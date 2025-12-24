@@ -1,3 +1,46 @@
+// Diagnostics: Scope visuals (safe to leave in prod; minimal output)
+(function () {
+  if (window.__scopeVisualDiag) return;
+  window.__scopeVisualDiag = {
+    logs: [],
+    log(level, area, message, extra) {
+      const entry = { t: new Date().toISOString(), level, area, message, extra };
+      this.logs.push(entry);
+      try {
+        const fn = level === 'error' ? console.error : (level === 'warn' ? console.warn : console.log);
+        fn.call(console, `[ScopeVisual:${area}] ${message}`, extra ?? '');
+      } catch { }
+    }
+  };
+})();
+const __diag = window.__scopeVisualDiag;
+
+function __renderFatal(hostEl, title, detail) {
+  try {
+    if (!hostEl) return;
+    hostEl.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'max-width:680px;width:100%;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:rgba(15,23,42,.55);backdrop-filter:blur(12px);padding:16px;';
+    const h = document.createElement('div');
+    h.style.cssText = 'font-weight:700;font-size:18px;margin-bottom:8px;color:#fff;';
+    h.textContent = title || 'Visual failed to load';
+    const p = document.createElement('div');
+    p.style.cssText = 'font-size:14px;line-height:1.4;color:rgba(255,255,255,.85);white-space:pre-wrap;';
+    p.textContent = detail || '';
+    const hint = document.createElement('div');
+    hint.style.cssText = 'margin-top:12px;font-size:12px;color:rgba(255,255,255,.7);';
+    hint.textContent = 'Open DevTools → Console and look for [ScopeVisual:*] logs. Also check Network for blocked scripts (cytoscape).';
+    card.appendChild(h); card.appendChild(p); card.appendChild(hint);
+    wrap.appendChild(card);
+    hostEl.appendChild(wrap);
+  } catch { }
+}
+// Diagnostics: Scope visuals
+window.__scopeVisual = window.__scopeVisual || { logs: [] };
+function __svLog(level, msg, obj){ try { window.__scopeVisual.logs.push({ t: new Date().toISOString(), level, msg, obj }); } catch(e){}; (level==="error"?console.error:console.log)("[ScopeVisual]", msg, obj||""); }
+
 // dbSchemaGraph.module.js
 // Cytoscape-based explorer for the Database Schemas "dot model" graph.
 // Loaded via Blazor JS module import.
@@ -326,6 +369,14 @@ function _applyTour(state, tourId, stepIndex) {
 }
 
 export function init(hostElement, data, options) {
+  __diag.log('info','db','init called', { hasHost: !!hostElement, cytoscapeType: typeof window.cytoscape });
+  if (!hostElement) { __diag.log('error','db','host element missing'); return; }
+  if (typeof window.cytoscape !== 'function') {
+    __diag.log('error','db','Cytoscape not loaded', { cytoscapeType: typeof window.cytoscape });
+    __renderFatal(hostElement, 'Cytoscape not loaded', `The cytoscape script did not load.\nCheck DevTools → Network for cytoscape.min.js and any CSP/blocked requests.\nIf you are offline or unpkg is blocked, vendor cytoscape into wwwroot and reference it locally.`);
+    return;
+  }
+
   const cytoscape = _ensureCytoscape();
   const host = hostElement;
 
