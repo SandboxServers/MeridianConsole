@@ -1,0 +1,682 @@
+<section id="flows" class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
+        10. Network Flows
+    </h2>
+
+    <div class="bg-red-900/30 border border-red-700 rounded-lg p-4 mb-6">
+        <p class="text-red-400 font-semibold mb-2">🔒 Canonical Traffic Manifest</p>
+        <p class="text-gray-300 text-sm"><strong class="text-white">Rule:</strong> If it's not documented here, the traffic is NOT allowed. This section serves as the authoritative reference for all network communication.</p>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Network Boundaries</h3>
+    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6 font-mono text-xs overflow-x-auto">
+        <pre class="text-gray-300">
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                    INTERNET                                          │
+│   • Customer Node Agents (worldwide)                                                 │
+│   • User Browsers                                                                    │
+│   • External SaaS (Stripe, PayPal, Steam, Discord, etc.)                            │
+│   • New Relic (SaaS telemetry endpoint)                                             │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │       CLOUDFLARE          │
+                            │   WAF · CDN · DDoS Prot   │
+                            └─────────────┬─────────────┘
+                                          │
+════════════════════════════════════════════════════════════════════════════════════════
+                               COLO BOUNDARY (AS396426)
+════════════════════════════════════════════════════════════════════════════════════════
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │   UniFi Hardware Firewall │
+                            │       (UDM Pro)           │
+                            └─────────────┬─────────────┘
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │     K8S CLUSTER           │
+                            │  (Cilium service mesh)    │
+                            └─────────────┬─────────────┘
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │    DOGFOOD AGENTS         │
+                            │  (Internal testing)       │
+                            └───────────────────────────┘
+        </pre>
+    </div>
+
+    <div class="bg-purple-900/30 border border-purple-700 rounded-lg p-4 mb-6">
+        <p class="text-purple-400 font-semibold text-lg">Total Documented Flows: 95</p>
+    </div>
+
+    <!-- INBOUND FLOWS -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">1. Inbound Flows (Internet → Colo) — 12 Flows</h3>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">1.1 User Browser Traffic (3 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Encryption</th>
+                    <th class="border border-gray-600 p-2 text-left">Path</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">IN-001</td><td class="border border-gray-600 p-2">User Browser</td><td class="border border-gray-600 p-2">Web App :5200</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">None (public)</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → Ingress → Web App</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">IN-002</td><td class="border border-gray-600 p-2">User Browser</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">JWT Bearer</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → Ingress → Gateway</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">IN-003</td><td class="border border-gray-600 p-2">User Browser</td><td class="border border-gray-600 p-2">Console :5070</td><td class="border border-gray-600 p-2">WSS 443</td><td class="border border-gray-600 p-2">JWT Bearer</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → Ingress → GW → Console</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">1.2 Customer Agent Traffic (4 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Encryption</th>
+                    <th class="border border-gray-600 p-2 text-left">Path</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">IN-010</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">One-time Token (15m)</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Bootstrap: Internet → CF → UniFi → GW → Nodes</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">IN-011</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">TLS 1.3+mTLS</td><td class="border border-gray-600 p-2">Registered: Internet → CF → UniFi → GW → Nodes</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">IN-012</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">Console :5070</td><td class="border border-gray-600 p-2">WSS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">TLS 1.3+mTLS</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → GW → Console</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">IN-013</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">Files :5060</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">TLS 1.3+mTLS</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → GW → Files</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">1.3 External Webhooks (3 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Encryption</th>
+                    <th class="border border-gray-600 p-2 text-left">Path</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">IN-020</td><td class="border border-gray-600 p-2">Stripe</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">Webhook Signature</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → GW → Billing</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">IN-021</td><td class="border border-gray-600 p-2">PayPal</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">Webhook Signature</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → GW → Billing</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">IN-022</td><td class="border border-gray-600 p-2">Discord</td><td class="border border-gray-600 p-2">Discord :5120</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">Webhook Signature</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → GW → Discord</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">1.4 OAuth Callbacks (2 flows)</h4>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Encryption</th>
+                    <th class="border border-gray-600 p-2 text-left">Path</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">IN-030</td><td class="border border-gray-600 p-2">Discord OAuth</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">OAuth State Token</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → GW → Identity</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">IN-031</td><td class="border border-gray-600 p-2">Steam OAuth</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">OAuth State Token</td><td class="border border-gray-600 p-2">TLS 1.3</td><td class="border border-gray-600 p-2">Internet → CF → UniFi → GW → Identity</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+
+    <!-- OUTBOUND FLOWS -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">2. Outbound Flows (Colo → Internet) — 18 Flows</h3>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">2.1 Payment Providers (2 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-001</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">Stripe API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Key</td><td class="border border-gray-600 p-2">Payment processing, subscription mgmt</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-002</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">PayPal API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">OAuth Client Creds</td><td class="border border-gray-600 p-2">Payment processing</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">2.2 Auth Providers (2 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-010</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">Discord API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">OAuth</td><td class="border border-gray-600 p-2">User authentication, token exchange</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-011</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">Steam API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Key</td><td class="border border-gray-600 p-2">User authentication</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">2.3 Mod Platforms (3 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-020</td><td class="border border-gray-600 p-2">Mods :5080</td><td class="border border-gray-600 p-2">Steam Workshop API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Key</td><td class="border border-gray-600 p-2">Mod metadata, downloads</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-021</td><td class="border border-gray-600 p-2">Mods :5080</td><td class="border border-gray-600 p-2">CurseForge API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Key</td><td class="border border-gray-600 p-2">Mod metadata, downloads</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-022</td><td class="border border-gray-600 p-2">Mods :5080</td><td class="border border-gray-600 p-2">Modrinth API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Key</td><td class="border border-gray-600 p-2">Mod metadata, downloads</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">2.4 Notifications (3 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-030</td><td class="border border-gray-600 p-2">Notifications :5090</td><td class="border border-gray-600 p-2">SMTP Provider</td><td class="border border-gray-600 p-2">SMTPS 465</td><td class="border border-gray-600 p-2">SMTP Auth</td><td class="border border-gray-600 p-2">Transactional email</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-031</td><td class="border border-gray-600 p-2">Discord :5120</td><td class="border border-gray-600 p-2">Discord API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">Bot Token</td><td class="border border-gray-600 p-2">Bot messages (internal team only)</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-032</td><td class="border border-gray-600 p-2">Notifications :5090</td><td class="border border-gray-600 p-2">Push Service</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Key</td><td class="border border-gray-600 p-2">Mobile push notifications</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">2.5 Certificate Management (4 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-040</td><td class="border border-gray-600 p-2">cert-manager</td><td class="border border-gray-600 p-2">Let's Encrypt ACME</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">ACME Account Key</td><td class="border border-gray-600 p-2">Certificate issuance (ingress)</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-041</td><td class="border border-gray-600 p-2">cert-manager</td><td class="border border-gray-600 p-2">Cloudflare API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Token</td><td class="border border-gray-600 p-2">DNS-01 challenge (programmatic)</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-042</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">Let's Encrypt ACME</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">ACME Account Key</td><td class="border border-gray-600 p-2">Agent certificate issuance</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-043</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">Cloudflare API</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Token</td><td class="border border-gray-600 p-2">DNS-01 challenge (agent certs)</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">2.6 Observability (2 flows)</h4>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-050</td><td class="border border-gray-600 p-2">All Services</td><td class="border border-gray-600 p-2">New Relic</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">License Key</td><td class="border border-gray-600 p-2">APM, traces, metrics, logs</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-051</td><td class="border border-gray-600 p-2">Prometheus</td><td class="border border-gray-600 p-2">New Relic (optional)</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Key</td><td class="border border-gray-600 p-2">Metric forwarding</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">2.7 Secrets (2 flows)</h4>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OUT-060</td><td class="border border-gray-600 p-2">Secrets :5110</td><td class="border border-gray-600 p-2">Azure Key Vault</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">Managed Identity</td><td class="border border-gray-600 p-2">Secret storage, rotation</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OUT-061</td><td class="border border-gray-600 p-2">CSI Driver</td><td class="border border-gray-600 p-2">Azure Key Vault</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">Managed Identity</td><td class="border border-gray-600 p-2">Secret retrieval for pod mount</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+
+    <!-- SERVICE-TO-SERVICE: Gateway → Control Plane -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">3. Service-to-Service: Gateway → Control Plane — 12 Flows</h3>
+    <div class="bg-blue-900/20 border border-blue-800 rounded-lg p-3 mb-4">
+        <p class="text-blue-300 text-sm">All internal traffic encrypted via Cilium service mesh mTLS.</p>
+    </div>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-001</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Auth validation, user lookup</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-002</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Subscription status</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-003</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Server CRUD operations</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-004</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Agent management</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-005</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Tasks :5050</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Job status</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-006</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Files :5060</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">File operations</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-007</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Console :5070</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">WebSocket proxy</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-008</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Mods :5080</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Mod queries</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-009</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Notifications :5090</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Notification triggers</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-010</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Firewall :5100</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Firewall status</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-011</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Secrets :5110</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Secret retrieval</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-012</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Discord :5120</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Discord operations</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- SERVICE-TO-SERVICE: Cross-Service -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">4. Service-to-Service: Cross-Service — 13 Flows</h3>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-020</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Node assignment</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-021</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">Firewall :5100</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Port allocation request</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-022</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Subscription → server status sync</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-023</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">Notifications :5090</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Payment notifications</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-024</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">Console :5070</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Agent console relay</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-025</td><td class="border border-gray-600 p-2">Tasks :5050</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Task execution on agents</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-026</td><td class="border border-gray-600 p-2">Tasks :5050</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Server state updates</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-027</td><td class="border border-gray-600 p-2">Tasks :5050</td><td class="border border-gray-600 p-2">Notifications :5090</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Task completion notifications</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-028</td><td class="border border-gray-600 p-2">Mods :5080</td><td class="border border-gray-600 p-2">Files :5060</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Mod file storage</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-029</td><td class="border border-gray-600 p-2">Discord :5120</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Discord cmd → server action</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-030</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">Notifications :5090</td><td class="border border-gray-600 p-2">HTTP/2</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Welcome emails, pw resets</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">SVC-031</td><td class="border border-gray-600 p-2">Console :5070</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">RCON command relay (via Gateway)</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">SVC-032</td><td class="border border-gray-600 p-2">Console :5070</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">HTTP/2 Dyn</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">RCON command relay (direct internal)</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-3 mb-6">
+        <p class="text-yellow-300 text-sm"><strong>Note:</strong> SVC-031 and SVC-032 are Console-initiated RCON commands to agents. This is separate from Agent-initiated console streaming flows (AGT-005, DOG-005). RCON allows the Console service to send commands TO the gameserver via the agent.</p>
+    </div>
+
+
+    <!-- INFRASTRUCTURE: PostgreSQL Platform DB -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">5. Infrastructure: PostgreSQL — Platform DB Pod — 10 Flows</h3>
+    <div class="bg-blue-900/20 border border-blue-800 rounded-lg p-3 mb-4">
+        <p class="text-blue-300 text-sm">Platform DB Pod hosts ALL microservice databases. NO customer data here.</p>
+    </div>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Database</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DB-001</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">identity_db</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DB-002</td><td class="border border-gray-600 p-2">Billing :5020</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">billing_db</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DB-003</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">servers_db</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DB-004</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">nodes_db</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DB-005</td><td class="border border-gray-600 p-2">Tasks :5050</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">tasks_db</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DB-006</td><td class="border border-gray-600 p-2">Files :5060</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">files_db</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DB-007</td><td class="border border-gray-600 p-2">Mods :5080</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">mods_db</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DB-008</td><td class="border border-gray-600 p-2">Notifications :5090</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">notifications_db</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DB-009</td><td class="border border-gray-600 p-2">Firewall :5100</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">firewall_db</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DB-010</td><td class="border border-gray-600 p-2">Secrets :5110</td><td class="border border-gray-600 p-2">Platform DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">secrets_db</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- INFRASTRUCTURE: PostgreSQL User DB -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">6. Infrastructure: PostgreSQL — User DB Pod — 1 Flow</h3>
+    <div class="bg-green-900/20 border border-green-800 rounded-lg p-3 mb-4">
+        <p class="text-green-300 text-sm">User DB Pod hosts ONLY customer-created gameserver databases. NO SaaS microservice DBs.</p>
+    </div>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DB-020</td><td class="border border-gray-600 p-2">Customer Gameservers</td><td class="border border-gray-600 p-2">User DB Pod</td><td class="border border-gray-600 p-2">PGSQL 5432</td><td class="border border-gray-600 p-2">Game Credentials</td><td class="border border-gray-600 p-2">Customer-created game databases</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- INFRASTRUCTURE: RabbitMQ -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">7. Infrastructure: RabbitMQ — 2 Flows</h3>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">RMQ-001</td><td class="border border-gray-600 p-2">All Services</td><td class="border border-gray-600 p-2">RabbitMQ</td><td class="border border-gray-600 p-2">AMQP 5672</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">Event publishing</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">RMQ-002</td><td class="border border-gray-600 p-2">RabbitMQ</td><td class="border border-gray-600 p-2">All Services</td><td class="border border-gray-600 p-2">AMQP 5672</td><td class="border border-gray-600 p-2">Cilium mTLS + Creds</td><td class="border border-gray-600 p-2">Event consumption</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4 class="text-lg font-medium text-cyan-400 mb-2">Key Event Flows</h4>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Event</th>
+                    <th class="border border-gray-600 p-2 text-left">Publisher</th>
+                    <th class="border border-gray-600 p-2 text-left">Subscribers</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">server.created</td><td class="border border-gray-600 p-2">Servers</td><td class="border border-gray-600 p-2">Tasks, Nodes, Firewall, Notifications</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">server.provisioned</td><td class="border border-gray-600 p-2">Tasks</td><td class="border border-gray-600 p-2">Servers, Firewall, Notifications</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">server.deleted</td><td class="border border-gray-600 p-2">Servers</td><td class="border border-gray-600 p-2">Tasks, Nodes, Firewall, Files</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">payment.succeeded</td><td class="border border-gray-600 p-2">Billing</td><td class="border border-gray-600 p-2">Servers, Notifications</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">payment.failed</td><td class="border border-gray-600 p-2">Billing</td><td class="border border-gray-600 p-2">Servers, Notifications</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">agent.registered</td><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">Tasks, Servers</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">agent.heartbeat</td><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">Servers (status)</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">cert.renewed</td><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">(logging only)</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">secret.rotated</td><td class="border border-gray-600 p-2">Secrets</td><td class="border border-gray-600 p-2">(affected services reload)</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- INFRASTRUCTURE: Redis -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">8. Infrastructure: Redis — 4 Flows</h3>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">REDIS-001</td><td class="border border-gray-600 p-2">Identity :5010</td><td class="border border-gray-600 p-2">Redis</td><td class="border border-gray-600 p-2">Redis 6379</td><td class="border border-gray-600 p-2">Cilium mTLS + Auth</td><td class="border border-gray-600 p-2">Session tokens, JWT blacklist</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">REDIS-002</td><td class="border border-gray-600 p-2">Gateway :5000</td><td class="border border-gray-600 p-2">Redis</td><td class="border border-gray-600 p-2">Redis 6379</td><td class="border border-gray-600 p-2">Cilium mTLS + Auth</td><td class="border border-gray-600 p-2">Rate limiting counters</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">REDIS-003</td><td class="border border-gray-600 p-2">Servers :5030</td><td class="border border-gray-600 p-2">Redis</td><td class="border border-gray-600 p-2">Redis 6379</td><td class="border border-gray-600 p-2">Cilium mTLS + Auth</td><td class="border border-gray-600 p-2">Server status cache</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">REDIS-004</td><td class="border border-gray-600 p-2">Tasks :5050</td><td class="border border-gray-600 p-2">Redis</td><td class="border border-gray-600 p-2">Redis 6379</td><td class="border border-gray-600 p-2">Cilium mTLS + Auth</td><td class="border border-gray-600 p-2">Job queue, distributed locks</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- INFRASTRUCTURE: Observability -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">9. Infrastructure: Internal Observability — 4 Flows</h3>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OBS-001</td><td class="border border-gray-600 p-2">All Services</td><td class="border border-gray-600 p-2">Prometheus</td><td class="border border-gray-600 p-2">HTTP 9090</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Metrics scraping</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OBS-002</td><td class="border border-gray-600 p-2">All Services</td><td class="border border-gray-600 p-2">Loki</td><td class="border border-gray-600 p-2">HTTP 3100</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Log aggregation</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">OBS-003</td><td class="border border-gray-600 p-2">Prometheus</td><td class="border border-gray-600 p-2">Grafana</td><td class="border border-gray-600 p-2">HTTP 3000</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Dashboard queries</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">OBS-004</td><td class="border border-gray-600 p-2">Loki</td><td class="border border-gray-600 p-2">Grafana</td><td class="border border-gray-600 p-2">HTTP 3000</td><td class="border border-gray-600 p-2">Cilium mTLS</td><td class="border border-gray-600 p-2">Log queries</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+
+    <!-- AGENT: Customer -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">10. Agent: Customer (Internet → Colo) — 8 Flows</h3>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">AGT-001</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">GW → Nodes</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">One-time Token (15m)</td><td class="border border-gray-600 p-2">Bootstrap registration</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">AGT-002</td><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">One-time Token</td><td class="border border-gray-600 p-2">Push client cert</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">AGT-003</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">GW → Nodes</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Heartbeat</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">AGT-004</td><td class="border border-gray-600 p-2">Nodes → Tasks</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Command execution</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">AGT-005</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">GW → Console</td><td class="border border-gray-600 p-2">WSS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Live console (agent → console streaming)</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">AGT-006</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">GW → Files</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">File upload</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">AGT-007</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">GW → Files</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">File download</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">AGT-008</td><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Cert renewal push</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- AGENT: Dogfood -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">11. Agent: Dogfood (Internal Only) — 8 Flows</h3>
+    <div class="overflow-x-auto mb-4">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DOG-001</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">HTTPS 5040</td><td class="border border-gray-600 p-2">One-time Token (15m)</td><td class="border border-gray-600 p-2">Bootstrap registration</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DOG-002</td><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">HTTPS Dyn</td><td class="border border-gray-600 p-2">One-time Token</td><td class="border border-gray-600 p-2">Push client cert</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DOG-003</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">Nodes :5040</td><td class="border border-gray-600 p-2">HTTPS 5040</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Heartbeat</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DOG-004</td><td class="border border-gray-600 p-2">Nodes → Tasks</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">HTTPS Dyn</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Command execution</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DOG-005</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">Console :5070</td><td class="border border-gray-600 p-2">WSS 5070</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Live console (agent → console streaming)</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DOG-006</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">Files :5060</td><td class="border border-gray-600 p-2">HTTPS 5060</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">File upload</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">DOG-007</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">Files :5060</td><td class="border border-gray-600 p-2">HTTPS 5060</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">File download</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">DOG-008</td><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2">HTTPS Dyn</td><td class="border border-gray-600 p-2">mTLS Client Cert</td><td class="border border-gray-600 p-2">Cert renewal push</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="bg-cyan-900/20 border border-cyan-700 rounded-lg p-3 mb-6">
+        <p class="text-cyan-300 text-sm"><strong>Key Difference:</strong> Customer agents route through Internet → Cloudflare → UniFi → Gateway → Service. Dogfood agents connect directly to services on the internal network (never leave colo).</p>
+    </div>
+
+    <!-- FIREWALL: UniFi -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">12. Firewall: UniFi Integration — 2 Flows</h3>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">FW-001</td><td class="border border-gray-600 p-2">Firewall :5100</td><td class="border border-gray-600 p-2">UniFi Controller</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Credentials</td><td class="border border-gray-600 p-2">Create/delete port forward rules</td></tr>
+                <tr><td class="border border-gray-600 p-2 font-mono">FW-002</td><td class="border border-gray-600 p-2">Firewall :5100</td><td class="border border-gray-600 p-2">UniFi Controller</td><td class="border border-gray-600 p-2">HTTPS 443</td><td class="border border-gray-600 p-2">API Credentials</td><td class="border border-gray-600 p-2">Query current rules</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- GAME: Player Traffic -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">13. Game: Player Traffic — 1 Flow</h3>
+    <div class="overflow-x-auto mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Flow ID</th>
+                    <th class="border border-gray-600 p-2 text-left">Source</th>
+                    <th class="border border-gray-600 p-2 text-left">Destination</th>
+                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
+                    <th class="border border-gray-600 p-2 text-left">Auth</th>
+                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono">GAME-001</td><td class="border border-gray-600 p-2">Game Players</td><td class="border border-gray-600 p-2">UniFi → Agent</td><td class="border border-gray-600 p-2">UDP/TCP Dyn</td><td class="border border-gray-600 p-2">Game Protocol</td><td class="border border-gray-600 p-2">Minecraft, Space Engineers, Satisfactory, etc.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Discord Service Clarification -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">14. Discord Service Clarification</h3>
+    <div class="bg-purple-900/30 border border-purple-700 rounded-lg p-4 mb-6">
+        <p class="text-purple-400 font-semibold mb-2">🤖 Discord :5120 is Meridian Console's internal team bot ONLY</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+            <div>
+                <p class="text-green-400 font-medium mb-1">✅ Used for:</p>
+                <ul class="text-gray-300 text-sm space-y-1">
+                    <li>• Deployment notifications to team Discord</li>
+                    <li>• Alert notifications (system health, errors)</li>
+                    <li>• Status updates</li>
+                    <li>• Admin commands from team Discord server</li>
+                </ul>
+            </div>
+            <div>
+                <p class="text-red-400 font-medium mb-1">❌ NOT used for:</p>
+                <ul class="text-gray-300 text-sm space-y-1">
+                    <li>• Customer Discord integrations</li>
+                    <li>• Bot hosting for customers</li>
+                    <li>• Customer server notifications</li>
+                </ul>
+            </div>
+        </div>
+        <p class="text-gray-400 text-xs mt-3 italic">Customer Discord notifications route through Notifications :5090 → customer's webhook.</p>
+    </div>
+
+    <!-- Explicitly Denied Traffic -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">15. Explicitly Denied Traffic</h3>
+    <div class="bg-red-900/30 border border-red-700 rounded-lg p-4 mb-6">
+        <table class="w-full text-xs border-collapse">
+            <thead>
+                <tr class="bg-red-900/50 text-white">
+                    <th class="border border-red-700 p-2 text-left">Denied Flow</th>
+                    <th class="border border-red-700 p-2 text-left">Reason</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr><td class="border border-red-800 p-2">Internet → PostgreSQL</td><td class="border border-red-800 p-2">Must go through services</td></tr>
+                <tr><td class="border border-red-800 p-2">Internet → RabbitMQ</td><td class="border border-red-800 p-2">Internal only</td></tr>
+                <tr><td class="border border-red-800 p-2">Internet → Redis</td><td class="border border-red-800 p-2">Internal only</td></tr>
+                <tr><td class="border border-red-800 p-2">Agent → Agent</td><td class="border border-red-800 p-2">All agent traffic routes through control plane</td></tr>
+                <tr><td class="border border-red-800 p-2">Services → Internet (unlisted)</td><td class="border border-red-800 p-2">Must use approved integrations</td></tr>
+                <tr><td class="border border-red-800 p-2">Any unencrypted traffic</td><td class="border border-red-800 p-2">All traffic must be TLS or Cilium mTLS</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Flow Count Summary -->
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Flow Count Summary</h3>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+            <thead>
+                <tr class="bg-gray-700 text-white">
+                    <th class="border border-gray-600 p-2 text-left">Category</th>
+                    <th class="border border-gray-600 p-2 text-right">Count</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-300">
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Inbound (Internet → Colo)</td><td class="border border-gray-600 p-2 text-right">12</td></tr>
+                <tr><td class="border border-gray-600 p-2">Outbound (Colo → Internet)</td><td class="border border-gray-600 p-2 text-right">18</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Service-to-Service (Gateway → Services)</td><td class="border border-gray-600 p-2 text-right">12</td></tr>
+                <tr><td class="border border-gray-600 p-2">Service-to-Service (Cross-Service + RCON)</td><td class="border border-gray-600 p-2 text-right">13</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2">PostgreSQL - Platform DB</td><td class="border border-gray-600 p-2 text-right">10</td></tr>
+                <tr><td class="border border-gray-600 p-2">PostgreSQL - User DB</td><td class="border border-gray-600 p-2 text-right">1</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2">RabbitMQ</td><td class="border border-gray-600 p-2 text-right">2</td></tr>
+                <tr><td class="border border-gray-600 p-2">Redis</td><td class="border border-gray-600 p-2 text-right">4</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Internal Observability</td><td class="border border-gray-600 p-2 text-right">4</td></tr>
+                <tr><td class="border border-gray-600 p-2">Customer Agent</td><td class="border border-gray-600 p-2 text-right">8</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Dogfood Agent</td><td class="border border-gray-600 p-2 text-right">8</td></tr>
+                <tr><td class="border border-gray-600 p-2">Firewall Integration</td><td class="border border-gray-600 p-2 text-right">2</td></tr>
+                <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Game Player Traffic</td><td class="border border-gray-600 p-2 text-right">1</td></tr>
+                <tr class="bg-purple-900/50 font-bold"><td class="border border-purple-600 p-2 text-purple-300">TOTAL</td><td class="border border-purple-600 p-2 text-right text-purple-300">95</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>

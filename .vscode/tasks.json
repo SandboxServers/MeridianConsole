@@ -12,6 +12,23 @@
       "type": "shell",
       "command": "dotnet test Dhadgar.sln -c Debug",
       "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Run Scope (open browser)",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "src/Dhadgar.Scope/Dhadgar.Scope.csproj"
+      ],
+      "isBackground": true,
+      "problemMatcher": "$msCompile",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Now listening on: (https?://\\S+)",
+        "uriFormat": "%s/dependencies"
+      }
     }
   ]
 }

@@ -1,26 +1,21 @@
+using System.Net.Http;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+
 using Dhadgar.Scope;
+using Dhadgar.Scope.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.RootComponents.Add<App>("#app");
+builder.RootComponents.Add<HeadOutlet>("head::after");
 
-var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
+builder.Services.AddScoped(_ => new HttpClient
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
+});
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
+builder.Services.AddScoped<ScopeContentService>();
+builder.Services.AddScoped<DependencyGraphService>();
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Scope", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Scope", status = "ok" }));
-
-app.Run();
-
-// Required for WebApplicationFactory<Program> integration tests.
-public partial class Program { }
+await builder.Build().RunAsync();

@@ -1,0 +1,144 @@
+<section id="certificates" class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
+        8. Certificate Management
+    </h2>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Certificate Architecture Overview</h3>
+    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6 font-mono text-xs overflow-x-auto">
+        <pre class="text-gray-300">
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         CERTIFICATE MANAGEMENT                                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   EXTERNAL (User-Facing):                                                        │
+│   ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐   │
+│   │  Let's Encrypt  │◄───────►│  Cloudflare API │◄───────►│  cert-manager   │   │
+│   │  (ACME CA)      │         │  (DNS-01)       │         │  (Ingress only) │   │
+│   └─────────────────┘         └─────────────────┘         └─────────────────┘   │
+│                                                                                  │
+│   INTERNAL (Pod-to-Pod):                                                         │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                         CILIUM SERVICE MESH                              │   │
+│   │   • Automatic mTLS between all pods                                      │   │
+│   │   • No manual cert management                                            │   │
+│   │   • Covers: services, PostgreSQL, RabbitMQ, Redis                        │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   AGENT CERTIFICATES:                                                            │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                    NODES SERVICE (Agent Cert Manager)                    │   │
+│   │                                                                          │   │
+│   │  Bootstrap: Token → Register → Issue cert → Establish mTLS              │   │
+│   │  Renewal: Automated at 45 days before expiry                             │   │
+│   │  DNS: agent-{id}.nodes.meridianconsole.com                              │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+        </pre>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Certificate Types</h3>
+    <table class="w-full text-sm border-collapse mb-6">
+        <thead>
+            <tr class="bg-gray-700 text-white">
+                <th class="border border-gray-600 p-2 text-left">Type</th>
+                <th class="border border-gray-600 p-2 text-left">Scope</th>
+                <th class="border border-gray-600 p-2 text-left">Manager</th>
+                <th class="border border-gray-600 p-2 text-left">Renewal</th>
+            </tr>
+        </thead>
+        <tbody class="text-gray-300">
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Ingress (User-facing)</td><td class="border border-gray-600 p-2">*.meridianconsole.com</td><td class="border border-gray-600 p-2">cert-manager</td><td class="border border-gray-600 p-2">45 days (automated)</td></tr>
+            <tr><td class="border border-gray-600 p-2">Internal Pod-to-Pod</td><td class="border border-gray-600 p-2">All cluster services</td><td class="border border-gray-600 p-2">Cilium</td><td class="border border-gray-600 p-2">Automatic (mesh)</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Agent mTLS</td><td class="border border-gray-600 p-2">agent-{id}.nodes.*</td><td class="border border-gray-600 p-2">Nodes Service</td><td class="border border-gray-600 p-2">45 days (automated)</td></tr>
+        </tbody>
+    </table>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Agent Bootstrap Flow</h3>
+    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6 font-mono text-xs overflow-x-auto">
+        <pre class="text-gray-300">
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           AGENT BOOTSTRAP SEQUENCE                               │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│  1. ADMIN GENERATES TOKEN                                                        │
+│     ┌─────────┐     POST /nodes/tokens      ┌─────────────┐                     │
+│     │  Admin  │ ───────────────────────────►│   Nodes     │                     │
+│     │   UI    │◄─────────────────────────── │   :5040     │                     │
+│     └─────────┘     { token: "xxx" }        └─────────────┘                     │
+│                     (15 min expiry)                                              │
+│                                                                                  │
+│  2. AGENT REGISTERS                                                              │
+│     ┌─────────┐     POST /nodes/register    ┌─────────────┐                     │
+│     │  Agent  │ ───────────────────────────►│   Nodes     │                     │
+│     │  (new)  │     { token: "xxx" }        │   :5040     │                     │
+│     └─────────┘                             └──────┬──────┘                     │
+│                                                    │                             │
+│  3. NODES SERVICE PROVISIONS CERT                  │                             │
+│                     ┌──────────────────────────────┘                             │
+│                     ▼                                                            │
+│     ┌─────────────────────────────────────────────────────────────────────────┐ │
+│     │  • Create DNS entry: agent-{id}.nodes.meridianconsole.com              │ │
+│     │  • Request cert from Let's Encrypt (via Cloudflare API DNS-01)         │ │
+│     │  • Store cert metadata in nodes_db                                      │ │
+│     └─────────────────────────────────────────────────────────────────────────┘ │
+│                     │                                                            │
+│  4. PUSH CERT TO AGENT                                                           │
+│     ┌─────────┐     cert + private key      ┌─────────────┐                     │
+│     │  Agent  │◄─────────────────────────── │   Nodes     │                     │
+│     │  (new)  │     (over initial TLS)      │   :5040     │                     │
+│     └─────────┘                             └─────────────┘                     │
+│                                                                                  │
+│  5. ESTABLISH mTLS                                                               │
+│     ┌─────────┐     mTLS connection         ┌─────────────┐                     │
+│     │  Agent  │◄═══════════════════════════►│   Nodes     │                     │
+│     │  (reg)  │     (ongoing comms)         │   :5040     │                     │
+│     └─────────┘                             └─────────────┘                     │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+        </pre>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">DNS-01 Challenge Flow</h3>
+    <table class="w-full text-sm border-collapse mb-6">
+        <thead>
+            <tr class="bg-gray-700 text-white">
+                <th class="border border-gray-600 p-2 text-left">Step</th>
+                <th class="border border-gray-600 p-2 text-left">Action</th>
+                <th class="border border-gray-600 p-2 text-left">Component</th>
+            </tr>
+        </thead>
+        <tbody class="text-gray-300">
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">1</td><td class="border border-gray-600 p-2">Request new certificate order</td><td class="border border-gray-600 p-2">→ Let's Encrypt ACME</td></tr>
+            <tr><td class="border border-gray-600 p-2">2</td><td class="border border-gray-600 p-2">Create TXT record via API</td><td class="border border-gray-600 p-2">→ Cloudflare API</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">3</td><td class="border border-gray-600 p-2">Validate challenge</td><td class="border border-gray-600 p-2">→ Let's Encrypt ACME</td></tr>
+            <tr><td class="border border-gray-600 p-2">4</td><td class="border border-gray-600 p-2">Delete TXT record</td><td class="border border-gray-600 p-2">→ Cloudflare API</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">5</td><td class="border border-gray-600 p-2">Store/push certificate</td><td class="border border-gray-600 p-2">→ K8s Secret / Agent</td></tr>
+        </tbody>
+    </table>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Renewal Policy</h3>
+    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6">
+        <p class="text-green-400 font-semibold mb-2">✅ Automated Renewal</p>
+        <ul class="text-gray-300 text-sm space-y-1">
+            <li>• <strong class="text-white">Validity:</strong> 90 days (Let's Encrypt standard)</li>
+            <li>• <strong class="text-white">Renewal trigger:</strong> 45 days before expiry (50% lifetime)</li>
+            <li>• <strong class="text-white">Automation:</strong> Fully automated — no manual intervention</li>
+            <li>• <strong class="text-white">Alerting:</strong> Alert if renewal fails 30 days before expiry</li>
+        </ul>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Internal Services (Cilium)</h3>
+    <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+        <p class="text-blue-400 font-semibold mb-2">🔒 Pod-to-Pod Encryption</p>
+        <p class="text-gray-300 text-sm mb-2">Cilium service mesh handles all internal mTLS automatically:</p>
+        <ul class="text-gray-300 text-sm space-y-1">
+            <li>• All 12 control plane services</li>
+            <li>• PostgreSQL connections (Platform DB, User DB)</li>
+            <li>• RabbitMQ connections</li>
+            <li>• Redis connections</li>
+            <li>• Prometheus/Loki scraping</li>
+        </ul>
+        <p class="text-gray-400 text-xs mt-2 italic">No manual certificate management required for internal services.</p>
+    </div>
+</section>

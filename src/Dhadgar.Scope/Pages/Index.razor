@@ -1,0 +1,39 @@
+@page "/"
+@inject ScopeContentService Scope
+
+<PageTitle>Meridian Console Scope</PageTitle>
+
+<div class="mx-auto w-full max-w-5xl">
+
+<div class="space-y-6">
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <h1 class="text-3xl font-bold tracking-tight">Meridian Console Scope</h1>
+        <p class="mt-3 text-white/80">
+            This site publishes the Meridian Console scoping document as a static web app.
+        </p>
+        <p class="mt-2 text-white/70">
+            Use the sidebar to navigate sections, or jump straight into Section 1.
+        </p>
+
+        <div class="mt-5 flex flex-wrap gap-3">
+            <a class="rounded-xl bg-indigo-500 px-4 py-2 font-semibold text-white hover:bg-indigo-400"
+               href="/s/project-structure">
+                Start at Section 1
+            </a>
+            <a class="rounded-xl border border-white/15 bg-white/0 px-4 py-2 font-semibold text-white/90 hover:bg-white/5"
+               href="/s/repos">
+                Repository Structure (Section 18)
+            </a>
+            <a class="rounded-xl border border-white/15 bg-white/0 px-4 py-2 font-semibold text-white/90 hover:bg-white/5"
+               href="/dependencies">
+                Dependency Map
+            </a>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <h2 class="text-xl font-semibold">Quick search</h2>
+        <p class="mt-2 text-white/70">Use the search box in the sidebar to filter section titles.</p>
+    </div>
+</div>
+</div>

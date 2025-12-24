@@ -1,0 +1,10 @@
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(Dhadgar.Scope.Shared.MainLayout)" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(Dhadgar.Scope.Shared.MainLayout)">
+            <Dhadgar.Scope.Pages.NotFound />
+        </LayoutView>
+    </NotFound>
+</Router>
