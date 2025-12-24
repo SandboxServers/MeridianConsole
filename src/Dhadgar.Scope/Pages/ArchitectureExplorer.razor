@@ -218,6 +218,7 @@
 
     private IJSObjectReference? _module;
     private DotNetObjectReference<ArchitectureExplorer>? _dotnetRef;
+    private bool _initialized;
     private Dhadgar.Scope.Services.ArchitectureGraphData? _data;
     private Dhadgar.Scope.Services.ArchitectureNode? _selected;
 
@@ -240,13 +241,15 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (_initialized) return;
         if (_data is null) return;
 
         _dotnetRef = DotNetObjectReference.Create(this);
         _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/architecturePark.module.js");
         await _module.InvokeVoidAsync("init", _graphHost, _data,
             new { mode = "full", selectable = true, dotNetRef = _dotnetRef });
+        await _module.InvokeVoidAsync("fit", _graphHost);
+        _initialized = true;
         await ApplyStateAsync();
     }
 
