@@ -30,37 +30,82 @@
         <div class="mt-5 grid gap-4 lg:grid-cols-3">
             <div class="space-y-3 lg:col-span-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div class="flex flex-wrap gap-2 text-xs">
-                        @foreach (var k in EdgeKinds)
-                        {
-                            var on = EnabledKinds.Contains(k);
-                            <button class="rounded-full border border-white/10 px-3 py-1 @(on ? "bg-indigo-500 text-white" : "bg-white/5 text-white/80 hover:bg-white/10")"
-                                    @onclick="() => ToggleKind(k)">
-                                @k
-                            </button>
-                        }
+                    <div class="flex items-center gap-2">
+                        <button class='@ViewClass("list")' @onclick='() => SetView("list")'>Tree</button>
+                        <button class='@ViewClass("map")' @onclick='() => SetView("map")'>Map</button>
                     </div>
 
-                    <div class="flex flex-wrap gap-2">
-                        <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                                @onclick="FitAsync">Fit</button>
-                        <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                                @onclick="ResetAsync">Reset</button>
-                    </div>
+                    @if (_viewMode == "map")
+                    {
+                        <div class="flex flex-wrap gap-2 text-xs">
+                            @foreach (var k in EdgeKinds)
+                            {
+                                var on = EnabledKinds.Contains(k);
+                                <button class="rounded-full border border-white/10 px-3 py-1 @(on ? "bg-indigo-500 text-white" : "bg-white/5 text-white/80 hover:bg-white/10")"
+                                        @onclick="() => ToggleKind(k)">
+                                    @k
+                                </button>
+                            }
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
+                                    @onclick="FitAsync">Fit</button>
+                            <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
+                                    @onclick="ResetAsync">Reset</button>
+                        </div>
+                    }
                 </div>
 
-                <div class="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <div class="flex items-center justify-between gap-3 px-2 pb-2">
-                        <div class="text-xs text-white/70">Explode districts</div>
-                        <div class="text-xs text-white/60">@Explode%</div>
-                    </div>
-                    <input type="range" min="0" max="100" step="1" class="w-full accent-indigo-500"
-                           value="@Explode" @oninput="OnExplodeChanged" />
+                @if (_viewMode == "map")
+                {
+                    <div class="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <div class="flex items-center justify-between gap-3 px-2 pb-2">
+                            <div class="text-xs text-white/70">Explode districts</div>
+                            <div class="text-xs text-white/60">@Explode%</div>
+                        </div>
+                        <input type="range" min="0" max="100" step="1" class="w-full accent-indigo-500"
+                               value="@Explode" @oninput="OnExplodeChanged" />
                     </div>
 
                     <div class="@GraphPanelExtraClass rounded-2xl border border-white/10 bg-black/20 overflow-hidden h-[70vh] md:h-[72vh] lg:h-[75vh]"
                          @ref="_graphHost">
                     </div>
+                }
+                else
+                {
+                    <div class="rounded-2xl border border-white/10 bg-black/20 p-4 h-[70vh] md:h-[72vh] lg:h-[75vh] overflow-auto">
+                        @if (_data is null)
+                        {
+                            <div class="text-sm text-white/70">Loading…</div>
+                        }
+                        else
+                        {
+                            @foreach (var group in TreeGroups)
+                            {
+                                <details class="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                                    <summary class="cursor-pointer text-sm font-semibold text-white/80">
+                                        @group.Name
+                                        <span class="ml-2 text-xs text-white/50">(@group.Nodes.Count)</span>
+                                    </summary>
+                                    <div class="mt-3 space-y-2">
+                                        @foreach (var node in group.Nodes)
+                                        {
+                                            <button class="w-full text-left rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white/85 hover:bg-white/10"
+                                                    @onclick="() => SelectNode(node)">
+                                                <div class="flex items-center gap-2">
+                                                    <span>@node.Emoji</span>
+                                                    <span class="font-semibold">@node.Name</span>
+                                                </div>
+                                                <div class="mt-1 text-xs text-white/60 line-clamp-2">@node.Description</div>
+                                            </button>
+                                        }
+                                    </div>
+                                </details>
+                            }
+                        }
+                    </div>
+                }
                 
 
                 <!-- Mobile tabs -->
@@ -219,6 +264,7 @@
     private IJSObjectReference? _module;
     private DotNetObjectReference<ArchitectureExplorer>? _dotnetRef;
     private bool _initialized;
+    private bool _pendingMapInit;
     private Dhadgar.Scope.Services.ArchitectureGraphData? _data;
     private Dhadgar.Scope.Services.ArchitectureNode? _selected;
 
@@ -226,6 +272,7 @@
     private string GraphPanelExtraClass => _mobileView == "graph" ? "" : "hidden md:block";
     private string DetailsPanelExtraClass => _mobileView == "details" ? "" : "hidden md:block";
     private string TourPanelExtraClass => _mobileView == "tour" ? "" : "hidden md:block";
+    private string _viewMode = "list";
 
     private bool _tourActive;
     private string _tourId = "request_console";
@@ -241,6 +288,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!_pendingMapInit || _viewMode != "map") return;
         if (_initialized) return;
         if (_data is null) return;
 
@@ -250,6 +298,7 @@
             new { mode = "full", selectable = true, dotNetRef = _dotnetRef });
         await _module.InvokeVoidAsync("fit", _graphHost);
         _initialized = true;
+        _pendingMapInit = false;
         await ApplyStateAsync();
     }
 
@@ -286,6 +335,18 @@
         => $"flex-1 rounded-xl px-3 py-2 text-xs font-semibold {( _mobileView == v ? "bg-indigo-500 text-white" : "bg-white/5 text-white/80 hover:bg-white/10" )}";
 
     private void SetMobileView(string v) => _mobileView = v;
+
+    private string ViewClass(string v)
+        => $"rounded-xl px-3 py-2 text-xs font-semibold {( _viewMode == v ? "bg-indigo-500 text-white" : "bg-white/5 text-white/80 hover:bg-white/10" )}";
+
+    private void SetView(string v)
+    {
+        _viewMode = v;
+        if (_viewMode == "map" && !_initialized)
+        {
+            _pendingMapInit = true;
+        }
+    }
 
     private async Task ToggleKind(string k)
     {
@@ -358,6 +419,52 @@
         _tourIndex = Math.Max(_tourIndex - 1, 0);
         _tourStep = tour.Steps[_tourIndex];
         await ApplyStateAsync();
+    }
+
+    private void SelectNode(Dhadgar.Scope.Services.ArchitectureNode node)
+    {
+        _selected = node;
+        _mobileView = "details";
+    }
+
+    private string NormalizeSearch(string? value)
+        => (value ?? string.Empty).Trim().ToLowerInvariant();
+
+    private bool NodeMatches(Dhadgar.Scope.Services.ArchitectureNode node)
+    {
+        var query = NormalizeSearch(Query);
+        if (string.IsNullOrWhiteSpace(query)) return true;
+
+        if ((node.Name ?? string.Empty).ToLowerInvariant().Contains(query)) return true;
+        if ((node.Description ?? string.Empty).ToLowerInvariant().Contains(query)) return true;
+        if (node.Responsibilities.Any(r => NormalizeSearch(r).Contains(query))) return true;
+        if (node.Endpoints.Any(e => NormalizeSearch(e).Contains(query))) return true;
+        if (node.Ports.Any(p => NormalizeSearch(p.ToString()).Contains(query))) return true;
+        if ((node.Kind ?? string.Empty).ToLowerInvariant().Contains(query)) return true;
+
+        return false;
+    }
+
+    private IEnumerable<(string Name, List<Dhadgar.Scope.Services.ArchitectureNode> Nodes)> TreeGroups
+    {
+        get
+        {
+            if (_data is null) return Array.Empty<(string, List<Dhadgar.Scope.Services.ArchitectureNode>)>();
+
+            var districtNames = _data.Districts.ToDictionary(d => d.Id, d => d.Name);
+            var filtered = _data.Nodes
+                .Where(NodeMatches)
+                .GroupBy(n => n.District ?? string.Empty)
+                .Select(g =>
+                {
+                    var name = districtNames.TryGetValue(g.Key, out var label) ? label : (string.IsNullOrWhiteSpace(g.Key) ? "Other" : g.Key);
+                    return (Name: name, Nodes: g.OrderBy(n => n.Name).ToList());
+                })
+                .OrderBy(g => g.Name)
+                .ToList();
+
+            return filtered;
+        }
     }
 
     [JSInvokable]
