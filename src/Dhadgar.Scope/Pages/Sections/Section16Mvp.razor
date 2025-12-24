@@ -1,1286 +1,1347 @@
-<section class="scope-prose">
+<section id="mvp" class="bg-gray-800 rounded-xl p-6 border border-gray-700">
+    <h2 class="text-2xl font-bold text-white mb-2">🎯 MVP Scope & Phases</h2>
+    <p class="text-gray-400 mb-6">Detailed project roadmap with <strong class="text-white">54 milestones</strong> across <strong class="text-white">6 phases</strong>. Each milestone includes dependencies and success criteria.</p>
+    
+    <!-- Phase Summary Bar -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+        <div class="bg-gray-900 rounded-lg p-3 border-l-4 border-green-500 text-center hover:bg-gray-800 transition-colors">
+            <div class="text-2xl font-bold text-green-400">9</div>
+            <div class="text-xs text-gray-400">Phase 1: MVP</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border-l-4 border-yellow-500 text-center hover:bg-gray-800 transition-colors">
+            <div class="text-2xl font-bold text-yellow-400">9</div>
+            <div class="text-xs text-gray-400">Phase 2: Enhance</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border-l-4 border-blue-500 text-center hover:bg-gray-800 transition-colors">
+            <div class="text-2xl font-bold text-blue-400">9</div>
+            <div class="text-xs text-gray-400">Phase 3: Launch</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border-l-4 border-indigo-500 text-center hover:bg-gray-800 transition-colors">
+            <div class="text-2xl font-bold text-indigo-400">9</div>
+            <div class="text-xs text-gray-400">Phase 4: KiP</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border-l-4 border-purple-500 text-center hover:bg-gray-800 transition-colors">
+            <div class="text-2xl font-bold text-purple-400">9</div>
+            <div class="text-xs text-gray-400">Phase 5: Mobile</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border-l-4 border-pink-500 text-center hover:bg-gray-800 transition-colors">
+            <div class="text-2xl font-bold text-pink-400">9</div>
+            <div class="text-xs text-gray-400">Phase 6: Future</div>
+        </div>
+    </div>
+    
+    <!-- Critical Dependencies Note -->
+    <div class="bg-amber-900/20 border border-amber-600/50 rounded-lg p-4 mb-8">
+        <div class="flex items-start gap-3">
+            <span class="text-amber-500 text-xl">⚠️</span>
+            <div>
+                <h4 class="text-amber-400 font-semibold text-sm">Critical Path Dependencies</h4>
+                <p class="text-gray-400 text-xs mt-1">Phases must complete sequentially: MVP → Enhancements → Launch → KiP → Mobile → Sustained Engineering. Some milestones within phases can be parallelized.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="space-y-8">
+        <div class="bg-gray-900 rounded-lg p-5 border-l-4 border-green-500">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                <h3 class="text-xl font-semibold text-green-400">Phase 1: MVP (Minimum Viable Product)</h3>
+                <span class="text-sm text-gray-400 mt-1 md:mt-0 bg-gray-800 px-3 py-1 rounded-full">9 milestones</span>
+            </div>
+            <p class="text-gray-400 mb-5 text-sm">Core product functionality with all 15 services operational. Estimated duration: 12-16 weeks</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.1</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M1</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Foundation Infrastructure</h4>
+                                <p class="text-gray-400 text-xs mb-3">Base platform infrastructure before deploying any services</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">None (starting point)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Kubernetes cluster passes conformance tests</li>
+                                        <li class="text-xs text-gray-400">✓ All nodes healthy and schedulable</li>
+                                        <li class="text-xs text-gray-400">✓ Cilium network policies enforced</li>
+                                        <li class="text-xs text-gray-400">✓ PostgreSQL replication working</li>
+                                        <li class="text-xs text-gray-500 italic">+4 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
 
-<h2>🎯 MVP Scope &amp; Phases</h2>
-<p>Detailed project roadmap with <strong>54 milestones</strong> across <strong>6 phases</strong>. Each milestone includes dependencies and success criteria.</p>
- Phase Summary Bar 
-<div>
-<div class="scope-callout">
-<div>9</div>
-<div>Phase 1: MVP</div>
-</div>
-<div class="scope-callout">
-<div>9</div>
-<div>Phase 2: Enhance</div>
-</div>
-<div class="scope-callout">
-<div>9</div>
-<div>Phase 3: Launch</div>
-</div>
-<div class="scope-callout">
-<div>9</div>
-<div>Phase 4: KiP</div>
-</div>
-<div class="scope-callout">
-<div>9</div>
-<div>Phase 5: Mobile</div>
-</div>
-<div class="scope-callout">
-<div>9</div>
-<div>Phase 6: Future</div>
-</div>
-</div>
- Critical Dependencies Note 
-<div>
-<div>
-<span>⚠️</span>
-<div>
-<h4>Critical Path Dependencies</h4>
-<p>Phases must complete sequentially: MVP → Enhancements → Launch → KiP → Mobile → Sustained Engineering. Some milestones within phases can be parallelized.</p>
-</div>
-</div>
-</div>
-<div>
-<div class="scope-callout">
-<div>
-<h3>Phase 1: MVP (Minimum Viable Product)</h3>
-<span>9 milestones</span>
-</div>
-<p>Core product functionality with all 15 services operational. Estimated duration: 12-16 weeks</p>
-<div>
-<div class="scope-panel">
-<div>
-<span>1.1</span>
-<span>M1</span>
-</div>
-<h4>Foundation Infrastructure</h4>
-<p>Base platform infrastructure before deploying any services</p>
-<div>
-<span>↳ Depends on:</span>
-<p>None (starting point)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Kubernetes cluster passes conformance tests</li>
-<li>✓ All nodes healthy and schedulable</li>
-<li>✓ Cilium network policies enforced</li>
-<li>✓ PostgreSQL replication working</li>
-<li>+4 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.2</span>
-<span>M2</span>
-</div>
-<h4>Foundational Services</h4>
-<p>Deploy core services that other services depend on</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 1 (Infrastructure ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Secrets Service retrieves from Azure Key Vault successfully</li>
-<li>✓ Observability collecting logs and metrics from all infrastructure</li>
-<li>✓ Gateway Service routing requests correctly</li>
-<li>✓ All services register health endpoints</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.3</span>
-<span>M3</span>
-</div>
-<h4>Identity &amp; Access</h4>
-<p>User authentication and authorization</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 2 (Foundational services available)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Users can register and login via Azure AD B2C</li>
-<li>✓ JWT tokens generated and validated correctly</li>
-<li>✓ Basic RBAC enforced (admin vs user roles)</li>
-<li>✓ Password reset and email verification working</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.4</span>
-<span>M4</span>
-</div>
-<h4>Core Backend Services</h4>
-<p>Essential business logic services</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 3 (Identity service for auth)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Billing Service processes test payments via Stripe</li>
-<li>✓ Firewall rules applied and enforced via Cilium</li>
-<li>✓ Mods can be uploaded and downloaded</li>
-<li>✓ Files stored in Azure Blob and retrievable</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.5</span>
-<span>M5</span>
-</div>
-<h4>Game Server Management Services</h4>
-<p>Services for managing game servers</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 4 (Core services available)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Servers Service can create/start/stop server records</li>
-<li>✓ Templates available for at least 3 game types</li>
-<li>✓ Schedules can trigger automated tasks</li>
-<li>✓ Console Service establishes WebSocket connections</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.6</span>
-<span>M6</span>
-</div>
-<h4>Agent Infrastructure</h4>
-<p>Deploy and configure agents on game server hosts</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 5 (Server management services ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Agents install successfully on Windows/Linux</li>
-<li>✓ Agent registration completes with one-time token</li>
-<li>✓ Agents maintain secure connection to control plane</li>
-<li>✓ Agents report health status every 30 seconds</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.7</span>
-<span>M7</span>
-</div>
-<h4>Agent-Driven Game Server Operations</h4>
-<p>Agents execute game server commands</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 6 (Agents deployed and connected)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Agents can start/stop game servers reliably</li>
-<li>✓ File operations complete successfully</li>
-<li>✓ Console output streams in real-time</li>
-<li>✓ Resource metrics reported accurately</li>
-<li>+3 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.8</span>
-<span>M8</span>
-</div>
-<h4>Frontend Development</h4>
-<p>User interface for all platform functionality</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestones 2-7 (services and APIs available)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ All backend APIs accessible via UI</li>
-<li>✓ Dashboard shows real-time server status</li>
-<li>✓ Server CRUD operations functional</li>
-<li>✓ Console displays real-time output</li>
-<li>+3 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>1.9</span>
-<span>M9</span>
-</div>
-<h4>MVP Integration &amp; Testing</h4>
-<p>End-to-end testing and production readiness</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestones 1-8 (all MVP components ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ End-to-end user workflows tested and functional</li>
-<li>✓ System handles 100+ concurrent users</li>
-<li>✓ No critical security vulnerabilities</li>
-<li>✓ All documentation complete and accurate</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-<div class="scope-callout">
-<div>
-<h3>Phase 2: Enhancements</h3>
-<span>9 milestones</span>
-</div>
-<p>Advanced features and platform maturity. Estimated duration: 8-12 weeks</p>
-<div>
-<div class="scope-panel">
-<div>
-<span>2.1</span>
-<span>M1</span>
-</div>
-<h4>Mod Marketplace &amp; Integration</h4>
-<p>Centralized mod discovery and installation</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Phase complete</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Marketplace contains 50+ curated mods at launch</li>
-<li>✓ Installation success rate &gt;95%</li>
-<li>✓ Compatibility checker prevents conflicts</li>
-<li>✓ Updates deploy without breaking servers</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.2</span>
-<span>M2</span>
-</div>
-<h4>Team Management &amp; Permissions</h4>
-<p>Multi-user collaboration features</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Authentication Service</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Teams support 2-50 members</li>
-<li>✓ Permissions enforce correctly (no privilege escalation)</li>
-<li>✓ Audit log captures all critical actions</li>
-<li>✓ Team billing splits costs accurately</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.3</span>
-<span>M3</span>
-</div>
-<h4>Advanced Billing &amp; Usage Tracking</h4>
-<p>Detailed usage analytics and cost management</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Billing Service</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Usage data updates in real-time (&lt;5 min lag)</li>
-<li>✓ Cost calculations match actual resource usage</li>
-<li>✓ Budget alerts trigger at configured thresholds</li>
-<li>✓ Invoice generation automated monthly</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.4</span>
-<span>M4</span>
-</div>
-<h4>Advanced Networking Features</h4>
-<p>Enhanced networking capabilities</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Networking Service</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ DDoS mitigation blocks attacks &gt;10Gbps</li>
-<li>✓ Custom DNS resolves in &lt;50ms globally</li>
-<li>✓ Geographic routing reduces latency by 30%+</li>
-<li>✓ Network analytics dashboard operational</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.5</span>
-<span>M5</span>
-</div>
-<h4>Advanced Console Features</h4>
-<p>Enhanced server console capabilities</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Console Service</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Console history retained 30+ days</li>
-<li>✓ Command templates save/execute correctly</li>
-<li>✓ Scheduled commands fire on time (±5 seconds)</li>
-<li>✓ Multi-server commands execute reliably</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.6</span>
-<span>M6</span>
-</div>
-<h4>File Management Enhancements</h4>
-<p>Advanced file operations</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP File Manager Service</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Bulk uploads handle 100+ files</li>
-<li>✓ File search indexes all server files</li>
-<li>✓ Archive operations complete without corruption</li>
-<li>✓ Text editor supports 10+ file types</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.7</span>
-<span>M7</span>
-</div>
-<h4>Analytics &amp; Reporting</h4>
-<p>Data insights and business intelligence</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Observability</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Analytics dashboards load in &lt;2 seconds</li>
-<li>✓ Data accuracy verified against raw metrics</li>
-<li>✓ Reports generate on-demand or scheduled</li>
-<li>✓ Exports contain complete data sets</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.8</span>
-<span>M8</span>
-</div>
-<h4>API &amp; Developer Tools</h4>
-<p>Programmatic access and automation</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP API Gateway</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ API covers 100% of UI functionality</li>
-<li>✓ WebSocket events deliver in &lt;100ms</li>
-<li>✓ API docs auto-generated from code</li>
-<li>✓ SDKs published to package managers</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>2.9</span>
-<span>M9</span>
-</div>
-<h4>Mobile-Optimized Web Experience</h4>
-<p>Responsive design improvements</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Frontend</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Mobile UI usable on screens down to 320px width</li>
-<li>✓ PWA installable on iOS/Android</li>
-<li>✓ Push notifications work cross-browser</li>
-<li>✓ Mobile performance meets Core Web Vitals</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-<div class="scope-callout">
-<div>
-<h3>Phase 3: Launch</h3>
-<span>9 milestones</span>
-</div>
-<p>Go-to-market readiness and public release. Estimated duration: 6-8 weeks</p>
-<div>
-<div class="scope-panel">
-<div>
-<span>3.1</span>
-<span>M1</span>
-</div>
-<h4>Legal &amp; Compliance</h4>
-<p>Legal requirements for operating a commercial service</p>
-<div>
-<span>↳ Depends on:</span>
-<p>None (can start anytime)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ All legal documents reviewed by attorney</li>
-<li>✓ Privacy policy covers all data collection/usage</li>
-<li>✓ Cookie consent banner implemented</li>
-<li>✓ DMCA agent registered with US Copyright Office</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.2</span>
-<span>M2</span>
-</div>
-<h4>Customer Onboarding &amp; Documentation</h4>
-<p>Help users get started successfully</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP complete (need product to document)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ At least 50 knowledge base articles published</li>
-<li>✓ 10+ video tutorials covering core features</li>
-<li>✓ New users complete onboarding flow (&gt;70%)</li>
-<li>✓ API docs auto-generated from OpenAPI spec</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.3</span>
-<span>M3</span>
-</div>
-<h4>Marketing Website &amp; Brand</h4>
-<p>Public-facing marketing presence</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Legal (Milestone 1 for ToS/Privacy links)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Marketing site deployed and responsive</li>
-<li>✓ Blog platform operational</li>
-<li>✓ Brand assets documented and accessible</li>
-<li>✓ Email templates designed and tested</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.4</span>
-<span>M4</span>
-</div>
-<h4>Customer Support Infrastructure</h4>
-<p>Tools and processes for helping customers</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP complete (need product to support)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Ticketing system integrated with product</li>
-<li>✓ Live chat widget embedded in app</li>
-<li>✓ Support email routing to ticketing system</li>
-<li>✓ SLAs defined and communicated</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.5</span>
-<span>M5</span>
-</div>
-<h4>Payment &amp; Billing Launch Readiness</h4>
-<p>Production payment processing</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Billing Service, Legal (Milestone 1)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Stripe account in production mode</li>
-<li>✓ All pricing tiers configured</li>
-<li>✓ Customers can upgrade/downgrade/cancel</li>
-<li>✓ Invoices sent automatically</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.6</span>
-<span>M6</span>
-</div>
-<h4>Security Hardening &amp; Audit</h4>
-<p>Production security readiness</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP complete (need full system to audit)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Penetration test completed with no critical findings</li>
-<li>✓ Vulnerability scans run automatically in CI/CD</li>
-<li>✓ All production secrets rotated and secured</li>
-<li>✓ DDoS protection active and tested</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.7</span>
-<span>M7</span>
-</div>
-<h4>Performance &amp; Scalability Testing</h4>
-<p>Ensure system can handle production load</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP complete (need full system to test)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ System handles 1000+ concurrent users</li>
-<li>✓ API response times &lt;500ms (p95)</li>
-<li>✓ Database queries optimized (&lt;100ms)</li>
-<li>✓ Static assets served via CDN</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.8</span>
-<span>M8</span>
-</div>
-<h4>Monitoring &amp; Alerting</h4>
-<p>Production observability</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP Observability</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Uptime monitoring checks all critical endpoints</li>
-<li>✓ Errors automatically tracked and triaged</li>
-<li>✓ Logs searchable and retained for 30+ days</li>
-<li>✓ APM shows service dependencies</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>3.9</span>
-<span>M9</span>
-</div>
-<h4>Launch Checklist &amp; Go-Live</h4>
-<p>Final verification before public launch</p>
-<div>
-<span>↳ Depends on:</span>
-<p>All previous Launch milestones</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Pre-launch checklist 100% complete</li>
-<li>✓ Rollback procedures tested</li>
-<li>✓ Launch announcement ready to publish</li>
-<li>✓ All payment tiers functional</li>
-<li>+2 more...</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-<div class="scope-callout">
-<div>
-<h3>Phase 4: KiP (Knowledge is Power Edition)</h3>
-<span>9 milestones</span>
-</div>
-<p>Open-source, self-hosted version for community deployment. Estimated duration: 6-10 weeks</p>
-<div>
-<div class="scope-panel">
-<div>
-<span>4.1</span>
-<span>M1</span>
-</div>
-<h4>Open Source Preparation</h4>
-<p>Prepare codebase for public release</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP complete (need stable codebase)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ All proprietary code removed or abstracted</li>
-<li>✓ No hardcoded secrets or internal URLs</li>
-<li>✓ License file added to all repositories</li>
-<li>✓ Contributor documentation complete</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.2</span>
-<span>M2</span>
-</div>
-<h4>Simplified Deployment</h4>
-<p>Make self-hosting accessible</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 1 (open source prep)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Docker Compose deploys all services successfully</li>
-<li>✓ Helm chart installs on vanilla K8s cluster</li>
-<li>✓ Installation completes in &lt;30 minutes</li>
-<li>✓ Configuration documented and validated</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.3</span>
-<span>M3</span>
-</div>
-<h4>Self-Hosted Infrastructure Alternatives</h4>
-<p>Replace managed services with self-hostable options</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 2 (deployment tools ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ All Azure-specific services have self-hosted alternatives</li>
-<li>✓ Configuration switches between managed/self-hosted</li>
-<li>✓ Documentation covers all alternative options</li>
-<li>✓ Default config uses self-hosted components</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.4</span>
-<span>M4</span>
-</div>
-<h4>Simplified Feature Set</h4>
-<p>Remove enterprise/cloud-only features for KiP</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 3 (infrastructure alternatives ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ KiP runs without billing service</li>
-<li>✓ Single-tenant mode functional</li>
-<li>✓ Basic networking works without Cilium</li>
-<li>✓ No Azure dependencies remain</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.5</span>
-<span>M5</span>
-</div>
-<h4>Community Infrastructure</h4>
-<p>Support channels for self-hosters</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 1 (open source ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ GitHub Discussions enabled and moderated</li>
-<li>✓ Discord server active with channels</li>
-<li>✓ Documentation site deployed and indexed</li>
-<li>✓ At least 10 example configurations</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.6</span>
-<span>M6</span>
-</div>
-<h4>Agent Simplification</h4>
-<p>Streamlined agents for self-hosted environments</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 4 (simplified feature set)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Agents install with one command</li>
-<li>✓ No external dependencies required</li>
-<li>✓ Agents work in air-gapped environments</li>
-<li>✓ Configuration UI functional and intuitive</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.7</span>
-<span>M7</span>
-</div>
-<h4>Performance Optimization for Small Deployments</h4>
-<p>Optimize for single-server/small-cluster deployments</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 2 (deployment ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ System runs on 2 CPU / 4GB RAM minimum</li>
-<li>✓ Lightweight mode reduces resource usage by 50%</li>
-<li>✓ Database performs well with &lt;1000 servers</li>
-<li>✓ Combined services deploy successfully</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.8</span>
-<span>M8</span>
-</div>
-<h4>Migration Tools (Cloud to Self-Hosted)</h4>
-<p>Allow users to migrate from hosted to KiP</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 3 (self-hosted infrastructure ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Export tool captures all user data</li>
-<li>✓ Import tool restores data successfully</li>
-<li>✓ No data loss during migration</li>
-<li>✓ Migration guide tested and validated</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>4.9</span>
-<span>M9</span>
-</div>
-<h4>KiP Launch &amp; Promotion</h4>
-<p>Public release and community building</p>
-<div>
-<span>↳ Depends on:</span>
-<p>All previous KiP milestones</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ GitHub repository starred by 100+ users</li>
-<li>✓ Launch announcement reaches 10k+ impressions</li>
-<li>✓ YouTube video published with installation guide</li>
-<li>✓ Comparison guide helps users choose version</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-<div class="scope-callout">
-<div>
-<h3>Phase 5: Mobile Apps</h3>
-<span>9 milestones</span>
-</div>
-<p>iOS and Android native applications. Estimated duration: 10-14 weeks</p>
-<div>
-<div class="scope-panel">
-<div>
-<span>5.1</span>
-<span>M1</span>
-</div>
-<h4>Mobile Strategy &amp; Requirements</h4>
-<p>Define scope and approach for mobile presence</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Launch Phase complete (stable API)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Mobile feature set defined and approved</li>
-<li>✓ Platform choice justified and documented</li>
-<li>✓ UX mockups for key flows completed</li>
-<li>✓ Performance benchmarks established</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.2</span>
-<span>M2</span>
-</div>
-<h4>Mobile API Enhancements</h4>
-<p>Optimize backend for mobile clients</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 1 (requirements defined)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Push notifications deliver reliably</li>
-<li>✓ API responses optimized for mobile bandwidth</li>
-<li>✓ Offline mode caches critical data</li>
-<li>✓ Biometric auth works on iOS/Android</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.3</span>
-<span>M3</span>
-</div>
-<h4>Core Mobile App (iOS)</h4>
-<p>iOS app with essential functionality</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 2 (mobile API ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ App approved and published to App Store</li>
-<li>✓ All core features functional</li>
-<li>✓ Performance smooth on iPhone 12+</li>
-<li>✓ Battery usage acceptable (&lt;5% per hour)</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.4</span>
-<span>M4</span>
-</div>
-<h4>Core Mobile App (Android)</h4>
-<p>Android app with essential functionality</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 2 (mobile API ready)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ App approved and published to Google Play</li>
-<li>✓ All core features functional</li>
-<li>✓ Performance smooth on Android 10+</li>
-<li>✓ Battery usage acceptable (&lt;5% per hour)</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.5</span>
-<span>M5</span>
-</div>
-<h4>Advanced Mobile Features (Phase 1)</h4>
-<p>Enhanced functionality beyond basics</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestones 3 &amp; 4 (core apps released)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Interactive console works reliably</li>
-<li>✓ File operations functional on mobile</li>
-<li>✓ Server creation wizard mobile-optimized</li>
-<li>✓ Widgets provide useful at-a-glance info</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.6</span>
-<span>M6</span>
-</div>
-<h4>Advanced Mobile Features (Phase 2)</h4>
-<p>Power user features</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestone 5 (advanced features phase 1)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Batch operations work across multiple servers</li>
-<li>✓ Custom alert rules save and trigger correctly</li>
-<li>✓ Offline actions sync when connection restored</li>
-<li>✓ Mod browsing optimized for mobile screens</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.7</span>
-<span>M7</span>
-</div>
-<h4>Mobile App Optimization</h4>
-<p>Performance and polish</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestones 3-6 (apps functional)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ App size &lt;50MB</li>
-<li>✓ Launch time &lt;2 seconds</li>
-<li>✓ Accessibility audit passes</li>
-<li>✓ At least 3 languages supported</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.8</span>
-<span>M8</span>
-</div>
-<h4>Tablet &amp; Watch Support</h4>
-<p>Extend to additional form factors</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Milestones 3 &amp; 4 (phone apps stable)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ iPad app uses available screen space effectively</li>
-<li>✓ Android tablet layouts responsive</li>
-<li>✓ Watch apps functional for quick checks</li>
-<li>✓ Watch apps don't drain battery excessively</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>5.9</span>
-<span>M9</span>
-</div>
-<h4>Mobile Platform Maturity</h4>
-<p>Long-term mobile sustainability</p>
-<div>
-<span>↳ Depends on:</span>
-<p>All previous mobile milestones</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Feature parity documented and justified</li>
-<li>✓ At least 2 mobile-first features launched</li>
-<li>✓ Deep links work from all notification types</li>
-<li>✓ App clips/instant apps functional</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-<div class="scope-callout">
-<div>
-<h3>Phase 6: Sustained Engineering &amp; Future</h3>
-<span>9 milestones</span>
-</div>
-<p>Long-term product evolution, maintenance, and innovation. Ongoing</p>
-<div>
-<div class="scope-panel">
-<div>
-<span>6.1</span>
-<span>M1</span>
-</div>
-<h4>Technical Debt Reduction</h4>
-<p>Address accumulated shortcuts and improve code quality</p>
-<div>
-<span>↳ Depends on:</span>
-<p>All previous phases (need stable product)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Code coverage reaches 90%+</li>
-<li>✓ All dependencies on supported versions</li>
-<li>✓ No critical security vulnerabilities</li>
-<li>✓ Performance regressions addressed</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.2</span>
-<span>M2</span>
-</div>
-<h4>Scalability Improvements</h4>
-<p>Prepare for 10x+ growth</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Launch phase complete (production traffic data)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ System handles 10,000+ concurrent users</li>
-<li>✓ Database scales horizontally</li>
-<li>✓ API response times remain &lt;500ms at scale</li>
-<li>✓ CDN serves 90%+ of static content</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.3</span>
-<span>M3</span>
-</div>
-<h4>Enterprise Features</h4>
-<p>Features for larger organizations</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Launch phase complete (customer feedback)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ SSO integration with major providers (Okta, Azure AD)</li>
-<li>✓ RBAC supports complex org structures</li>
-<li>✓ Audit logs meet SOC 2 requirements</li>
-<li>✓ SLA monitoring and reporting automated</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.4</span>
-<span>M4</span>
-</div>
-<h4>AI/ML Integration</h4>
-<p>Intelligent features powered by machine learning</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Launch phase (need historical data)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Anomaly detection accuracy &gt;85%</li>
-<li>✓ Predictive scaling reduces incidents by 50%</li>
-<li>✓ Recommendations improve performance measurably</li>
-<li>✓ Automated troubleshooting resolves 30%+ of issues</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.5</span>
-<span>M5</span>
-</div>
-<h4>Advanced Game Support</h4>
-<p>Expand beyond initial game types</p>
-<div>
-<span>↳ Depends on:</span>
-<p>MVP game support stable</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ At least 15 total game types supported</li>
-<li>✓ Game-specific features implemented for top 5 games</li>
-<li>✓ Mod marketplace has 200+ mods</li>
-<li>✓ Voice server provisioning functional</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.6</span>
-<span>M6</span>
-</div>
-<h4>Platform Ecosystem</h4>
-<p>Enable third-party integrations and extensions</p>
-<div>
-<span>↳ Depends on:</span>
-<p>API &amp; Developer Tools (Enhancements Phase)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Plugin system supports common use cases</li>
-<li>✓ Marketplace has 20+ third-party plugins</li>
-<li>✓ Webhooks deliver 99.9% of events</li>
-<li>✓ GraphQL API covers all functionality</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.7</span>
-<span>M7</span>
-</div>
-<h4>Global Expansion</h4>
-<p>Support international customers</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Launch phase (stable foundation)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Services deployed in 3+ regions</li>
-<li>✓ UI/docs translated to 10+ languages</li>
-<li>✓ Payment processing in 5+ currencies</li>
-<li>✓ GDPR compliance verified</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.8</span>
-<span>M8</span>
-</div>
-<h4>Advanced Analytics &amp; BI</h4>
-<p>Deep insights for users and business</p>
-<div>
-<span>↳ Depends on:</span>
-<p>Analytics &amp; Reporting (Enhancements Phase)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Users can create custom dashboards</li>
-<li>✓ Data export supports CSV, JSON, Parquet</li>
-<li>✓ Predictive models deployed and accurate</li>
-<li>✓ BI dashboards track key business metrics</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-<div class="scope-panel">
-<div>
-<span>6.9</span>
-<span>M9</span>
-</div>
-<h4>Innovation &amp; R&amp;D</h4>
-<p>Explore future technologies and features</p>
-<div>
-<span>↳ Depends on:</span>
-<p>All previous phases (mature platform)</p>
-</div>
-<div>
-<span>✅ Success Criteria:</span>
-<ul>
-<li>✓ Edge deployment piloted in 2+ locations</li>
-<li>✓ Blockchain features (if pursued) functional</li>
-<li>✓ VR/AR platform support (if applicable) working</li>
-<li>✓ Encryption upgraded to quantum-resistant algorithms</li>
-<li>+1 more...</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-</div>
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.2</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M2</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Foundational Services</h4>
+                                <p class="text-gray-400 text-xs mb-3">Deploy core services that other services depend on</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 1 (Infrastructure ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Secrets Service retrieves from Azure Key Vault successfully</li>
+                                        <li class="text-xs text-gray-400">✓ Observability collecting logs and metrics from all infrastructure</li>
+                                        <li class="text-xs text-gray-400">✓ Gateway Service routing requests correctly</li>
+                                        <li class="text-xs text-gray-400">✓ All services register health endpoints</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.3</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M3</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Identity & Access</h4>
+                                <p class="text-gray-400 text-xs mb-3">User authentication and authorization</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 2 (Foundational services available)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Users can register and login via Azure AD B2C</li>
+                                        <li class="text-xs text-gray-400">✓ JWT tokens generated and validated correctly</li>
+                                        <li class="text-xs text-gray-400">✓ Basic RBAC enforced (admin vs user roles)</li>
+                                        <li class="text-xs text-gray-400">✓ Password reset and email verification working</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.4</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M4</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Core Backend Services</h4>
+                                <p class="text-gray-400 text-xs mb-3">Essential business logic services</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 3 (Identity service for auth)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Billing Service processes test payments via Stripe</li>
+                                        <li class="text-xs text-gray-400">✓ Firewall rules applied and enforced via Cilium</li>
+                                        <li class="text-xs text-gray-400">✓ Mods can be uploaded and downloaded</li>
+                                        <li class="text-xs text-gray-400">✓ Files stored in Azure Blob and retrievable</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.5</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M5</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Game Server Management Services</h4>
+                                <p class="text-gray-400 text-xs mb-3">Services for managing game servers</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 4 (Core services available)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Servers Service can create/start/stop server records</li>
+                                        <li class="text-xs text-gray-400">✓ Templates available for at least 3 game types</li>
+                                        <li class="text-xs text-gray-400">✓ Schedules can trigger automated tasks</li>
+                                        <li class="text-xs text-gray-400">✓ Console Service establishes WebSocket connections</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.6</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M6</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Agent Infrastructure</h4>
+                                <p class="text-gray-400 text-xs mb-3">Deploy and configure agents on game server hosts</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 5 (Server management services ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Agents install successfully on Windows/Linux</li>
+                                        <li class="text-xs text-gray-400">✓ Agent registration completes with one-time token</li>
+                                        <li class="text-xs text-gray-400">✓ Agents maintain secure connection to control plane</li>
+                                        <li class="text-xs text-gray-400">✓ Agents report health status every 30 seconds</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.7</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M7</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Agent-Driven Game Server Operations</h4>
+                                <p class="text-gray-400 text-xs mb-3">Agents execute game server commands</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 6 (Agents deployed and connected)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Agents can start/stop game servers reliably</li>
+                                        <li class="text-xs text-gray-400">✓ File operations complete successfully</li>
+                                        <li class="text-xs text-gray-400">✓ Console output streams in real-time</li>
+                                        <li class="text-xs text-gray-400">✓ Resource metrics reported accurately</li>
+                                        <li class="text-xs text-gray-500 italic">+3 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.8</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M8</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">Frontend Development</h4>
+                                <p class="text-gray-400 text-xs mb-3">User interface for all platform functionality</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestones 2-7 (services and APIs available)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ All backend APIs accessible via UI</li>
+                                        <li class="text-xs text-gray-400">✓ Dashboard shows real-time server status</li>
+                                        <li class="text-xs text-gray-400">✓ Server CRUD operations functional</li>
+                                        <li class="text-xs text-gray-400">✓ Console displays real-time output</li>
+                                        <li class="text-xs text-gray-500 italic">+3 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-green-500 transition-all duration-200 hover:shadow-lg hover:shadow-green-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900 text-green-400 text-xs font-bold border border-green-500 group-hover:scale-110 transition-transform">1.9</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M9</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-green-400 transition-colors">MVP Integration & Testing</h4>
+                                <p class="text-gray-400 text-xs mb-3">End-to-end testing and production readiness</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-green-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestones 1-8 (all MVP components ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ End-to-end user workflows tested and functional</li>
+                                        <li class="text-xs text-gray-400">✓ System handles 100+ concurrent users</li>
+                                        <li class="text-xs text-gray-400">✓ No critical security vulnerabilities</li>
+                                        <li class="text-xs text-gray-400">✓ All documentation complete and accurate</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 rounded-lg p-5 border-l-4 border-yellow-500">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                <h3 class="text-xl font-semibold text-yellow-400">Phase 2: Enhancements</h3>
+                <span class="text-sm text-gray-400 mt-1 md:mt-0 bg-gray-800 px-3 py-1 rounded-full">9 milestones</span>
+            </div>
+            <p class="text-gray-400 mb-5 text-sm">Advanced features and platform maturity. Estimated duration: 8-12 weeks</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.1</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M1</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">Mod Marketplace & Integration</h4>
+                                <p class="text-gray-400 text-xs mb-3">Centralized mod discovery and installation</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Phase complete</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Marketplace contains 50+ curated mods at launch</li>
+                                        <li class="text-xs text-gray-400">✓ Installation success rate >95%</li>
+                                        <li class="text-xs text-gray-400">✓ Compatibility checker prevents conflicts</li>
+                                        <li class="text-xs text-gray-400">✓ Updates deploy without breaking servers</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.2</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M2</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">Team Management & Permissions</h4>
+                                <p class="text-gray-400 text-xs mb-3">Multi-user collaboration features</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Authentication Service</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Teams support 2-50 members</li>
+                                        <li class="text-xs text-gray-400">✓ Permissions enforce correctly (no privilege escalation)</li>
+                                        <li class="text-xs text-gray-400">✓ Audit log captures all critical actions</li>
+                                        <li class="text-xs text-gray-400">✓ Team billing splits costs accurately</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.3</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M3</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">Advanced Billing & Usage Tracking</h4>
+                                <p class="text-gray-400 text-xs mb-3">Detailed usage analytics and cost management</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Billing Service</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Usage data updates in real-time (&lt;5 min lag)</li>
+                                        <li class="text-xs text-gray-400">✓ Cost calculations match actual resource usage</li>
+                                        <li class="text-xs text-gray-400">✓ Budget alerts trigger at configured thresholds</li>
+                                        <li class="text-xs text-gray-400">✓ Invoice generation automated monthly</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.4</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M4</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">Advanced Networking Features</h4>
+                                <p class="text-gray-400 text-xs mb-3">Enhanced networking capabilities</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Networking Service</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ DDoS mitigation blocks attacks >10Gbps</li>
+                                        <li class="text-xs text-gray-400">✓ Custom DNS resolves in &lt;50ms globally</li>
+                                        <li class="text-xs text-gray-400">✓ Geographic routing reduces latency by 30%+</li>
+                                        <li class="text-xs text-gray-400">✓ Network analytics dashboard operational</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.5</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M5</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">Advanced Console Features</h4>
+                                <p class="text-gray-400 text-xs mb-3">Enhanced server console capabilities</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Console Service</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Console history retained 30+ days</li>
+                                        <li class="text-xs text-gray-400">✓ Command templates save/execute correctly</li>
+                                        <li class="text-xs text-gray-400">✓ Scheduled commands fire on time (±5 seconds)</li>
+                                        <li class="text-xs text-gray-400">✓ Multi-server commands execute reliably</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.6</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M6</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">File Management Enhancements</h4>
+                                <p class="text-gray-400 text-xs mb-3">Advanced file operations</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP File Manager Service</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Bulk uploads handle 100+ files</li>
+                                        <li class="text-xs text-gray-400">✓ File search indexes all server files</li>
+                                        <li class="text-xs text-gray-400">✓ Archive operations complete without corruption</li>
+                                        <li class="text-xs text-gray-400">✓ Text editor supports 10+ file types</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.7</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M7</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">Analytics & Reporting</h4>
+                                <p class="text-gray-400 text-xs mb-3">Data insights and business intelligence</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Observability</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Analytics dashboards load in &lt;2 seconds</li>
+                                        <li class="text-xs text-gray-400">✓ Data accuracy verified against raw metrics</li>
+                                        <li class="text-xs text-gray-400">✓ Reports generate on-demand or scheduled</li>
+                                        <li class="text-xs text-gray-400">✓ Exports contain complete data sets</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.8</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M8</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">API & Developer Tools</h4>
+                                <p class="text-gray-400 text-xs mb-3">Programmatic access and automation</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP API Gateway</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ API covers 100% of UI functionality</li>
+                                        <li class="text-xs text-gray-400">✓ WebSocket events deliver in &lt;100ms</li>
+                                        <li class="text-xs text-gray-400">✓ API docs auto-generated from code</li>
+                                        <li class="text-xs text-gray-400">✓ SDKs published to package managers</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-yellow-500 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-900 text-yellow-400 text-xs font-bold border border-yellow-500 group-hover:scale-110 transition-transform">2.9</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M9</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-yellow-400 transition-colors">Mobile-Optimized Web Experience</h4>
+                                <p class="text-gray-400 text-xs mb-3">Responsive design improvements</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-yellow-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Frontend</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Mobile UI usable on screens down to 320px width</li>
+                                        <li class="text-xs text-gray-400">✓ PWA installable on iOS/Android</li>
+                                        <li class="text-xs text-gray-400">✓ Push notifications work cross-browser</li>
+                                        <li class="text-xs text-gray-400">✓ Mobile performance meets Core Web Vitals</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 rounded-lg p-5 border-l-4 border-blue-500">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                <h3 class="text-xl font-semibold text-blue-400">Phase 3: Launch</h3>
+                <span class="text-sm text-gray-400 mt-1 md:mt-0 bg-gray-800 px-3 py-1 rounded-full">9 milestones</span>
+            </div>
+            <p class="text-gray-400 mb-5 text-sm">Go-to-market readiness and public release. Estimated duration: 6-8 weeks</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.1</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M1</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Legal & Compliance</h4>
+                                <p class="text-gray-400 text-xs mb-3">Legal requirements for operating a commercial service</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">None (can start anytime)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ All legal documents reviewed by attorney</li>
+                                        <li class="text-xs text-gray-400">✓ Privacy policy covers all data collection/usage</li>
+                                        <li class="text-xs text-gray-400">✓ Cookie consent banner implemented</li>
+                                        <li class="text-xs text-gray-400">✓ DMCA agent registered with US Copyright Office</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.2</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M2</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Customer Onboarding & Documentation</h4>
+                                <p class="text-gray-400 text-xs mb-3">Help users get started successfully</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP complete (need product to document)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ At least 50 knowledge base articles published</li>
+                                        <li class="text-xs text-gray-400">✓ 10+ video tutorials covering core features</li>
+                                        <li class="text-xs text-gray-400">✓ New users complete onboarding flow (>70%)</li>
+                                        <li class="text-xs text-gray-400">✓ API docs auto-generated from OpenAPI spec</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.3</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M3</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Marketing Website & Brand</h4>
+                                <p class="text-gray-400 text-xs mb-3">Public-facing marketing presence</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Legal (Milestone 1 for ToS/Privacy links)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Marketing site deployed and responsive</li>
+                                        <li class="text-xs text-gray-400">✓ Blog platform operational</li>
+                                        <li class="text-xs text-gray-400">✓ Brand assets documented and accessible</li>
+                                        <li class="text-xs text-gray-400">✓ Email templates designed and tested</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.4</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M4</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Customer Support Infrastructure</h4>
+                                <p class="text-gray-400 text-xs mb-3">Tools and processes for helping customers</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP complete (need product to support)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Ticketing system integrated with product</li>
+                                        <li class="text-xs text-gray-400">✓ Live chat widget embedded in app</li>
+                                        <li class="text-xs text-gray-400">✓ Support email routing to ticketing system</li>
+                                        <li class="text-xs text-gray-400">✓ SLAs defined and communicated</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.5</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M5</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Payment & Billing Launch Readiness</h4>
+                                <p class="text-gray-400 text-xs mb-3">Production payment processing</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Billing Service, Legal (Milestone 1)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Stripe account in production mode</li>
+                                        <li class="text-xs text-gray-400">✓ All pricing tiers configured</li>
+                                        <li class="text-xs text-gray-400">✓ Customers can upgrade/downgrade/cancel</li>
+                                        <li class="text-xs text-gray-400">✓ Invoices sent automatically</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.6</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M6</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Security Hardening & Audit</h4>
+                                <p class="text-gray-400 text-xs mb-3">Production security readiness</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP complete (need full system to audit)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Penetration test completed with no critical findings</li>
+                                        <li class="text-xs text-gray-400">✓ Vulnerability scans run automatically in CI/CD</li>
+                                        <li class="text-xs text-gray-400">✓ All production secrets rotated and secured</li>
+                                        <li class="text-xs text-gray-400">✓ DDoS protection active and tested</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.7</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M7</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Performance & Scalability Testing</h4>
+                                <p class="text-gray-400 text-xs mb-3">Ensure system can handle production load</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP complete (need full system to test)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ System handles 1000+ concurrent users</li>
+                                        <li class="text-xs text-gray-400">✓ API response times &lt;500ms (p95)</li>
+                                        <li class="text-xs text-gray-400">✓ Database queries optimized (&lt;100ms)</li>
+                                        <li class="text-xs text-gray-400">✓ Static assets served via CDN</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.8</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M8</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Monitoring & Alerting</h4>
+                                <p class="text-gray-400 text-xs mb-3">Production observability</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP Observability</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Uptime monitoring checks all critical endpoints</li>
+                                        <li class="text-xs text-gray-400">✓ Errors automatically tracked and triaged</li>
+                                        <li class="text-xs text-gray-400">✓ Logs searchable and retained for 30+ days</li>
+                                        <li class="text-xs text-gray-400">✓ APM shows service dependencies</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900 text-blue-400 text-xs font-bold border border-blue-500 group-hover:scale-110 transition-transform">3.9</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M9</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-blue-400 transition-colors">Launch Checklist & Go-Live</h4>
+                                <p class="text-gray-400 text-xs mb-3">Final verification before public launch</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-blue-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">All previous Launch milestones</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Pre-launch checklist 100% complete</li>
+                                        <li class="text-xs text-gray-400">✓ Rollback procedures tested</li>
+                                        <li class="text-xs text-gray-400">✓ Launch announcement ready to publish</li>
+                                        <li class="text-xs text-gray-400">✓ All payment tiers functional</li>
+                                        <li class="text-xs text-gray-500 italic">+2 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 rounded-lg p-5 border-l-4 border-indigo-500">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                <h3 class="text-xl font-semibold text-indigo-400">Phase 4: KiP (Knowledge is Power Edition)</h3>
+                <span class="text-sm text-gray-400 mt-1 md:mt-0 bg-gray-800 px-3 py-1 rounded-full">9 milestones</span>
+            </div>
+            <p class="text-gray-400 mb-5 text-sm">Open-source, self-hosted version for community deployment. Estimated duration: 6-10 weeks</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.1</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M1</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Open Source Preparation</h4>
+                                <p class="text-gray-400 text-xs mb-3">Prepare codebase for public release</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP complete (need stable codebase)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ All proprietary code removed or abstracted</li>
+                                        <li class="text-xs text-gray-400">✓ No hardcoded secrets or internal URLs</li>
+                                        <li class="text-xs text-gray-400">✓ License file added to all repositories</li>
+                                        <li class="text-xs text-gray-400">✓ Contributor documentation complete</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.2</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M2</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Simplified Deployment</h4>
+                                <p class="text-gray-400 text-xs mb-3">Make self-hosting accessible</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 1 (open source prep)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Docker Compose deploys all services successfully</li>
+                                        <li class="text-xs text-gray-400">✓ Helm chart installs on vanilla K8s cluster</li>
+                                        <li class="text-xs text-gray-400">✓ Installation completes in &lt;30 minutes</li>
+                                        <li class="text-xs text-gray-400">✓ Configuration documented and validated</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.3</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M3</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Self-Hosted Infrastructure Alternatives</h4>
+                                <p class="text-gray-400 text-xs mb-3">Replace managed services with self-hostable options</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 2 (deployment tools ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ All Azure-specific services have self-hosted alternatives</li>
+                                        <li class="text-xs text-gray-400">✓ Configuration switches between managed/self-hosted</li>
+                                        <li class="text-xs text-gray-400">✓ Documentation covers all alternative options</li>
+                                        <li class="text-xs text-gray-400">✓ Default config uses self-hosted components</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.4</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M4</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Simplified Feature Set</h4>
+                                <p class="text-gray-400 text-xs mb-3">Remove enterprise/cloud-only features for KiP</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 3 (infrastructure alternatives ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ KiP runs without billing service</li>
+                                        <li class="text-xs text-gray-400">✓ Single-tenant mode functional</li>
+                                        <li class="text-xs text-gray-400">✓ Basic networking works without Cilium</li>
+                                        <li class="text-xs text-gray-400">✓ No Azure dependencies remain</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.5</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M5</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Community Infrastructure</h4>
+                                <p class="text-gray-400 text-xs mb-3">Support channels for self-hosters</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 1 (open source ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ GitHub Discussions enabled and moderated</li>
+                                        <li class="text-xs text-gray-400">✓ Discord server active with channels</li>
+                                        <li class="text-xs text-gray-400">✓ Documentation site deployed and indexed</li>
+                                        <li class="text-xs text-gray-400">✓ At least 10 example configurations</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.6</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M6</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Agent Simplification</h4>
+                                <p class="text-gray-400 text-xs mb-3">Streamlined agents for self-hosted environments</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 4 (simplified feature set)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Agents install with one command</li>
+                                        <li class="text-xs text-gray-400">✓ No external dependencies required</li>
+                                        <li class="text-xs text-gray-400">✓ Agents work in air-gapped environments</li>
+                                        <li class="text-xs text-gray-400">✓ Configuration UI functional and intuitive</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.7</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M7</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Performance Optimization for Small Deployments</h4>
+                                <p class="text-gray-400 text-xs mb-3">Optimize for single-server/small-cluster deployments</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 2 (deployment ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ System runs on 2 CPU / 4GB RAM minimum</li>
+                                        <li class="text-xs text-gray-400">✓ Lightweight mode reduces resource usage by 50%</li>
+                                        <li class="text-xs text-gray-400">✓ Database performs well with &lt;1000 servers</li>
+                                        <li class="text-xs text-gray-400">✓ Combined services deploy successfully</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.8</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M8</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">Migration Tools (Cloud to Self-Hosted)</h4>
+                                <p class="text-gray-400 text-xs mb-3">Allow users to migrate from hosted to KiP</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 3 (self-hosted infrastructure ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Export tool captures all user data</li>
+                                        <li class="text-xs text-gray-400">✓ Import tool restores data successfully</li>
+                                        <li class="text-xs text-gray-400">✓ No data loss during migration</li>
+                                        <li class="text-xs text-gray-400">✓ Migration guide tested and validated</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-400 text-xs font-bold border border-indigo-500 group-hover:scale-110 transition-transform">4.9</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M9</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-indigo-400 transition-colors">KiP Launch & Promotion</h4>
+                                <p class="text-gray-400 text-xs mb-3">Public release and community building</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-indigo-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">All previous KiP milestones</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ GitHub repository starred by 100+ users</li>
+                                        <li class="text-xs text-gray-400">✓ Launch announcement reaches 10k+ impressions</li>
+                                        <li class="text-xs text-gray-400">✓ YouTube video published with installation guide</li>
+                                        <li class="text-xs text-gray-400">✓ Comparison guide helps users choose version</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 rounded-lg p-5 border-l-4 border-purple-500">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                <h3 class="text-xl font-semibold text-purple-400">Phase 5: Mobile Apps</h3>
+                <span class="text-sm text-gray-400 mt-1 md:mt-0 bg-gray-800 px-3 py-1 rounded-full">9 milestones</span>
+            </div>
+            <p class="text-gray-400 mb-5 text-sm">iOS and Android native applications. Estimated duration: 10-14 weeks</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.1</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M1</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Mobile Strategy & Requirements</h4>
+                                <p class="text-gray-400 text-xs mb-3">Define scope and approach for mobile presence</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Launch Phase complete (stable API)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Mobile feature set defined and approved</li>
+                                        <li class="text-xs text-gray-400">✓ Platform choice justified and documented</li>
+                                        <li class="text-xs text-gray-400">✓ UX mockups for key flows completed</li>
+                                        <li class="text-xs text-gray-400">✓ Performance benchmarks established</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.2</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M2</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Mobile API Enhancements</h4>
+                                <p class="text-gray-400 text-xs mb-3">Optimize backend for mobile clients</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 1 (requirements defined)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Push notifications deliver reliably</li>
+                                        <li class="text-xs text-gray-400">✓ API responses optimized for mobile bandwidth</li>
+                                        <li class="text-xs text-gray-400">✓ Offline mode caches critical data</li>
+                                        <li class="text-xs text-gray-400">✓ Biometric auth works on iOS/Android</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.3</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M3</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Core Mobile App (iOS)</h4>
+                                <p class="text-gray-400 text-xs mb-3">iOS app with essential functionality</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 2 (mobile API ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ App approved and published to App Store</li>
+                                        <li class="text-xs text-gray-400">✓ All core features functional</li>
+                                        <li class="text-xs text-gray-400">✓ Performance smooth on iPhone 12+</li>
+                                        <li class="text-xs text-gray-400">✓ Battery usage acceptable (&lt;5% per hour)</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.4</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M4</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Core Mobile App (Android)</h4>
+                                <p class="text-gray-400 text-xs mb-3">Android app with essential functionality</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 2 (mobile API ready)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ App approved and published to Google Play</li>
+                                        <li class="text-xs text-gray-400">✓ All core features functional</li>
+                                        <li class="text-xs text-gray-400">✓ Performance smooth on Android 10+</li>
+                                        <li class="text-xs text-gray-400">✓ Battery usage acceptable (&lt;5% per hour)</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.5</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M5</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Advanced Mobile Features (Phase 1)</h4>
+                                <p class="text-gray-400 text-xs mb-3">Enhanced functionality beyond basics</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestones 3 & 4 (core apps released)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Interactive console works reliably</li>
+                                        <li class="text-xs text-gray-400">✓ File operations functional on mobile</li>
+                                        <li class="text-xs text-gray-400">✓ Server creation wizard mobile-optimized</li>
+                                        <li class="text-xs text-gray-400">✓ Widgets provide useful at-a-glance info</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.6</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M6</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Advanced Mobile Features (Phase 2)</h4>
+                                <p class="text-gray-400 text-xs mb-3">Power user features</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestone 5 (advanced features phase 1)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Batch operations work across multiple servers</li>
+                                        <li class="text-xs text-gray-400">✓ Custom alert rules save and trigger correctly</li>
+                                        <li class="text-xs text-gray-400">✓ Offline actions sync when connection restored</li>
+                                        <li class="text-xs text-gray-400">✓ Mod browsing optimized for mobile screens</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.7</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M7</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Mobile App Optimization</h4>
+                                <p class="text-gray-400 text-xs mb-3">Performance and polish</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestones 3-6 (apps functional)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ App size &lt;50MB</li>
+                                        <li class="text-xs text-gray-400">✓ Launch time &lt;2 seconds</li>
+                                        <li class="text-xs text-gray-400">✓ Accessibility audit passes</li>
+                                        <li class="text-xs text-gray-400">✓ At least 3 languages supported</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.8</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M8</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Tablet & Watch Support</h4>
+                                <p class="text-gray-400 text-xs mb-3">Extend to additional form factors</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Milestones 3 & 4 (phone apps stable)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ iPad app uses available screen space effectively</li>
+                                        <li class="text-xs text-gray-400">✓ Android tablet layouts responsive</li>
+                                        <li class="text-xs text-gray-400">✓ Watch apps functional for quick checks</li>
+                                        <li class="text-xs text-gray-400">✓ Watch apps don't drain battery excessively</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-900 text-purple-400 text-xs font-bold border border-purple-500 group-hover:scale-110 transition-transform">5.9</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M9</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">Mobile Platform Maturity</h4>
+                                <p class="text-gray-400 text-xs mb-3">Long-term mobile sustainability</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-purple-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">All previous mobile milestones</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Feature parity documented and justified</li>
+                                        <li class="text-xs text-gray-400">✓ At least 2 mobile-first features launched</li>
+                                        <li class="text-xs text-gray-400">✓ Deep links work from all notification types</li>
+                                        <li class="text-xs text-gray-400">✓ App clips/instant apps functional</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 rounded-lg p-5 border-l-4 border-pink-500">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                <h3 class="text-xl font-semibold text-pink-400">Phase 6: Sustained Engineering & Future</h3>
+                <span class="text-sm text-gray-400 mt-1 md:mt-0 bg-gray-800 px-3 py-1 rounded-full">9 milestones</span>
+            </div>
+            <p class="text-gray-400 mb-5 text-sm">Long-term product evolution, maintenance, and innovation. Ongoing</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.1</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M1</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Technical Debt Reduction</h4>
+                                <p class="text-gray-400 text-xs mb-3">Address accumulated shortcuts and improve code quality</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">All previous phases (need stable product)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Code coverage reaches 90%+</li>
+                                        <li class="text-xs text-gray-400">✓ All dependencies on supported versions</li>
+                                        <li class="text-xs text-gray-400">✓ No critical security vulnerabilities</li>
+                                        <li class="text-xs text-gray-400">✓ Performance regressions addressed</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.2</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M2</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Scalability Improvements</h4>
+                                <p class="text-gray-400 text-xs mb-3">Prepare for 10x+ growth</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Launch phase complete (production traffic data)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ System handles 10,000+ concurrent users</li>
+                                        <li class="text-xs text-gray-400">✓ Database scales horizontally</li>
+                                        <li class="text-xs text-gray-400">✓ API response times remain &lt;500ms at scale</li>
+                                        <li class="text-xs text-gray-400">✓ CDN serves 90%+ of static content</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.3</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M3</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Enterprise Features</h4>
+                                <p class="text-gray-400 text-xs mb-3">Features for larger organizations</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Launch phase complete (customer feedback)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ SSO integration with major providers (Okta, Azure AD)</li>
+                                        <li class="text-xs text-gray-400">✓ RBAC supports complex org structures</li>
+                                        <li class="text-xs text-gray-400">✓ Audit logs meet SOC 2 requirements</li>
+                                        <li class="text-xs text-gray-400">✓ SLA monitoring and reporting automated</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.4</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M4</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">AI/ML Integration</h4>
+                                <p class="text-gray-400 text-xs mb-3">Intelligent features powered by machine learning</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Launch phase (need historical data)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Anomaly detection accuracy >85%</li>
+                                        <li class="text-xs text-gray-400">✓ Predictive scaling reduces incidents by 50%</li>
+                                        <li class="text-xs text-gray-400">✓ Recommendations improve performance measurably</li>
+                                        <li class="text-xs text-gray-400">✓ Automated troubleshooting resolves 30%+ of issues</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.5</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M5</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Advanced Game Support</h4>
+                                <p class="text-gray-400 text-xs mb-3">Expand beyond initial game types</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">MVP game support stable</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ At least 15 total game types supported</li>
+                                        <li class="text-xs text-gray-400">✓ Game-specific features implemented for top 5 games</li>
+                                        <li class="text-xs text-gray-400">✓ Mod marketplace has 200+ mods</li>
+                                        <li class="text-xs text-gray-400">✓ Voice server provisioning functional</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.6</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M6</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Platform Ecosystem</h4>
+                                <p class="text-gray-400 text-xs mb-3">Enable third-party integrations and extensions</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">API & Developer Tools (Enhancements Phase)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Plugin system supports common use cases</li>
+                                        <li class="text-xs text-gray-400">✓ Marketplace has 20+ third-party plugins</li>
+                                        <li class="text-xs text-gray-400">✓ Webhooks deliver 99.9% of events</li>
+                                        <li class="text-xs text-gray-400">✓ GraphQL API covers all functionality</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.7</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M7</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Global Expansion</h4>
+                                <p class="text-gray-400 text-xs mb-3">Support international customers</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Launch phase (stable foundation)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Services deployed in 3+ regions</li>
+                                        <li class="text-xs text-gray-400">✓ UI/docs translated to 10+ languages</li>
+                                        <li class="text-xs text-gray-400">✓ Payment processing in 5+ currencies</li>
+                                        <li class="text-xs text-gray-400">✓ GDPR compliance verified</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.8</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M8</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Advanced Analytics & BI</h4>
+                                <p class="text-gray-400 text-xs mb-3">Deep insights for users and business</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">Analytics & Reporting (Enhancements Phase)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Users can create custom dashboards</li>
+                                        <li class="text-xs text-gray-400">✓ Data export supports CSV, JSON, Parquet</li>
+                                        <li class="text-xs text-gray-400">✓ Predictive models deployed and accurate</li>
+                                        <li class="text-xs text-gray-400">✓ BI dashboards track key business metrics</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-pink-500 transition-all duration-200 hover:shadow-lg hover:shadow-pink-500/10 group">
+                                <div class="flex items-start justify-between mb-2">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-pink-900 text-pink-400 text-xs font-bold border border-pink-500 group-hover:scale-110 transition-transform">6.9</span>
+                                    <span class="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">M9</span>
+                                </div>
+                                <h4 class="text-white font-semibold text-sm mb-1 group-hover:text-pink-400 transition-colors">Innovation & R&D</h4>
+                                <p class="text-gray-400 text-xs mb-3">Explore future technologies and features</p>
+                                <div class="mb-3">
+                                    <span class="text-xs font-medium text-pink-400">↳ Depends on:</span>
+                                    <p class="text-xs text-gray-500 mt-0.5">All previous phases (mature platform)</p>
+                                </div>
+                                <div class="border-t border-gray-700 pt-2">
+                                    <span class="text-xs font-medium text-gray-300 block mb-1">✅ Success Criteria:</span>
+                                    <ul class="space-y-0.5">
+                                        <li class="text-xs text-gray-400">✓ Edge deployment piloted in 2+ locations</li>
+                                        <li class="text-xs text-gray-400">✓ Blockchain features (if pursued) functional</li>
+                                        <li class="text-xs text-gray-400">✓ VR/AR platform support (if applicable) working</li>
+                                        <li class="text-xs text-gray-400">✓ Encryption upgraded to quantum-resistant algorithms</li>
+                                        <li class="text-xs text-gray-500 italic">+1 more...</li>
+                                    </ul>
+                                </div>
+                            </div>
+            </div>
+        </div>
+    </div>
 </section>

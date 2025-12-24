@@ -1,71 +1,80 @@
-<section class="scope-prose">
+<section id="security" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
+    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
+        7. Security Architecture
+    </h2>
 
-<h3>Security Philosophy</h3>
-<div class="scope-callout">
-<p>🔐 TLS Everywhere, Always, Forever</p>
-<p>Every connection, internal or external, is encrypted. No exceptions.</p>
-</div>
-<h3>Transport Security</h3>
-<table class="scope-table">
-<thead>
-<tr>
-<th>Connection</th>
-<th>Security</th>
-<th>TLS Version</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>User → Cloudflare</td><td>TLS</td><td>1.3 (preferred), 1.2 (minimum)</td></tr>
-<tr><td>Cloudflare → Cluster</td><td>TLS (Full/Strict mode)</td><td>1.2 minimum</td></tr>
-<tr><td>Agent ↔ Cluster</td><td>mTLS (mutual authentication)</td><td>1.2 minimum</td></tr>
-<tr><td>Microservices ↔ Microservices</td><td>Cilium mTLS (service mesh)</td><td>1.2 minimum</td></tr>
-</tbody>
-</table>
-<div class="scope-callout">
-<p>🔐 TLS Version Policy</p>
-<ul>
-<li>• <strong>Minimum:</strong> TLS 1.2 for all connections</li>
-<li>• <strong>Preferred:</strong> TLS 1.3 where supported</li>
-<li>• <strong>Prohibited:</strong> TLS 1.0, TLS 1.1, SSL 3.0</li>
-<li>• <strong>Cipher Suites:</strong> Modern AEAD ciphers only (AES-GCM, ChaCha20-Poly1305)</li>
-</ul>
-</div>
-<h3>Authentication Layers</h3>
-<table class="scope-table">
-<thead>
-<tr>
-<th>Actor</th>
-<th>Method</th>
-<th>Token Type</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>End Users</td><td>OAuth (Discord/Steam)</td><td>JWT Bearer</td></tr>
-<tr><td>Node Agents (Bootstrap)</td><td>One-time registration token</td><td>15-minute expiry</td></tr>
-<tr><td>Node Agents (Registered)</td><td>mTLS client certificate</td><td>X.509</td></tr>
-<tr><td>External Webhooks</td><td>Signature verification</td><td>HMAC/RSA</td></tr>
-</tbody>
-</table>
-<h3>Kubernetes Security</h3>
-<ul>
-<li>• <strong>CNI:</strong> Cilium (network policy enforcement, mTLS between pods)</li>
-<li>• <strong>RBAC:</strong> Least-privilege service accounts per microservice</li>
-<li>• <strong>Secrets:</strong> Azure Key Vault + CSI driver (no secrets in etcd)</li>
-<li>• <strong>Pod Security:</strong> Restricted PSS baseline</li>
-<li>• <strong>Network Policies:</strong> Default deny, explicit allow per service</li>
-</ul>
-<h3>Secret Management</h3>
-<ul>
-<li>• All secrets stored in Azure Key Vault</li>
-<li>• CSI Secret Store driver mounts secrets as volumes</li>
-<li>• Automatic rotation via Secrets Service (:5110)</li>
-<li>• Secret access logged and auditable</li>
-</ul>
-<h3>Network Boundaries</h3>
-<ul>
-<li>• <strong>Edge:</strong> Cloudflare (WAF, DDoS protection)</li>
-<li>• <strong>Perimeter:</strong> UniFi Hardware Firewall (stateful inspection)</li>
-<li>• <strong>Internal:</strong> Cilium (pod-to-pod encryption, L3/L4 policies)</li>
-<li>• <strong>Data:</strong> Encrypted at rest (PostgreSQL, Redis), encrypted in transit</li>
-</ul>
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Security Philosophy</h3>
+    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6">
+        <p class="text-white font-semibold mb-2">🔐 TLS Everywhere, Always, Forever</p>
+        <p class="text-gray-300 text-sm">Every connection, internal or external, is encrypted. No exceptions.</p>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Transport Security</h3>
+    <table class="w-full text-sm border-collapse mb-6">
+        <thead>
+            <tr class="bg-gray-700 text-white">
+                <th class="border border-gray-600 p-2 text-left">Connection</th>
+                <th class="border border-gray-600 p-2 text-left">Security</th>
+                <th class="border border-gray-600 p-2 text-left">TLS Version</th>
+            </tr>
+        </thead>
+        <tbody class="text-gray-300">
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">User → Cloudflare</td><td class="border border-gray-600 p-2">TLS</td><td class="border border-gray-600 p-2">1.3 (preferred), 1.2 (minimum)</td></tr>
+            <tr><td class="border border-gray-600 p-2">Cloudflare → Cluster</td><td class="border border-gray-600 p-2">TLS (Full/Strict mode)</td><td class="border border-gray-600 p-2">1.2 minimum</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Agent ↔ Cluster</td><td class="border border-gray-600 p-2">mTLS (mutual authentication)</td><td class="border border-gray-600 p-2">1.2 minimum</td></tr>
+            <tr><td class="border border-gray-600 p-2">Microservices ↔ Microservices</td><td class="border border-gray-600 p-2">Cilium mTLS (service mesh)</td><td class="border border-gray-600 p-2">1.2 minimum</td></tr>
+        </tbody>
+    </table>
+
+    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6">
+        <p class="text-white font-semibold mb-2">🔐 TLS Version Policy</p>
+        <ul class="text-gray-300 text-sm space-y-1">
+            <li>• <strong class="text-white">Minimum:</strong> TLS 1.2 for all connections</li>
+            <li>• <strong class="text-white">Preferred:</strong> TLS 1.3 where supported</li>
+            <li>• <strong class="text-white">Prohibited:</strong> TLS 1.0, TLS 1.1, SSL 3.0</li>
+            <li>• <strong class="text-white">Cipher Suites:</strong> Modern AEAD ciphers only (AES-GCM, ChaCha20-Poly1305)</li>
+        </ul>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Authentication Layers</h3>
+    <table class="w-full text-sm border-collapse mb-6">
+        <thead>
+            <tr class="bg-gray-700 text-white">
+                <th class="border border-gray-600 p-2 text-left">Actor</th>
+                <th class="border border-gray-600 p-2 text-left">Method</th>
+                <th class="border border-gray-600 p-2 text-left">Token Type</th>
+            </tr>
+        </thead>
+        <tbody class="text-gray-300">
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">End Users</td><td class="border border-gray-600 p-2">OAuth (Discord/Steam)</td><td class="border border-gray-600 p-2">JWT Bearer</td></tr>
+            <tr><td class="border border-gray-600 p-2">Node Agents (Bootstrap)</td><td class="border border-gray-600 p-2">One-time registration token</td><td class="border border-gray-600 p-2">15-minute expiry</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Node Agents (Registered)</td><td class="border border-gray-600 p-2">mTLS client certificate</td><td class="border border-gray-600 p-2">X.509</td></tr>
+            <tr><td class="border border-gray-600 p-2">External Webhooks</td><td class="border border-gray-600 p-2">Signature verification</td><td class="border border-gray-600 p-2">HMAC/RSA</td></tr>
+        </tbody>
+    </table>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Kubernetes Security</h3>
+    <ul class="text-gray-300 space-y-2 mb-6">
+        <li>• <strong class="text-white">CNI:</strong> Cilium (network policy enforcement, mTLS between pods)</li>
+        <li>• <strong class="text-white">RBAC:</strong> Least-privilege service accounts per microservice</li>
+        <li>• <strong class="text-white">Secrets:</strong> Azure Key Vault + CSI driver (no secrets in etcd)</li>
+        <li>• <strong class="text-white">Pod Security:</strong> Restricted PSS baseline</li>
+        <li>• <strong class="text-white">Network Policies:</strong> Default deny, explicit allow per service</li>
+    </ul>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Secret Management</h3>
+    <ul class="text-gray-300 space-y-2 mb-6">
+        <li>• All secrets stored in Azure Key Vault</li>
+        <li>• CSI Secret Store driver mounts secrets as volumes</li>
+        <li>• Automatic rotation via Secrets Service (:5110)</li>
+        <li>• Secret access logged and auditable</li>
+    </ul>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Network Boundaries</h3>
+    <ul class="text-gray-300 space-y-2">
+        <li>• <strong class="text-white">Edge:</strong> Cloudflare (WAF, DDoS protection)</li>
+        <li>• <strong class="text-white">Perimeter:</strong> UniFi Hardware Firewall (stateful inspection)</li>
+        <li>• <strong class="text-white">Internal:</strong> Cilium (pod-to-pod encryption, L3/L4 policies)</li>
+        <li>• <strong class="text-white">Data:</strong> Encrypted at rest (PostgreSQL, Redis), encrypted in transit</li>
+    </ul>
 </section>

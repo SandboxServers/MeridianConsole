@@ -1,45 +1,310 @@
-<section class="scope-prose">
-<div class="scope-callout">
-  <strong>Interactive view available:</strong>
-  <p>For a richer, searchable diagram of service relationships, use the <a href="/dependencies">Interactive Dependency Map</a>.</p>
-</div>
-<h2>
+<section id="services" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
+    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
         13. Interactive Dependency Visual
     </h2>
-<p>Hover over services for quick info • Click for complete documentation</p>
- Legend 
-<div class="scope-callout">
-<h3>Architecture Layers</h3>
-<div>
-<div><div></div><span>Foundation</span></div>
-<div><div></div><span>External APIs</span></div>
-<div><div></div><span>Core Services</span></div>
-<div><div></div><span>Business Logic</span></div>
-<div><div></div><span>Presentation</span></div>
-</div>
-</div>
- Service Layers (populated by JavaScript) 
-<div class="scope-callout" id="service-layers"></div>
- Critical Dependencies Warning 
-<div>
-<h3>⚠️ Critical Infrastructure Dependencies</h3>
-<p>The following services are single points of failure:</p>
-<div>
-<div class="scope-callout">
-<div>🗄️ PostgreSQL (11/14 services depend on it)</div>
-<div><strong>Impact if down:</strong> Identity, Nodes, Secrets, Billing, Servers, Tasks, Files, Mods, Notifications, Firewall, Discord all fail</div>
-<div><strong>Mitigation:</strong> Automated backups every 6 hours, read replicas, point-in-time recovery</div>
-</div>
-<div class="scope-callout">
-<div>📬 RabbitMQ (9/14 services depend on it)</div>
-<div><strong>Impact if down:</strong> Asynchronous operations halt, no event-driven communication, task queue stops</div>
-<div><strong>Mitigation:</strong> Durable queues, dead letter exchanges, message persistence</div>
-</div>
-<div class="scope-callout">
-<div>🖥️ Nodes (7/17 services depend on it)</div>
-<div><strong>Impact if down:</strong> Cannot provision new servers, certificate management fails, agents disconnect</div>
-<div><strong>Mitigation:</strong> Health checks, alerting, cached DNS records</div>
-</div>
-</div>
-</div>
+    <p class="text-gray-400 text-sm mb-6">Hover over services for quick info • Click for complete documentation</p>
+
+    <!-- Legend -->
+    <div class="bg-gray-900 rounded-lg p-5 border border-gray-700 mb-6">
+        <h3 class="text-lg font-semibold text-white mb-3">Architecture Layers</h3>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-600 rounded"></div><span class="text-gray-300">Foundation</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-600 rounded"></div><span class="text-gray-300">External APIs</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-yellow-600 rounded"></div><span class="text-gray-300">Core Services</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-purple-600 rounded"></div><span class="text-gray-300">Business Logic</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-600 rounded"></div><span class="text-gray-300">Presentation</span></div>
+        </div>
+    </div>
+
+    <!-- Service Layers (populated by JavaScript) -->
+    <div id="service-layers" class="bg-gray-900 rounded-lg p-5 border border-gray-700 mb-6"></div>
+
+    <!-- Critical Dependencies Warning -->
+    <div class="bg-red-900/30 rounded-lg p-5 border border-red-800 mb-6">
+        <h3 class="text-xl font-bold text-red-400 mb-3">⚠️ Critical Infrastructure Dependencies</h3>
+        <p class="text-gray-400 mb-4">The following services are single points of failure:</p>
+        
+        <div class="space-y-3">
+            <div class="bg-gray-900 rounded-lg p-4">
+                <div class="font-semibold text-red-300 mb-2">🗄️ PostgreSQL (11/14 services depend on it)</div>
+                <div class="text-sm text-gray-400"><strong>Impact if down:</strong> Identity, Nodes, Secrets, Billing, Servers, Tasks, Files, Mods, Notifications, Firewall, Discord all fail</div>
+                <div class="text-sm text-gray-400 mt-1"><strong>Mitigation:</strong> Automated backups every 6 hours, read replicas, point-in-time recovery</div>
+            </div>
+            <div class="bg-gray-900 rounded-lg p-4">
+                <div class="font-semibold text-red-300 mb-2">📬 RabbitMQ (9/14 services depend on it)</div>
+                <div class="text-sm text-gray-400"><strong>Impact if down:</strong> Asynchronous operations halt, no event-driven communication, task queue stops</div>
+                <div class="text-sm text-gray-400 mt-1"><strong>Mitigation:</strong> Durable queues, dead letter exchanges, message persistence</div>
+            </div>
+            <div class="bg-gray-900 rounded-lg p-4">
+                <div class="font-semibold text-yellow-300 mb-2">🖥️ Nodes (7/17 services depend on it)</div>
+                <div class="text-sm text-gray-400"><strong>Impact if down:</strong> Cannot provision new servers, certificate management fails, agents disconnect</div>
+                <div class="text-sm text-gray-400 mt-1"><strong>Mitigation:</strong> Health checks, alerting, cached DNS records</div>
+            </div>
+        </div>
+    </div>
+
 </section>
+
+<!-- Tooltip Container -->
+<div id="tooltip-services" class="tooltip-services"></div>
+
+<!-- Modal -->
+<div id="modal-services" class="modal-services">
+    <div class="modal-content-services">
+        <div class="sticky top-0 bg-gray-800 p-6 border-b border-gray-700 flex justify-between items-center rounded-t-xl">
+            <h3 id="modal-title-services" class="text-2xl font-bold text-white"></h3>
+            <button onclick="closeServicesModal()" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+        </div>
+        <div id="modal-body-services" class="p-6"></div>
+    </div>
+</div>
+
+<style>
+.service-node {
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+}
+.service-node:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.5);
+}
+.tooltip-services {
+    position: fixed;
+    background: rgba(17, 24, 39, 0.98);
+    border: 2px solid #3b82f6;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    z-index: 1000;
+    min-width: 350px;
+    max-width: 450px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.tooltip-services.visible {
+    opacity: 1;
+}
+.modal-services {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    overflow-y: auto;
+}
+.modal-services.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.modal-content-services {
+    background: #1f2937;
+    border-radius: 0.75rem;
+    max-width: 900px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    border: 1px solid #374151;
+}
+</style>
+
+<script>
+const servicesData = {
+    foundation: [
+        {name:"PostgreSQL",emoji:"🗄️",port:null,description:"Primary relational database for all persistent storage needs",responsibilities:["User accounts and authentication data","Game server configurations and metadata","Billing records and subscription data","Task queue state and history","File metadata and permissions","Mod registry and version tracking","Notification templates and delivery logs","Firewall rules and IP whitelist/blacklist","Discord integration mappings"],dependencies:[],dependents:["Identity","Nodes","Secrets","Billing","Servers","Tasks","Files","Mods","Notifications","Firewall","Discord"],endpoints:["Connection pooling via PgBouncer","Read replicas for query optimization","Automated backups every 6 hours","Point-in-time recovery capability"]},
+        {name:"RabbitMQ",emoji:"📬",port:null,description:"Message broker for asynchronous communication and event-driven architecture",responsibilities:["Task queue management for long-running operations","Event publishing/subscription between services","Server lifecycle notifications (start, stop, crash)","Billing event streams (payment processed, subscription renewed)","Notification delivery orchestration","Discord webhook event routing"],dependencies:[],dependents:["Identity","Gateway","Secrets","Billing","Servers","Tasks","Notifications","Firewall","Discord"],endpoints:["AMQP protocol on port 5672","Management UI on port 15672","Durable queues for critical messages","Dead letter exchange for failed messages"]},
+        {name:"Redis",emoji:"⚡",port:null,description:"In-memory cache and session store for high-performance data access",responsibilities:["Session token storage and validation","Rate limiting counters per user/IP","Real-time server status caching","Task queue temporary state","API response caching (5-60 second TTL)"],dependencies:[],dependents:["Nodes","Tasks"],endpoints:["Redis protocol on port 6379","Persistence via RDB snapshots + AOF","Master-replica setup for HA","Pub/sub for real-time updates"]},
+        {name:"Cloudflare",emoji:"🌐",port:null,description:"DNS management and CDN for domain routing and DDoS protection",responsibilities:["DNS record management for *.meridianconsole.com","ACME DNS-01 challenge responses for Let's Encrypt","DDoS protection and WAF rules","CDN for static assets"],dependencies:[],dependents:["Nodes"],endpoints:["Cloudflare API v4","Programmatic DNS updates","Webhook notifications for zone changes"]}
+    ],
+    external: [
+        {name:"Let's Encrypt",emoji:"🔒",port:null,description:"Automated SSL/TLS certificate provisioning via ACME protocol",responsibilities:["Issue wildcard certificates for *.meridianconsole.com","90-day certificate lifecycle management","Automated renewal via DNS-01 challenges"],dependencies:[],dependents:["Nodes"],endpoints:["ACME v2 API","DNS-01 challenge via Cloudflare"]},
+        {name:"UniFi Controller",emoji:"🌍",port:null,description:"Network equipment management for dynamic firewall rules",responsibilities:["Apply firewall rules to UniFi Dream Machine","Port forwarding configuration for game servers","Network topology visibility"],dependencies:[],dependents:["Firewall"],endpoints:["UniFi Controller API","SSH for direct rule application"]},
+        {name:"Stripe",emoji:"💰",port:null,description:"Primary payment processor for credit cards and subscriptions",responsibilities:["Process credit card payments","Manage subscription billing cycles","Handle refunds and disputes","PCI compliance"],dependencies:[],dependents:["Billing"],endpoints:["Stripe API v1","Webhook events for payment updates"]},
+        {name:"PayPal",emoji:"💵",port:null,description:"Alternative payment processor for PayPal accounts",responsibilities:["Process PayPal payments","Handle PayPal subscriptions","IPN (Instant Payment Notification) handling"],dependencies:[],dependents:["Billing"],endpoints:["PayPal REST API","IPN endpoint for payment notifications"]}
+    ],
+    core: [
+        {name:"Identity",emoji:"🔐",port:5010,description:"Centralized authentication and authorization service using OAuth 2.0 and OpenID Connect",responsibilities:["User registration and login (email/password, OAuth)","JWT token issuance and validation","Role-based access control (RBAC)","API key management for service-to-service auth","Password reset and email verification"],dependencies:["PostgreSQL","RabbitMQ"],dependents:["Gateway","Billing","Servers","Web UI"],endpoints:["POST /auth/register - User registration","POST /auth/login - User authentication","POST /auth/refresh - Token refresh","GET /auth/validate - Token validation","POST /auth/logout - Session termination"]},
+        {name:"Gateway",emoji:"🚪",port:5000,description:"API Gateway providing unified entry point, rate limiting, and request routing",responsibilities:["Route requests to appropriate microservices","Enforce rate limits per user/IP","JWT validation on all protected routes","Request/response logging and metrics","Circuit breaker pattern for failing services"],dependencies:["Identity","RabbitMQ"],dependents:["Web UI"],endpoints:["/* - Routes all API traffic","/health - Gateway health check","/metrics - Prometheus metrics"]},
+        {name:"Nodes",emoji:"🖥️",port:5040,description:"Physical server lifecycle management and workload orchestration",responsibilities:["Track server hardware inventory and status","Monitor resource utilization (CPU, RAM, disk)","Provision SSL certificates via Let's Encrypt","Manage DNS records via Cloudflare API","Coordinate with Windows/Linux agents for provisioning","Health checks and alerting for hardware failures"],dependencies:["PostgreSQL","Redis","Let's Encrypt","Cloudflare"],dependents:["Secrets","Servers","Files","Console","Firewall","Windows Agent","Linux Agent"],endpoints:["GET /nodes - List all nodes","GET /nodes/:id - Node details","POST /nodes/:id/provision - Provision certificates","GET /nodes/:id/metrics - Resource metrics"]},
+        {name:"Secrets",emoji:"🗝️",port:5110,description:"Secure secret storage and rotation for sensitive credentials",responsibilities:["Store encrypted database passwords","Manage API keys for external services","Rotate secrets on configurable schedules","Audit logging for secret access","Provide secrets to authorized services only"],dependencies:["PostgreSQL","RabbitMQ","Nodes"],dependents:[],endpoints:["GET /secrets/:key - Retrieve secret","POST /secrets - Store new secret","PUT /secrets/:key/rotate - Force rotation","GET /secrets/audit - Access audit logs"]}
+    ],
+    business: [
+        {name:"Billing",emoji:"💳",port:5020,description:"Payment processing and subscription management",responsibilities:["Process payments via Stripe and PayPal","Manage subscription plans (Free, Basic, Pro, Enterprise)","Handle upgrades, downgrades, and cancellations","Generate invoices and receipts","Track usage for metered billing"],dependencies:["PostgreSQL","RabbitMQ","Identity","Stripe","PayPal"],dependents:["Web UI"],endpoints:["POST /billing/subscribe - Create subscription","POST /billing/upgrade - Upgrade plan","POST /billing/cancel - Cancel subscription","GET /billing/invoices - List invoices"]},
+        {name:"Servers",emoji:"🎮",port:5030,description:"Game server lifecycle management and orchestration",responsibilities:["Create, start, stop, and delete game servers","Assign servers to physical nodes","Manage server configurations and save files","Monitor server status and player counts","Schedule automated backups and restarts"],dependencies:["PostgreSQL","RabbitMQ","Nodes","Identity"],dependents:["Console","Discord","Web UI"],endpoints:["POST /servers - Create server","POST /servers/:id/start - Start server","POST /servers/:id/stop - Stop server","GET /servers/:id/status - Server status","POST /servers/:id/backup - Create backup"]},
+        {name:"Tasks",emoji:"📋",port:5050,description:"Background job queue and long-running task management",responsibilities:["Process server installation jobs","Handle file uploads and downloads","Execute scheduled maintenance tasks","Retry failed jobs with exponential backoff","Track job status and progress"],dependencies:["PostgreSQL","RabbitMQ","Redis"],dependents:[],endpoints:["POST /tasks - Queue new task","GET /tasks/:id - Task status","POST /tasks/:id/cancel - Cancel task","GET /tasks/queue - Queue depth metrics"]},
+        {name:"Files",emoji:"📁",port:5060,description:"File storage and transfer orchestration",responsibilities:["Manage server configuration files","Handle save file uploads/downloads","Coordinate file transfers between nodes","Enforce storage quotas per user","Generate pre-signed URLs for direct uploads"],dependencies:["PostgreSQL","Nodes"],dependents:["Mods"],endpoints:["GET /files/:serverId - List files","POST /files/:serverId/upload - Upload file","GET /files/:serverId/download/:path - Download file","DELETE /files/:serverId/:path - Delete file"]},
+        {name:"Console",emoji:"💻",port:5070,description:"Real-time server console access and RCON command execution",responsibilities:["WebSocket connections for live console output","Execute RCON commands on game servers","Stream logs to connected clients","Support multiple concurrent console sessions","Buffer last 1000 lines of console output"],dependencies:["Servers","Nodes"],dependents:[],endpoints:["WS /console/:serverId - WebSocket connection","POST /console/:serverId/command - Execute RCON command","GET /console/:serverId/history - Recent console output"]},
+        {name:"Mods",emoji:"🧩",port:5080,description:"Mod installation and version management",responsibilities:["Browse mod repositories (CurseForge, Steam Workshop)","Install and update mods on game servers","Manage mod dependencies and conflicts","Track mod versions and changelogs","Sync mod lists across server clusters"],dependencies:["PostgreSQL","Files"],dependents:[],endpoints:["GET /mods/search - Search mod repositories","POST /mods/:serverId/install - Install mod","PUT /mods/:serverId/:modId/update - Update mod","DELETE /mods/:serverId/:modId - Uninstall mod"]},
+        {name:"Notifications",emoji:"🔔",port:5090,description:"Multi-channel notification delivery system",responsibilities:["Send email notifications via SMTP","Deliver push notifications to mobile apps","Route Discord notifications via webhook","Support notification preferences per user","Track delivery status and failures"],dependencies:["PostgreSQL","RabbitMQ","Discord"],dependents:[],endpoints:["POST /notifications/send - Send notification","GET /notifications/history - Notification history","PUT /notifications/preferences - Update user preferences"]},
+        {name:"Firewall",emoji:"🛡️",port:5100,description:"Dynamic firewall rule management and IP whitelisting",responsibilities:["Maintain IP whitelist/blacklist per server","Apply firewall rules to UniFi network equipment","Support port forwarding for game servers","Track rule changes and audit logs","Automated DDoS mitigation rules"],dependencies:["PostgreSQL","RabbitMQ","Nodes","UniFi Controller"],dependents:[],endpoints:["POST /firewall/rules - Add firewall rule","DELETE /firewall/rules/:id - Remove rule","GET /firewall/whitelist/:serverId - List whitelisted IPs","POST /firewall/whitelist/:serverId - Add IP to whitelist"]},
+        {name:"Discord",emoji:"🤖",port:5120,description:"Discord bot integration for server management and notifications",responsibilities:["Discord bot commands for server control","Send server status updates to Discord channels","Player join/leave notifications","Support ticket creation from Discord","Server administration via Discord slash commands"],dependencies:["PostgreSQL","RabbitMQ","Notifications","Servers"],dependents:["Notifications"],endpoints:["POST /discord/webhook - Incoming Discord webhook","POST /discord/send - Send Discord message","GET /discord/link/:userId - Link Discord account"]}
+    ],
+    presentation: [
+        {name:"Web UI",emoji:"🌐",port:5200,description:"Blazor WebAssembly frontend application for end-user interaction",responsibilities:["User dashboard and control panel","Real-time updates via SignalR","Responsive design for mobile and desktop","Client-side routing and state management","Static asset delivery via CDN"],dependencies:["Gateway","Identity","Billing","Servers"],dependents:[],endpoints:["/ - Landing page","/dashboard - User dashboard","/servers - Server management UI","/billing - Billing portal"]},
+        {name:"Windows Agent",emoji:"🪟",port:6001,description:"Windows-based agent for game server provisioning and management",responsibilities:["Install and configure game servers on Windows nodes","Monitor server processes and resource usage","Execute server start/stop/restart commands","Report health metrics to Nodes service","Handle Windows-specific game server requirements"],dependencies:["Nodes"],dependents:[],endpoints:["Runs as Windows Service","gRPC API for Nodes service communication","Local HTTP health endpoint on :6001"]},
+        {name:"Linux Agent",emoji:"🐧",port:6002,description:"Linux-based agent for game server provisioning and management",responsibilities:["Install and configure game servers on Linux nodes","Monitor server processes via systemd","Execute server lifecycle commands","Report health metrics to Nodes service","Handle containerized game server deployments"],dependencies:["Nodes"],dependents:[],endpoints:["Runs as systemd service","gRPC API for Nodes service communication","Local HTTP health endpoint on :6002"]}
+    ]
+};
+
+// Layer config with CORRECT colors that match the legend
+const layerConfig = [
+    {name:'Presentation Layer', key:'presentation', gridCols:'3', color:'green'},
+    {name:'Business Services', key:'business', gridCols:'5', color:'purple'},
+    {name:'Core Services', key:'core', gridCols:'4', color:'yellow'},
+    {name:'External APIs', key:'external', gridCols:'4', color:'red'},
+    {name:'Foundation Layer', key:'foundation', gridCols:'4', color:'blue'}
+];
+
+function renderServices() {
+    const container = document.getElementById('service-layers');
+    
+    layerConfig.forEach(layer => {
+        const layerServices = servicesData[layer.key];
+        const layerDiv = document.createElement('div');
+        layerDiv.className = 'space-y-4';
+        layerDiv.innerHTML = `
+            <h3 class="text-lg font-semibold text-white">${layer.name}</h3>
+            <div class="grid grid-cols-2 md:grid-cols-${layer.gridCols} gap-4" id="layer-${layer.key}"></div>
+        `;
+        container.appendChild(layerDiv);
+        
+        const gridContainer = document.getElementById(`layer-${layer.key}`);
+        
+        layerServices.forEach(service => {
+            const node = document.createElement('div');
+            // USE LAYER COLOR instead of service.color
+            node.className = `service-node bg-gray-900 rounded-lg p-5 border border-${layer.color}-800`;
+            node.dataset.service = service.name;
+            node.innerHTML = `
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="text-2xl">${service.emoji}</span>
+                    <div>
+                        <h4 class="text-lg font-bold text-${layer.color}-400">${service.name}</h4>
+                        ${service.port ? `<span class="text-xs text-gray-500">:${service.port}</span>` : ''}
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">${service.dependents.length} dependent${service.dependents.length !== 1 ? 's' : ''}</p>
+            `;
+            
+            node.addEventListener('mouseenter', (e) => showTooltip(e, service));
+            node.addEventListener('mouseleave', hideTooltip);
+            node.addEventListener('click', () => showModal(service));
+            
+            gridContainer.appendChild(node);
+        });
+    });
+}
+
+function showTooltip(e, service) {
+    const tooltip = document.getElementById('tooltip-services');
+    const deps = service.dependencies.length > 0 ? service.dependencies.join(', ') : 'None';
+    const dependents = service.dependents.length > 0 ? service.dependents.join(', ') : 'None';
+    
+    tooltip.innerHTML = `
+        <div class="font-bold text-lg mb-2 text-white">${service.emoji} ${service.name}${service.port ? ' :' + service.port : ''}</div>
+        <div class="text-sm text-gray-300 mb-3">${service.description}</div>
+        <div class="text-xs mb-2">
+            <div class="font-semibold text-blue-400 mb-1">Top Responsibilities:</div>
+            <ul class="list-disc list-inside space-y-1">
+                ${service.responsibilities.slice(0, 3).map(r => `<li class="text-gray-400">${r}</li>`).join('')}
+                ${service.responsibilities.length > 3 ? `<li class="text-gray-500 italic">...and ${service.responsibilities.length - 3} more</li>` : ''}
+            </ul>
+        </div>
+        <div class="text-xs">
+            <div class="text-blue-400">📥 Depends on: <span class="text-gray-300">${deps}</span></div>
+            <div class="text-green-400">📤 Needed by: <span class="text-gray-300">${dependents}</span></div>
+        </div>
+        <div class="text-xs text-gray-500 mt-2 italic">Click for full details</div>
+    `;
+    
+    const rect = e.target.closest('.service-node').getBoundingClientRect();
+    tooltip.style.left = `${rect.right + 10}px`;
+    tooltip.style.top = `${rect.top}px`;
+    tooltip.classList.add('visible');
+}
+
+function hideTooltip() {
+    document.getElementById('tooltip-services').classList.remove('visible');
+}
+
+function showModal(service) {
+    const modal = document.getElementById('modal-services');
+    const title = document.getElementById('modal-title-services');
+    const body = document.getElementById('modal-body-services');
+    
+    title.textContent = `${service.emoji} ${service.name}${service.port ? ' :' + service.port : ''}`;
+    
+    body.innerHTML = `
+        <div class="space-y-6">
+            <div>
+                <h4 class="text-lg font-semibold text-blue-400 mb-2">Description</h4>
+                <p class="text-gray-300">${service.description}</p>
+            </div>
+            
+            <div>
+                <h4 class="text-lg font-semibold text-purple-400 mb-2">Key Responsibilities</h4>
+                <ul class="list-disc list-inside space-y-2 text-gray-300">
+                    ${service.responsibilities.map(r => `<li>${r}</li>`).join('')}
+                </ul>
+            </div>
+            
+            <div>
+                <h4 class="text-lg font-semibold text-yellow-400 mb-2">Dependencies</h4>
+                ${service.dependencies.length > 0 
+                    ? `<div class="flex flex-wrap gap-2">
+                        ${service.dependencies.map(d => `<span class="bg-blue-900 text-blue-200 px-3 py-1 rounded text-sm">${d}</span>`).join('')}
+                       </div>`
+                    : `<p class="text-gray-500 italic">No dependencies</p>`
+                }
+            </div>
+            
+            <div>
+                <h4 class="text-lg font-semibold text-green-400 mb-2">Dependents</h4>
+                ${service.dependents.length > 0 
+                    ? `<div class="flex flex-wrap gap-2">
+                        ${service.dependents.map(d => `<span class="bg-green-900 text-green-200 px-3 py-1 rounded text-sm">${d}</span>`).join('')}
+                       </div>`
+                    : `<p class="text-gray-500 italic">No dependents</p>`
+                }
+            </div>
+            
+            ${service.endpoints && service.endpoints.length > 0 ? `
+                <div>
+                    <h4 class="text-lg font-semibold text-red-400 mb-2">Key Endpoints / Features</h4>
+                    <ul class="space-y-2">
+                        ${service.endpoints.map(e => `<li class="bg-gray-800 p-2 rounded text-sm font-mono text-gray-300">${e}</li>`).join('')}
+                    </ul>
+                </div>
+            ` : ''}
+        </div>
+    `;
+    
+    modal.classList.add('active');
+}
+
+function closeServicesModal() {
+    document.getElementById('modal-services').classList.remove('active');
+}
+
+document.getElementById('modal-services').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-services') {
+        closeServicesModal();
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeServicesModal();
+    }
+});
+
+renderServices();
+</script>
+<!-- ========== END: SECTION 13 ========== -->

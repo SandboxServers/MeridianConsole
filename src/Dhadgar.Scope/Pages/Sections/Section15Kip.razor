@@ -1,342 +1,356 @@
-<section class="scope-prose">
+<section id="kip" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
+    <h2 class="text-2xl font-bold text-white mb-4">Section 15: KiP Edition (Knowledge is Power)</h2>
+    <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4 mb-6">
+        <p class="text-indigo-400 font-semibold">🎯 Self-Hosted Version — Post-SaaS Launch</p>
+        <p class="text-sm text-gray-400 mt-1">A complete, self-contained deployment of Meridian Console for power users who want to run their own infrastructure.</p>
+    </div>
+    
+    <div class="max-w-6xl mx-auto">
 
-<div>
-<p>🎯 Self-Hosted Version — Post-SaaS Launch</p>
-<p>A complete, self-contained deployment of Meridian Console for power users who want to run their own infrastructure.</p>
-</div>
-<div>
-<!-- Overview -->
-<div class="scope-panel">
-<h2>Overview</h2>
-<p>
-<span>KiP Edition</span> is a scaled-down, open-source version of Meridian Console designed for self-hosting. 
+        <!-- Overview -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+            <h2 class="text-2xl font-bold text-white mb-4">Overview</h2>
+            <p class="text-gray-300 mb-4">
+                <span class="text-sky-400 font-semibold">KiP Edition</span> is a scaled-down, open-source version of Meridian Console designed for self-hosting. 
                 It targets power users, homelabbers, and small communities who want to run game servers on their own infrastructure without cloud dependencies.
             </p>
-<p>
+            <p class="text-gray-300">
                 Think <strong>Pterodactyl/Pelican competitor</strong>, but built on modern .NET architecture with a focus on simplicity and developer experience.
             </p>
-</div>
-<!-- Post-MVP Warning -->
-<div>
-<div>
-<span>⚠️</span>
-<div>
-<h3>Post-MVP Release</h3>
-<p>KiP Edition ships <strong>after the SaaS MVP</strong>. Timeline TBD based on core platform stability and community demand.</p>
-</div>
-</div>
-</div>
-<!-- What's Included -->
-<div class="scope-panel">
-<h2>What's Included</h2>
-<ul>
-<li>
-<span>✓</span>
-<div>
-<strong>Core Panel Functionality</strong>
-<p>Server management, resource allocation, monitoring, logs, console access</p>
-</div>
-</li>
-<li>
-<span>✓</span>
-<div>
-<strong>Agent System</strong>
-<p>Open source game server agents with proper sandboxing</p>
-</div>
-</li>
-<li>
-<span>✓</span>
-<div>
-<strong>YARP Reverse Proxy (Internal Only)</strong>
-<p>Internal API gateway for panel services - NOT for game server traffic</p>
-</div>
-</li>
-<li>
-<span>✓</span>
-<div>
-<strong>Local User Accounts</strong>
-<p>Authentication without Azure AD B2C (local database-backed auth)</p>
-</div>
-</li>
-<li>
-<span>✓</span>
-<div>
-<strong>Blazor WASM UI</strong>
-<p>Modern web interface with xterm.js console rendering</p>
-</div>
-</li>
-<li>
-<span>✓</span>
-<div>
-<strong>Built-in Update Mechanism</strong>
-<p>Update button in UI to fetch and apply new versions</p>
-</div>
-</li>
-<li>
-<span>✓</span>
-<div>
-<strong>Community Support</strong>
-<p>Documentation, community forums, GitHub discussions</p>
-</div>
-</li>
-</ul>
-</div>
-<!-- What's NOT Included -->
-<div class="scope-panel">
-<h2>What's NOT Included</h2>
-<ul>
-<li>
-<span>✗</span>
-<div>
-<strong>Firewall Service</strong>
-<p>Users manage their own firewall rules and DDoS protection</p>
-</div>
-</li>
-<li>
-<span>✗</span>
-<div>
-<strong>Discord Service</strong>
-<p>No Discord bot integration or notifications</p>
-</div>
-</li>
-<li>
-<span>✗</span>
-<div>
-<strong>Secrets Service</strong>
-<p>No Azure Key Vault or cloud secret management (file-driven config only)</p>
-</div>
-</li>
-<li>
-<span>✗</span>
-<div>
-<strong>Cloudflare/Let's Encrypt Automation</strong>
-<p>Users manage their own SSL certificates and DNS</p>
-</div>
-</li>
-<li>
-<span>✗</span>
-<div>
-<strong>External Reverse Proxy for Game Servers</strong>
-<p>Users manage their own reverse proxy for game traffic (nginx, Caddy, Traefik) - YARP only handles internal panel services</p>
-</div>
-</li>
-<li>
-<span>✗</span>
-<div>
-<strong>Bundled Dependencies</strong>
-<p>PostgreSQL, RabbitMQ, and Redis are separate installs (not bundled)</p>
-</div>
-</li>
-<li>
-<span>✗</span>
-<div>
-<strong>Azure AD B2C Integration</strong>
-<p>Auth works without Azure (local user accounts only)</p>
-</div>
-</li>
-</ul>
-</div>
-<!-- YARP Clarification -->
-<div>
-<div>
-<span>💡</span>
-<div>
-<h3>YARP Clarification</h3>
-<p>YARP is included in KiP Edition, but <strong>only for internal panel traffic</strong> (API gateway between services).</p>
-<p>Many game servers don't support being proxied, so users are responsible for managing external reverse proxies for game server traffic if needed.</p>
-</div>
-</div>
-</div>
-<!-- Deployment Options -->
-<div>
-<div class="scope-panel">
-<div>
-<span>🐳</span>
-<h3>Docker Compose</h3>
-</div>
-<p>Pre-configured docker-compose.yml with:</p>
-<ul>
-<li>• Panel container</li>
-<li>• PostgreSQL container</li>
-<li>• RabbitMQ container</li>
-<li>• Redis container</li>
-<li>• Volume mounts for persistence</li>
-</ul>
-<p>Recommended for most users</p>
-</div>
-<div class="scope-panel">
-<div>
-<span>📦</span>
-<h3>Standalone Binary</h3>
-</div>
-<p>Single executable that:</p>
-<ul>
-<li>• Runs directly on Linux</li>
-<li>• Connects to existing PostgreSQL/RabbitMQ/Redis</li>
-<li>• Configured via YAML/JSON file</li>
-<li>• No Docker required</li>
-</ul>
-<p>For advanced users with existing infrastructure</p>
-</div>
-</div>
-<!-- System Requirements -->
-<div class="scope-panel">
-<h2>System Requirements</h2>
-<div>
-<div>
-<h3>Minimum</h3>
-<ul>
-<li>• 2 CPU cores</li>
-<li>• 4 GB RAM</li>
-<li>• 20 GB storage</li>
-<li>• Linux (Ubuntu 22.04+)</li>
-</ul>
-</div>
-<div>
-<h3>Recommended</h3>
-<ul>
-<li>• 4 CPU cores</li>
-<li>• 8 GB RAM</li>
-<li>• 50 GB SSD</li>
-<li>• Linux (Debian/Ubuntu)</li>
-</ul>
-</div>
-<div>
-<h3>Dependencies</h3>
-<ul>
-<li>• PostgreSQL 15+</li>
-<li>• RabbitMQ 3.12+</li>
-<li>• Redis 7+</li>
-<li>• Docker (for Compose option)</li>
-</ul>
-</div>
-</div>
-</div>
-<!-- Comparison Table -->
-<div class="scope-panel">
-<h2>KiP vs SaaS Comparison</h2>
-<div>
-<table class="scope-table">
-<thead>
-<tr>
-<th>Feature</th>
-<th>KiP Edition</th>
-<th>SaaS Edition</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Hosting</td>
-<td>Self-hosted</td>
-<td>Cloud-hosted</td>
-</tr>
-<tr>
-<td>Authentication</td>
-<td>Local accounts</td>
-<td>Azure AD B2C</td>
-</tr>
-<tr>
-<td>Firewall Management</td>
-<td>❌ User-managed</td>
-<td>✓ Automated</td>
-</tr>
-<tr>
-<td>Discord Integration</td>
-<td>❌ None</td>
-<td>✓ Full integration</td>
-</tr>
-<tr>
-<td>External Reverse Proxy</td>
-<td>❌ User-managed</td>
-<td>✓ YARP included</td>
-</tr>
-<tr>
-<td>Internal API Gateway</td>
-<td>✓ YARP included</td>
-<td>✓ YARP included</td>
-</tr>
-<tr>
-<td>SSL Certificates</td>
-<td>❌ User-managed</td>
-<td>✓ Automated</td>
-</tr>
-<tr>
-<td>Updates</td>
-<td>Manual (UI button)</td>
-<td>Automatic</td>
-</tr>
-<tr>
-<td>Support</td>
-<td>Community</td>
-<td>Official</td>
-</tr>
-<tr>
-<td>Price</td>
-<td>Free (OSS)</td>
-<td>Subscription</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-<!-- Branding & Licensing -->
-<div class="scope-panel">
-<h2>Branding &amp; Licensing</h2>
-<div>
-<h3>Required Attribution</h3>
-<p>KiP Edition <strong>must</strong> display "Powered by Meridian Console" in the UI footer and documentation.</p>
-<div class="scope-callout">
-<code>Powered by Meridian Console | Open Source</code>
-</div>
-</div>
-<div>
-<p><strong>License TBD:</strong> Need to discuss with Kira about open-source license choice (MIT, Apache 2.0, AGPL, etc.)</p>
-</div>
-</div>
-<!-- Target Audience -->
-<div>
-<div class="scope-panel">
-<div>🏠</div>
-<h3>Homelabbers</h3>
-<p>Running game servers on their own hardware for friends and small communities.</p>
-</div>
-<div class="scope-panel">
-<div>🎮</div>
-<h3>Small Communities</h3>
-<p>Clans, guilds, or friend groups who want control without cloud costs.</p>
-</div>
-<div class="scope-panel">
-<div>💻</div>
-<h3>Power Users</h3>
-<p>Users comfortable with Linux, Docker, and networking who want full control.</p>
-</div>
-</div>
-<!-- Release Timeline -->
-<div class="scope-panel">
-<h2>Release Timeline</h2>
-<div>
-<div>
-<div>1</div>
-<div>
-<h3>SaaS MVP First</h3>
-<p>Focus on core platform stability and revenue generation.</p>
-</div>
-</div>
-<div>
-<div>2</div>
-<div>
-<h3>Evaluate Demand</h3>
-<p>Gauge community interest through surveys and discussions.</p>
-</div>
-</div>
-<div>
-<div>3</div>
-<div>
-<h3>KiP Edition Release</h3>
-<p>Ship post-MVP once core platform is stable. Timeline: <strong>TBD</strong></p>
-</div>
-</div>
-</div>
-</div>
-</div>
+        </div>
+
+        <!-- Post-MVP Warning -->
+        <div class="bg-yellow-900/30 border-l-4 border-yellow-500 rounded-r-lg p-6 mb-6">
+            <div class="flex items-start gap-3">
+                <span class="text-2xl">⚠️</span>
+                <div>
+                    <h3 class="font-bold text-yellow-400 mb-2">Post-MVP Release</h3>
+                    <p class="text-gray-300">KiP Edition ships <strong>after the SaaS MVP</strong>. Timeline TBD based on core platform stability and community demand.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- What's Included -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+            <h2 class="text-2xl font-bold text-white mb-4">What's Included</h2>
+            <ul class="space-y-3">
+                <li class="flex items-start gap-3">
+                    <span class="text-green-400 text-xl">✓</span>
+                    <div>
+                        <strong class="text-white">Core Panel Functionality</strong>
+                        <p class="text-gray-400">Server management, resource allocation, monitoring, logs, console access</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-green-400 text-xl">✓</span>
+                    <div>
+                        <strong class="text-white">Agent System</strong>
+                        <p class="text-gray-400">Open source game server agents with proper sandboxing</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-green-400 text-xl">✓</span>
+                    <div>
+                        <strong class="text-white">YARP Reverse Proxy (Internal Only)</strong>
+                        <p class="text-gray-400">Internal API gateway for panel services - NOT for game server traffic</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-green-400 text-xl">✓</span>
+                    <div>
+                        <strong class="text-white">Local User Accounts</strong>
+                        <p class="text-gray-400">Authentication without Azure AD B2C (local database-backed auth)</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-green-400 text-xl">✓</span>
+                    <div>
+                        <strong class="text-white">Blazor WASM UI</strong>
+                        <p class="text-gray-400">Modern web interface with xterm.js console rendering</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-green-400 text-xl">✓</span>
+                    <div>
+                        <strong class="text-white">Built-in Update Mechanism</strong>
+                        <p class="text-gray-400">Update button in UI to fetch and apply new versions</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-green-400 text-xl">✓</span>
+                    <div>
+                        <strong class="text-white">Community Support</strong>
+                        <p class="text-gray-400">Documentation, community forums, GitHub discussions</p>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        <!-- What's NOT Included -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+            <h2 class="text-2xl font-bold text-white mb-4">What's NOT Included</h2>
+            <ul class="space-y-3">
+                <li class="flex items-start gap-3">
+                    <span class="text-red-400 text-xl">✗</span>
+                    <div>
+                        <strong class="text-white">Firewall Service</strong>
+                        <p class="text-gray-400">Users manage their own firewall rules and DDoS protection</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-red-400 text-xl">✗</span>
+                    <div>
+                        <strong class="text-white">Discord Service</strong>
+                        <p class="text-gray-400">No Discord bot integration or notifications</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-red-400 text-xl">✗</span>
+                    <div>
+                        <strong class="text-white">Secrets Service</strong>
+                        <p class="text-gray-400">No Azure Key Vault or cloud secret management (file-driven config only)</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-red-400 text-xl">✗</span>
+                    <div>
+                        <strong class="text-white">Cloudflare/Let's Encrypt Automation</strong>
+                        <p class="text-gray-400">Users manage their own SSL certificates and DNS</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-red-400 text-xl">✗</span>
+                    <div>
+                        <strong class="text-white">External Reverse Proxy for Game Servers</strong>
+                        <p class="text-gray-400">Users manage their own reverse proxy for game traffic (nginx, Caddy, Traefik) - YARP only handles internal panel services</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-red-400 text-xl">✗</span>
+                    <div>
+                        <strong class="text-white">Bundled Dependencies</strong>
+                        <p class="text-gray-400">PostgreSQL, RabbitMQ, and Redis are separate installs (not bundled)</p>
+                    </div>
+                </li>
+                <li class="flex items-start gap-3">
+                    <span class="text-red-400 text-xl">✗</span>
+                    <div>
+                        <strong class="text-white">Azure AD B2C Integration</strong>
+                        <p class="text-gray-400">Auth works without Azure (local user accounts only)</p>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        <!-- YARP Clarification -->
+        <div class="bg-blue-900/30 border-l-4 border-blue-400 rounded-r-lg p-6 mb-6">
+            <div class="flex items-start gap-3">
+                <span class="text-2xl">💡</span>
+                <div>
+                    <h3 class="font-bold text-blue-400 mb-2">YARP Clarification</h3>
+                    <p class="text-gray-300 mb-2">YARP is included in KiP Edition, but <strong>only for internal panel traffic</strong> (API gateway between services).</p>
+                    <p class="text-gray-300">Many game servers don't support being proxied, so users are responsible for managing external reverse proxies for game server traffic if needed.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deployment Options -->
+        <div class="grid md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-gray-800 border border-sky-500 rounded-lg p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-3xl">🐳</span>
+                    <h3 class="text-xl font-bold text-sky-400">Docker Compose</h3>
+                </div>
+                <p class="text-gray-300 mb-3">Pre-configured docker-compose.yml with:</p>
+                <ul class="space-y-2 text-gray-400 text-sm">
+                    <li>• Panel container</li>
+                    <li>• PostgreSQL container</li>
+                    <li>• RabbitMQ container</li>
+                    <li>• Redis container</li>
+                    <li>• Volume mounts for persistence</li>
+                </ul>
+                <p class="text-gray-500 text-sm mt-3 italic">Recommended for most users</p>
+            </div>
+
+            <div class="bg-gray-800 border border-purple-500 rounded-lg p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-3xl">📦</span>
+                    <h3 class="text-xl font-bold text-purple-400">Standalone Binary</h3>
+                </div>
+                <p class="text-gray-300 mb-3">Single executable that:</p>
+                <ul class="space-y-2 text-gray-400 text-sm">
+                    <li>• Runs directly on Linux</li>
+                    <li>• Connects to existing PostgreSQL/RabbitMQ/Redis</li>
+                    <li>• Configured via YAML/JSON file</li>
+                    <li>• No Docker required</li>
+                </ul>
+                <p class="text-gray-500 text-sm mt-3 italic">For advanced users with existing infrastructure</p>
+            </div>
+        </div>
+
+        <!-- System Requirements -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+            <h2 class="text-2xl font-bold text-white mb-4">System Requirements</h2>
+            <div class="grid md:grid-cols-3 gap-6">
+                <div>
+                    <h3 class="font-bold text-sky-400 mb-3">Minimum</h3>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• 2 CPU cores</li>
+                        <li>• 4 GB RAM</li>
+                        <li>• 20 GB storage</li>
+                        <li>• Linux (Ubuntu 22.04+)</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sky-400 mb-3">Recommended</h3>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• 4 CPU cores</li>
+                        <li>• 8 GB RAM</li>
+                        <li>• 50 GB SSD</li>
+                        <li>• Linux (Debian/Ubuntu)</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sky-400 mb-3">Dependencies</h3>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li>• PostgreSQL 15+</li>
+                        <li>• RabbitMQ 3.12+</li>
+                        <li>• Redis 7+</li>
+                        <li>• Docker (for Compose option)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+            <h2 class="text-2xl font-bold text-white mb-4">KiP vs SaaS Comparison</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-700">
+                            <th class="text-left p-3 text-sky-400">Feature</th>
+                            <th class="text-center p-3 text-purple-400">KiP Edition</th>
+                            <th class="text-center p-3 text-green-400">SaaS Edition</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        <tr>
+                            <td class="p-3 text-white font-medium">Hosting</td>
+                            <td class="p-3 text-center text-gray-300">Self-hosted</td>
+                            <td class="p-3 text-center text-gray-300">Cloud-hosted</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">Authentication</td>
+                            <td class="p-3 text-center text-gray-300">Local accounts</td>
+                            <td class="p-3 text-center text-gray-300">Azure AD B2C</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">Firewall Management</td>
+                            <td class="p-3 text-center text-red-400">❌ User-managed</td>
+                            <td class="p-3 text-center text-green-400">✓ Automated</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">Discord Integration</td>
+                            <td class="p-3 text-center text-red-400">❌ None</td>
+                            <td class="p-3 text-center text-green-400">✓ Full integration</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">External Reverse Proxy</td>
+                            <td class="p-3 text-center text-red-400">❌ User-managed</td>
+                            <td class="p-3 text-center text-green-400">✓ YARP included</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">Internal API Gateway</td>
+                            <td class="p-3 text-center text-green-400">✓ YARP included</td>
+                            <td class="p-3 text-center text-green-400">✓ YARP included</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">SSL Certificates</td>
+                            <td class="p-3 text-center text-red-400">❌ User-managed</td>
+                            <td class="p-3 text-center text-green-400">✓ Automated</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">Updates</td>
+                            <td class="p-3 text-center text-gray-300">Manual (UI button)</td>
+                            <td class="p-3 text-center text-gray-300">Automatic</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">Support</td>
+                            <td class="p-3 text-center text-gray-300">Community</td>
+                            <td class="p-3 text-center text-gray-300">Official</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 text-white font-medium">Price</td>
+                            <td class="p-3 text-center text-green-400 font-bold">Free (OSS)</td>
+                            <td class="p-3 text-center text-gray-300">Subscription</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Branding & Licensing -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+            <h2 class="text-2xl font-bold text-white mb-4">Branding & Licensing</h2>
+            <div class="mb-4">
+                <h3 class="text-lg font-bold text-sky-400 mb-2">Required Attribution</h3>
+                <p class="text-gray-300 mb-3">KiP Edition <strong>must</strong> display "Powered by Meridian Console" in the UI footer and documentation.</p>
+                <div class="bg-gray-900 border border-gray-700 rounded p-3">
+                    <code class="text-sky-300">Powered by Meridian Console | Open Source</code>
+                </div>
+            </div>
+            <div class="bg-yellow-900/30 border-l-4 border-yellow-500 rounded-r-lg p-4 mt-4">
+                <p class="text-gray-300"><strong class="text-yellow-400">License TBD:</strong> Need to discuss with Kira about open-source license choice (MIT, Apache 2.0, AGPL, etc.)</p>
+            </div>
+        </div>
+
+        <!-- Target Audience -->
+        <div class="grid md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="text-4xl mb-3">🏠</div>
+                <h3 class="text-lg font-bold text-sky-400 mb-2">Homelabbers</h3>
+                <p class="text-gray-300 text-sm">Running game servers on their own hardware for friends and small communities.</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="text-4xl mb-3">🎮</div>
+                <h3 class="text-lg font-bold text-sky-400 mb-2">Small Communities</h3>
+                <p class="text-gray-300 text-sm">Clans, guilds, or friend groups who want control without cloud costs.</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="text-4xl mb-3">💻</div>
+                <h3 class="text-lg font-bold text-sky-400 mb-2">Power Users</h3>
+                <p class="text-gray-300 text-sm">Users comfortable with Linux, Docker, and networking who want full control.</p>
+            </div>
+        </div>
+
+        <!-- Release Timeline -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
+            <h2 class="text-2xl font-bold text-white mb-4">Release Timeline</h2>
+            <div class="space-y-4">
+                <div class="flex items-start gap-4">
+                    <div class="bg-sky-500 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm">1</div>
+                    <div>
+                        <h3 class="font-bold text-white">SaaS MVP First</h3>
+                        <p class="text-gray-400 text-sm">Focus on core platform stability and revenue generation.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4">
+                    <div class="bg-purple-500 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm">2</div>
+                    <div>
+                        <h3 class="font-bold text-white">Evaluate Demand</h3>
+                        <p class="text-gray-400 text-sm">Gauge community interest through surveys and discussions.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4">
+                    <div class="bg-green-500 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm">3</div>
+                    <div>
+                        <h3 class="font-bold text-white">KiP Edition Release</h3>
+                        <p class="text-gray-400 text-sm">Ship post-MVP once core platform is stable. Timeline: <strong>TBD</strong></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
 </section>

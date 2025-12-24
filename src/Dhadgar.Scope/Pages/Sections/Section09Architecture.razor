@@ -1,8 +1,11 @@
-<section class="scope-prose">
+<section id="architecture" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
+    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
+        9. System Architecture
+    </h2>
 
-<h3>Architecture Overview</h3>
-<div class="scope-callout">
-<pre class="scope-code">
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Architecture Overview</h3>
+    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6 font-mono text-xs overflow-x-auto">
+        <pre class="text-gray-300">
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                              INTERNET                                                │
 ├─────────────────────────────────────────────────────────────────────────────────────────────────────┤
@@ -73,7 +76,7 @@
 │   │  ┌──────────────────────────────┐  ┌──────────────────────────────┐  ┌────────────────────────┐ ││
 │   │  │  Platform DB Pod (PostgreSQL)│  │  User DB Pod (PostgreSQL)   │  │      RabbitMQ          │ ││
 │   │  │  ─────────────────────────── │  │  ────────────────────────── │  │                        │ ││
-│   │  │  • identity_db               │  │  • Customer game databases  │  │  Events &amp; Commands     │ ││
+│   │  │  • identity_db               │  │  • Customer game databases  │  │  Events & Commands     │ ││
 │   │  │  • billing_db                │  │  • Tenant data              │  │                        │ ││
 │   │  │  • servers_db                │  │                             │  └────────────────────────┘ ││
 │   │  │  • nodes_db                  │  └──────────────────────────────┘                             ││
@@ -107,93 +110,97 @@
 │                                                                                                       │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────┘
         </pre>
-</div>
-<h3>Control Plane Services (12)</h3>
-<table class="scope-table">
-<thead>
-<tr>
-<th>Service</th>
-<th>Port</th>
-<th>Responsibility</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>Identity</td><td>:5010</td><td>User authentication, OAuth (Discord/Steam), JWT issuance</td></tr>
-<tr><td>Billing</td><td>:5020</td><td>Subscriptions, payments (Stripe/PayPal), usage tracking</td></tr>
-<tr><td>Servers</td><td>:5030</td><td>Server CRUD, state management, configuration</td></tr>
-<tr><td>Nodes</td><td>:5040</td><td>Agent registration, heartbeat, certificate issuance</td></tr>
-<tr><td>Tasks</td><td>:5050</td><td>Job queue, provisioning, async operations</td></tr>
-<tr><td>Files</td><td>:5060</td><td>File storage, backups, uploads/downloads</td></tr>
-<tr><td>Console</td><td>:5070</td><td>WebSocket console streaming (xterm.js), RCON relay</td></tr>
-<tr><td>Mods</td><td>:5080</td><td>Mod management (Steam Workshop, CurseForge, Modrinth)</td></tr>
-<tr><td>Notifications</td><td>:5090</td><td>Email, push notifications, customer alerts</td></tr>
-<tr><td>Firewall</td><td>:5100</td><td>Port allocation, UniFi API integration</td></tr>
-<tr><td>Secrets</td><td>:5110</td><td>Secret rotation, Azure Key Vault sync</td></tr>
-<tr><td>Discord</td><td>:5120</td><td>Internal team bot (NOT customer-facing)</td></tr>
-</tbody>
-</table>
-<h3>Database Architecture</h3>
-<div>
-<div>
-<p>📦 Platform DB Pod</p>
-<p>All microservice databases. NO customer data.</p>
-<ul>
-<li>• identity_db, billing_db, servers_db</li>
-<li>• nodes_db, tasks_db, files_db</li>
-<li>• mods_db, notifications_db</li>
-<li>• firewall_db, secrets_db</li>
-</ul>
-</div>
-<div>
-<p>👤 User DB Pod</p>
-<p>Customer-created databases ONLY.</p>
-<ul>
-<li>• Game server databases (per customer)</li>
-<li>• Tenant-specific data</li>
-<li>• Complete isolation from platform DBs</li>
-</ul>
-</div>
-</div>
-<h3>Agent Types</h3>
-<table class="scope-table">
-<thead>
-<tr>
-<th>Type</th>
-<th>Location</th>
-<th>Network Path</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Customer Agent</strong></td>
-<td>Internet (anywhere)</td>
-<td>Internet → Cloudflare → UniFi → Gateway → Services</td>
-<td>Production customer gameservers</td>
-</tr>
-<tr>
-<td><strong>Dogfood Agent</strong></td>
-<td>Inside colo</td>
-<td>Internal network → Services (direct)</td>
-<td>Internal testing, validation</td>
-</tr>
-</tbody>
-</table>
-<h3>Observability Stack</h3>
-<table class="scope-table">
-<thead>
-<tr>
-<th>Layer</th>
-<th>Tool</th>
-<th>Location</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr><td>APM</td><td>New Relic</td><td>SaaS (external)</td><td>Traces, APM, primary dashboards</td></tr>
-<tr><td>Metrics</td><td>Prometheus</td><td>In-cluster</td><td>Internal metrics scraping</td></tr>
-<tr><td>Dashboards</td><td>Grafana</td><td>In-cluster</td><td>Internal visualization</td></tr>
-<tr><td>Logs</td><td>Loki</td><td>In-cluster</td><td>Log aggregation</td></tr>
-</tbody>
-</table>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Control Plane Services (12)</h3>
+    <table class="w-full text-sm border-collapse mb-6">
+        <thead>
+            <tr class="bg-gray-700 text-white">
+                <th class="border border-gray-600 p-2 text-left">Service</th>
+                <th class="border border-gray-600 p-2 text-left">Port</th>
+                <th class="border border-gray-600 p-2 text-left">Responsibility</th>
+            </tr>
+        </thead>
+        <tbody class="text-gray-300">
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Identity</td><td class="border border-gray-600 p-2">:5010</td><td class="border border-gray-600 p-2">User authentication, OAuth (Discord/Steam), JWT issuance</td></tr>
+            <tr><td class="border border-gray-600 p-2">Billing</td><td class="border border-gray-600 p-2">:5020</td><td class="border border-gray-600 p-2">Subscriptions, payments (Stripe/PayPal), usage tracking</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Servers</td><td class="border border-gray-600 p-2">:5030</td><td class="border border-gray-600 p-2">Server CRUD, state management, configuration</td></tr>
+            <tr><td class="border border-gray-600 p-2">Nodes</td><td class="border border-gray-600 p-2">:5040</td><td class="border border-gray-600 p-2">Agent registration, heartbeat, certificate issuance</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Tasks</td><td class="border border-gray-600 p-2">:5050</td><td class="border border-gray-600 p-2">Job queue, provisioning, async operations</td></tr>
+            <tr><td class="border border-gray-600 p-2">Files</td><td class="border border-gray-600 p-2">:5060</td><td class="border border-gray-600 p-2">File storage, backups, uploads/downloads</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Console</td><td class="border border-gray-600 p-2">:5070</td><td class="border border-gray-600 p-2">WebSocket console streaming (xterm.js), RCON relay</td></tr>
+            <tr><td class="border border-gray-600 p-2">Mods</td><td class="border border-gray-600 p-2">:5080</td><td class="border border-gray-600 p-2">Mod management (Steam Workshop, CurseForge, Modrinth)</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Notifications</td><td class="border border-gray-600 p-2">:5090</td><td class="border border-gray-600 p-2">Email, push notifications, customer alerts</td></tr>
+            <tr><td class="border border-gray-600 p-2">Firewall</td><td class="border border-gray-600 p-2">:5100</td><td class="border border-gray-600 p-2">Port allocation, UniFi API integration</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Secrets</td><td class="border border-gray-600 p-2">:5110</td><td class="border border-gray-600 p-2">Secret rotation, Azure Key Vault sync</td></tr>
+            <tr><td class="border border-gray-600 p-2">Discord</td><td class="border border-gray-600 p-2">:5120</td><td class="border border-gray-600 p-2">Internal team bot (NOT customer-facing)</td></tr>
+        </tbody>
+    </table>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Database Architecture</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+            <p class="text-blue-400 font-semibold mb-2">📦 Platform DB Pod</p>
+            <p class="text-gray-300 text-sm mb-2">All microservice databases. NO customer data.</p>
+            <ul class="text-gray-400 text-xs space-y-1">
+                <li>• identity_db, billing_db, servers_db</li>
+                <li>• nodes_db, tasks_db, files_db</li>
+                <li>• mods_db, notifications_db</li>
+                <li>• firewall_db, secrets_db</li>
+            </ul>
+        </div>
+        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+            <p class="text-green-400 font-semibold mb-2">👤 User DB Pod</p>
+            <p class="text-gray-300 text-sm mb-2">Customer-created databases ONLY.</p>
+            <ul class="text-gray-400 text-xs space-y-1">
+                <li>• Game server databases (per customer)</li>
+                <li>• Tenant-specific data</li>
+                <li>• Complete isolation from platform DBs</li>
+            </ul>
+        </div>
+    </div>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Agent Types</h3>
+    <table class="w-full text-sm border-collapse mb-6">
+        <thead>
+            <tr class="bg-gray-700 text-white">
+                <th class="border border-gray-600 p-2 text-left">Type</th>
+                <th class="border border-gray-600 p-2 text-left">Location</th>
+                <th class="border border-gray-600 p-2 text-left">Network Path</th>
+                <th class="border border-gray-600 p-2 text-left">Purpose</th>
+            </tr>
+        </thead>
+        <tbody class="text-gray-300">
+            <tr class="bg-gray-800">
+                <td class="border border-gray-600 p-2"><strong class="text-orange-400">Customer Agent</strong></td>
+                <td class="border border-gray-600 p-2">Internet (anywhere)</td>
+                <td class="border border-gray-600 p-2">Internet → Cloudflare → UniFi → Gateway → Services</td>
+                <td class="border border-gray-600 p-2">Production customer gameservers</td>
+            </tr>
+            <tr>
+                <td class="border border-gray-600 p-2"><strong class="text-cyan-400">Dogfood Agent</strong></td>
+                <td class="border border-gray-600 p-2">Inside colo</td>
+                <td class="border border-gray-600 p-2">Internal network → Services (direct)</td>
+                <td class="border border-gray-600 p-2">Internal testing, validation</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Observability Stack</h3>
+    <table class="w-full text-sm border-collapse">
+        <thead>
+            <tr class="bg-gray-700 text-white">
+                <th class="border border-gray-600 p-2 text-left">Layer</th>
+                <th class="border border-gray-600 p-2 text-left">Tool</th>
+                <th class="border border-gray-600 p-2 text-left">Location</th>
+                <th class="border border-gray-600 p-2 text-left">Purpose</th>
+            </tr>
+        </thead>
+        <tbody class="text-gray-300">
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">APM</td><td class="border border-gray-600 p-2">New Relic</td><td class="border border-gray-600 p-2">SaaS (external)</td><td class="border border-gray-600 p-2">Traces, APM, primary dashboards</td></tr>
+            <tr><td class="border border-gray-600 p-2">Metrics</td><td class="border border-gray-600 p-2">Prometheus</td><td class="border border-gray-600 p-2">In-cluster</td><td class="border border-gray-600 p-2">Internal metrics scraping</td></tr>
+            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Dashboards</td><td class="border border-gray-600 p-2">Grafana</td><td class="border border-gray-600 p-2">In-cluster</td><td class="border border-gray-600 p-2">Internal visualization</td></tr>
+            <tr><td class="border border-gray-600 p-2">Logs</td><td class="border border-gray-600 p-2">Loki</td><td class="border border-gray-600 p-2">In-cluster</td><td class="border border-gray-600 p-2">Log aggregation</td></tr>
+        </tbody>
+    </table>
 </section>
