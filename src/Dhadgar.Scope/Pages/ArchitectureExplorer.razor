@@ -55,7 +55,7 @@
                         <div class="text-xs text-white/60">@Explode%</div>
                     </div>
                     <input type="range" min="0" max="100" step="1" class="w-full accent-indigo-500"
-                           @bind="Explode" @bind:event="oninput" @bind:after="OnQueryChanged" />
+                           value="@Explode" @oninput="OnExplodeChanged" />
                     </div>
 
                     <div class="@GraphPanelExtraClass rounded-2xl border border-white/10 bg-black/20 overflow-hidden h-[70vh] md:h-[72vh] lg:h-[75vh]"
@@ -260,6 +260,15 @@
 
     private async Task OnQueryChanged()
     {
+        await ApplyStateAsync();
+    }
+
+    private async Task OnExplodeChanged(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var value))
+        {
+            Explode = value;
+        }
         await ApplyStateAsync();
     }
 
