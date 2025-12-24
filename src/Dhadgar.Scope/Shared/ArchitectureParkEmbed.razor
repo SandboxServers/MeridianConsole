@@ -10,24 +10,22 @@
 
     private ElementReference _host;
     private IJSObjectReference? _module;
-    private string _id = $"arch_{Guid.NewGuid():N}";
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
 
         var data = await GraphService.GetAsync();
         _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/architecturePark.module.js");
-        await _module.InvokeVoidAsync("init", _id, _host, data, new { mode = "embed", selectable = false });
-        await _module.InvokeVoidAsync("fit", _id);
-        await _module.InvokeVoidAsync("setExplode", _id, 35);
+        await _module.InvokeVoidAsync("init", _host, data, new { mode = "embed", selectable = false });
+        await _module.InvokeVoidAsync("fit", _host);
+        await _module.InvokeVoidAsync("setExplode", _host, 35);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_module is not null)
         {
-            await _module.InvokeVoidAsync("dispose", _id);
+            await _module.InvokeVoidAsync("dispose", _host);
             await _module.DisposeAsync();
         }
     }

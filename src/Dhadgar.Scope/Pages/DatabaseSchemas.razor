@@ -123,8 +123,6 @@
 
 @code {
     private ElementReference _graphHost;
-    private const string GraphId = "db-schemas";
-
     private IJSObjectReference? _module;
     private DotNetObjectReference<DatabaseSchemas>? _dotnetRef;
 
@@ -151,8 +149,8 @@
 
         _dotnetRef = DotNetObjectReference.Create(this);
         _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/dbSchemaGraph.module.js");
-        await _module.InvokeVoidAsync("init", GraphId, _graphHost, _catalog,
-            new { mode = "full", selectable = true, dotnet = _dotnetRef });
+        await _module.InvokeVoidAsync("init", _graphHost, _catalog,
+            new { mode = "full", selectable = true, dotNetRef = _dotnetRef });
         await ApplyStateAsync();
     }
 
@@ -169,9 +167,9 @@
     private async Task ApplyStateAsync()
     {
         if (_module is null) return;
-        await _module.InvokeVoidAsync("setExplode", GraphId, Explode);
-        await _module.InvokeVoidAsync("setServiceFilter", GraphId, ServiceKey ?? string.Empty);
-        await _module.InvokeVoidAsync("search", GraphId, Query ?? string.Empty);
+        await _module.InvokeVoidAsync("setExplode", _graphHost, Explode);
+        await _module.InvokeVoidAsync("setServiceFilter", _graphHost, ServiceKey ?? string.Empty);
+        await _module.InvokeVoidAsync("search", _graphHost, Query ?? string.Empty);
     }
 
     private string TabClass(string v)
@@ -182,7 +180,7 @@
     private async Task FitAsync()
     {
         if (_module is null) return;
-        await _module.InvokeVoidAsync("fit", GraphId);
+        await _module.InvokeVoidAsync("fit", _graphHost);
     }
 
     private async Task ResetAsync()
@@ -193,7 +191,7 @@
         _selected = null;
 
         if (_module is not null)
-            await _module.InvokeVoidAsync("reset", GraphId);
+            await _module.InvokeVoidAsync("reset", _graphHost);
         await ApplyStateAsync();
     }
 
@@ -201,7 +199,7 @@
     {
         _selected = null;
         if (_module is not null)
-            await _module.InvokeVoidAsync("clearSelection", GraphId);
+            await _module.InvokeVoidAsync("clearSelection", _graphHost);
     }
 
     [JSInvokable]
@@ -230,7 +228,7 @@
         {
             if (_module is not null)
             {
-                await _module.InvokeVoidAsync("dispose", GraphId);
+                await _module.InvokeVoidAsync("dispose", _graphHost);
                 await _module.DisposeAsync();
             }
         }
