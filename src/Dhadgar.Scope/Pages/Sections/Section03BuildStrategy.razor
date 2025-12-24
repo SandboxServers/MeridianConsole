@@ -1,66 +1,59 @@
-<section id="build-strategy" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
-    <h2 class="text-2xl font-bold text-white mb-4">🛤️ Section 3: Build Strategy</h2>
-    
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Environment Structure</h3>
-    <table class="w-full text-sm border-collapse mb-4">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Environment</th><th class="border border-gray-600 p-2">Infrastructure</th><th class="border border-gray-600 p-2">Purpose</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong>Dev</strong></td><td class="border border-gray-600 p-2">Kubernetes namespace</td><td class="border border-gray-600 p-2">Active development, frequent deploys</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Staging</strong></td><td class="border border-gray-600 p-2">Kubernetes namespace</td><td class="border border-gray-600 p-2">Pre-production validation, customer demos</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Prod</strong></td><td class="border border-gray-600 p-2">Kubernetes namespace (future: dedicated cluster)</td><td class="border border-gray-600 p-2">Live customer environment</td></tr>
-        </tbody>
-    </table>
+<section class="scope-prose">
 
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-600 mb-6">
-        <p class="text-white font-semibold mb-1">Local Development:</p>
-        <p class="text-sm text-gray-400">Developer's choice (Docker Compose, local Kubernetes, etc.). Changes must be validated locally before pushing to dev environment.</p>
-    </div>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">CI/CD Platform</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Component</th><th class="border border-gray-600 p-2">Technology</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong>CI/CD</strong></td><td class="border border-gray-600 p-2">Azure Pipelines</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Build Agents</strong></td><td class="border border-gray-600 p-2">Self-hosted (pod in cluster)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Container Registry</strong></td><td class="border border-gray-600 p-2">Azure Container Registry (ACR)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Artifact Retention</strong></td><td class="border border-gray-600 p-2">Forever (ADO doesn't charge for storage)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Package Manager</strong></td><td class="border border-gray-600 p-2">Helm</td></tr>
-        </tbody>
-    </table>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">GitOps with ArgoCD</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Aspect</th><th class="border border-gray-600 p-2">Implementation</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong>ArgoCD Role</strong></td><td class="border border-gray-600 p-2">Read-only, declarative state enforcement</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Drift Detection</strong></td><td class="border border-gray-600 p-2">Used as deployment gate (staging/prod must match Git exactly)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Source of Truth</strong></td><td class="border border-gray-600 p-2">CI/CD pipeline updates Git, ArgoCD syncs to cluster</td></tr>
-        </tbody>
-    </table>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Branching Strategy</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Branch</th><th class="border border-gray-600 p-2">Deploys To</th><th class="border border-gray-600 p-2">Trigger</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><code class="text-indigo-400">develop</code></td><td class="border border-gray-600 p-2">Dev</td><td class="border border-gray-600 p-2">Automatic on push</td></tr>
-            <tr><td class="border border-gray-600 p-2"><code class="text-indigo-400">main</code> (untagged)</td><td class="border border-gray-600 p-2">Staging</td><td class="border border-gray-600 p-2">Automatic on merge</td></tr>
-            <tr><td class="border border-gray-600 p-2"><code class="text-indigo-400">main</code> (tagged)</td><td class="border border-gray-600 p-2">Prod</td><td class="border border-gray-600 p-2">Manual approval required (ADO Environment Resources)</td></tr>
-        </tbody>
-    </table>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Deployment Gates</h3>
-    <ul class="text-gray-300 space-y-1 mb-6">
-        <li>• <strong class="text-white">Dev → Staging:</strong> Unit tests pass, build succeeds</li>
-        <li>• <strong class="text-white">Staging → Prod:</strong> Manual approval + ArgoCD drift check (staging must be in sync)</li>
-    </ul>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Notifications</h3>
-    <table class="w-full text-sm border-collapse">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Event</th><th class="border border-gray-600 p-2">Notification Method</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2">Build failures</td><td class="border border-gray-600 p-2">Discord webhook to dev channel</td></tr>
-            <tr><td class="border border-gray-600 p-2">Deployment to staging/prod</td><td class="border border-gray-600 p-2">Discord webhook to ops channel</td></tr>
-            <tr><td class="border border-gray-600 p-2">Approval required</td><td class="border border-gray-600 p-2">Discord webhook + ADO notification</td></tr>
-        </tbody>
-    </table>
+<h3>Environment Structure</h3>
+<table class="scope-table">
+<thead><tr><th>Environment</th><th>Infrastructure</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><strong>Dev</strong></td><td>Kubernetes namespace</td><td>Active development, frequent deploys</td></tr>
+<tr><td><strong>Staging</strong></td><td>Kubernetes namespace</td><td>Pre-production validation, customer demos</td></tr>
+<tr><td><strong>Prod</strong></td><td>Kubernetes namespace (future: dedicated cluster)</td><td>Live customer environment</td></tr>
+</tbody>
+</table>
+<div class="scope-callout">
+<p>Local Development:</p>
+<p>Developer's choice (Docker Compose, local Kubernetes, etc.). Changes must be validated locally before pushing to dev environment.</p>
+</div>
+<h3>CI/CD Platform</h3>
+<table class="scope-table">
+<thead><tr><th>Component</th><th>Technology</th></tr></thead>
+<tbody>
+<tr><td><strong>CI/CD</strong></td><td>Azure Pipelines</td></tr>
+<tr><td><strong>Build Agents</strong></td><td>Self-hosted (pod in cluster)</td></tr>
+<tr><td><strong>Container Registry</strong></td><td>Azure Container Registry (ACR)</td></tr>
+<tr><td><strong>Artifact Retention</strong></td><td>Forever (ADO doesn't charge for storage)</td></tr>
+<tr><td><strong>Package Manager</strong></td><td>Helm</td></tr>
+</tbody>
+</table>
+<h3>GitOps with ArgoCD</h3>
+<table class="scope-table">
+<thead><tr><th>Aspect</th><th>Implementation</th></tr></thead>
+<tbody>
+<tr><td><strong>ArgoCD Role</strong></td><td>Read-only, declarative state enforcement</td></tr>
+<tr><td><strong>Drift Detection</strong></td><td>Used as deployment gate (staging/prod must match Git exactly)</td></tr>
+<tr><td><strong>Source of Truth</strong></td><td>CI/CD pipeline updates Git, ArgoCD syncs to cluster</td></tr>
+</tbody>
+</table>
+<h3>Branching Strategy</h3>
+<table class="scope-table">
+<thead><tr><th>Branch</th><th>Deploys To</th><th>Trigger</th></tr></thead>
+<tbody>
+<tr><td><code>develop</code></td><td>Dev</td><td>Automatic on push</td></tr>
+<tr><td><code>main</code> (untagged)</td><td>Staging</td><td>Automatic on merge</td></tr>
+<tr><td><code>main</code> (tagged)</td><td>Prod</td><td>Manual approval required (ADO Environment Resources)</td></tr>
+</tbody>
+</table>
+<h3>Deployment Gates</h3>
+<ul>
+<li>• <strong>Dev → Staging:</strong> Unit tests pass, build succeeds</li>
+<li>• <strong>Staging → Prod:</strong> Manual approval + ArgoCD drift check (staging must be in sync)</li>
+</ul>
+<h3>Notifications</h3>
+<table class="scope-table">
+<thead><tr><th>Event</th><th>Notification Method</th></tr></thead>
+<tbody>
+<tr><td>Build failures</td><td>Discord webhook to dev channel</td></tr>
+<tr><td>Deployment to staging/prod</td><td>Discord webhook to ops channel</td></tr>
+<tr><td>Approval required</td><td>Discord webhook + ADO notification</td></tr>
+</tbody>
+</table>
 </section>

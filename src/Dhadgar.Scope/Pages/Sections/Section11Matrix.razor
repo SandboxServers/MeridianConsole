@@ -1,468 +1,464 @@
-<section id="matrix" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
-    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
-        11. Service Communication Matrix
-    </h2>
-    
-    <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
-        <p class="text-blue-400 font-semibold mb-2">📋 Note</p>
-        <p class="text-gray-300 text-sm">This matrix is a visual summary of Section 10's canonical traffic manifest. For complete flow details including ports, authentication methods, and encryption layers, see Section 10.</p>
-    </div>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">11.1 Legend</h3>
-    <div class="overflow-x-auto mb-6">
-        <table class="w-full text-sm border-collapse">
-            <thead>
-                <tr class="bg-gray-700 text-white">
-                    <th class="border border-gray-600 p-2 text-left">Symbol</th>
-                    <th class="border border-gray-600 p-2 text-left">Meaning</th>
-                </tr>
-            </thead>
-            <tbody class="text-gray-300">
-                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono font-bold text-green-400">HTTPS</td><td class="border border-gray-600 p-2">HTTP/2 over Cilium mTLS (internal) or TLS 1.3 (edge)</td></tr>
-                <tr><td class="border border-gray-600 p-2 font-mono font-bold text-green-400">WSS</td><td class="border border-gray-600 p-2">WebSocket Secure</td></tr>
-                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono font-bold text-purple-400">RMQ</td><td class="border border-gray-600 p-2">RabbitMQ (AMQP over Cilium mTLS)</td></tr>
-                <tr><td class="border border-gray-600 p-2 font-mono font-bold text-red-400">mTLS</td><td class="border border-gray-600 p-2">Direct mTLS client certificate authentication</td></tr>
-                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono font-bold text-yellow-400">PGSQL</td><td class="border border-gray-600 p-2">PostgreSQL over Cilium mTLS</td></tr>
-                <tr><td class="border border-gray-600 p-2 font-mono font-bold text-blue-400">REDIS</td><td class="border border-gray-600 p-2">Redis protocol over Cilium mTLS</td></tr>
-                <tr class="bg-gray-800"><td class="border border-gray-600 p-2 font-mono text-gray-500">-</td><td class="border border-gray-600 p-2">No direct communication (denied by default)</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">11.2 Service-to-Service Communication Matrix</h3>
-    <div class="overflow-x-auto mb-6">
-        <table class="w-full text-xs border-collapse">
-            <thead>
-                <tr class="bg-gray-700 text-white">
-                    <th class="border border-gray-600 p-2 text-left min-w-[120px]">FROM \ TO</th>
-                    <th class="border border-gray-600 p-1 text-center">Gateway</th>
-                    <th class="border border-gray-600 p-1 text-center">Identity</th>
-                    <th class="border border-gray-600 p-1 text-center">Billing</th>
-                    <th class="border border-gray-600 p-1 text-center">Servers</th>
-                    <th class="border border-gray-600 p-1 text-center">Nodes</th>
-                    <th class="border border-gray-600 p-1 text-center">Tasks</th>
-                    <th class="border border-gray-600 p-1 text-center">Files</th>
-                    <th class="border border-gray-600 p-1 text-center">Console</th>
-                    <th class="border border-gray-600 p-1 text-center">Mods</th>
-                    <th class="border border-gray-600 p-1 text-center">Notif</th>
-                    <th class="border border-gray-600 p-1 text-center">Firewall</th>
-                    <th class="border border-gray-600 p-1 text-center">Secrets</th>
-                    <th class="border border-gray-600 p-1 text-center">Discord</th>
-                    <th class="border border-gray-600 p-1 text-center">PlatDB</th>
-                    <th class="border border-gray-600 p-1 text-center">UserDB</th>
-                    <th class="border border-gray-600 p-1 text-center">RMQ</th>
-                    <th class="border border-gray-600 p-1 text-center">Redis</th>
-                </tr>
-            </thead>
-            <tbody class="text-gray-300">
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Client (Browser)</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">WSS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Gateway :5000</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">WSS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-blue-900/40 text-blue-400 font-mono">REDIS</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Identity :5010</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center bg-blue-900/40 text-blue-400 font-mono">REDIS</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Billing :5020</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Servers :5030</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center bg-blue-900/40 text-blue-400 font-mono">REDIS</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Nodes :5040</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Tasks :5050</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center bg-blue-900/40 text-blue-400 font-mono">REDIS</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Files :5060</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Console :5070</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Mods :5080</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Notifications :5090</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Firewall :5100</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Secrets :5110</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Discord :5120</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-green-900/40 text-green-400 font-mono">HTTPS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-yellow-900/40 text-yellow-400 font-mono">PGSQL</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-purple-900/40 text-purple-400 font-mono">RMQ</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2 font-semibold text-white bg-gray-700">Node Agent</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-red-900/40 text-red-400 font-mono">mTLS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center bg-red-900/40 text-red-400 font-mono">mTLS</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                    <td class="border border-gray-600 p-1 text-center text-gray-600">-</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">11.3 External Service Dependencies</h3>
-    <div class="overflow-x-auto mb-6">
-        <table class="w-full text-sm border-collapse">
-            <thead>
-                <tr class="bg-gray-700 text-white">
-                    <th class="border border-gray-600 p-2 text-left">Service</th>
-                    <th class="border border-gray-600 p-2 text-left">External Dependency</th>
-                    <th class="border border-gray-600 p-2 text-left">Protocol</th>
-                    <th class="border border-gray-600 p-2 text-left">Purpose</th>
-                </tr>
-            </thead>
-            <tbody class="text-gray-300">
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2">Identity</td>
-                    <td class="border border-gray-600 p-2">Azure AD / Entra ID</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">OAuth2 / OIDC authentication</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2">Identity</td>
-                    <td class="border border-gray-600 p-2">Discord OAuth</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">Social login</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2">Billing</td>
-                    <td class="border border-gray-600 p-2">Stripe API</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">Payment processing</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2">Notifications</td>
-                    <td class="border border-gray-600 p-2">SendGrid / Mailgun</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">Transactional email</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2">Discord</td>
-                    <td class="border border-gray-600 p-2">Discord API</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS/WSS</td>
-                    <td class="border border-gray-600 p-2">Bot integration</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2">Mods</td>
-                    <td class="border border-gray-600 p-2">CurseForge API</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">Mod metadata/downloads</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2">Mods</td>
-                    <td class="border border-gray-600 p-2">Modrinth API</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">Mod metadata/downloads</td>
-                </tr>
-                <tr>
-                    <td class="border border-gray-600 p-2">Secrets</td>
-                    <td class="border border-gray-600 p-2">Azure Key Vault</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">Secret retrieval</td>
-                </tr>
-                <tr class="bg-gray-800">
-                    <td class="border border-gray-600 p-2">All Services</td>
-                    <td class="border border-gray-600 p-2">Azure Container Registry</td>
-                    <td class="border border-gray-600 p-2 font-mono text-green-400">HTTPS</td>
-                    <td class="border border-gray-600 p-2">Container image pull</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">11.4 Key Observations</h3>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="bg-green-900/20 border border-green-700 rounded-lg p-4">
-            <h4 class="text-green-400 font-semibold mb-2">✅ Zero-Trust Architecture</h4>
-            <ul class="text-gray-300 text-sm space-y-1">
-                <li>• All internal traffic encrypted via Cilium mTLS</li>
-                <li>• No service-to-service communication without explicit policy</li>
-                <li>• Gateway is the only external entry point</li>
-            </ul>
-        </div>
-        <div class="bg-purple-900/20 border border-purple-700 rounded-lg p-4">
-            <h4 class="text-purple-400 font-semibold mb-2">🐰 RabbitMQ as Event Backbone</h4>
-            <ul class="text-gray-300 text-sm space-y-1">
-                <li>• 10 services publish/consume via RabbitMQ</li>
-                <li>• Decouples services for async workflows</li>
-                <li>• Dead letter queues for failed message handling</li>
-            </ul>
-        </div>
-        <div class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
-            <h4 class="text-yellow-400 font-semibold mb-2">🗄️ Database Isolation</h4>
-            <ul class="text-gray-300 text-sm space-y-1">
-                <li>• PlatformDB: shared platform state (servers, billing, etc.)</li>
-                <li>• UserDB: user-specific data (isolated for compliance)</li>
-                <li>• No cross-database queries; services own their data</li>
-            </ul>
-        </div>
-        <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-            <h4 class="text-blue-400 font-semibold mb-2">⚡ Redis for Hot Data</h4>
-            <ul class="text-gray-300 text-sm space-y-1">
-                <li>• Gateway: rate limiting, session cache</li>
-                <li>• Identity: token blacklist, session store</li>
-                <li>• Tasks: job queue state, distributed locks</li>
-                <li>• Servers: real-time status cache</li>
-            </ul>
-        </div>
-    </div>
+<section class="scope-prose">
+<div class="scope-callout">
+  <strong>Interactive view available:</strong>
+  <p>For a richer, searchable diagram of service relationships, use the <a href="/dependencies">Interactive Dependency Map</a>.</p>
+</div>
+<div>
+<p>📋 Note</p>
+<p>This matrix is a visual summary of Section 10's canonical traffic manifest. For complete flow details including ports, authentication methods, and encryption layers, see Section 10.</p>
+</div>
+<h3>11.1 Legend</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>HTTPS</td><td>HTTP/2 over Cilium mTLS (internal) or TLS 1.3 (edge)</td></tr>
+<tr><td>WSS</td><td>WebSocket Secure</td></tr>
+<tr><td>RMQ</td><td>RabbitMQ (AMQP over Cilium mTLS)</td></tr>
+<tr><td>mTLS</td><td>Direct mTLS client certificate authentication</td></tr>
+<tr><td>PGSQL</td><td>PostgreSQL over Cilium mTLS</td></tr>
+<tr><td>REDIS</td><td>Redis protocol over Cilium mTLS</td></tr>
+<tr><td>-</td><td>No direct communication (denied by default)</td></tr>
+</tbody>
+</table>
+</div>
+<h3>11.2 Service-to-Service Communication Matrix</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>FROM \ TO</th>
+<th>Gateway</th>
+<th>Identity</th>
+<th>Billing</th>
+<th>Servers</th>
+<th>Nodes</th>
+<th>Tasks</th>
+<th>Files</th>
+<th>Console</th>
+<th>Mods</th>
+<th>Notif</th>
+<th>Firewall</th>
+<th>Secrets</th>
+<th>Discord</th>
+<th>PlatDB</th>
+<th>UserDB</th>
+<th>RMQ</th>
+<th>Redis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Client (Browser)</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>WSS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Gateway :5000</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>WSS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Identity :5010</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Billing :5020</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Servers :5030</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Nodes :5040</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Tasks :5050</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Files :5060</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Console :5070</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Mods :5080</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Notifications :5090</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Firewall :5100</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Secrets :5110</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Discord :5120</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Node Agent</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>mTLS</td>
+<td>-</td>
+<td>-</td>
+<td>mTLS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3>11.3 External Service Dependencies</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Service</th>
+<th>External Dependency</th>
+<th>Protocol</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Identity</td>
+<td>Azure AD / Entra ID</td>
+<td>HTTPS</td>
+<td>OAuth2 / OIDC authentication</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>Discord OAuth</td>
+<td>HTTPS</td>
+<td>Social login</td>
+</tr>
+<tr>
+<td>Billing</td>
+<td>Stripe API</td>
+<td>HTTPS</td>
+<td>Payment processing</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td>SendGrid / Mailgun</td>
+<td>HTTPS</td>
+<td>Transactional email</td>
+</tr>
+<tr>
+<td>Discord</td>
+<td>Discord API</td>
+<td>HTTPS/WSS</td>
+<td>Bot integration</td>
+</tr>
+<tr>
+<td>Mods</td>
+<td>CurseForge API</td>
+<td>HTTPS</td>
+<td>Mod metadata/downloads</td>
+</tr>
+<tr>
+<td>Mods</td>
+<td>Modrinth API</td>
+<td>HTTPS</td>
+<td>Mod metadata/downloads</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>Azure Key Vault</td>
+<td>HTTPS</td>
+<td>Secret retrieval</td>
+</tr>
+<tr>
+<td>All Services</td>
+<td>Azure Container Registry</td>
+<td>HTTPS</td>
+<td>Container image pull</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3>11.4 Key Observations</h3>
+<div>
+<div>
+<h4>✅ Zero-Trust Architecture</h4>
+<ul>
+<li>• All internal traffic encrypted via Cilium mTLS</li>
+<li>• No service-to-service communication without explicit policy</li>
+<li>• Gateway is the only external entry point</li>
+</ul>
+</div>
+<div>
+<h4>🐰 RabbitMQ as Event Backbone</h4>
+<ul>
+<li>• 10 services publish/consume via RabbitMQ</li>
+<li>• Decouples services for async workflows</li>
+<li>• Dead letter queues for failed message handling</li>
+</ul>
+</div>
+<div>
+<h4>🗄️ Database Isolation</h4>
+<ul>
+<li>• PlatformDB: shared platform state (servers, billing, etc.)</li>
+<li>• UserDB: user-specific data (isolated for compliance)</li>
+<li>• No cross-database queries; services own their data</li>
+</ul>
+</div>
+<div>
+<h4>⚡ Redis for Hot Data</h4>
+<ul>
+<li>• Gateway: rate limiting, session cache</li>
+<li>• Identity: token blacklist, session store</li>
+<li>• Tasks: job queue state, distributed locks</li>
+<li>• Servers: real-time status cache</li>
+</ul>
+</div>
+</div>
 </section>

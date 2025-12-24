@@ -1,58 +1,56 @@
-<section id="governance" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
-    <h2 class="text-2xl font-bold text-white mb-4">🏛️ Product Governance</h2>
-    <p class="text-sm text-gray-400 mb-6">Governance structure specific to Meridian Console product development and operations.</p>
-    
-    <div class="grid md:grid-cols-2 gap-6 mb-6">
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">🔧 Service Ownership</h3>
-            <table class="w-full text-sm">
-                <thead><tr class="text-left text-gray-400"><th>Service</th><th>Owner</th></tr></thead>
-                <tbody class="text-gray-300">
-                    <tr><td>Cloudflare (DNS, CDN)</td><td class="text-cyan-400">Aura</td></tr>
-                    <tr><td>M365 Tenant</td><td class="text-cyan-400">Cady</td></tr>
-                    <tr><td>GitHub Organization</td><td class="text-cyan-400">Jorsh</td></tr>
-                    <tr><td>Azure Subscription</td><td class="text-cyan-400">TBD</td></tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">📋 Contribution Tracking</h3>
-            <ul class="text-sm text-gray-400 space-y-2">
-                <li>• <strong class="text-white">Method:</strong> GitHub CONTRIBUTIONS.md</li>
-                <li>• <strong class="text-white">Focus:</strong> Significant efforts, not hours</li>
-                <li>• <strong class="text-white">No credentials:</strong> Hard rule — AKV only</li>
-                <li>• <strong class="text-white">Audit:</strong> Git history for changes</li>
-            </ul>
-        </div>
-    </div>
-    
-    <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
-        <h3 class="text-xl font-semibold text-indigo-400 mb-3">🎯 Decision Authority</h3>
-        <div class="grid md:grid-cols-3 gap-4 text-sm">
-            <div>
-                <h4 class="text-white font-medium mb-2">Technical Decisions</h4>
-                <ul class="text-gray-400 space-y-1">
-                    <li>• Architecture → Founders consensus</li>
-                    <li>• Tech stack → Founders consensus</li>
-                    <li>• Implementation → Assigned dev</li>
-                </ul>
-            </div>
-            <div>
-                <h4 class="text-white font-medium mb-2">Product Decisions</h4>
-                <ul class="text-gray-400 space-y-1">
-                    <li>• Features → Founders consensus</li>
-                    <li>• Pricing → Founders consensus</li>
-                    <li>• Roadmap → Founders consensus</li>
-                </ul>
-            </div>
-            <div>
-                <h4 class="text-white font-medium mb-2">Operational Decisions</h4>
-                <ul class="text-gray-400 space-y-1">
-                    <li>• Incidents → On-call owner</li>
-                    <li>• Access grants → Service owner</li>
-                    <li>• Vendor changes → Founders vote</li>
-                </ul>
-            </div>
-        </div>
-    </div>
+<section class="scope-prose">
+
+<p>Governance structure specific to Meridian Console product development and operations.</p>
+<div>
+<div class="scope-callout">
+<h3>🔧 Service Ownership</h3>
+<table class="scope-table">
+<thead><tr><th>Service</th><th>Owner</th></tr></thead>
+<tbody>
+<tr><td>Cloudflare (DNS, CDN)</td><td>Aura</td></tr>
+<tr><td>M365 Tenant</td><td>Cady</td></tr>
+<tr><td>GitHub Organization</td><td>Jorsh</td></tr>
+<tr><td>Azure Subscription</td><td>TBD</td></tr>
+</tbody>
+</table>
+</div>
+<div class="scope-callout">
+<h3>📋 Contribution Tracking</h3>
+<ul>
+<li>• <strong>Method:</strong> GitHub CONTRIBUTIONS.md</li>
+<li>• <strong>Focus:</strong> Significant efforts, not hours</li>
+<li>• <strong>No credentials:</strong> Hard rule — AKV only</li>
+<li>• <strong>Audit:</strong> Git history for changes</li>
+</ul>
+</div>
+</div>
+<div class="scope-callout">
+<h3>🎯 Decision Authority</h3>
+<div>
+<div>
+<h4>Technical Decisions</h4>
+<ul>
+<li>• Architecture → Founders consensus</li>
+<li>• Tech stack → Founders consensus</li>
+<li>• Implementation → Assigned dev</li>
+</ul>
+</div>
+<div>
+<h4>Product Decisions</h4>
+<ul>
+<li>• Features → Founders consensus</li>
+<li>• Pricing → Founders consensus</li>
+<li>• Roadmap → Founders consensus</li>
+</ul>
+</div>
+<div>
+<h4>Operational Decisions</h4>
+<ul>
+<li>• Incidents → On-call owner</li>
+<li>• Access grants → Service owner</li>
+<li>• Vendor changes → Founders vote</li>
+</ul>
+</div>
+</div>
+</div>
 </section>
