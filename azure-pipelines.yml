@@ -1,0 +1,241 @@
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+
+pr:
+  branches:
+    include:
+    - main
+    - develop
+
+parameters:
+- name: servicesCsv
+  type: string
+  default: ''
+  displayName: 'Services to build (comma-separated). Leave blank = all.'
+- name: buildConfiguration
+  type: string
+  default: Release
+- name: runTests
+  type: boolean
+  default: true
+- name: collectCoverage
+  type: boolean
+  default: true
+- name: deploy
+  type: boolean
+  default: true
+  displayName: 'Deploy release targets (non-PR)'
+
+variables:
+  # Uses the new `trim()` pipeline expression function (Sprint 248) to be resilient to whitespace.
+  servicesCsvNormalized: ${{ format(',{0},', replace(replace(trim(parameters.servicesCsv), ' ', ''), ';', ',')) }}
+
+resources:
+  repositories:
+  - repository: pipelinePatterns
+    type: git
+    # Update this to match your org/project/repo name for the shared YAML repo.
+    name: SandboxServers/Azure-Pipeline-YAML
+    ref: refs/heads/main
+
+extends:
+  template: Templates/Dhadgar.CI/Pipeline/Pipeline.yml@pipelinePatterns
+  parameters:
+    servicesCsvNormalized: ${{ variables.servicesCsvNormalized }}
+    buildConfiguration: ${{ parameters.buildConfiguration }}
+    runTests: ${{ parameters.runTests }}
+    collectCoverage: ${{ parameters.collectCoverage }}
+    deploy: ${{ parameters.deploy }}
+    services:
+      - id: Dhadgar.Agent.Core
+        projectPath: src/Agents/Dhadgar.Agent.Core/Dhadgar.Agent.Core.csproj
+        testProjectPath: tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj
+        deploy:
+      - id: Dhadgar.Agent.Linux
+        projectPath: src/Agents/Dhadgar.Agent.Linux/Dhadgar.Agent.Linux.csproj
+        testProjectPath: tests/Dhadgar.Agent.Linux.Tests/Dhadgar.Agent.Linux.Tests.csproj
+        deploy:
+      - id: Dhadgar.Agent.Windows
+        projectPath: src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj
+        testProjectPath: tests/Dhadgar.Agent.Windows.Tests/Dhadgar.Agent.Windows.Tests.csproj
+        deploy:
+      - id: Dhadgar.Billing
+        projectPath: src/Dhadgar.Billing/Dhadgar.Billing.csproj
+        testProjectPath: tests/Dhadgar.Billing.Tests/Dhadgar.Billing.Tests.csproj
+        deploy:
+      - id: Dhadgar.Cli
+        projectPath: src/Dhadgar.Cli/Dhadgar.Cli.csproj
+        testProjectPath: tests/Dhadgar.Cli.Tests/Dhadgar.Cli.Tests.csproj
+        deploy:
+      - id: Dhadgar.Console
+        projectPath: src/Dhadgar.Console/Dhadgar.Console.csproj
+        testProjectPath: tests/Dhadgar.Console.Tests/Dhadgar.Console.Tests.csproj
+        deploy:
+      - id: Dhadgar.Discord
+        projectPath: src/Dhadgar.Discord/Dhadgar.Discord.csproj
+        testProjectPath: tests/Dhadgar.Discord.Tests/Dhadgar.Discord.Tests.csproj
+        deploy:
+      - id: Dhadgar.Files
+        projectPath: src/Dhadgar.Files/Dhadgar.Files.csproj
+        testProjectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
+        deploy:
+      - id: Dhadgar.Firewall
+        projectPath: src/Dhadgar.Firewall/Dhadgar.Firewall.csproj
+        testProjectPath: tests/Dhadgar.Firewall.Tests/Dhadgar.Firewall.Tests.csproj
+        deploy:
+      - id: Dhadgar.Gateway
+        projectPath: src/Dhadgar.Gateway/Dhadgar.Gateway.csproj
+        testProjectPath: tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj
+        deploy:
+      - id: Dhadgar.Identity
+        projectPath: src/Dhadgar.Identity/Dhadgar.Identity.csproj
+        testProjectPath: tests/Dhadgar.Identity.Tests/Dhadgar.Identity.Tests.csproj
+        deploy:
+      - id: Dhadgar.Mods
+        projectPath: src/Dhadgar.Mods/Dhadgar.Mods.csproj
+        testProjectPath: tests/Dhadgar.Mods.Tests/Dhadgar.Mods.Tests.csproj
+        deploy:
+      - id: Dhadgar.Nodes
+        projectPath: src/Dhadgar.Nodes/Dhadgar.Nodes.csproj
+        testProjectPath: tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj
+        deploy:
+      - id: Dhadgar.Notifications
+        projectPath: src/Dhadgar.Notifications/Dhadgar.Notifications.csproj
+        testProjectPath: tests/Dhadgar.Notifications.Tests/Dhadgar.Notifications.Tests.csproj
+        deploy:
+      - id: Dhadgar.Scope
+        projectPath: src/Dhadgar.Scope/Dhadgar.Scope.csproj
+        testProjectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
+        deploy: swa
+        swa:
+          apiTokenVar: Dhadgar_Swa_ApiToken
+          appLocation: .
+          outputLocation: _swa_publish/wwwroot
+          appBuildCommand: dotnet publish src/Dhadgar.Scope/Dhadgar.Scope.csproj -c $(BuildConfiguration) -o _swa_publish
+      - id: Dhadgar.Secrets
+        projectPath: src/Dhadgar.Secrets/Dhadgar.Secrets.csproj
+        testProjectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
+        deploy:
+      - id: Dhadgar.Servers
+        projectPath: src/Dhadgar.Servers/Dhadgar.Servers.csproj
+        testProjectPath: tests/Dhadgar.Servers.Tests/Dhadgar.Servers.Tests.csproj
+        deploy:
+      - id: Dhadgar.Tasks
+        projectPath: src/Dhadgar.Tasks/Dhadgar.Tasks.csproj
+        testProjectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
+        deploy:
+      - id: Dhadgar.Web
+        projectPath: src/Dhadgar.Web/Dhadgar.Web.csproj
+        testProjectPath: tests/Dhadgar.Web.Tests/Dhadgar.Web.Tests.csproj
+        deploy:
+      - id: Dhadgar.Contracts
+        projectPath: src/Shared/Dhadgar.Contracts/Dhadgar.Contracts.csproj
+        testProjectPath: tests/Dhadgar.Contracts.Tests/Dhadgar.Contracts.Tests.csproj
+        deploy:
+      - id: Dhadgar.Messaging
+        projectPath: src/Shared/Dhadgar.Messaging/Dhadgar.Messaging.csproj
+        testProjectPath: tests/Dhadgar.Messaging.Tests/Dhadgar.Messaging.Tests.csproj
+        deploy:
+      - id: Dhadgar.ServiceDefaults
+        projectPath: src/Shared/Dhadgar.ServiceDefaults/Dhadgar.ServiceDefaults.csproj
+        testProjectPath: tests/Dhadgar.ServiceDefaults.Tests/Dhadgar.ServiceDefaults.Tests.csproj
+        deploy:
+      - id: Dhadgar.Shared
+        projectPath: src/Shared/Dhadgar.Shared/Dhadgar.Shared.csproj
+        testProjectPath: tests/Dhadgar.Shared.Tests/Dhadgar.Shared.Tests.csproj
+        deploy:
+      - id: Dhadgar.Agent.Core.Tests
+        projectPath: tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Agent.Linux.Tests
+        projectPath: tests/Dhadgar.Agent.Linux.Tests/Dhadgar.Agent.Linux.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Agent.Windows.Tests
+        projectPath: tests/Dhadgar.Agent.Windows.Tests/Dhadgar.Agent.Windows.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Billing.Tests
+        projectPath: tests/Dhadgar.Billing.Tests/Dhadgar.Billing.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Cli.Tests
+        projectPath: tests/Dhadgar.Cli.Tests/Dhadgar.Cli.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Console.Tests
+        projectPath: tests/Dhadgar.Console.Tests/Dhadgar.Console.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Contracts.Tests
+        projectPath: tests/Dhadgar.Contracts.Tests/Dhadgar.Contracts.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Discord.Tests
+        projectPath: tests/Dhadgar.Discord.Tests/Dhadgar.Discord.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Files.Tests
+        projectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Firewall.Tests
+        projectPath: tests/Dhadgar.Firewall.Tests/Dhadgar.Firewall.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Gateway.Tests
+        projectPath: tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Identity.Tests
+        projectPath: tests/Dhadgar.Identity.Tests/Dhadgar.Identity.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Messaging.Tests
+        projectPath: tests/Dhadgar.Messaging.Tests/Dhadgar.Messaging.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Mods.Tests
+        projectPath: tests/Dhadgar.Mods.Tests/Dhadgar.Mods.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Nodes.Tests
+        projectPath: tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Notifications.Tests
+        projectPath: tests/Dhadgar.Notifications.Tests/Dhadgar.Notifications.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Scope.Tests
+        projectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Secrets.Tests
+        projectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Servers.Tests
+        projectPath: tests/Dhadgar.Servers.Tests/Dhadgar.Servers.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.ServiceDefaults.Tests
+        projectPath: tests/Dhadgar.ServiceDefaults.Tests/Dhadgar.ServiceDefaults.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Shared.Tests
+        projectPath: tests/Dhadgar.Shared.Tests/Dhadgar.Shared.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Tasks.Tests
+        projectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
+        testProjectPath: ''
+        deploy:
+      - id: Dhadgar.Web.Tests
+        projectPath: tests/Dhadgar.Web.Tests/Dhadgar.Web.Tests.csproj
+        testProjectPath: ''
+        deploy:

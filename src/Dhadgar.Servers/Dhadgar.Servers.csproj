@@ -1,0 +1,25 @@
+  <Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+      <AssemblyName>Dhadgar.Servers</AssemblyName>
+      <RootNamespace>Dhadgar.Servers</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+  <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+  <ProjectReference Include="..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+  <ProjectReference Include="..\Shared\Dhadgar.Messaging\Dhadgar.Messaging.csproj" />
+  <ProjectReference Include="..\Shared\Dhadgar.ServiceDefaults\Dhadgar.ServiceDefaults.csproj" />
+</ItemGroup>
+<ItemGroup>
+  <PackageReference Include="MassTransit" />
+  <PackageReference Include="MassTransit.RabbitMQ" />
+  <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+</ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+</Project>
+

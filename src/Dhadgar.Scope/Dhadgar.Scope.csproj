@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Dhadgar.Scope</RootNamespace>
+    <AssemblyName>Dhadgar.Scope</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="wwwroot\staticwebapp.config.json" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="wwwroot\robots.txt" CopyToPublishDirectory="PreserveNewest" Condition="Exists('wwwroot\\robots.txt')" />
+    <Content Include="wwwroot\sitemap.xml" CopyToPublishDirectory="PreserveNewest" Condition="Exists('wwwroot\\sitemap.xml')" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- When you run `dotnet publish`, we also produce a SWA-ready folder at:
+         <project>/_swa_publish/wwwroot
+         This keeps local deploys (swa deploy) and CI deploys consistent. -->
+    <SwaPublishOutputDir>$(MSBuildProjectDirectory)\_swa_publish</SwaPublishOutputDir>
+  </PropertyGroup>
+
+  <Target Name="CreateSwaPublishOutput" AfterTargets="Publish">
+    <ItemGroup>
+      <_SwaFiles Include="$(PublishDir)wwwroot\**\*" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(SwaPublishOutputDir)\wwwroot" />
+    <Copy SourceFiles="@(_SwaFiles)"
+          DestinationFiles="@(_SwaFiles->'$(SwaPublishOutputDir)\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

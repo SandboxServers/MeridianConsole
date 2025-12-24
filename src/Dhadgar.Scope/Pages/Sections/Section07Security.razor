@@ -1,0 +1,71 @@
+<section class="scope-prose">
+
+<h3>Security Philosophy</h3>
+<div class="scope-callout">
+<p>🔐 TLS Everywhere, Always, Forever</p>
+<p>Every connection, internal or external, is encrypted. No exceptions.</p>
+</div>
+<h3>Transport Security</h3>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Connection</th>
+<th>Security</th>
+<th>TLS Version</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>User → Cloudflare</td><td>TLS</td><td>1.3 (preferred), 1.2 (minimum)</td></tr>
+<tr><td>Cloudflare → Cluster</td><td>TLS (Full/Strict mode)</td><td>1.2 minimum</td></tr>
+<tr><td>Agent ↔ Cluster</td><td>mTLS (mutual authentication)</td><td>1.2 minimum</td></tr>
+<tr><td>Microservices ↔ Microservices</td><td>Cilium mTLS (service mesh)</td><td>1.2 minimum</td></tr>
+</tbody>
+</table>
+<div class="scope-callout">
+<p>🔐 TLS Version Policy</p>
+<ul>
+<li>• <strong>Minimum:</strong> TLS 1.2 for all connections</li>
+<li>• <strong>Preferred:</strong> TLS 1.3 where supported</li>
+<li>• <strong>Prohibited:</strong> TLS 1.0, TLS 1.1, SSL 3.0</li>
+<li>• <strong>Cipher Suites:</strong> Modern AEAD ciphers only (AES-GCM, ChaCha20-Poly1305)</li>
+</ul>
+</div>
+<h3>Authentication Layers</h3>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Actor</th>
+<th>Method</th>
+<th>Token Type</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>End Users</td><td>OAuth (Discord/Steam)</td><td>JWT Bearer</td></tr>
+<tr><td>Node Agents (Bootstrap)</td><td>One-time registration token</td><td>15-minute expiry</td></tr>
+<tr><td>Node Agents (Registered)</td><td>mTLS client certificate</td><td>X.509</td></tr>
+<tr><td>External Webhooks</td><td>Signature verification</td><td>HMAC/RSA</td></tr>
+</tbody>
+</table>
+<h3>Kubernetes Security</h3>
+<ul>
+<li>• <strong>CNI:</strong> Cilium (network policy enforcement, mTLS between pods)</li>
+<li>• <strong>RBAC:</strong> Least-privilege service accounts per microservice</li>
+<li>• <strong>Secrets:</strong> Azure Key Vault + CSI driver (no secrets in etcd)</li>
+<li>• <strong>Pod Security:</strong> Restricted PSS baseline</li>
+<li>• <strong>Network Policies:</strong> Default deny, explicit allow per service</li>
+</ul>
+<h3>Secret Management</h3>
+<ul>
+<li>• All secrets stored in Azure Key Vault</li>
+<li>• CSI Secret Store driver mounts secrets as volumes</li>
+<li>• Automatic rotation via Secrets Service (:5110)</li>
+<li>• Secret access logged and auditable</li>
+</ul>
+<h3>Network Boundaries</h3>
+<ul>
+<li>• <strong>Edge:</strong> Cloudflare (WAF, DDoS protection)</li>
+<li>• <strong>Perimeter:</strong> UniFi Hardware Firewall (stateful inspection)</li>
+<li>• <strong>Internal:</strong> Cilium (pod-to-pod encryption, L3/L4 policies)</li>
+<li>• <strong>Data:</strong> Encrypted at rest (PostgreSQL, Redis), encrypted in transit</li>
+</ul>
+</section>

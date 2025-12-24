@@ -1,0 +1,126 @@
+@using Dhadgar.Scope.Services
+
+<div class="@Class">
+    @if (Selected is null)
+    {
+        <div class="text-sm text-white/70">
+            <div class="font-semibold text-white">Nothing selected</div>
+            <p class="mt-2">
+                Select a node on the graph to see details here.
+            </p>
+            <hr class="my-4 border-white/10" />
+            <div class="text-xs text-white/60">
+                Layers (top → bottom): External, Presentation, Core, Business, Foundation
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="space-y-4">
+            <div>
+                <div class="text-xs font-semibold tracking-wide text-white/60">Node</div>
+                <div class="mt-1 text-xl font-bold">
+                    @(Selected.Emoji) @Selected.Name
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/70">
+                    <span class="rounded-full bg-white/5 px-2 py-1">@Selected.Layer</span>
+                    @if (Selected.Port is not null)
+                    {
+                        <span class="text-white/60">Port:</span>
+                        <span class="font-mono text-white">@Selected.Port</span>
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Selected.Description))
+                {
+                    <p class="mt-3 text-sm text-white/80">@Selected.Description</p>
+                }
+            </div>
+
+            @if (Selected.Responsibilities.Count > 0)
+            {
+                <div>
+                    <div class="text-xs font-semibold tracking-wide text-white/60">Responsibilities</div>
+                    <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-white/80">
+                        @foreach (var r in Selected.Responsibilities)
+                        {
+                            <li>@r</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @if (Selected.Endpoints.Count > 0)
+            {
+                <div>
+                    <div class="text-xs font-semibold tracking-wide text-white/60">Endpoints / Notes</div>
+                    <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-white/80">
+                        @foreach (var e in Selected.Endpoints)
+                        {
+                            <li>@e</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <div class="grid gap-4 md:grid-cols-2">
+                <div>
+                    <div class="text-xs font-semibold tracking-wide text-white/60">Depends on</div>
+                    @if (Selected.Dependencies.Count == 0)
+                    {
+                        <div class="mt-2 text-sm text-white/60">None</div>
+                    }
+                    else
+                    {
+                        <ul class="mt-2 space-y-1 text-sm">
+                            @foreach (var d in Selected.Dependencies.OrderBy(x => x))
+                            {
+                                <li>
+                                    <button class="text-left text-indigo-300 hover:underline"
+                                            @onclick="() => SelectByName.InvokeAsync(d)">
+                                        @d
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold tracking-wide text-white/60">Used by</div>
+                    @if (Selected.Dependents.Count == 0)
+                    {
+                        <div class="mt-2 text-sm text-white/60">None</div>
+                    }
+                    else
+                    {
+                        <ul class="mt-2 space-y-1 text-sm">
+                            @foreach (var d in Selected.Dependents.OrderBy(x => x))
+                            {
+                                <li>
+                                    <button class="text-left text-indigo-300 hover:underline"
+                                            @onclick="() => SelectByName.InvokeAsync(d)">
+                                        @d
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <button class="rounded-xl bg-white/10 px-3 py-2 text-sm hover:bg-white/15"
+                        @onclick="() => Clear.InvokeAsync()">
+                    Clear selection
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public DependencyNode? Selected { get; set; }
+    [Parameter] public EventCallback<string> SelectByName { get; set; }
+    [Parameter] public EventCallback Clear { get; set; }
+    [Parameter] public string Class { get; set; } = "rounded-2xl border border-white/10 bg-white/5 p-6";
+}

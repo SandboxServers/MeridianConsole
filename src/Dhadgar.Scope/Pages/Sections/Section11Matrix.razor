@@ -1,0 +1,464 @@
+<section class="scope-prose">
+<div class="scope-callout">
+  <strong>Interactive view available:</strong>
+  <p>For a richer, searchable diagram of service relationships, use the <a href="/dependencies">Interactive Dependency Map</a>.</p>
+</div>
+<div>
+<p>📋 Note</p>
+<p>This matrix is a visual summary of Section 10's canonical traffic manifest. For complete flow details including ports, authentication methods, and encryption layers, see Section 10.</p>
+</div>
+<h3>11.1 Legend</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>HTTPS</td><td>HTTP/2 over Cilium mTLS (internal) or TLS 1.3 (edge)</td></tr>
+<tr><td>WSS</td><td>WebSocket Secure</td></tr>
+<tr><td>RMQ</td><td>RabbitMQ (AMQP over Cilium mTLS)</td></tr>
+<tr><td>mTLS</td><td>Direct mTLS client certificate authentication</td></tr>
+<tr><td>PGSQL</td><td>PostgreSQL over Cilium mTLS</td></tr>
+<tr><td>REDIS</td><td>Redis protocol over Cilium mTLS</td></tr>
+<tr><td>-</td><td>No direct communication (denied by default)</td></tr>
+</tbody>
+</table>
+</div>
+<h3>11.2 Service-to-Service Communication Matrix</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>FROM \ TO</th>
+<th>Gateway</th>
+<th>Identity</th>
+<th>Billing</th>
+<th>Servers</th>
+<th>Nodes</th>
+<th>Tasks</th>
+<th>Files</th>
+<th>Console</th>
+<th>Mods</th>
+<th>Notif</th>
+<th>Firewall</th>
+<th>Secrets</th>
+<th>Discord</th>
+<th>PlatDB</th>
+<th>UserDB</th>
+<th>RMQ</th>
+<th>Redis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Client (Browser)</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>WSS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Gateway :5000</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>WSS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Identity :5010</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Billing :5020</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Servers :5030</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Nodes :5040</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Tasks :5050</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>REDIS</td>
+</tr>
+<tr>
+<td>Files :5060</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Console :5070</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Mods :5080</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Notifications :5090</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Firewall :5100</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Secrets :5110</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Discord :5120</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>HTTPS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>PGSQL</td>
+<td>-</td>
+<td>RMQ</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Node Agent</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>mTLS</td>
+<td>-</td>
+<td>-</td>
+<td>mTLS</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3>11.3 External Service Dependencies</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Service</th>
+<th>External Dependency</th>
+<th>Protocol</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Identity</td>
+<td>Azure AD / Entra ID</td>
+<td>HTTPS</td>
+<td>OAuth2 / OIDC authentication</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>Discord OAuth</td>
+<td>HTTPS</td>
+<td>Social login</td>
+</tr>
+<tr>
+<td>Billing</td>
+<td>Stripe API</td>
+<td>HTTPS</td>
+<td>Payment processing</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td>SendGrid / Mailgun</td>
+<td>HTTPS</td>
+<td>Transactional email</td>
+</tr>
+<tr>
+<td>Discord</td>
+<td>Discord API</td>
+<td>HTTPS/WSS</td>
+<td>Bot integration</td>
+</tr>
+<tr>
+<td>Mods</td>
+<td>CurseForge API</td>
+<td>HTTPS</td>
+<td>Mod metadata/downloads</td>
+</tr>
+<tr>
+<td>Mods</td>
+<td>Modrinth API</td>
+<td>HTTPS</td>
+<td>Mod metadata/downloads</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>Azure Key Vault</td>
+<td>HTTPS</td>
+<td>Secret retrieval</td>
+</tr>
+<tr>
+<td>All Services</td>
+<td>Azure Container Registry</td>
+<td>HTTPS</td>
+<td>Container image pull</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3>11.4 Key Observations</h3>
+<div>
+<div>
+<h4>✅ Zero-Trust Architecture</h4>
+<ul>
+<li>• All internal traffic encrypted via Cilium mTLS</li>
+<li>• No service-to-service communication without explicit policy</li>
+<li>• Gateway is the only external entry point</li>
+</ul>
+</div>
+<div>
+<h4>🐰 RabbitMQ as Event Backbone</h4>
+<ul>
+<li>• 10 services publish/consume via RabbitMQ</li>
+<li>• Decouples services for async workflows</li>
+<li>• Dead letter queues for failed message handling</li>
+</ul>
+</div>
+<div>
+<h4>🗄️ Database Isolation</h4>
+<ul>
+<li>• PlatformDB: shared platform state (servers, billing, etc.)</li>
+<li>• UserDB: user-specific data (isolated for compliance)</li>
+<li>• No cross-database queries; services own their data</li>
+</ul>
+</div>
+<div>
+<h4>⚡ Redis for Hot Data</h4>
+<ul>
+<li>• Gateway: rate limiting, session cache</li>
+<li>• Identity: token blacklist, session store</li>
+<li>• Tasks: job queue state, distributed locks</li>
+<li>• Servers: real-time status cache</li>
+</ul>
+</div>
+</div>
+</section>

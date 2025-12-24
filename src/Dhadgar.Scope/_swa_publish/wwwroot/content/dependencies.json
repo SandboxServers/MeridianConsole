@@ -1,0 +1,950 @@
+{
+  "generatedFrom": "meridian-console-scope-v4.5.html SECTION 13 servicesData",
+  "generatedAt": "2025-12-24T04:58:08.006282Z",
+  "layers": [
+    "external",
+    "presentation",
+    "core",
+    "business",
+    "foundation"
+  ],
+  "nodes": [
+    {
+      "id": "postgresql",
+      "name": "PostgreSQL",
+      "emoji": "🗄️",
+      "port": null,
+      "layer": "foundation",
+      "description": "Primary relational database for all persistent storage needs",
+      "responsibilities": [
+        "User accounts and authentication data",
+        "Game server configurations and metadata",
+        "Billing records and subscription data",
+        "Task queue state and history",
+        "File metadata and permissions",
+        "Mod registry and version tracking",
+        "Notification templates and delivery logs",
+        "Firewall rules and IP whitelist/blacklist",
+        "Discord integration mappings"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Identity",
+        "Nodes",
+        "Secrets",
+        "Billing",
+        "Servers",
+        "Tasks",
+        "Files",
+        "Mods",
+        "Notifications",
+        "Firewall",
+        "Discord"
+      ],
+      "endpoints": [
+        "Connection pooling via PgBouncer",
+        "Read replicas for query optimization",
+        "Automated backups every 6 hours",
+        "Point-in-time recovery capability"
+      ]
+    },
+    {
+      "id": "rabbitmq",
+      "name": "RabbitMQ",
+      "emoji": "📬",
+      "port": null,
+      "layer": "foundation",
+      "description": "Message broker for asynchronous communication and event-driven architecture",
+      "responsibilities": [
+        "Task queue management for long-running operations",
+        "Event publishing/subscription between services",
+        "Server lifecycle notifications (start, stop, crash)",
+        "Billing event streams (payment processed, subscription renewed)",
+        "Notification delivery orchestration",
+        "Discord webhook event routing"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Identity",
+        "Gateway",
+        "Secrets",
+        "Billing",
+        "Servers",
+        "Tasks",
+        "Notifications",
+        "Firewall",
+        "Discord"
+      ],
+      "endpoints": [
+        "AMQP protocol on port 5672",
+        "Management UI on port 15672",
+        "Durable queues for critical messages",
+        "Dead letter exchange for failed messages"
+      ]
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "emoji": "⚡",
+      "port": null,
+      "layer": "foundation",
+      "description": "In-memory cache and session store for high-performance data access",
+      "responsibilities": [
+        "Session token storage and validation",
+        "Rate limiting counters per user/IP",
+        "Real-time server status caching",
+        "Task queue temporary state",
+        "API response caching (5-60 second TTL)"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Nodes",
+        "Tasks"
+      ],
+      "endpoints": [
+        "Redis protocol on port 6379",
+        "Persistence via RDB snapshots + AOF",
+        "Master-replica setup for HA",
+        "Pub/sub for real-time updates"
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "name": "Cloudflare",
+      "emoji": "🌐",
+      "port": null,
+      "layer": "foundation",
+      "description": "DNS management and CDN for domain routing and DDoS protection",
+      "responsibilities": [
+        "DNS record management for *.meridianconsole.com",
+        "ACME DNS-01 challenge responses for Let's Encrypt",
+        "DDoS protection and WAF rules",
+        "CDN for static assets"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Nodes"
+      ],
+      "endpoints": [
+        "Cloudflare API v4",
+        "Programmatic DNS updates",
+        "Webhook notifications for zone changes"
+      ]
+    },
+    {
+      "id": "lets-encrypt",
+      "name": "Let's Encrypt",
+      "emoji": "🔒",
+      "port": null,
+      "layer": "external",
+      "description": "Automated SSL/TLS certificate provisioning via ACME protocol",
+      "responsibilities": [
+        "Issue wildcard certificates for *.meridianconsole.com",
+        "90-day certificate lifecycle management",
+        "Automated renewal via DNS-01 challenges"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Nodes"
+      ],
+      "endpoints": [
+        "ACME v2 API",
+        "DNS-01 challenge via Cloudflare"
+      ]
+    },
+    {
+      "id": "unifi-controller",
+      "name": "UniFi Controller",
+      "emoji": "🌍",
+      "port": null,
+      "layer": "external",
+      "description": "Network equipment management for dynamic firewall rules",
+      "responsibilities": [
+        "Apply firewall rules to UniFi Dream Machine",
+        "Port forwarding configuration for game servers",
+        "Network topology visibility"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Firewall"
+      ],
+      "endpoints": [
+        "UniFi Controller API",
+        "SSH for direct rule application"
+      ]
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "emoji": "💰",
+      "port": null,
+      "layer": "external",
+      "description": "Primary payment processor for credit cards and subscriptions",
+      "responsibilities": [
+        "Process credit card payments",
+        "Manage subscription billing cycles",
+        "Handle refunds and disputes",
+        "PCI compliance"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Billing"
+      ],
+      "endpoints": [
+        "Stripe API v1",
+        "Webhook events for payment updates"
+      ]
+    },
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "emoji": "💵",
+      "port": null,
+      "layer": "external",
+      "description": "Alternative payment processor for PayPal accounts",
+      "responsibilities": [
+        "Process PayPal payments",
+        "Handle PayPal subscriptions",
+        "IPN (Instant Payment Notification) handling"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "Billing"
+      ],
+      "endpoints": [
+        "PayPal REST API",
+        "IPN endpoint for payment notifications"
+      ]
+    },
+    {
+      "id": "identity",
+      "name": "Identity",
+      "emoji": "🔐",
+      "port": 5010,
+      "layer": "core",
+      "description": "Centralized authentication and authorization service using OAuth 2.0 and OpenID Connect",
+      "responsibilities": [
+        "User registration and login (email/password, OAuth)",
+        "JWT token issuance and validation",
+        "Role-based access control (RBAC)",
+        "API key management for service-to-service auth",
+        "Password reset and email verification"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ"
+      ],
+      "dependents": [
+        "Gateway",
+        "Billing",
+        "Servers",
+        "Web UI"
+      ],
+      "endpoints": [
+        "POST /auth/register - User registration",
+        "POST /auth/login - User authentication",
+        "POST /auth/refresh - Token refresh",
+        "GET /auth/validate - Token validation",
+        "POST /auth/logout - Session termination"
+      ]
+    },
+    {
+      "id": "gateway",
+      "name": "Gateway",
+      "emoji": "🚪",
+      "port": 5000,
+      "layer": "core",
+      "description": "API Gateway providing unified entry point, rate limiting, and request routing",
+      "responsibilities": [
+        "Route requests to appropriate microservices",
+        "Enforce rate limits per user/IP",
+        "JWT validation on all protected routes",
+        "Request/response logging and metrics",
+        "Circuit breaker pattern for failing services"
+      ],
+      "dependencies": [
+        "Identity",
+        "RabbitMQ"
+      ],
+      "dependents": [
+        "Web UI"
+      ],
+      "endpoints": [
+        "/* - Routes all API traffic",
+        "/health - Gateway health check",
+        "/metrics - Prometheus metrics"
+      ]
+    },
+    {
+      "id": "nodes",
+      "name": "Nodes",
+      "emoji": "🖥️",
+      "port": 5040,
+      "layer": "core",
+      "description": "Physical server lifecycle management and workload orchestration",
+      "responsibilities": [
+        "Track server hardware inventory and status",
+        "Monitor resource utilization (CPU, RAM, disk)",
+        "Provision SSL certificates via Let's Encrypt",
+        "Manage DNS records via Cloudflare API",
+        "Coordinate with Windows/Linux agents for provisioning",
+        "Health checks and alerting for hardware failures"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "Redis",
+        "Let's Encrypt",
+        "Cloudflare"
+      ],
+      "dependents": [
+        "Secrets",
+        "Servers",
+        "Files",
+        "Console",
+        "Firewall",
+        "Windows Agent",
+        "Linux Agent"
+      ],
+      "endpoints": [
+        "GET /nodes - List all nodes",
+        "GET /nodes/:id - Node details",
+        "POST /nodes/:id/provision - Provision certificates",
+        "GET /nodes/:id/metrics - Resource metrics"
+      ]
+    },
+    {
+      "id": "secrets",
+      "name": "Secrets",
+      "emoji": "🗝️",
+      "port": 5110,
+      "layer": "core",
+      "description": "Secure secret storage and rotation for sensitive credentials",
+      "responsibilities": [
+        "Store encrypted database passwords",
+        "Manage API keys for external services",
+        "Rotate secrets on configurable schedules",
+        "Audit logging for secret access",
+        "Provide secrets to authorized services only"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ",
+        "Nodes"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "GET /secrets/:key - Retrieve secret",
+        "POST /secrets - Store new secret",
+        "PUT /secrets/:key/rotate - Force rotation",
+        "GET /secrets/audit - Access audit logs"
+      ]
+    },
+    {
+      "id": "billing",
+      "name": "Billing",
+      "emoji": "💳",
+      "port": 5020,
+      "layer": "business",
+      "description": "Payment processing and subscription management",
+      "responsibilities": [
+        "Process payments via Stripe and PayPal",
+        "Manage subscription plans (Free, Basic, Pro, Enterprise)",
+        "Handle upgrades, downgrades, and cancellations",
+        "Generate invoices and receipts",
+        "Track usage for metered billing"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ",
+        "Identity",
+        "Stripe",
+        "PayPal"
+      ],
+      "dependents": [
+        "Web UI"
+      ],
+      "endpoints": [
+        "POST /billing/subscribe - Create subscription",
+        "POST /billing/upgrade - Upgrade plan",
+        "POST /billing/cancel - Cancel subscription",
+        "GET /billing/invoices - List invoices"
+      ]
+    },
+    {
+      "id": "servers",
+      "name": "Servers",
+      "emoji": "🎮",
+      "port": 5030,
+      "layer": "business",
+      "description": "Game server lifecycle management and orchestration",
+      "responsibilities": [
+        "Create, start, stop, and delete game servers",
+        "Assign servers to physical nodes",
+        "Manage server configurations and save files",
+        "Monitor server status and player counts",
+        "Schedule automated backups and restarts"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ",
+        "Nodes",
+        "Identity"
+      ],
+      "dependents": [
+        "Console",
+        "Discord",
+        "Web UI"
+      ],
+      "endpoints": [
+        "POST /servers - Create server",
+        "POST /servers/:id/start - Start server",
+        "POST /servers/:id/stop - Stop server",
+        "GET /servers/:id/status - Server status",
+        "POST /servers/:id/backup - Create backup"
+      ]
+    },
+    {
+      "id": "tasks",
+      "name": "Tasks",
+      "emoji": "📋",
+      "port": 5050,
+      "layer": "business",
+      "description": "Background job queue and long-running task management",
+      "responsibilities": [
+        "Process server installation jobs",
+        "Handle file uploads and downloads",
+        "Execute scheduled maintenance tasks",
+        "Retry failed jobs with exponential backoff",
+        "Track job status and progress"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ",
+        "Redis"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "POST /tasks - Queue new task",
+        "GET /tasks/:id - Task status",
+        "POST /tasks/:id/cancel - Cancel task",
+        "GET /tasks/queue - Queue depth metrics"
+      ]
+    },
+    {
+      "id": "files",
+      "name": "Files",
+      "emoji": "📁",
+      "port": 5060,
+      "layer": "business",
+      "description": "File storage and transfer orchestration",
+      "responsibilities": [
+        "Manage server configuration files",
+        "Handle save file uploads/downloads",
+        "Coordinate file transfers between nodes",
+        "Enforce storage quotas per user",
+        "Generate pre-signed URLs for direct uploads"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "Nodes"
+      ],
+      "dependents": [
+        "Mods"
+      ],
+      "endpoints": [
+        "GET /files/:serverId - List files",
+        "POST /files/:serverId/upload - Upload file",
+        "GET /files/:serverId/download/:path - Download file",
+        "DELETE /files/:serverId/:path - Delete file"
+      ]
+    },
+    {
+      "id": "console",
+      "name": "Console",
+      "emoji": "💻",
+      "port": 5070,
+      "layer": "business",
+      "description": "Real-time server console access and RCON command execution",
+      "responsibilities": [
+        "WebSocket connections for live console output",
+        "Execute RCON commands on game servers",
+        "Stream logs to connected clients",
+        "Support multiple concurrent console sessions",
+        "Buffer last 1000 lines of console output"
+      ],
+      "dependencies": [
+        "Servers",
+        "Nodes"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "WS /console/:serverId - WebSocket connection",
+        "POST /console/:serverId/command - Execute RCON command",
+        "GET /console/:serverId/history - Recent console output"
+      ]
+    },
+    {
+      "id": "mods",
+      "name": "Mods",
+      "emoji": "🧩",
+      "port": 5080,
+      "layer": "business",
+      "description": "Mod installation and version management",
+      "responsibilities": [
+        "Browse mod repositories (CurseForge, Steam Workshop)",
+        "Install and update mods on game servers",
+        "Manage mod dependencies and conflicts",
+        "Track mod versions and changelogs",
+        "Sync mod lists across server clusters"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "Files"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "GET /mods/search - Search mod repositories",
+        "POST /mods/:serverId/install - Install mod",
+        "PUT /mods/:serverId/:modId/update - Update mod",
+        "DELETE /mods/:serverId/:modId - Uninstall mod"
+      ]
+    },
+    {
+      "id": "notifications",
+      "name": "Notifications",
+      "emoji": "🔔",
+      "port": 5090,
+      "layer": "business",
+      "description": "Multi-channel notification delivery system",
+      "responsibilities": [
+        "Send email notifications via SMTP",
+        "Deliver push notifications to mobile apps",
+        "Route Discord notifications via webhook",
+        "Support notification preferences per user",
+        "Track delivery status and failures"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ",
+        "Discord"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "POST /notifications/send - Send notification",
+        "GET /notifications/history - Notification history",
+        "PUT /notifications/preferences - Update user preferences"
+      ]
+    },
+    {
+      "id": "firewall",
+      "name": "Firewall",
+      "emoji": "🛡️",
+      "port": 5100,
+      "layer": "business",
+      "description": "Dynamic firewall rule management and IP whitelisting",
+      "responsibilities": [
+        "Maintain IP whitelist/blacklist per server",
+        "Apply firewall rules to UniFi network equipment",
+        "Support port forwarding for game servers",
+        "Track rule changes and audit logs",
+        "Automated DDoS mitigation rules"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ",
+        "Nodes",
+        "UniFi Controller"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "POST /firewall/rules - Add firewall rule",
+        "DELETE /firewall/rules/:id - Remove rule",
+        "GET /firewall/whitelist/:serverId - List whitelisted IPs",
+        "POST /firewall/whitelist/:serverId - Add IP to whitelist"
+      ]
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "emoji": "🤖",
+      "port": 5120,
+      "layer": "business",
+      "description": "Discord bot integration for server management and notifications",
+      "responsibilities": [
+        "Discord bot commands for server control",
+        "Send server status updates to Discord channels",
+        "Player join/leave notifications",
+        "Support ticket creation from Discord",
+        "Server administration via Discord slash commands"
+      ],
+      "dependencies": [
+        "PostgreSQL",
+        "RabbitMQ",
+        "Notifications",
+        "Servers"
+      ],
+      "dependents": [
+        "Notifications"
+      ],
+      "endpoints": [
+        "POST /discord/webhook - Incoming Discord webhook",
+        "POST /discord/send - Send Discord message",
+        "GET /discord/link/:userId - Link Discord account"
+      ]
+    },
+    {
+      "id": "web-ui",
+      "name": "Web UI",
+      "emoji": "🌐",
+      "port": 5200,
+      "layer": "presentation",
+      "description": "Blazor WebAssembly frontend application for end-user interaction",
+      "responsibilities": [
+        "User dashboard and control panel",
+        "Real-time updates via SignalR",
+        "Responsive design for mobile and desktop",
+        "Client-side routing and state management",
+        "Static asset delivery via CDN"
+      ],
+      "dependencies": [
+        "Gateway",
+        "Identity",
+        "Billing",
+        "Servers"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "/ - Landing page",
+        "/dashboard - User dashboard",
+        "/servers - Server management UI",
+        "/billing - Billing portal"
+      ]
+    },
+    {
+      "id": "windows-agent",
+      "name": "Windows Agent",
+      "emoji": "🪟",
+      "port": 6001,
+      "layer": "presentation",
+      "description": "Windows-based agent for game server provisioning and management",
+      "responsibilities": [
+        "Install and configure game servers on Windows nodes",
+        "Monitor server processes and resource usage",
+        "Execute server start/stop/restart commands",
+        "Report health metrics to Nodes service",
+        "Handle Windows-specific game server requirements"
+      ],
+      "dependencies": [
+        "Nodes"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "Runs as Windows Service",
+        "gRPC API for Nodes service communication",
+        "Local HTTP health endpoint on :6001"
+      ]
+    },
+    {
+      "id": "linux-agent",
+      "name": "Linux Agent",
+      "emoji": "🐧",
+      "port": 6002,
+      "layer": "presentation",
+      "description": "Linux-based agent for game server provisioning and management",
+      "responsibilities": [
+        "Install and configure game servers on Linux nodes",
+        "Monitor server processes via systemd",
+        "Execute server lifecycle commands",
+        "Report health metrics to Nodes service",
+        "Handle containerized game server deployments"
+      ],
+      "dependencies": [
+        "Nodes"
+      ],
+      "dependents": [],
+      "endpoints": [
+        "Runs as systemd service",
+        "gRPC API for Nodes service communication",
+        "Local HTTP health endpoint on :6002"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "identity__depends_on__postgresql",
+      "source": "identity",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "identity__depends_on__rabbitmq",
+      "source": "identity",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "gateway__depends_on__identity",
+      "source": "gateway",
+      "target": "identity",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "gateway__depends_on__rabbitmq",
+      "source": "gateway",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "nodes__depends_on__postgresql",
+      "source": "nodes",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "nodes__depends_on__redis",
+      "source": "nodes",
+      "target": "redis",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "nodes__depends_on__lets-encrypt",
+      "source": "nodes",
+      "target": "lets-encrypt",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "nodes__depends_on__cloudflare",
+      "source": "nodes",
+      "target": "cloudflare",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "secrets__depends_on__postgresql",
+      "source": "secrets",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "secrets__depends_on__rabbitmq",
+      "source": "secrets",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "secrets__depends_on__nodes",
+      "source": "secrets",
+      "target": "nodes",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "billing__depends_on__postgresql",
+      "source": "billing",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "billing__depends_on__rabbitmq",
+      "source": "billing",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "billing__depends_on__identity",
+      "source": "billing",
+      "target": "identity",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "billing__depends_on__stripe",
+      "source": "billing",
+      "target": "stripe",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "billing__depends_on__paypal",
+      "source": "billing",
+      "target": "paypal",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "servers__depends_on__postgresql",
+      "source": "servers",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "servers__depends_on__rabbitmq",
+      "source": "servers",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "servers__depends_on__nodes",
+      "source": "servers",
+      "target": "nodes",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "servers__depends_on__identity",
+      "source": "servers",
+      "target": "identity",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "tasks__depends_on__postgresql",
+      "source": "tasks",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "tasks__depends_on__rabbitmq",
+      "source": "tasks",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "tasks__depends_on__redis",
+      "source": "tasks",
+      "target": "redis",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "files__depends_on__postgresql",
+      "source": "files",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "files__depends_on__nodes",
+      "source": "files",
+      "target": "nodes",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "console__depends_on__servers",
+      "source": "console",
+      "target": "servers",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "console__depends_on__nodes",
+      "source": "console",
+      "target": "nodes",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "mods__depends_on__postgresql",
+      "source": "mods",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "mods__depends_on__files",
+      "source": "mods",
+      "target": "files",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "notifications__depends_on__postgresql",
+      "source": "notifications",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "notifications__depends_on__rabbitmq",
+      "source": "notifications",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "notifications__depends_on__discord",
+      "source": "notifications",
+      "target": "discord",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "firewall__depends_on__postgresql",
+      "source": "firewall",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "firewall__depends_on__rabbitmq",
+      "source": "firewall",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "firewall__depends_on__nodes",
+      "source": "firewall",
+      "target": "nodes",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "firewall__depends_on__unifi-controller",
+      "source": "firewall",
+      "target": "unifi-controller",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "discord__depends_on__postgresql",
+      "source": "discord",
+      "target": "postgresql",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "discord__depends_on__rabbitmq",
+      "source": "discord",
+      "target": "rabbitmq",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "discord__depends_on__notifications",
+      "source": "discord",
+      "target": "notifications",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "discord__depends_on__servers",
+      "source": "discord",
+      "target": "servers",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "web-ui__depends_on__gateway",
+      "source": "web-ui",
+      "target": "gateway",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "web-ui__depends_on__identity",
+      "source": "web-ui",
+      "target": "identity",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "web-ui__depends_on__billing",
+      "source": "web-ui",
+      "target": "billing",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "web-ui__depends_on__servers",
+      "source": "web-ui",
+      "target": "servers",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "windows-agent__depends_on__nodes",
+      "source": "windows-agent",
+      "target": "nodes",
+      "relationship": "depends_on"
+    },
+    {
+      "id": "linux-agent__depends_on__nodes",
+      "source": "linux-agent",
+      "target": "nodes",
+      "relationship": "depends_on"
+    }
+  ]
+}

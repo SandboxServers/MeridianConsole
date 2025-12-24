@@ -1,0 +1,47 @@
+<section class="scope-prose">
+
+<div class="scope-callout">
+<pre class="scope-code">MeridianConsole/
+├── src/
+│   ├── Shared/
+│   │   ├── MeridianConsole.Shared/           # Common utilities
+│   │   ├── MeridianConsole.Contracts/        # DTOs, API contracts
+│   │   ├── MeridianConsole.Messaging/        # RabbitMQ abstractions
+│   │   └── MeridianConsole.ServiceDefaults/  # Aspire defaults
+│   ├── Gateway/
+│   ├── Identity/
+│   ├── Billing/                              # SaaS only (excluded from KiP)
+│   ├── Servers/
+│   ├── Nodes/
+│   ├── Tasks/
+│   ├── Files/
+│   ├── Console/
+│   ├── Mods/
+│   ├── Notifications/
+│   ├── Firewall/
+│   ├── Secrets/
+│   ├── Discord/
+│   ├── Web/
+│   └── Agents/
+│       ├── MeridianConsole.Agent.Core/
+│       ├── MeridianConsole.Agent.Linux/
+│       └── MeridianConsole.Agent.Windows/
+├── deploy/
+│   ├── kubernetes/                           # SaaS deployment
+│   │   ├── base/
+│   │   ├── overlays/
+│   │   └── cert-manager/
+│   ├── compose/                              # KiP deployment
+│   │   ├── docker-compose.yml
+│   │   ├── docker-compose.monitoring.yml
+│   │   ├── docker-compose.discord.yml
+│   │   └── .env.example
+│   └── terraform/
+├── docs/
+│   ├── architecture/
+│   ├── runbooks/
+│   └── kip/                                  # Self-host documentation
+├── CONTRIBUTIONS.md
+└── README.md</pre>
+</div>
+</section>

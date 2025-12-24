@@ -1,0 +1,645 @@
+<section class="scope-prose">
+
+<div>
+<p>🔒 Canonical Traffic Manifest</p>
+<p><strong>Rule:</strong> If it's not documented here, the traffic is NOT allowed. This section serves as the authoritative reference for all network communication.</p>
+</div>
+<h3>Network Boundaries</h3>
+<div class="scope-callout">
+<pre class="scope-code">
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                    INTERNET                                          │
+│   • Customer Node Agents (worldwide)                                                 │
+│   • User Browsers                                                                    │
+│   • External SaaS (Stripe, PayPal, Steam, Discord, etc.)                            │
+│   • New Relic (SaaS telemetry endpoint)                                             │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │       CLOUDFLARE          │
+                            │   WAF · CDN · DDoS Prot   │
+                            └─────────────┬─────────────┘
+                                          │
+════════════════════════════════════════════════════════════════════════════════════════
+                               COLO BOUNDARY (AS396426)
+════════════════════════════════════════════════════════════════════════════════════════
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │   UniFi Hardware Firewall │
+                            │       (UDM Pro)           │
+                            └─────────────┬─────────────┘
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │     K8S CLUSTER           │
+                            │  (Cilium service mesh)    │
+                            └─────────────┬─────────────┘
+                                          │
+                            ┌─────────────▼─────────────┐
+                            │    DOGFOOD AGENTS         │
+                            │  (Internal testing)       │
+                            └───────────────────────────┘
+        </pre>
+</div>
+<div>
+<p>Total Documented Flows: 95</p>
+</div>
+ INBOUND FLOWS 
+<h3>1. Inbound Flows (Internet → Colo) — 12 Flows</h3>
+<h4>1.1 User Browser Traffic (3 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Encryption</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>IN-001</td><td>User Browser</td><td>Web App :5200</td><td>HTTPS 443</td><td>None (public)</td><td>TLS 1.3</td><td>Internet → CF → UniFi → Ingress → Web App</td></tr>
+<tr><td>IN-002</td><td>User Browser</td><td>Gateway :5000</td><td>HTTPS 443</td><td>JWT Bearer</td><td>TLS 1.3</td><td>Internet → CF → UniFi → Ingress → Gateway</td></tr>
+<tr><td>IN-003</td><td>User Browser</td><td>Console :5070</td><td>WSS 443</td><td>JWT Bearer</td><td>TLS 1.3</td><td>Internet → CF → UniFi → Ingress → GW → Console</td></tr>
+</tbody>
+</table>
+</div>
+<h4>1.2 Customer Agent Traffic (4 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Encryption</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>IN-010</td><td>Customer Agent</td><td>Nodes :5040</td><td>HTTPS 443</td><td>One-time Token (15m)</td><td>TLS 1.3</td><td>Bootstrap: Internet → CF → UniFi → GW → Nodes</td></tr>
+<tr><td>IN-011</td><td>Customer Agent</td><td>Nodes :5040</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>TLS 1.3+mTLS</td><td>Registered: Internet → CF → UniFi → GW → Nodes</td></tr>
+<tr><td>IN-012</td><td>Customer Agent</td><td>Console :5070</td><td>WSS 443</td><td>mTLS Client Cert</td><td>TLS 1.3+mTLS</td><td>Internet → CF → UniFi → GW → Console</td></tr>
+<tr><td>IN-013</td><td>Customer Agent</td><td>Files :5060</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>TLS 1.3+mTLS</td><td>Internet → CF → UniFi → GW → Files</td></tr>
+</tbody>
+</table>
+</div>
+<h4>1.3 External Webhooks (3 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Encryption</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>IN-020</td><td>Stripe</td><td>Billing :5020</td><td>HTTPS 443</td><td>Webhook Signature</td><td>TLS 1.3</td><td>Internet → CF → UniFi → GW → Billing</td></tr>
+<tr><td>IN-021</td><td>PayPal</td><td>Billing :5020</td><td>HTTPS 443</td><td>Webhook Signature</td><td>TLS 1.3</td><td>Internet → CF → UniFi → GW → Billing</td></tr>
+<tr><td>IN-022</td><td>Discord</td><td>Discord :5120</td><td>HTTPS 443</td><td>Webhook Signature</td><td>TLS 1.3</td><td>Internet → CF → UniFi → GW → Discord</td></tr>
+</tbody>
+</table>
+</div>
+<h4>1.4 OAuth Callbacks (2 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Encryption</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>IN-030</td><td>Discord OAuth</td><td>Identity :5010</td><td>HTTPS 443</td><td>OAuth State Token</td><td>TLS 1.3</td><td>Internet → CF → UniFi → GW → Identity</td></tr>
+<tr><td>IN-031</td><td>Steam OAuth</td><td>Identity :5010</td><td>HTTPS 443</td><td>OAuth State Token</td><td>TLS 1.3</td><td>Internet → CF → UniFi → GW → Identity</td></tr>
+</tbody>
+</table>
+</div>
+ OUTBOUND FLOWS 
+<h3>2. Outbound Flows (Colo → Internet) — 18 Flows</h3>
+<h4>2.1 Payment Providers (2 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OUT-001</td><td>Billing :5020</td><td>Stripe API</td><td>HTTPS 443</td><td>API Key</td><td>Payment processing, subscription mgmt</td></tr>
+<tr><td>OUT-002</td><td>Billing :5020</td><td>PayPal API</td><td>HTTPS 443</td><td>OAuth Client Creds</td><td>Payment processing</td></tr>
+</tbody>
+</table>
+</div>
+<h4>2.2 Auth Providers (2 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OUT-010</td><td>Identity :5010</td><td>Discord API</td><td>HTTPS 443</td><td>OAuth</td><td>User authentication, token exchange</td></tr>
+<tr><td>OUT-011</td><td>Identity :5010</td><td>Steam API</td><td>HTTPS 443</td><td>API Key</td><td>User authentication</td></tr>
+</tbody>
+</table>
+</div>
+<h4>2.3 Mod Platforms (3 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OUT-020</td><td>Mods :5080</td><td>Steam Workshop API</td><td>HTTPS 443</td><td>API Key</td><td>Mod metadata, downloads</td></tr>
+<tr><td>OUT-021</td><td>Mods :5080</td><td>CurseForge API</td><td>HTTPS 443</td><td>API Key</td><td>Mod metadata, downloads</td></tr>
+<tr><td>OUT-022</td><td>Mods :5080</td><td>Modrinth API</td><td>HTTPS 443</td><td>API Key</td><td>Mod metadata, downloads</td></tr>
+</tbody>
+</table>
+</div>
+<h4>2.4 Notifications (3 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OUT-030</td><td>Notifications :5090</td><td>SMTP Provider</td><td>SMTPS 465</td><td>SMTP Auth</td><td>Transactional email</td></tr>
+<tr><td>OUT-031</td><td>Discord :5120</td><td>Discord API</td><td>HTTPS 443</td><td>Bot Token</td><td>Bot messages (internal team only)</td></tr>
+<tr><td>OUT-032</td><td>Notifications :5090</td><td>Push Service</td><td>HTTPS 443</td><td>API Key</td><td>Mobile push notifications</td></tr>
+</tbody>
+</table>
+</div>
+<h4>2.5 Certificate Management (4 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OUT-040</td><td>cert-manager</td><td>Let's Encrypt ACME</td><td>HTTPS 443</td><td>ACME Account Key</td><td>Certificate issuance (ingress)</td></tr>
+<tr><td>OUT-041</td><td>cert-manager</td><td>Cloudflare API</td><td>HTTPS 443</td><td>API Token</td><td>DNS-01 challenge (programmatic)</td></tr>
+<tr><td>OUT-042</td><td>Nodes :5040</td><td>Let's Encrypt ACME</td><td>HTTPS 443</td><td>ACME Account Key</td><td>Agent certificate issuance</td></tr>
+<tr><td>OUT-043</td><td>Nodes :5040</td><td>Cloudflare API</td><td>HTTPS 443</td><td>API Token</td><td>DNS-01 challenge (agent certs)</td></tr>
+</tbody>
+</table>
+</div>
+<h4>2.6 Observability (2 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OUT-050</td><td>All Services</td><td>New Relic</td><td>HTTPS 443</td><td>License Key</td><td>APM, traces, metrics, logs</td></tr>
+<tr><td>OUT-051</td><td>Prometheus</td><td>New Relic (optional)</td><td>HTTPS 443</td><td>API Key</td><td>Metric forwarding</td></tr>
+</tbody>
+</table>
+</div>
+<h4>2.7 Secrets (2 flows)</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OUT-060</td><td>Secrets :5110</td><td>Azure Key Vault</td><td>HTTPS 443</td><td>Managed Identity</td><td>Secret storage, rotation</td></tr>
+<tr><td>OUT-061</td><td>CSI Driver</td><td>Azure Key Vault</td><td>HTTPS 443</td><td>Managed Identity</td><td>Secret retrieval for pod mount</td></tr>
+</tbody>
+</table>
+</div>
+ SERVICE-TO-SERVICE: Gateway → Control Plane 
+<h3>3. Service-to-Service: Gateway → Control Plane — 12 Flows</h3>
+<div>
+<p>All internal traffic encrypted via Cilium service mesh mTLS.</p>
+</div>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>SVC-001</td><td>Gateway :5000</td><td>Identity :5010</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Auth validation, user lookup</td></tr>
+<tr><td>SVC-002</td><td>Gateway :5000</td><td>Billing :5020</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Subscription status</td></tr>
+<tr><td>SVC-003</td><td>Gateway :5000</td><td>Servers :5030</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Server CRUD operations</td></tr>
+<tr><td>SVC-004</td><td>Gateway :5000</td><td>Nodes :5040</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Agent management</td></tr>
+<tr><td>SVC-005</td><td>Gateway :5000</td><td>Tasks :5050</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Job status</td></tr>
+<tr><td>SVC-006</td><td>Gateway :5000</td><td>Files :5060</td><td>HTTP/2</td><td>Cilium mTLS</td><td>File operations</td></tr>
+<tr><td>SVC-007</td><td>Gateway :5000</td><td>Console :5070</td><td>HTTP/2</td><td>Cilium mTLS</td><td>WebSocket proxy</td></tr>
+<tr><td>SVC-008</td><td>Gateway :5000</td><td>Mods :5080</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Mod queries</td></tr>
+<tr><td>SVC-009</td><td>Gateway :5000</td><td>Notifications :5090</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Notification triggers</td></tr>
+<tr><td>SVC-010</td><td>Gateway :5000</td><td>Firewall :5100</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Firewall status</td></tr>
+<tr><td>SVC-011</td><td>Gateway :5000</td><td>Secrets :5110</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Secret retrieval</td></tr>
+<tr><td>SVC-012</td><td>Gateway :5000</td><td>Discord :5120</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Discord operations</td></tr>
+</tbody>
+</table>
+</div>
+ SERVICE-TO-SERVICE: Cross-Service 
+<h3>4. Service-to-Service: Cross-Service — 13 Flows</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>SVC-020</td><td>Servers :5030</td><td>Nodes :5040</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Node assignment</td></tr>
+<tr><td>SVC-021</td><td>Servers :5030</td><td>Firewall :5100</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Port allocation request</td></tr>
+<tr><td>SVC-022</td><td>Billing :5020</td><td>Servers :5030</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Subscription → server status sync</td></tr>
+<tr><td>SVC-023</td><td>Billing :5020</td><td>Notifications :5090</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Payment notifications</td></tr>
+<tr><td>SVC-024</td><td>Nodes :5040</td><td>Console :5070</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Agent console relay</td></tr>
+<tr><td>SVC-025</td><td>Tasks :5050</td><td>Nodes :5040</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Task execution on agents</td></tr>
+<tr><td>SVC-026</td><td>Tasks :5050</td><td>Servers :5030</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Server state updates</td></tr>
+<tr><td>SVC-027</td><td>Tasks :5050</td><td>Notifications :5090</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Task completion notifications</td></tr>
+<tr><td>SVC-028</td><td>Mods :5080</td><td>Files :5060</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Mod file storage</td></tr>
+<tr><td>SVC-029</td><td>Discord :5120</td><td>Servers :5030</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Discord cmd → server action</td></tr>
+<tr><td>SVC-030</td><td>Identity :5010</td><td>Notifications :5090</td><td>HTTP/2</td><td>Cilium mTLS</td><td>Welcome emails, pw resets</td></tr>
+<tr><td>SVC-031</td><td>Console :5070</td><td>Customer Agent</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>RCON command relay (via Gateway)</td></tr>
+<tr><td>SVC-032</td><td>Console :5070</td><td>Dogfood Agent</td><td>HTTP/2 Dyn</td><td>Cilium mTLS</td><td>RCON command relay (direct internal)</td></tr>
+</tbody>
+</table>
+</div>
+<div>
+<p><strong>Note:</strong> SVC-031 and SVC-032 are Console-initiated RCON commands to agents. This is separate from Agent-initiated console streaming flows (AGT-005, DOG-005). RCON allows the Console service to send commands TO the gameserver via the agent.</p>
+</div>
+ INFRASTRUCTURE: PostgreSQL Platform DB 
+<h3>5. Infrastructure: PostgreSQL — Platform DB Pod — 10 Flows</h3>
+<div>
+<p>Platform DB Pod hosts ALL microservice databases. NO customer data here.</p>
+</div>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Database</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>DB-001</td><td>Identity :5010</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>identity_db</td></tr>
+<tr><td>DB-002</td><td>Billing :5020</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>billing_db</td></tr>
+<tr><td>DB-003</td><td>Servers :5030</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>servers_db</td></tr>
+<tr><td>DB-004</td><td>Nodes :5040</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>nodes_db</td></tr>
+<tr><td>DB-005</td><td>Tasks :5050</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>tasks_db</td></tr>
+<tr><td>DB-006</td><td>Files :5060</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>files_db</td></tr>
+<tr><td>DB-007</td><td>Mods :5080</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>mods_db</td></tr>
+<tr><td>DB-008</td><td>Notifications :5090</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>notifications_db</td></tr>
+<tr><td>DB-009</td><td>Firewall :5100</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>firewall_db</td></tr>
+<tr><td>DB-010</td><td>Secrets :5110</td><td>Platform DB Pod</td><td>PGSQL 5432</td><td>Cilium mTLS + Creds</td><td>secrets_db</td></tr>
+</tbody>
+</table>
+</div>
+ INFRASTRUCTURE: PostgreSQL User DB 
+<h3>6. Infrastructure: PostgreSQL — User DB Pod — 1 Flow</h3>
+<div>
+<p>User DB Pod hosts ONLY customer-created gameserver databases. NO SaaS microservice DBs.</p>
+</div>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>DB-020</td><td>Customer Gameservers</td><td>User DB Pod</td><td>PGSQL 5432</td><td>Game Credentials</td><td>Customer-created game databases</td></tr>
+</tbody>
+</table>
+</div>
+ INFRASTRUCTURE: RabbitMQ 
+<h3>7. Infrastructure: RabbitMQ — 2 Flows</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>RMQ-001</td><td>All Services</td><td>RabbitMQ</td><td>AMQP 5672</td><td>Cilium mTLS + Creds</td><td>Event publishing</td></tr>
+<tr><td>RMQ-002</td><td>RabbitMQ</td><td>All Services</td><td>AMQP 5672</td><td>Cilium mTLS + Creds</td><td>Event consumption</td></tr>
+</tbody>
+</table>
+</div>
+<h4>Key Event Flows</h4>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Event</th>
+<th>Publisher</th>
+<th>Subscribers</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>server.created</td><td>Servers</td><td>Tasks, Nodes, Firewall, Notifications</td></tr>
+<tr><td>server.provisioned</td><td>Tasks</td><td>Servers, Firewall, Notifications</td></tr>
+<tr><td>server.deleted</td><td>Servers</td><td>Tasks, Nodes, Firewall, Files</td></tr>
+<tr><td>payment.succeeded</td><td>Billing</td><td>Servers, Notifications</td></tr>
+<tr><td>payment.failed</td><td>Billing</td><td>Servers, Notifications</td></tr>
+<tr><td>agent.registered</td><td>Nodes</td><td>Tasks, Servers</td></tr>
+<tr><td>agent.heartbeat</td><td>Nodes</td><td>Servers (status)</td></tr>
+<tr><td>cert.renewed</td><td>Nodes</td><td>(logging only)</td></tr>
+<tr><td>secret.rotated</td><td>Secrets</td><td>(affected services reload)</td></tr>
+</tbody>
+</table>
+</div>
+ INFRASTRUCTURE: Redis 
+<h3>8. Infrastructure: Redis — 4 Flows</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>REDIS-001</td><td>Identity :5010</td><td>Redis</td><td>Redis 6379</td><td>Cilium mTLS + Auth</td><td>Session tokens, JWT blacklist</td></tr>
+<tr><td>REDIS-002</td><td>Gateway :5000</td><td>Redis</td><td>Redis 6379</td><td>Cilium mTLS + Auth</td><td>Rate limiting counters</td></tr>
+<tr><td>REDIS-003</td><td>Servers :5030</td><td>Redis</td><td>Redis 6379</td><td>Cilium mTLS + Auth</td><td>Server status cache</td></tr>
+<tr><td>REDIS-004</td><td>Tasks :5050</td><td>Redis</td><td>Redis 6379</td><td>Cilium mTLS + Auth</td><td>Job queue, distributed locks</td></tr>
+</tbody>
+</table>
+</div>
+ INFRASTRUCTURE: Observability 
+<h3>9. Infrastructure: Internal Observability — 4 Flows</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>OBS-001</td><td>All Services</td><td>Prometheus</td><td>HTTP 9090</td><td>Cilium mTLS</td><td>Metrics scraping</td></tr>
+<tr><td>OBS-002</td><td>All Services</td><td>Loki</td><td>HTTP 3100</td><td>Cilium mTLS</td><td>Log aggregation</td></tr>
+<tr><td>OBS-003</td><td>Prometheus</td><td>Grafana</td><td>HTTP 3000</td><td>Cilium mTLS</td><td>Dashboard queries</td></tr>
+<tr><td>OBS-004</td><td>Loki</td><td>Grafana</td><td>HTTP 3000</td><td>Cilium mTLS</td><td>Log queries</td></tr>
+</tbody>
+</table>
+</div>
+ AGENT: Customer 
+<h3>10. Agent: Customer (Internet → Colo) — 8 Flows</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>AGT-001</td><td>Customer Agent</td><td>GW → Nodes</td><td>HTTPS 443</td><td>One-time Token (15m)</td><td>Bootstrap registration</td></tr>
+<tr><td>AGT-002</td><td>Nodes</td><td>Customer Agent</td><td>HTTPS 443</td><td>One-time Token</td><td>Push client cert</td></tr>
+<tr><td>AGT-003</td><td>Customer Agent</td><td>GW → Nodes</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>Heartbeat</td></tr>
+<tr><td>AGT-004</td><td>Nodes → Tasks</td><td>Customer Agent</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>Command execution</td></tr>
+<tr><td>AGT-005</td><td>Customer Agent</td><td>GW → Console</td><td>WSS 443</td><td>mTLS Client Cert</td><td>Live console (agent → console streaming)</td></tr>
+<tr><td>AGT-006</td><td>Customer Agent</td><td>GW → Files</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>File upload</td></tr>
+<tr><td>AGT-007</td><td>Customer Agent</td><td>GW → Files</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>File download</td></tr>
+<tr><td>AGT-008</td><td>Nodes</td><td>Customer Agent</td><td>HTTPS 443</td><td>mTLS Client Cert</td><td>Cert renewal push</td></tr>
+</tbody>
+</table>
+</div>
+ AGENT: Dogfood 
+<h3>11. Agent: Dogfood (Internal Only) — 8 Flows</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>DOG-001</td><td>Dogfood Agent</td><td>Nodes :5040</td><td>HTTPS 5040</td><td>One-time Token (15m)</td><td>Bootstrap registration</td></tr>
+<tr><td>DOG-002</td><td>Nodes</td><td>Dogfood Agent</td><td>HTTPS Dyn</td><td>One-time Token</td><td>Push client cert</td></tr>
+<tr><td>DOG-003</td><td>Dogfood Agent</td><td>Nodes :5040</td><td>HTTPS 5040</td><td>mTLS Client Cert</td><td>Heartbeat</td></tr>
+<tr><td>DOG-004</td><td>Nodes → Tasks</td><td>Dogfood Agent</td><td>HTTPS Dyn</td><td>mTLS Client Cert</td><td>Command execution</td></tr>
+<tr><td>DOG-005</td><td>Dogfood Agent</td><td>Console :5070</td><td>WSS 5070</td><td>mTLS Client Cert</td><td>Live console (agent → console streaming)</td></tr>
+<tr><td>DOG-006</td><td>Dogfood Agent</td><td>Files :5060</td><td>HTTPS 5060</td><td>mTLS Client Cert</td><td>File upload</td></tr>
+<tr><td>DOG-007</td><td>Dogfood Agent</td><td>Files :5060</td><td>HTTPS 5060</td><td>mTLS Client Cert</td><td>File download</td></tr>
+<tr><td>DOG-008</td><td>Nodes</td><td>Dogfood Agent</td><td>HTTPS Dyn</td><td>mTLS Client Cert</td><td>Cert renewal push</td></tr>
+</tbody>
+</table>
+</div>
+<div>
+<p><strong>Key Difference:</strong> Customer agents route through Internet → Cloudflare → UniFi → Gateway → Service. Dogfood agents connect directly to services on the internal network (never leave colo).</p>
+</div>
+ FIREWALL: UniFi 
+<h3>12. Firewall: UniFi Integration — 2 Flows</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>FW-001</td><td>Firewall :5100</td><td>UniFi Controller</td><td>HTTPS 443</td><td>API Credentials</td><td>Create/delete port forward rules</td></tr>
+<tr><td>FW-002</td><td>Firewall :5100</td><td>UniFi Controller</td><td>HTTPS 443</td><td>API Credentials</td><td>Query current rules</td></tr>
+</tbody>
+</table>
+</div>
+ GAME: Player Traffic 
+<h3>13. Game: Player Traffic — 1 Flow</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Flow ID</th>
+<th>Source</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>GAME-001</td><td>Game Players</td><td>UniFi → Agent</td><td>UDP/TCP Dyn</td><td>Game Protocol</td><td>Minecraft, Space Engineers, Satisfactory, etc.</td></tr>
+</tbody>
+</table>
+</div>
+ Discord Service Clarification 
+<h3>14. Discord Service Clarification</h3>
+<div>
+<p>🤖 Discord :5120 is Meridian Console's internal team bot ONLY</p>
+<div>
+<div>
+<p>✅ Used for:</p>
+<ul>
+<li>• Deployment notifications to team Discord</li>
+<li>• Alert notifications (system health, errors)</li>
+<li>• Status updates</li>
+<li>• Admin commands from team Discord server</li>
+</ul>
+</div>
+<div>
+<p>❌ NOT used for:</p>
+<ul>
+<li>• Customer Discord integrations</li>
+<li>• Bot hosting for customers</li>
+<li>• Customer server notifications</li>
+</ul>
+</div>
+</div>
+<p>Customer Discord notifications route through Notifications :5090 → customer's webhook.</p>
+</div>
+ Explicitly Denied Traffic 
+<h3>15. Explicitly Denied Traffic</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Denied Flow</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Internet → PostgreSQL</td><td>Must go through services</td></tr>
+<tr><td>Internet → RabbitMQ</td><td>Internal only</td></tr>
+<tr><td>Internet → Redis</td><td>Internal only</td></tr>
+<tr><td>Agent → Agent</td><td>All agent traffic routes through control plane</td></tr>
+<tr><td>Services → Internet (unlisted)</td><td>Must use approved integrations</td></tr>
+<tr><td>Any unencrypted traffic</td><td>All traffic must be TLS or Cilium mTLS</td></tr>
+</tbody>
+</table>
+</div>
+ Flow Count Summary 
+<h3>Flow Count Summary</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Category</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Inbound (Internet → Colo)</td><td>12</td></tr>
+<tr><td>Outbound (Colo → Internet)</td><td>18</td></tr>
+<tr><td>Service-to-Service (Gateway → Services)</td><td>12</td></tr>
+<tr><td>Service-to-Service (Cross-Service + RCON)</td><td>13</td></tr>
+<tr><td>PostgreSQL - Platform DB</td><td>10</td></tr>
+<tr><td>PostgreSQL - User DB</td><td>1</td></tr>
+<tr><td>RabbitMQ</td><td>2</td></tr>
+<tr><td>Redis</td><td>4</td></tr>
+<tr><td>Internal Observability</td><td>4</td></tr>
+<tr><td>Customer Agent</td><td>8</td></tr>
+<tr><td>Dogfood Agent</td><td>8</td></tr>
+<tr><td>Firewall Integration</td><td>2</td></tr>
+<tr><td>Game Player Traffic</td><td>1</td></tr>
+<tr><td>TOTAL</td><td>95</td></tr>
+</tbody>
+</table>
+</div>
+</section>

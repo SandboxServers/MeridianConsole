@@ -1,0 +1,45 @@
+<section class="scope-prose">
+<div class="scope-callout">
+  <strong>Interactive view available:</strong>
+  <p>For a richer, searchable diagram of service relationships, use the <a href="/dependencies">Interactive Dependency Map</a>.</p>
+</div>
+<h2>
+        13. Interactive Dependency Visual
+    </h2>
+<p>Hover over services for quick info • Click for complete documentation</p>
+ Legend 
+<div class="scope-callout">
+<h3>Architecture Layers</h3>
+<div>
+<div><div></div><span>Foundation</span></div>
+<div><div></div><span>External APIs</span></div>
+<div><div></div><span>Core Services</span></div>
+<div><div></div><span>Business Logic</span></div>
+<div><div></div><span>Presentation</span></div>
+</div>
+</div>
+ Service Layers (populated by JavaScript) 
+<div class="scope-callout" id="service-layers"></div>
+ Critical Dependencies Warning 
+<div>
+<h3>⚠️ Critical Infrastructure Dependencies</h3>
+<p>The following services are single points of failure:</p>
+<div>
+<div class="scope-callout">
+<div>🗄️ PostgreSQL (11/14 services depend on it)</div>
+<div><strong>Impact if down:</strong> Identity, Nodes, Secrets, Billing, Servers, Tasks, Files, Mods, Notifications, Firewall, Discord all fail</div>
+<div><strong>Mitigation:</strong> Automated backups every 6 hours, read replicas, point-in-time recovery</div>
+</div>
+<div class="scope-callout">
+<div>📬 RabbitMQ (9/14 services depend on it)</div>
+<div><strong>Impact if down:</strong> Asynchronous operations halt, no event-driven communication, task queue stops</div>
+<div><strong>Mitigation:</strong> Durable queues, dead letter exchanges, message persistence</div>
+</div>
+<div class="scope-callout">
+<div>🖥️ Nodes (7/17 services depend on it)</div>
+<div><strong>Impact if down:</strong> Cannot provision new servers, certificate management fails, agents disconnect</div>
+<div><strong>Mitigation:</strong> Health checks, alerting, cached DNS records</div>
+</div>
+</div>
+</div>
+</section>

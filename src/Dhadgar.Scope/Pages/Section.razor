@@ -1,0 +1,51 @@
+@page "/s/{Slug}"
+@inject ScopeContentService Scope
+
+<PageTitle>@(SectionTitle)</PageTitle>
+
+<div class="mx-auto w-full max-w-5xl">
+@if (_section is null)
+{
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <h1 class="text-2xl font-bold">Section not found</h1>
+        <p class="mt-2 text-white/70">That section slug doesn’t exist in the published scope content.</p>
+        <a class="mt-4 inline-block rounded-xl bg-indigo-500 px-4 py-2 font-semibold text-white hover:bg-indigo-400"
+           href="/">
+            Back to home
+        </a>
+    </div>
+}
+else
+{
+    <div class="space-y-4">
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="text-sm text-white/60">Section @_section.Number</div>
+            <div class="text-2xl font-bold">@_section.Title</div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-black/20 p-6">
+            <DynamicComponent Type="_section.ComponentType" />
+        </div>
+    </div>
+}
+</div>
+
+@code {
+    [Parameter] public string? Slug { get; set; }
+
+    private ScopeSectionInfo? _section;
+
+    private string SectionTitle => _section is null ? "Scope Section" : $"Section {_section.Number}: {_section.Title}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Slug))
+        {
+            _section = null;
+            return;
+        }
+
+        var sections = await Scope.GetSectionsAsync();
+        _section = sections.FirstOrDefault(s => string.Equals(s.Slug, Slug, StringComparison.OrdinalIgnoreCase));
+    }
+}

@@ -1,0 +1,342 @@
+<section class="scope-prose">
+
+<div>
+<p>🎯 Self-Hosted Version — Post-SaaS Launch</p>
+<p>A complete, self-contained deployment of Meridian Console for power users who want to run their own infrastructure.</p>
+</div>
+<div>
+<!-- Overview -->
+<div class="scope-panel">
+<h2>Overview</h2>
+<p>
+<span>KiP Edition</span> is a scaled-down, open-source version of Meridian Console designed for self-hosting. 
+                It targets power users, homelabbers, and small communities who want to run game servers on their own infrastructure without cloud dependencies.
+            </p>
+<p>
+                Think <strong>Pterodactyl/Pelican competitor</strong>, but built on modern .NET architecture with a focus on simplicity and developer experience.
+            </p>
+</div>
+<!-- Post-MVP Warning -->
+<div>
+<div>
+<span>⚠️</span>
+<div>
+<h3>Post-MVP Release</h3>
+<p>KiP Edition ships <strong>after the SaaS MVP</strong>. Timeline TBD based on core platform stability and community demand.</p>
+</div>
+</div>
+</div>
+<!-- What's Included -->
+<div class="scope-panel">
+<h2>What's Included</h2>
+<ul>
+<li>
+<span>✓</span>
+<div>
+<strong>Core Panel Functionality</strong>
+<p>Server management, resource allocation, monitoring, logs, console access</p>
+</div>
+</li>
+<li>
+<span>✓</span>
+<div>
+<strong>Agent System</strong>
+<p>Open source game server agents with proper sandboxing</p>
+</div>
+</li>
+<li>
+<span>✓</span>
+<div>
+<strong>YARP Reverse Proxy (Internal Only)</strong>
+<p>Internal API gateway for panel services - NOT for game server traffic</p>
+</div>
+</li>
+<li>
+<span>✓</span>
+<div>
+<strong>Local User Accounts</strong>
+<p>Authentication without Azure AD B2C (local database-backed auth)</p>
+</div>
+</li>
+<li>
+<span>✓</span>
+<div>
+<strong>Blazor WASM UI</strong>
+<p>Modern web interface with xterm.js console rendering</p>
+</div>
+</li>
+<li>
+<span>✓</span>
+<div>
+<strong>Built-in Update Mechanism</strong>
+<p>Update button in UI to fetch and apply new versions</p>
+</div>
+</li>
+<li>
+<span>✓</span>
+<div>
+<strong>Community Support</strong>
+<p>Documentation, community forums, GitHub discussions</p>
+</div>
+</li>
+</ul>
+</div>
+<!-- What's NOT Included -->
+<div class="scope-panel">
+<h2>What's NOT Included</h2>
+<ul>
+<li>
+<span>✗</span>
+<div>
+<strong>Firewall Service</strong>
+<p>Users manage their own firewall rules and DDoS protection</p>
+</div>
+</li>
+<li>
+<span>✗</span>
+<div>
+<strong>Discord Service</strong>
+<p>No Discord bot integration or notifications</p>
+</div>
+</li>
+<li>
+<span>✗</span>
+<div>
+<strong>Secrets Service</strong>
+<p>No Azure Key Vault or cloud secret management (file-driven config only)</p>
+</div>
+</li>
+<li>
+<span>✗</span>
+<div>
+<strong>Cloudflare/Let's Encrypt Automation</strong>
+<p>Users manage their own SSL certificates and DNS</p>
+</div>
+</li>
+<li>
+<span>✗</span>
+<div>
+<strong>External Reverse Proxy for Game Servers</strong>
+<p>Users manage their own reverse proxy for game traffic (nginx, Caddy, Traefik) - YARP only handles internal panel services</p>
+</div>
+</li>
+<li>
+<span>✗</span>
+<div>
+<strong>Bundled Dependencies</strong>
+<p>PostgreSQL, RabbitMQ, and Redis are separate installs (not bundled)</p>
+</div>
+</li>
+<li>
+<span>✗</span>
+<div>
+<strong>Azure AD B2C Integration</strong>
+<p>Auth works without Azure (local user accounts only)</p>
+</div>
+</li>
+</ul>
+</div>
+<!-- YARP Clarification -->
+<div>
+<div>
+<span>💡</span>
+<div>
+<h3>YARP Clarification</h3>
+<p>YARP is included in KiP Edition, but <strong>only for internal panel traffic</strong> (API gateway between services).</p>
+<p>Many game servers don't support being proxied, so users are responsible for managing external reverse proxies for game server traffic if needed.</p>
+</div>
+</div>
+</div>
+<!-- Deployment Options -->
+<div>
+<div class="scope-panel">
+<div>
+<span>🐳</span>
+<h3>Docker Compose</h3>
+</div>
+<p>Pre-configured docker-compose.yml with:</p>
+<ul>
+<li>• Panel container</li>
+<li>• PostgreSQL container</li>
+<li>• RabbitMQ container</li>
+<li>• Redis container</li>
+<li>• Volume mounts for persistence</li>
+</ul>
+<p>Recommended for most users</p>
+</div>
+<div class="scope-panel">
+<div>
+<span>📦</span>
+<h3>Standalone Binary</h3>
+</div>
+<p>Single executable that:</p>
+<ul>
+<li>• Runs directly on Linux</li>
+<li>• Connects to existing PostgreSQL/RabbitMQ/Redis</li>
+<li>• Configured via YAML/JSON file</li>
+<li>• No Docker required</li>
+</ul>
+<p>For advanced users with existing infrastructure</p>
+</div>
+</div>
+<!-- System Requirements -->
+<div class="scope-panel">
+<h2>System Requirements</h2>
+<div>
+<div>
+<h3>Minimum</h3>
+<ul>
+<li>• 2 CPU cores</li>
+<li>• 4 GB RAM</li>
+<li>• 20 GB storage</li>
+<li>• Linux (Ubuntu 22.04+)</li>
+</ul>
+</div>
+<div>
+<h3>Recommended</h3>
+<ul>
+<li>• 4 CPU cores</li>
+<li>• 8 GB RAM</li>
+<li>• 50 GB SSD</li>
+<li>• Linux (Debian/Ubuntu)</li>
+</ul>
+</div>
+<div>
+<h3>Dependencies</h3>
+<ul>
+<li>• PostgreSQL 15+</li>
+<li>• RabbitMQ 3.12+</li>
+<li>• Redis 7+</li>
+<li>• Docker (for Compose option)</li>
+</ul>
+</div>
+</div>
+</div>
+<!-- Comparison Table -->
+<div class="scope-panel">
+<h2>KiP vs SaaS Comparison</h2>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Feature</th>
+<th>KiP Edition</th>
+<th>SaaS Edition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hosting</td>
+<td>Self-hosted</td>
+<td>Cloud-hosted</td>
+</tr>
+<tr>
+<td>Authentication</td>
+<td>Local accounts</td>
+<td>Azure AD B2C</td>
+</tr>
+<tr>
+<td>Firewall Management</td>
+<td>❌ User-managed</td>
+<td>✓ Automated</td>
+</tr>
+<tr>
+<td>Discord Integration</td>
+<td>❌ None</td>
+<td>✓ Full integration</td>
+</tr>
+<tr>
+<td>External Reverse Proxy</td>
+<td>❌ User-managed</td>
+<td>✓ YARP included</td>
+</tr>
+<tr>
+<td>Internal API Gateway</td>
+<td>✓ YARP included</td>
+<td>✓ YARP included</td>
+</tr>
+<tr>
+<td>SSL Certificates</td>
+<td>❌ User-managed</td>
+<td>✓ Automated</td>
+</tr>
+<tr>
+<td>Updates</td>
+<td>Manual (UI button)</td>
+<td>Automatic</td>
+</tr>
+<tr>
+<td>Support</td>
+<td>Community</td>
+<td>Official</td>
+</tr>
+<tr>
+<td>Price</td>
+<td>Free (OSS)</td>
+<td>Subscription</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Branding & Licensing -->
+<div class="scope-panel">
+<h2>Branding &amp; Licensing</h2>
+<div>
+<h3>Required Attribution</h3>
+<p>KiP Edition <strong>must</strong> display "Powered by Meridian Console" in the UI footer and documentation.</p>
+<div class="scope-callout">
+<code>Powered by Meridian Console | Open Source</code>
+</div>
+</div>
+<div>
+<p><strong>License TBD:</strong> Need to discuss with Kira about open-source license choice (MIT, Apache 2.0, AGPL, etc.)</p>
+</div>
+</div>
+<!-- Target Audience -->
+<div>
+<div class="scope-panel">
+<div>🏠</div>
+<h3>Homelabbers</h3>
+<p>Running game servers on their own hardware for friends and small communities.</p>
+</div>
+<div class="scope-panel">
+<div>🎮</div>
+<h3>Small Communities</h3>
+<p>Clans, guilds, or friend groups who want control without cloud costs.</p>
+</div>
+<div class="scope-panel">
+<div>💻</div>
+<h3>Power Users</h3>
+<p>Users comfortable with Linux, Docker, and networking who want full control.</p>
+</div>
+</div>
+<!-- Release Timeline -->
+<div class="scope-panel">
+<h2>Release Timeline</h2>
+<div>
+<div>
+<div>1</div>
+<div>
+<h3>SaaS MVP First</h3>
+<p>Focus on core platform stability and revenue generation.</p>
+</div>
+</div>
+<div>
+<div>2</div>
+<div>
+<h3>Evaluate Demand</h3>
+<p>Gauge community interest through surveys and discussions.</p>
+</div>
+</div>
+<div>
+<div>3</div>
+<div>
+<h3>KiP Edition Release</h3>
+<p>Ship post-MVP once core platform is stable. Timeline: <strong>TBD</strong></p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>

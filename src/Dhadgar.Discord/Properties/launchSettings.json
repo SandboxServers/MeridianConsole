@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Dhadgar.Discord": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://localhost:5012"
+    }
+  }
+}

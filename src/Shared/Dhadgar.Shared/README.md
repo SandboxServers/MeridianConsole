@@ -1,0 +1,3 @@
+# Dhadgar.Shared
+
+Common utilities.

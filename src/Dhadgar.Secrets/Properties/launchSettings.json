@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Dhadgar.Secrets": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://localhost:5011"
+    }
+  }
+}

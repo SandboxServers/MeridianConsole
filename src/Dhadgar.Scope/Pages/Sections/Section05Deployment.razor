@@ -1,0 +1,49 @@
+<section class="scope-prose">
+
+<h3>High-Level Architecture</h3>
+<p>Single Kubernetes cluster hosting dev/staging/prod as separate namespaces. Agent nodes run outside Kubernetes on isolated VLANs.</p>
+<h3>External Services</h3>
+<ul>
+<li>• Azure (Key Vault, AD, ACR, DevOps)</li>
+<li>• Cloudflare (DNS, WAF, CDN)</li>
+<li>• New Relic (Observability)</li>
+</ul>
+<h3>Kubernetes Cluster</h3>
+<h4>Infrastructure Layer</h4>
+<ul>
+<li>• cert-manager (TLS automation)</li>
+<li>• Secrets Store CSI Driver (Azure Key Vault integration)</li>
+<li>• ArgoCD (GitOps, read-only drift detection)</li>
+<li>• Azure DevOps Build Agent (self-hosted pod)</li>
+</ul>
+<h4>Platform Data Layer</h4>
+<ul>
+<li>• <strong>PostgreSQL (platform):</strong> Application metadata (users, servers, agents, billing)</li>
+<li>• <strong>RabbitMQ:</strong> Message queue for async operations</li>
+<li>• <strong>Redis:</strong> Caching, session state</li>
+</ul>
+<h4>User Data Layer</h4>
+<div>
+<p>🔴 HARD RULE:</p>
+<p>User data (game server databases, configs, saves) stored in separate PostgreSQL instance per environment. Platform DB and User DB must never share an instance.</p>
+</div>
+<table class="scope-table">
+<thead><tr><th>Environment</th><th>User DB Instance</th></tr></thead>
+<tbody>
+<tr><td>Dev</td><td>PostgreSQL (user-dev)</td></tr>
+<tr><td>Staging</td><td>PostgreSQL (user-staging)</td></tr>
+<tr><td>Prod</td><td>PostgreSQL (user-prod)</td></tr>
+</tbody>
+</table>
+<h3>Agent Nodes</h3>
+<ul>
+<li>• Run <strong>outside Kubernetes</strong> on isolated VLANs</li>
+<li>• Linux + Windows agents (cross-platform)</li>
+<li>• Connect to cluster via <strong>mTLS</strong></li>
+<li>• Managed by Nodes Service (cert issuance, health checks)</li>
+</ul>
+<div>
+<p>💡 Future Note</p>
+<p><strong>When to split prod to dedicated cluster?</strong> When customer base grows to the point where resource contention or blast radius concerns justify the operational overhead (likely 500+ active servers).</p>
+</div>
+</section>

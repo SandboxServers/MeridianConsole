@@ -1,0 +1,310 @@
+<section class="scope-prose">
+
+<h2>🖥️ Section 14: Agent Architecture</h2>
+ Prominent Callout: Customer-Hosted 
+<div>
+<h3>🏠 Customer-Hosted Agents</h3>
+<p>
+            These agents run on <strong>your hardware</strong>, not ours. You install them on your own servers, and they coordinate with our control plane to provision and manage your game servers.
+        </p>
+<div>
+<div class="scope-callout">
+<div>📥 Bootstrap</div>
+<div>Install agent → Register with control plane → Receive certificate</div>
+</div>
+<div class="scope-callout">
+<div>🎮 Provision</div>
+<div>Control plane sends deployment commands → Agent provisions game servers locally</div>
+</div>
+<div class="scope-callout">
+<div>📊 Telemetry</div>
+<div>Agent ships metrics, logs, console output → Displayed in Web UI</div>
+</div>
+</div>
+</div>
+ Agent Platform Descriptions 
+<div>
+<div class="scope-callout">
+<h3>🐧 Agent.Linux</h3>
+<p>Runs as a systemd service on your Linux server. Manages game servers via Docker containers.</p>
+<ul>
+<li>• <strong>Deployment:</strong> Systemd service</li>
+<li>• <strong>Isolation:</strong> One Docker container per game server</li>
+<li>• <strong>Resources:</strong> cgroup limits (CPU, RAM, disk I/O)</li>
+<li>• <strong>Storage:</strong> Volume mounts for persistent game data</li>
+<li>• <strong>Encryption:</strong> LUKS full disk encryption (optional)</li>
+</ul>
+</div>
+<div class="scope-callout">
+<h3>🪟 Agent.Windows</h3>
+<p>Runs as a Windows Service on your Windows server. Manages game servers as child processes.</p>
+<ul>
+<li>• <strong>Deployment:</strong> Windows Service</li>
+<li>• <strong>Isolation:</strong> Job Objects for resource limits</li>
+<li>• <strong>Resources:</strong> CPU affinity, memory limits, priority</li>
+<li>• <strong>Required for:</strong> ARK, Conan Exiles, some Unity games</li>
+<li>• <strong>Encryption:</strong> BitLocker full disk encryption (optional)</li>
+</ul>
+</div>
+</div>
+ Trust & Transparency 
+<h3>🔒 Trust &amp; Transparency</h3>
+<div>
+<h4>⚠️ Important: Your Hardware, Your Rules</h4>
+<p>
+            We <strong>cannot and will not</strong> enforce encryption or security policies on your hardware. 
+            That's <strong>your responsibility</strong>. What we <em>can</em> do is prove that our agents have limited, 
+            well-defined operations and cannot execute arbitrary code against your machines.
+        </p>
+</div>
+<div>
+<!-- Trust Mechanism 1: Command Audit Logging -->
+<div class="scope-callout">
+<div>
+<span>📝</span>
+<h4>Command Audit Logging</h4>
+</div>
+<p>
+                Every command the control plane sends to the agent is logged <strong>locally on your machine</strong>.
+            </p>
+<div class="scope-panel">
+<p>Log locations:</p>
+<div>
+<div>
+<p>🐧 <strong>Linux:</strong></p>
+<code>/var/log/meridian-agent/commands.log</code>
+</div>
+<div>
+<p>🪟 <strong>Windows Event Log:</strong></p>
+<code>Applications and Services Logs → Meridian Console → Agent Commands</code>
+<p>Custom event source: <code>MeridianAgent</code></p>
+</div>
+</div>
+</div>
+<p>
+<strong>You can audit these logs</strong> anytime to see exactly what our control plane requested your agent to do.
+            </p>
+</div>
+<!-- Trust Mechanism 2: No Arbitrary Code Execution -->
+<div class="scope-callout">
+<div>
+<span>🚫</span>
+<h4>No Arbitrary Code Execution</h4>
+</div>
+<p>
+                The agent <strong>only executes predefined operations</strong> from a whitelist. We cannot send arbitrary shell commands.
+            </p>
+<div class="scope-panel">
+<p>Allowed operations:</p>
+<ul>
+<li>• <code>install_game_server</code></li>
+<li>• <code>start_server</code> / <code>stop_server</code></li>
+<li>• <code>collect_metrics</code></li>
+<li>• <code>stream_console_output</code></li>
+<li>• <code>upload_file</code> / <code>download_file</code></li>
+</ul>
+</div>
+<p>
+                Anything outside this whitelist is <strong>rejected</strong> by the agent.
+            </p>
+</div>
+<!-- Trust Mechanism 3: Declarative Operations Manifest -->
+<div class="scope-callout">
+<div>
+<span>📋</span>
+<h4>Declarative Operations Manifest</h4>
+</div>
+<p>
+                The agent ships with a <strong>manifest file</strong> listing every operation it can perform and what privileges each requires.
+            </p>
+<div class="scope-panel">
+<p>Example manifest entry:</p>
+<pre class="scope-code">install_game_server:
+  privileges: [file_write, process_spawn]
+  scope: /opt/gameservers/*
+  description: "Downloads and installs game server binaries"</pre>
+</div>
+<p>
+<strong>You can review this manifest</strong> before installing the agent to understand exactly what it's capable of.
+            </p>
+</div>
+<!-- Trust Mechanism 4: Permission Scoping -->
+<div class="scope-callout">
+<div>
+<span>🔐</span>
+<h4>Principle of Least Privilege</h4>
+</div>
+<p>
+                The agent runs with <strong>minimum required permissions</strong> and can only access specific directories.
+            </p>
+<div class="scope-panel">
+<p>Linux example:</p>
+<ul>
+<li>• <strong>User:</strong> <code>meridian-agent</code> (dedicated user)</li>
+<li>• <strong>Write access:</strong> <code>/opt/gameservers/</code> only</li>
+<li>• <strong>No root:</strong> Agent does not run as root</li>
+</ul>
+<p>Windows example:</p>
+<ul>
+<li>• <strong>Service Account:</strong> Restricted permissions</li>
+<li>• <strong>ACLs:</strong> Explicit folder/process permissions</li>
+</ul>
+</div>
+<p>
+<strong>You control the user</strong> the agent runs as and can further restrict permissions via your OS.
+            </p>
+</div>
+<!-- Trust Mechanism 5: Signed Binaries (NEW - MOVED FROM FUTURE) -->
+<div class="scope-callout">
+<div>
+<span>🔏</span>
+<h4>Signed Binaries</h4>
+</div>
+<p>
+                All agent releases are <strong>cryptographically signed</strong> via Azure Trusted Signing so you can verify authenticity.
+            </p>
+<div class="scope-panel">
+<p>Benefits:</p>
+<ul>
+<li>• ✅ No "Unknown Publisher" warnings on Windows</li>
+<li>• ✅ Verify it's really from Meridian Console</li>
+<li>• ✅ Detect tampering before installation</li>
+<li>• ✅ Integrated with Azure DevOps pipeline</li>
+</ul>
+</div>
+<div>
+<p>
+<strong>Implementation:</strong> Azure Trusted Signing (Basic tier, $10/month, 5,000 ops/month)
+                </p>
+</div>
+</div>
+</div>
+ Future Enhancements 
+<h3>🔮 Future Trust Enhancements</h3>
+<div>
+<div class="scope-callout">
+<div>📂 Open Source Agents</div>
+<p>Publish agent source code on GitHub for full auditability ("Don't trust, verify").</p>
+<p>Planned post-SaaS launch</p>
+</div>
+<div class="scope-callout">
+<div>🛡️ Third-Party Audit</div>
+<p>Pay security firm to audit and certify agent code (or rely on nerds to audit for free 😄).</p>
+<p>When budget allows ($10k-50k)</p>
+</div>
+</div>
+ Agent Security & Certificates 
+<h3>🔐 Agent Security &amp; Certificates</h3>
+<div class="scope-callout">
+<div>
+<div>
+<h4>📝 Registration Flow</h4>
+<ol>
+<li><strong>1.</strong> Admin generates one-time registration code (15-minute expiry) via Web UI</li>
+<li><strong>2.</strong> Customer runs agent installer with code on their hardware</li>
+<li><strong>3.</strong> Agent registers with Nodes Service using code</li>
+<li><strong>4.</strong> Nodes Service creates DNS entry: <code>agent-{id}.nodes.meridianconsole.com</code></li>
+<li><strong>5.</strong> Nodes Service requests certificate from Let's Encrypt (DNS-01 via Cloudflare)</li>
+<li><strong>6.</strong> Certificate pushed to agent over secure bootstrap channel</li>
+<li><strong>7.</strong> Agent installs certificate and establishes <strong>mTLS connection</strong></li>
+</ol>
+</div>
+<div>
+<h4>🔄 Certificate Lifecycle</h4>
+<table class="scope-table">
+<tbody>
+<tr><td><strong>CA:</strong></td><td>Let's Encrypt</td></tr>
+<tr><td><strong>DNS:</strong></td><td>agent-{id}.nodes.meridianconsole.com</td></tr>
+<tr><td><strong>Validity:</strong></td><td>90 days</td></tr>
+<tr><td><strong>Renewal:</strong></td><td>45 days before expiry (automatic)</td></tr>
+<tr><td><strong>Handler:</strong></td><td>Nodes Service (not agent)</td></tr>
+<tr><td><strong>Distribution:</strong></td><td>Push over existing mTLS connection</td></tr>
+</tbody>
+</table>
+<div>
+<p>✅ Zero Touch Renewal</p>
+<p>Agents never directly request certs. Nodes Service handles all ACME interactions and pushes renewed certs automatically.</p>
+</div>
+</div>
+</div>
+</div>
+ Agent Communication 
+<h3>📡 Agent Communication</h3>
+<div class="scope-callout">
+<h4>Agent Boot Sequence</h4>
+<pre class="scope-code">1. Agent loads mTLS certificate from local storage
+   └─ Linux: /etc/meridianconsole/certs/
+   └─ Windows: C:\ProgramData\MeridianConsole\certs\
+
+2. Establish WSS connection to Nodes Service
+   └─ wss://nodes.meridianconsole.com/ws
+   └─ mTLS mutual authentication
+
+3. Send HELLO message with metadata
+   └─ OS version, CPU cores, RAM, disk space
+   └─ Agent version, capabilities
+
+4. Receive ACK + assigned server list
+   └─ Control plane tells agent what servers should be running
+
+5. Reconcile local state
+   └─ Start servers that should be running
+   └─ Stop servers that shouldn't be running
+   └─ Report any discrepancies
+
+6. Enter command loop
+   └─ Heartbeat every 30 seconds
+   └─ Listen for control plane commands
+   └─ Stream console output, metrics, logs</pre>
+</div>
+<div class="scope-callout">
+<h4>Certificate Renewal (Automatic)</h4>
+<pre class="scope-code">1. Nodes Service detects certificate expiring in &lt; 45 days
+   └─ Scheduled job runs daily checking all agent certs
+
+2. Nodes Service requests new certificate from Let's Encrypt
+   └─ DNS-01 challenge via Cloudflare API
+   └─ Creates TXT record: _acme-challenge.agent-{id}.nodes.meridianconsole.com
+
+3. Let's Encrypt validates and issues new certificate
+
+4. Nodes Service pushes new certificate to agent
+   └─ Sent over existing mTLS connection
+   └─ Agent receives cert + private key
+
+5. Agent installs new certificate
+   └─ Writes to local storage (replaces old cert)
+   └─ Reloads TLS context (no restart required)
+
+6. Agent confirms installation
+   └─ Sends confirmation message to Nodes Service
+   └─ Nodes Service marks renewal as complete</pre>
+</div>
+ Key Points Summary 
+<div>
+<h3>🎯 Key Takeaways</h3>
+<div>
+<div>
+<h4>✅ What We Do</h4>
+<ul>
+<li>• Prove limited scope of operations</li>
+<li>• Provide audit logs on your machine</li>
+<li>• Run with least privilege</li>
+<li>• Whitelist allowed operations</li>
+<li>• Publish operations manifest</li>
+<li>• Sign all binaries cryptographically</li>
+</ul>
+</div>
+<div>
+<h4>❌ What We Don't Do</h4>
+<ul>
+<li>• Enforce encryption (your choice)</li>
+<li>• Execute arbitrary code</li>
+<li>• Access files outside designated paths</li>
+<li>• Run with elevated privileges by default</li>
+<li>• Hide what the agent is doing</li>
+</ul>
+</div>
+</div>
+</div>
+</section>

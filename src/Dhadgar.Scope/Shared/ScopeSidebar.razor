@@ -1,0 +1,80 @@
+@using Dhadgar.Scope.Services
+@inject ScopeContentService Scope
+
+<div class="space-y-4">
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <NavLink href="/" class="block" @onclick="HandleNavigate">
+            <div class="text-sm text-white/60">Meridian Console</div>
+            <div class="text-xl font-bold tracking-tight">Scope</div>
+        </NavLink>
+
+        <div class="mt-4 space-y-2">
+            <NavLink href="/dependencies"
+                     class="block rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+                     ActiveClass="bg-white/10"
+                     @onclick="HandleNavigate">
+                <span class="mr-2">🕸️</span> Dependency Map
+            </NavLink>
+
+            <input class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                   placeholder="Search sections…"
+                   @bind="_filter"
+                   @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-2">
+        @if (_sections is null)
+        {
+            <div class="p-3 text-sm text-white/60">Loading…</div>
+        }
+        else
+        {
+            <nav class="max-h-[70vh] overflow-auto">
+                @foreach (var s in FilteredSections())
+                {
+                    <NavLink class="block rounded-xl px-3 py-2 text-sm hover:bg-white/5"
+                             href="@($"/s/{s.Slug}")"
+                             @onclick="HandleNavigate">
+                        <span class="text-white/60">@(s.Number).</span>
+                        <span class="ml-2">@s.Title</span>
+                    </NavLink>
+                }
+            </nav>
+        }
+    </div>
+
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/60">
+        <div class="font-semibold text-white/70">Hosting note</div>
+        <div class="mt-2">
+            This site publishes as static files (Blazor WebAssembly) and is designed to deploy cleanly to Azure Static Web Apps (Free tier).
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnNavigate { get; set; }
+
+    private IReadOnlyList<ScopeSectionInfo>? _sections;
+    private string _filter = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sections = await Scope.GetSectionsAsync();
+    }
+
+    private IEnumerable<ScopeSectionInfo> FilteredSections()
+    {
+        if (_sections is null) return Array.Empty<ScopeSectionInfo>();
+
+        var f = (_filter ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(f)) return _sections;
+
+        return _sections.Where(s =>
+            s.Title.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+            s.Slug.Contains(f, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private Task HandleNavigate()
+        => OnNavigate.HasDelegate ? OnNavigate.InvokeAsync() : Task.CompletedTask;
+}

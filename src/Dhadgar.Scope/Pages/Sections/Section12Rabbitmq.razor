@@ -1,0 +1,249 @@
+<section class="scope-prose">
+<div class="scope-callout">
+  <strong>Interactive view available:</strong>
+  <p>For a richer, searchable diagram of service relationships, use the <a href="/dependencies">Interactive Dependency Map</a>.</p>
+</div>
+<div>
+<p>📋 Message Bus Architecture</p>
+<p>RabbitMQ serves as the central event backbone for asynchronous, event-driven communication between services. All queues, exchanges, and bindings are declared programmatically via .NET client libraries during service startup.</p>
+</div>
+<h3>12.1 Exchange Strategy</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Exchange Name</th>
+<th>Type</th>
+<th>Purpose</th>
+<th>Routing Pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>meridian.events</td>
+<td>topic</td>
+<td>Platform-wide domain events</td>
+<td>{domain}.{entity}.{action}</td>
+</tr>
+<tr>
+<td>meridian.commands</td>
+<td>direct</td>
+<td>Command messages requiring single consumer</td>
+<td>{service}.{command}</td>
+</tr>
+<tr>
+<td>meridian.notifications</td>
+<td>fanout</td>
+<td>Broadcast notifications to all subscribers</td>
+<td>(no routing key)</td>
+</tr>
+<tr>
+<td>meridian.dlx</td>
+<td>topic</td>
+<td>Dead-letter exchange for failed messages</td>
+<td>{original.routing.key}</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3>12.2 Queue Naming Convention</h3>
+<div class="scope-panel scope-panel-alt">
+<p>All queues follow the pattern:</p>
+<div class="scope-callout">
+            {service-name}.{queue-purpose}[.{optional-discriminator}]
+        </div>
+<p><strong>Examples:</strong></p>
+<ul>
+<li><span>servers.state-sync</span> — Server state change events</li>
+<li><span>billing.invoice-created</span> — New invoice notifications</li>
+<li><span>tasks.backup-requested</span> — Backup job commands</li>
+<li><span>notifications.email-outbound</span> — Email delivery queue</li>
+</ul>
+</div>
+<h3>12.3 Publishers &amp; Consumers</h3>
+<div>
+<table class="scope-table">
+<thead>
+<tr>
+<th>Queue Name</th>
+<th>Publisher(s)</th>
+<th>Consumer(s)</th>
+<th>Message Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>servers.state-sync</td>
+<td>Servers, Nodes</td>
+<td>Console, Notifications</td>
+<td>ServerStateChanged</td>
+</tr>
+<tr>
+<td>billing.invoice-created</td>
+<td>Billing</td>
+<td>Notifications</td>
+<td>InvoiceGenerated</td>
+</tr>
+<tr>
+<td>billing.payment-received</td>
+<td>Billing</td>
+<td>Servers, Notifications</td>
+<td>PaymentProcessed</td>
+</tr>
+<tr>
+<td>identity.user-registered</td>
+<td>Identity</td>
+<td>Billing, Notifications</td>
+<td>UserCreated</td>
+</tr>
+<tr>
+<td>tasks.backup-requested</td>
+<td>Gateway, Servers</td>
+<td>Tasks</td>
+<td>BackupCommand</td>
+</tr>
+<tr>
+<td>tasks.restore-requested</td>
+<td>Gateway, Servers</td>
+<td>Tasks</td>
+<td>RestoreCommand</td>
+</tr>
+<tr>
+<td>tasks.update-requested</td>
+<td>Gateway, Servers</td>
+<td>Tasks</td>
+<td>UpdateCommand</td>
+</tr>
+<tr>
+<td>tasks.job-completed</td>
+<td>Tasks</td>
+<td>Servers, Notifications</td>
+<td>JobFinished</td>
+</tr>
+<tr>
+<td>files.upload-complete</td>
+<td>Files</td>
+<td>Mods, Servers</td>
+<td>FileUploaded</td>
+</tr>
+<tr>
+<td>mods.catalog-updated</td>
+<td>Mods</td>
+<td>Servers, Notifications</td>
+<td>ModCatalogRefreshed</td>
+</tr>
+<tr>
+<td>console.stream-events</td>
+<td>Nodes</td>
+<td>Console</td>
+<td>ConsoleOutput</td>
+</tr>
+<tr>
+<td>notifications.email-outbound</td>
+<td>Identity, Billing, Tasks</td>
+<td>Notifications</td>
+<td>EmailRequest</td>
+</tr>
+<tr>
+<td>notifications.webhook-outbound</td>
+<td>Servers, Billing, Tasks</td>
+<td>Notifications</td>
+<td>WebhookDelivery</td>
+</tr>
+<tr>
+<td>firewall.rule-sync</td>
+<td>Firewall</td>
+<td>Nodes</td>
+<td>FirewallRuleUpdated</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3>12.4 Dead Letter Queue (DLQ) Strategy</h3>
+<div>
+<p>⚠️ Failure Handling</p>
+<p>All application queues are configured with:</p>
+<ul>
+<li><strong>x-message-ttl:</strong> 86400000 (24 hours)</li>
+<li><strong>x-dead-letter-exchange:</strong> meridian.dlx</li>
+<li><strong>x-dead-letter-routing-key:</strong> dlq.{original-queue-name}</li>
+<li><strong>Retry policy:</strong> 3 attempts with exponential backoff (1s, 5s, 15s)</li>
+</ul>
+</div>
+<div class="scope-panel scope-panel-alt">
+<p><strong>DLQ Monitoring:</strong></p>
+<p>Messages entering the DLX trigger alerts in Notifications service. Platform admins receive digest emails for DLQ depth &gt; 10 messages.</p>
+</div>
+<h3>12.5 Message Flow Examples</h3>
+<h4>Example 1: Server Creation Flow</h4>
+<div class="scope-callout">
+<div><span>1.</span> User creates server via Gateway</div>
+<div><span>→</span> Gateway → Servers (HTTPS): POST /api/servers</div>
+<div><span>2.</span> Servers service creates DB record</div>
+<div><span>→</span> Servers → Platform DB (PostgreSQL): INSERT</div>
+<div><span>3.</span> Servers publishes event</div>
+<div><span>→</span> Servers → RabbitMQ: servers.state-sync (ServerCreated)</div>
+<div><span>4.</span> Multiple consumers react:</div>
+<div><span>→</span> Console: Subscribe to live updates</div>
+<div><span>→</span> Notifications: Send "Server Ready" email</div>
+<div><span>→</span> Billing: Record billable resource creation</div>
+</div>
+<h4>Example 2: Backup Job Flow</h4>
+<div class="scope-callout">
+<div><span>1.</span> User requests backup via Gateway</div>
+<div><span>→</span> Gateway → Tasks (HTTPS): POST /api/tasks/backup</div>
+<div><span>2.</span> Gateway publishes command</div>
+<div><span>→</span> Gateway → RabbitMQ: tasks.backup-requested (BackupCommand)</div>
+<div><span>3.</span> Tasks consumer picks up work</div>
+<div><span>→</span> Tasks: Dequeue message, execute backup logic</div>
+<div><span>4.</span> Tasks uploads backup file</div>
+<div><span>→</span> Tasks → Files (HTTPS): POST /api/files/upload</div>
+<div><span>5.</span> Tasks publishes completion event</div>
+<div><span>→</span> Tasks → RabbitMQ: tasks.job-completed (JobFinished)</div>
+<div><span>6.</span> Notifications sends confirmation email</div>
+<div><span>→</span> Notifications: Dequeue, send email via SMTP</div>
+</div>
+<h4>Example 3: Payment Processing Flow</h4>
+<div class="scope-callout">
+<div><span>1.</span> Stripe webhook hits Gateway</div>
+<div><span>→</span> Gateway → Billing (HTTPS): POST /api/billing/webhook</div>
+<div><span>2.</span> Billing validates and records payment</div>
+<div><span>→</span> Billing → Platform DB (PostgreSQL): UPDATE invoices</div>
+<div><span>3.</span> Billing publishes event</div>
+<div><span>→</span> Billing → RabbitMQ: billing.payment-received (PaymentProcessed)</div>
+<div><span>4.</span> Multiple consumers react:</div>
+<div><span>→</span> Servers: Resume suspended servers</div>
+<div><span>→</span> Notifications: Send payment receipt email</div>
+<div><span>→</span> Billing: Update credit balance</div>
+</div>
+<h3>12.6 Configuration</h3>
+<div>
+<div class="scope-panel scope-panel-alt">
+<p>Connection Pooling</p>
+<ul>
+<li>• Max channels per connection: 50</li>
+<li>• Connection timeout: 30s</li>
+<li>• Heartbeat interval: 60s</li>
+<li>• Auto-recovery enabled</li>
+</ul>
+</div>
+<div class="scope-panel scope-panel-alt">
+<p>Quality of Service</p>
+<ul>
+<li>• Prefetch count: 10</li>
+<li>• Manual acknowledgments</li>
+<li>• Persistent messages (delivery mode 2)</li>
+<li>• Publisher confirms enabled</li>
+</ul>
+</div>
+</div>
+<div>
+<p>✅ Key Principles</p>
+<ul>
+<li><strong>Idempotency:</strong> All message handlers are idempotent to handle duplicate delivery</li>
+<li><strong>Schema Versioning:</strong> Message types include version field for backward compatibility</li>
+<li><strong>Observability:</strong> All publishes/consumes logged with correlation IDs</li>
+<li><strong>Security:</strong> AMQP traffic encrypted via Cilium mTLS, vhost isolation per environment</li>
+</ul>
+</div>
+</section>
