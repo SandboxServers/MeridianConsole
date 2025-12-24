@@ -16,6 +16,20 @@
                 <span class="mr-2">🕸️</span> Dependency Map
             </NavLink>
 
+<NavLink href="/architecture-explorer"
+         class="block rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+         ActiveClass="bg-white/10"
+         @onclick="HandleNavigate">
+    <span class="mr-2">🏙️</span> Architecture Explorer
+</NavLink>
+
+<NavLink href="/database-schemas"
+         class="block rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+         ActiveClass="bg-white/10"
+         @onclick="HandleNavigate">
+    <span class="mr-2">🗄️</span> Database Schemas
+</NavLink>
+
             <input class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                    placeholder="Search sections…"
                    @bind="_filter"

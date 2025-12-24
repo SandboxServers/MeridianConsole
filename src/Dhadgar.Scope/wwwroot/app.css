@@ -1,4 +1,13 @@
 /* Small, intentional baseline tweaks for readability */
+/* Ensure native form controls prefer dark UI where supported (Chrome/Edge/Safari). */
+:root { color-scheme: dark; }
+
+/* Reduce "flashbang" native <select> dropdown styling on Windows/Chromium */
+select, option {
+  background-color: rgb(15 23 42); /* slate-900 */
+  color: rgb(226 232 240);        /* slate-200 */
+}
+
 html, body {
   height: 100%;
 }

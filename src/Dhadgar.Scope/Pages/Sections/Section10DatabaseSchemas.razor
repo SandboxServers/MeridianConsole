@@ -1,0 +1,87 @@
+@using Dhadgar.Scope.Shared
+
+<section id="database-schemas" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
+    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
+        10. Database Schemas
+    </h2>
+
+    <div class="grid gap-6 lg:grid-cols-3">
+        <div class="lg:col-span-2 space-y-4">
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h3 class="text-xl font-semibold text-indigo-300">Interactive schema explorer</h3>
+                        <p class="mt-2 text-sm text-white/70">
+                            We model <span class="font-semibold text-white">schema-first</span> everywhere (e.g. <code class="rounded bg-black/30 px-1">identity.users</code>).
+                            That gives us a clean “switch” between:
+                            <span class="font-semibold text-white">SaaS (DB-per-service)</span> and
+                            <span class="font-semibold text-white">KiP (schemas in one DB)</span>.
+                        </p>
+                    </div>
+                    <a class="inline-flex items-center justify-center rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+                       href="/database-schemas">
+                        Open full-screen
+                    </a>
+                </div>
+
+                <div class="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+                    <DbSchemaGraphEmbed HeightClass="h-[52vh]" />
+                </div>
+
+                <div class="mt-4 flex flex-wrap gap-2 text-xs text-white/70">
+                    <span class="rounded-full bg-white/5 px-2 py-1">Tap a table for columns</span>
+                    <span class="rounded-full bg-white/5 px-2 py-1">Pinch / scroll to zoom</span>
+                    <span class="rounded-full bg-white/5 px-2 py-1">Service filter + search in full-screen</span>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+                <h3 class="text-lg font-semibold text-white">PostgreSQL-native upgrades we’re leaning on</h3>
+                <ul class="mt-3 list-disc space-y-2 pl-6 text-sm text-white/75">
+                    <li><span class="font-semibold text-white">UUID primary keys</span> via <code class="rounded bg-black/30 px-1">pgcrypto</code> (<code class="rounded bg-black/30 px-1">gen_random_uuid()</code>).</li>
+                    <li><span class="font-semibold text-white">Case-insensitive identifiers</span> for email/keys using <code class="rounded bg-black/30 px-1">citext</code>.</li>
+                    <li><span class="font-semibold text-white">JSONB + GIN indexes</span> for flexible per-game configuration and metadata.</li>
+                    <li><span class="font-semibold text-white">Partial indexes</span> for hot queries (e.g., active rows only).</li>
+                    <li><span class="font-semibold text-white">SKIP LOCKED</span> queue-claim patterns for workers.</li>
+                    <li><span class="font-semibold text-white">Optional RLS</span> for tenant isolation (defense-in-depth), without forcing it day one.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+                <h3 class="text-lg font-semibold text-white">SaaS vs KiP (database reality)</h3>
+                <div class="mt-3 space-y-3 text-sm text-white/75">
+                    <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <div class="font-semibold text-white">SaaS</div>
+                        <ul class="mt-2 list-disc pl-5 space-y-1">
+                            <li><span class="font-semibold">DB-per-service</span>, but still schema-first inside each DB.</li>
+                            <li>All platform DBs live on the <span class="font-semibold">Platform Postgres HA cluster</span>.</li>
+                            <li>Customer game-server DBs live on the <span class="font-semibold">User DB HA cluster</span> — <span class="font-semibold">or BYO DB server</span> if the customer wants.</li>
+                            <li>Meridian can provision/manage user DBs with only network/IAM access + endpoint info.</li>
+                        </ul>
+                    </div>
+
+                    <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <div class="font-semibold text-white">KiP</div>
+                        <ul class="mt-2 list-disc pl-5 space-y-1">
+                            <li><span class="font-semibold">One physical DB</span>, many schemas (<code class="rounded bg-black/30 px-1">identity.*</code>, <code class="rounded bg-black/30 px-1">servers.*</code>, …).</li>
+                            <li>Everything is <span class="font-semibold">BYO DB server</span>, but KiP still runs DB creation + migrations.</li>
+                            <li>BYO DB can be the same instance hosting KiP itself.</li>
+                            <li>Game servers control what happens inside their DB. We provide <span class="font-semibold">ping, power, air</span> (and optional backups).</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+                <h3 class="text-lg font-semibold text-white">EF Core mapping</h3>
+                <ul class="mt-3 list-disc space-y-2 pl-6 text-sm text-white/75">
+                    <li>Each service uses its own <span class="font-semibold">DbContext</span> and <span class="font-semibold">migrations</span>.</li>
+                    <li>Each service sets a <span class="font-semibold">default schema</span> (e.g. <code class="rounded bg-black/30 px-1">identity</code>).</li>
+                    <li>Cross-service IDs are stored as UUIDs with <span class="font-semibold">soft references</span> (no cross-DB foreign keys in SaaS).</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>

@@ -1,0 +1,913 @@
+{
+  "version": "v1",
+  "districts": [
+    {
+      "id": "edge",
+      "name": "Client Edge",
+      "center": {
+        "x": -520,
+        "y": -220
+      }
+    },
+    {
+      "id": "control",
+      "name": "Control Plane",
+      "center": {
+        "x": 0,
+        "y": -260
+      }
+    },
+    {
+      "id": "nodeplane",
+      "name": "Node Plane",
+      "center": {
+        "x": 520,
+        "y": -120
+      }
+    },
+    {
+      "id": "dataplane",
+      "name": "Data Services",
+      "center": {
+        "x": 0,
+        "y": 260
+      }
+    },
+    {
+      "id": "foundation",
+      "name": "Foundation",
+      "center": {
+        "x": -520,
+        "y": 220
+      }
+    },
+    {
+      "id": "external",
+      "name": "External Integrations",
+      "center": {
+        "x": 520,
+        "y": 260
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "client_browser",
+      "name": "Web Client (Browser)",
+      "district": "edge",
+      "kind": "client",
+      "emoji": "\ud83e\uddd1\u200d\ud83d\ude80",
+      "description": "User-facing UI: dashboards, provisioning, console sessions.",
+      "position": {
+        "x": -660,
+        "y": -300
+      },
+      "ports": [
+        "HTTPS 443",
+        "WSS 443"
+      ],
+      "endpoints": [
+        "/ui/*",
+        "/ws/console/*"
+      ],
+      "responsibilities": [
+        "Renders the UI",
+        "Initiates console sessions",
+        "Submits provisioning actions"
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "name": "Cloudflare (DNS / Edge)",
+      "district": "edge",
+      "kind": "external",
+      "emoji": "\u2601\ufe0f",
+      "description": "DNS + optional edge proxy. Automates records for nodes, agents, and cert flows.",
+      "position": {
+        "x": -430,
+        "y": -330
+      },
+      "ports": [
+        "DNS 53",
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "DNS zones",
+        "API token / scoped key"
+      ],
+      "responsibilities": [
+        "Public DNS hosting",
+        "Optional proxy/WAF",
+        "ACME DNS-01 support"
+      ]
+    },
+    {
+      "id": "gateway",
+      "name": "Gateway / Reverse Proxy (YARP)",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83d\udeaa",
+      "description": "Single entry-point to control-plane APIs. Authn/z, routing, rate limits, headers.",
+      "position": {
+        "x": -120,
+        "y": -350
+      },
+      "ports": [
+        "HTTPS 443",
+        "WSS 443"
+      ],
+      "endpoints": [
+        "/api/*",
+        "/ws/*"
+      ],
+      "responsibilities": [
+        "Routes requests to services",
+        "Terminates TLS",
+        "Standardizes auth + tracing"
+      ]
+    },
+    {
+      "id": "identity",
+      "name": "Identity Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83e\udeaa",
+      "description": "Auth, tenants, users, roles, API keys, sessions.",
+      "position": {
+        "x": 100,
+        "y": -360
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/identity/*"
+      ],
+      "responsibilities": [
+        "Users/tenants/roles",
+        "Token issuance + validation",
+        "API keys + sessions"
+      ]
+    },
+    {
+      "id": "billing",
+      "name": "Billing Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83d\udcb3",
+      "description": "Plans, subscriptions, usage/metering, invoicing, entitlements.",
+      "position": {
+        "x": 300,
+        "y": -330
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/billing/*"
+      ],
+      "responsibilities": [
+        "Subscriptions + entitlements",
+        "Invoicing",
+        "Usage/metering ingestion"
+      ]
+    },
+    {
+      "id": "servers",
+      "name": "Servers Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83e\udde9",
+      "description": "Game-server lifecycle: templates, instances, port allocations, backups.",
+      "position": {
+        "x": -20,
+        "y": -180
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/servers/*"
+      ],
+      "responsibilities": [
+        "Server provisioning",
+        "Instance state machine",
+        "Allocations + backups metadata"
+      ]
+    },
+    {
+      "id": "nodes",
+      "name": "Nodes Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83d\uddfa\ufe0f",
+      "description": "Capacity + inventory of agent hosts. Regions, pools, tags, health, placements.",
+      "position": {
+        "x": 180,
+        "y": -170
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/nodes/*"
+      ],
+      "responsibilities": [
+        "Node registry",
+        "Placement inputs (capacity, tags)",
+        "Health + agent association"
+      ]
+    },
+    {
+      "id": "tasks",
+      "name": "Tasks Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83e\udde0",
+      "description": "Orchestrated workflows (provisioning, backup, migrate, rotate certs).",
+      "position": {
+        "x": 380,
+        "y": -170
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/tasks/*"
+      ],
+      "responsibilities": [
+        "Workflow engine",
+        "Queues + retries",
+        "Long-running operations coordination"
+      ]
+    },
+    {
+      "id": "files",
+      "name": "Files Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83d\udce6",
+      "description": "Artifact registry + transfer orchestration (S3/Azure Blob compatible patterns).",
+      "position": {
+        "x": -160,
+        "y": -90
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/files/*"
+      ],
+      "responsibilities": [
+        "Manifests",
+        "Signed URLs / staged uploads",
+        "Transfer auditing"
+      ]
+    },
+    {
+      "id": "notifications",
+      "name": "Notifications Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83d\udd14",
+      "description": "Delivery: email, webhooks, Discord, in-app notifications.",
+      "position": {
+        "x": 40,
+        "y": -70
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/notify/*"
+      ],
+      "responsibilities": [
+        "Templated notifications",
+        "Delivery fan-out",
+        "Preference controls"
+      ]
+    },
+    {
+      "id": "firewall",
+      "name": "Firewall Service",
+      "district": "control",
+      "kind": "service",
+      "emoji": "\ud83d\udee1\ufe0f",
+      "description": "Rules + allowlists for nodes and game ports; integrates with edge and host agents.",
+      "position": {
+        "x": 240,
+        "y": -70
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "/api/firewall/*"
+      ],
+      "responsibilities": [
+        "Allow/deny policies",
+        "Per-tenant policies",
+        "Push rules to agents"
+      ]
+    },
+    {
+      "id": "agent_host",
+      "name": "Agent Host (Customer / Managed)",
+      "district": "nodeplane",
+      "kind": "agent",
+      "emoji": "\ud83d\udda5\ufe0f",
+      "description": "Linux/Windows host running Meridian Agent + Wings/containers and game processes.",
+      "position": {
+        "x": 520,
+        "y": -240
+      },
+      "ports": [
+        "WSS 443 (agent channel)",
+        "Game ports (UDP/TCP)"
+      ],
+      "endpoints": [
+        "Agent gRPC/WS endpoint",
+        "Node telemetry"
+      ],
+      "responsibilities": [
+        "Runs agent daemon",
+        "Executes workloads",
+        "Reports health and metrics"
+      ]
+    },
+    {
+      "id": "agent",
+      "name": "Meridian Agent",
+      "district": "nodeplane",
+      "kind": "agent",
+      "emoji": "\ud83d\udef0\ufe0f",
+      "description": "Control-plane endpoint on the host: receive commands, run containers, stream logs/console.",
+      "position": {
+        "x": 710,
+        "y": -180
+      },
+      "ports": [
+        "WSS 443",
+        "Local Docker/Podman socket"
+      ],
+      "endpoints": [
+        "/agent/ws",
+        "/agent/metrics"
+      ],
+      "responsibilities": [
+        "Secure command execution",
+        "Log + console streaming",
+        "Local lifecycle controls"
+      ]
+    },
+    {
+      "id": "gameserver",
+      "name": "Game Server Workload",
+      "district": "nodeplane",
+      "kind": "service",
+      "emoji": "\ud83c\udfae",
+      "description": "Customer game server process/container. Owns its database semantics.",
+      "position": {
+        "x": 640,
+        "y": -50
+      },
+      "ports": [
+        "UDP/TCP game ports"
+      ],
+      "endpoints": [
+        "Game-specific protocols"
+      ],
+      "responsibilities": [
+        "Runs gameplay logic",
+        "Writes/reads game DB",
+        "Produces logs/events"
+      ]
+    },
+    {
+      "id": "platform_pg",
+      "name": "Platform Postgres HA Cluster",
+      "district": "dataplane",
+      "kind": "db",
+      "emoji": "\ud83d\udc18",
+      "description": "Hosts all SaaS platform microservice databases (DB-per-service). HA node cluster.",
+      "position": {
+        "x": -120,
+        "y": 220
+      },
+      "ports": [
+        "Postgres 5432"
+      ],
+      "endpoints": [
+        "platform-pg:5432"
+      ],
+      "responsibilities": [
+        "Stores platform state",
+        "HA failover/replication",
+        "Backups + PITR"
+      ]
+    },
+    {
+      "id": "user_pg",
+      "name": "User Postgres HA Cluster",
+      "district": "dataplane",
+      "kind": "db",
+      "emoji": "\ud83d\udc18",
+      "description": "Hosts customer-provided game-server databases (managed cluster). HA node cluster.",
+      "position": {
+        "x": 160,
+        "y": 240
+      },
+      "ports": [
+        "Postgres 5432"
+      ],
+      "endpoints": [
+        "user-pg:5432"
+      ],
+      "responsibilities": [
+        "Managed user DB hosting",
+        "Backups (optional)",
+        "Isolated from platform DBs"
+      ]
+    },
+    {
+      "id": "byo_user_pg",
+      "name": "BYO User DB Server",
+      "district": "dataplane",
+      "kind": "db",
+      "emoji": "\ud83e\uddf3",
+      "description": "Customer-supplied DB server for their game-server databases (SaaS) or everything (KiP).",
+      "position": {
+        "x": 360,
+        "y": 270
+      },
+      "ports": [
+        "Postgres 5432"
+      ],
+      "endpoints": [
+        "customer-db:5432"
+      ],
+      "responsibilities": [
+        "Customer owns infra",
+        "Meridian provisions DBs via IAM/network access",
+        "May co-host KiP DB"
+      ]
+    },
+    {
+      "id": "rabbit",
+      "name": "RabbitMQ",
+      "district": "foundation",
+      "kind": "foundation",
+      "emoji": "\ud83d\udc07",
+      "description": "Async bus for workflows: fan-out events, retries, delayed tasks.",
+      "position": {
+        "x": -660,
+        "y": 140
+      },
+      "ports": [
+        "AMQP 5672",
+        "Mgmt 15672"
+      ],
+      "endpoints": [
+        "amqp://rabbitmq:5672"
+      ],
+      "responsibilities": [
+        "Work queues",
+        "Pub/Sub events",
+        "Delayed/retry patterns"
+      ]
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "district": "foundation",
+      "kind": "foundation",
+      "emoji": "\ud83e\udde0",
+      "description": "Caching, ephemeral coordination, rate limits, short-lived tokens.",
+      "position": {
+        "x": -500,
+        "y": 280
+      },
+      "ports": [
+        "Redis 6379"
+      ],
+      "endpoints": [
+        "redis://redis:6379"
+      ],
+      "responsibilities": [
+        "Cache",
+        "Short-lived state",
+        "Distributed locks (optional)"
+      ]
+    },
+    {
+      "id": "objectstore",
+      "name": "Object Storage (S3/Blob)",
+      "district": "external",
+      "kind": "external",
+      "emoji": "\ud83e\udea3",
+      "description": "Artifacts + backups: world files, images, configs. Could be Azure Blob or S3-compatible.",
+      "position": {
+        "x": 500,
+        "y": 380
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "blob/container",
+        "s3://bucket"
+      ],
+      "responsibilities": [
+        "Store large blobs",
+        "Signed upload/download",
+        "Versioning / retention"
+      ]
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "district": "external",
+      "kind": "external",
+      "emoji": "\ud83d\udcac",
+      "description": "Optional integration: notifications, provisioning alerts, support hooks.",
+      "position": {
+        "x": 720,
+        "y": 330
+      },
+      "ports": [
+        "HTTPS 443"
+      ],
+      "endpoints": [
+        "Discord Webhooks",
+        "Bot API"
+      ],
+      "responsibilities": [
+        "Deliver messages",
+        "Command hooks (optional)"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_client_dns",
+      "source": "client_browser",
+      "target": "cloudflare",
+      "kind": "DNS",
+      "label": "DNS lookup / record mgmt"
+    },
+    {
+      "id": "e_edge_gateway",
+      "source": "cloudflare",
+      "target": "gateway",
+      "kind": "HTTP",
+      "label": "HTTPS proxy"
+    },
+    {
+      "id": "e_client_gateway",
+      "source": "client_browser",
+      "target": "gateway",
+      "kind": "HTTP",
+      "label": "UI/API requests"
+    },
+    {
+      "id": "e_gateway_identity",
+      "source": "gateway",
+      "target": "identity",
+      "kind": "HTTP",
+      "label": "authn/z"
+    },
+    {
+      "id": "e_gateway_billing",
+      "source": "gateway",
+      "target": "billing",
+      "kind": "HTTP",
+      "label": "subscriptions"
+    },
+    {
+      "id": "e_gateway_servers",
+      "source": "gateway",
+      "target": "servers",
+      "kind": "HTTP",
+      "label": "server ops"
+    },
+    {
+      "id": "e_gateway_nodes",
+      "source": "gateway",
+      "target": "nodes",
+      "kind": "HTTP",
+      "label": "node ops"
+    },
+    {
+      "id": "e_gateway_tasks",
+      "source": "gateway",
+      "target": "tasks",
+      "kind": "HTTP",
+      "label": "workflows"
+    },
+    {
+      "id": "e_gateway_files",
+      "source": "gateway",
+      "target": "files",
+      "kind": "HTTP",
+      "label": "artifacts"
+    },
+    {
+      "id": "e_gateway_notify",
+      "source": "gateway",
+      "target": "notifications",
+      "kind": "HTTP",
+      "label": "notify"
+    },
+    {
+      "id": "e_gateway_firewall",
+      "source": "gateway",
+      "target": "firewall",
+      "kind": "HTTP",
+      "label": "rules"
+    },
+    {
+      "id": "e_servers_nodes",
+      "source": "servers",
+      "target": "nodes",
+      "kind": "HTTP",
+      "label": "placement inputs"
+    },
+    {
+      "id": "e_tasks_rabbit",
+      "source": "tasks",
+      "target": "rabbit",
+      "kind": "AMQP",
+      "label": "enqueue/subscribe"
+    },
+    {
+      "id": "e_files_rabbit",
+      "source": "files",
+      "target": "rabbit",
+      "kind": "AMQP",
+      "label": "transfer events"
+    },
+    {
+      "id": "e_notify_rabbit",
+      "source": "notifications",
+      "target": "rabbit",
+      "kind": "AMQP",
+      "label": "fan-out"
+    },
+    {
+      "id": "e_firewall_rabbit",
+      "source": "firewall",
+      "target": "rabbit",
+      "kind": "AMQP",
+      "label": "rule events"
+    },
+    {
+      "id": "e_servers_pg",
+      "source": "servers",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "servers DB"
+    },
+    {
+      "id": "e_nodes_pg",
+      "source": "nodes",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "nodes DB"
+    },
+    {
+      "id": "e_tasks_pg",
+      "source": "tasks",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "tasks DB"
+    },
+    {
+      "id": "e_files_pg",
+      "source": "files",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "files DB"
+    },
+    {
+      "id": "e_identity_pg",
+      "source": "identity",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "identity DB"
+    },
+    {
+      "id": "e_billing_pg",
+      "source": "billing",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "billing DB"
+    },
+    {
+      "id": "e_notify_pg",
+      "source": "notifications",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "notify DB"
+    },
+    {
+      "id": "e_firewall_pg",
+      "source": "firewall",
+      "target": "platform_pg",
+      "kind": "DB",
+      "label": "firewall DB"
+    },
+    {
+      "id": "e_agent_ws",
+      "source": "gateway",
+      "target": "agent",
+      "kind": "WSS",
+      "label": "agent control channel"
+    },
+    {
+      "id": "e_agent_host",
+      "source": "agent",
+      "target": "agent_host",
+      "kind": "OTHER",
+      "label": "local host exec"
+    },
+    {
+      "id": "e_agent_gameserver",
+      "source": "agent_host",
+      "target": "gameserver",
+      "kind": "OTHER",
+      "label": "run workload"
+    },
+    {
+      "id": "e_gameserver_userdb",
+      "source": "gameserver",
+      "target": "user_pg",
+      "kind": "DB",
+      "label": "managed user DB"
+    },
+    {
+      "id": "e_gameserver_byodb",
+      "source": "gameserver",
+      "target": "byo_user_pg",
+      "kind": "DB",
+      "label": "BYO user DB"
+    },
+    {
+      "id": "e_files_object",
+      "source": "files",
+      "target": "objectstore",
+      "kind": "OTHER",
+      "label": "signed blob ops"
+    },
+    {
+      "id": "e_notify_discord",
+      "source": "notifications",
+      "target": "discord",
+      "kind": "OTHER",
+      "label": "webhooks/bot"
+    }
+  ],
+  "tours": [
+    {
+      "id": "request_console",
+      "name": "Console session: user \u2192 live stream",
+      "steps": [
+        {
+          "title": "1) User hits the dashboard",
+          "body": "The browser loads the UI and calls the Gateway for data. Everything control-plane starts here.",
+          "focusNodes": [
+            "client_browser",
+            "gateway"
+          ],
+          "focusEdges": [
+            "e_client_gateway"
+          ]
+        },
+        {
+          "title": "2) Auth + tenant context",
+          "body": "Gateway validates tokens and asks Identity for user/tenant/role policy.",
+          "focusNodes": [
+            "gateway",
+            "identity",
+            "platform_pg"
+          ],
+          "focusEdges": [
+            "e_gateway_identity",
+            "e_identity_pg"
+          ]
+        },
+        {
+          "title": "3) Locate the instance",
+          "body": "Server operations flow through Servers Service, which consults Nodes for placement and live health.",
+          "focusNodes": [
+            "gateway",
+            "servers",
+            "nodes"
+          ],
+          "focusEdges": [
+            "e_gateway_servers",
+            "e_servers_nodes",
+            "e_gateway_nodes"
+          ]
+        },
+        {
+          "title": "4) Establish a live channel",
+          "body": "Gateway upgrades to WebSocket and bridges to the Agent\u2019s secure control channel.",
+          "focusNodes": [
+            "gateway",
+            "agent",
+            "agent_host"
+          ],
+          "focusEdges": [
+            "e_agent_ws",
+            "e_agent_host"
+          ]
+        },
+        {
+          "title": "5) Stream output from the workload",
+          "body": "Agent fans in logs/console stream from the host and returns it to the UI over WSS.",
+          "focusNodes": [
+            "agent_host",
+            "gameserver",
+            "agent",
+            "client_browser"
+          ],
+          "focusEdges": [
+            "e_agent_gameserver"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "saas_user_db_provision",
+      "name": "SaaS: provision a customer game DB (managed or BYO)",
+      "steps": [
+        {
+          "title": "1) A workflow is created",
+          "body": "A provisioning action starts a Tasks workflow and is enqueued via RabbitMQ for workers.",
+          "focusNodes": [
+            "tasks",
+            "rabbit"
+          ],
+          "focusEdges": [
+            "e_tasks_rabbit",
+            "e_tasks_pg"
+          ]
+        },
+        {
+          "title": "2) Choose the user DB target",
+          "body": "SaaS can place customer game databases on the managed User DB cluster or a BYO DB server, as long as we have IAM + network reachability.",
+          "focusNodes": [
+            "user_pg",
+            "byo_user_pg",
+            "tasks"
+          ],
+          "focusEdges": []
+        },
+        {
+          "title": "3) Workload writes the schema",
+          "body": "Gameservers own their internal schema. Meridian provisions the DB and may be kind enough to back it up.",
+          "focusNodes": [
+            "gameserver",
+            "user_pg",
+            "byo_user_pg"
+          ],
+          "focusEdges": [
+            "e_gameserver_userdb",
+            "e_gameserver_byodb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kip_single_db",
+      "name": "KiP: everything in one DB, schema-first",
+      "steps": [
+        {
+          "title": "1) One physical DB server",
+          "body": "KiP runs all service schemas together on a single DB server (often BYO).",
+          "focusNodes": [
+            "byo_user_pg"
+          ],
+          "focusEdges": []
+        },
+        {
+          "title": "2) Schemas act like \u201cvirtual DBs\u201d",
+          "body": "Each microservice still uses a default schema (identity.*, servers.*, \u2026) \u2014 same EF model, different physical topology.",
+          "focusNodes": [
+            "identity",
+            "servers",
+            "nodes",
+            "tasks",
+            "byo_user_pg"
+          ],
+          "focusEdges": [
+            "e_identity_pg",
+            "e_servers_pg",
+            "e_nodes_pg",
+            "e_tasks_pg"
+          ]
+        }
+      ]
+    }
+  ]
+}

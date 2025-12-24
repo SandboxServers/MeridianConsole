@@ -17,5 +17,8 @@ builder.Services.AddScoped(_ => new HttpClient
 
 builder.Services.AddScoped<ScopeContentService>();
 builder.Services.AddScoped<DependencyGraphService>();
+builder.Services.AddScoped<ArchitectureGraphService>();
+builder.Services.AddScoped<DbSchemaCatalogService>();
+builder.Services.AddScoped<CommMatrixService>();
 
 await builder.Build().RunAsync();
