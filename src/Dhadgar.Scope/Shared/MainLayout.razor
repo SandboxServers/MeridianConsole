@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IJSRuntime JS
 
 <div class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-black text-white">
     <div class="mx-auto w-full px-4 py-6 2xl:px-8">
@@ -11,6 +12,7 @@
 
             <button class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
                     @onclick="ToggleSidebar"
+                    aria-expanded="@_sidebarOpen"
                     aria-label="Open menu">
                 ☰
             </button>
@@ -24,7 +26,7 @@
                 </div>
             </aside>
 
-            <main class="min-w-0 flex-1">
+            <main class="min-w-0 flex-1 scope-content">
                 @Body
             </main>
         </div>
@@ -32,11 +34,13 @@
 
     <!-- Mobile drawer sidebar -->
     <div class="@($"fixed inset-0 z-50 lg:hidden {( _sidebarOpen ? "" : "pointer-events-none" )}")">
-        <div class="@($"absolute inset-0 bg-black/60 transition-opacity duration-200 {( _sidebarOpen ? "opacity-100" : "opacity-0" )}")"
+        <div class="@($"absolute inset-0 bg-black/60 touch-none transition-opacity duration-200 {( _sidebarOpen ? "opacity-100" : "opacity-0" )}")"
              @onclick="CloseSidebar"></div>
 
-        <aside class="@($"absolute left-0 top-0 h-full w-80 max-w-[85vw] overflow-y-auto border-r border-white/10 bg-slate-950/90 p-4 shadow-2xl backdrop-blur transition-transform duration-200 {( _sidebarOpen ? "translate-x-0" : "-translate-x-full" )}")">
-            <div class="flex items-center justify-between">
+        <aside class="@($"absolute inset-y-0 left-0 z-50 flex h-full w-[min(92vw,380px)] flex-col border-r border-white/10 bg-slate-950/95 p-4 backdrop-blur-xl shadow-2xl transition-transform duration-200 {( _sidebarOpen ? "translate-x-0" : "-translate-x-full" )}")"
+               role="dialog"
+               aria-modal="true">
+            <div class="flex items-center justify-between pt-[env(safe-area-inset-top)]">
                 <div class="text-sm text-white/60">Menu</div>
                 <button class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
                         @onclick="CloseSidebar"
@@ -45,7 +49,7 @@
                 </button>
             </div>
 
-            <div class="mt-4">
+            <div class="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] pr-1">
                 <ScopeSidebar OnNavigate="CloseSidebar" />
             </div>
         </aside>
@@ -55,10 +59,18 @@
 @code {
     private bool _sidebarOpen;
 
-    private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
-    private Task CloseSidebar()
+    private async Task ToggleSidebar()
     {
+        _sidebarOpen = !_sidebarOpen;
+        await JS.InvokeVoidAsync("scopeUi.setScrollLock", _sidebarOpen);
+    }
+
+    private async Task CloseSidebar()
+    {
+        if (!_sidebarOpen)
+            return;
+
         _sidebarOpen = false;
-        return Task.CompletedTask;
+        await JS.InvokeVoidAsync("scopeUi.setScrollLock", false);
     }
 }

@@ -125,3 +125,47 @@ button, a {
   padding: 1rem;
   margin: 0.9rem 0 1.1rem;
 }
+
+
+/* --- Mobile ergonomics + overflow handling (phones/tablets) --- */
+
+/* Make long URLs and identifiers behave on narrow screens */
+.scope-content a,
+.scope-content code,
+.scope-content pre {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Pre/code blocks should never blow out the layout */
+.scope-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tables: allow horizontal scroll on small screens (service matrices, etc.) */
+@media (max-width: 768px) {
+  .scope-content table,
+  .scope-table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scope-content th,
+  .scope-content td,
+  .scope-table th,
+  .scope-table td {
+    white-space: nowrap;
+  }
+}
+
+/* Respect iOS safe areas */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
