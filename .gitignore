@@ -1,0 +1,27 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.csproj.user
+
+# Logs
+*.log
+
+# Env
+.env
+**/.env
+
+# Local dev
+**/appsettings.Development.json

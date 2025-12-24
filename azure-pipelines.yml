@@ -1,0 +1,125 @@
+trigger:
+  branches:
+    include: [ main, develop ]
+
+pr:
+  branches:
+    include: [ main, develop, feature/* ]
+
+parameters:
+  - name: configuration
+    type: string
+    default: Release
+    values: [ Debug, Release ]
+
+  - name: runTests
+    type: boolean
+    default: true
+
+  - name: collectCoverage
+    type: boolean
+    default: true
+
+  - name: testFilter
+    type: string
+    default: ""
+
+  # Multi-select. Default selects ALL projects.
+  # NOTE: stringList can't be declared inside templates, only at the root pipeline.
+  - name: projects
+    type: stringList
+    displayName: Projects to build
+    values:
+      - Dhadgar.Agent.Core
+      - Dhadgar.Agent.Linux
+      - Dhadgar.Agent.Windows
+      - Dhadgar.Billing
+      - Dhadgar.Cli
+      - Dhadgar.Console
+      - Dhadgar.Contracts
+      - Dhadgar.Discord
+      - Dhadgar.Files
+      - Dhadgar.Firewall
+      - Dhadgar.Gateway
+      - Dhadgar.Identity
+      - Dhadgar.Messaging
+      - Dhadgar.Mods
+      - Dhadgar.Nodes
+      - Dhadgar.Notifications
+      - Dhadgar.Scope
+      - Dhadgar.Secrets
+      - Dhadgar.Servers
+      - Dhadgar.ServiceDefaults
+      - Dhadgar.Shared
+      - Dhadgar.Tasks
+      - Dhadgar.Web
+    default:
+      - Dhadgar.Agent.Core
+      - Dhadgar.Agent.Linux
+      - Dhadgar.Agent.Windows
+      - Dhadgar.Billing
+      - Dhadgar.Cli
+      - Dhadgar.Console
+      - Dhadgar.Contracts
+      - Dhadgar.Discord
+      - Dhadgar.Files
+      - Dhadgar.Firewall
+      - Dhadgar.Gateway
+      - Dhadgar.Identity
+      - Dhadgar.Messaging
+      - Dhadgar.Mods
+      - Dhadgar.Nodes
+      - Dhadgar.Notifications
+      - Dhadgar.Scope
+      - Dhadgar.Secrets
+      - Dhadgar.Servers
+      - Dhadgar.ServiceDefaults
+      - Dhadgar.Shared
+      - Dhadgar.Tasks
+      - Dhadgar.Web
+
+  - name: prPoolName
+    type: string
+    default: Azure Pipelines
+
+  - name: ciPoolName
+    type: string
+    default: Azure Pipelines
+
+  - name: vmImage
+    type: string
+    default: ubuntu-latest
+
+  - name: artifactPrefix
+    type: string
+    default: ci
+
+resources:
+  repositories:
+    - repository: pipelinePatterns
+      type: git
+      name: YourProject/shared-yaml
+      ref: refs/heads/main
+
+variables:
+  poolToUse: ${{ iif(eq(variables['Build.Reason'], 'PullRequest'), parameters.prPoolName, parameters.ciPoolName) }}
+
+  # If you're on a self-hosted pool, set ciPoolName to that pool name and set vmImage to '' (empty).
+  vmImageToUse: ${{ iif(eq(variables['Build.Reason'], 'PullRequest'), parameters.vmImage,
+                    iif(eq(parameters.ciPoolName, 'Azure Pipelines'), parameters.vmImage, '')) }}
+
+extends:
+  template: Dhadgar.CI/Pipeline/Pipeline.yml@pipelinePatterns
+  parameters:
+    poolName: ${{ variables.poolToUse }}
+    vmImage: ${{ variables.vmImageToUse }}
+
+    configuration: ${{ parameters.configuration }}
+    runTests: ${{ parameters.runTests }}
+    collectCoverage: ${{ parameters.collectCoverage }}
+    testFilter: ${{ trim(parameters.testFilter) }}
+
+    artifactPrefix: ${{ trim(parameters.artifactPrefix) }}
+
+    # stringList flows into templates as object
+    projects: ${{ parameters.projects }}

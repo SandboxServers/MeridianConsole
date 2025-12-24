@@ -1,0 +1,11 @@
+    <Project Sdk="Microsoft.NET.Sdk">
+      <PropertyGroup>
+        <AssemblyName>Dhadgar.Messaging</AssemblyName>
+        <RootNamespace>Dhadgar.Messaging</RootNamespace>
+      </PropertyGroup>
+      <ItemGroup>
+  <PackageReference Include="MassTransit" />
+  <PackageReference Include="MassTransit.RabbitMQ" />
+</ItemGroup>
+
+    </Project>

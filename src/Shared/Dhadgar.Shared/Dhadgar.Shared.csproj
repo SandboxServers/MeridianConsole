@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Dhadgar.Shared</AssemblyName>
+    <RootNamespace>Dhadgar.Shared</RootNamespace>
+  </PropertyGroup>
+
+</Project>

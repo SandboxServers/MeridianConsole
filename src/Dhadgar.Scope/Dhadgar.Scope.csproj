@@ -1,0 +1,14 @@
+  <Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+      <AssemblyName>Dhadgar.Scope</AssemblyName>
+      <RootNamespace>Dhadgar.Scope</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+  <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+</ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+</Project>
+

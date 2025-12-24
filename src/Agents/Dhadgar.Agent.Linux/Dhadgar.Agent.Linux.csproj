@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Dhadgar.Agent.Linux</AssemblyName>
+    <RootNamespace>Dhadgar.Agent.Linux</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+    <ProjectReference Include="..\..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+  </ItemGroup>
+</Project>
