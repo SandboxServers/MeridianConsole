@@ -1,8 +1,5 @@
 @page "/database-schemas"
-@implements IAsyncDisposable
-@using Microsoft.JSInterop
 @inject Dhadgar.Scope.Services.DbSchemaCatalogService CatalogService
-@inject IJSRuntime JS
 
 <PageTitle>Database Schemas</PageTitle>
 
@@ -22,18 +19,13 @@
                 <input class="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                        placeholder="Try: identity.users, servers.game_servers…"
                        @bind="Query"
-                       @bind:event="oninput" @bind:after="OnQueryChanged" />
+                       @bind:event="oninput" />
             </div>
         </div>
 
         <div class="mt-5 grid gap-4 lg:grid-cols-3">
             <div class="space-y-3 lg:col-span-2">
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="flex items-center gap-2">
-                        <button class='@ViewClass("list")' @onclick='() => SetView("list")'>Tree</button>
-                        <button class='@ViewClass("map")' @onclick='() => SetView("map")'>Map</button>
-                    </div>
-
                     <div class="flex-1 min-w-[12rem]">
                         <label class="block text-xs font-semibold tracking-wide text-white/60">Service</label>
                         <select class="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
@@ -48,82 +40,52 @@
                             }
                         </select>
                     </div>
+                </div>
 
-                    @if (_viewMode == "map")
+                <div class="rounded-2xl border border-white/10 bg-black/20 p-4 h-[70vh] md:h-[72vh] lg:h-[75vh] overflow-auto">
+                    @if (_catalog is null)
                     {
-                        <div class="flex items-end gap-2">
-                            <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                                    @onclick="FitAsync">Fit</button>
-                            <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                                    @onclick="ResetAsync">Reset</button>
-                        </div>
+                        <div class="text-sm text-white/70">Loading…</div>
+                    }
+                    else
+                    {
+                        @foreach (var group in TreeGroups)
+                        {
+                            <details class="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                                <summary class="cursor-pointer text-sm font-semibold text-white/80">
+                                    @group.ServiceName
+                                    <span class="ml-2 text-xs text-white/50">(@group.Schema)</span>
+                                </summary>
+                                <div class="mt-3 space-y-3">
+                                    @foreach (var kindGroup in group.Kinds)
+                                    {
+                                        <details class="rounded-xl border border-white/10 bg-black/30 p-3">
+                                            <summary class="cursor-pointer text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                                @kindGroup.Kind (@kindGroup.Items.Count)
+                                            </summary>
+                                            <div class="mt-2 space-y-2">
+                                                @foreach (var item in kindGroup.Items)
+                                                {
+                                                    <button class="w-full text-left rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/85 hover:bg-white/10"
+                                                            @onclick="() => SelectItem(item)">
+                                                        <div class="font-semibold">@item.Id</div>
+                                                        @if (item.Details?.Count > 0)
+                                                        {
+                                                            <div class="mt-1 text-xs text-white/60 line-clamp-2">@item.Details.First()</div>
+                                                        }
+                                                    </button>
+                                                }
+                                            </div>
+                                        </details>
+                                    }
+                                </div>
+                            </details>
+                        }
                     }
                 </div>
 
-                @if (_viewMode == "map")
-                {
-                    <div class="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div class="flex items-center justify-between gap-3 px-2 pb-2">
-                            <div class="text-xs text-white/70">Explode schemas</div>
-                            <div class="text-xs text-white/60">@Explode%</div>
-                        </div>
-                        <input type="range" min="0" max="100" step="1" class="w-full accent-indigo-500"
-                               value="@Explode" @oninput="OnExplodeChanged" />
-                    </div>
-
-                    <div class="@GraphPanelExtraClass rounded-2xl border border-white/10 bg-black/20 overflow-hidden h-[70vh] md:h-[72vh] lg:h-[75vh]"
-                         @ref="_graphHost">
-                    </div>
-                }
-                else
-                {
-                    <div class="rounded-2xl border border-white/10 bg-black/20 p-4 h-[70vh] md:h-[72vh] lg:h-[75vh] overflow-auto">
-                        @if (_catalog is null)
-                        {
-                            <div class="text-sm text-white/70">Loading…</div>
-                        }
-                        else
-                        {
-                            @foreach (var group in TreeGroups)
-                            {
-                                <details class="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
-                                    <summary class="cursor-pointer text-sm font-semibold text-white/80">
-                                        @group.ServiceName
-                                        <span class="ml-2 text-xs text-white/50">(@group.Schema)</span>
-                                    </summary>
-                                    <div class="mt-3 space-y-3">
-                                        @foreach (var kindGroup in group.Kinds)
-                                        {
-                                            <details class="rounded-xl border border-white/10 bg-black/30 p-3">
-                                                <summary class="cursor-pointer text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                                    @kindGroup.Kind (@kindGroup.Items.Count)
-                                                </summary>
-                                                <div class="mt-2 space-y-2">
-                                                    @foreach (var item in kindGroup.Items)
-                                                    {
-                                                        <button class="w-full text-left rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/85 hover:bg-white/10"
-                                                                @onclick="() => SelectItem(item)">
-                                                            <div class="font-semibold">@item.Id</div>
-                                                            @if (item.Details?.Count > 0)
-                                                            {
-                                                                <div class="mt-1 text-xs text-white/60 line-clamp-2">@item.Details.First()</div>
-                                                            }
-                                                        </button>
-                                                    }
-                                                </div>
-                                            </details>
-                                        }
-                                    </div>
-                                </details>
-                            }
-                        }
-                    </div>
-                }
-                
-
                 <!-- Mobile tabs -->
                 <div class="mt-3 flex md:hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
-                    <button class='@TabClass("graph")' @onclick='() => SetMobileView("graph")'>Graph</button>
                     <button class='@TabClass("details")' @onclick='() => SetMobileView("details")'>Details</button>
                 </div>
             </div>
@@ -135,7 +97,7 @@
                         @if (_selected is not null)
                         {
                             <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                                    @onclick="ClearSelectionAsync">Clear</button>
+                                    @onclick="ClearSelection">Clear</button>
                         }
                     </div>
 
@@ -177,70 +139,23 @@
 </div>
 
 @code {
-    private ElementReference _graphHost;
-    private IJSObjectReference? _module;
-    private DotNetObjectReference<DatabaseSchemas>? _dotnetRef;
-    private bool _pendingMapInit;
-    private bool _initialized;
-
     private Dhadgar.Scope.Services.DbSchemaCatalog? _catalog;
     private Dhadgar.Scope.Services.DbSchemaItem? _selected;
 
     private string Query { get; set; } = string.Empty;
     private string ServiceKey { get; set; } = string.Empty;
-    private int Explode { get; set; } = 25;
 
-    private string _mobileView = "graph";
-    private string GraphPanelExtraClass => _mobileView == "graph" ? "" : "hidden md:block";
+    private string _mobileView = "details";
     private string DetailsPanelExtraClass => _mobileView == "details" ? "" : "hidden md:block";
-    private string _viewMode = "list";
 
     protected override async Task OnInitializedAsync()
     {
         _catalog = await CatalogService.GetAsync();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_pendingMapInit || _viewMode != "map") return;
-        if (_initialized) return;
-        if (_catalog is null) return;
-
-        _dotnetRef = DotNetObjectReference.Create(this);
-        _module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/dbSchemaGraph.module.js");
-        await _module.InvokeVoidAsync("init", _graphHost, _catalog,
-            new { mode = "full", selectable = true, dotNetRef = _dotnetRef });
-        await _module.InvokeVoidAsync("fit", _graphHost);
-        _initialized = true;
-        _pendingMapInit = false;
-        await ApplyStateAsync();
-    }
-
-    private async Task OnQueryChanged()
-    {
-        await ApplyStateAsync();
-    }
-
     private async Task OnServiceChanged()
     {
-        await ApplyStateAsync();
-    }
-
-    private async Task OnExplodeChanged(ChangeEventArgs args)
-    {
-        if (int.TryParse(args.Value?.ToString(), out var value))
-        {
-            Explode = value;
-        }
-        await ApplyStateAsync();
-    }
-
-    private async Task ApplyStateAsync()
-    {
-        if (_module is null) return;
-        await _module.InvokeVoidAsync("setExplode", _graphHost, Explode);
-        await _module.InvokeVoidAsync("setServiceFilter", _graphHost, ServiceKey ?? string.Empty);
-        await _module.InvokeVoidAsync("search", _graphHost, Query ?? string.Empty);
+        await Task.CompletedTask;
     }
 
     private string TabClass(string v)
@@ -248,61 +163,9 @@
 
     private void SetMobileView(string v) => _mobileView = v;
 
-    private string ViewClass(string v)
-        => $"rounded-xl px-3 py-2 text-xs font-semibold {( _viewMode == v ? "bg-indigo-500 text-white" : "bg-white/5 text-white/80 hover:bg-white/10" )}";
-
-    private void SetView(string v)
-    {
-        _viewMode = v;
-        if (_viewMode == "map" && !_initialized)
-        {
-            _pendingMapInit = true;
-        }
-    }
-
-    private async Task FitAsync()
-    {
-        if (_module is null) return;
-        await _module.InvokeVoidAsync("fit", _graphHost);
-    }
-
-    private async Task ResetAsync()
-    {
-        Query = string.Empty;
-        ServiceKey = string.Empty;
-        Explode = 25;
-        _selected = null;
-
-        if (_module is not null)
-            await _module.InvokeVoidAsync("reset", _graphHost);
-        await ApplyStateAsync();
-    }
-
-    private async Task ClearSelectionAsync()
+    private void ClearSelection()
     {
         _selected = null;
-        if (_module is not null)
-            await _module.InvokeVoidAsync("clearSelection", _graphHost);
-    }
-
-    [JSInvokable]
-    public Task OnItemSelected(string itemId)
-    {
-        if (_catalog is null) return Task.CompletedTask;
-
-        foreach (var s in _catalog.Services)
-        {
-            var found = s.Items.FirstOrDefault(i => i.Id == itemId);
-            if (found is not null)
-            {
-                _selected = found;
-                _mobileView = "details";
-                break;
-            }
-        }
-
-        StateHasChanged();
-        return Task.CompletedTask;
     }
 
     private void SelectItem(Dhadgar.Scope.Services.DbSchemaItem item)
@@ -360,18 +223,4 @@
         }
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        try
-        {
-            if (_module is not null)
-            {
-                await _module.InvokeVoidAsync("dispose", _graphHost);
-                await _module.DisposeAsync();
-            }
-        }
-        catch { /* ignore */ }
-
-        _dotnetRef?.Dispose();
-    }
 }
