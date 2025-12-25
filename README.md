@@ -300,42 +300,14 @@ dotnet ef database update \
 
 ```
 MeridianConsole/
-  Dhadgar.sln
-  src/
-    Shared/
-      Dhadgar.Shared
-      Dhadgar.Contracts
-      Dhadgar.Messaging
-      Dhadgar.ServiceDefaults
-    Agents/
-      Dhadgar.Agent.Core
-      Dhadgar.Agent.Linux
-      Dhadgar.Agent.Windows
-    Dhadgar.Gateway
-    Dhadgar.Identity
-    Dhadgar.Billing
-    Dhadgar.Servers
-    Dhadgar.Nodes
-    Dhadgar.Tasks
-    Dhadgar.Files
-    Dhadgar.Console
-    Dhadgar.Mods
-    Dhadgar.Notifications
-    Dhadgar.Firewall
-    Dhadgar.Secrets
-    Dhadgar.Discord
-    Dhadgar.Web
-    Dhadgar.Scope
-    Dhadgar.Cli
-  tests/
-    <One test project per project>
-  deploy/
-    compose/
-      docker-compose.dev.yml
-  docs/
-    architecture/
-    runbooks/
-    kip/
+  Dhadgar.sln        # Main .NET solution entry point.
+  global.json        # SDK pinning and toolchain versioning.
+  src/               # Core application code and shared libraries.
+    Shared/          # Cross-cutting contracts, messaging, and defaults.
+    Agents/          # Agent implementations and platform-specific runtimes.
+  tests/             # Automated tests organized by feature area.
+  deploy/            # Deployment templates and infrastructure scaffolding.
+  docs/              # Public-facing documentation and architectural overviews.
 ```
 
 ---
