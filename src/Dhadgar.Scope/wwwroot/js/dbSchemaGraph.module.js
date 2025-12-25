@@ -171,6 +171,27 @@ function _styles() {
   ];
 }
 
+function _applyResponsiveSchemaStyle(cy) {
+  const host = cy?.container?.();
+  if (!host) return;
+  const hostW = Math.max(1, host.clientWidth ?? 1);
+  const scale = Math.max(0.5, Math.min(1, hostW / 1200));
+  const padW = Math.round(560 * scale);
+  const padH = Math.round(360 * scale);
+  const fontSize = Math.round(12 * scale);
+
+  cy.style()
+    .selector("node[isSchema]")
+    .style({
+      "width": padW,
+      "height": padH,
+      "font-size": fontSize,
+      "text-margin-x": Math.round(14 * scale),
+      "text-margin-y": Math.round(12 * scale)
+    })
+    .update();
+}
+
 function _buildElements(data) {
   const elements = [];
 
@@ -236,10 +257,15 @@ function _computeLayout(state, explodePct) {
   const cy = state.cy;
   const schemas = state.schemas;
 
+  const host = cy.container?.();
+  const hostW = Math.max(1, host?.clientWidth ?? 1);
+  const hostH = Math.max(1, host?.clientHeight ?? 1);
+  const baseScale = Math.max(0.5, Math.min(1, hostW / 1200));
+
   // Grid of schema pads across the canvas
   const columns = Math.max(1, Math.round(Math.sqrt(schemas.length)));
-  const padW = 780;
-  const padH = 520;
+  const padW = Math.round(780 * baseScale);
+  const padH = Math.round(520 * baseScale);
 
   const centers = new Map();
   for (let i = 0; i < schemas.length; i++) {
@@ -266,14 +292,14 @@ function _computeLayout(state, explodePct) {
     perSchema.get(schema).push(it);
   }
 
-  const scale = 1 + (explode * 1.6);
+  const scale = (1 + (explode * 1.6)) * baseScale;
 
   cy.batch(() => {
     for (const [schema, items] of perSchema.entries()) {
       const center = centers.get(schema) ?? { x: 0, y: 0 };
       const innerCols = Math.max(2, Math.ceil(Math.sqrt(items.length)));
-      const cellX = 170;
-      const cellY = 95;
+      const cellX = 170 * baseScale;
+      const cellY = 95 * baseScale;
 
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
@@ -398,6 +424,8 @@ export function init(hostElement, data, options) {
     boxSelectionEnabled: false,
     selectionType: "single"
   });
+
+  _applyResponsiveSchemaStyle(cy);
 
   const state = {
     cy,

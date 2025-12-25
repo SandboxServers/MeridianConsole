@@ -77,7 +77,7 @@ function _renderFallback(host, message) {
   } catch {}
 }
 
-function _buildElements(data) {
+function _buildElements(data, transform) {
   const districts = data.districts ?? [];
   const nodes = data.nodes ?? [];
   const edges = data.edges ?? [];
@@ -93,7 +93,7 @@ function _buildElements(data) {
         districtId: d.id,
         isDistrict: true
       },
-      position: { x: d.center?.x ?? 0, y: d.center?.y ?? 0 }
+      position: transform(d.center?.x ?? 0, d.center?.y ?? 0)
     });
   }
 
@@ -109,7 +109,7 @@ function _buildElements(data) {
         endpoints: n.endpoints ?? [],
         responsibilities: n.responsibilities ?? []
       },
-      position: { x: n.position?.x ?? 0, y: n.position?.y ?? 0 }
+      position: transform(n.position?.x ?? 0, n.position?.y ?? 0)
     });
   }
 
@@ -127,6 +127,68 @@ function _buildElements(data) {
   }
 
   return elements;
+}
+
+function _computeTransform(host, data) {
+  const districts = data.districts ?? [];
+  const nodes = data.nodes ?? [];
+  const points = [];
+
+  for (const d of districts) {
+    if (!d?.center) continue;
+    points.push({ x: d.center.x ?? 0, y: d.center.y ?? 0 });
+  }
+  for (const n of nodes) {
+    if (!n?.position) continue;
+    points.push({ x: n.position.x ?? 0, y: n.position.y ?? 0 });
+  }
+
+  if (!points.length || !host) {
+    return (x, y) => ({ x, y });
+  }
+
+  const minX = Math.min(...points.map(p => p.x));
+  const minY = Math.min(...points.map(p => p.y));
+  const maxX = Math.max(...points.map(p => p.x));
+  const maxY = Math.max(...points.map(p => p.y));
+
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+
+  const hostW = Math.max(1, host.clientWidth ?? 1);
+  const hostH = Math.max(1, host.clientHeight ?? 1);
+  const targetW = hostW * 0.86;
+  const targetH = hostH * 0.86;
+
+  const scale = Math.min(targetW / width, targetH / height, 1);
+  const offsetX = (hostW - width * scale) / 2;
+  const offsetY = (hostH - height * scale) / 2;
+
+  return (x, y) => ({
+    x: ((x - minX) * scale) + offsetX,
+    y: ((y - minY) * scale) + offsetY
+  });
+}
+
+function _applyResponsiveDistrictStyle(cy) {
+  const host = cy?.container?.();
+  if (!host) return;
+  const hostW = Math.max(1, host.clientWidth ?? 1);
+  const scale = Math.max(0.6, Math.min(1, hostW / 1200));
+  const padW = Math.round(520 * scale);
+  const padH = Math.round(320 * scale);
+  const fontSize = Math.round(12 * scale);
+
+  cy.style()
+    .selector('node[isDistrict]')
+    .style({
+      "width": padW,
+      "height": padH,
+      "font-size": fontSize,
+      "text-margin-x": Math.round(14 * scale),
+      "text-margin-y": Math.round(12 * scale)
+    })
+    .update();
 }
 
 function _styles() {
@@ -358,7 +420,8 @@ export function init(hostElement, data, options) {
   // Dispose if already attached
   dispose(host);
 
-  const elements = _buildElements(data);
+  const transform = _computeTransform(host, data);
+  const elements = _buildElements(data, transform);
 
   const cy = cytoscape({
     container: host,
@@ -382,6 +445,8 @@ export function init(hostElement, data, options) {
     n.grabify(false);
   });
 
+  _applyResponsiveDistrictStyle(cy);
+
   const state = {
     cy,
     data,
@@ -394,11 +459,12 @@ export function init(hostElement, data, options) {
   // Capture base positions & district centers
   for (const n of (data.nodes ?? [])) {
     if (!n?.id) continue;
-    const pos = n.position ?? { x: 0, y: 0 };
+    const pos = transform(n.position?.x ?? 0, n.position?.y ?? 0);
     state.basePositions.set(n.id, { x: pos.x ?? 0, y: pos.y ?? 0 });
   }
   for (const d of (data.districts ?? [])) {
-    state.districtCenters.set(d.id, { x: d.center?.x ?? 0, y: d.center?.y ?? 0 });
+    const pos = transform(d.center?.x ?? 0, d.center?.y ?? 0);
+    state.districtCenters.set(d.id, { x: pos.x ?? 0, y: pos.y ?? 0 });
   }
 
   const dotNetRef = state.options?.dotNetRef;
