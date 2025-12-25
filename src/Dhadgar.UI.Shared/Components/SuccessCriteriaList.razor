@@ -1,0 +1,17 @@
+@using MudBlazor
+
+@if (Criteria?.Count > 0)
+{
+    <MudList T="string" Dense="true">
+        @foreach (var item in Criteria)
+        {
+            <MudListItem T="string">
+                <MudText Typo="Typo.caption">✅ @item</MudText>
+            </MudListItem>
+        }
+    </MudList>
+}
+
+@code {
+    [Parameter] public List<string> Criteria { get; set; } = new();
+}

@@ -1,0 +1,25 @@
+@using MudBlazor
+@using Dhadgar.UI.Shared.Models
+
+<MudCard Outlined="true" Class="feature-card">
+    <MudCardContent>
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4">@Data.Icon</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Primary">@Data.Title</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@Data.Description</MudText>
+            @if (Data.Tags?.Count > 0)
+            {
+                <MudStack Direction="Row" Spacing="1" Wrap="Wrap.Wrap">
+                    @foreach (var tag in Data.Tags)
+                    {
+                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">@tag</MudChip>
+                    }
+                </MudStack>
+            }
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public FeatureCardData Data { get; set; } = new();
+}

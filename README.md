@@ -116,7 +116,7 @@ At a high level:
 | Discord | `src/Dhadgar.Discord` | Discord integration services |
 | Panel UI | `src/Dhadgar.Panel` | Blazor Web UI (WASM) for the main panel |
 | Shopping Cart | `src/Dhadgar.ShoppingCart` | SWA marketing + checkout site with /api functions |
-| Scope | `src/Dhadgar.Scope` | Static host for the scope/doc HTML |
+| Scope | `src/Dhadgar.Scope.Client` | Blazor WebAssembly scope documentation site |
 | CLI | `src/Dhadgar.Cli` | Operator-style CLI (“azure cli”-like) |
 | Linux Agent | `src/Agents/Dhadgar.Agent.Linux` | Customer-side agent (Linux) |
 | Windows Agent | `src/Agents/Dhadgar.Agent.Windows` | Customer-side agent (Windows) |

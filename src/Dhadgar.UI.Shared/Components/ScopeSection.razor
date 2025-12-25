@@ -1,0 +1,26 @@
+@using MudBlazor
+
+<MudPaper Class="scope-section" Elevation="0" Outlined="true" Id="@Id">
+    <MudStack Spacing="2">
+        <MudStack Direction="Row" AlignItems="AlignItems.Center" Spacing="1">
+            @if (!string.IsNullOrWhiteSpace(Icon))
+            {
+                <MudText Typo="Typo.h5">@Icon</MudText>
+            }
+            <MudText Typo="Typo.h5" Color="Color.Primary">@Title</MudText>
+        </MudStack>
+        @if (!string.IsNullOrWhiteSpace(Description))
+        {
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">@Description</MudText>
+        }
+        @ChildContent
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

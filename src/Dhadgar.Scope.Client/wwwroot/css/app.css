@@ -1,0 +1,77 @@
+html, body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: #111827;
+    color: #ffffff;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+.hero-gradient {
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+}
+
+.scope-section {
+    padding: 1.5rem;
+}
+
+.feature-card,
+.milestone-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feature-card:hover,
+.milestone-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(79, 70, 229, 0.2);
+}
+
+.section-nav {
+    position: sticky;
+    top: 80px;
+}
+
+.markdown-block h3,
+.markdown-block h4 {
+    color: #93c5fd;
+}
+
+.markdown-block table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.markdown-block th,
+.markdown-block td {
+    border: 1px solid #4b5563;
+    padding: 0.5rem;
+}
+
+.markdown-block th {
+    background-color: #1f2937;
+}
+
+.markdown-block blockquote {
+    border-left: 4px solid #6366f1;
+    padding-left: 1rem;
+    color: #d1d5db;
+}
+
+::-webkit-scrollbar {
+    width: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: #111827;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 6px;
+}
+
+#blazor-error-ui {
+    color-scheme: light only;
+}

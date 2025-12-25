@@ -1,0 +1,60 @@
+{
+  "sections": [
+    {
+      "id": "architecture",
+      "title": "System Architecture",
+      "icon": "\ud83c\udfd7\ufe0f",
+      "description": "Control plane, infrastructure, and agent topology.",
+      "markdown": "### Architecture Overview\n- Customer node agents (Linux + Windows) connect through Cloudflare to the control plane\n- Kubernetes cluster hosts Gateway, Web App, and 12 control plane services\n- Infrastructure layer includes PostgreSQL, Redis, RabbitMQ, and Cilium\n- Internal observability via Prometheus, Grafana, and Loki\n\n### Control Plane Services (12)\n| Service | Port | Responsibility |\n| --- | --- | --- |\n| Identity | :5010 | User authentication, OAuth (Discord/Steam), JWT issuance |\n| Billing | :5020 | Subscriptions, payments (Stripe/PayPal), usage tracking |\n| Servers | :5030 | Server CRUD, state management, configuration |\n| Nodes | :5040 | Agent registration, heartbeat, certificate issuance |\n| Tasks | :5050 | Job queue, provisioning, async operations |\n| Files | :5060 | File storage, backups, uploads/downloads |\n| Console | :5070 | WebSocket console streaming (xterm.js), RCON relay |\n| Mods | :5080 | Mod management (Steam Workshop, CurseForge, Modrinth) |\n| Notifications | :5090 | Email, push notifications, customer alerts |\n| Firewall | :5100 | Port allocation, UniFi API integration |\n| Secrets | :5110 | Secret rotation, Azure Key Vault sync |\n| Discord | :5120 | Internal team bot (NOT customer-facing) |\n\n### Database Architecture\n- **Platform DB Pod:** identity_db, billing_db, servers_db, nodes_db, tasks_db, files_db, mods_db, notifications_db, firewall_db, secrets_db\n- **User DB Pod:** customer-created databases only (game server data, tenant data)\n\n### Agent Types\n| Type | Location | Network Path | Purpose |\n| --- | --- | --- | --- |\n| Customer Agent | Internet (anywhere) | Internet \u2192 Cloudflare \u2192 UniFi \u2192 Gateway \u2192 Services | Production customer gameservers |\n| Dogfood Agent | Internal Colo | Internal network \u2192 Gateway \u2192 Services | Internal testing and staging |"
+    },
+    {
+      "id": "db-schemas",
+      "title": "Database Schemas",
+      "icon": "\ud83d\uddc3\ufe0f",
+      "description": "Platform and tenant schema catalog.",
+      "markdown": "### Platform Schemas\n- identity_db, billing_db, servers_db, nodes_db, tasks_db\n- files_db, mods_db, notifications_db, firewall_db, secrets_db\n\n### Tenant Schemas\n- Per-customer game server databases\n- Tenant-specific operational data"
+    },
+    {
+      "id": "flows",
+      "title": "Network Flows",
+      "icon": "\ud83d\udd00",
+      "description": "Inbound, outbound, and agent connectivity.",
+      "markdown": "### Inbound Traffic\n- Cloudflare terminates TLS and routes to the ingress controller\n- Gateway routes traffic to control plane services\n\n### Outbound Traffic\n- Telemetry to New Relic (APM, logs, traces)\n- External integrations (Discord, Steam, payment providers)\n\n### Agent Connectivity\n- Agents connect via outbound TLS to Gateway\n- No inbound ports required on customer nodes"
+    },
+    {
+      "id": "matrix",
+      "title": "Service Communication Matrix",
+      "icon": "\ud83d\udce1",
+      "description": "Service-to-service interactions and responsibilities.",
+      "markdown": "### Communication Principles\n- HTTP/gRPC between services via Gateway\n- Messaging via RabbitMQ for async workflows\n- SignalR for real-time updates and console streaming"
+    },
+    {
+      "id": "rabbitmq",
+      "title": "RabbitMQ Topology",
+      "icon": "\ud83d\udc07",
+      "description": "Messaging topology and queue responsibilities.",
+      "markdown": "### Topology\n- Dedicated exchanges per service domain\n- Durable queues for provisioning, notifications, and billing events\n- Dead-letter queues for failed processing"
+    },
+    {
+      "id": "services",
+      "title": "Services",
+      "icon": "\ud83e\udde9",
+      "description": "Service catalog and responsibilities.",
+      "markdown": "### Core Services\n- Identity, Billing, Servers, Nodes, Tasks\n- Files, Mods, Notifications, Firewall, Secrets\n- Console, Discord"
+    },
+    {
+      "id": "agents",
+      "title": "Agents",
+      "icon": "\ud83e\udd16",
+      "description": "Agent platforms and responsibilities.",
+      "markdown": "### Agent Platforms\n- **Linux Agent:** Primary hosting nodes\n- **Windows Agent:** Required for Windows-only game servers\n\n### Responsibilities\n- Provision game servers, manage lifecycle, report telemetry\n- Secure registration with one-time tokens"
+    },
+    {
+      "id": "kip",
+      "title": "KiP Edition",
+      "icon": "\ud83e\udde0",
+      "description": "Future analytics and insights product.",
+      "markdown": "### Knowledge is Power (KiP)\n- Advanced analytics, insights, and intelligence layer\n- Builds on existing telemetry and data pipelines\n- Planned for Phase 4 after core platform launch"
+    }
+  ]
+}

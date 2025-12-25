@@ -1,0 +1,18 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/css/*", "/data/*", "/*.{css,scss,js,png,gif,ico,jpg,svg}"]
+  },
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/index.html",
+      "statusCode": 200
+    }
+  },
+  "globalHeaders": {
+    "cache-control": "must-revalidate, max-age=3600"
+  },
+  "mimeTypes": {
+    ".json": "application/json"
+  }
+}

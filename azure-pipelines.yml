@@ -107,14 +107,13 @@ extends:
         testProjectPath: tests/Dhadgar.Notifications.Tests/Dhadgar.Notifications.Tests.csproj
         deploy:
       - id: Dhadgar.Scope
-        projectPath: src/Dhadgar.Scope/Dhadgar.Scope.csproj
-        testProjectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
+        projectPath: src/Dhadgar.Scope.Client/Dhadgar.Scope.Client.csproj
         deploy: swa
         swa:
           apiTokenVar: Dhadgar_Swa_ApiToken
           appLocation: .
           outputLocation: _swa_publish/wwwroot
-          appBuildCommand: dotnet publish src/Dhadgar.Scope/Dhadgar.Scope.csproj -c $(BuildConfiguration) -o _swa_publish
+          appBuildCommand: dotnet publish src/Dhadgar.Scope.Client/Dhadgar.Scope.Client.csproj -c $(BuildConfiguration) -o _swa_publish
       - id: Dhadgar.ShoppingCart
         projectPath: src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj
         testProjectPath: tests/Dhadgar.ShoppingCart.Tests/Dhadgar.ShoppingCart.Tests.csproj
@@ -219,10 +218,6 @@ extends:
         deploy:
       - id: Dhadgar.Notifications.Tests
         projectPath: tests/Dhadgar.Notifications.Tests/Dhadgar.Notifications.Tests.csproj
-        testProjectPath: ''
-        deploy:
-      - id: Dhadgar.Scope.Tests
-        projectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
         testProjectPath: ''
         deploy:
       - id: Dhadgar.ShoppingCart.Tests

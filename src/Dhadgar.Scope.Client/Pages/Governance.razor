@@ -1,0 +1,47 @@
+@page "/governance"
+
+@inject ScopeDataService DataService
+
+<MudStack Spacing="4">
+    @if (_data is null)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        @if (_data.ServiceOwnershipTables.Count > 0)
+        {
+            <MudText Typo="Typo.h4" Color="Color.Primary">Service Ownership</MudText>
+            <MudGrid Spacing="3">
+                @foreach (var table in _data.ServiceOwnershipTables)
+                {
+                    <MudItem xs="12" md="6">
+                        <ServiceOwnershipTable Title="@table.Title" Services="@table.Services" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @if (_data.DecisionCategories.Count > 0)
+        {
+            <MudText Typo="Typo.h4" Color="Color.Primary">Decision Authority</MudText>
+            <DecisionAuthorityGrid Categories="_data.DecisionCategories" />
+        }
+
+        @foreach (var sectionItem in _data.Sections)
+        {
+            <ScopeSection Id="@sectionItem.Id" Title="@sectionItem.Title" Icon="@sectionItem.Icon" Description="@sectionItem.Description">
+                <MarkdownBlock Content="@sectionItem.Markdown" />
+            </ScopeSection>
+        }
+    }
+</MudStack>
+
+@code {
+    private GovernanceData? _data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _data = await DataService.GetGovernanceAsync();
+    }
+}

@@ -1,0 +1,60 @@
+{
+  "sections": [
+    {
+      "id": "project-structure",
+      "title": "Project Structure",
+      "icon": "\ud83e\udded",
+      "description": "Product identity, ownership, and core team.",
+      "markdown": "### Product Name\n**Meridian Console**\n\nDomain: [meridianconsole.com](https://meridianconsole.com)\n\n### Repository\n<https://github.com/SandboxServers/MeridianConsole>\n\n### Codename (Pre-Release)\n**Dadgar** \u2014 Internal codename used prior to public release.\n\n### Core Team\n| Role | Name | Responsibilities |\n| --- | --- | --- |\n| Project Lead | Cady | Vision, architecture decisions, final approval |\n| Lead Developer | Jorsh | Core development, code review, technical implementation |\n| Infrastructure | Aura (Derek) | DevOps, observability, New Relic integration |\n\n### Distribution Lists\n| DL | Members | Purpose |\n| --- | --- | --- |\n| dev@meridianconsole.com | Jorsh, Aura | Development team communications |\n| ops@meridianconsole.com | Cady, Aura | Operations and infrastructure alerts |\n| team@meridianconsole.com | Cady, Jorsh, Aura | All-hands communications |\n\n### Asset Ownership\n| Asset | Current Owner | Status |\n| --- | --- | --- |\n| meridianconsole.com (domain) | Aura (personal) | Transfer post-MVP |\n| Cloudflare Zone | Aura (personal) | Transfer post-MVP |\n| GitHub Organization | Jorsh | \u2713 Active |\n| M365 Tenant | Cady | \u2713 Active |\n| Azure Subscription | Cady | \u2713 Active |\n\n> \u26a0\ufe0f **Transfer Note**\n> Assets currently on personal accounts will be transferred to a formal business entity post-MVP when company structure is established."
+    },
+    {
+      "id": "vision",
+      "title": "Vision & Scope",
+      "icon": "\ud83d\ude80",
+      "description": "Product overview, audience, and differentiation.",
+      "markdown": "### Product Overview\nA complete game server hosting platform consisting of three integrated components:\n- **Control Plane:** Microservices-based backend managing provisioning, orchestration, billing, and user management\n- **Distributed Agents:** Cross-platform workers (Linux + Windows) that provision and manage game servers\n- **Unified Web Application:** Blazor WASM frontend providing real-time console, server management, and administrative controls\n\n### Target Users\nPrimary audiences:\n- Gaming communities & clans\n- Content creators & streamers\n- Small-medium businesses\n- Modding communities\n- Indie game developers\n- Individuals\n- LAN event organizers\n- Esports teams\n\n### Core Differentiators\n| Feature | Advantage |\n| --- | --- |\n| .NET 8 + SignalR | Real-time console, high performance, modern stack |\n| Cross-Platform Agents | Linux + Windows support (most competitors Linux-only) |\n| Multi-Engine Support | Minecraft, Valheim, ARK, Rust, Palworld, and more |\n| Hybrid Cloud Ready | Deploy agents anywhere (colo, cloud, on-prem) |\n\n### Performance Targets\n| Metric | Target |\n| --- | --- |\n| Provisioning Time | Server created + installing within 60 seconds (not playable yet) |\n| Uptime SLA | 99% (MVP), 99.5% (growth target) |\n\n### Non-Goals\n- Web hosting (focus on game servers only)\n- Competing on price (premium positioning)\n- White-label / reseller program (at least initially)\n\n### Deferred Goals\n> \u26a0\ufe0f **Important:** Architecture must support these future features\n- **Mobile apps** (iOS/Android)\n- **KiP - Knowledge is Power Edition** (detailed analytics/insights product)"
+    },
+    {
+      "id": "build-strategy",
+      "title": "Build Strategy",
+      "icon": "\ud83d\udee4\ufe0f",
+      "description": "Environments, CI/CD, GitOps, branching, and notifications.",
+      "markdown": "### Environment Structure\n| Environment | Infrastructure | Purpose |\n| --- | --- | --- |\n| Dev | Kubernetes namespace | Active development, frequent deploys |\n| Staging | Kubernetes namespace | Pre-production validation, customer demos |\n| Prod | Kubernetes namespace (future: dedicated cluster) | Live customer environment |\n\n**Local Development:** Developer's choice (Docker Compose, local Kubernetes, etc.). Changes must be validated locally before pushing to dev environment.\n\n### CI/CD Platform\n| Component | Technology |\n| --- | --- |\n| CI/CD | Azure Pipelines |\n| Build Agents | Self-hosted (pod in cluster) |\n| Container Registry | Azure Container Registry (ACR) |\n| Artifact Retention | Forever (ADO doesn't charge for storage) |\n| Package Manager | Helm |\n\n### GitOps with ArgoCD\n| Aspect | Implementation |\n| --- | --- |\n| ArgoCD Role | Read-only, declarative state enforcement |\n| Drift Detection | Used as deployment gate (staging/prod must match Git exactly) |\n| Source of Truth | CI/CD pipeline updates Git, ArgoCD syncs to cluster |\n\n### Branching Strategy\n| Branch | Deploys To | Trigger |\n| --- | --- | --- |\n| `develop` | Dev | Automatic on push |\n| `main` (untagged) | Staging | Automatic on merge |\n| `main` (tagged) | Prod | Manual approval required (ADO Environment Resources) |\n\n### Deployment Gates\n- **Dev \u2192 Staging:** Unit tests pass, build succeeds\n- **Staging \u2192 Prod:** Manual approval + ArgoCD drift check (staging must be in sync)\n\n### Notifications\n| Event | Notification Method |\n| --- | --- |\n| Build failures | Discord webhook to dev channel |\n| Deployment to staging/prod | Discord webhook to ops channel |\n| Approval required | Discord webhook + ADO notification |"
+    },
+    {
+      "id": "tech-stack",
+      "title": "Tech Stack",
+      "icon": "\ud83e\uddf0",
+      "description": "Languages, frameworks, and infrastructure stack.",
+      "markdown": "### Core Technologies\n- **Backend:** .NET 8 (ASP.NET Core)\n- **Frontend:** Blazor WebAssembly\n- **Messaging:** RabbitMQ + MassTransit\n- **Databases:** PostgreSQL\n- **Caching:** Redis\n- **Observability:** Prometheus, Grafana, Loki, New Relic\n- **Networking:** Cloudflare, Cilium, UniFi\n\n### Service Architecture\n- Microservices with clean separation and per-service databases\n- YARP API Gateway\n- SignalR for real-time console streaming\n\n### Tooling\n- Helm charts per service\n- Azure DevOps pipelines\n- GitHub for source control"
+    },
+    {
+      "id": "deployment",
+      "title": "Deployment Topology",
+      "icon": "\ud83d\udef0\ufe0f",
+      "description": "Cluster layout, ingress, and network boundaries.",
+      "markdown": "### Key Topology Highlights\n- Cloudflare WAF/CDN/DDoS protection in front of the cluster\n- UniFi firewall at colo boundary for stateful inspection and port forwarding\n- Kubernetes cluster hosting Gateway, Web App, and 12 control plane services\n- Dedicated infrastructure layer for PostgreSQL, Redis, RabbitMQ, and Cilium\n\n### Zones\n- **Internet boundary:** Cloudflare\n- **Colo boundary:** UniFi hardware firewall\n- **Cluster boundary:** Ingress controller and service mesh"
+    },
+    {
+      "id": "data-retention",
+      "title": "Data Retention",
+      "icon": "\ud83d\uddc4\ufe0f",
+      "description": "Retention windows and storage responsibilities.",
+      "markdown": "### Retention Rules\n- **Logs:** 30 days hot, 90 days cold\n- **Metrics:** 13 months\n- **Backups:** Daily for 30 days, monthly for 12 months\n- **Audit events:** 12 months\n\n### Storage Guidance\n- Avoid storing customer data in platform databases\n- Support customer data isolation and deletion requests"
+    },
+    {
+      "id": "security",
+      "title": "Security Architecture",
+      "icon": "\ud83d\udee1\ufe0f",
+      "description": "Authentication, authorization, secrets, and network isolation.",
+      "markdown": "### Security Foundations\n- Azure AD B2C for customer authentication\n- JWT for internal service communication\n- Network policy enforcement via Cilium\n- Cloudflare WAF and DDoS protection\n\n### Secrets & Certificates\n- Azure Key Vault as source of truth\n- Automated secret rotation\n- mTLS between internal services where applicable"
+    },
+    {
+      "id": "certificates",
+      "title": "Certificate Management",
+      "icon": "\ud83d\udd10",
+      "description": "Certificate authorities and lifecycle automation.",
+      "markdown": "### Certificate Strategy\n- Central certificate authority for control plane\n- Short-lived certs for agents\n- Automated renewal and rotation\n- Trust chain validated by gateway"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+@page "/roadmap"
+
+@inject ScopeDataService DataService
+
+<MudStack Spacing="4">
+    @if (_data is null)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudPaper Outlined="true" Class="pa-5">
+            <MudText Typo="Typo.h4" Color="Color.Primary">@_data.Title</MudText>
+            <MudText Typo="Typo.body1">@_data.Overview</MudText>
+            @if (_data.PhaseSummaries.Count > 0)
+            {
+                <MudGrid Class="mt-4" Spacing="2">
+                    @foreach (var summary in _data.PhaseSummaries)
+                    {
+                        <MudItem xs="6" md="2">
+                            <MudPaper Outlined="true" Class="pa-3 text-center">
+                                <MudText Typo="Typo.h5" Color="@MapColor(summary.AccentColor)">@summary.Count</MudText>
+                                <MudText Typo="Typo.caption">@summary.Label</MudText>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            @if (!string.IsNullOrWhiteSpace(_data.CriticalPathNote))
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+                    @_data.CriticalPathNote
+                </MudAlert>
+            }
+        </MudPaper>
+
+        <RoadmapTimeline Phases="_data.Phases" ShowMilestones="true" />
+    }
+</MudStack>
+
+@code {
+    private RoadmapData? _data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _data = await DataService.GetRoadmapAsync();
+    }
+
+    private static Color MapColor(string? color)
+    {
+        return color?.ToLowerInvariant() switch
+        {
+            "success" => Color.Success,
+            "warning" => Color.Warning,
+            "info" => Color.Info,
+            "secondary" => Color.Secondary,
+            "primary" => Color.Primary,
+            "error" => Color.Error,
+            _ => Color.Primary
+        };
+    }
+}

@@ -1,0 +1,30 @@
+@page "/overview"
+
+@inject ScopeDataService DataService
+
+<MudStack Spacing="4">
+    @if (_data is null)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <SectionNavigation Sections="_data.Sections" />
+
+        @foreach (var sectionItem in _data.Sections)
+        {
+            <ScopeSection Id="@sectionItem.Id" Title="@sectionItem.Title" Icon="@sectionItem.Icon" Description="@sectionItem.Description">
+                <MarkdownBlock Content="@sectionItem.Markdown" />
+            </ScopeSection>
+        }
+    }
+</MudStack>
+
+@code {
+    private PageSectionsData? _data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _data = await DataService.GetOverviewAsync();
+    }
+}

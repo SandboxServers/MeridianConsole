@@ -1,0 +1,21 @@
+@using MudBlazor
+@using Dhadgar.UI.Shared.Models
+
+<MudCard Outlined="true" Class="milestone-card">
+    <MudCardContent>
+        <MudStack Spacing="1">
+            <MudStack Direction="Row" AlignItems="AlignItems.Center" Spacing="1">
+                <MudChip T="string" Color="@AccentColor" Variant="Variant.Filled" Size="Size.Small">@Milestone.Code</MudChip>
+                <MudText Typo="Typo.subtitle1" Color="Color.Primary">@Milestone.Name</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2">@Milestone.Description</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Depends on: @Milestone.Dependencies</MudText>
+            <SuccessCriteriaList Criteria="Milestone.SuccessCriteria" />
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public RoadmapMilestone Milestone { get; set; } = new();
+    [Parameter] public Color AccentColor { get; set; } = Color.Primary;
+}

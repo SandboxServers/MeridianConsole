@@ -1,0 +1,21 @@
+@using Markdig
+
+@if (!string.IsNullOrWhiteSpace(Content))
+{
+    <div class="markdown-block">@((MarkupString)_rendered)</div>
+}
+
+@code {
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
+    private string _rendered = string.Empty;
+
+    [Parameter] public string? Content { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _rendered = Content is null ? string.Empty : Markdown.ToHtml(Content, Pipeline);
+    }
+}

@@ -1,0 +1,315 @@
+{
+  "title": "MVP Scope & Phases",
+  "overview": "Detailed project roadmap with 54 milestones across 6 phases. Each milestone includes dependencies and success criteria.",
+  "criticalPathNote": "Phases must complete sequentially: MVP \u2192 Enhancements \u2192 Launch \u2192 KiP \u2192 Mobile \u2192 Sustained Engineering. Some milestones within phases can be parallelized.",
+  "phaseSummaries": [
+    {
+      "label": "Phase 1: MVP",
+      "count": "9",
+      "accentColor": "Success"
+    },
+    {
+      "label": "Phase 2: Enhance",
+      "count": "9",
+      "accentColor": "Warning"
+    },
+    {
+      "label": "Phase 3: Launch",
+      "count": "9",
+      "accentColor": "Info"
+    },
+    {
+      "label": "Phase 4: KiP",
+      "count": "9",
+      "accentColor": "Primary"
+    },
+    {
+      "label": "Phase 5: Mobile",
+      "count": "9",
+      "accentColor": "Secondary"
+    },
+    {
+      "label": "Phase 6: Future",
+      "count": "9",
+      "accentColor": "Error"
+    }
+  ],
+  "phases": [
+    {
+      "name": "Phase 1: MVP (Minimum Viable Product)",
+      "timeline": "12-16 weeks",
+      "summary": "Core product functionality with all 15 services operational.",
+      "accentColor": "Success",
+      "goals": [
+        "Foundation infrastructure operational",
+        "Core services deployed and stable",
+        "Agents connected and provisioning"
+      ],
+      "milestones": [
+        {
+          "code": "1.1",
+          "name": "Foundation Infrastructure",
+          "description": "Base platform infrastructure before deploying any services.",
+          "dependencies": "None (starting point)",
+          "successCriteria": [
+            "Kubernetes cluster passes conformance tests",
+            "All nodes healthy and schedulable",
+            "Cilium network policies enforced"
+          ]
+        },
+        {
+          "code": "1.2",
+          "name": "Foundational Services",
+          "description": "Deploy core services that other services depend on.",
+          "dependencies": "Milestone 1 (Infrastructure ready)",
+          "successCriteria": [
+            "Secrets Service retrieves from Azure Key Vault successfully",
+            "Observability collecting logs and metrics",
+            "Gateway Service routing requests correctly"
+          ]
+        },
+        {
+          "code": "1.3",
+          "name": "Identity & Access",
+          "description": "User authentication and authorization.",
+          "dependencies": "Milestone 2 (Foundational services available)",
+          "successCriteria": [
+            "Users can register and login via Azure AD B2C",
+            "JWT tokens generated and validated correctly",
+            "Basic RBAC enforced"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 2: Enhance",
+      "timeline": "8-12 weeks",
+      "summary": "Expand platform capabilities and improve operational readiness.",
+      "accentColor": "Warning",
+      "goals": [
+        "Enhance billing and automation",
+        "Improve observability and alerting",
+        "Refine customer workflows"
+      ],
+      "milestones": [
+        {
+          "code": "2.1",
+          "name": "Billing Enhancements",
+          "description": "Expand billing workflows and invoicing.",
+          "dependencies": "Phase 1 complete",
+          "successCriteria": [
+            "Invoices generated automatically",
+            "Usage metering integrated",
+            "Payment retries and dunning configured"
+          ]
+        },
+        {
+          "code": "2.2",
+          "name": "Operational Automation",
+          "description": "Automate routine infrastructure and service tasks.",
+          "dependencies": "Phase 1 complete",
+          "successCriteria": [
+            "Automated service rollouts",
+            "Self-healing checks for core services",
+            "Automated backup verification"
+          ]
+        },
+        {
+          "code": "2.3",
+          "name": "Customer Experience Improvements",
+          "description": "Improve onboarding, provisioning, and UI flow.",
+          "dependencies": "Phase 1 complete",
+          "successCriteria": [
+            "Guided onboarding flow",
+            "Provisioning progress updates",
+            "Improved notification templates"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 3: Launch",
+      "timeline": "6-8 weeks",
+      "summary": "Production readiness and public launch.",
+      "accentColor": "Info",
+      "goals": [
+        "Finalize SLA and support processes",
+        "Scale infrastructure",
+        "Public launch execution"
+      ],
+      "milestones": [
+        {
+          "code": "3.1",
+          "name": "Launch Readiness",
+          "description": "Finalize security and compliance readiness.",
+          "dependencies": "Phase 2 complete",
+          "successCriteria": [
+            "Security audit complete",
+            "SLA documentation published",
+            "Incident response runbooks ready"
+          ]
+        },
+        {
+          "code": "3.2",
+          "name": "Scale Infrastructure",
+          "description": "Increase capacity for launch traffic.",
+          "dependencies": "Phase 2 complete",
+          "successCriteria": [
+            "Cluster autoscaling configured",
+            "Database scaling plan implemented",
+            "Load testing benchmarks achieved"
+          ]
+        },
+        {
+          "code": "3.3",
+          "name": "Public Launch",
+          "description": "Marketing and product release.",
+          "dependencies": "Launch readiness complete",
+          "successCriteria": [
+            "Launch checklist complete",
+            "Marketing assets published",
+            "Customer onboarding support live"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 4: KiP",
+      "timeline": "10-14 weeks",
+      "summary": "Analytics and insights product line.",
+      "accentColor": "Primary",
+      "goals": [
+        "Analytics pipeline",
+        "Customer dashboards",
+        "Insights alerts"
+      ],
+      "milestones": [
+        {
+          "code": "4.1",
+          "name": "Telemetry Expansion",
+          "description": "Collect deeper metrics for analytics.",
+          "dependencies": "Phase 3 complete",
+          "successCriteria": [
+            "Extended telemetry schema",
+            "Data pipeline validated",
+            "Retention policies applied"
+          ]
+        },
+        {
+          "code": "4.2",
+          "name": "KiP Dashboards",
+          "description": "Deliver analytics dashboards to customers.",
+          "dependencies": "Telemetry expansion complete",
+          "successCriteria": [
+            "Dashboard MVP released",
+            "Insights latency below 5 minutes",
+            "Customer feedback loop established"
+          ]
+        },
+        {
+          "code": "4.3",
+          "name": "Insights Automation",
+          "description": "Automated insights and anomaly detection.",
+          "dependencies": "KiP dashboards live",
+          "successCriteria": [
+            "Anomaly detection in place",
+            "Automated insight notifications",
+            "Actionable recommendations documented"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 5: Mobile",
+      "timeline": "12-16 weeks",
+      "summary": "Mobile experience for server management.",
+      "accentColor": "Secondary",
+      "goals": [
+        "Mobile API readiness",
+        "iOS and Android apps",
+        "Push notifications"
+      ],
+      "milestones": [
+        {
+          "code": "5.1",
+          "name": "Mobile API Layer",
+          "description": "Prepare APIs for mobile usage.",
+          "dependencies": "Phase 4 complete",
+          "successCriteria": [
+            "Mobile auth flows complete",
+            "Optimized payloads",
+            "Rate limit policies updated"
+          ]
+        },
+        {
+          "code": "5.2",
+          "name": "Mobile App MVP",
+          "description": "Deliver first mobile experience.",
+          "dependencies": "Mobile API layer complete",
+          "successCriteria": [
+            "Core server controls available",
+            "Push notifications integrated",
+            "App store submissions ready"
+          ]
+        },
+        {
+          "code": "5.3",
+          "name": "Mobile Enhancements",
+          "description": "Expand mobile management capabilities.",
+          "dependencies": "Mobile app MVP",
+          "successCriteria": [
+            "Advanced settings control",
+            "Insights summaries on mobile",
+            "Offline status caching"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phase 6: Future",
+      "timeline": "Ongoing",
+      "summary": "Sustained engineering and future growth.",
+      "accentColor": "Error",
+      "goals": [
+        "Long-term reliability",
+        "Continuous improvement",
+        "New game engines"
+      ],
+      "milestones": [
+        {
+          "code": "6.1",
+          "name": "Reliability Investments",
+          "description": "Improve uptime and resilience.",
+          "dependencies": "Phase 5 complete",
+          "successCriteria": [
+            "99.9% uptime target achieved",
+            "Chaos testing program",
+            "Regular DR drills"
+          ]
+        },
+        {
+          "code": "6.2",
+          "name": "Platform Expansion",
+          "description": "Support new regions and games.",
+          "dependencies": "Reliability investments",
+          "successCriteria": [
+            "New regions deployed",
+            "Additional game engines supported",
+            "Localization pipeline"
+          ]
+        },
+        {
+          "code": "6.3",
+          "name": "Continuous Optimization",
+          "description": "Improve cost efficiency and tooling.",
+          "dependencies": "Ongoing",
+          "successCriteria": [
+            "Cost dashboards",
+            "Performance tuning backlog",
+            "Regular roadmap reviews"
+          ]
+        }
+      ]
+    }
+  ]
+}

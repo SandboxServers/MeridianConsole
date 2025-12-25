@@ -1,0 +1,75 @@
+{
+  "hero": {
+    "title": "Meridian Console Scope",
+    "subtitle": "Modern game server hosting platform",
+    "description": "Meridian Console is a full-stack control plane with distributed agents and a unified web console for managing game servers at scale.",
+    "callouts": [
+      "Blazor WebAssembly",
+      "MudBlazor UI",
+      "Microservices",
+      "Hybrid Cloud"
+    ],
+    "links": [
+      {
+        "title": "Explore Overview",
+        "href": "overview"
+      },
+      {
+        "title": "View Architecture",
+        "href": "architecture"
+      },
+      {
+        "title": "Review Roadmap",
+        "href": "roadmap"
+      }
+    ]
+  },
+  "highlights": [
+    {
+      "icon": "\ud83c\udfaf",
+      "title": "Clear Product Vision",
+      "description": "Unified control plane, distributed agents, and a Blazor-based management console.",
+      "tags": [
+        "Scope",
+        "Vision",
+        "Strategy"
+      ]
+    },
+    {
+      "icon": "\ud83e\udde9",
+      "title": "Composable Architecture",
+      "description": "12 control plane services with dedicated infrastructure for observability, messaging, and data.",
+      "tags": [
+        "Microservices",
+        "Kubernetes",
+        "RabbitMQ"
+      ]
+    },
+    {
+      "icon": "\ud83d\uddfa\ufe0f",
+      "title": "Phased Delivery",
+      "description": "Six phases, 54 milestones, and explicit success criteria to track execution.",
+      "tags": [
+        "Roadmap",
+        "Milestones",
+        "Governance"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "mission",
+      "title": "Mission",
+      "icon": "\u2728",
+      "description": "Why Meridian Console exists",
+      "markdown": "Meridian Console delivers a premium, developer-focused game server hosting experience with real-time visibility, strong security, and rapid provisioning."
+    },
+    {
+      "id": "how-to-use",
+      "title": "How to use this scope",
+      "icon": "\ud83e\udded",
+      "description": "Navigate by section to explore the full product plan.",
+      "markdown": "Use the navigation drawer to explore Overview, Architecture, Roadmap, and Governance. Each section captures the authoritative plan for product delivery."
+    }
+  ]
+}

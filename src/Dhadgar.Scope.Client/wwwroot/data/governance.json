@@ -1,0 +1,171 @@
+{
+  "serviceOwnershipTables": [
+    {
+      "title": "Infrastructure Services",
+      "services": {
+        "Cloudflare (DNS, CDN)": "Aura",
+        "M365 Tenant": "Cady",
+        "GitHub Organization": "Jorsh",
+        "Azure Subscription": "TBD"
+      }
+    },
+    {
+      "title": "Application Services",
+      "services": {
+        "Gateway (YARP)": "TBD",
+        "Billing Service": "TBD",
+        "Auth Service": "TBD",
+        "Servers Service": "TBD",
+        "Mod Management": "TBD",
+        "Notification Service": "TBD"
+      }
+    },
+    {
+      "title": "Data Stores",
+      "services": {
+        "PostgreSQL (prod)": "TBD",
+        "Redis Cache": "TBD",
+        "Azure Blob Storage": "TBD"
+      }
+    },
+    {
+      "title": "Monitoring & Operations",
+      "services": {
+        "Application Insights": "TBD",
+        "Azure Monitor": "TBD",
+        "Log Analytics": "TBD"
+      }
+    }
+  ],
+  "decisionCategories": [
+    {
+      "name": "Technical Decisions",
+      "rules": [
+        {
+          "decision": "Architecture changes",
+          "authority": "Lead Developer + Project Lead"
+        },
+        {
+          "decision": "Service ownership changes",
+          "authority": "Project Lead"
+        },
+        {
+          "decision": "Technology stack additions",
+          "authority": "Founders consensus"
+        }
+      ]
+    },
+    {
+      "name": "Product Decisions",
+      "rules": [
+        {
+          "decision": "Feature prioritization",
+          "authority": "Project Lead"
+        },
+        {
+          "decision": "Scope changes",
+          "authority": "Founders consensus"
+        },
+        {
+          "decision": "UI/UX standards",
+          "authority": "Lead Developer"
+        }
+      ]
+    },
+    {
+      "name": "Operational Decisions",
+      "rules": [
+        {
+          "decision": "Incident response",
+          "authority": "On-call authority"
+        },
+        {
+          "decision": "Infrastructure spend",
+          "authority": "Project Lead + Infrastructure"
+        },
+        {
+          "decision": "Deployment schedule",
+          "authority": "Service owner"
+        }
+      ]
+    },
+    {
+      "name": "Security Decisions",
+      "rules": [
+        {
+          "decision": "Security policy updates",
+          "authority": "Founders consensus"
+        },
+        {
+          "decision": "Emergency hotfix",
+          "authority": "On-call authority; notify founders"
+        },
+        {
+          "decision": "Credential handling",
+          "authority": "Mandatory AKV only"
+        }
+      ]
+    },
+    {
+      "name": "Financial Decisions",
+      "rules": [
+        {
+          "decision": "Pricing changes",
+          "authority": "Founders consensus"
+        },
+        {
+          "decision": "Major vendor contracts",
+          "authority": "Project Lead"
+        },
+        {
+          "decision": "Budget adjustments",
+          "authority": "Project Lead + Infrastructure"
+        }
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "contribution-tracking",
+      "title": "Contribution Tracking",
+      "icon": "\ud83d\udccb",
+      "description": "Documenting work and accountability.",
+      "markdown": "- **Method:** GitHub `CONTRIBUTING.md`\n- **Focus:** Significant efforts, not hours\n- **No credentials:** Hard rule \u2014 AKV only\n- **Audit:** Git history for changes"
+    },
+    {
+      "id": "change-management",
+      "title": "Change Management",
+      "icon": "\ud83e\udded",
+      "description": "How production changes are approved.",
+      "markdown": "**Production Deployment Approval**\n- Non-breaking changes \u2192 Service owner approval + tests pass + PR deployment plan\n- Breaking changes \u2192 Founders consensus + migration guide + customer comms + rollback plan\n- Database migrations \u2192 2 founders + backup verified + rollback tested + off-peak window\n- Emergency hotfixes \u2192 On-call authority; inform founders within 1 hour; post-incident review in 24 hours\n\n**Feature Flag Governance**\n- Create new flags \u2192 Founder review + cleanup plan + monitoring plan\n- Toggle in prod \u2192 Service owner; logged to audit trail; rollback plan ready\n- Retire flags \u2192 Remove after 2 sprints at 100% rollout"
+    },
+    {
+      "id": "data-governance",
+      "title": "Data Governance",
+      "icon": "\ud83e\uddec",
+      "description": "PII handling, retention, and GDPR commitments.",
+      "markdown": "**PII Handling**\n- PII includes emails, IPs, payment data, auth tokens, and identifiers\n- Encrypted at rest (AES-256) + in transit (TLS 1.3)\n- Never logged in plaintext; masked in non-prod\n- Access logged to audit trail\n\n**Retention Policies**\n- Active accounts \u2192 Retain while active\n- Billing history \u2192 7 years (tax)\n- Soft delete \u2192 30 days\n- Hard delete \u2192 Purge PII after 30 days\n- Backups \u2192 30-day retention; PITR 7 days\n- Deleted PII purged from backups after 30 days\n\n**Backup/Restore Authority**\n- Daily production DB backups (service owner monitors)\n- Restore non-prod \u2192 Service owner authority\n- Restore prod \u2192 2 founders + justification + test in non-prod first\n- Customer notification if data loss possible\n\n**GDPR Compliance**\n- Right to access \u2192 Self-service export; 48 hours\n- Right to erasure \u2192 7-day review + founder approval + delete within 30 days\n- Portability \u2192 JSON export excluding derived analytics/IDs\n\n**Customer Data Requests**\n- Support access \u2192 Logged; customer notified\n- Law enforcement \u2192 Founders + legal review; notify customer unless prohibited"
+    },
+    {
+      "id": "api-governance",
+      "title": "API & Integration Governance",
+      "icon": "\ud83d\udd0c",
+      "description": "Versioning, deprecation, integrations, and rate limits.",
+      "markdown": "**API Versioning & Deprecation**\n- Version negotiation \u2192 Prefer URL (`/api/v1`); allow query/header for compatibility\n- Major versions only in code; minor changes are additive\n- Gateway defines external contract; internal services version interfaces too\n- Breaking changes include error shapes, pagination defaults, response schema\n- Deprecation headers \u2192 RFC 8594 Sunset + documented timelines\n- Hard cutoffs \u2192 Sunset dates enforced (no extensions unless Adama says so)\n- Version dashboards \u2192 Per-version latency, error rate, usage\n\n**Deprecation Process**\n1. Announce deprecation (docs + email + release notes)\n2. Return Sunset + Deprecation headers\n3. 6-month minimum notice before sunset\n4. Reminder cadence at 6mo, 3mo, 1mo, 1wk\n5. Sunset date \u2192 Return 410 Gone\n\n**Third-Party Integrations**\n- New integration \u2192 Service owner proposal + founders security/compliance review\n- Cost evaluation required; founders consensus for approval\n- Breaking integration changes \u2192 Founders review\n- Non-breaking changes \u2192 Service owner authority\n\n**Webhooks & Callbacks**\n- New webhooks \u2192 Service owner; documented in API docs\n- Breaking payload change \u2192 New API version\n- Non-breaking payload change \u2192 Service owner + customer notice\n\n**Rate Limit Policy**\n- Free tier \u2192 100 requests/hour\n- Paid tier \u2192 1000 requests/hour\n- Increase limits \u2192 Service owner authority\n- Decrease limits \u2192 Founders consensus + 30-day notice"
+    },
+    {
+      "id": "financial-controls",
+      "title": "Financial Controls",
+      "icon": "\ud83d\udcb8",
+      "description": "Billing oversight and spend approvals.",
+      "markdown": "- All recurring vendor costs tracked in a shared ledger\n- Monthly spend review by founders\n- Any contract over $500/month requires founders approval\n- Billing issues prioritized as Sev-1 incidents"
+    },
+    {
+      "id": "support-sla",
+      "title": "Support & SLA",
+      "icon": "\ud83d\udedf",
+      "description": "Support tiers and escalation.",
+      "markdown": "- Community support for free tier\n- 24/7 support for paid tiers (target)\n- Incident response within 1 hour for Sev-1\n- Post-incident reviews within 24 hours"
+    }
+  ]
+}

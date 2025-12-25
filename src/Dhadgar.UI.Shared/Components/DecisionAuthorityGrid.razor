@@ -1,0 +1,25 @@
+@using MudBlazor
+@using Dhadgar.UI.Shared.Models
+
+<MudStack Spacing="2">
+    @foreach (var category in Categories)
+    {
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.h6" Color="Color.Primary">@category.Name</MudText>
+            <MudTable Items="category.Rules" Dense="true">
+                <HeaderContent>
+                    <MudTh>Decision</MudTh>
+                    <MudTh>Authority</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Decision">@context.Decision</MudTd>
+                    <MudTd DataLabel="Authority">@context.Authority</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public List<DecisionCategory> Categories { get; set; } = new();
+}

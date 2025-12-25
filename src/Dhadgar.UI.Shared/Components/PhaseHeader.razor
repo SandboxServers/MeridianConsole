@@ -1,0 +1,16 @@
+@using MudBlazor
+
+<MudStack Direction="Row" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+    <MudText Typo="Typo.h6" Color="Color.Primary">@Name</MudText>
+    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small">@Timeline</MudChip>
+</MudStack>
+@if (!string.IsNullOrWhiteSpace(Summary))
+{
+    <MudText Typo="Typo.body2" Class="mt-1">@Summary</MudText>
+}
+
+@code {
+    [Parameter] public string Name { get; set; } = string.Empty;
+    [Parameter] public string Timeline { get; set; } = string.Empty;
+    [Parameter] public string Summary { get; set; } = string.Empty;
+}

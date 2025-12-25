@@ -1,0 +1,54 @@
+@using MudBlazor
+@using Dhadgar.UI.Shared.Models
+
+<MudTimeline Class="roadmap-timeline">
+    @foreach (var phase in Phases)
+    {
+        <MudTimelineItem Color="@MapColor(phase.AccentColor)" Icon="@Icons.Material.Filled.Flag">
+            <MudPaper Outlined="true" Class="pa-4">
+                <PhaseHeader Name="@phase.Name" Timeline="@phase.Timeline" Summary="@phase.Summary" />
+                @if (phase.Goals.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Goals</MudText>
+                    <MudList T="string" Dense="true">
+                        @foreach (var goal in phase.Goals)
+                        {
+                            <MudListItem T="string">@goal</MudListItem>
+                        }
+                    </MudList>
+                }
+                @if (ShowMilestones)
+                {
+                    <MudDivider Class="my-3" />
+                    <MudGrid Spacing="2">
+                        @foreach (var milestone in phase.Milestones)
+                        {
+                            <MudItem xs="12" md="6" lg="4">
+                                <MilestoneCard Milestone="milestone" AccentColor="@MapColor(phase.AccentColor)" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+            </MudPaper>
+        </MudTimelineItem>
+    }
+</MudTimeline>
+
+@code {
+    [Parameter] public List<RoadmapPhase> Phases { get; set; } = new();
+    [Parameter] public bool ShowMilestones { get; set; } = true;
+
+    private static Color MapColor(string? color)
+    {
+        return color?.ToLowerInvariant() switch
+        {
+            "success" => Color.Success,
+            "warning" => Color.Warning,
+            "info" => Color.Info,
+            "secondary" => Color.Secondary,
+            "primary" => Color.Primary,
+            "error" => Color.Error,
+            _ => Color.Primary
+        };
+    }
+}

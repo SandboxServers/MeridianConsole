@@ -1,0 +1,57 @@
+@page "/"
+
+@inject ScopeDataService DataService
+
+<MudStack Spacing="4">
+    @if (_data is null)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudPaper Class="hero-gradient pa-6" Outlined="true">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h3" Color="Color.Primary">@_data.Hero.Title</MudText>
+                <MudText Typo="Typo.h5">@_data.Hero.Subtitle</MudText>
+                <MudText Typo="Typo.body1">@_data.Hero.Description</MudText>
+                <MudStack Direction="Row" Spacing="1" Wrap="Wrap.Wrap">
+                    @foreach (var callout in _data.Hero.Callouts)
+                    {
+                        <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">@callout</MudChip>
+                    }
+                </MudStack>
+                <MudStack Direction="Row" Spacing="2" Wrap="Wrap.Wrap">
+                    @foreach (var link in _data.Hero.Links)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="@link.Href">@link.Title</MudButton>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <MudGrid Spacing="3">
+            @foreach (var highlight in _data.Highlights)
+            {
+                <MudItem xs="12" md="4">
+                    <FeatureCard Data="highlight" />
+                </MudItem>
+            }
+        </MudGrid>
+
+        @foreach (var sectionItem in _data.Sections)
+        {
+            <ScopeSection Id="@sectionItem.Id" Title="@sectionItem.Title" Icon="@sectionItem.Icon" Description="@sectionItem.Description">
+                <MarkdownBlock Content="@sectionItem.Markdown" />
+            </ScopeSection>
+        }
+    }
+</MudStack>
+
+@code {
+    private IndexData? _data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _data = await DataService.GetIndexAsync();
+    }
+}

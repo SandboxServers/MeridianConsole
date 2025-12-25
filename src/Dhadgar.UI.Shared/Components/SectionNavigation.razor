@@ -1,0 +1,18 @@
+@using MudBlazor
+@using Dhadgar.UI.Shared.Models
+
+<MudPaper Outlined="true" Class="pa-4 section-nav">
+    <MudText Typo="Typo.subtitle1" Color="Color.Primary">Jump to Section</MudText>
+    <MudList T="string" Dense="true">
+    @foreach (var sectionItem in Sections)
+    {
+        <MudListItem T="string">
+            <MudLink Href="@("#" + sectionItem.Id)">@sectionItem.Title</MudLink>
+        </MudListItem>
+    }
+    </MudList>
+</MudPaper>
+
+@code {
+    [Parameter] public List<ContentSection> Sections { get; set; } = new();
+}
