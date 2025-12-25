@@ -7,13 +7,44 @@
 
 <div class="space-y-6">
     <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h1 class="text-3xl font-bold tracking-tight">Meridian Console Scope</h1>
-        <p class="mt-3 text-white/80">
-            This site publishes the Meridian Console scoping document as a static web app.
-        </p>
-        <p class="mt-2 text-white/70">
-            Use the sidebar to navigate sections, or jump straight into Section 1.
-        </p>
+        <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight">Meridian Console Scope</h1>
+                <p class="mt-3 text-white/80">
+                    This site is the executive-level scope and architecture reference for Meridian Console.
+                </p>
+                <p class="mt-2 text-white/70">
+                    It documents what the platform is, how the services fit together, and the data model that powers it.
+                </p>
+            </div>
+            <img src="images/meridian-console.png"
+                 alt="Meridian Console"
+                 class="w-full max-w-xs rounded-2xl border border-white/10 shadow-xl md:w-72" />
+        </div>
+
+        <div class="mt-5 grid gap-4 lg:grid-cols-3">
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div class="text-sm font-semibold text-white/80">What this site is</div>
+                <p class="mt-2 text-sm text-white/70">
+                    A curated scope document that explains the product vision, system architecture, and core services
+                    behind Meridian Console.
+                </p>
+            </div>
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div class="text-sm font-semibold text-white/80">What you’re seeing</div>
+                <p class="mt-2 text-sm text-white/70">
+                    Structured sections that outline the control plane, data plane, security model, and the
+                    service-by-service schema landscape.
+                </p>
+            </div>
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div class="text-sm font-semibold text-white/80">Why it matters</div>
+                <p class="mt-2 text-sm text-white/70">
+                    It aligns engineering, product, and stakeholders on scope, dependencies, and the architectural
+                    decisions that shape delivery.
+                </p>
+            </div>
+        </div>
 
         <div class="mt-5 flex flex-wrap gap-3">
             <a class="rounded-xl bg-indigo-500 px-4 py-2 font-semibold text-white hover:bg-indigo-400"

@@ -1,3 +1,5 @@
+@using Dhadgar.Scope.Shared
+
 <section id="architecture" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
     <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
         9. System Architecture
@@ -12,13 +14,11 @@
                     Browse the system architecture in a structured, readable tree view.
                 </p>
             </div>
-            <a class="inline-flex items-center justify-center rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-               href="/architecture-explorer">
-                Open explorer
-            </a>
         </div>
     </div>
-
+    <div class="rounded-2xl border border-white/10 bg-black/20 p-4 mb-6">
+        <ArchitectureTreeView />
+    </div>
 <details class="rounded-2xl border border-white/10 bg-black/20 p-4 mb-6">
     <summary class="cursor-pointer select-none text-sm font-semibold text-white/80">
         Show the original ASCII “soul” diagram
