@@ -3,46 +3,55 @@
     <div class="bg-gray-900 rounded-lg p-4 overflow-x-auto border border-gray-600">
         <pre class="tree text-green-400">MeridianConsole/
 ├── src/
-│   ├── Shared/
-│   │   ├── MeridianConsole.Shared/           # Common utilities
-│   │   ├── MeridianConsole.Contracts/        # DTOs, API contracts
-│   │   ├── MeridianConsole.Messaging/        # RabbitMQ abstractions
-│   │   └── MeridianConsole.ServiceDefaults/  # Aspire defaults
-│   ├── Gateway/
-│   ├── Identity/
-│   ├── Billing/                              # SaaS only (excluded from KiP)
-│   ├── Servers/
-│   ├── Nodes/
-│   ├── Tasks/
-│   ├── Files/
-│   ├── Console/
-│   ├── Mods/
-│   ├── Notifications/
-│   ├── Firewall/
-│   ├── Secrets/
-│   ├── Discord/
-│   ├── Web/
-│   └── Agents/
-│       ├── MeridianConsole.Agent.Core/
-│       ├── MeridianConsole.Agent.Linux/
-│       └── MeridianConsole.Agent.Windows/
+│   ├── Shared/                               # Shared libraries, DTOs, and messaging contracts
+│   │   ├── Dhadgar.Shared/                   # Common utilities and shared domain helpers
+│   │   ├── Dhadgar.Contracts/                # DTOs, API contracts, and shared models
+│   │   ├── Dhadgar.Messaging/                # RabbitMQ abstractions and messaging helpers
+│   │   └── Dhadgar.ServiceDefaults/          # Aspire defaults and shared hosting conventions
+│   ├── Agents/                               # Agent runtimes and platform-specific agents
+│   │   ├── Dhadgar.Agent.Core/               # Agent core runtime and common services
+│   │   ├── Dhadgar.Agent.Linux/              # Linux agent host and packaging
+│   │   └── Dhadgar.Agent.Windows/            # Windows agent host and packaging
+│   ├── Dhadgar.Gateway/                      # API gateway, routing, and edge middleware
+│   ├── Dhadgar.Identity/                     # Auth, identity, and access management
+│   ├── Dhadgar.Billing/                      # SaaS billing service (excluded from KiP)
+│   ├── Dhadgar.Servers/                      # Server lifecycle and provisioning APIs
+│   ├── Dhadgar.Nodes/                        # Node inventory, health, and orchestration
+│   ├── Dhadgar.Tasks/                        # Task scheduling and background job orchestration
+│   ├── Dhadgar.Files/                        # File management, storage, and transfer APIs
+│   ├── Dhadgar.Console/                      # Real-time console viewer for gameserver processes
+│   ├── Dhadgar.Mods/                         # Mod marketplace and plugin management
+│   ├── Dhadgar.Notifications/                # Email, SMS, and in-app notification workflows
+│   ├── Dhadgar.Firewall/                     # Firewall rules, network policy, and security
+│   ├── Dhadgar.Secrets/                      # Secret storage and vault integrations
+│   ├── Dhadgar.Discord/                      # Discord integration service and bots
+│   ├── Dhadgar.Panel/                        # Blazor Web UI (WASM) for the main panel
+│   ├── Dhadgar.ShoppingCart/                 # SWA marketing + checkout site with /api functions
+│   ├── Dhadgar.Scope/                        # Product scope site and documentation UI
+│   └── Dhadgar.Cli/                          # CLI tooling and command-line workflows
 ├── deploy/
-│   ├── kubernetes/                           # SaaS deployment
+│   ├── kubernetes/                           # SaaS deployment manifests and overlays
 │   │   ├── base/
 │   │   ├── overlays/
 │   │   └── cert-manager/
-│   ├── compose/                              # KiP deployment
+│   ├── compose/                              # KiP deployment via Docker Compose
 │   │   ├── docker-compose.yml
 │   │   ├── docker-compose.monitoring.yml
 │   │   ├── docker-compose.discord.yml
 │   │   └── .env.example
-│   └── terraform/
+│   └── terraform/                            # Infrastructure-as-code provisioning
 ├── docs/
-│   ├── architecture/
-│   ├── runbooks/
-│   └── kip/                                  # Self-host documentation
-├── CONTRIBUTIONS.md
-└── README.md</pre>
+│   ├── architecture/                         # Architecture diagrams and system design notes
+│   ├── runbooks/                             # Operational runbooks and support procedures
+│   └── kip/                                  # Self-host documentation and guides
+├── tests/                                    # Automated tests and fixtures
+├── Dhadgar.sln                               # Solution entry point for all projects
+├── Directory.Build.props                     # Shared MSBuild configuration
+├── Directory.Packages.props                  # Centralized NuGet package versions
+├── global.json                               # .NET SDK pinning
+├── azure-pipelines.yml                       # CI pipeline definition
+├── CONTRIBUTING.md                           # Contribution guidelines
+└── README.md                                 # Project overview and onboarding</pre>
     </div>
 
 

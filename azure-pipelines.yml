@@ -115,6 +115,16 @@ extends:
           appLocation: .
           outputLocation: _swa_publish/wwwroot
           appBuildCommand: dotnet publish src/Dhadgar.Scope/Dhadgar.Scope.csproj -c $(BuildConfiguration) -o _swa_publish
+      - id: Dhadgar.ShoppingCart
+        projectPath: src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj
+        testProjectPath: tests/Dhadgar.ShoppingCart.Tests/Dhadgar.ShoppingCart.Tests.csproj
+        deploy: swa
+        swa:
+          apiTokenVar: Dhadgar_ShoppingCart_Swa_ApiToken
+          appLocation: .
+          outputLocation: _swa_publish/wwwroot
+          apiLocation: _swa_publish/api
+          appBuildCommand: dotnet publish src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj -c $(BuildConfiguration) -o _swa_publish
       - id: Dhadgar.Secrets
         projectPath: src/Dhadgar.Secrets/Dhadgar.Secrets.csproj
         testProjectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
@@ -127,9 +137,9 @@ extends:
         projectPath: src/Dhadgar.Tasks/Dhadgar.Tasks.csproj
         testProjectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
         deploy:
-      - id: Dhadgar.Web
-        projectPath: src/Dhadgar.Web/Dhadgar.Web.csproj
-        testProjectPath: tests/Dhadgar.Web.Tests/Dhadgar.Web.Tests.csproj
+      - id: Dhadgar.Panel
+        projectPath: src/Dhadgar.Panel/Dhadgar.Panel.csproj
+        testProjectPath: tests/Dhadgar.Panel.Tests/Dhadgar.Panel.Tests.csproj
         deploy:
       - id: Dhadgar.Contracts
         projectPath: src/Shared/Dhadgar.Contracts/Dhadgar.Contracts.csproj
@@ -215,6 +225,10 @@ extends:
         projectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
         testProjectPath: ''
         deploy:
+      - id: Dhadgar.ShoppingCart.Tests
+        projectPath: tests/Dhadgar.ShoppingCart.Tests/Dhadgar.ShoppingCart.Tests.csproj
+        testProjectPath: ''
+        deploy:
       - id: Dhadgar.Secrets.Tests
         projectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
         testProjectPath: ''
@@ -235,7 +249,7 @@ extends:
         projectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
         testProjectPath: ''
         deploy:
-      - id: Dhadgar.Web.Tests
-        projectPath: tests/Dhadgar.Web.Tests/Dhadgar.Web.Tests.csproj
+      - id: Dhadgar.Panel.Tests
+        projectPath: tests/Dhadgar.Panel.Tests/Dhadgar.Panel.Tests.csproj
         testProjectPath: ''
         deploy:

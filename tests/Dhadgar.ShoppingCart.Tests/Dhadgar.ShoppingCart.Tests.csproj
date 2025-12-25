@@ -2,8 +2,8 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <AssemblyName>Dhadgar.Web.Tests</AssemblyName>
-    <RootNamespace>Dhadgar.Web.Tests</RootNamespace>
+    <AssemblyName>Dhadgar.ShoppingCart.Tests</AssemblyName>
+    <RootNamespace>Dhadgar.ShoppingCart.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +13,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Dhadgar.Web\Dhadgar.Web.csproj" />
+    <ProjectReference Include="..\..\src\Dhadgar.ShoppingCart\Dhadgar.ShoppingCart.csproj" />
   </ItemGroup>
 </Project>

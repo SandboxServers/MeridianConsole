@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
   <PropertyGroup>
-    <AssemblyName>Dhadgar.Web</AssemblyName>
-    <RootNamespace>Dhadgar.Web</RootNamespace>
+    <AssemblyName>Dhadgar.Panel</AssemblyName>
+    <RootNamespace>Dhadgar.Panel</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
