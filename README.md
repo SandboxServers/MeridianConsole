@@ -114,7 +114,8 @@ At a high level:
 | Firewall | `src/Dhadgar.Firewall` | Port/policy intent and safety rails |
 | Secrets | `src/Dhadgar.Secrets` | Secret storage + rotation + audit intent |
 | Discord | `src/Dhadgar.Discord` | Discord integration services |
-| Web UI | `src/Dhadgar.Web` | Blazor Web UI (WASM) |
+| Panel UI | `src/Dhadgar.Panel` | Blazor Web UI (WASM) for the main panel |
+| Shopping Cart | `src/Dhadgar.ShoppingCart` | SWA marketing + checkout site with /api functions |
 | Scope | `src/Dhadgar.Scope` | Static host for the scope/doc HTML |
 | CLI | `src/Dhadgar.Cli` | Operator-style CLI (“azure cli”-like) |
 | Linux Agent | `src/Agents/Dhadgar.Agent.Linux` | Customer-side agent (Linux) |
@@ -324,7 +325,8 @@ MeridianConsole/
     Dhadgar.Firewall
     Dhadgar.Secrets
     Dhadgar.Discord
-    Dhadgar.Web
+    Dhadgar.Panel
+    Dhadgar.ShoppingCart
     Dhadgar.Scope
     Dhadgar.Cli
   tests/
