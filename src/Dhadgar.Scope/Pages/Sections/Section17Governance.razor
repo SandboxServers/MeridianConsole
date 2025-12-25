@@ -63,337 +63,332 @@
         </div>
     </div>
 
-    <div class="md:columns-2 md:gap-6 md:[column-fill:auto] mb-6">
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">📋 Contribution Tracking</h3>
-            <ul class="text-sm text-gray-400 space-y-2">
-                <li>• <strong class="text-white">Method:</strong> GitHub CONTRIBUTIONS.md</li>
-                <li>• <strong class="text-white">Focus:</strong> Significant efforts, not hours</li>
-                <li>• <strong class="text-white">No credentials:</strong> Hard rule — AKV only (see <a class="underline decoration-white/20 hover:decoration-white/50" href="/s/security">Section 7</a>)</li>
-                <li>• <strong class="text-white">Audit:</strong> Git history for changes</li>
-            </ul>
-        </div>
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.2 🎯 Decision Authority</h3>
-            <div class="grid md:grid-cols-3 gap-4 text-sm">
-                <div>
-                    <h4 class="text-white font-medium mb-2">Technical Decisions</h4>
-                    <ul class="text-gray-400 space-y-1">
-                        <li>• Architecture → Founders consensus</li>
-                        <li>• Tech stack → Founders consensus</li>
-                        <li>• Implementation → Assigned dev</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Product Decisions</h4>
-                    <ul class="text-gray-400 space-y-1">
-                        <li>• Features → Founders consensus</li>
-                        <li>• Pricing → Founders consensus</li>
-                        <li>• Roadmap → Founders consensus</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Operational Decisions</h4>
-                    <ul class="text-gray-400 space-y-1">
-                        <li>• Incidents → On-call owner</li>
-                        <li>• Access grants → Service owner</li>
-                        <li>• Vendor changes → Founders vote</li>
-                    </ul>
+    <div class="md:flex md:gap-6 mb-6">
+        <div class="space-y-6 md:w-1/2">
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">📋 Contribution Tracking</h3>
+                <ul class="text-sm text-gray-400 space-y-2">
+                    <li>• <strong class="text-white">Method:</strong> GitHub CONTRIBUTIONS.md</li>
+                    <li>• <strong class="text-white">Focus:</strong> Significant efforts, not hours</li>
+                    <li>• <strong class="text-white">No credentials:</strong> Hard rule — AKV only (see <a class="underline decoration-white/20 hover:decoration-white/50" href="/s/security">Section 7</a>)</li>
+                    <li>• <strong class="text-white">Audit:</strong> Git history for changes</li>
+                </ul>
+            </div>
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.3 🧭 Change Management</h3>
+                <div class="space-y-4 text-sm text-gray-400">
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Production Deployment Approval</h4>
+                        <ul class="space-y-1">
+                            <li>• Non-breaking changes → Service owner approval + tests pass + PR deployment plan</li>
+                            <li>• Breaking changes → Founders consensus + migration guide + customer comms + rollback plan</li>
+                            <li>• Database migrations → 2 founders + backup verified + rollback tested + off-peak window</li>
+                            <li>• Emergency hotfixes → On-call authority; inform founders within 1 hour; post-incident review in 24 hours</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Feature Flag Governance</h4>
+                        <ul class="space-y-1">
+                            <li>• Create new flags → Founder review + cleanup plan + monitoring plan</li>
+                            <li>• Toggle in prod → Service owner; logged to audit trail; rollback plan ready</li>
+                            <li>• Retire flags → Remove after 2 sprints at 100% rollout</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-            <div class="mt-4 grid md:grid-cols-2 items-start gap-4 text-sm">
-                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                    <h4 class="text-white font-medium mb-2">Production Changes</h4>
-                    <ul class="text-gray-400 space-y-1">
-                        <li>• Database migrations (prod) → 2 founders + backup verified</li>
-                        <li>• Production deployments → Service owner + 1 founder review</li>
-                        <li>• Breaking API changes → Founders consensus</li>
-                        <li>• Feature flag toggles (prod) → Service owner</li>
-                        <li>• Emergency rollback → On-call authority (notify founders within 1 hour)</li>
-                    </ul>
-                </div>
-                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                    <h4 class="text-white font-medium mb-2">Security Decisions</h4>
-                    <ul class="text-gray-400 space-y-1">
-                        <li>• Production access grants → Founders consensus</li>
-                        <li>• Secret rotation → Service owner (per Section 7)</li>
-                        <li>• Critical security patches → Service owner immediate authority</li>
-                        <li>• Vulnerability disclosures → Founders consensus</li>
-                        <li>• Security incident response → On-call authority (documented runbooks)</li>
-                    </ul>
-                </div>
-                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                    <h4 class="text-white font-medium mb-2">Customer Impact</h4>
-                    <ul class="text-gray-400 space-y-1">
-                        <li>• Refunds &gt; $100 → Founders consensus</li>
-                        <li>• SLA exceptions → Service owner + 1 founder</li>
-                        <li>• ToS/Privacy updates → Founders + legal review</li>
-                        <li>• GDPR deletions → Founder approval + compliance check</li>
-                        <li>• Account suspensions → Service owner + documented justification</li>
-                    </ul>
-                </div>
-                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                    <h4 class="text-white font-medium mb-2">Financial Decisions</h4>
-                    <ul class="text-gray-400 space-y-1">
-                        <li>• New Azure services &gt; $50/mo → Founders consensus</li>
-                        <li>• Contract commitments &gt; $500 → Founders consensus</li>
-                        <li>• Budget overruns &gt; 10% → Founders review</li>
-                        <li>• Cost optimization changes → Service owner</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="md:columns-2 md:gap-6 md:[column-fill:auto] mb-6">
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.3 🧭 Change Management</h3>
-            <div class="space-y-4 text-sm text-gray-400">
-                <div>
-                    <h4 class="text-white font-medium mb-2">Production Deployment Approval</h4>
-                    <ul class="space-y-1">
-                        <li>• Non-breaking changes → Service owner approval + tests pass + PR deployment plan</li>
-                        <li>• Breaking changes → Founders consensus + migration guide + customer comms + rollback plan</li>
-                        <li>• Database migrations → 2 founders + backup verified + rollback tested + off-peak window</li>
-                        <li>• Emergency hotfixes → On-call authority; inform founders within 1 hour; post-incident review in 24 hours</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Feature Flag Governance</h4>
-                    <ul class="space-y-1">
-                        <li>• Create new flags → Founder review + cleanup plan + monitoring plan</li>
-                        <li>• Toggle in prod → Service owner; logged to audit trail; rollback plan ready</li>
-                        <li>• Retire flags → Remove after 2 sprints at 100% rollout</li>
-                    </ul>
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.5 🧬 Data Governance</h3>
+                <div class="space-y-4 text-sm text-gray-400">
+                    <div>
+                        <h4 class="text-white font-medium mb-2">PII Handling</h4>
+                        <ul class="space-y-1">
+                            <li>• PII includes emails, IPs, payment data, auth tokens, and identifiers</li>
+                            <li>• Encrypted at rest (AES-256) + in transit (TLS 1.3)</li>
+                            <li>• Never logged in plaintext; masked in non-prod</li>
+                            <li>• Access logged to audit trail</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Retention Policies</h4>
+                        <ul class="space-y-1">
+                            <li>• Active accounts → Retain while active</li>
+                            <li>• Billing history → 7 years (tax)</li>
+                            <li>• Soft delete → 30 days</li>
+                            <li>• Hard delete → Purge PII after 30 days</li>
+                            <li>• Backups → 30-day retention; PITR 7 days</li>
+                            <li>• Deleted PII purged from backups after 30 days</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Backup/Restore Authority</h4>
+                        <ul class="space-y-1">
+                            <li>• Daily production DB backups (service owner monitors)</li>
+                            <li>• Restore non-prod → Service owner authority</li>
+                            <li>• Restore prod → 2 founders + justification + test in non-prod first</li>
+                            <li>• Customer notification if data loss possible</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">GDPR Compliance</h4>
+                        <ul class="space-y-1">
+                            <li>• Right to access → Self-service export; 48 hours</li>
+                            <li>• Right to erasure → 7-day review + founder approval + delete within 30 days</li>
+                            <li>• Portability → JSON export excluding derived analytics/IDs</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Customer Data Requests</h4>
+                        <ul class="space-y-1">
+                            <li>• Support access → Logged; customer notified</li>
+                            <li>• Law enforcement → Founders + legal review; notify customer unless prohibited</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.4 🔐 Access Control &amp; Security</h3>
-            <div class="space-y-4 text-sm text-gray-400">
-                <div>
-                    <h4 class="text-white font-medium mb-2">Production Access Policy</h4>
-                    <ul class="space-y-1">
-                        <li>• Founders → Full access</li>
-                        <li>• Service owners → Read access to their service logs/metrics</li>
-                        <li>• Everyone else → No access by default</li>
-                        <li>• Temporary access → Founders consensus, max 7 days, scoped, logged, auto-revoked</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Secret Management</h4>
-                    <ul class="space-y-1">
-                        <li>• No credentials in code/config/docs → Azure Key Vault only</li>
-                        <li>• Rotation schedule → Every 90 days (service owner responsible)</li>
-                        <li>• Rotation failures → Alert founders immediately</li>
-                        <li>• Access logged → Audit trail retained per policy</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Audit Requirements</h4>
-                    <ul class="space-y-1">
-                        <li>• Logged: prod access, secret access, deployments, migrations, refunds/SLA exceptions, data exports</li>
-                        <li>• Retention: audit 1y, security 2y, compliance 7y (if required)</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Security Incident Response</h4>
-                    <ul class="space-y-1">
-                        <li>• On-call can mitigate, disable features, deploy fixes</li>
-                        <li>• Notify founders within 1 hour</li>
-                        <li>• RCA within 24 hours + remediation plan reviewed</li>
-                        <li>• Customer comms if data affected</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Vulnerability Disclosure</h4>
-                    <ul class="space-y-1">
-                        <li>• Triage within 24 hours</li>
-                        <li>• Critical: fix &lt; 7 days, High: &lt; 30 days, Medium: &lt; 90 days</li>
-                        <li>• External disclosure → Founders decide response timeline</li>
-                    </ul>
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.7 🔌 API &amp; Integration Governance</h3>
+                <div class="space-y-4 text-sm text-gray-400">
+                    <div>
+                        <h4 class="text-white font-medium mb-2">API Versioning &amp; Deprecation</h4>
+                        <ul class="space-y-1">
+                            <li>• Version negotiation → Prefer URL (/api/v1); allow query/header for compatibility</li>
+                            <li>• Major versions only in code; minor changes are additive</li>
+                            <li>• Gateway defines external contract; internal services version their interfaces too</li>
+                            <li>• Breaking changes include error shapes, pagination/sorting defaults, response schema</li>
+                            <li>• Deprecation headers → RFC 8594 Sunset + documented timelines</li>
+                            <li>• Hard cutoffs → Sunset dates enforced (no extensions unless Adama says so)</li>
+                            <li>• Version dashboards → Per-version latency, error rate, usage</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Deprecation Process</h4>
+                        <ol class="list-decimal list-inside space-y-1">
+                            <li>Announce deprecation (docs + email + release notes)</li>
+                            <li>Return Sunset + Deprecation headers</li>
+                            <li>6-month minimum notice before sunset</li>
+                            <li>Reminder cadence at 6mo, 3mo, 1mo, 1wk</li>
+                            <li>Sunset date → Return 410 Gone</li>
+                        </ol>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Third-Party Integrations</h4>
+                        <ul class="space-y-1">
+                            <li>• New integration → Service owner proposal + founders security/compliance review</li>
+                            <li>• Cost evaluation required; founders consensus for approval</li>
+                            <li>• Breaking integration changes → Founders review</li>
+                            <li>• Non-breaking changes → Service owner authority</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Webhooks &amp; Callbacks</h4>
+                        <ul class="space-y-1">
+                            <li>• New webhooks → Service owner; documented in API docs</li>
+                            <li>• Breaking payload change → New API version</li>
+                            <li>• Non-breaking payload change → Service owner + customer notice</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Rate Limit Policy</h4>
+                        <ul class="space-y-1">
+                            <li>• Free tier → 100 requests/hour</li>
+                            <li>• Paid tier → 1000 requests/hour</li>
+                            <li>• Increase limits → Service owner authority</li>
+                            <li>• Decrease limits → Founders consensus + 30-day notice</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-
-    <div class="md:columns-2 md:gap-6 md:[column-fill:auto] mb-6">
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.5 🧬 Data Governance</h3>
-            <div class="space-y-4 text-sm text-gray-400">
-                <div>
-                    <h4 class="text-white font-medium mb-2">PII Handling</h4>
-                    <ul class="space-y-1">
-                        <li>• PII includes emails, IPs, payment data, auth tokens, and identifiers</li>
-                        <li>• Encrypted at rest (AES-256) + in transit (TLS 1.3)</li>
-                        <li>• Never logged in plaintext; masked in non-prod</li>
-                        <li>• Access logged to audit trail</li>
-                    </ul>
+        <div class="space-y-6 md:w-1/2">
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.2 🎯 Decision Authority</h3>
+                <div class="grid md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Technical Decisions</h4>
+                        <ul class="text-gray-400 space-y-1">
+                            <li>• Architecture → Founders consensus</li>
+                            <li>• Tech stack → Founders consensus</li>
+                            <li>• Implementation → Assigned dev</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Product Decisions</h4>
+                        <ul class="text-gray-400 space-y-1">
+                            <li>• Features → Founders consensus</li>
+                            <li>• Pricing → Founders consensus</li>
+                            <li>• Roadmap → Founders consensus</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Operational Decisions</h4>
+                        <ul class="text-gray-400 space-y-1">
+                            <li>• Incidents → On-call owner</li>
+                            <li>• Access grants → Service owner</li>
+                            <li>• Vendor changes → Founders vote</li>
+                        </ul>
+                    </div>
                 </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Retention Policies</h4>
-                    <ul class="space-y-1">
-                        <li>• Active accounts → Retain while active</li>
-                        <li>• Billing history → 7 years (tax)</li>
-                        <li>• Soft delete → 30 days</li>
-                        <li>• Hard delete → Purge PII after 30 days</li>
-                        <li>• Backups → 30-day retention; PITR 7 days</li>
-                        <li>• Deleted PII purged from backups after 30 days</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Backup/Restore Authority</h4>
-                    <ul class="space-y-1">
-                        <li>• Daily production DB backups (service owner monitors)</li>
-                        <li>• Restore non-prod → Service owner authority</li>
-                        <li>• Restore prod → 2 founders + justification + test in non-prod first</li>
-                        <li>• Customer notification if data loss possible</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">GDPR Compliance</h4>
-                    <ul class="space-y-1">
-                        <li>• Right to access → Self-service export; 48 hours</li>
-                        <li>• Right to erasure → 7-day review + founder approval + delete within 30 days</li>
-                        <li>• Portability → JSON export excluding derived analytics/IDs</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Customer Data Requests</h4>
-                    <ul class="space-y-1">
-                        <li>• Support access → Logged; customer notified</li>
-                        <li>• Law enforcement → Founders + legal review; notify customer unless prohibited</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.6 💸 Financial Governance</h3>
-            <div class="space-y-4 text-sm text-gray-400">
-                <div>
-                    <h4 class="text-white font-medium mb-2">Azure Spending Limits</h4>
-                    <ul class="space-y-1">
-                        <li>• Quarterly budget set by founders</li>
-                        <li>• Alerts at 50% (owners), 75% (founders), 90% (meeting), 100% (auto-shutdown non-prod)</li>
-                        <li>• &gt; 10% over budget → Founder review</li>
-                        <li>• &gt; 25% over budget → Emergency cost optimization</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Service Approval Thresholds</h4>
-                    <ul class="space-y-1">
-                        <li>• New Azure services &lt; $50/mo → Service owner</li>
-                        <li>• $50–$200/mo → 1 founder approval</li>
-                        <li>• &gt; $200/mo → Founders consensus</li>
-                        <li>• Contracts &lt; $500 → Service owner</li>
-                        <li>• $500–$2000 → 1 founder approval</li>
-                        <li>• &gt; $2000 or multi-year → Founders consensus</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Cost Anomaly Response</h4>
-                    <ul class="space-y-1">
-                        <li>• &gt; 20% daily increase → Alert service owner</li>
-                        <li>• &gt; 50% weekly increase → Alert founders</li>
-                        <li>• Unexpected new services → Immediate investigation</li>
-                        <li>• Owner investigates within 4 hours; founders briefed within 24 hours</li>
-                    </ul>
+                <div class="mt-4 grid md:grid-cols-2 items-start gap-4 text-sm">
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <h4 class="text-white font-medium mb-2">Production Changes</h4>
+                        <ul class="text-gray-400 space-y-1">
+                            <li>• Database migrations (prod) → 2 founders + backup verified</li>
+                            <li>• Production deployments → Service owner + 1 founder review</li>
+                            <li>• Breaking API changes → Founders consensus</li>
+                            <li>• Feature flag toggles (prod) → Service owner</li>
+                            <li>• Emergency rollback → On-call authority (notify founders within 1 hour)</li>
+                        </ul>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <h4 class="text-white font-medium mb-2">Security Decisions</h4>
+                        <ul class="text-gray-400 space-y-1">
+                            <li>• Production access grants → Founders consensus</li>
+                            <li>• Secret rotation → Service owner (per Section 7)</li>
+                            <li>• Critical security patches → Service owner immediate authority</li>
+                            <li>• Vulnerability disclosures → Founders consensus</li>
+                            <li>• Security incident response → On-call authority (documented runbooks)</li>
+                        </ul>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <h4 class="text-white font-medium mb-2">Customer Impact</h4>
+                        <ul class="text-gray-400 space-y-1">
+                            <li>• Refunds &gt; $100 → Founders consensus</li>
+                            <li>• SLA exceptions → Service owner + 1 founder</li>
+                            <li>• ToS/Privacy updates → Founders + legal review</li>
+                            <li>• GDPR deletions → Founder approval + compliance check</li>
+                            <li>• Account suspensions → Service owner + documented justification</li>
+                        </ul>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                        <h4 class="text-white font-medium mb-2">Financial Decisions</h4>
+                        <ul class="text-gray-400 space-y-1">
+                            <li>• New Azure services &gt; $50/mo → Founders consensus</li>
+                            <li>• Contract commitments &gt; $500 → Founders consensus</li>
+                            <li>• Budget overruns &gt; 10% → Founders review</li>
+                            <li>• Cost optimization changes → Service owner</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <div class="md:columns-2 md:gap-6 md:[column-fill:auto] mb-6">
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.7 🔌 API &amp; Integration Governance</h3>
-            <div class="space-y-4 text-sm text-gray-400">
-                <div>
-                    <h4 class="text-white font-medium mb-2">API Versioning &amp; Deprecation</h4>
-                    <ul class="space-y-1">
-                        <li>• Version negotiation → Prefer URL (/api/v1); allow query/header for compatibility</li>
-                        <li>• Major versions only in code; minor changes are additive</li>
-                        <li>• Gateway defines external contract; internal services version their interfaces too</li>
-                        <li>• Breaking changes include error shapes, pagination/sorting defaults, response schema</li>
-                        <li>• Deprecation headers → RFC 8594 Sunset + documented timelines</li>
-                        <li>• Hard cutoffs → Sunset dates enforced (no extensions unless Adama says so)</li>
-                        <li>• Version dashboards → Per-version latency, error rate, usage</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Deprecation Process</h4>
-                    <ol class="list-decimal list-inside space-y-1">
-                        <li>Announce deprecation (docs + email + release notes)</li>
-                        <li>Return Sunset + Deprecation headers</li>
-                        <li>6-month minimum notice before sunset</li>
-                        <li>Reminder cadence at 6mo, 3mo, 1mo, 1wk</li>
-                        <li>Sunset date → Return 410 Gone</li>
-                    </ol>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Third-Party Integrations</h4>
-                    <ul class="space-y-1">
-                        <li>• New integration → Service owner proposal + founders security/compliance review</li>
-                        <li>• Cost evaluation required; founders consensus for approval</li>
-                        <li>• Breaking integration changes → Founders review</li>
-                        <li>• Non-breaking changes → Service owner authority</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Webhooks &amp; Callbacks</h4>
-                    <ul class="space-y-1">
-                        <li>• New webhooks → Service owner; documented in API docs</li>
-                        <li>• Breaking payload change → New API version</li>
-                        <li>• Non-breaking payload change → Service owner + customer notice</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Rate Limit Policy</h4>
-                    <ul class="space-y-1">
-                        <li>• Free tier → 100 requests/hour</li>
-                        <li>• Paid tier → 1000 requests/hour</li>
-                        <li>• Increase limits → Service owner authority</li>
-                        <li>• Decrease limits → Founders consensus + 30-day notice</li>
-                    </ul>
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.4 🔐 Access Control &amp; Security</h3>
+                <div class="space-y-4 text-sm text-gray-400">
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Production Access Policy</h4>
+                        <ul class="space-y-1">
+                            <li>• Founders → Full access</li>
+                            <li>• Service owners → Read access to their service logs/metrics</li>
+                            <li>• Everyone else → No access by default</li>
+                            <li>• Temporary access → Founders consensus, max 7 days, scoped, logged, auto-revoked</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Secret Management</h4>
+                        <ul class="space-y-1">
+                            <li>• No credentials in code/config/docs → Azure Key Vault only</li>
+                            <li>• Rotation schedule → Every 90 days (service owner responsible)</li>
+                            <li>• Rotation failures → Alert founders immediately</li>
+                            <li>• Access logged → Audit trail retained per policy</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Audit Requirements</h4>
+                        <ul class="space-y-1">
+                            <li>• Logged: prod access, secret access, deployments, migrations, refunds/SLA exceptions, data exports</li>
+                            <li>• Retention: audit 1y, security 2y, compliance 7y (if required)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Security Incident Response</h4>
+                        <ul class="space-y-1">
+                            <li>• On-call can mitigate, disable features, deploy fixes</li>
+                            <li>• Notify founders within 1 hour</li>
+                            <li>• RCA within 24 hours + remediation plan reviewed</li>
+                            <li>• Customer comms if data affected</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Vulnerability Disclosure</h4>
+                        <ul class="space-y-1">
+                            <li>• Triage within 24 hours</li>
+                            <li>• Critical: fix &lt; 7 days, High: &lt; 30 days, Medium: &lt; 90 days</li>
+                            <li>• External disclosure → Founders decide response timeline</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="bg-gray-900 rounded-lg p-5 border border-gray-600 break-inside-avoid mb-6 last:mb-0">
-            <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.8 🤝 Support &amp; SLA</h3>
-            <div class="space-y-4 text-sm text-gray-400">
-                <div>
-                    <h4 class="text-white font-medium mb-2">Customer Escalation Paths</h4>
-                    <ul class="space-y-1">
-                        <li>• Tier 1 → Docs, knowledge base, community</li>
-                        <li>• Tier 2 → Support ticket (24-hour first response)</li>
-                        <li>• Tier 3 → Founder escalation (4-hour response; critical = immediate)</li>
-                    </ul>
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.6 💸 Financial Governance</h3>
+                <div class="space-y-4 text-sm text-gray-400">
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Azure Spending Limits</h4>
+                        <ul class="space-y-1">
+                            <li>• Quarterly budget set by founders</li>
+                            <li>• Alerts at 50% (owners), 75% (founders), 90% (meeting), 100% (auto-shutdown non-prod)</li>
+                            <li>• &gt; 10% over budget → Founder review</li>
+                            <li>• &gt; 25% over budget → Emergency cost optimization</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Service Approval Thresholds</h4>
+                        <ul class="space-y-1">
+                            <li>• New Azure services &lt; $50/mo → Service owner</li>
+                            <li>• $50–$200/mo → 1 founder approval</li>
+                            <li>• &gt; $200/mo → Founders consensus</li>
+                            <li>• Contracts &lt; $500 → Service owner</li>
+                            <li>• $500–$2000 → 1 founder approval</li>
+                            <li>• &gt; $2000 or multi-year → Founders consensus</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Cost Anomaly Response</h4>
+                        <ul class="space-y-1">
+                            <li>• &gt; 20% daily increase → Alert service owner</li>
+                            <li>• &gt; 50% weekly increase → Alert founders</li>
+                            <li>• Unexpected new services → Immediate investigation</li>
+                            <li>• Owner investigates within 4 hours; founders briefed within 24 hours</li>
+                        </ul>
+                    </div>
                 </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Refund Approval Authority</h4>
-                    <ul class="space-y-1">
-                        <li>• &lt; $10 → Automatic refund</li>
-                        <li>• $10–$100 → Service owner authority</li>
-                        <li>• &gt; $100 → Founders consensus</li>
-                        <li>• Full account refunds → Founders + legal if &gt; $500</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">SLA Exception Grants</h4>
-                    <ul class="space-y-1">
-                        <li>• Qualifies: outage &gt; 4h, data loss, breach, breaking change without notice</li>
-                        <li>• Approval: Service owner + 1 founder</li>
-                        <li>• Root cause + remediation required</li>
-                        <li>• Compensation: service credit preferred, refund if requested</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="text-white font-medium mb-2">Downtime Communication</h4>
-                    <ul class="space-y-1">
-                        <li>• Status page updated within 15 minutes</li>
-                        <li>• Email within 1 hour; updates every 2 hours</li>
-                        <li>• Founder review before send (unless critical security issue)</li>
-                        <li>• Post-mortem within 5 days (founder reviewed)</li>
-                    </ul>
+            </div>
+            <div class="bg-gray-900 rounded-lg p-5 border border-gray-600">
+                <h3 class="text-xl font-semibold text-indigo-400 mb-3">18.8 🤝 Support &amp; SLA</h3>
+                <div class="space-y-4 text-sm text-gray-400">
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Customer Escalation Paths</h4>
+                        <ul class="space-y-1">
+                            <li>• Tier 1 → Docs, knowledge base, community</li>
+                            <li>• Tier 2 → Support ticket (24-hour first response)</li>
+                            <li>• Tier 3 → Founder escalation (4-hour response; critical = immediate)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Refund Approval Authority</h4>
+                        <ul class="space-y-1">
+                            <li>• &lt; $10 → Automatic refund</li>
+                            <li>• $10–$100 → Service owner authority</li>
+                            <li>• &gt; $100 → Founders consensus</li>
+                            <li>• Full account refunds → Founders + legal if &gt; $500</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">SLA Exception Grants</h4>
+                        <ul class="space-y-1">
+                            <li>• Qualifies: outage &gt; 4h, data loss, breach, breaking change without notice</li>
+                            <li>• Approval: Service owner + 1 founder</li>
+                            <li>• Root cause + remediation required</li>
+                            <li>• Compensation: service credit preferred, refund if requested</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-white font-medium mb-2">Downtime Communication</h4>
+                        <ul class="space-y-1">
+                            <li>• Status page updated within 15 minutes</li>
+                            <li>• Email within 1 hour; updates every 2 hours</li>
+                            <li>• Founder review before send (unless critical security issue)</li>
+                            <li>• Post-mortem within 5 days (founder reviewed)</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
