@@ -191,14 +191,3 @@ button, a {
     z-index: auto;
   }
 }
-
-/* Ensure MudDrawer only shows on mobile when needed */
-.mud-drawer {
-  display: none !important;
-}
-
-@media (max-width: 1023px) {
-  .mud-drawer {
-    display: block !important;
-  }
-}
