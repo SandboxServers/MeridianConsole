@@ -334,3 +334,52 @@ MeridianConsole/
 - **MudBlazor 7.15.0** for UI components
 - **SignalR** for real-time features
 - **xUnit 2.9.2** for testing
+
+## Documentation Lookup with Context7
+
+This repository is configured with the **context7 MCP server** for retrieving up-to-date library documentation. When working with any of the key technologies above, use context7 to look up best practices, API references, and code examples.
+
+### When to Use Context7
+
+Use context7 MCP tools proactively when:
+- Implementing features with MudBlazor components (theming, layouts, forms, etc.)
+- Working with Entity Framework Core patterns (migrations, relationships, queries)
+- Setting up MassTransit consumers, sagas, or messaging patterns
+- Configuring YARP routing, authentication, or middleware
+- Using .NET 10 features or ASP.NET Core patterns
+
+### How to Use Context7
+
+1. **Resolve library ID** first using `mcp__context7__resolve-library-id`:
+   ```
+   libraryName: "MudBlazor"
+   ```
+
+2. **Fetch documentation** using `mcp__context7__get-library-docs`:
+   ```
+   context7CompatibleLibraryID: "/mudblazor/mudblazor"
+   topic: "dark theme customization"
+   mode: "code"  (for API references) or "info" (for conceptual guides)
+   ```
+
+### Examples
+
+**MudBlazor theming:**
+```
+resolve-library-id: "MudBlazor"
+get-library-docs: "/mudblazor/mudblazor", topic: "custom dark theme", mode: "code"
+```
+
+**Entity Framework Core:**
+```
+resolve-library-id: "Entity Framework Core"
+get-library-docs: "/dotnet/efcore", topic: "migrations", mode: "code"
+```
+
+**MassTransit:**
+```
+resolve-library-id: "MassTransit"
+get-library-docs: "/masstransit/masstransit", topic: "RabbitMQ consumer", mode: "code"
+```
+
+This ensures you're always working with current, accurate documentation rather than relying solely on training data.
