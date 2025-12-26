@@ -56,6 +56,30 @@
         LayoutProperties = new LayoutProperties
         {
             DefaultBorderRadius = "0.75rem", // rounded-xl
+        },
+        Typography = new Typography
+        {
+            Default = new Default
+            {
+                FontFamily = new[] { "Roboto", "Helvetica", "Arial", "sans-serif" },
+                FontSize = "0.875rem",
+                LineHeight = 1.65
+            },
+            H3 = new H3
+            {
+                FontWeight = 700,
+                LetterSpacing = "-0.025em" // tracking-tight
+            },
+            H5 = new H5
+            {
+                FontWeight = 600,
+                LetterSpacing = "-0.015em"
+            },
+            H6 = new H6
+            {
+                FontWeight = 700,
+                LetterSpacing = "-0.025em" // tracking-tight
+            }
         }
     };
 }

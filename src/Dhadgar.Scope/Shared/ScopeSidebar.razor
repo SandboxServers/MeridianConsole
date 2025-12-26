@@ -12,7 +12,7 @@
             <MudButton Href="/dependencies"
                        Variant="Variant.Outlined"
                        FullWidth="true"
-                       StartIcon="🕸️"
+                       StartIcon="@Icons.Material.Filled.AccountTree"
                        Style="border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); text-transform: none; justify-content: flex-start;"
                        Class="rounded-xl text-sm"
                        OnClick="HandleNavigate">
@@ -25,6 +25,10 @@
                           Margin="Margin.Dense"
                           Class="rounded-xl text-sm text-white"
                           Immediate="true"
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          AdornmentColor="Color.Primary"
                           Style="border-radius: 0.75rem; background: rgba(0,0,0,0.3);" />
         </div>
     </MudPaper>
@@ -32,7 +36,12 @@
     <MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-2" Elevation="0">
         @if (_sections is null)
         {
-            <div class="p-3 text-sm text-white/60">Loading…</div>
+            <div class="p-2 space-y-2">
+                @for (int i = 0; i < 8; i++)
+                {
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="32px" Class="rounded-xl" Animation="Animation.Wave" />
+                }
+            </div>
         }
         else
         {
