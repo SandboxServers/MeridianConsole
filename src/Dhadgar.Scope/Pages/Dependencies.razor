@@ -6,54 +6,85 @@
 <PageTitle>Dependency Map</PageTitle>
 
 <div class="space-y-6">
-    <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+    <MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-6" Elevation="0">
         <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-                <h1 class="text-2xl font-bold tracking-tight">Interactive Dependency Map</h1>
-                <p class="mt-2 text-white/75">
+                <MudText Typo="Typo.h4" Class="font-bold tracking-tight">Interactive Dependency Map</MudText>
+                <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.75);">
                     Click a node to inspect its responsibilities, endpoints, and relationships. Use search to jump.
-                </p>
+                </MudText>
             </div>
 
             <div class="w-full md:w-96">
-                <label class="block text-xs font-semibold tracking-wide text-white/60">Search</label>
-                <input class="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                       placeholder="Try: Gateway, RabbitMQ, Nodes…"
-                       @bind="Query"
-                       @bind:event="oninput" />
+                <MudTextField @bind-Value="Query"
+                              Label="Search"
+                              Placeholder="Try: Gateway, RabbitMQ, Nodes..."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Immediate="true"
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              AdornmentColor="Color.Primary"
+                              Class="rounded-xl"
+                              Style="border-radius: 0.75rem; background: rgba(0,0,0,0.3);" />
             </div>
         </div>
 
         <!-- Phone tabs -->
-        <div class="mt-4 flex md:hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
-            <button class='@TabClass("graph")' @onclick='() => SetMobileView("graph")'>Graph</button>
-            <button class='@TabClass("details")' @onclick='() => SetMobileView("details")'>Details</button>
+        <div class="mt-4 flex md:hidden items-center gap-2">
+            <MudButtonGroup OverrideStyles="false" Class="w-full rounded-2xl border border-white/10 bg-white/5 p-1">
+                <MudButton OnClick='() => SetMobileView("graph")'
+                           Variant="@(_mobileView == "graph" ? Variant.Filled : Variant.Text)"
+                           Color="Color.Default"
+                           Class="flex-1 rounded-xl"
+                           Style="@GetMobileTabStyle("graph")">
+                    Graph
+                </MudButton>
+                <MudButton OnClick='() => SetMobileView("details")'
+                           Variant="@(_mobileView == "details" ? Variant.Filled : Variant.Text)"
+                           Color="Color.Default"
+                           Class="flex-1 rounded-xl"
+                           Style="@GetMobileTabStyle("details")">
+                    Details
+                </MudButton>
+            </MudButtonGroup>
         </div>
-    </div>
+    </MudPaper>
 
     <div class="grid gap-4 lg:grid-cols-3">
         <!-- Graph panel -->
-        <div class="lg:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-3 @GraphPanelExtraClass">
+        <MudPaper Class="@($"lg:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-3 {GraphPanelExtraClass}")" Elevation="0">
             <div class="flex flex-wrap items-center justify-between gap-2 px-2 pb-3">
-                <div class="flex flex-wrap gap-2 text-xs text-white/70">
-                    <span class="rounded-full bg-white/5 px-2 py-1">Scroll / pinch to zoom</span>
-                    <span class="rounded-full bg-white/5 px-2 py-1">Drag nodes</span>
-                    <span class="rounded-full bg-white/5 px-2 py-1">Tap background to clear</span>
+                <div class="flex flex-wrap gap-2">
+                    <MudChip T="string" Size="Size.Small" Style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7);">Scroll / pinch to zoom</MudChip>
+                    <MudChip T="string" Size="Size.Small" Style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7);">Drag nodes</MudChip>
+                    <MudChip T="string" Size="Size.Small" Style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7);">Tap background to clear</MudChip>
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                            @onclick="FitGraphAsync">
+                    <MudButton OnClick="FitGraphAsync"
+                               Variant="Variant.Filled"
+                               Size="Size.Small"
+                               Class="rounded-xl"
+                               Style="background: rgba(255,255,255,0.1); text-transform: none;">
                         Fit
-                    </button>
-                    <button class="rounded-xl bg-white/10 px-3 py-2 text-xs hover:bg-white/15"
-                            @onclick="ResetGraphAsync">
+                    </MudButton>
+                    <MudButton OnClick="ResetGraphAsync"
+                               Variant="Variant.Filled"
+                               Size="Size.Small"
+                               Class="rounded-xl"
+                               Style="background: rgba(255,255,255,0.1); text-transform: none;">
                         Reset
-                    </button>
-                    <button class="hidden md:inline-flex lg:hidden rounded-xl bg-indigo-500 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-400"
-                            @onclick="ToggleDrawer">
+                    </MudButton>
+                    <MudButton OnClick="ToggleDrawer"
+                               Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               Class="hidden md:inline-flex lg:hidden rounded-xl font-semibold"
+                               Style="text-transform: none;">
                         Details
-                    </button>
+                    </MudButton>
                 </div>
             </div>
 
@@ -61,12 +92,12 @@
 
             @if (_initError)
             {
-                <div class="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-                    Graph renderer failed to initialize. If you’re behind a strict network, the Cytoscape CDN may be blocked.
+                <MudAlert Severity="Severity.Warning" Class="mt-3 rounded-xl" Dense="true">
+                    Graph renderer failed to initialize. If you're behind a strict network, the Cytoscape CDN may be blocked.
                     Check DevTools console for details.
-                </div>
+                </MudAlert>
             }
-        </div>
+        </MudPaper>
 
         <!-- Desktop details panel -->
         <div class="hidden lg:block">
@@ -86,17 +117,17 @@
     </div>
 </div>
 
-<!-- Tablet drawer (md → lg) -->
+<!-- Tablet drawer (md to lg) -->
+<MudOverlay @bind-Visible="_drawerOpen" OnClick="CloseDrawer" ZIndex="49" Class="hidden md:block lg:hidden" />
 <div class="@TabletDrawerRootClass">
-    <div class="@TabletDrawerBackdropClass" @onclick="CloseDrawer"></div>
     <div class="@TabletDrawerPanelClass">
         <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold text-white/80">Details</div>
-            <button class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-                    @onclick="CloseDrawer"
-                    aria-label="Close details">
-                ✕
-            </button>
+            <MudText Typo="Typo.body2" Class="font-semibold" Style="color: rgba(255,255,255,0.8);">Details</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                           Size="Size.Small"
+                           OnClick="CloseDrawer"
+                           Style="border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);"
+                           aria-label="Close details" />
         </div>
 
         <div class="mt-4 overflow-auto">
@@ -166,6 +197,11 @@ private string _query = string.Empty;
 
     private string TabClass(string view)
         => $"flex-1 rounded-xl px-4 py-2 text-sm font-semibold {( _mobileView == view ? "bg-white/10 text-white" : "text-white/70 hover:bg-white/5" )}";
+
+    private string GetMobileTabStyle(string view)
+        => _mobileView == view
+            ? "background: rgba(255,255,255,0.1); text-transform: none;"
+            : "text-transform: none;";
 
     private void SetMobileView(string view)
     {

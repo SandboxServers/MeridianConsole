@@ -2,11 +2,16 @@
 
 <PageTitle>Not Found</PageTitle>
 
-<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
-    <h1 class="text-2xl font-bold">Page not found</h1>
-    <p class="mt-2 text-white/70">The page you requested does not exist.</p>
-    <a class="mt-4 inline-block rounded-xl bg-indigo-500 px-4 py-2 font-semibold text-white hover:bg-indigo-400"
-       href="/">
+<MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-6" Elevation="0">
+    <MudText Typo="Typo.h4" Class="font-bold">Page not found</MudText>
+    <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.7);">
+        The page you requested does not exist.
+    </MudText>
+    <MudButton Href="/"
+               Variant="Variant.Filled"
+               Color="Color.Primary"
+               Class="mt-4 rounded-xl font-semibold"
+               Style="text-transform: none;">
         Back to home
-    </a>
-</div>
+    </MudButton>
+</MudPaper>

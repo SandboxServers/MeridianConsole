@@ -1,86 +1,86 @@
-<section id="tech-stack" class="bg-gray-800 rounded-xl p-6 border border-gray-700">
-    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
+<MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-6" Elevation="0">
+    <MudText Typo="Typo.h4" Color="Color.Secondary" Class="font-bold mb-6 pb-2" Style="border-bottom: 1px solid rgba(192, 132, 252, 0.3);">
         4. Tech Stack
-    </h2>
+    </MudText>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Backend</h3>
-    <table class="w-full text-sm border-collapse mb-6">
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Backend</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
         <thead>
-            <tr class="bg-gray-700 text-white">
-                <th class="border border-gray-600 p-2 text-left">Component</th>
-                <th class="border border-gray-600 p-2 text-left">Technology</th>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Component</th>
+                <th style="color: white; padding: 12px;">Technology</th>
             </tr>
         </thead>
-        <tbody class="text-gray-300">
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Framework</strong></td><td class="border border-gray-600 p-2">.NET 8, ASP.NET Core</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>ORM</strong></td><td class="border border-gray-600 p-2">Entity Framework Core</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Real-time</strong></td><td class="border border-gray-600 p-2">SignalR (WebSockets)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Messaging</strong></td><td class="border border-gray-600 p-2">MassTransit + RabbitMQ</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Reverse Proxy</strong></td><td class="border border-gray-600 p-2">YARP</td></tr>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Framework</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">.NET 8, ASP.NET Core</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>ORM</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Entity Framework Core</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Real-time</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">SignalR (WebSockets)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Messaging</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">MassTransit + RabbitMQ</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Reverse Proxy</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">YARP</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Frontend</h3>
-    <table class="w-full text-sm border-collapse mb-6">
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Frontend</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
         <thead>
-            <tr class="bg-gray-700 text-white">
-                <th class="border border-gray-600 p-2 text-left">Component</th>
-                <th class="border border-gray-600 p-2 text-left">Technology</th>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Component</th>
+                <th style="color: white; padding: 12px;">Technology</th>
             </tr>
         </thead>
-        <tbody class="text-gray-300">
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Framework</strong></td><td class="border border-gray-600 p-2">Blazor WebAssembly</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Styling</strong></td><td class="border border-gray-600 p-2">TailwindCSS</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Console Rendering</strong></td><td class="border border-gray-600 p-2">xterm.js</td></tr>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Framework</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Blazor WebAssembly</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Styling</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">TailwindCSS</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Console Rendering</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">xterm.js</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Infrastructure & Data</h3>
-    <table class="w-full text-sm border-collapse mb-6">
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Infrastructure and Data</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
         <thead>
-            <tr class="bg-gray-700 text-white">
-                <th class="border border-gray-600 p-2 text-left">Component</th>
-                <th class="border border-gray-600 p-2 text-left">Technology</th>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Component</th>
+                <th style="color: white; padding: 12px;">Technology</th>
             </tr>
         </thead>
-        <tbody class="text-gray-300">
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Orchestration</strong></td><td class="border border-gray-600 p-2">Kubernetes</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>CNI / Service Mesh</strong></td><td class="border border-gray-600 p-2">Cilium (mTLS, network policies)</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Database</strong></td><td class="border border-gray-600 p-2">PostgreSQL</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Cache</strong></td><td class="border border-gray-600 p-2">Redis</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Message Queue</strong></td><td class="border border-gray-600 p-2">RabbitMQ</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Secrets</strong></td><td class="border border-gray-600 p-2">Azure Key Vault + CSI Driver</td></tr>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Orchestration</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Kubernetes</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>CNI / Service Mesh</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Cilium (mTLS, network policies)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Database</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">PostgreSQL</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Cache</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Redis</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Message Queue</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">RabbitMQ</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Secrets</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Azure Key Vault + CSI Driver</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Observability</h3>
-    <table class="w-full text-sm border-collapse mb-6">
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Observability</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
         <thead>
-            <tr class="bg-gray-700 text-white">
-                <th class="border border-gray-600 p-2 text-left">Component</th>
-                <th class="border border-gray-600 p-2 text-left">Technology</th>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Component</th>
+                <th style="color: white; padding: 12px;">Technology</th>
             </tr>
         </thead>
-        <tbody class="text-gray-300">
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>APM</strong></td><td class="border border-gray-600 p-2">New Relic (SaaS)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Metrics</strong></td><td class="border border-gray-600 p-2">Prometheus + Grafana (internal)</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Logs</strong></td><td class="border border-gray-600 p-2">Loki</td></tr>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>APM</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">New Relic (SaaS)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Metrics</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Prometheus + Grafana (internal)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Logs</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Loki</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">DevOps</h3>
-    <table class="w-full text-sm border-collapse mb-6">
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">DevOps</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="rounded-xl" Style="background: rgba(0,0,0,0.2);">
         <thead>
-            <tr class="bg-gray-700 text-white">
-                <th class="border border-gray-600 p-2 text-left">Component</th>
-                <th class="border border-gray-600 p-2 text-left">Technology</th>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Component</th>
+                <th style="color: white; padding: 12px;">Technology</th>
             </tr>
         </thead>
-        <tbody class="text-gray-300">
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>CI/CD</strong></td><td class="border border-gray-600 p-2">Azure DevOps Pipelines</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>GitOps</strong></td><td class="border border-gray-600 p-2">ArgoCD</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2"><strong>Containers</strong></td><td class="border border-gray-600 p-2">Docker</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Registry</strong></td><td class="border border-gray-600 p-2">Azure Container Registry</td></tr>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>CI/CD</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Azure DevOps Pipelines</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>GitOps</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">ArgoCD</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Containers</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Docker</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Registry</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Azure Container Registry</td></tr>
         </tbody>
-    </table>
-</section>
+    </MudSimpleTable>
+</MudPaper>

@@ -2,54 +2,69 @@
 @inject ScopeContentService Scope
 
 <div class="space-y-4">
-    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <NavLink href="/" class="block" @onclick="HandleNavigate">
-            <div class="text-sm text-white/60">Meridian Console</div>
-            <div class="text-xl font-bold tracking-tight">Scope</div>
-        </NavLink>
+    <MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-4" Elevation="0">
+        <MudLink Href="/" Underline="Underline.None" Color="Color.Inherit" OnClick="HandleNavigate">
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6);">Meridian Console</MudText>
+            <MudText Typo="Typo.h6" Class="font-bold tracking-tight">Scope</MudText>
+        </MudLink>
 
         <div class="mt-4 space-y-2">
-            <NavLink href="/dependencies"
-                     class="block rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-                     ActiveClass="bg-white/10"
-                     @onclick="HandleNavigate">
-                <span class="mr-2">🕸️</span> Dependency Map
-            </NavLink>
+            <MudButton Href="/dependencies"
+                       Variant="Variant.Outlined"
+                       FullWidth="true"
+                       StartIcon="@Icons.Material.Filled.AccountTree"
+                       Style="border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); text-transform: none; justify-content: flex-start;"
+                       Class="rounded-xl text-sm"
+                       OnClick="HandleNavigate">
+                Dependency Map
+            </MudButton>
 
-            <input class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                   placeholder="Search sections…"
-                   @bind="_filter"
-                   @bind:event="oninput" />
+            <MudTextField @bind-Value="_filter"
+                          Placeholder="Search sections…"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Class="rounded-xl text-sm text-white"
+                          Immediate="true"
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          AdornmentColor="Color.Primary"
+                          Style="border-radius: 0.75rem; background: rgba(0,0,0,0.3);" />
         </div>
-    </div>
+    </MudPaper>
 
-    <div class="rounded-2xl border border-white/10 bg-white/5 p-2">
+    <MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-2" Elevation="0">
         @if (_sections is null)
         {
-            <div class="p-3 text-sm text-white/60">Loading…</div>
+            <div class="p-2 space-y-2">
+                @for (int i = 0; i < 8; i++)
+                {
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="32px" Class="rounded-xl" Animation="Animation.Wave" />
+                }
+            </div>
         }
         else
         {
-            <nav class="max-h-[70vh] overflow-auto">
+            <MudNavMenu Class="max-h-[70vh] overflow-auto">
                 @foreach (var s in FilteredSections())
                 {
-                    <NavLink class="block rounded-xl px-3 py-2 text-sm hover:bg-white/5"
-                             href="@($"/s/{s.Slug}")"
-                             @onclick="HandleNavigate">
+                    <MudNavLink Href="@($"/s/{s.Slug}")"
+                                OnClick="HandleNavigate"
+                                Class="rounded-xl text-sm">
                         <span class="text-white/60">@(s.Number).</span>
                         <span class="ml-2">@s.Title</span>
-                    </NavLink>
+                    </MudNavLink>
                 }
-            </nav>
+            </MudNavMenu>
         }
-    </div>
+    </MudPaper>
 
-    <div class="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/60">
-        <div class="font-semibold text-white/70">Hosting note</div>
-        <div class="mt-2">
+    <MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-4" Elevation="0">
+        <MudText Typo="Typo.caption" Class="font-semibold" Style="color: rgba(255,255,255,0.7);">Hosting note</MudText>
+        <MudText Typo="Typo.caption" Class="mt-2" Style="color: rgba(255,255,255,0.6);">
             This site publishes as static files (Blazor WebAssembly) and is designed to deploy cleanly to Azure Static Web Apps (Free tier).
-        </div>
-    </div>
+        </MudText>
+    </MudPaper>
 </div>
 
 @code {

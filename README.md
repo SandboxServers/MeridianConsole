@@ -273,6 +273,61 @@ dotnet run --project src/Dhadgar.Gateway
 
 ---
 
+## AI-Assisted Development with Claude Code
+
+This repository is configured for AI-assisted development using [Claude Code](https://claude.ai/code). When working on this codebase, developers should leverage the specialized Claude agents for optimal results.
+
+### Setup
+
+Claude Code reads project-specific instructions from `CLAUDE.md` in the repository root. This file contains:
+- Build and development commands
+- Architecture guidelines and patterns
+- Configuration conventions
+- Testing strategies
+
+### Specialized Agents
+
+When using Claude Code in this repository, the following specialized agents are available:
+
+| Agent | Use Case |
+|-------|----------|
+| **blazor-webdev-expert** | Blazor WebAssembly development, MudBlazor components, responsive layouts, forms, and styling |
+| **dotnet-10-researcher** | .NET 10 features, EF Core patterns, security best practices, and API design guidance |
+| **security-architect** | Authentication/authorization design, secrets management, mTLS configuration, threat modeling |
+| **Explore** | Codebase exploration, finding files, understanding code structure |
+| **Plan** | Designing implementation strategies for complex features |
+
+### Recommended Workflows
+
+**For new Blazor pages/components:**
+```
+Use the blazor-webdev-expert agent when creating UI components for Panel, ShoppingCart, or Scope
+```
+
+**For service implementation:**
+```
+Use dotnet-10-researcher for guidance on .NET 10 patterns, then implement with context from CLAUDE.md
+```
+
+**For security-sensitive features:**
+```
+Consult security-architect agent before implementing auth flows, agent enrollment, or secrets handling
+```
+
+**For documentation lookup:**
+```
+Use Context7 MCP tools to fetch up-to-date docs for MudBlazor, EF Core, MassTransit, and YARP
+```
+
+### Best Practices
+
+1. **Read CLAUDE.md first** - It contains critical architecture decisions (e.g., no service-to-service project references)
+2. **Use agents proactively** - Let specialized agents guide implementation for their domains
+3. **Leverage Context7** - Fetch current library documentation instead of relying on training data
+4. **Follow established patterns** - Check existing services before implementing new ones
+
+---
+
 ## EF Core migrations (DB-backed services)
 
 A service typically keeps migrations under `Data/Migrations`.

@@ -178,3 +178,16 @@ button, a {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* Ensure desktop sidebar never overlays content */
+@media (min-width: 1024px) {
+  aside {
+    position: relative !important;
+    z-index: auto !important;
+  }
+
+  .scope-content {
+    position: relative;
+    z-index: auto;
+  }
+}

@@ -1,62 +1,81 @@
-<section id="vision" class="bg-gray-800 rounded-xl p-6 border border-gray-700">
-    <h2 class="text-2xl font-bold text-white mb-4">🚀 Section 2: Vision & Scope</h2>
-    
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Product Overview</h3>
-    <p class="text-lg mb-6 text-gray-300">A complete game server hosting platform consisting of three integrated components:</p>
-    <ul class="text-gray-300 space-y-2 mb-6">
-        <li class="flex items-start gap-2"><span class="text-indigo-400">•</span> <strong class="text-white">Control Plane:</strong> Microservices-based backend managing provisioning, orchestration, billing, and user management</li>
-        <li class="flex items-start gap-2"><span class="text-green-400">•</span> <strong class="text-white">Distributed Agents:</strong> Cross-platform workers (Linux + Windows) that provision and manage game servers</li>
-        <li class="flex items-start gap-2"><span class="text-purple-400">•</span> <strong class="text-white">Unified Web Application:</strong> Blazor WASM frontend providing real-time console, server management, and administrative controls</li>
-    </ul>
+<MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-6" Elevation="0">
+    <MudText Typo="Typo.h4" Class="font-bold mb-4">Section 2: Vision and Scope</MudText>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Target Users</h3>
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-600 mb-6">
-        <p class="text-white font-semibold mb-2">Primary Audiences:</p>
-        <ul class="text-gray-300 space-y-1 text-sm grid md:grid-cols-2 gap-2">
-            <li>• Gaming communities & clans</li>
-            <li>• Content creators & streamers</li>
-            <li>• Small-medium businesses</li>
-            <li>• Modding communities</li>
-            <li>• Indie game developers</li>
-            <li>• Individuals</li>
-            <li>• LAN event organizers</li>
-            <li>• Esports teams</li>
-        </ul>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Product Overview</MudText>
+    <MudText Typo="Typo.body1" Class="mb-6" Style="color: rgba(255,255,255,0.7);">A complete game server hosting platform consisting of three integrated components:</MudText>
+    <div class="space-y-2 mb-6">
+        <div class="flex items-start gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Primary" Class="mt-1" />
+            <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);"><strong>Control Plane:</strong> Microservices-based backend managing provisioning, orchestration, billing, and user management</MudText>
+        </div>
+        <div class="flex items-start gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Success" Class="mt-1" />
+            <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);"><strong>Distributed Agents:</strong> Cross-platform workers (Linux + Windows) that provision and manage game servers</MudText>
+        </div>
+        <div class="flex items-start gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="Color.Secondary" Class="mt-1" />
+            <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);"><strong>Unified Web Application:</strong> Blazor WASM frontend providing real-time console, server management, and administrative controls</MudText>
+        </div>
     </div>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Core Differentiators</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Feature</th><th class="border border-gray-600 p-2">Advantage</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong class="text-white">.NET 8 + SignalR</strong></td><td class="border border-gray-600 p-2">Real-time console, high performance, modern stack</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong class="text-white">Cross-Platform Agents</strong></td><td class="border border-gray-600 p-2">Linux + Windows support (most competitors Linux-only)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong class="text-white">Multi-Engine Support</strong></td><td class="border border-gray-600 p-2">Minecraft, Valheim, ARK, Rust, Palworld, and more</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong class="text-white">Hybrid Cloud Ready</strong></td><td class="border border-gray-600 p-2">Deploy agents anywhere (colo, cloud, on-prem)</td></tr>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Target Users</MudText>
+    <MudPaper Class="rounded-xl border border-white/10 bg-black/20 p-4 mb-6" Elevation="0">
+        <MudText Typo="Typo.body2" Class="font-semibold mb-2">Primary Audiences:</MudText>
+        <div class="grid md:grid-cols-2 gap-2">
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- Gaming communities and clans</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- Content creators and streamers</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- Small-medium businesses</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- Modding communities</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- Indie game developers</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- Individuals</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- LAN event organizers</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- Esports teams</MudText>
+        </div>
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Core Differentiators</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
+        <thead>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Feature</th>
+                <th style="color: white; padding: 12px;">Advantage</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>.NET 8 + SignalR</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Real-time console, high performance, modern stack</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Cross-Platform Agents</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Linux + Windows support (most competitors Linux-only)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Multi-Engine Support</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Minecraft, Valheim, ARK, Rust, Palworld, and more</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Hybrid Cloud Ready</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Deploy agents anywhere (colo, cloud, on-prem)</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Performance Targets</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Metric</th><th class="border border-gray-600 p-2">Target</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong>Provisioning Time</strong></td><td class="border border-gray-600 p-2">Server created + installing within 60 seconds (not playable yet)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Uptime SLA</strong></td><td class="border border-gray-600 p-2">99% (MVP), 99.5% (growth target)</td></tr>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Performance Targets</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
+        <thead>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Metric</th>
+                <th style="color: white; padding: 12px;">Target</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Provisioning Time</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Server created + installing within 60 seconds (not playable yet)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Uptime SLA</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">99% (MVP), 99.5% (growth target)</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Non-Goals</h3>
-    <ul class="text-gray-300 space-y-1 mb-6">
-        <li>• Web hosting (focus on game servers only)</li>
-        <li>• Competing on price (premium positioning)</li>
-        <li>• White-label / reseller program (at least initially)</li>
-    </ul>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Deferred Goals</h3>
-    <div class="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4">
-        <p class="text-yellow-400 font-semibold mb-2">⚠️ Important: Architecture must support these future features</p>
-        <ul class="text-gray-300 space-y-1">
-            <li>• <strong>Mobile apps</strong> (iOS/Android)</li>
-            <li>• <strong>KiP - Knowledge is Power Edition</strong> (detailed analytics/insights product)</li>
-        </ul>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Non-Goals</MudText>
+    <div class="space-y-1 mb-6">
+        <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);">- Web hosting (focus on game servers only)</MudText>
+        <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);">- Competing on price (premium positioning)</MudText>
+        <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);">- White-label / reseller program (at least initially)</MudText>
     </div>
-</section>
+
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Deferred Goals</MudText>
+    <MudAlert Severity="Severity.Warning" Class="rounded-xl" Dense="true">
+        <strong>Important:</strong> Architecture must support these future features
+        <div class="mt-2 space-y-1">
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- <strong>Mobile apps</strong> (iOS/Android)</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">- <strong>KiP - Knowledge is Power Edition</strong> (detailed analytics/insights product)</MudText>
+        </div>
+    </MudAlert>
+</MudPaper>
