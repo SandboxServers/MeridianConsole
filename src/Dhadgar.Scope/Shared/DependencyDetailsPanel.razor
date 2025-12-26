@@ -1,122 +1,133 @@
 @using Dhadgar.Scope.Services
 
-<div class="@Class">
+<MudPaper Class="@Class" Elevation="0">
     @if (Selected is null)
     {
-        <div class="text-sm text-white/70">
-            <div class="font-semibold text-white">Nothing selected</div>
-            <p class="mt-2">
+        <div>
+            <MudText Typo="Typo.body2" Class="font-semibold">Nothing selected</MudText>
+            <MudText Typo="Typo.body2" Class="mt-2" Style="color: rgba(255,255,255,0.7);">
                 Select a node on the graph to see details here.
-            </p>
-            <hr class="my-4 border-white/10" />
-            <div class="text-xs text-white/60">
-                Layers (top → bottom): External, Presentation, Core, Business, Foundation
-            </div>
+            </MudText>
+            <MudDivider Class="my-4" Style="border-color: rgba(255,255,255,0.1);" />
+            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.6);">
+                Layers (top to bottom): External, Presentation, Core, Business, Foundation
+            </MudText>
         </div>
     }
     else
     {
         <div class="space-y-4">
             <div>
-                <div class="text-xs font-semibold tracking-wide text-white/60">Node</div>
-                <div class="mt-1 text-xl font-bold">
+                <MudText Typo="Typo.caption" Class="font-semibold tracking-wide" Style="color: rgba(255,255,255,0.6);">Node</MudText>
+                <MudText Typo="Typo.h5" Class="mt-1 font-bold">
                     @(Selected.Emoji) @Selected.Name
-                </div>
-                <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/70">
-                    <span class="rounded-full bg-white/5 px-2 py-1">@Selected.Layer</span>
+                </MudText>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <MudChip T="string" Size="Size.Small" Style="background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7);">@Selected.Layer</MudChip>
                     @if (Selected.Port is not null)
                     {
-                        <span class="text-white/60">Port:</span>
-                        <span class="font-mono text-white">@Selected.Port</span>
+                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6);">Port:</MudText>
+                        <MudText Typo="Typo.body2" Class="font-mono">@Selected.Port</MudText>
                     }
                 </div>
                 @if (!string.IsNullOrWhiteSpace(Selected.Description))
                 {
-                    <p class="mt-3 text-sm text-white/80">@Selected.Description</p>
+                    <MudText Typo="Typo.body2" Class="mt-3" Style="color: rgba(255,255,255,0.8);">@Selected.Description</MudText>
                 }
             </div>
 
             @if (Selected.Responsibilities.Count > 0)
             {
                 <div>
-                    <div class="text-xs font-semibold tracking-wide text-white/60">Responsibilities</div>
-                    <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-white/80">
+                    <MudText Typo="Typo.caption" Class="font-semibold tracking-wide" Style="color: rgba(255,255,255,0.6);">Responsibilities</MudText>
+                    <MudList T="string" Dense="true" Class="mt-2" Style="padding: 0;">
                         @foreach (var r in Selected.Responsibilities)
                         {
-                            <li>@r</li>
+                            <MudListItem T="string" Dense="true" Style="padding-left: 0; min-height: auto;">
+                                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">- @r</MudText>
+                            </MudListItem>
                         }
-                    </ul>
+                    </MudList>
                 </div>
             }
 
             @if (Selected.Endpoints.Count > 0)
             {
                 <div>
-                    <div class="text-xs font-semibold tracking-wide text-white/60">Endpoints / Notes</div>
-                    <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-white/80">
+                    <MudText Typo="Typo.caption" Class="font-semibold tracking-wide" Style="color: rgba(255,255,255,0.6);">Endpoints / Notes</MudText>
+                    <MudList T="string" Dense="true" Class="mt-2" Style="padding: 0;">
                         @foreach (var e in Selected.Endpoints)
                         {
-                            <li>@e</li>
+                            <MudListItem T="string" Dense="true" Style="padding-left: 0; min-height: auto;">
+                                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">- @e</MudText>
+                            </MudListItem>
                         }
-                    </ul>
+                    </MudList>
                 </div>
             }
 
             <div class="grid gap-4 md:grid-cols-2">
                 <div>
-                    <div class="text-xs font-semibold tracking-wide text-white/60">Depends on</div>
+                    <MudText Typo="Typo.caption" Class="font-semibold tracking-wide" Style="color: rgba(255,255,255,0.6);">Depends on</MudText>
                     @if (Selected.Dependencies.Count == 0)
                     {
-                        <div class="mt-2 text-sm text-white/60">None</div>
+                        <MudText Typo="Typo.body2" Class="mt-2" Style="color: rgba(255,255,255,0.6);">None</MudText>
                     }
                     else
                     {
-                        <ul class="mt-2 space-y-1 text-sm">
+                        <div class="mt-2 space-y-1">
                             @foreach (var d in Selected.Dependencies.OrderBy(x => x))
                             {
-                                <li>
-                                    <button class="text-left text-indigo-300 hover:underline"
-                                            @onclick="() => SelectByName.InvokeAsync(d)">
+                                <div>
+                                    <MudLink Color="Color.Primary"
+                                             Underline="Underline.Hover"
+                                             OnClick="() => SelectByName.InvokeAsync(d)"
+                                             Style="cursor: pointer; font-size: 0.875rem;">
                                         @d
-                                    </button>
-                                </li>
+                                    </MudLink>
+                                </div>
                             }
-                        </ul>
+                        </div>
                     }
                 </div>
 
                 <div>
-                    <div class="text-xs font-semibold tracking-wide text-white/60">Used by</div>
+                    <MudText Typo="Typo.caption" Class="font-semibold tracking-wide" Style="color: rgba(255,255,255,0.6);">Used by</MudText>
                     @if (Selected.Dependents.Count == 0)
                     {
-                        <div class="mt-2 text-sm text-white/60">None</div>
+                        <MudText Typo="Typo.body2" Class="mt-2" Style="color: rgba(255,255,255,0.6);">None</MudText>
                     }
                     else
                     {
-                        <ul class="mt-2 space-y-1 text-sm">
+                        <div class="mt-2 space-y-1">
                             @foreach (var d in Selected.Dependents.OrderBy(x => x))
                             {
-                                <li>
-                                    <button class="text-left text-indigo-300 hover:underline"
-                                            @onclick="() => SelectByName.InvokeAsync(d)">
+                                <div>
+                                    <MudLink Color="Color.Primary"
+                                             Underline="Underline.Hover"
+                                             OnClick="() => SelectByName.InvokeAsync(d)"
+                                             Style="cursor: pointer; font-size: 0.875rem;">
                                         @d
-                                    </button>
-                                </li>
+                                    </MudLink>
+                                </div>
                             }
-                        </ul>
+                        </div>
                     }
                 </div>
             </div>
 
             <div class="pt-2">
-                <button class="rounded-xl bg-white/10 px-3 py-2 text-sm hover:bg-white/15"
-                        @onclick="() => Clear.InvokeAsync()">
+                <MudButton OnClick="() => Clear.InvokeAsync()"
+                           Variant="Variant.Filled"
+                           Size="Size.Small"
+                           Class="rounded-xl"
+                           Style="background: rgba(255,255,255,0.1); text-transform: none;">
                     Clear selection
-                </button>
+                </MudButton>
             </div>
         </div>
     }
-</div>
+</MudPaper>
 
 @code {
     [Parameter] public DependencyNode? Selected { get; set; }

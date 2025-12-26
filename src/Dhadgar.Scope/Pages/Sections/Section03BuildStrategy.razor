@@ -1,66 +1,93 @@
-<section id="build-strategy" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
-    <h2 class="text-2xl font-bold text-white mb-4">🛤️ Section 3: Build Strategy</h2>
-    
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Environment Structure</h3>
-    <table class="w-full text-sm border-collapse mb-4">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Environment</th><th class="border border-gray-600 p-2">Infrastructure</th><th class="border border-gray-600 p-2">Purpose</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong>Dev</strong></td><td class="border border-gray-600 p-2">Kubernetes namespace</td><td class="border border-gray-600 p-2">Active development, frequent deploys</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Staging</strong></td><td class="border border-gray-600 p-2">Kubernetes namespace</td><td class="border border-gray-600 p-2">Pre-production validation, customer demos</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Prod</strong></td><td class="border border-gray-600 p-2">Kubernetes namespace (future: dedicated cluster)</td><td class="border border-gray-600 p-2">Live customer environment</td></tr>
-        </tbody>
-    </table>
+<MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-6" Elevation="0">
+    <MudText Typo="Typo.h4" Class="font-bold mb-4">Section 3: Build Strategy</MudText>
 
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-600 mb-6">
-        <p class="text-white font-semibold mb-1">Local Development:</p>
-        <p class="text-sm text-gray-400">Developer's choice (Docker Compose, local Kubernetes, etc.). Changes must be validated locally before pushing to dev environment.</p>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Environment Structure</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-4 rounded-xl" Style="background: rgba(0,0,0,0.2);">
+        <thead>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Environment</th>
+                <th style="color: white; padding: 12px;">Infrastructure</th>
+                <th style="color: white; padding: 12px;">Purpose</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Dev</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Kubernetes namespace</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Active development, frequent deploys</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Staging</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Kubernetes namespace</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Pre-production validation, customer demos</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Prod</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Kubernetes namespace (future: dedicated cluster)</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Live customer environment</td></tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <MudPaper Class="rounded-xl border border-white/10 bg-black/20 p-4 mb-6" Elevation="0">
+        <MudText Typo="Typo.body2" Class="font-semibold mb-1">Local Development:</MudText>
+        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6);">Developer's choice (Docker Compose, local Kubernetes, etc.). Changes must be validated locally before pushing to dev environment.</MudText>
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">CI/CD Platform</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
+        <thead>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Component</th>
+                <th style="color: white; padding: 12px;">Technology</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>CI/CD</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Azure Pipelines</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Build Agents</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Self-hosted (pod in cluster)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Container Registry</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Azure Container Registry (ACR)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Artifact Retention</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Forever (ADO doesn't charge for storage)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Package Manager</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Helm</td></tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">GitOps with ArgoCD</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
+        <thead>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Aspect</th>
+                <th style="color: white; padding: 12px;">Implementation</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>ArgoCD Role</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Read-only, declarative state enforcement</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Drift Detection</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Used as deployment gate (staging/prod must match Git exactly)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><strong>Source of Truth</strong></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">CI/CD pipeline updates Git, ArgoCD syncs to cluster</td></tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Branching Strategy</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
+        <thead>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Branch</th>
+                <th style="color: white; padding: 12px;">Deploys To</th>
+                <th style="color: white; padding: 12px;">Trigger</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><code style="color: #818cf8;">develop</code></td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Dev</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Automatic on push</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><code style="color: #818cf8;">main</code> (untagged)</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Staging</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Automatic on merge</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;"><code style="color: #818cf8;">main</code> (tagged)</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Prod</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Manual approval required (ADO Environment Resources)</td></tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Deployment Gates</MudText>
+    <div class="space-y-1 mb-6">
+        <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);">- <strong>Dev to Staging:</strong> Unit tests pass, build succeeds</MudText>
+        <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.7);">- <strong>Staging to Prod:</strong> Manual approval + ArgoCD drift check (staging must be in sync)</MudText>
     </div>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">CI/CD Platform</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Component</th><th class="border border-gray-600 p-2">Technology</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong>CI/CD</strong></td><td class="border border-gray-600 p-2">Azure Pipelines</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Build Agents</strong></td><td class="border border-gray-600 p-2">Self-hosted (pod in cluster)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Container Registry</strong></td><td class="border border-gray-600 p-2">Azure Container Registry (ACR)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Artifact Retention</strong></td><td class="border border-gray-600 p-2">Forever (ADO doesn't charge for storage)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Package Manager</strong></td><td class="border border-gray-600 p-2">Helm</td></tr>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Notifications</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="rounded-xl" Style="background: rgba(0,0,0,0.2);">
+        <thead>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Event</th>
+                <th style="color: white; padding: 12px;">Notification Method</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">Build failures</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Discord webhook to dev channel</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">Deployment to staging/prod</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Discord webhook to ops channel</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">Approval required</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Discord webhook + ADO notification</td></tr>
         </tbody>
-    </table>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">GitOps with ArgoCD</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Aspect</th><th class="border border-gray-600 p-2">Implementation</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><strong>ArgoCD Role</strong></td><td class="border border-gray-600 p-2">Read-only, declarative state enforcement</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Drift Detection</strong></td><td class="border border-gray-600 p-2">Used as deployment gate (staging/prod must match Git exactly)</td></tr>
-            <tr><td class="border border-gray-600 p-2"><strong>Source of Truth</strong></td><td class="border border-gray-600 p-2">CI/CD pipeline updates Git, ArgoCD syncs to cluster</td></tr>
-        </tbody>
-    </table>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Branching Strategy</h3>
-    <table class="w-full text-sm border-collapse mb-6">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Branch</th><th class="border border-gray-600 p-2">Deploys To</th><th class="border border-gray-600 p-2">Trigger</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2"><code class="text-indigo-400">develop</code></td><td class="border border-gray-600 p-2">Dev</td><td class="border border-gray-600 p-2">Automatic on push</td></tr>
-            <tr><td class="border border-gray-600 p-2"><code class="text-indigo-400">main</code> (untagged)</td><td class="border border-gray-600 p-2">Staging</td><td class="border border-gray-600 p-2">Automatic on merge</td></tr>
-            <tr><td class="border border-gray-600 p-2"><code class="text-indigo-400">main</code> (tagged)</td><td class="border border-gray-600 p-2">Prod</td><td class="border border-gray-600 p-2">Manual approval required (ADO Environment Resources)</td></tr>
-        </tbody>
-    </table>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Deployment Gates</h3>
-    <ul class="text-gray-300 space-y-1 mb-6">
-        <li>• <strong class="text-white">Dev → Staging:</strong> Unit tests pass, build succeeds</li>
-        <li>• <strong class="text-white">Staging → Prod:</strong> Manual approval + ArgoCD drift check (staging must be in sync)</li>
-    </ul>
-
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Notifications</h3>
-    <table class="w-full text-sm border-collapse">
-        <thead><tr class="bg-gray-700 text-white"><th class="border border-gray-600 p-2">Event</th><th class="border border-gray-600 p-2">Notification Method</th></tr></thead>
-        <tbody class="text-gray-300">
-            <tr><td class="border border-gray-600 p-2">Build failures</td><td class="border border-gray-600 p-2">Discord webhook to dev channel</td></tr>
-            <tr><td class="border border-gray-600 p-2">Deployment to staging/prod</td><td class="border border-gray-600 p-2">Discord webhook to ops channel</td></tr>
-            <tr><td class="border border-gray-600 p-2">Approval required</td><td class="border border-gray-600 p-2">Discord webhook + ADO notification</td></tr>
-        </tbody>
-    </table>
-</section>
+    </MudSimpleTable>
+</MudPaper>
