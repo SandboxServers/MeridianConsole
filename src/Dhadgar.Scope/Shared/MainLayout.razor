@@ -1,63 +1,65 @@
 @inherits LayoutComponentBase
 @inject IJSRuntime JS
 
-<div class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-black text-white">
-    <div class="mx-auto w-full px-4 py-6 2xl:px-8">
-        <!-- Mobile top bar -->
-        <div class="mb-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4 lg:hidden">
-            <a href="/" class="block">
-                <div class="text-sm text-white/60">Meridian Console</div>
-                <div class="text-xl font-bold tracking-tight">Scope</div>
-            </a>
+<MudLayout Class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-black text-white">
+    <!-- Mobile AppBar -->
+    <MudAppBar Elevation="0" Class="lg:hidden" Style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 1rem; margin: 1rem;">
+        <MudLink Href="/" Underline="Underline.None" Color="Color.Inherit">
+            <div class="text-sm text-white/60">Meridian Console</div>
+            <div class="text-xl font-bold tracking-tight">Scope</div>
+        </MudLink>
+        <MudSpacer />
+        <MudIconButton Icon="☰"
+                       Color="Color.Inherit"
+                       Edge="Edge.End"
+                       OnClick="@ToggleSidebar"
+                       Style="border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);" />
+    </MudAppBar>
 
-            <button class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-                    @onclick="ToggleSidebar"
-                    aria-expanded="@_sidebarOpen"
-                    aria-label="Open menu">
-                ☰
-            </button>
-        </div>
+    <!-- Desktop Drawer (always open) -->
+    <MudDrawer @bind-Open="_desktopDrawerOpen"
+               Anchor="Anchor.Left"
+               Elevation="0"
+               Variant="@DrawerVariant.Persistent"
+               Class="hidden lg:block"
+               ClipMode="DrawerClipMode.Never"
+               Style="width: 320px; position: sticky; top: 1.5rem; margin-left: 1rem; max-height: calc(100vh - 3rem);">
+        <ScopeSidebar />
+    </MudDrawer>
 
-        <div class="flex flex-col gap-4 lg:flex-row">
-            <!-- Desktop sidebar -->
-            <aside class="hidden lg:block lg:w-80">
-                <div class="sticky top-6">
-                    <ScopeSidebar />
-                </div>
-            </aside>
-
-            <main class="min-w-0 flex-1 scope-content">
-                @Body
-            </main>
-        </div>
-    </div>
-
-    <!-- Mobile drawer sidebar -->
-    <div class="@($"fixed inset-0 z-50 lg:hidden {( _sidebarOpen ? "" : "pointer-events-none" )}")">
-        <div class="@($"absolute inset-0 bg-black/60 touch-none transition-opacity duration-200 {( _sidebarOpen ? "opacity-100" : "opacity-0" )}")"
-             @onclick="CloseSidebar"></div>
-
-        <aside class="@($"absolute inset-y-0 left-0 z-50 flex h-full w-[min(92vw,380px)] flex-col border-r border-white/10 bg-slate-950/95 p-4 backdrop-blur-xl shadow-2xl transition-transform duration-200 {( _sidebarOpen ? "translate-x-0" : "-translate-x-full" )}")"
-               role="dialog"
-               aria-modal="true">
-            <div class="flex items-center justify-between pt-[env(safe-area-inset-top)]">
-                <div class="text-sm text-white/60">Menu</div>
-                <button class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-                        @onclick="CloseSidebar"
-                        aria-label="Close menu">
-                    ✕
-                </button>
+    <!-- Mobile Drawer (responsive) -->
+    <MudDrawer @bind-Open="_sidebarOpen"
+               Anchor="Anchor.Left"
+               Elevation="16"
+               Variant="@DrawerVariant.Temporary"
+               Class="lg:hidden"
+               ClipMode="DrawerClipMode.Always"
+               Style="width: min(92vw, 380px); background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.1);">
+        <MudDrawerHeader Style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div class="flex items-center justify-between w-full">
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6);">Menu</MudText>
+                <MudIconButton Icon="✕"
+                               Color="Color.Inherit"
+                               Size="Size.Small"
+                               OnClick="@CloseSidebar"
+                               Style="border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);" />
             </div>
+        </MudDrawerHeader>
+        <div class="mt-4 px-4">
+            <ScopeSidebar OnNavigate="CloseSidebar" />
+        </div>
+    </MudDrawer>
 
-            <div class="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] pr-1">
-                <ScopeSidebar OnNavigate="CloseSidebar" />
-            </div>
-        </aside>
-    </div>
-</div>
+    <MudMainContent Class="px-4 py-6 2xl:px-8">
+        <div class="scope-content">
+            @Body
+        </div>
+    </MudMainContent>
+</MudLayout>
 
 @code {
     private bool _sidebarOpen;
+    private bool _desktopDrawerOpen = true;
 
     private async Task ToggleSidebar()
     {

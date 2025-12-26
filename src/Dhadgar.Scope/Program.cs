@@ -1,6 +1,8 @@
 using System.Net.Http;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using MudBlazor;
+using MudBlazor.Services;
 
 using Dhadgar.Scope;
 using Dhadgar.Scope.Services;
@@ -20,5 +22,11 @@ builder.Services.AddScoped<DependencyGraphService>();
 builder.Services.AddScoped<ArchitectureGraphService>();
 builder.Services.AddScoped<DbSchemaCatalogService>();
 builder.Services.AddScoped<CommMatrixService>();
+
+// Configure MudBlazor with custom dark theme matching existing indigo/purple palette
+builder.Services.AddMudServices(config =>
+{
+    config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomRight;
+});
 
 await builder.Build().RunAsync();
