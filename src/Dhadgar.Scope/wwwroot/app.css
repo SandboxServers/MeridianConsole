@@ -178,3 +178,27 @@ button, a {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* Ensure desktop sidebar never overlays content */
+@media (min-width: 1024px) {
+  aside {
+    position: relative !important;
+    z-index: auto !important;
+  }
+
+  .scope-content {
+    position: relative;
+    z-index: auto;
+  }
+}
+
+/* Ensure MudDrawer only shows on mobile when needed */
+.mud-drawer {
+  display: none !important;
+}
+
+@media (max-width: 1023px) {
+  .mud-drawer {
+    display: block !important;
+  }
+}
