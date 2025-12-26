@@ -87,6 +87,45 @@ dotnet user-secrets set "Discord:BotToken" "your-token" --project src/Dhadgar.Di
 dotnet user-secrets list --project src/Dhadgar.Identity
 ```
 
+## Parallel Claude Sessions
+
+**Rule**: When running multiple Claude Code sessions simultaneously, each session MUST use its own **git worktree**. This prevents one session from accidentally committing another session's uncommitted work.
+
+### What is a Git Worktree?
+
+Normal git: One folder, one branch at a time. Switching branches changes all files.
+
+Git worktree: Same repo, multiple folders, each on a different branch simultaneously.
+
+```
+C:\projects\
+├── MeridianConsole/           ← main branch (Claude A)
+├── MeridianConsole-feature1/  ← feature/auth branch (Claude B)
+└── MeridianConsole-feature2/  ← feature/billing branch (Claude C)
+```
+
+All folders share the same `.git` history. Commits in any folder show up in all of them, but uncommitted changes stay isolated to their respective folder.
+
+### Commands
+
+```bash
+# Create a worktree for a new feature branch
+git worktree add ../MeridianConsole-auth -b feature/auth
+
+# Create a worktree for an existing branch
+git worktree add ../MeridianConsole-hotfix hotfix/urgent-fix
+
+# List all worktrees
+git worktree list
+
+# Remove a worktree when done
+git worktree remove ../MeridianConsole-auth
+```
+
+### Why This is Required
+
+Without separate worktrees, parallel Claude sessions share the same working directory. When one session commits, it may inadvertently include uncommitted changes from another session—exactly the problem worktrees solve.
+
 ## Architecture
 
 ### Microservices Pattern
