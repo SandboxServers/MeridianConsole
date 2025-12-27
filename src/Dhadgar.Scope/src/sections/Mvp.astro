@@ -1,0 +1,66 @@
+---
+// Section 17: MVP Scope & Phases
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 17: MVP Scope & Phases</h2>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">MVP Definition</h3>
+  <p class="mb-4 text-white/70">
+    Minimum Viable Product: A working platform that can provision, manage, and bill for game servers
+    with at least one supported game engine.
+  </p>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Phase 1: Foundation</h3>
+  <div class="scope-panel mb-4">
+    <ul class="space-y-1 text-white/70">
+      <li>- Core service scaffolding</li>
+      <li>- Authentication (Identity service)</li>
+      <li>- Basic server management (Servers service)</li>
+      <li>- Agent enrollment and communication</li>
+      <li>- Infrastructure setup (K8s, databases)</li>
+    </ul>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Phase 2: Core Features</h3>
+  <div class="scope-panel mb-4">
+    <ul class="space-y-1 text-white/70">
+      <li>- Real-time console streaming</li>
+      <li>- File management and backups</li>
+      <li>- First game engine support (Minecraft)</li>
+      <li>- Basic billing integration</li>
+      <li>- User/org management</li>
+    </ul>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Phase 3: Polish</h3>
+  <div class="scope-panel mb-4">
+    <ul class="space-y-1 text-white/70">
+      <li>- Additional game engines</li>
+      <li>- Mod support</li>
+      <li>- Discord integration</li>
+      <li>- Notifications</li>
+      <li>- Observability dashboard</li>
+    </ul>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Success Metrics</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Target</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Time to first server</td><td>&lt; 5 minutes from signup</td></tr>
+      <tr><td>Server provisioning</td><td>&lt; 60 seconds</td></tr>
+      <tr><td>Platform uptime</td><td>99%</td></tr>
+      <tr><td>Supported game engines</td><td>3+ at MVP</td></tr>
+    </tbody>
+  </table>
+
+  <div class="scope-callout">
+    <strong>Current Status:</strong> Phase 1 planning complete with ~400 work items tracked in Azure DevOps.
+  </div>
+</div>

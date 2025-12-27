@@ -1,0 +1,15 @@
+---
+// Section 9: System Architecture
+import { ArchitectureTreeView } from '../components/visualizations/ArchitectureTreeView';
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 9: System Architecture</h2>
+
+  <p class="mb-6 text-white/70">
+    Explore the system architecture by district. Click on nodes to see details about each service,
+    including responsibilities, ports, and connections.
+  </p>
+
+  <ArchitectureTreeView client:load />
+</div>

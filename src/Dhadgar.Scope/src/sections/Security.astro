@@ -1,0 +1,57 @@
+---
+// Section 7: Security Architecture
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 7: Security Architecture</h2>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Trust Boundaries</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Boundary</th>
+        <th>Protection</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Edge (Internet)</td><td>Cloudflare WAF, DDoS protection</td></tr>
+      <tr><td>Gateway</td><td>Authentication, rate limiting, input validation</td></tr>
+      <tr><td>Service-to-Service</td><td>mTLS (planned), internal network only</td></tr>
+      <tr><td>Agent-to-Control Plane</td><td>mTLS certificates, outbound-only</td></tr>
+      <tr><td>Database</td><td>TLS, per-service credentials, network isolation</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Authentication</h3>
+  <div class="scope-panel mb-6">
+    <ul class="space-y-2 text-white/70">
+      <li>- JWT-based authentication</li>
+      <li>- Support for passwordless login (planned)</li>
+      <li>- OAuth2 integration (Discord, Google)</li>
+      <li>- API keys for programmatic access</li>
+    </ul>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Authorization (RBAC)</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Role</th>
+        <th>Scope</th>
+        <th>Permissions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Owner</td><td>Organization</td><td>Full control, billing</td></tr>
+      <tr><td>Admin</td><td>Organization</td><td>Manage users, servers</td></tr>
+      <tr><td>Operator</td><td>Server</td><td>Start/stop, configure</td></tr>
+      <tr><td>Viewer</td><td>Server</td><td>View status, logs</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Secrets Management</h3>
+  <div class="scope-callout">
+    <strong>Approach:</strong> Kubernetes secrets for infrastructure, dedicated Secrets Service for user credentials.
+    No secrets in code or environment variables.
+  </div>
+</div>

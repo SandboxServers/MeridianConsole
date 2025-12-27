@@ -1,0 +1,47 @@
+---
+// Section 5: Deployment Topology
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 5: Deployment Topology</h2>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Infrastructure Overview</h3>
+  <p class="mb-4 text-white/70">
+    The platform uses a hybrid deployment model with control plane services running in Kubernetes
+    and agents deployed on customer-managed hardware.
+  </p>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Control Plane (Kubernetes)</h3>
+  <div class="scope-panel mb-6">
+    <p class="mb-2 font-semibold">Hosted on Talos Linux Kubernetes cluster:</p>
+    <ul class="space-y-1 text-white/70">
+      <li>- All microservices containerized</li>
+      <li>- PostgreSQL databases (one per service)</li>
+      <li>- RabbitMQ message broker</li>
+      <li>- Redis for caching/sessions</li>
+      <li>- YARP Gateway as single entry point</li>
+    </ul>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Edge Layer</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Provider</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>WAF/DDoS</td><td>Cloudflare</td><td>Protection at edge</td></tr>
+      <tr><td>CDN</td><td>Cloudflare</td><td>Static asset delivery</td></tr>
+      <tr><td>DNS</td><td>Cloudflare</td><td>DNS management</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Agent Deployment</h3>
+  <div class="scope-callout">
+    Agents run on customer hardware (colo, cloud VMs, on-premises) and connect outbound to the control plane.
+    No inbound firewall rules required on customer side.
+  </div>
+</div>
