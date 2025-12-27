@@ -1,356 +1,366 @@
-<section id="kip" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
-    <h2 class="text-2xl font-bold text-white">16. KiP Edition (Knowledge is Power)</h2>
-    <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4 mb-6">
-        <p class="text-indigo-400 font-semibold">🎯 Self-Hosted Version — Post-SaaS Launch</p>
-        <p class="text-sm text-gray-400 mt-1">A complete, self-contained deployment of Meridian Console for power users who want to run their own infrastructure.</p>
-    </div>
-    
-    <div class="max-w-6xl mx-auto">
+<MudPaper Class="rounded-2xl border p-6 md:p-8" Style="background: rgba(31, 41, 55, 1); border-color: rgba(99, 102, 241, 0.7);" Elevation="0">
+    <MudText Typo="Typo.h4" Color="Color.Secondary" Class="font-bold">16. KiP Edition (Knowledge is Power)</MudText>
+    <MudPaper Class="rounded-2xl border p-4 mt-4 mb-6" Style="background: rgba(49, 46, 129, 0.3); border-color: rgba(99, 102, 241, 0.7);" Elevation="0">
+        <MudText Typo="Typo.body1" Class="font-semibold" Style="color: rgba(165, 180, 252, 1);">🎯 Self-Hosted Version — Post-SaaS Launch</MudText>
+        <MudText Typo="Typo.body2" Class="mt-1" Style="color: rgba(156, 163, 175, 1); font-size: 0.875rem;">A complete, self-contained deployment of Meridian Console for power users who want to run their own infrastructure.</MudText>
+    </MudPaper>
+
+    <div style="max-width: 72rem; margin: 0 auto;">
 
         <!-- Overview -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-            <h2 class="text-2xl font-bold text-white mb-4">Overview</h2>
-            <p class="text-gray-300 mb-4">
-                <span class="text-sky-400 font-semibold">KiP Edition</span> is a scaled-down, open-source version of Meridian Console designed for self-hosting. 
+        <MudPaper Class="rounded-2xl p-6 mb-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+            <MudText Typo="Typo.h5" Color="Color.Info" Class="mb-4 font-bold">Overview</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4" Style="color: rgba(209, 213, 219, 1);">
+                <span class="font-semibold" style="color: rgba(125, 211, 252, 1);">KiP Edition</span> is a scaled-down, open-source version of Meridian Console designed for self-hosting.
                 It targets power users, homelabbers, and small communities who want to run game servers on their own infrastructure without cloud dependencies.
-            </p>
-            <p class="text-gray-300">
-                Think <strong>Pterodactyl/Pelican competitor</strong>, but built on modern .NET architecture with a focus on simplicity and developer experience.
-            </p>
-        </div>
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(209, 213, 219, 1);">
+                Think <strong style="color: white;">Pterodactyl/Pelican competitor</strong>, but built on modern .NET architecture with a focus on simplicity and developer experience.
+            </MudText>
+        </MudPaper>
 
         <!-- Post-MVP Warning -->
-        <div class="bg-yellow-900/30 border-l-4 border-yellow-500 rounded-r-lg p-6 mb-6">
-            <div class="flex items-start gap-3">
-                <span class="text-2xl">⚠️</span>
+        <MudAlert Severity="Severity.Warning" Class="rounded-2xl mb-6" Variant="Variant.Outlined">
+            <div class="d-flex align-start gap-3">
+                <span style="font-size: 1.5rem;">⚠️</span>
                 <div>
-                    <h3 class="font-bold text-yellow-400 mb-2">Post-MVP Release</h3>
-                    <p class="text-gray-300">KiP Edition ships <strong>after the SaaS MVP</strong>. Timeline TBD based on core platform stability and community demand.</p>
+                    <MudText Typo="Typo.h6" Class="font-bold mb-2" Style="color: rgba(253, 224, 71, 1);">Post-MVP Release</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(209, 213, 219, 1);">KiP Edition ships <strong>after the SaaS MVP</strong>. Timeline TBD based on core platform stability and community demand.</MudText>
                 </div>
             </div>
-        </div>
+        </MudAlert>
 
         <!-- What's Included -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-            <h2 class="text-2xl font-bold text-white mb-4">What's Included</h2>
-            <ul class="space-y-3">
-                <li class="flex items-start gap-3">
-                    <span class="text-green-400 text-xl">✓</span>
+        <MudPaper Class="rounded-2xl p-6 mb-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+            <MudText Typo="Typo.h5" Color="Color.Info" Class="mb-4 font-bold">What's Included</MudText>
+            <ul style="list-style: none; padding-left: 0; margin: 0;">
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(74, 222, 128, 1); font-size: 1.25rem;">✓</span>
                     <div>
-                        <strong class="text-white">Core Panel Functionality</strong>
-                        <p class="text-gray-400">Server management, resource allocation, monitoring, logs, console access</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Core Panel Functionality</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Server management, resource allocation, monitoring, logs, console access</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-green-400 text-xl">✓</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(74, 222, 128, 1); font-size: 1.25rem;">✓</span>
                     <div>
-                        <strong class="text-white">Agent System</strong>
-                        <p class="text-gray-400">Open source game server agents with proper sandboxing</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Agent System</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Open source game server agents with proper sandboxing</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-green-400 text-xl">✓</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(74, 222, 128, 1); font-size: 1.25rem;">✓</span>
                     <div>
-                        <strong class="text-white">YARP Reverse Proxy (Internal Only)</strong>
-                        <p class="text-gray-400">Internal API gateway for panel services - NOT for game server traffic</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">YARP Reverse Proxy (Internal Only)</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Internal API gateway for panel services - NOT for game server traffic</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-green-400 text-xl">✓</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(74, 222, 128, 1); font-size: 1.25rem;">✓</span>
                     <div>
-                        <strong class="text-white">Local User Accounts</strong>
-                        <p class="text-gray-400">Authentication without Azure AD B2C (local database-backed auth)</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Local User Accounts</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Authentication without Azure AD B2C (local database-backed auth)</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-green-400 text-xl">✓</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(74, 222, 128, 1); font-size: 1.25rem;">✓</span>
                     <div>
-                        <strong class="text-white">Blazor WASM UI</strong>
-                        <p class="text-gray-400">Modern web interface with xterm.js console rendering</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Blazor WASM UI</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Modern web interface with xterm.js console rendering</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-green-400 text-xl">✓</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(74, 222, 128, 1); font-size: 1.25rem;">✓</span>
                     <div>
-                        <strong class="text-white">Built-in Update Mechanism</strong>
-                        <p class="text-gray-400">Update button in UI to fetch and apply new versions</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Built-in Update Mechanism</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Update button in UI to fetch and apply new versions</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-green-400 text-xl">✓</span>
+                <li class="d-flex align-start gap-3">
+                    <span style="color: rgba(74, 222, 128, 1); font-size: 1.25rem;">✓</span>
                     <div>
-                        <strong class="text-white">Community Support</strong>
-                        <p class="text-gray-400">Documentation, community forums, GitHub discussions</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Community Support</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Documentation, community forums, GitHub discussions</MudText>
                     </div>
                 </li>
             </ul>
-        </div>
+        </MudPaper>
 
         <!-- What's NOT Included -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-            <h2 class="text-2xl font-bold text-white mb-4">What's NOT Included</h2>
-            <ul class="space-y-3">
-                <li class="flex items-start gap-3">
-                    <span class="text-red-400 text-xl">✗</span>
+        <MudPaper Class="rounded-2xl p-6 mb-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+            <MudText Typo="Typo.h5" Color="Color.Info" Class="mb-4 font-bold">What's NOT Included</MudText>
+            <ul style="list-style: none; padding-left: 0; margin: 0;">
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(248, 113, 113, 1); font-size: 1.25rem;">✗</span>
                     <div>
-                        <strong class="text-white">Firewall Service</strong>
-                        <p class="text-gray-400">Users manage their own firewall rules and DDoS protection</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Firewall Service</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Users manage their own firewall rules and DDoS protection</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-red-400 text-xl">✗</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(248, 113, 113, 1); font-size: 1.25rem;">✗</span>
                     <div>
-                        <strong class="text-white">Discord Service</strong>
-                        <p class="text-gray-400">No Discord bot integration or notifications</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Discord Service</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">No Discord bot integration or notifications</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-red-400 text-xl">✗</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(248, 113, 113, 1); font-size: 1.25rem;">✗</span>
                     <div>
-                        <strong class="text-white">Secrets Service</strong>
-                        <p class="text-gray-400">No Azure Key Vault or cloud secret management (file-driven config only)</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Secrets Service</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">No Azure Key Vault or cloud secret management (file-driven config only)</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-red-400 text-xl">✗</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(248, 113, 113, 1); font-size: 1.25rem;">✗</span>
                     <div>
-                        <strong class="text-white">Cloudflare/Let's Encrypt Automation</strong>
-                        <p class="text-gray-400">Users manage their own SSL certificates and DNS</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Cloudflare/Let's Encrypt Automation</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Users manage their own SSL certificates and DNS</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-red-400 text-xl">✗</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(248, 113, 113, 1); font-size: 1.25rem;">✗</span>
                     <div>
-                        <strong class="text-white">External Reverse Proxy for Game Servers</strong>
-                        <p class="text-gray-400">Users manage their own reverse proxy for game traffic (nginx, Caddy, Traefik) - YARP only handles internal panel services</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">External Reverse Proxy for Game Servers</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Users manage their own reverse proxy for game traffic (nginx, Caddy, Traefik) - YARP only handles internal panel services</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-red-400 text-xl">✗</span>
+                <li class="d-flex align-start gap-3 mb-4">
+                    <span style="color: rgba(248, 113, 113, 1); font-size: 1.25rem;">✗</span>
                     <div>
-                        <strong class="text-white">Bundled Dependencies</strong>
-                        <p class="text-gray-400">PostgreSQL, RabbitMQ, and Redis are separate installs (not bundled)</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Bundled Dependencies</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">PostgreSQL, RabbitMQ, and Redis are separate installs (not bundled)</MudText>
                     </div>
                 </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-red-400 text-xl">✗</span>
+                <li class="d-flex align-start gap-3">
+                    <span style="color: rgba(248, 113, 113, 1); font-size: 1.25rem;">✗</span>
                     <div>
-                        <strong class="text-white">Azure AD B2C Integration</strong>
-                        <p class="text-gray-400">Auth works without Azure (local user accounts only)</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Azure AD B2C Integration</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1);">Auth works without Azure (local user accounts only)</MudText>
                     </div>
                 </li>
             </ul>
-        </div>
+        </MudPaper>
 
         <!-- YARP Clarification -->
-        <div class="bg-blue-900/30 border-l-4 border-blue-400 rounded-r-lg p-6 mb-6">
-            <div class="flex items-start gap-3">
-                <span class="text-2xl">💡</span>
+        <MudAlert Severity="Severity.Info" Class="rounded-2xl mb-6" Variant="Variant.Outlined">
+            <div class="d-flex align-start gap-3">
+                <span style="font-size: 1.5rem;">💡</span>
                 <div>
-                    <h3 class="font-bold text-blue-400 mb-2">YARP Clarification</h3>
-                    <p class="text-gray-300 mb-2">YARP is included in KiP Edition, but <strong>only for internal panel traffic</strong> (API gateway between services).</p>
-                    <p class="text-gray-300">Many game servers don't support being proxied, so users are responsible for managing external reverse proxies for game server traffic if needed.</p>
+                    <MudText Typo="Typo.h6" Class="font-bold mb-2" Style="color: rgba(96, 165, 250, 1);">YARP Clarification</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(209, 213, 219, 1);">YARP is included in KiP Edition, but <strong>only for internal panel traffic</strong> (API gateway between services).</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(209, 213, 219, 1);">Many game servers don't support being proxied, so users are responsible for managing external reverse proxies for game server traffic if needed.</MudText>
                 </div>
             </div>
-        </div>
+        </MudAlert>
 
         <!-- Deployment Options -->
-        <div class="grid md:grid-cols-2 gap-6 mb-6">
-            <div class="bg-gray-800 border border-sky-500 rounded-lg p-6">
-                <div class="flex items-center gap-3 mb-4">
-                    <span class="text-3xl">🐳</span>
-                    <h3 class="text-xl font-bold text-sky-400">Docker Compose</h3>
-                </div>
-                <p class="text-gray-300 mb-3">Pre-configured docker-compose.yml with:</p>
-                <ul class="space-y-2 text-gray-400 text-sm">
-                    <li>• Panel container</li>
-                    <li>• PostgreSQL container</li>
-                    <li>• RabbitMQ container</li>
-                    <li>• Redis container</li>
-                    <li>• Volume mounts for persistence</li>
-                </ul>
-                <p class="text-gray-500 text-sm mt-3 italic">Recommended for most users</p>
-            </div>
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" md="6">
+                <MudPaper Class="rounded-2xl p-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(14, 165, 233, 0.8);" Elevation="0">
+                    <div class="d-flex align-center gap-3 mb-4">
+                        <span style="font-size: 2rem;">🐳</span>
+                        <MudText Typo="Typo.h6" Class="font-bold" Style="color: rgba(125, 211, 252, 1);">Docker Compose</MudText>
+                    </div>
+                    <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(209, 213, 219, 1);">Pre-configured docker-compose.yml with:</MudText>
+                    <ul style="color: rgba(156, 163, 175, 1); font-size: 0.875rem; list-style: none; padding-left: 0; margin: 0;">
+                        <li style="margin-bottom: 8px;">• Panel container</li>
+                        <li style="margin-bottom: 8px;">• PostgreSQL container</li>
+                        <li style="margin-bottom: 8px;">• RabbitMQ container</li>
+                        <li style="margin-bottom: 8px;">• Redis container</li>
+                        <li>• Volume mounts for persistence</li>
+                    </ul>
+                    <MudText Typo="Typo.caption" Class="mt-3" Style="color: rgba(107, 114, 128, 1); font-style: italic;">Recommended for most users</MudText>
+                </MudPaper>
+            </MudItem>
 
-            <div class="bg-gray-800 border border-purple-500 rounded-lg p-6">
-                <div class="flex items-center gap-3 mb-4">
-                    <span class="text-3xl">📦</span>
-                    <h3 class="text-xl font-bold text-purple-400">Standalone Binary</h3>
-                </div>
-                <p class="text-gray-300 mb-3">Single executable that:</p>
-                <ul class="space-y-2 text-gray-400 text-sm">
-                    <li>• Runs directly on Linux</li>
-                    <li>• Connects to existing PostgreSQL/RabbitMQ/Redis</li>
-                    <li>• Configured via YAML/JSON file</li>
-                    <li>• No Docker required</li>
-                </ul>
-                <p class="text-gray-500 text-sm mt-3 italic">For advanced users with existing infrastructure</p>
-            </div>
-        </div>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="rounded-2xl p-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(168, 85, 247, 0.8);" Elevation="0">
+                    <div class="d-flex align-center gap-3 mb-4">
+                        <span style="font-size: 2rem;">📦</span>
+                        <MudText Typo="Typo.h6" Class="font-bold" Style="color: rgba(192, 132, 252, 1);">Standalone Binary</MudText>
+                    </div>
+                    <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(209, 213, 219, 1);">Single executable that:</MudText>
+                    <ul style="color: rgba(156, 163, 175, 1); font-size: 0.875rem; list-style: none; padding-left: 0; margin: 0;">
+                        <li style="margin-bottom: 8px;">• Runs directly on Linux</li>
+                        <li style="margin-bottom: 8px;">• Connects to existing PostgreSQL/RabbitMQ/Redis</li>
+                        <li style="margin-bottom: 8px;">• Configured via YAML/JSON file</li>
+                        <li>• No Docker required</li>
+                    </ul>
+                    <MudText Typo="Typo.caption" Class="mt-3" Style="color: rgba(107, 114, 128, 1); font-style: italic;">For advanced users with existing infrastructure</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
 
         <!-- System Requirements -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-            <h2 class="text-2xl font-bold text-white mb-4">System Requirements</h2>
-            <div class="grid md:grid-cols-3 gap-6">
-                <div>
-                    <h3 class="font-bold text-sky-400 mb-3">Minimum</h3>
-                    <ul class="space-y-2 text-gray-300 text-sm">
-                        <li>• 2 CPU cores</li>
-                        <li>• 4 GB RAM</li>
-                        <li>• 20 GB storage</li>
+        <MudPaper Class="rounded-2xl p-6 mb-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+            <MudText Typo="Typo.h5" Color="Color.Info" Class="mb-4 font-bold">System Requirements</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudText Typo="Typo.h6" Class="font-bold mb-3" Style="color: rgba(125, 211, 252, 1);">Minimum</MudText>
+                    <ul style="color: rgba(209, 213, 219, 1); font-size: 0.875rem; list-style: none; padding-left: 0; margin: 0;">
+                        <li style="margin-bottom: 8px;">• 2 CPU cores</li>
+                        <li style="margin-bottom: 8px;">• 4 GB RAM</li>
+                        <li style="margin-bottom: 8px;">• 20 GB storage</li>
                         <li>• Linux (Ubuntu 22.04+)</li>
                     </ul>
-                </div>
-                <div>
-                    <h3 class="font-bold text-sky-400 mb-3">Recommended</h3>
-                    <ul class="space-y-2 text-gray-300 text-sm">
-                        <li>• 4 CPU cores</li>
-                        <li>• 8 GB RAM</li>
-                        <li>• 50 GB SSD</li>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudText Typo="Typo.h6" Class="font-bold mb-3" Style="color: rgba(125, 211, 252, 1);">Recommended</MudText>
+                    <ul style="color: rgba(209, 213, 219, 1); font-size: 0.875rem; list-style: none; padding-left: 0; margin: 0;">
+                        <li style="margin-bottom: 8px;">• 4 CPU cores</li>
+                        <li style="margin-bottom: 8px;">• 8 GB RAM</li>
+                        <li style="margin-bottom: 8px;">• 50 GB SSD</li>
                         <li>• Linux (Debian/Ubuntu)</li>
                     </ul>
-                </div>
-                <div>
-                    <h3 class="font-bold text-sky-400 mb-3">Dependencies</h3>
-                    <ul class="space-y-2 text-gray-300 text-sm">
-                        <li>• PostgreSQL 15+</li>
-                        <li>• RabbitMQ 3.12+</li>
-                        <li>• Redis 7+</li>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudText Typo="Typo.h6" Class="font-bold mb-3" Style="color: rgba(125, 211, 252, 1);">Dependencies</MudText>
+                    <ul style="color: rgba(209, 213, 219, 1); font-size: 0.875rem; list-style: none; padding-left: 0; margin: 0;">
+                        <li style="margin-bottom: 8px;">• PostgreSQL 15+</li>
+                        <li style="margin-bottom: 8px;">• RabbitMQ 3.12+</li>
+                        <li style="margin-bottom: 8px;">• Redis 7+</li>
                         <li>• Docker (for Compose option)</li>
                     </ul>
-                </div>
-            </div>
-        </div>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
 
         <!-- Comparison Table -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-            <h2 class="text-2xl font-bold text-white mb-4">KiP vs SaaS Comparison</h2>
+        <MudPaper Class="rounded-2xl p-6 mb-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+            <MudText Typo="Typo.h5" Color="Color.Info" Class="mb-4 font-bold">KiP vs SaaS Comparison</MudText>
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <MudSimpleTable Dense="true" Style="font-size: 0.875rem;">
                     <thead>
-                        <tr class="border-b border-gray-700">
-                            <th class="text-left p-3 text-sky-400">Feature</th>
-                            <th class="text-center p-3 text-purple-400">KiP Edition</th>
-                            <th class="text-center p-3 text-green-400">SaaS Edition</th>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <th style="text-align: left; padding: 12px; color: rgba(125, 211, 252, 1);">Feature</th>
+                            <th style="text-align: center; padding: 12px; color: rgba(192, 132, 252, 1);">KiP Edition</th>
+                            <th style="text-align: center; padding: 12px; color: rgba(74, 222, 128, 1);">SaaS Edition</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-700">
-                        <tr>
-                            <td class="p-3 text-white font-medium">Hosting</td>
-                            <td class="p-3 text-center text-gray-300">Self-hosted</td>
-                            <td class="p-3 text-center text-gray-300">Cloud-hosted</td>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">Hosting</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Self-hosted</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Cloud-hosted</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">Authentication</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Local accounts</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Azure AD B2C</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">Firewall Management</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(248, 113, 113, 1);">❌ User-managed</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(74, 222, 128, 1);">✓ Automated</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">Discord Integration</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(248, 113, 113, 1);">❌ None</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(74, 222, 128, 1);">✓ Full integration</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">External Reverse Proxy</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(248, 113, 113, 1);">❌ User-managed</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(74, 222, 128, 1);">✓ YARP included</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">Internal API Gateway</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(74, 222, 128, 1);">✓ YARP included</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(74, 222, 128, 1);">✓ YARP included</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">SSL Certificates</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(248, 113, 113, 1);">❌ User-managed</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(74, 222, 128, 1);">✓ Automated</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">Updates</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Manual (UI button)</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Automatic</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid rgba(75, 85, 99, 1);">
+                            <td style="padding: 12px; color: white; font-weight: 500;">Support</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Community</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Official</td>
                         </tr>
                         <tr>
-                            <td class="p-3 text-white font-medium">Authentication</td>
-                            <td class="p-3 text-center text-gray-300">Local accounts</td>
-                            <td class="p-3 text-center text-gray-300">Azure AD B2C</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">Firewall Management</td>
-                            <td class="p-3 text-center text-red-400">❌ User-managed</td>
-                            <td class="p-3 text-center text-green-400">✓ Automated</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">Discord Integration</td>
-                            <td class="p-3 text-center text-red-400">❌ None</td>
-                            <td class="p-3 text-center text-green-400">✓ Full integration</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">External Reverse Proxy</td>
-                            <td class="p-3 text-center text-red-400">❌ User-managed</td>
-                            <td class="p-3 text-center text-green-400">✓ YARP included</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">Internal API Gateway</td>
-                            <td class="p-3 text-center text-green-400">✓ YARP included</td>
-                            <td class="p-3 text-center text-green-400">✓ YARP included</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">SSL Certificates</td>
-                            <td class="p-3 text-center text-red-400">❌ User-managed</td>
-                            <td class="p-3 text-center text-green-400">✓ Automated</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">Updates</td>
-                            <td class="p-3 text-center text-gray-300">Manual (UI button)</td>
-                            <td class="p-3 text-center text-gray-300">Automatic</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">Support</td>
-                            <td class="p-3 text-center text-gray-300">Community</td>
-                            <td class="p-3 text-center text-gray-300">Official</td>
-                        </tr>
-                        <tr>
-                            <td class="p-3 text-white font-medium">Price</td>
-                            <td class="p-3 text-center text-green-400 font-bold">Free (OSS)</td>
-                            <td class="p-3 text-center text-gray-300">Subscription</td>
+                            <td style="padding: 12px; color: white; font-weight: 500;">Price</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(74, 222, 128, 1); font-weight: bold;">Free (OSS)</td>
+                            <td style="padding: 12px; text-align: center; color: rgba(209, 213, 219, 1);">Subscription</td>
                         </tr>
                     </tbody>
-                </table>
+                </MudSimpleTable>
             </div>
-        </div>
+        </MudPaper>
 
         <!-- Branding & Licensing -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-            <h2 class="text-2xl font-bold text-white mb-4">Branding & Licensing</h2>
+        <MudPaper Class="rounded-2xl p-6 mb-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+            <MudText Typo="Typo.h5" Color="Color.Info" Class="mb-4 font-bold">Branding & Licensing</MudText>
             <div class="mb-4">
-                <h3 class="text-lg font-bold text-sky-400 mb-2">Required Attribution</h3>
-                <p class="text-gray-300 mb-3">KiP Edition <strong>must</strong> display "Powered by Meridian Console" in the UI footer and documentation.</p>
-                <div class="bg-gray-900 border border-gray-700 rounded p-3">
-                    <code class="text-sky-300">Powered by Meridian Console | Open Source</code>
-                </div>
+                <MudText Typo="Typo.body1" Class="font-bold mb-2" Style="color: rgba(125, 211, 252, 1);">Required Attribution</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(209, 213, 219, 1);">KiP Edition <strong>must</strong> display "Powered by Meridian Console" in the UI footer and documentation.</MudText>
+                <MudPaper Class="rounded-xl border p-3" Style="background: rgba(17, 24, 39, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+                    <code style="color: rgba(125, 211, 252, 1);">Powered by Meridian Console | Open Source</code>
+                </MudPaper>
             </div>
-            <div class="bg-yellow-900/30 border-l-4 border-yellow-500 rounded-r-lg p-4 mt-4">
-                <p class="text-gray-300"><strong class="text-yellow-400">License TBD:</strong> Need to discuss with Kira about open-source license choice (MIT, Apache 2.0, AGPL, etc.)</p>
-            </div>
-        </div>
+            <MudAlert Severity="Severity.Warning" Class="rounded-xl mt-4" Variant="Variant.Outlined">
+                <MudText Typo="Typo.body2" Style="color: rgba(209, 213, 219, 1);"><strong style="color: rgba(253, 224, 71, 1);">License TBD:</strong> Need to discuss with Kira about open-source license choice (MIT, Apache 2.0, AGPL, etc.)</MudText>
+            </MudAlert>
+        </MudPaper>
 
         <!-- Target Audience -->
-        <div class="grid md:grid-cols-3 gap-6 mb-6">
-            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                <div class="text-4xl mb-3">🏠</div>
-                <h3 class="text-lg font-bold text-sky-400 mb-2">Homelabbers</h3>
-                <p class="text-gray-300 text-sm">Running game servers on their own hardware for friends and small communities.</p>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                <div class="text-4xl mb-3">🎮</div>
-                <h3 class="text-lg font-bold text-sky-400 mb-2">Small Communities</h3>
-                <p class="text-gray-300 text-sm">Clans, guilds, or friend groups who want control without cloud costs.</p>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                <div class="text-4xl mb-3">💻</div>
-                <h3 class="text-lg font-bold text-sky-400 mb-2">Power Users</h3>
-                <p class="text-gray-300 text-sm">Users comfortable with Linux, Docker, and networking who want full control.</p>
-            </div>
-        </div>
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" md="4">
+                <MudPaper Class="rounded-2xl p-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+                    <div style="font-size: 2.5rem; margin-bottom: 12px;">🏠</div>
+                    <MudText Typo="Typo.body1" Class="font-bold mb-2" Style="color: rgba(125, 211, 252, 1);">Homelabbers</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(209, 213, 219, 1); font-size: 0.875rem;">Running game servers on their own hardware for friends and small communities.</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="rounded-2xl p-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+                    <div style="font-size: 2.5rem; margin-bottom: 12px;">🎮</div>
+                    <MudText Typo="Typo.body1" Class="font-bold mb-2" Style="color: rgba(125, 211, 252, 1);">Small Communities</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(209, 213, 219, 1); font-size: 0.875rem;">Clans, guilds, or friend groups who want control without cloud costs.</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="rounded-2xl p-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+                    <div style="font-size: 2.5rem; margin-bottom: 12px;">💻</div>
+                    <MudText Typo="Typo.body1" Class="font-bold mb-2" Style="color: rgba(125, 211, 252, 1);">Power Users</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(209, 213, 219, 1); font-size: 0.875rem;">Users comfortable with Linux, Docker, and networking who want full control.</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
 
         <!-- Release Timeline -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-            <h2 class="text-2xl font-bold text-white mb-4">Release Timeline</h2>
-            <div class="space-y-4">
-                <div class="flex items-start gap-4">
-                    <div class="bg-sky-500 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm">1</div>
+        <MudPaper Class="rounded-2xl p-6 mb-6 border" Style="background: rgba(31, 41, 55, 1); border-color: rgba(75, 85, 99, 1);" Elevation="0">
+            <MudText Typo="Typo.h5" Color="Color.Info" Class="mb-4 font-bold">Release Timeline</MudText>
+            <div>
+                <div class="d-flex align-start gap-4 mb-4">
+                    <div style="background: rgba(14, 165, 233, 1); color: white; font-weight: bold; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.875rem;">1</div>
                     <div>
-                        <h3 class="font-bold text-white">SaaS MVP First</h3>
-                        <p class="text-gray-400 text-sm">Focus on core platform stability and revenue generation.</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">SaaS MVP First</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1); font-size: 0.875rem;">Focus on core platform stability and revenue generation.</MudText>
                     </div>
                 </div>
-                <div class="flex items-start gap-4">
-                    <div class="bg-purple-500 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm">2</div>
+                <div class="d-flex align-start gap-4 mb-4">
+                    <div style="background: rgba(168, 85, 247, 1); color: white; font-weight: bold; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.875rem;">2</div>
                     <div>
-                        <h3 class="font-bold text-white">Evaluate Demand</h3>
-                        <p class="text-gray-400 text-sm">Gauge community interest through surveys and discussions.</p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">Evaluate Demand</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1); font-size: 0.875rem;">Gauge community interest through surveys and discussions.</MudText>
                     </div>
                 </div>
-                <div class="flex items-start gap-4">
-                    <div class="bg-green-500 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm">3</div>
+                <div class="d-flex align-start gap-4">
+                    <div style="background: rgba(34, 197, 94, 1); color: white; font-weight: bold; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.875rem;">3</div>
                     <div>
-                        <h3 class="font-bold text-white">KiP Edition Release</h3>
-                        <p class="text-gray-400 text-sm">Ship post-MVP once core platform is stable. Timeline: <strong>TBD</strong></p>
+                        <MudText Typo="Typo.body1" Class="font-bold" Style="color: white;">KiP Edition Release</MudText>
+                        <MudText Typo="Typo.body2" Style="color: rgba(156, 163, 175, 1); font-size: 0.875rem;">Ship post-MVP once core platform is stable. Timeline: <strong>TBD</strong></MudText>
                     </div>
                 </div>
             </div>
-        </div>
+        </MudPaper>
 
     </div>
-</section>
+</MudPaper>
