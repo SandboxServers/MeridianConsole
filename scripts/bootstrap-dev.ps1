@@ -11,7 +11,8 @@
     - Git
     - Optional: VS Code, PostgreSQL client tools
 
-    This script is idempotent and safe to re-run.
+    This script is idempotent, supports checkpointing, and will stop when a
+    restart is required, allowing you to resume after restart.
 
 .PARAMETER SkipDocker
     Skip Docker Desktop installation and configuration.
@@ -25,15 +26,25 @@
 .PARAMETER SkipOptional
     Skip optional tools (VS Code, PostgreSQL client tools).
 
+.PARAMETER Reset
+    Clear any saved checkpoint and start fresh.
+
+.PARAMETER Status
+    Show current checkpoint status and exit.
+
 .EXAMPLE
     .\bootstrap-dev.ps1
 
 .EXAMPLE
     .\bootstrap-dev.ps1 -SkipMinikube -SkipOptional
 
+.EXAMPLE
+    .\bootstrap-dev.ps1 -Reset
+
 .NOTES
     Requires Windows 10 version 1903 or later.
     Logs output to ~/.meridian-bootstrap.log
+    Checkpoint saved to ~/.meridian-bootstrap-checkpoint.json
 #>
 
 [CmdletBinding()]
@@ -41,17 +52,160 @@ param(
     [switch]$SkipDocker,
     [switch]$SkipMinikube,
     [switch]$SkipInfrastructure,
-    [switch]$SkipOptional
+    [switch]$SkipOptional,
+    [switch]$Reset,
+    [switch]$Status
 )
 
 # Script configuration
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $LogFile = Join-Path $env:USERPROFILE ".meridian-bootstrap.log"
+$CheckpointFile = Join-Path $env:USERPROFILE ".meridian-bootstrap-checkpoint.json"
 $MinWindowsVersion = [Version]"10.0.18362"  # Windows 10 1903
 $DockerStartupTimeout = 300  # seconds
 $MinikubeCpus = 4
 $MinikubeMemory = 8192
+
+# Phases (in order)
+$Phases = @(
+    "PreFlight",
+    "Winget",
+    "CoreTools",      # Git, .NET SDK, kubectl
+    "Docker",         # Docker Desktop - MAY REQUIRE RESTART
+    "Minikube",       # minikube setup
+    "OptionalTools",  # VS Code, pgAdmin
+    "ProjectSetup",   # dotnet restore, docker-compose
+    "Complete"
+)
+
+#region Checkpoint Management
+
+function Get-Checkpoint {
+    if (Test-Path $CheckpointFile) {
+        try {
+            $checkpoint = Get-Content $CheckpointFile -Raw | ConvertFrom-Json
+            return $checkpoint
+        }
+        catch {
+            return $null
+        }
+    }
+    return $null
+}
+
+function Save-Checkpoint {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Phase,
+        [string]$RestartReason = "",
+        [bool]$RestartRequired = $false,
+        [hashtable]$CompletedItems = @{}
+    )
+
+    $checkpoint = @{
+        Phase = $Phase
+        Timestamp = (Get-Date).ToString("o")
+        RestartRequired = $RestartRequired
+        RestartReason = $RestartReason
+        CompletedItems = $CompletedItems
+        ScriptParameters = @{
+            SkipDocker = $SkipDocker.IsPresent
+            SkipMinikube = $SkipMinikube.IsPresent
+            SkipInfrastructure = $SkipInfrastructure.IsPresent
+            SkipOptional = $SkipOptional.IsPresent
+        }
+    }
+
+    $checkpoint | ConvertTo-Json -Depth 5 | Set-Content $CheckpointFile -Force
+    Write-Log "Checkpoint saved: Phase=$Phase" -Level Info
+}
+
+function Clear-Checkpoint {
+    if (Test-Path $CheckpointFile) {
+        Remove-Item $CheckpointFile -Force
+        Write-Log "Checkpoint cleared" -Level Info
+    }
+}
+
+function Get-PhaseIndex {
+    param([string]$Phase)
+    return [Array]::IndexOf($Phases, $Phase)
+}
+
+function Test-PhaseCompleted {
+    param([string]$Phase)
+    $checkpoint = Get-Checkpoint
+    if ($null -eq $checkpoint) { return $false }
+
+    $currentIndex = Get-PhaseIndex -Phase $checkpoint.Phase
+    $targetIndex = Get-PhaseIndex -Phase $Phase
+
+    return $currentIndex -gt $targetIndex
+}
+
+function Request-RestartAndExit {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Reason,
+        [Parameter(Mandatory)]
+        [string]$NextPhase,
+        [ValidateSet("Reboot", "Logout", "Terminal")]
+        [string]$RestartType = "Terminal"
+    )
+
+    Save-Checkpoint -Phase $NextPhase -RestartRequired $true -RestartReason $Reason
+
+    Write-Host ""
+    Write-Host "=" * 70 -ForegroundColor Red
+    Write-Host "  RESTART REQUIRED" -ForegroundColor Red
+    Write-Host "=" * 70 -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Reason: $Reason" -ForegroundColor Yellow
+    Write-Host ""
+
+    switch ($RestartType) {
+        "Reboot" {
+            Write-Host "  ACTION REQUIRED:" -ForegroundColor Cyan
+            Write-Host "    1. Save all your work" -ForegroundColor White
+            Write-Host "    2. Restart your computer" -ForegroundColor White
+            Write-Host "    3. Re-run this script after restart:" -ForegroundColor White
+            Write-Host ""
+            Write-Host "       .\bootstrap-dev.ps1" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  The script will automatically resume from where it left off." -ForegroundColor Gray
+        }
+        "Logout" {
+            Write-Host "  ACTION REQUIRED:" -ForegroundColor Cyan
+            Write-Host "    1. Log out of Windows (or restart)" -ForegroundColor White
+            Write-Host "    2. Log back in" -ForegroundColor White
+            Write-Host "    3. Re-run this script:" -ForegroundColor White
+            Write-Host ""
+            Write-Host "       .\bootstrap-dev.ps1" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  The script will automatically resume from where it left off." -ForegroundColor Gray
+        }
+        "Terminal" {
+            Write-Host "  ACTION REQUIRED:" -ForegroundColor Cyan
+            Write-Host "    1. Close this PowerShell window" -ForegroundColor White
+            Write-Host "    2. Open a NEW PowerShell window (as Administrator)" -ForegroundColor White
+            Write-Host "    3. Re-run this script:" -ForegroundColor White
+            Write-Host ""
+            Write-Host "       .\bootstrap-dev.ps1" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  The script will automatically resume from where it left off." -ForegroundColor Gray
+        }
+    }
+
+    Write-Host ""
+    Write-Host "=" * 70 -ForegroundColor Red
+    Write-Host ""
+    Write-Log "Restart required: $Reason (Type: $RestartType, Next Phase: $NextPhase)" -Level Warning
+
+    exit 0
+}
+
+#endregion
 
 #region Helper Functions
 
@@ -92,6 +246,7 @@ function Write-Banner {
 "@
     Write-Host $banner -ForegroundColor Magenta
     Write-Host "    Logging to: $LogFile" -ForegroundColor DarkGray
+    Write-Host "    Checkpoint: $CheckpointFile" -ForegroundColor DarkGray
     Write-Host ""
 }
 
@@ -113,6 +268,7 @@ function Write-Summary {
             "Skipped"     { "Yellow" }
             "Already OK"  { "Cyan" }
             "Failed"      { "Red" }
+            "Pending"     { "Gray" }
             default       { "White" }
         }
         Write-Host "  $($key.PadRight(25)) : " -NoNewline
@@ -121,6 +277,45 @@ function Write-Summary {
 
     Write-Host ""
     Write-Host "=" * 60 -ForegroundColor Magenta
+    Write-Host ""
+}
+
+function Show-CheckpointStatus {
+    $checkpoint = Get-Checkpoint
+
+    Write-Host ""
+    Write-Host "=" * 60 -ForegroundColor Cyan
+    Write-Host "  CHECKPOINT STATUS" -ForegroundColor Cyan
+    Write-Host "=" * 60 -ForegroundColor Cyan
+    Write-Host ""
+
+    if ($null -eq $checkpoint) {
+        Write-Host "  No checkpoint found. Script will start from beginning." -ForegroundColor Gray
+    }
+    else {
+        Write-Host "  Current Phase: $($checkpoint.Phase)" -ForegroundColor White
+        Write-Host "  Saved At: $($checkpoint.Timestamp)" -ForegroundColor Gray
+
+        if ($checkpoint.RestartRequired) {
+            Write-Host "  Restart Required: Yes" -ForegroundColor Yellow
+            Write-Host "  Reason: $($checkpoint.RestartReason)" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "  Restart Required: No" -ForegroundColor Green
+        }
+
+        Write-Host ""
+        Write-Host "  Saved Parameters:" -ForegroundColor Gray
+        Write-Host "    SkipDocker: $($checkpoint.ScriptParameters.SkipDocker)" -ForegroundColor Gray
+        Write-Host "    SkipMinikube: $($checkpoint.ScriptParameters.SkipMinikube)" -ForegroundColor Gray
+        Write-Host "    SkipInfrastructure: $($checkpoint.ScriptParameters.SkipInfrastructure)" -ForegroundColor Gray
+        Write-Host "    SkipOptional: $($checkpoint.ScriptParameters.SkipOptional)" -ForegroundColor Gray
+    }
+
+    Write-Host ""
+    Write-Host "=" * 60 -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  To clear checkpoint and start fresh: .\bootstrap-dev.ps1 -Reset" -ForegroundColor DarkGray
     Write-Host ""
 }
 
@@ -139,6 +334,7 @@ function Request-Elevation {
         if ($SkipMinikube) { $arguments += " -SkipMinikube" }
         if ($SkipInfrastructure) { $arguments += " -SkipInfrastructure" }
         if ($SkipOptional) { $arguments += " -SkipOptional" }
+        if ($Reset) { $arguments += " -Reset" }
 
         Start-Process PowerShell -Verb RunAs -ArgumentList $arguments
         exit
@@ -176,9 +372,7 @@ function Test-WingetAvailable {
 function Install-Winget {
     Write-Log "Installing winget (App Installer)..."
 
-    # Try to install via Microsoft Store first
     try {
-        # Use Add-AppxPackage with the Microsoft Store URI
         $progressPreference = 'silentlyContinue'
 
         # Download the latest App Installer from GitHub releases
@@ -294,6 +488,48 @@ function Install-WingetPackage {
     }
 }
 
+function Test-WSLEnabled {
+    try {
+        $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
+        $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
+
+        return ($wslFeature.State -eq "Enabled") -and ($vmFeature.State -eq "Enabled")
+    }
+    catch {
+        return $false
+    }
+}
+
+function Enable-WSL {
+    Write-Log "Enabling WSL2 features..."
+
+    $needsReboot = $false
+
+    try {
+        # Enable WSL
+        $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
+        if ($wslFeature.State -ne "Enabled") {
+            Write-Log "Enabling Windows Subsystem for Linux..."
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart -ErrorAction Stop
+            $needsReboot = $true
+        }
+
+        # Enable Virtual Machine Platform
+        $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
+        if ($vmFeature.State -ne "Enabled") {
+            Write-Log "Enabling Virtual Machine Platform..."
+            Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -ErrorAction Stop
+            $needsReboot = $true
+        }
+
+        return $needsReboot
+    }
+    catch {
+        Write-Log "Failed to enable WSL features: $_" -Level Error
+        return $false
+    }
+}
+
 function Wait-ForDocker {
     param(
         [int]$TimeoutSeconds = 300
@@ -377,7 +613,7 @@ function Configure-DockerWSL2 {
             $settings.wslEngineEnabled = $true
             $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath
 
-            Write-Log "Docker WSL2 backend enabled. Restart Docker Desktop for changes to take effect." -Level Warning
+            Write-Log "Docker WSL2 backend enabled." -Level Success
             return "Configured"
         }
         catch {
@@ -515,9 +751,48 @@ function Verify-Installation {
     Write-Host ""
 }
 
+function Test-CommandAvailableInNewSession {
+    param([string]$Command)
+
+    # Check if command exists in current session
+    try {
+        $null = Get-Command $Command -ErrorAction Stop
+        return $true
+    }
+    catch {
+        # Command not in current session, check if it might be available after PATH refresh
+        $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+        $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+        $newPath = "$machinePath;$userPath"
+
+        foreach ($dir in $newPath -split ";") {
+            if (Test-Path (Join-Path $dir "$Command.exe")) {
+                return $false  # Exists but needs new session
+            }
+        }
+        return $false
+    }
+}
+
+function Refresh-EnvironmentPath {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
 #endregion
 
 #region Main Script
+
+# Handle -Status flag
+if ($Status) {
+    Show-CheckpointStatus
+    exit 0
+}
+
+# Handle -Reset flag
+if ($Reset) {
+    Clear-Checkpoint
+    Write-Log "Checkpoint cleared. Starting fresh." -Level Success
+}
 
 # Initialize log file
 $null = New-Item -Path $LogFile -ItemType File -Force -ErrorAction SilentlyContinue
@@ -528,159 +803,278 @@ Add-Content -Path $LogFile -Value "=" * 60
 # Display banner
 Write-Banner
 
+# Check for existing checkpoint
+$checkpoint = Get-Checkpoint
+$startPhase = "PreFlight"
+
+if ($null -ne $checkpoint) {
+    Write-Host ""
+    Write-Log "Found existing checkpoint at phase: $($checkpoint.Phase)" -Level Info
+
+    if ($checkpoint.RestartRequired) {
+        Write-Log "Resuming after restart (Reason: $($checkpoint.RestartReason))" -Level Info
+    }
+
+    $startPhase = $checkpoint.Phase
+
+    # Restore parameters from checkpoint if not overridden
+    if (-not $PSBoundParameters.ContainsKey('SkipDocker')) {
+        $script:SkipDocker = $checkpoint.ScriptParameters.SkipDocker
+    }
+    if (-not $PSBoundParameters.ContainsKey('SkipMinikube')) {
+        $script:SkipMinikube = $checkpoint.ScriptParameters.SkipMinikube
+    }
+    if (-not $PSBoundParameters.ContainsKey('SkipInfrastructure')) {
+        $script:SkipInfrastructure = $checkpoint.ScriptParameters.SkipInfrastructure
+    }
+    if (-not $PSBoundParameters.ContainsKey('SkipOptional')) {
+        $script:SkipOptional = $checkpoint.ScriptParameters.SkipOptional
+    }
+
+    Write-Host ""
+}
+
 # Results tracking
 $results = @{}
 
 try {
-    #region Pre-flight Checks
+    $startIndex = Get-PhaseIndex -Phase $startPhase
 
-    Write-Log "Running pre-flight checks..."
-    Write-Host ""
-
-    # Check admin privileges
-    if (-not (Test-Administrator)) {
-        Write-Log "Administrator privileges required. Requesting elevation..." -Level Warning
-        Request-Elevation
-        exit
-    }
-    Write-Log "  Running as Administrator" -Level Success
-
-    # Check Windows version
-    Write-Log "  Checking Windows version..."
-    Test-WindowsVersion
-    $osVersion = [Environment]::OSVersion.Version
-    Write-Log "  Windows version OK: $osVersion" -Level Success
-
-    # Check internet connectivity
-    Write-Log "  Checking internet connectivity..."
-    if (-not (Test-InternetConnection)) {
-        throw "Internet connection required but not available"
-    }
-    Write-Log "  Internet connection OK" -Level Success
-
-    # Check/install winget
-    Write-Log "  Checking winget availability..."
-    if (-not (Test-WingetAvailable)) {
-        Write-Log "  winget not found. Installing..." -Level Warning
-        if (-not (Install-Winget)) {
-            throw "Failed to install winget. Please install App Installer from Microsoft Store manually."
-        }
-
-        # Refresh environment
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    }
-    Write-Log "  winget is available" -Level Success
-
-    Write-Host ""
-    Write-Log "Pre-flight checks passed" -Level Success
-    Write-Host ""
-
-    #endregion
-
-    #region Install Core Tools
-
-    Write-Log "Installing core tools..."
-    Write-Host ""
-
-    # Git
-    $results["Git"] = Install-WingetPackage -PackageId "Git.Git" -DisplayName "Git"
-
-    # .NET SDK 10
-    $results[".NET SDK 10"] = Install-WingetPackage -PackageId "Microsoft.DotNet.SDK.10" -DisplayName ".NET SDK 10"
-
-    # kubectl
-    $results["kubectl"] = Install-WingetPackage -PackageId "Kubernetes.kubectl" -DisplayName "kubectl"
-
-    #endregion
-
-    #region Docker
-
-    if ($SkipDocker) {
-        Write-Log "Skipping Docker installation (--SkipDocker)" -Level Warning
-        $results["Docker Desktop"] = "Skipped"
-    }
-    else {
-        $results["Docker Desktop"] = Install-WingetPackage -PackageId "Docker.DockerDesktop" -DisplayName "Docker Desktop"
-
-        if ($results["Docker Desktop"] -in @("Installed", "Already OK")) {
-            # Start Docker and wait for it
-            if (Start-DockerDesktop) {
-                $results["Docker WSL2"] = Configure-DockerWSL2
-            }
-            else {
-                $results["Docker WSL2"] = "Skipped"
-            }
-        }
-    }
-
-    #endregion
-
-    #region Minikube
-
-    if ($SkipMinikube) {
-        Write-Log "Skipping minikube installation (--SkipMinikube)" -Level Warning
-        $results["minikube"] = "Skipped"
-        $results["minikube Config"] = "Skipped"
-    }
-    else {
-        $results["minikube"] = Install-WingetPackage -PackageId "Kubernetes.minikube" -DisplayName "minikube"
-
-        if ($results["minikube"] -in @("Installed", "Already OK")) {
-            # Refresh PATH to include minikube
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-            if (-not $SkipDocker -and $results["Docker Desktop"] -in @("Installed", "Already OK")) {
-                $results["minikube Config"] = Configure-Minikube
-            }
-            else {
-                Write-Log "Skipping minikube configuration (Docker not available)" -Level Warning
-                $results["minikube Config"] = "Skipped"
-            }
-        }
-    }
-
-    #endregion
-
-    #region Optional Tools
-
-    if ($SkipOptional) {
-        Write-Log "Skipping optional tools (--SkipOptional)" -Level Warning
-        $results["VS Code"] = "Skipped"
-        $results["PostgreSQL Tools"] = "Skipped"
-    }
-    else {
+    #region Phase: PreFlight
+    if ($startIndex -le (Get-PhaseIndex -Phase "PreFlight")) {
+        Write-Log "=== Phase: Pre-flight Checks ===" -Level Info
         Write-Host ""
-        Write-Log "Installing optional tools..."
 
-        # VS Code
-        $results["VS Code"] = Install-WingetPackage -PackageId "Microsoft.VisualStudioCode" -DisplayName "Visual Studio Code"
+        # Check admin privileges
+        if (-not (Test-Administrator)) {
+            Write-Log "Administrator privileges required. Requesting elevation..." -Level Warning
+            Request-Elevation
+            exit
+        }
+        Write-Log "  Running as Administrator" -Level Success
 
-        # PostgreSQL client tools (pgAdmin or just psql via PostgreSQL package)
-        $results["PostgreSQL Tools"] = Install-WingetPackage -PackageId "PostgreSQL.pgAdmin" -DisplayName "pgAdmin 4"
+        # Check Windows version
+        Write-Log "  Checking Windows version..."
+        Test-WindowsVersion
+        $osVersion = [Environment]::OSVersion.Version
+        Write-Log "  Windows version OK: $osVersion" -Level Success
+
+        # Check internet connectivity
+        Write-Log "  Checking internet connectivity..."
+        if (-not (Test-InternetConnection)) {
+            throw "Internet connection required but not available"
+        }
+        Write-Log "  Internet connection OK" -Level Success
+
+        Write-Host ""
+        Write-Log "Pre-flight checks passed" -Level Success
+        Save-Checkpoint -Phase "Winget"
     }
-
     #endregion
 
-    #region Project Setup
+    #region Phase: Winget
+    if ($startIndex -le (Get-PhaseIndex -Phase "Winget")) {
+        Write-Log "=== Phase: Winget Setup ===" -Level Info
+        Write-Host ""
 
-    Write-Host ""
-    if ($SkipInfrastructure) {
-        Write-Log "Skipping infrastructure setup (--SkipInfrastructure)" -Level Warning
-        $results["Project Setup"] = "Skipped"
+        if (-not (Test-WingetAvailable)) {
+            Write-Log "winget not found. Installing..." -Level Warning
+            if (-not (Install-Winget)) {
+                throw "Failed to install winget. Please install App Installer from Microsoft Store manually."
+            }
+
+            # winget was just installed - need new terminal
+            Request-RestartAndExit `
+                -Reason "winget (Windows Package Manager) was installed and requires a new PowerShell session to be available." `
+                -NextPhase "CoreTools" `
+                -RestartType "Terminal"
+        }
+
+        Write-Log "winget is available" -Level Success
+        Save-Checkpoint -Phase "CoreTools"
     }
-    else {
-        # Refresh PATH for newly installed tools
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-        $results["Project Setup"] = Setup-Project
-    }
-
     #endregion
 
-    #region Verification
+    #region Phase: CoreTools
+    if ($startIndex -le (Get-PhaseIndex -Phase "CoreTools")) {
+        Write-Log "=== Phase: Core Tools ===" -Level Info
+        Write-Host ""
 
+        # Refresh PATH in case we're resuming
+        Refresh-EnvironmentPath
+
+        # Git
+        $results["Git"] = Install-WingetPackage -PackageId "Git.Git" -DisplayName "Git"
+
+        # .NET SDK 10
+        $dotnetResult = Install-WingetPackage -PackageId "Microsoft.DotNet.SDK.10" -DisplayName ".NET SDK 10"
+        $results[".NET SDK 10"] = $dotnetResult
+
+        # Check if .NET needs new terminal
+        if ($dotnetResult -eq "Installed") {
+            Refresh-EnvironmentPath
+            if (-not (Test-CommandAvailableInNewSession "dotnet")) {
+                # .NET was installed but not in PATH yet
+                Request-RestartAndExit `
+                    -Reason ".NET SDK 10 was installed. A new PowerShell session is required for the 'dotnet' command to be available in PATH." `
+                    -NextPhase "CoreTools" `
+                    -RestartType "Terminal"
+            }
+        }
+
+        # kubectl
+        if (-not $SkipMinikube) {
+            $results["kubectl"] = Install-WingetPackage -PackageId "Kubernetes.kubectl" -DisplayName "kubectl"
+        }
+        else {
+            $results["kubectl"] = "Skipped"
+        }
+
+        Save-Checkpoint -Phase "Docker"
+    }
+    #endregion
+
+    #region Phase: Docker
+    if ($startIndex -le (Get-PhaseIndex -Phase "Docker")) {
+        Write-Log "=== Phase: Docker ===" -Level Info
+        Write-Host ""
+
+        Refresh-EnvironmentPath
+
+        if ($SkipDocker) {
+            Write-Log "Skipping Docker installation (--SkipDocker)" -Level Warning
+            $results["Docker Desktop"] = "Skipped"
+            $results["Docker WSL2"] = "Skipped"
+        }
+        else {
+            # Check if WSL2 is enabled (required for Docker Desktop)
+            if (-not (Test-WSLEnabled)) {
+                Write-Log "WSL2 features not enabled. Enabling now..." -Level Warning
+                $needsReboot = Enable-WSL
+
+                if ($needsReboot) {
+                    Request-RestartAndExit `
+                        -Reason "Windows Subsystem for Linux (WSL2) and Virtual Machine Platform features were enabled. A system restart is required for these changes to take effect." `
+                        -NextPhase "Docker" `
+                        -RestartType "Reboot"
+                }
+            }
+
+            Write-Log "WSL2 features are enabled" -Level Success
+
+            $dockerResult = Install-WingetPackage -PackageId "Docker.DockerDesktop" -DisplayName "Docker Desktop"
+            $results["Docker Desktop"] = $dockerResult
+
+            if ($dockerResult -eq "Installed") {
+                # Docker was just installed - needs logout/login for group membership
+                Request-RestartAndExit `
+                    -Reason "Docker Desktop was installed. A logout/login (or restart) is required for the Docker group membership to take effect and for Docker Desktop to initialize properly." `
+                    -NextPhase "Minikube" `
+                    -RestartType "Logout"
+            }
+            elseif ($dockerResult -in @("Already OK")) {
+                # Docker already installed, try to start it
+                if (Start-DockerDesktop) {
+                    $results["Docker WSL2"] = Configure-DockerWSL2
+                }
+                else {
+                    $results["Docker WSL2"] = "Skipped"
+                }
+            }
+        }
+
+        Save-Checkpoint -Phase "Minikube"
+    }
+    #endregion
+
+    #region Phase: Minikube
+    if ($startIndex -le (Get-PhaseIndex -Phase "Minikube")) {
+        Write-Log "=== Phase: Minikube ===" -Level Info
+        Write-Host ""
+
+        Refresh-EnvironmentPath
+
+        if ($SkipMinikube) {
+            Write-Log "Skipping minikube installation (--SkipMinikube)" -Level Warning
+            $results["minikube"] = "Skipped"
+            $results["minikube Config"] = "Skipped"
+        }
+        else {
+            $results["minikube"] = Install-WingetPackage -PackageId "Kubernetes.minikube" -DisplayName "minikube"
+
+            if ($results["minikube"] -in @("Installed", "Already OK")) {
+                Refresh-EnvironmentPath
+
+                if (-not $SkipDocker -and $results["Docker Desktop"] -in @("Installed", "Already OK")) {
+                    # Ensure Docker is running before configuring minikube
+                    if (Start-DockerDesktop) {
+                        $results["minikube Config"] = Configure-Minikube
+                    }
+                    else {
+                        Write-Log "Docker not available - skipping minikube configuration" -Level Warning
+                        $results["minikube Config"] = "Skipped"
+                    }
+                }
+                else {
+                    Write-Log "Skipping minikube configuration (Docker not available)" -Level Warning
+                    $results["minikube Config"] = "Skipped"
+                }
+            }
+        }
+
+        Save-Checkpoint -Phase "OptionalTools"
+    }
+    #endregion
+
+    #region Phase: OptionalTools
+    if ($startIndex -le (Get-PhaseIndex -Phase "OptionalTools")) {
+        Write-Log "=== Phase: Optional Tools ===" -Level Info
+        Write-Host ""
+
+        Refresh-EnvironmentPath
+
+        if ($SkipOptional) {
+            Write-Log "Skipping optional tools (--SkipOptional)" -Level Warning
+            $results["VS Code"] = "Skipped"
+            $results["PostgreSQL Tools"] = "Skipped"
+        }
+        else {
+            # VS Code
+            $results["VS Code"] = Install-WingetPackage -PackageId "Microsoft.VisualStudioCode" -DisplayName "Visual Studio Code"
+
+            # PostgreSQL client tools (pgAdmin)
+            $results["PostgreSQL Tools"] = Install-WingetPackage -PackageId "PostgreSQL.pgAdmin" -DisplayName "pgAdmin 4"
+        }
+
+        Save-Checkpoint -Phase "ProjectSetup"
+    }
+    #endregion
+
+    #region Phase: ProjectSetup
+    if ($startIndex -le (Get-PhaseIndex -Phase "ProjectSetup")) {
+        Write-Log "=== Phase: Project Setup ===" -Level Info
+        Write-Host ""
+
+        Refresh-EnvironmentPath
+
+        if ($SkipInfrastructure) {
+            Write-Log "Skipping infrastructure setup (--SkipInfrastructure)" -Level Warning
+            $results["Project Setup"] = "Skipped"
+        }
+        else {
+            $results["Project Setup"] = Setup-Project
+        }
+
+        Save-Checkpoint -Phase "Complete"
+    }
+    #endregion
+
+    #region Phase: Complete
+    Write-Log "=== Phase: Verification ===" -Level Info
     Verify-Installation
 
+    # Clear checkpoint on successful completion
+    Clear-Checkpoint
     #endregion
 }
 catch {
@@ -701,7 +1095,8 @@ finally {
         Write-Host "  2. Address any failed installations manually" -ForegroundColor Gray
         Write-Host "  3. Re-run this script to verify" -ForegroundColor Gray
     }
-    else {
+    elseif (-not (Test-Path $CheckpointFile)) {
+        # Only show success if we don't have a pending checkpoint
         Write-Log "Bootstrap completed successfully!" -Level Success
         Write-Host ""
         Write-Host "NEXT STEPS:" -ForegroundColor Green
