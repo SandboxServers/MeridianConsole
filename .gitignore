@@ -27,3 +27,17 @@ obj/
 # Local dev
 **/appsettings.Development.json
 src/Dhadgar.Scope/_swa_publish/*
+
+# Backup directories
+*.blazor-backup/
+*backup*/
+
+# Node.js
+node_modules/
+
+# Build artifacts
+.astro/
+
+# Local utility scripts
+scripts/fix-wsl-clipboard-*.sh
+scripts/fix-wsl-clipboard-*.ps1
