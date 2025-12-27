@@ -1,0 +1,502 @@
+# Default values for meridian-console Helm chart
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  # Container image registry
+  imageRegistry: ""
+  # Image pull secrets for private registries
+  imagePullSecrets: []
+  # StorageClass for persistent volumes
+  storageClass: ""
+
+# Common settings for all services
+common:
+  # Default image pull policy
+  imagePullPolicy: IfNotPresent
+  # Default service account
+  serviceAccountName: default
+  # Default security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+  # Default resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Namespace to deploy into (optional, defaults to Release namespace)
+namespaceOverride: ""
+
+#==============================================================================
+# GATEWAY SERVICE (YARP Reverse Proxy)
+#==============================================================================
+gateway:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: meridian/gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+  # Ingress configuration (primary entry point)
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: api.meridian.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: meridian-gateway-tls
+        hosts:
+          - api.meridian.example.com
+
+#==============================================================================
+# IDENTITY SERVICE
+#==============================================================================
+identity:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: meridian/identity
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_identity
+
+#==============================================================================
+# BILLING SERVICE
+#==============================================================================
+billing:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: meridian/billing
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_billing
+
+#==============================================================================
+# SERVERS SERVICE
+#==============================================================================
+servers:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: meridian/servers
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_servers
+
+#==============================================================================
+# NODES SERVICE
+#==============================================================================
+nodes:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: meridian/nodes
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_nodes
+
+#==============================================================================
+# TASKS SERVICE
+#==============================================================================
+tasks:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: meridian/tasks
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_tasks
+
+#==============================================================================
+# FILES SERVICE
+#==============================================================================
+files:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: meridian/files
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_files
+
+#==============================================================================
+# MODS SERVICE
+#==============================================================================
+mods:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: meridian/mods
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_mods
+
+#==============================================================================
+# CONSOLE SERVICE (SignalR)
+#==============================================================================
+console:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: meridian/console
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_console
+
+  # SignalR requires sticky sessions
+  sessionAffinity: ClientIP
+
+#==============================================================================
+# NOTIFICATIONS SERVICE
+#==============================================================================
+notifications:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: meridian/notifications
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_notifications
+
+#==============================================================================
+# FIREWALL SERVICE
+#==============================================================================
+firewall:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: meridian/firewall
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_firewall
+
+#==============================================================================
+# SECRETS SERVICE
+#==============================================================================
+secrets:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: meridian/secrets
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_secrets
+
+#==============================================================================
+# DISCORD SERVICE
+#==============================================================================
+discord:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: meridian/discord
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  database:
+    name: dhadgar_discord
+
+#==============================================================================
+# INFRASTRUCTURE DEPENDENCIES
+#==============================================================================
+
+# PostgreSQL configuration (Bitnami chart)
+postgresql:
+  enabled: true
+  auth:
+    username: dhadgar
+    password: dhadgar-change-me
+    database: dhadgar_platform
+    postgresPassword: postgres-change-me
+
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+
+  # Multiple databases for database-per-service pattern
+  # Note: Bitnami PostgreSQL chart doesn't natively support multiple DBs
+  # You'll need to create them via init scripts or manually
+  initdbScripts:
+    create-databases.sh: |
+      #!/bin/bash
+      set -e
+
+      PGPASSWORD=$POSTGRES_PASSWORD psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE DATABASE dhadgar_identity;
+        CREATE DATABASE dhadgar_billing;
+        CREATE DATABASE dhadgar_servers;
+        CREATE DATABASE dhadgar_nodes;
+        CREATE DATABASE dhadgar_tasks;
+        CREATE DATABASE dhadgar_files;
+        CREATE DATABASE dhadgar_mods;
+        CREATE DATABASE dhadgar_console;
+        CREATE DATABASE dhadgar_notifications;
+        CREATE DATABASE dhadgar_firewall;
+        CREATE DATABASE dhadgar_secrets;
+        CREATE DATABASE dhadgar_discord;
+
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_identity TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_billing TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_servers TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_nodes TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_tasks TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_files TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_mods TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_console TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_notifications TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_firewall TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_secrets TO dhadgar;
+        GRANT ALL PRIVILEGES ON DATABASE dhadgar_discord TO dhadgar;
+      EOSQL
+
+# RabbitMQ configuration (Bitnami chart)
+rabbitmq:
+  enabled: true
+  auth:
+    username: dhadgar
+    password: dhadgar-change-me
+    erlangCookie: secure-erlang-cookie-change-me
+
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+  # Enable plugins
+  plugins: "rabbitmq_management rabbitmq_prometheus"
+
+  # Community plugins
+  communityPlugins: ""
+
+  # Load definitions (exchanges, queues, etc.)
+  loadDefinition:
+    enabled: false
+
+# Redis configuration (Bitnami chart)
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: redis-change-me
+
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+#==============================================================================
+# SHARED CONFIGURATION
+#==============================================================================
+
+# Environment variables (non-sensitive)
+config:
+  # ASP.NET Core environment
+  aspNetCoreEnvironment: Production
+
+  # Logging configuration
+  logging:
+    logLevel:
+      default: Information
+      microsoft: Warning
+      microsoftAspNetCore: Warning
+
+# Secrets (should be overridden via --set or external secret management)
+secrets:
+  # PostgreSQL connection
+  postgresHost: "{{ .Release.Name }}-postgresql"
+  postgresPort: "5432"
+  postgresUser: "dhadgar"
+  postgresPassword: "dhadgar-change-me"
+
+  # RabbitMQ connection
+  rabbitmqHost: "{{ .Release.Name }}-rabbitmq"
+  rabbitmqPort: "5672"
+  rabbitmqUser: "dhadgar"
+  rabbitmqPassword: "dhadgar-change-me"
+
+  # Redis connection
+  redisHost: "{{ .Release.Name }}-redis-master"
+  redisPort: "6379"
+  redisPassword: "redis-change-me"
+
+  # JWT signing key (MUST be changed in production)
+  jwtSigningKey: "dev-only-jwt-key-change-me-in-production"
+  jwtIssuer: "https://meridian.example.com"
+  jwtAudience: "meridian-api"
+
+#==============================================================================
+# OBSERVABILITY
+#==============================================================================
+
+# Prometheus ServiceMonitor (requires prometheus-operator)
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+# Grafana dashboards
+grafanaDashboard:
+  enabled: false

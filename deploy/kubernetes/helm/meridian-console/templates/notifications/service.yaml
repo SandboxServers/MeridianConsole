@@ -1,0 +1,17 @@
+{{- if .Values.notifications.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "meridian.service.fullname" (dict "context" . "service" "notifications") }}
+  labels:
+    {{- include "meridian.service.labels" (dict "context" . "service" "notifications") | nindent 4 }}
+spec:
+  type: {{ .Values.notifications.service.type }}
+  ports:
+  - port: {{ .Values.notifications.service.port }}
+    targetPort: {{ .Values.notifications.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "meridian.service.selectorLabels" (dict "context" . "service" "notifications") | nindent 4 }}
+{{- end }}

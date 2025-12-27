@@ -1,0 +1,121 @@
+# Azure DevOps Pipeline: Publish Helm Charts to ACR
+# This pipeline publishes the Meridian Console Helm chart to Azure Container Registry
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - deploy/kubernetes/helm/meridian-console/**
+      - deploy/kubernetes/helm/helm-publish-pipeline.yml
+
+# Also trigger on releases (tags)
+# Uncomment if you want tag-based triggers
+# trigger:
+#   tags:
+#     include:
+#       - v*
+
+# Manual trigger support
+pr: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Configure your Azure Container Registry name here
+  # Or set as a pipeline variable in Azure DevOps
+  ACR_NAME: 'meridianconsoleacr'
+  HELM_VERSION: '3.13.0'
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+    displayName: 'Checkout repository'
+
+  - task: HelmInstaller@1
+    displayName: 'Install Helm $(HELM_VERSION)'
+    inputs:
+      helmVersionToInstall: '$(HELM_VERSION)'
+
+  - task: AzureCLI@2
+    displayName: 'Login to Azure Container Registry'
+    inputs:
+      azureSubscription: 'meridian-acr-connection'  # Name of your Azure service connection
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        # Get ACR login server
+        ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+        echo "##vso[task.setvariable variable=ACR_LOGIN_SERVER]$ACR_LOGIN_SERVER"
+
+        # Login to ACR using Azure CLI
+        az acr login --name $ACR_NAME
+
+        # Login Helm registry for OCI push
+        ACCESS_TOKEN=$(az acr login --name $ACR_NAME --expose-token --output tsv --query accessToken)
+        echo "$ACCESS_TOKEN" | helm registry login "$ACR_LOGIN_SERVER" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+
+        echo "✅ Logged in to ACR: $ACR_LOGIN_SERVER"
+
+  - bash: |
+      helm repo add bitnami https://charts.bitnami.com/bitnami
+      helm repo update
+    displayName: 'Add Bitnami repository'
+
+  - bash: |
+      cd deploy/kubernetes/helm/meridian-console
+      helm dependency update
+    displayName: 'Update chart dependencies'
+
+  - bash: |
+      cd deploy/kubernetes/helm
+      helm lint meridian-console
+    displayName: 'Lint Helm chart'
+
+  - bash: |
+      cd deploy/kubernetes/helm
+
+      # Package the chart
+      helm package meridian-console
+
+      # Get chart version
+      CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}')
+      CHART_FILE="meridian-console-${CHART_VERSION}.tgz"
+
+      echo "=== Publishing Chart ==="
+      echo "Chart: meridian-console"
+      echo "Version: $CHART_VERSION"
+      echo "Registry: $ACR_LOGIN_SERVER"
+      echo "========================"
+
+      # Push to ACR as OCI artifact
+      helm push "$CHART_FILE" oci://$ACR_LOGIN_SERVER/helm
+
+      echo "✅ Successfully published meridian-console:${CHART_VERSION} to ACR"
+
+      # Save version for summary
+      echo "##vso[task.setvariable variable=CHART_VERSION]$CHART_VERSION"
+    displayName: 'Package and Push Helm chart to ACR'
+
+  - bash: |
+      echo "## 📦 Helm Chart Published to Azure Container Registry"
+      echo ""
+      echo "**Chart:** \`meridian-console\`"
+      echo "**Version:** \`$(CHART_VERSION)\`"
+      echo "**Registry:** \`$(ACR_LOGIN_SERVER)\`"
+      echo ""
+      echo "### 🚀 Installation"
+      echo ""
+      echo '```bash'
+      echo "# Login to ACR (Azure CLI required)"
+      echo "az acr login --name $(ACR_NAME)"
+      echo ""
+      echo "# Install the chart from ACR"
+      echo "helm install meridian oci://$(ACR_LOGIN_SERVER)/helm/meridian-console \\"
+      echo "  --version $(CHART_VERSION) \\"
+      echo "  --namespace meridian-system \\"
+      echo "  --create-namespace"
+      echo '```'
+    displayName: 'Create release summary'

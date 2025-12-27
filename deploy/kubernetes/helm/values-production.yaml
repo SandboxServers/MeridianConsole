@@ -1,0 +1,182 @@
+# Production values for Meridian Console
+# Copy this file and customize for your production environment
+
+# Use external infrastructure (Azure/AWS managed services)
+postgresql:
+  enabled: false
+
+rabbitmq:
+  enabled: false
+
+redis:
+  enabled: false
+
+# Configure external infrastructure endpoints
+secrets:
+  # PostgreSQL (Azure Database for PostgreSQL, AWS RDS, etc.)
+  postgresHost: "your-postgres-host.postgres.database.azure.com"
+  postgresPort: "5432"
+  postgresUser: "dhadgar"
+  postgresPassword: "CHANGE-ME-secure-password"
+
+  # RabbitMQ (Amazon MQ, CloudAMQP, etc.)
+  rabbitmqHost: "your-rabbitmq-host.mq.example.com"
+  rabbitmqPort: "5672"
+  rabbitmqUser: "dhadgar"
+  rabbitmqPassword: "CHANGE-ME-secure-password"
+
+  # Redis (Azure Cache for Redis, AWS ElastiCache, etc.)
+  redisHost: "your-redis-host.redis.cache.windows.net"
+  redisPort: "6380"  # Azure Redis uses 6380 for SSL
+  redisPassword: "CHANGE-ME-secure-password"
+
+  # JWT configuration
+  jwtSigningKey: "CHANGE-ME-generate-secure-256-bit-key"
+  jwtIssuer: "https://api.yourdomain.com"
+  jwtAudience: "meridian-api"
+
+# Gateway configuration
+gateway:
+  replicaCount: 3  # Higher replica count for production
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/rate-limit: "100"
+      nginx.ingress.kubernetes.io/limit-rps: "10"
+    hosts:
+      - host: api.yourdomain.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: meridian-gateway-tls
+        hosts:
+          - api.yourdomain.com
+
+# Identity service - critical, scale appropriately
+identity:
+  replicaCount: 3
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Servers service - high traffic expected
+servers:
+  replicaCount: 3
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Nodes service - high traffic expected
+nodes:
+  replicaCount: 3
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Tasks service - background job processing
+tasks:
+  replicaCount: 3
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+# Console service - SignalR WebSocket connections
+console:
+  replicaCount: 3
+  sessionAffinity: ClientIP
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Billing service - critical for SaaS revenue
+billing:
+  replicaCount: 2
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Other services - standard configuration
+files:
+  replicaCount: 2
+
+mods:
+  replicaCount: 2
+
+notifications:
+  replicaCount: 2
+
+firewall:
+  replicaCount: 2
+
+secrets:
+  replicaCount: 3  # Critical service
+
+discord:
+  replicaCount: 1
+
+# Global container registry (if using private registry)
+global:
+  imageRegistry: "your-registry.azurecr.io"
+  imagePullSecrets:
+    - name: acr-credentials
+
+# Environment
+config:
+  aspNetCoreEnvironment: Production
+  logging:
+    logLevel:
+      default: Warning
+      microsoft: Error
+      microsoftAspNetCore: Error
+
+# Observability
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+
+grafanaDashboard:
+  enabled: true

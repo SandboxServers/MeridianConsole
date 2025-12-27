@@ -1,0 +1,51 @@
+apiVersion: v2
+name: meridian-console
+description: A Helm chart for Meridian Console - Game server control plane platform
+type: application
+
+# Chart version (SemVer)
+version: 0.1.0
+
+# Application version
+appVersion: "0.1.0"
+
+# Keywords for searching
+keywords:
+  - game-servers
+  - control-plane
+  - microservices
+  - saas
+
+# Maintainers
+maintainers:
+  - name: Meridian Console Team
+    email: team@meridian.local
+
+# Infrastructure dependencies (Bitnami charts)
+dependencies:
+  # PostgreSQL - used by 12 services
+  - name: postgresql
+    version: "15.2.5"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+    tags:
+      - infrastructure
+      - database
+
+  # RabbitMQ - message broker for all services
+  - name: rabbitmq
+    version: "14.3.3"
+    repository: https://charts.bitnami.com/bitnami
+    condition: rabbitmq.enabled
+    tags:
+      - infrastructure
+      - messaging
+
+  # Redis - caching and session storage
+  - name: redis
+    version: "19.5.2"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+    tags:
+      - infrastructure
+      - cache

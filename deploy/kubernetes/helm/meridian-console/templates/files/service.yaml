@@ -1,0 +1,17 @@
+{{- if .Values.files.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "meridian.service.fullname" (dict "context" . "service" "files") }}
+  labels:
+    {{- include "meridian.service.labels" (dict "context" . "service" "files") | nindent 4 }}
+spec:
+  type: {{ .Values.files.service.type }}
+  ports:
+  - port: {{ .Values.files.service.port }}
+    targetPort: {{ .Values.files.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "meridian.service.selectorLabels" (dict "context" . "service" "files") | nindent 4 }}
+{{- end }}

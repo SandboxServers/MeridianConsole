@@ -1,0 +1,17 @@
+{{- if .Values.billing.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "meridian.service.fullname" (dict "context" . "service" "billing") }}
+  labels:
+    {{- include "meridian.service.labels" (dict "context" . "service" "billing") | nindent 4 }}
+spec:
+  type: {{ .Values.billing.service.type }}
+  ports:
+  - port: {{ .Values.billing.service.port }}
+    targetPort: {{ .Values.billing.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "meridian.service.selectorLabels" (dict "context" . "service" "billing") | nindent 4 }}
+{{- end }}

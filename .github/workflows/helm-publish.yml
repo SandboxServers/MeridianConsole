@@ -1,0 +1,115 @@
+name: Publish Helm Charts to ACR
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'deploy/kubernetes/helm/meridian-console/**'
+      - '.github/workflows/helm-publish.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  # Configure your Azure Container Registry name here or use repository variables
+  ACR_NAME: ${{ vars.ACR_NAME || 'meridianconsoleacr' }}
+
+jobs:
+  publish-helm-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.13.0'
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to Azure Container Registry
+        run: |
+          # Get ACR login server
+          ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+          echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+
+          # Login to ACR using Azure CLI (uses the federated credential from azure/login)
+          az acr login --name $ACR_NAME
+
+          # Also login Helm registry for OCI push
+          ACCESS_TOKEN=$(az acr login --name $ACR_NAME --expose-token --output tsv --query accessToken)
+          echo "$ACCESS_TOKEN" | helm registry login "$ACR_LOGIN_SERVER" --username 00000000-0000-0000-0000-000000000000 --password-stdin
+
+      - name: Add Bitnami repository
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          cd deploy/kubernetes/helm/meridian-console
+          helm dependency update
+
+      - name: Lint Helm chart
+        run: |
+          cd deploy/kubernetes/helm
+          helm lint meridian-console
+
+      - name: Package and Push Helm chart to ACR
+        run: |
+          cd deploy/kubernetes/helm
+
+          # Package the chart
+          helm package meridian-console
+
+          # Get chart version
+          CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}')
+          CHART_FILE="meridian-console-${CHART_VERSION}.tgz"
+
+          echo "=== Publishing Chart ==="
+          echo "Chart: meridian-console"
+          echo "Version: $CHART_VERSION"
+          echo "Registry: $ACR_LOGIN_SERVER"
+          echo "========================"
+
+          # Push to ACR as OCI artifact
+          helm push "$CHART_FILE" oci://$ACR_LOGIN_SERVER/helm
+
+          echo "✅ Successfully published meridian-console:${CHART_VERSION} to ACR"
+
+          # Save version for summary
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_ENV
+
+      - name: Create release summary
+        run: |
+          echo "## 📦 Helm Chart Published to Azure Container Registry" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Chart:** \`meridian-console\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`$CHART_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** \`$ACR_LOGIN_SERVER\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Installation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Login to ACR (Azure CLI required)" >> $GITHUB_STEP_SUMMARY
+          echo "az acr login --name $ACR_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Install the chart from ACR" >> $GITHUB_STEP_SUMMARY
+          echo "helm install meridian oci://$ACR_LOGIN_SERVER/helm/meridian-console \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --version $CHART_VERSION \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --namespace meridian-system \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --create-namespace" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
