@@ -1,12 +1,11 @@
-<section id="certificates" class="bg-gray-800 rounded-xl p-6 border border-gray-700">
-    <h2 class="text-2xl font-bold text-purple-400 mb-6 border-b border-purple-600 pb-2">
+<MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-6" Elevation="0">
+    <MudText Typo="Typo.h4" Color="Color.Secondary" Class="font-bold mb-6 pb-2" Style="border-bottom: 1px solid rgba(192, 132, 252, 0.3);">
         8. Certificate Management
-    </h2>
+    </MudText>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Certificate Architecture Overview</h3>
-    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6 font-mono text-xs overflow-x-auto">
-        <pre class="text-gray-300">
-┌─────────────────────────────────────────────────────────────────────────────────┐
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Certificate Architecture Overview</MudText>
+    <MudPaper Class="rounded-xl p-4 mb-6 font-mono text-xs overflow-x-auto" Style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);">
+        <MudText Typo="Typo.body2" Class="font-mono text-xs" Style="color: rgba(255,255,255,0.7); white-space: pre;">┌─────────────────────────────────────────────────────────────────────────────────┐
 │                         CERTIFICATE MANAGEMENT                                   │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
@@ -33,31 +32,29 @@
 │   │  DNS: agent-{id}.nodes.meridianconsole.com                              │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-        </pre>
-    </div>
+└─────────────────────────────────────────────────────────────────────────────────┘</MudText>
+    </MudPaper>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Certificate Types</h3>
-    <table class="w-full text-sm border-collapse mb-6">
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Certificate Types</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
         <thead>
-            <tr class="bg-gray-700 text-white">
-                <th class="border border-gray-600 p-2 text-left">Type</th>
-                <th class="border border-gray-600 p-2 text-left">Scope</th>
-                <th class="border border-gray-600 p-2 text-left">Manager</th>
-                <th class="border border-gray-600 p-2 text-left">Renewal</th>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Type</th>
+                <th style="color: white; padding: 12px;">Scope</th>
+                <th style="color: white; padding: 12px;">Manager</th>
+                <th style="color: white; padding: 12px;">Renewal</th>
             </tr>
         </thead>
-        <tbody class="text-gray-300">
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Ingress (User-facing)</td><td class="border border-gray-600 p-2">*.meridianconsole.com</td><td class="border border-gray-600 p-2">cert-manager</td><td class="border border-gray-600 p-2">45 days (automated)</td></tr>
-            <tr><td class="border border-gray-600 p-2">Internal Pod-to-Pod</td><td class="border border-gray-600 p-2">All cluster services</td><td class="border border-gray-600 p-2">Cilium</td><td class="border border-gray-600 p-2">Automatic (mesh)</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">Agent mTLS</td><td class="border border-gray-600 p-2">agent-{id}.nodes.*</td><td class="border border-gray-600 p-2">Nodes Service</td><td class="border border-gray-600 p-2">45 days (automated)</td></tr>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">Ingress (User-facing)</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">*.meridianconsole.com</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">cert-manager</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">45 days (automated)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">Internal Pod-to-Pod</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">All cluster services</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Cilium</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Automatic (mesh)</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">Agent mTLS</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">agent-{id}.nodes.*</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Nodes Service</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">45 days (automated)</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Agent Bootstrap Flow</h3>
-    <div class="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-6 font-mono text-xs overflow-x-auto">
-        <pre class="text-gray-300">
-┌─────────────────────────────────────────────────────────────────────────────────┐
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Agent Bootstrap Flow</MudText>
+    <MudPaper Class="rounded-xl p-4 mb-6 font-mono text-xs overflow-x-auto" Style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);">
+        <MudText Typo="Typo.body2" Class="font-mono text-xs" Style="color: rgba(255,255,255,0.7); white-space: pre;">┌─────────────────────────────────────────────────────────────────────────────────┐
 │                           AGENT BOOTSTRAP SEQUENCE                               │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
@@ -95,50 +92,53 @@
 │     │  (reg)  │     (ongoing comms)         │   :5040     │                     │
 │     └─────────┘                             └─────────────┘                     │
 │                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-        </pre>
-    </div>
+└─────────────────────────────────────────────────────────────────────────────────┘</MudText>
+    </MudPaper>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">DNS-01 Challenge Flow</h3>
-    <table class="w-full text-sm border-collapse mb-6">
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">DNS-01 Challenge Flow</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Class="mb-6 rounded-xl" Style="background: rgba(0,0,0,0.2);">
         <thead>
-            <tr class="bg-gray-700 text-white">
-                <th class="border border-gray-600 p-2 text-left">Step</th>
-                <th class="border border-gray-600 p-2 text-left">Action</th>
-                <th class="border border-gray-600 p-2 text-left">Component</th>
+            <tr style="background: rgba(255,255,255,0.05);">
+                <th style="color: white; padding: 12px;">Step</th>
+                <th style="color: white; padding: 12px;">Action</th>
+                <th style="color: white; padding: 12px;">Component</th>
             </tr>
         </thead>
-        <tbody class="text-gray-300">
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">1</td><td class="border border-gray-600 p-2">Request new certificate order</td><td class="border border-gray-600 p-2">→ Let's Encrypt ACME</td></tr>
-            <tr><td class="border border-gray-600 p-2">2</td><td class="border border-gray-600 p-2">Create TXT record via API</td><td class="border border-gray-600 p-2">→ Cloudflare API</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">3</td><td class="border border-gray-600 p-2">Validate challenge</td><td class="border border-gray-600 p-2">→ Let's Encrypt ACME</td></tr>
-            <tr><td class="border border-gray-600 p-2">4</td><td class="border border-gray-600 p-2">Delete TXT record</td><td class="border border-gray-600 p-2">→ Cloudflare API</td></tr>
-            <tr class="bg-gray-800"><td class="border border-gray-600 p-2">5</td><td class="border border-gray-600 p-2">Store/push certificate</td><td class="border border-gray-600 p-2">→ K8s Secret / Agent</td></tr>
+        <tbody>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">1</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Request new certificate order</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">→ Let's Encrypt ACME</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">2</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Create TXT record via API</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">→ Cloudflare API</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">3</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Validate challenge</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">→ Let's Encrypt ACME</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">4</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Delete TXT record</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">→ Cloudflare API</td></tr>
+            <tr><td style="color: rgba(255,255,255,0.8); padding: 12px;">5</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">Store/push certificate</td><td style="color: rgba(255,255,255,0.8); padding: 12px;">→ K8s Secret / Agent</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Renewal Policy</h3>
-    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6">
-        <p class="text-green-400 font-semibold mb-2">✅ Automated Renewal</p>
-        <ul class="text-gray-300 text-sm space-y-1">
-            <li>• <strong class="text-white">Validity:</strong> 90 days (Let's Encrypt standard)</li>
-            <li>• <strong class="text-white">Renewal trigger:</strong> 45 days before expiry (50% lifetime)</li>
-            <li>• <strong class="text-white">Automation:</strong> Fully automated — no manual intervention</li>
-            <li>• <strong class="text-white">Alerting:</strong> Alert if renewal fails 30 days before expiry</li>
-        </ul>
-    </div>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Renewal Policy</MudText>
+    <MudPaper Class="rounded-xl p-4 mb-6" Style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4);">
+        <MudText Typo="Typo.body1" Style="color: rgba(16, 185, 129, 1);"><strong>✅ Automated Renewal</strong></MudText>
+        <MudText Typo="Typo.body2" Class="mt-2" Style="color: rgba(255,255,255,0.7);">
+            • <strong style="color: white;">Validity:</strong> 90 days (Let's Encrypt standard)<br/>
+            • <strong style="color: white;">Renewal trigger:</strong> 45 days before expiry (50% lifetime)<br/>
+            • <strong style="color: white;">Automation:</strong> Fully automated — no manual intervention<br/>
+            • <strong style="color: white;">Alerting:</strong> Alert if renewal fails 30 days before expiry
+        </MudText>
+    </MudPaper>
 
-    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Internal Services (Cilium)</h3>
-    <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
-        <p class="text-blue-400 font-semibold mb-2">🔒 Pod-to-Pod Encryption</p>
-        <p class="text-gray-300 text-sm mb-2">Cilium service mesh handles all internal mTLS automatically:</p>
-        <ul class="text-gray-300 text-sm space-y-1">
-            <li>• All 12 control plane services</li>
-            <li>• PostgreSQL connections (Platform DB, User DB)</li>
-            <li>• RabbitMQ connections</li>
-            <li>• Redis connections</li>
-            <li>• Prometheus/Loki scraping</li>
-        </ul>
-        <p class="text-gray-400 text-xs mt-2 italic">No manual certificate management required for internal services.</p>
-    </div>
-</section>
+    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">Internal Services (Cilium)</MudText>
+    <MudPaper Class="rounded-xl p-4" Style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4);">
+        <MudText Typo="Typo.body1" Style="color: rgba(59, 130, 246, 1);"><strong>🔒 Pod-to-Pod Encryption</strong></MudText>
+        <MudText Typo="Typo.body2" Class="mt-2 mb-2" Style="color: rgba(255,255,255,0.7);">
+            Cilium service mesh handles all internal mTLS automatically:
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">
+            • All 12 control plane services<br/>
+            • PostgreSQL connections (Platform DB, User DB)<br/>
+            • RabbitMQ connections<br/>
+            • Redis connections<br/>
+            • Prometheus/Loki scraping
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mt-2 font-italic" Style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">
+            No manual certificate management required for internal services.
+        </MudText>
+    </MudPaper>
+</MudPaper>
