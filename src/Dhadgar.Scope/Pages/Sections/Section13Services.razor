@@ -1,47 +1,65 @@
-<section id="services" class="bg-gray-800 rounded-xl p-6 border border-indigo-700">
-    <h2 class="text-2xl font-bold text-white">14. Services Catalogue</h2>
-    <p class="text-gray-400 text-sm mb-6">Hover over services for quick info • Click for complete documentation</p>
+<MudPaper Class="rounded-2xl border border-white/10 bg-white/5 p-6" Elevation="0">
+    <MudText Typo="Typo.h4" Color="Color.Secondary" Class="font-bold mb-6 pb-2" Style="border-bottom: 1px solid rgba(192, 132, 252, 0.3);">
+        14. Services Catalogue
+    </MudText>
+    <MudText Typo="Typo.body2" Class="mb-6" Style="color: rgba(255,255,255,0.6); font-size: 0.875rem;">
+        Hover over services for quick info • Click for complete documentation
+    </MudText>
 
     <!-- Legend -->
-    <div class="bg-gray-900 rounded-lg p-5 border border-gray-700 mb-6">
-        <h3 class="text-lg font-semibold text-white mb-3">Architecture Layers</h3>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-600 rounded"></div><span class="text-gray-300">Foundation</span></div>
-            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-600 rounded"></div><span class="text-gray-300">External APIs</span></div>
-            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-yellow-600 rounded"></div><span class="text-gray-300">Core Services</span></div>
-            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-purple-600 rounded"></div><span class="text-gray-300">Business Logic</span></div>
-            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-600 rounded"></div><span class="text-gray-300">Presentation</span></div>
-        </div>
-    </div>
+    <MudPaper Class="rounded-xl p-5 border mb-6" Style="background: rgba(17, 24, 39, 1); border-color: rgba(55, 65, 81, 1);" Elevation="0">
+        <MudText Typo="Typo.h6" Style="color: white;" Class="mb-3">Architecture Layers</MudText>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center gap-2">
+                <div style="width: 16px; height: 16px; background: rgb(37, 99, 235); border-radius: 4px;"></div>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7); font-size: 0.875rem;">Foundation</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center gap-2">
+                <div style="width: 16px; height: 16px; background: rgb(220, 38, 38); border-radius: 4px;"></div>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7); font-size: 0.875rem;">External APIs</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center gap-2">
+                <div style="width: 16px; height: 16px; background: rgb(202, 138, 4); border-radius: 4px;"></div>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7); font-size: 0.875rem;">Core Services</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center gap-2">
+                <div style="width: 16px; height: 16px; background: rgb(147, 51, 234); border-radius: 4px;"></div>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7); font-size: 0.875rem;">Business Logic</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center gap-2">
+                <div style="width: 16px; height: 16px; background: rgb(22, 163, 74); border-radius: 4px;"></div>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7); font-size: 0.875rem;">Presentation</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
     <!-- Service Layers (populated by JavaScript) -->
-    <div id="service-layers" class="bg-gray-900 rounded-lg p-5 border border-gray-700 mb-6"></div>
+    <MudPaper id="service-layers" Class="rounded-xl p-5 border mb-6" Style="background: rgba(17, 24, 39, 1); border-color: rgba(55, 65, 81, 1);" Elevation="0"></MudPaper>
 
     <!-- Critical Dependencies Warning -->
-    <div class="bg-red-900/30 rounded-lg p-5 border border-red-800 mb-6">
-        <h3 class="text-xl font-bold text-red-400 mb-3">⚠️ Critical Infrastructure Dependencies</h3>
-        <p class="text-gray-400 mb-4">The following services are single points of failure:</p>
-        
-        <div class="space-y-3">
-            <div class="bg-gray-900 rounded-lg p-4">
-                <div class="font-semibold text-red-300 mb-2">🗄️ PostgreSQL (11/14 services depend on it)</div>
-                <div class="text-sm text-gray-400"><strong>Impact if down:</strong> Identity, Nodes, Secrets, Billing, Servers, Tasks, Files, Mods, Notifications, Firewall, Discord all fail</div>
-                <div class="text-sm text-gray-400 mt-1"><strong>Mitigation:</strong> Automated backups every 6 hours, read replicas, point-in-time recovery</div>
-            </div>
-            <div class="bg-gray-900 rounded-lg p-4">
-                <div class="font-semibold text-red-300 mb-2">📬 RabbitMQ (9/14 services depend on it)</div>
-                <div class="text-sm text-gray-400"><strong>Impact if down:</strong> Asynchronous operations halt, no event-driven communication, task queue stops</div>
-                <div class="text-sm text-gray-400 mt-1"><strong>Mitigation:</strong> Durable queues, dead letter exchanges, message persistence</div>
-            </div>
-            <div class="bg-gray-900 rounded-lg p-4">
-                <div class="font-semibold text-yellow-300 mb-2">🖥️ Nodes (7/17 services depend on it)</div>
-                <div class="text-sm text-gray-400"><strong>Impact if down:</strong> Cannot provision new servers, certificate management fails, agents disconnect</div>
-                <div class="text-sm text-gray-400 mt-1"><strong>Mitigation:</strong> Health checks, alerting, cached DNS records</div>
-            </div>
-        </div>
-    </div>
+    <MudPaper Class="rounded-xl p-5 border mb-6" Style="background: rgba(127, 29, 29, 0.3); border-color: rgba(153, 27, 27, 1);" Elevation="0">
+        <MudText Typo="Typo.h5" Style="color: rgba(248, 113, 113, 1);" Class="mb-3 font-bold">⚠️ Critical Infrastructure Dependencies</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color: rgba(255,255,255,0.6);">The following services are single points of failure:</MudText>
 
-</section>
+        <div class="d-flex flex-column gap-3">
+            <MudPaper Class="rounded-xl p-4" Style="background: rgba(17, 24, 39, 1);" Elevation="0">
+                <MudText Typo="Typo.body1" Style="color: rgba(252, 165, 165, 1);" Class="mb-2 font-weight-bold">🗄️ PostgreSQL (11/14 services depend on it)</MudText>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6); font-size: 0.875rem;"><strong>Impact if down:</strong> Identity, Nodes, Secrets, Billing, Servers, Tasks, Files, Mods, Notifications, Firewall, Discord all fail</MudText>
+                <MudText Typo="Typo.body2" Class="mt-1" Style="color: rgba(255,255,255,0.6); font-size: 0.875rem;"><strong>Mitigation:</strong> Automated backups every 6 hours, read replicas, point-in-time recovery</MudText>
+            </MudPaper>
+            <MudPaper Class="rounded-xl p-4" Style="background: rgba(17, 24, 39, 1);" Elevation="0">
+                <MudText Typo="Typo.body1" Style="color: rgba(252, 165, 165, 1);" Class="mb-2 font-weight-bold">📬 RabbitMQ (9/14 services depend on it)</MudText>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6); font-size: 0.875rem;"><strong>Impact if down:</strong> Asynchronous operations halt, no event-driven communication, task queue stops</MudText>
+                <MudText Typo="Typo.body2" Class="mt-1" Style="color: rgba(255,255,255,0.6); font-size: 0.875rem;"><strong>Mitigation:</strong> Durable queues, dead letter exchanges, message persistence</MudText>
+            </MudPaper>
+            <MudPaper Class="rounded-xl p-4" Style="background: rgba(17, 24, 39, 1);" Elevation="0">
+                <MudText Typo="Typo.body1" Style="color: rgba(252, 211, 77, 1);" Class="mb-2 font-weight-bold">🖥️ Nodes (7/17 services depend on it)</MudText>
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6); font-size: 0.875rem;"><strong>Impact if down:</strong> Cannot provision new servers, certificate management fails, agents disconnect</MudText>
+                <MudText Typo="Typo.body2" Class="mt-1" Style="color: rgba(255,255,255,0.6); font-size: 0.875rem;"><strong>Mitigation:</strong> Health checks, alerting, cached DNS records</MudText>
+            </MudPaper>
+        </div>
+    </MudPaper>
+</MudPaper>
 
 <!-- Tooltip Container -->
 <div id="tooltip-services" class="tooltip-services"></div>
@@ -162,7 +180,7 @@ const layerConfig = [
 
 function renderServices() {
     const container = document.getElementById('service-layers');
-    
+
     layerConfig.forEach(layer => {
         const layerServices = servicesData[layer.key];
         const layerDiv = document.createElement('div');
@@ -172,9 +190,9 @@ function renderServices() {
             <div class="grid grid-cols-2 md:grid-cols-${layer.gridCols} gap-4" id="layer-${layer.key}"></div>
         `;
         container.appendChild(layerDiv);
-        
+
         const gridContainer = document.getElementById(`layer-${layer.key}`);
-        
+
         layerServices.forEach(service => {
             const node = document.createElement('div');
             // USE LAYER COLOR instead of service.color
@@ -190,11 +208,11 @@ function renderServices() {
                 </div>
                 <p class="text-xs text-gray-500 mt-2">${service.dependents.length} dependent${service.dependents.length !== 1 ? 's' : ''}</p>
             `;
-            
+
             node.addEventListener('mouseenter', (e) => showTooltip(e, service));
             node.addEventListener('mouseleave', hideTooltip);
             node.addEventListener('click', () => showModal(service));
-            
+
             gridContainer.appendChild(node);
         });
     });
@@ -204,7 +222,7 @@ function showTooltip(e, service) {
     const tooltip = document.getElementById('tooltip-services');
     const deps = service.dependencies.length > 0 ? service.dependencies.join(', ') : 'None';
     const dependents = service.dependents.length > 0 ? service.dependents.join(', ') : 'None';
-    
+
     tooltip.innerHTML = `
         <div class="font-bold text-lg mb-2 text-white">${service.emoji} ${service.name}${service.port ? ' :' + service.port : ''}</div>
         <div class="text-sm text-gray-300 mb-3">${service.description}</div>
@@ -221,7 +239,7 @@ function showTooltip(e, service) {
         </div>
         <div class="text-xs text-gray-500 mt-2 italic">Click for full details</div>
     `;
-    
+
     const rect = e.target.closest('.service-node').getBoundingClientRect();
     tooltip.style.left = `${rect.right + 10}px`;
     tooltip.style.top = `${rect.top}px`;
@@ -236,43 +254,43 @@ function showModal(service) {
     const modal = document.getElementById('modal-services');
     const title = document.getElementById('modal-title-services');
     const body = document.getElementById('modal-body-services');
-    
+
     title.textContent = `${service.emoji} ${service.name}${service.port ? ' :' + service.port : ''}`;
-    
+
     body.innerHTML = `
         <div class="space-y-6">
             <div>
                 <h4 class="text-lg font-semibold text-blue-400 mb-2">Description</h4>
                 <p class="text-gray-300">${service.description}</p>
             </div>
-            
+
             <div>
                 <h4 class="text-lg font-semibold text-purple-400 mb-2">Key Responsibilities</h4>
                 <ul class="list-disc list-inside space-y-2 text-gray-300">
                     ${service.responsibilities.map(r => `<li>${r}</li>`).join('')}
                 </ul>
             </div>
-            
+
             <div>
                 <h4 class="text-lg font-semibold text-yellow-400 mb-2">Dependencies</h4>
-                ${service.dependencies.length > 0 
+                ${service.dependencies.length > 0
                     ? `<div class="flex flex-wrap gap-2">
                         ${service.dependencies.map(d => `<span class="bg-blue-900 text-blue-200 px-3 py-1 rounded text-sm">${d}</span>`).join('')}
                        </div>`
                     : `<p class="text-gray-500 italic">No dependencies</p>`
                 }
             </div>
-            
+
             <div>
                 <h4 class="text-lg font-semibold text-green-400 mb-2">Dependents</h4>
-                ${service.dependents.length > 0 
+                ${service.dependents.length > 0
                     ? `<div class="flex flex-wrap gap-2">
                         ${service.dependents.map(d => `<span class="bg-green-900 text-green-200 px-3 py-1 rounded text-sm">${d}</span>`).join('')}
                        </div>`
                     : `<p class="text-gray-500 italic">No dependents</p>`
                 }
             </div>
-            
+
             ${service.endpoints && service.endpoints.length > 0 ? `
                 <div>
                     <h4 class="text-lg font-semibold text-red-400 mb-2">Key Endpoints / Features</h4>
@@ -283,7 +301,7 @@ function showModal(service) {
             ` : ''}
         </div>
     `;
-    
+
     modal.classList.add('active');
 }
 
