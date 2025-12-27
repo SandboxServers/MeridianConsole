@@ -294,6 +294,19 @@ When using Claude Code in this repository, the following specialized agents are 
 | **blazor-webdev-expert** | Blazor WebAssembly development, MudBlazor components, responsive layouts, forms, and styling |
 | **dotnet-10-researcher** | .NET 10 features, EF Core patterns, security best practices, and API design guidance |
 | **security-architect** | Authentication/authorization design, secrets management, mTLS configuration, threat modeling |
+| **database-admin** | PostgreSQL setup/tuning, connection pooling, backup/recovery, performance optimization |
+| **database-schema-architect** | Schema design, EF Core migrations, data modeling, indexing strategies |
+| **iam-architect** | OAuth/OIDC flows, RBAC design, JWT strategies, passwordless auth (WebAuthn/passkeys) |
+| **messaging-engineer** | RabbitMQ, MassTransit consumers/publishers, sagas, retry policies, dead letter queues |
+| **microservices-architect** | Service boundaries, inter-service communication, distributed system patterns |
+| **rest-api-engineer** | REST API design, endpoint structure, HTTP methods, status codes, versioning |
+| **dotnet-test-engineer** | xUnit testing, mocking, WebApplicationFactory integration tests, debugging flaky tests |
+| **azure-pipelines-architect** | Azure Pipelines YAML, multi-stage pipelines, template patterns, pipeline debugging |
+| **azure-infra-advisor** | Cloud vs on-prem decisions, Azure cost optimization, hybrid infrastructure planning |
+| **observability-architect** | Distributed tracing, metrics, logging, alerting, OpenTelemetry instrumentation |
+| **k3s-bottlerocket-expert** | k3s cluster configuration, Bottlerocket OS, container orchestration, node provisioning |
+| **talos-os-expert** | Talos OS configuration, cluster bootstrapping, etcd management, upgrades |
+| **agent-service-guardian** | Reviews changes to customer-hosted agent code for security compliance |
 | **Explore** | Codebase exploration, finding files, understanding code structure |
 | **Plan** | Designing implementation strategies for complex features |
 
