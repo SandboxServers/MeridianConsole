@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "ms-dotnettools.csharp",
+    "ms-azuretools.vscode-docker",
+    "redhat.vscode-yaml",
+    "humao.rest-client",
+    "ms-kubernetes-tools.vscode-kubernetes-tools",
+    "eamodio.gitlens"
+  ],
+  "unwantedRecommendations": []
+}

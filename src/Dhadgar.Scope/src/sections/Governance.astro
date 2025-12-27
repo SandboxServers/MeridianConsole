@@ -1,0 +1,57 @@
+---
+// Section 18: Product Governance
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 18: Product Governance</h2>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Decision Making</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Area</th>
+        <th>Decision Maker</th>
+        <th>Input From</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Product vision</td><td>Cady (Lead)</td><td>All team</td></tr>
+      <tr><td>Architecture</td><td>Cady + Jorsh</td><td>Aura for infra</td></tr>
+      <tr><td>Technical implementation</td><td>Jorsh</td><td>Code review required</td></tr>
+      <tr><td>Infrastructure</td><td>Aura</td><td>Team approval for costs</td></tr>
+      <tr><td>Security</td><td>Consensus</td><td>All team</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Code Review Policy</h3>
+  <div class="scope-panel mb-6">
+    <ul class="space-y-2 text-white/70">
+      <li>- All changes require PR review</li>
+      <li>- At least one approval before merge</li>
+      <li>- CI must pass (build + tests)</li>
+      <li>- Security-sensitive changes require two approvals</li>
+    </ul>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Communication</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Channel</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Discord</td><td>Day-to-day communication</td></tr>
+      <tr><td>GitHub Issues</td><td>Bug reports, feature requests</td></tr>
+      <tr><td>Azure DevOps</td><td>Sprint planning, work items</td></tr>
+      <tr><td>Weekly sync</td><td>Progress review, blockers</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Documentation Standards</h3>
+  <div class="scope-callout">
+    Architecture decisions documented in ADRs (Architecture Decision Records).
+    API contracts defined before implementation. CLAUDE.md keeps Claude Code informed.
+  </div>
+</div>

@@ -1,0 +1,11 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { MainLayout } from '../components/layout/MainLayout';
+import { DependencyGraph } from '../components/visualizations/DependencyGraph';
+---
+
+<BaseLayout title="Dependency Map">
+  <MainLayout client:load>
+    <DependencyGraph client:load />
+  </MainLayout>
+</BaseLayout>

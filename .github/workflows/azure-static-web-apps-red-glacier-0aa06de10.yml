@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'src/Dhadgar.Scope/**'
+      - '.github/workflows/azure-static-web-apps-red-glacier-0aa06de10.yml'
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches:
       - main
+    paths:
+      - 'src/Dhadgar.Scope/**'
+      - '.github/workflows/azure-static-web-apps-red-glacier-0aa06de10.yml'
 
 jobs:
   build_and_deploy_job:
@@ -20,14 +26,20 @@ jobs:
           submodules: true
           lfs: false
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          dotnet-version: "10.0.x"
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'src/Dhadgar.Scope/package-lock.json'
 
-      # Produces src/Dhadgar.Scope/_swa_publish/wwwroot because we wired the csproj
-      - name: Publish Scope (Blazor WASM)
-        run: dotnet publish ./src/Dhadgar.Scope/Dhadgar.Scope.csproj -c Release
+      - name: Install dependencies
+        working-directory: src/Dhadgar.Scope
+        run: npm ci
+
+      - name: Build Astro site
+        working-directory: src/Dhadgar.Scope
+        run: npm run build
 
       - name: Deploy to Azure Static Web Apps
         id: builddeploy
@@ -36,8 +48,8 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_RED_GLACIER_0AA06DE10 }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-
-          # We are NOT letting Oryx build. We upload built static assets.
+          # Upload pre-built static assets (skip Oryx build)
+          skip_app_build: true
           app_location: "src/Dhadgar.Scope/_swa_publish/wwwroot"
           api_location: ""
           output_location: ""

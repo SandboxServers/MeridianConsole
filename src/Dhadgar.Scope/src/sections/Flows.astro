@@ -1,0 +1,44 @@
+---
+// Section 11: Network Flows
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 11: Network Flows</h2>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Traffic Patterns</h3>
+  <p class="mb-4 text-white/70">
+    All external traffic enters through Cloudflare, then the YARP Gateway.
+    Internal services communicate via HTTP and RabbitMQ.
+  </p>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Ingress Flow</h3>
+  <div class="scope-code mb-6">
+    <code>
+      User → Cloudflare (WAF/CDN) → YARP Gateway → Target Service<br/>
+      Agent → Cloudflare → Gateway → Control Plane Services
+    </code>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Internal Communication</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Protocol</th>
+        <th>Use Case</th>
+        <th>Examples</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>HTTP/REST</td><td>Synchronous requests</td><td>Service-to-service APIs</td></tr>
+      <tr><td>RabbitMQ/AMQP</td><td>Async events, commands</td><td>Provisioning, notifications</td></tr>
+      <tr><td>SignalR/WSS</td><td>Real-time</td><td>Console streaming, status updates</td></tr>
+      <tr><td>PostgreSQL</td><td>Data persistence</td><td>Each service to its own DB</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Agent Communication</h3>
+  <div class="scope-callout">
+    Agents initiate all connections outbound to the control plane.
+    No inbound ports required on customer infrastructure.
+  </div>
+</div>

@@ -1,0 +1,66 @@
+---
+// Section 15: Agent Architecture
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 15: Agent Architecture</h2>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Overview</h3>
+  <p class="mb-4 text-white/70">
+    Agents are high-trust components deployed on customer hardware to manage game servers.
+    They handle process lifecycle, file management, and real-time communication.
+  </p>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Agent Types</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>Platform</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Dhadgar.Agent.Core</td><td>Cross-platform</td><td>Shared logic, abstractions</td></tr>
+      <tr><td>Dhadgar.Agent.Linux</td><td>Linux</td><td>Linux-specific implementation</td></tr>
+      <tr><td>Dhadgar.Agent.Windows</td><td>Windows</td><td>Windows-specific implementation</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Communication Model</h3>
+  <div class="scope-panel mb-6">
+    <p class="mb-2 font-semibold">Outbound-Only Design:</p>
+    <ul class="space-y-1 text-white/70">
+      <li>- Agents initiate all connections to control plane</li>
+      <li>- No inbound firewall rules required</li>
+      <li>- WebSocket for real-time commands</li>
+      <li>- HTTP for file transfers and API calls</li>
+    </ul>
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Security Model</h3>
+  <div class="scope-callout">
+    <strong>High Trust:</strong> Agents run with elevated privileges to manage game server processes.
+    mTLS certificates authenticate agents to control plane. Short-lived certificates with automatic rotation.
+  </div>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Capabilities</h3>
+  <div class="grid gap-3 md:grid-cols-2">
+    <div class="scope-panel">
+      <h4 class="font-semibold">Process Management</h4>
+      <p class="text-sm text-white/70">Start, stop, restart game server processes</p>
+    </div>
+    <div class="scope-panel">
+      <h4 class="font-semibold">File Operations</h4>
+      <p class="text-sm text-white/70">Download, upload, backup game files</p>
+    </div>
+    <div class="scope-panel">
+      <h4 class="font-semibold">Console Streaming</h4>
+      <p class="text-sm text-white/70">Real-time stdout/stdin relay via SignalR</p>
+    </div>
+    <div class="scope-panel">
+      <h4 class="font-semibold">Health Reporting</h4>
+      <p class="text-sm text-white/70">CPU, memory, disk usage metrics</p>
+    </div>
+  </div>
+</div>

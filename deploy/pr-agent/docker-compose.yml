@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  pr-agent:
+    image: codiumai/pr-agent:latest
+    container_name: meridian-pr-agent
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # GitHub Configuration
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_APP_ID=${GITHUB_APP_ID:-}
+      - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY:-}
+
+      # OpenRouter Configuration
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+
+      # PR-Agent Configuration
+      - CONFIG_FILE=/app/configuration.toml
+      - LOG_LEVEL=INFO
+
+    volumes:
+      # Mount your custom configuration
+      - ../../.pr_agent.toml:/app/configuration.toml:ro
+
+      # Persist logs (optional)
+      - ./logs:/app/logs
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - pr-agent-network
+
+  # Optional: Ollama for local fallback (if you want fully local option)
+  # Uncomment if running on home server with GPU
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: meridian-ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   networks:
+  #     - pr-agent-network
+
+networks:
+  pr-agent-network:
+    driver: bridge
+
+# volumes:
+#   ollama-data:
