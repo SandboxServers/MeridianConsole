@@ -7,6 +7,7 @@
       "Bash(git add:*)",
       "Bash(claude mcp:*)",
       "Bash(cat:*)"
+      "Bash(bash:*)"
     ]
   }
 }

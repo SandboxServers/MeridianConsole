@@ -796,9 +796,9 @@ if ($Reset) {
 
 # Initialize log file
 $null = New-Item -Path $LogFile -ItemType File -Force -ErrorAction SilentlyContinue
-Add-Content -Path $LogFile -Value "=" * 60
+Add-Content -Path $LogFile -Value ("=" * 60)
 Add-Content -Path $LogFile -Value "MeridianConsole Bootstrap - $(Get-Date)"
-Add-Content -Path $LogFile -Value "=" * 60
+Add-Content -Path $LogFile -Value ("=" * 60)
 
 # Display banner
 Write-Banner
