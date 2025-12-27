@@ -36,8 +36,8 @@ variables:
 resources:
   repositories:
   - repository: pipelinePatterns
-    type: git
-    # Update this to match your org/project/repo name for the shared YAML repo.
+    type: github
+    endpoint: github.com_SandboxServers
     name: SandboxServers/Azure-Pipeline-YAML
     ref: refs/heads/main
 
