@@ -12,7 +12,9 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Dhadgar.Scope\Dhadgar.Scope.csproj" />
-  </ItemGroup>
+  <!--
+    Note: Dhadgar.Scope is now an Astro/Node.js project, not a .NET project.
+    Tests for the Scope site should be done with Playwright or similar E2E testing.
+    This test project validates the project structure and build artifacts.
+  -->
 </Project>

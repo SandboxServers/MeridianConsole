@@ -27,3 +27,6 @@ obj/
 # Local dev
 **/appsettings.Development.json
 src/Dhadgar.Scope/_swa_publish/*
+
+# Blazor backup (preserved locally for reference during migration)
+src/Dhadgar.Scope.blazor-backup/
