@@ -403,6 +403,28 @@ check_internet() {
     return 0
 }
 
+is_wsl2() {
+    if [[ -f /proc/version ]] && grep -qi microsoft /proc/version; then
+        return 0
+    fi
+    return 1
+}
+
+has_docker_desktop() {
+    # Docker Desktop for Windows is accessible in WSL2
+    if is_wsl2 && command_exists docker; then
+        # Check if docker is using Docker Desktop (looks for docker-desktop context)
+        if docker context ls 2>/dev/null | grep -q "docker-desktop"; then
+            return 0
+        fi
+        # Alternative check: Docker Desktop typically has a specific socket path
+        if [[ -S /var/run/docker.sock ]] && docker info 2>/dev/null | grep -qi "docker desktop"; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 wait_for_apt_lock() {
     local max_wait=60
     local waited=0
@@ -698,7 +720,24 @@ phase_docker() {
 
     step "Phase: Docker Engine"
 
-    # Check if already installed
+    # Check for Docker Desktop in WSL2
+    if has_docker_desktop; then
+        success "Docker Desktop detected (running in WSL2)"
+        success "Docker is already installed: $(docker --version)"
+        if docker info &>/dev/null; then
+            success "Docker is accessible and working"
+            info "Skipping Docker Engine installation (using Docker Desktop)"
+            save_checkpoint "Kubernetes"
+            return 0
+        else
+            warn "Docker Desktop detected but not accessible - it may not be running"
+            warn "Please start Docker Desktop on Windows and try again"
+            save_checkpoint "Kubernetes"
+            return 0
+        fi
+    fi
+
+    # Check if already installed (non-Docker Desktop)
     if command_exists docker; then
         success "Docker is already installed: $(docker --version)"
 
@@ -714,14 +753,18 @@ phase_docker() {
                 warn "Docker installed but not accessible - may need logout/login"
             fi
         else
-            # User not in docker group - add them
-            info "Adding $USER to docker group..."
-            sudo usermod -aG docker "$USER"
-
-            request_restart_and_exit \
-                "You were added to the 'docker' group. A logout/login is required for this change to take effect." \
-                "Kubernetes" \
-                "logout"
+            # User not in docker group - add them (only if not WSL2 with Docker Desktop)
+            if ! is_wsl2; then
+                info "Adding $USER to docker group..."
+                if sudo -n usermod -aG docker "$USER" 2>/dev/null; then
+                    request_restart_and_exit \
+                        "You were added to the 'docker' group. A logout/login is required for this change to take effect." \
+                        "Kubernetes" \
+                        "logout"
+                else
+                    warn "Could not add user to docker group (sudo required)"
+                fi
+            fi
         fi
     fi
 
@@ -813,17 +856,35 @@ install_docker_arch() {
 }
 
 configure_docker_service() {
+    # Skip systemctl in WSL2 or if Docker Desktop is detected
+    if is_wsl2 || has_docker_desktop; then
+        info "Skipping Docker service configuration (WSL2/Docker Desktop)"
+        # Test Docker
+        info "Testing Docker installation..."
+        if docker run --rm hello-world &>/dev/null; then
+            success "Docker is working correctly"
+        else
+            warn "Docker test failed - ensure Docker Desktop is running on Windows"
+        fi
+        return 0
+    fi
+
     info "Configuring Docker service..."
 
-    # Enable and start Docker service
-    sudo systemctl enable docker
-    sudo systemctl start docker
+    # Enable and start Docker service (only if sudo is available)
+    if sudo -n true 2>/dev/null; then
+        sudo systemctl enable docker 2>/dev/null || warn "Could not enable Docker service"
+        sudo systemctl start docker 2>/dev/null || warn "Could not start Docker service"
+    else
+        warn "Sudo not available - skipping Docker service configuration"
+        warn "You may need to manually start the Docker service"
+    fi
 
     # Test Docker
     info "Testing Docker installation..."
     if docker run --rm hello-world &>/dev/null; then
         success "Docker is working correctly"
-    elif sudo docker run --rm hello-world &>/dev/null; then
+    elif sudo -n docker run --rm hello-world 2>/dev/null; then
         success "Docker is working (requires re-login for non-sudo access)"
     else
         warn "Docker test failed - service may need a moment to start"
@@ -863,23 +924,28 @@ install_kubectl() {
 
     info "Installing kubectl..."
 
+    # Try package manager installation first
+    local install_success=false
+
     case "$DISTRO" in
         debian)
-            # Add Kubernetes GPG key
-            sudo mkdir -p /etc/apt/keyrings
-            curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg 2>/dev/null || true
-            sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+            # Try with sudo if available
+            if sudo -n true 2>/dev/null; then
+                sudo mkdir -p /etc/apt/keyrings 2>/dev/null || true
+                curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg 2>/dev/null || true
+                sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg 2>/dev/null || true
 
-            # Add repository
-            echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | \
-                sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+                echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | \
+                    sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null 2>&1 || true
 
-            wait_for_apt_lock
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq kubectl
+                wait_for_apt_lock
+                sudo apt-get update -qq 2>/dev/null || true
+                sudo apt-get install -y -qq kubectl 2>/dev/null && install_success=true
+            fi
             ;;
         fedora)
-            cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo > /dev/null
+            if sudo -n true 2>/dev/null; then
+                cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo > /dev/null 2>&1 || true
 [kubernetes]
 name=Kubernetes
 baseurl=https://pkgs.k8s.io/core:/stable:/v1.31/rpm/
@@ -887,18 +953,70 @@ enabled=1
 gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/v1.31/rpm/repodata/repomd.xml.key
 EOF
-            sudo dnf install -y kubectl
+                sudo dnf install -y kubectl 2>/dev/null && install_success=true
+            fi
             ;;
         arch)
-            sudo pacman -S --noconfirm kubectl
+            if sudo -n true 2>/dev/null; then
+                sudo pacman -S --noconfirm kubectl 2>/dev/null && install_success=true
+            fi
             ;;
     esac
 
-    if command_exists kubectl; then
+    # If package manager install failed, download binary to user directory
+    if ! command_exists kubectl; then
+        warn "Package manager installation failed or sudo not available, installing to ~/.local/bin"
+        install_kubectl_binary
+    else
         success "kubectl installed successfully"
+    fi
+}
+
+install_kubectl_binary() {
+    mkdir -p "$HOME/.local/bin"
+
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)
+            arch="amd64"
+            ;;
+        aarch64|arm64)
+            arch="arm64"
+            ;;
+        *)
+            error "Unsupported architecture: $arch"
+            return 1
+            ;;
+    esac
+
+    info "Downloading kubectl binary..."
+    local kubectl_version
+    kubectl_version=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+
+    curl -fsSLo "$HOME/.local/bin/kubectl" "https://dl.k8s.io/release/${kubectl_version}/bin/linux/${arch}/kubectl"
+    chmod +x "$HOME/.local/bin/kubectl"
+
+    # Add to PATH if not already there
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+
+        local profile_file="$HOME/.bashrc"
+        if [[ -f "$HOME/.zshrc" ]]; then
+            profile_file="$HOME/.zshrc"
+        fi
+
+        if ! grep -q ".local/bin" "$profile_file" 2>/dev/null; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$profile_file"
+            info "Added ~/.local/bin to PATH in $profile_file"
+        fi
+    fi
+
+    if command_exists kubectl; then
+        success "kubectl binary installed to ~/.local/bin"
     else
         error "Failed to install kubectl"
-        exit 1
+        return 1
     fi
 }
 
@@ -925,9 +1043,27 @@ install_minikube() {
             ;;
     esac
 
-    curl -fsSLo /tmp/minikube "https://storage.googleapis.com/minikube/releases/latest/minikube-linux-$arch"
-    sudo install /tmp/minikube /usr/local/bin/minikube
-    rm -f /tmp/minikube
+    # Create local bin directory if it doesn't exist
+    mkdir -p "$HOME/.local/bin"
+
+    curl -fsSLo "$HOME/.local/bin/minikube" "https://storage.googleapis.com/minikube/releases/latest/minikube-linux-$arch"
+    chmod +x "$HOME/.local/bin/minikube"
+
+    # Add to PATH if not already there
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+
+        # Add to shell profile
+        local profile_file="$HOME/.bashrc"
+        if [[ -f "$HOME/.zshrc" ]]; then
+            profile_file="$HOME/.zshrc"
+        fi
+
+        if ! grep -q ".local/bin" "$profile_file" 2>/dev/null; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$profile_file"
+            info "Added ~/.local/bin to PATH in $profile_file"
+        fi
+    fi
 
     if command_exists minikube; then
         success "minikube installed: $(minikube version --short 2>/dev/null || minikube version | head -1)"
@@ -939,6 +1075,39 @@ install_minikube() {
 
 configure_minikube() {
     info "Configuring minikube..."
+
+    # WSL2-specific: Check for Windows minikube conflict
+    if is_wsl2; then
+        # Check if Windows minikube exists
+        if command -v minikube.exe &>/dev/null || [[ -f "/mnt/c/Program Files/minikube/minikube.exe" ]]; then
+            warn "Detected Windows minikube installation"
+
+            # Check if there's an existing cluster (from Windows)
+            if minikube status &>/dev/null || minikube.exe status &>/dev/null 2>&1; then
+                echo ""
+                warn "╔════════════════════════════════════════════════════════════════════╗"
+                warn "║  WSL2 + Windows minikube conflict detected!                       ║"
+                warn "╚════════════════════════════════════════════════════════════════════╝"
+                echo ""
+                warn "You have minikube running from Windows which may conflict with WSL2 minikube."
+                warn ""
+                warn "RECOMMENDED APPROACH for WSL2 + Docker Desktop:"
+                warn "  → Use Windows minikube (already installed)"
+                warn "  → Skip WSL2 minikube to avoid conflicts"
+                warn ""
+                warn "To use Windows minikube from WSL2, add to ~/.bashrc:"
+                warn "  export PATH=\"\$PATH:/mnt/c/Program Files/minikube\""
+                warn ""
+                warn "OR, to use WSL2 minikube only:"
+                warn "  1. Delete the Windows minikube cluster: minikube.exe delete"
+                warn "  2. Delete the WSL2 minikube cluster: minikube delete"
+                warn "  3. Re-run this script or: minikube start --cpus=4 --memory=8192"
+                echo ""
+                warn "Skipping minikube cluster start to avoid conflicts..."
+                return 0
+            fi
+        fi
+    fi
 
     # Set Docker as default driver
     minikube config set driver docker
@@ -959,15 +1128,23 @@ configure_minikube() {
 
     # Start minikube
     info "Starting minikube cluster (this may take a few minutes)..."
-    if minikube start --cpus=4 --memory=8192; then
+    if minikube start --cpus=4 --memory=8192 2>&1; then
         success "minikube cluster started"
         minikube_enable_addons
-    elif sudo -E minikube start --cpus=4 --memory=8192; then
-        success "minikube cluster started (with sudo)"
-        minikube_enable_addons
     else
-        warn "Failed to start minikube - you may need to re-login for Docker group access"
-        warn "After re-login, run: minikube start --cpus=4 --memory=8192"
+        local exit_code=$?
+        warn "Failed to start minikube (exit code: $exit_code)"
+
+        if is_wsl2; then
+            warn "This may be due to:"
+            warn "  - Conflicting Windows minikube installation"
+            warn "  - Corrupted certificates (run: minikube delete && minikube start)"
+            warn "  - Docker group membership (re-login required)"
+        else
+            warn "You may need to re-login for Docker group access"
+        fi
+
+        warn "To start manually later: minikube start --cpus=4 --memory=8192"
     fi
 }
 
