@@ -1,0 +1,245 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { MainLayout } from '../components/layout/MainLayout';
+---
+
+<BaseLayout title="Meridian Console Scope Navigator">
+  <MainLayout client:load>
+    <div class="mx-auto w-full max-w-5xl">
+      <div class="space-y-6">
+
+        <!-- HERO -->
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div class="max-w-xl">
+              <h1 class="text-3xl font-bold tracking-tight">Meridian Console Scope Navigator</h1>
+
+              <p class="mt-3 text-white/80">
+                A living, searchable architecture + delivery map for Meridian Console.
+              </p>
+
+              <ul class="mt-4 space-y-2 text-sm text-white/70">
+                <li class="flex gap-2">
+                  <span class="mt-[2px] inline-block h-2 w-2 rounded-full bg-white/30"></span>
+                  Browse structured sections with deep links and fast sidebar search
+                </li>
+                <li class="flex gap-2">
+                  <span class="mt-[2px] inline-block h-2 w-2 rounded-full bg-white/30"></span>
+                  Explore an interactive dependency graph across services, data, and flows
+                </li>
+                <li class="flex gap-2">
+                  <span class="mt-[2px] inline-block h-2 w-2 rounded-full bg-white/30"></span>
+                  Share a single URL that reflects the current, agreed scope
+                </li>
+              </ul>
+            </div>
+
+            <img
+              src="/images/meridian-console.png"
+              alt="Meridian Console"
+              class="w-full max-w-xs rounded-2xl border border-white/10 shadow-xl md:w-72"
+            />
+          </div>
+
+          <!-- START WHERE YOU ARE -->
+          <div class="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5">
+            <div class="text-sm font-semibold text-white/80">Start where you are</div>
+            <div class="mt-2 text-sm text-white/70">
+              New here? Follow the narrative. Need impact fast? Jump to phases or open the dependency map.
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-3">
+              <a
+                href="/s/project-structure"
+                class="inline-flex items-center rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-600"
+              >
+                Start at Section 1
+              </a>
+
+              <a
+                href="/s/mvp"
+                class="inline-flex items-center rounded-xl border border-white/15 bg-transparent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/5"
+              >
+                MVP Scope & Phases
+              </a>
+
+              <a
+                href="/dependencies"
+                class="inline-flex items-center rounded-xl border border-white/15 bg-transparent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/5"
+              >
+                Dependency Map
+              </a>
+
+              <a
+                href="/s/repos"
+                class="inline-flex items-center rounded-xl border border-white/15 bg-transparent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/5"
+              >
+                Repository Structure
+              </a>
+            </div>
+          </div>
+
+          <!-- WHAT THIS APP DOES -->
+          <div class="mt-6 grid gap-4 lg:grid-cols-3">
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div class="text-sm font-semibold text-white/80">How to use it</div>
+              <div class="mt-2 text-sm text-white/70">
+                Use the sidebar to browse sections, or type to filter instantly. Every section has a stable link
+                so you can share exact context in discussions.
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div class="text-sm font-semibold text-white/80">What you can do here</div>
+              <div class="mt-2 text-sm text-white/70">
+                Move between vision, architecture, security, schemas, and flows—then switch to the dependency map
+                to validate impact before changes land.
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div class="text-sm font-semibold text-white/80">What it replaces</div>
+              <div class="mt-2 text-sm text-white/70">
+                No more hunting through scattered docs and diagrams. This consolidates scope and architecture
+                references into one always-current hub.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ABOUT THE PRODUCT -->
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div class="flex flex-col gap-4">
+            <div>
+              <h2 class="text-xl font-semibold">What Meridian Console is</h2>
+              <p class="mt-2 text-white/70">
+                Meridian Console <span class="text-white/60">(codename Dhadgar)</span> is a comprehensive game server hosting and management platform
+                built on .NET 10 with a microservices architecture. Think of it as a self-hosted alternative to commercial game server hosts,
+                giving organizations full control over their gaming infrastructure.
+              </p>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-5">
+              <div class="text-sm font-semibold text-white/80">Architecture</div>
+              <div class="mt-2 text-sm text-white/70">
+                The platform consists of 10+ microservices communicating via HTTP/REST and RabbitMQ event streams:
+              </div>
+
+              <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Identity Service</div>
+                  <div class="mt-1 text-xs text-white/70">User/org authentication and authorization</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Servers Service</div>
+                  <div class="mt-1 text-xs text-white/70">Game server lifecycle (create, start, stop, configure)</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Nodes Service</div>
+                  <div class="mt-1 text-xs text-white/70">Physical infrastructure / agent management</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Billing Service</div>
+                  <div class="mt-1 text-xs text-white/70">Subscriptions, invoicing, payment processing</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Tasks Service</div>
+                  <div class="mt-1 text-xs text-white/70">Background jobs and scheduled operations</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Files Service</div>
+                  <div class="mt-1 text-xs text-white/70">S3-backed file storage and backups</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Mods Service</div>
+                  <div class="mt-1 text-xs text-white/70">Plugin/mod installation and management</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Firewall Service</div>
+                  <div class="mt-1 text-xs text-white/70">UniFi network integration</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Secrets Service</div>
+                  <div class="mt-1 text-xs text-white/70">Credential management</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Notifications Service</div>
+                  <div class="mt-1 text-xs text-white/70">Alerts and event-driven messaging</div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-sm font-semibold text-white/80">Discord Service</div>
+                  <div class="mt-1 text-xs text-white/70">Bot integration for server events</div>
+                </div>
+              </div>
+
+              <div class="mt-4 rounded-xl border border-white/10 bg-black/40 p-3">
+                <div class="text-sm font-semibold text-white/80">Status</div>
+                <div class="mt-1 text-xs text-white/70">
+                  Active development — Phase 1 planning complete with ~400 work items mapped in Azure DevOps.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- KEY CAPABILITIES -->
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 class="text-xl font-semibold">Key capabilities</h2>
+          <p class="mt-2 text-white/70">
+            The scope is presented as a tool you can navigate, search, and share—built for both stakeholders and engineers.
+          </p>
+
+          <div class="mt-5 grid gap-4 md:grid-cols-2">
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div class="text-sm font-semibold text-white/80">Structured scope index</div>
+              <div class="mt-2 text-sm text-white/70">
+                Clear, consistent sections for product scope, platform architecture, security posture, data model, and network flows.
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div class="text-sm font-semibold text-white/80">Instant search + deep links</div>
+              <div class="mt-2 text-sm text-white/70">
+                Filter content quickly from the sidebar and share links that open the exact section being discussed.
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div class="text-sm font-semibold text-white/80">Dependency Map</div>
+              <div class="mt-2 text-sm text-white/70">
+                Visualize how services, schemas, and integrations connect—so changes are scoped before they surprise you.
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <div class="text-sm font-semibold text-white/80">Delivery alignment</div>
+              <div class="mt-2 text-sm text-white/70">
+                Connect "what we're building" to phases and dependencies to keep scope, sequencing, and tradeoffs explicit.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- QUICK SEARCH -->
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 class="text-xl font-semibold">Quick search</h2>
+          <p class="mt-2 text-white/70">
+            Use the search box in the sidebar to filter section titles and jump directly to what you need.
+            It's designed for "find it fast" moments in meetings.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </MainLayout>
+</BaseLayout>

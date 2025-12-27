@@ -1,0 +1,67 @@
+---
+// Section 4: Tech Stack
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 4: Technology Stack</h2>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Backend Services</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Technology</th>
+        <th>Version</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Runtime</td><td>.NET</td><td>10.0</td></tr>
+      <tr><td>Web Framework</td><td>ASP.NET Core</td><td>10.0</td></tr>
+      <tr><td>ORM</td><td>Entity Framework Core</td><td>10.0</td></tr>
+      <tr><td>API Gateway</td><td>YARP</td><td>2.3.0</td></tr>
+      <tr><td>Message Broker</td><td>RabbitMQ + MassTransit</td><td>8.3.6</td></tr>
+      <tr><td>Real-time</td><td>SignalR</td><td>Built-in</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Frontend</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Technology</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Framework</td><td>Blazor WebAssembly</td></tr>
+      <tr><td>UI Library</td><td>MudBlazor 7.15.0</td></tr>
+      <tr><td>Styling</td><td>Tailwind CSS</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Data & Infrastructure</h3>
+  <table class="scope-table mb-6">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Technology</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Primary Database</td><td>PostgreSQL 17</td></tr>
+      <tr><td>Caching</td><td>Redis</td></tr>
+      <tr><td>Object Storage</td><td>S3-compatible (MinIO/Azure Blob)</td></tr>
+      <tr><td>Container Platform</td><td>Kubernetes (Talos OS)</td></tr>
+      <tr><td>Edge/CDN</td><td>Cloudflare</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="mb-3 text-lg font-semibold text-indigo-400">Testing & Quality</h3>
+  <div class="scope-panel">
+    <ul class="space-y-1 text-white/70">
+      <li>- xUnit for unit and integration tests</li>
+      <li>- WebApplicationFactory for API testing</li>
+      <li>- 1:1 test project per service</li>
+    </ul>
+  </div>
+</div>

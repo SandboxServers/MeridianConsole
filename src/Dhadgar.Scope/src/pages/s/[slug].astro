@@ -1,0 +1,85 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { MainLayout } from '../../components/layout/MainLayout';
+import { SectionNav } from '../../components/layout/SectionNav';
+import { sections, findBySlug } from '../../lib/sections-registry';
+
+// Import all section components
+import ProjectStructure from '../../sections/ProjectStructure.astro';
+import Vision from '../../sections/Vision.astro';
+import BuildStrategy from '../../sections/BuildStrategy.astro';
+import TechStack from '../../sections/TechStack.astro';
+import Deployment from '../../sections/Deployment.astro';
+import DataRetention from '../../sections/DataRetention.astro';
+import Security from '../../sections/Security.astro';
+import Certificates from '../../sections/Certificates.astro';
+import Architecture from '../../sections/Architecture.astro';
+import DatabaseSchemas from '../../sections/DatabaseSchemas.astro';
+import Flows from '../../sections/Flows.astro';
+import Matrix from '../../sections/Matrix.astro';
+import Rabbitmq from '../../sections/Rabbitmq.astro';
+import Services from '../../sections/Services.astro';
+import Agents from '../../sections/Agents.astro';
+import Kip from '../../sections/Kip.astro';
+import Mvp from '../../sections/Mvp.astro';
+import Governance from '../../sections/Governance.astro';
+import Repos from '../../sections/Repos.astro';
+
+export function getStaticPaths() {
+  return sections.map((section) => ({
+    params: { slug: section.slug },
+  }));
+}
+
+const { slug } = Astro.params;
+const section = findBySlug(slug!);
+
+if (!section) {
+  return Astro.redirect('/404');
+}
+
+const currentIndex = sections.findIndex((s) => s.slug === slug);
+const prevSection = currentIndex > 0 ? sections[currentIndex - 1] : null;
+const nextSection = currentIndex < sections.length - 1 ? sections[currentIndex + 1] : null;
+
+// Map slug to component
+const sectionComponents: Record<string, any> = {
+  'project-structure': ProjectStructure,
+  'vision': Vision,
+  'build-strategy': BuildStrategy,
+  'tech-stack': TechStack,
+  'deployment': Deployment,
+  'data-retention': DataRetention,
+  'security': Security,
+  'certificates': Certificates,
+  'architecture': Architecture,
+  'database-schemas': DatabaseSchemas,
+  'flows': Flows,
+  'matrix': Matrix,
+  'rabbitmq': Rabbitmq,
+  'services': Services,
+  'agents': Agents,
+  'kip': Kip,
+  'mvp': Mvp,
+  'governance': Governance,
+  'repos': Repos,
+};
+
+const SectionComponent = sectionComponents[slug!];
+---
+
+<BaseLayout title={section.title}>
+  <MainLayout client:load>
+    <SectionNav
+      client:load
+      section={section}
+      prevSection={prevSection}
+      nextSection={nextSection}
+      total={sections.length}
+    />
+
+    <div class="scope-prose">
+      {SectionComponent && <SectionComponent />}
+    </div>
+  </MainLayout>
+</BaseLayout>

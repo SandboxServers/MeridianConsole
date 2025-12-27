@@ -1,0 +1,15 @@
+---
+// Section 12: Service Communication Matrix
+import { CommMatrixMobile } from '../components/visualizations/CommMatrixMobile';
+---
+
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <h2 class="mb-4 text-2xl font-bold">Section 12: Service Communication Matrix</h2>
+
+  <p class="mb-6 text-white/70">
+    This matrix shows which services communicate with each other and via which protocols.
+    Select a source service to see its outbound connections.
+  </p>
+
+  <CommMatrixMobile client:load />
+</div>

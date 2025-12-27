@@ -31,6 +31,7 @@ src/Dhadgar.Scope/_swa_publish/*
 # Backup directories
 *.blazor-backup/
 *backup*/
+src/Dhadgar.Scope.blazor-backup/
 
 # Node.js
 node_modules/
