@@ -422,3 +422,203 @@ get-library-docs: "/masstransit/masstransit", topic: "RabbitMQ consumer", mode: 
 ```
 
 This ensures you're always working with current, accurate documentation rather than relying solely on training data.
+
+## Specialized Agents
+
+This repository has **15 specialized agents** configured in `.claude/agents/` to provide expert guidance across all aspects of the platform. These agents should be used proactively when working in their respective domains.
+
+### Frontend & UI
+
+#### blazor-webdev-expert
+**Use for**: Blazor WebAssembly/Server development, MudBlazor components, responsive design, forms, layouts, navigation, CSS styling, client-side state management.
+
+**When to invoke**:
+- Creating new Blazor pages or components
+- Implementing forms with validation
+- Styling with MudBlazor or custom CSS
+- Fixing responsive layout issues
+- Building reusable UI components
+
+### Architecture & Design
+
+#### microservices-architect
+**Use for**: Service boundary decisions, inter-service communication patterns, distributed system concerns, evaluating service decomposition, ensuring proper service isolation.
+
+**When to invoke**:
+- Designing features that span multiple services
+- Evaluating whether to create a new service
+- Implementing cross-service data access
+- Reviewing architecture for anti-patterns
+- Planning distributed transactions or sagas
+
+#### iam-architect
+**Use for**: Identity and access management, authentication flows, authorization strategies, RBAC design, JWT tokens, OAuth/OIDC, passwordless authentication.
+
+**When to invoke**:
+- Implementing authentication or authorization
+- Designing role hierarchies and permissions
+- Evaluating passwordless options (WebAuthn, passkeys)
+- Reviewing security of authentication code
+- Planning multi-tenant identity isolation
+
+#### security-architect
+**Use for**: Security architecture, threat modeling, secure coding practices, secrets management, network security, API security, container security, compliance.
+
+**When to invoke**:
+- Designing security-critical features
+- Reviewing code for security vulnerabilities
+- Planning secrets management approach
+- Implementing authentication/authorization enforcement
+- Hardening Kubernetes or container configurations
+
+#### agent-service-guardian
+**Use for**: **CRITICAL** - Security reviews of customer-hosted agent code (Dhadgar.Agent.Core, Dhadgar.Agent.Linux, Dhadgar.Agent.Windows).
+
+**When to invoke** (ALWAYS):
+- After ANY code changes to agent projects
+- When adding new agent endpoints or capabilities
+- Implementing process isolation or sandboxing
+- Adding command execution or file handling
+- Modifying agent authentication or communication
+
+**Special note**: This agent must review all agent code due to the high-trust nature of customer-hosted components.
+
+### Data & Persistence
+
+#### database-schema-architect
+**Use for**: Database schema design, EF Core migrations, table relationships, indexing strategies, normalization, schema evolution patterns.
+
+**When to invoke**:
+- Creating new entities or tables
+- Adding relationships between entities
+- Designing migrations for schema changes
+- Planning data models for new features
+- Reviewing migrations for safety and performance
+
+#### database-admin
+**Use for**: PostgreSQL administration, performance tuning, connection pooling, migration strategies, backup/recovery, query optimization, database security.
+
+**When to invoke**:
+- Configuring PostgreSQL connections
+- Troubleshooting slow queries
+- Planning database scaling (replication, sharding)
+- Implementing backup strategies
+- Optimizing connection pool settings
+
+### Integration & Communication
+
+#### messaging-engineer
+**Use for**: RabbitMQ, MassTransit, message consumers, publishers, sagas, message contracts, retry policies, dead letter queues.
+
+**When to invoke**:
+- Implementing message consumers or publishers
+- Designing message contracts (commands/events)
+- Configuring retry policies or error handling
+- Implementing sagas for orchestration
+- Troubleshooting message flow issues
+
+#### rest-api-engineer
+**Use for**: REST API design, endpoint structure, HTTP methods, status codes, request/response design, versioning, error handling, pagination.
+
+**When to invoke**:
+- Designing new API endpoints
+- Reviewing API consistency across services
+- Implementing pagination or filtering
+- Choosing appropriate HTTP status codes
+- Designing error response formats
+
+### Development & Quality
+
+#### dotnet-10-researcher
+**Use for**: .NET 10 features, security patterns, performance optimization, advanced APIs, researching best practices.
+
+**When to invoke**:
+- Exploring new .NET 10 features for a use case
+- Implementing security-sensitive functionality
+- Optimizing performance-critical code
+- Researching streaming or advanced patterns
+- Evaluating cryptographic or security APIs
+
+#### dotnet-test-engineer
+**Use for**: Writing tests, debugging test failures, test strategies, xUnit, WebApplicationFactory, mocking, integration testing.
+
+**When to invoke**:
+- Writing tests for new features
+- Debugging failing or flaky tests
+- Designing test strategies for complex scenarios
+- Setting up integration tests with database
+- Mocking dependencies (HttpClient, databases)
+
+### Infrastructure & Operations
+
+#### azure-pipelines-architect
+**Use for**: Azure Pipelines YAML, CI/CD configuration, pipeline templates, build/deploy workflows, pipeline versioning, troubleshooting pipeline failures.
+
+**When to invoke**:
+- Adding new services to CI/CD pipeline
+- Modifying azure-pipelines.yml
+- Debugging pipeline template errors
+- Implementing pipeline versioning strategies
+- Optimizing build performance
+
+#### azure-infra-advisor
+**Use for**: Cloud vs on-premises placement decisions, cost analysis, infrastructure sizing, evaluating Azure services, hybrid architecture planning.
+
+**When to invoke**:
+- Deciding where to host a database or service
+- Evaluating Azure managed services vs self-hosted
+- Analyzing cloud costs vs on-prem TCO
+- Planning infrastructure for new features
+- Reviewing monthly cloud spend
+
+#### talos-os-expert
+**Use for**: Talos OS configuration, cluster bootstrapping, upgrades, networking (CNI), storage, etcd management, Kubernetes-on-Talos patterns.
+
+**When to invoke**:
+- Configuring Talos machine configs
+- Adding nodes to Talos cluster
+- Troubleshooting etcd or cluster issues
+- Planning Talos cluster upgrades
+- Configuring storage or networking on Talos
+
+**Warning**: Talos mistakes can brick nodes. Always use this agent before applying machine config changes.
+
+#### observability-architect
+**Use for**: Distributed tracing, metrics collection, log aggregation, alerting, dashboards, OpenTelemetry instrumentation, New Relic vs open-source tooling.
+
+**When to invoke**:
+- Adding observability to new services
+- Implementing distributed tracing
+- Setting up metrics or custom instrumentation
+- Designing dashboards or alerts
+- Evaluating observability tools (New Relic, Jaeger, Grafana)
+
+## Agent Usage Patterns
+
+### Proactive Agent Use
+
+Some agents should be invoked **automatically** after certain actions:
+
+1. **agent-service-guardian**: ALWAYS after modifying agent code
+2. **dotnet-test-engineer**: After implementing complex features (should you write tests?)
+3. **observability-architect**: After creating new services or endpoints
+4. **security-architect**: After implementing authentication/authorization features
+
+### Multi-Agent Collaboration
+
+Some tasks benefit from multiple agents:
+
+- **New microservice**: microservices-architect → dotnet-10-researcher → observability-architect → dotnet-test-engineer
+- **Database feature**: database-schema-architect → database-admin → dotnet-test-engineer
+- **API endpoint**: rest-api-engineer → security-architect → dotnet-test-engineer
+- **Agent changes**: (implement code) → agent-service-guardian → dotnet-test-engineer
+- **Infrastructure decision**: azure-infra-advisor → talos-os-expert (if Kubernetes) OR azure-pipelines-architect (if deployment)
+
+### When NOT to Use Agents
+
+- Simple, obvious code changes (typo fixes, minor refactoring)
+- Reading/exploring code without modifications
+- Quick debugging or investigation
+- Tasks already well-understood and straightforward
+
+Agents add value for complex, security-sensitive, or architecturally significant work. Use your judgment.
