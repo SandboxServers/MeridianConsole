@@ -1,0 +1,75 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "meridian.service.fullname" (dict "context" . "service" "gateway") }}
+  labels:
+    {{- include "meridian.service.labels" (dict "context" . "service" "gateway") | nindent 4 }}
+spec:
+  replicas: {{ .Values.gateway.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "meridian.service.selectorLabels" (dict "context" . "service" "gateway") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "meridian.service.selectorLabels" (dict "context" . "service" "gateway") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.common.podSecurityContext | nindent 8 }}
+      containers:
+      - name: gateway
+        image: {{ include "meridian.image" (dict "context" . "service" "gateway") }}
+        imagePullPolicy: {{ .Values.gateway.image.pullPolicy | default .Values.common.imagePullPolicy }}
+        securityContext:
+          {{- toYaml .Values.common.containerSecurityContext | nindent 10 }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        {{- include "meridian.commonEnv" . | nindent 8 }}
+        # Gateway-specific: no database
+        - name: ServiceUrls__Identity
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "identity") }}:80"
+        - name: ServiceUrls__Billing
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "billing") }}:80"
+        - name: ServiceUrls__Servers
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "servers") }}:80"
+        - name: ServiceUrls__Nodes
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "nodes") }}:80"
+        - name: ServiceUrls__Tasks
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "tasks") }}:80"
+        - name: ServiceUrls__Files
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "files") }}:80"
+        - name: ServiceUrls__Mods
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "mods") }}:80"
+        - name: ServiceUrls__Console
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "console") }}:80"
+        - name: ServiceUrls__Notifications
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "notifications") }}:80"
+        - name: ServiceUrls__Firewall
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "firewall") }}:80"
+        - name: ServiceUrls__Secrets
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "secrets") }}:80"
+        - name: ServiceUrls__Discord
+          value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "discord") }}:80"
+        resources:
+          {{- include "meridian.resources" (dict "context" . "service" "gateway") | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}

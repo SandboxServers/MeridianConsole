@@ -1,0 +1,17 @@
+{{- if .Values.mods.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "meridian.service.fullname" (dict "context" . "service" "mods") }}
+  labels:
+    {{- include "meridian.service.labels" (dict "context" . "service" "mods") | nindent 4 }}
+spec:
+  type: {{ .Values.mods.service.type }}
+  ports:
+  - port: {{ .Values.mods.service.port }}
+    targetPort: {{ .Values.mods.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "meridian.service.selectorLabels" (dict "context" . "service" "mods") | nindent 4 }}
+{{- end }}

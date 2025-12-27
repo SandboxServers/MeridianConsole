@@ -1,0 +1,17 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "meridian.service.fullname" (dict "context" . "service" "gateway") }}
+  labels:
+    {{- include "meridian.service.labels" (dict "context" . "service" "gateway") | nindent 4 }}
+spec:
+  type: {{ .Values.gateway.service.type }}
+  ports:
+  - port: {{ .Values.gateway.service.port }}
+    targetPort: {{ .Values.gateway.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "meridian.service.selectorLabels" (dict "context" . "service" "gateway") | nindent 4 }}
+{{- end }}

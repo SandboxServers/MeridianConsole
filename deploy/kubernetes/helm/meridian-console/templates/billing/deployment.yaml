@@ -1,0 +1,51 @@
+{{- if .Values.billing.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "meridian.service.fullname" (dict "context" . "service" "billing") }}
+  labels:
+    {{- include "meridian.service.labels" (dict "context" . "service" "billing") | nindent 4 }}
+spec:
+  replicas: {{ .Values.billing.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "meridian.service.selectorLabels" (dict "context" . "service" "billing") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "meridian.service.selectorLabels" (dict "context" . "service" "billing") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.common.podSecurityContext | nindent 8 }}
+      containers:
+      - name: billing
+        image: {{ include "meridian.image" (dict "context" . "service" "billing") }}
+        imagePullPolicy: {{ .Values.billing.image.pullPolicy | default .Values.common.imagePullPolicy }}
+        securityContext:
+          {{- toYaml .Values.common.containerSecurityContext | nindent 10 }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        {{- include "meridian.commonEnv" . | nindent 8 }}
+        {{- include "meridian.postgresEnv" (dict "context" . "database" .Values.billing.database.name) | nindent 8 }}
+        resources:
+          {{- include "meridian.resources" (dict "context" . "service" "billing") | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}

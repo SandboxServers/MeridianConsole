@@ -1,0 +1,213 @@
+================================================================================
+🎮 Meridian Console - Game Server Control Plane
+================================================================================
+
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named: {{ .Release.Name }}
+Deployed to namespace: {{ .Release.Namespace }}
+
+--------------------------------------------------------------------------------
+📊 DEPLOYMENT STATUS
+--------------------------------------------------------------------------------
+
+To check the status of your deployment:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To watch the rollout:
+
+  kubectl rollout status deployment -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+--------------------------------------------------------------------------------
+🌐 ACCESSING THE GATEWAY
+--------------------------------------------------------------------------------
+
+{{- if .Values.gateway.ingress.enabled }}
+The Gateway is exposed via Ingress:
+
+{{- range .Values.gateway.ingress.hosts }}
+  Gateway URL: https://{{ .host }}
+{{- end }}
+
+Make sure your DNS is configured to point to your Ingress controller's IP.
+
+To get the Ingress controller IP:
+
+  kubectl get ingress -n {{ .Release.Namespace }} {{ include "meridian.fullname" . }}-gateway
+{{- else }}
+The Gateway is running as a ClusterIP service. To access it:
+
+1. Port-forward to the Gateway service:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "meridian.service.fullname" (dict "context" . "service" "gateway") }} 8080:80
+
+2. Access the Gateway at: http://localhost:8080
+
+{{- end }}
+
+--------------------------------------------------------------------------------
+🗄️  INFRASTRUCTURE STATUS
+--------------------------------------------------------------------------------
+
+{{- if .Values.postgresql.enabled }}
+✅ PostgreSQL is deployed as part of this chart
+
+Database host: {{ include "meridian.fullname" . }}-postgresql
+Username: {{ .Values.postgresql.auth.username }}
+Password: (stored in secret {{ include "meridian.fullname" . }}-secrets)
+
+To connect to PostgreSQL:
+
+  kubectl run {{ .Release.Name }}-postgresql-client --rm --tty -i --restart='Never' \
+    --namespace {{ .Release.Namespace }} \
+    --image docker.io/bitnami/postgresql:15 \
+    --env="PGPASSWORD={{ .Values.secrets.postgresPassword }}" \
+    --command -- psql --host {{ include "meridian.fullname" . }}-postgresql \
+    -U {{ .Values.postgresql.auth.username }} -d {{ .Values.postgresql.auth.database }} -p 5432
+{{- else }}
+⚠️  PostgreSQL is NOT deployed - using external instance
+{{- end }}
+
+{{- if .Values.rabbitmq.enabled }}
+✅ RabbitMQ is deployed as part of this chart
+
+RabbitMQ host: {{ include "meridian.fullname" . }}-rabbitmq
+Username: {{ .Values.rabbitmq.auth.username }}
+Password: (stored in secret {{ include "meridian.fullname" . }}-secrets)
+
+To access the RabbitMQ Management UI:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "meridian.fullname" . }}-rabbitmq 15672:15672
+
+  Then visit: http://localhost:15672
+{{- else }}
+⚠️  RabbitMQ is NOT deployed - using external instance
+{{- end }}
+
+{{- if .Values.redis.enabled }}
+✅ Redis is deployed as part of this chart
+
+Redis host: {{ include "meridian.fullname" . }}-redis-master
+Password: (stored in secret {{ include "meridian.fullname" . }}-secrets)
+
+To connect to Redis:
+
+  kubectl run {{ .Release.Name }}-redis-client --rm --tty -i --restart='Never' \
+    --namespace {{ .Release.Namespace }} \
+    --image docker.io/bitnami/redis:7.2 \
+    --env REDIS_PASSWORD={{ .Values.secrets.redisPassword }} \
+    --command -- redis-cli -h {{ include "meridian.fullname" . }}-redis-master -a $REDIS_PASSWORD
+{{- else }}
+⚠️  Redis is NOT deployed - using external instance
+{{- end }}
+
+--------------------------------------------------------------------------------
+🔒 SECURITY REMINDERS
+--------------------------------------------------------------------------------
+
+⚠️  IMPORTANT: The default passwords are NOT secure!
+
+Before using this in production, you MUST:
+
+1. Change all default passwords:
+   - PostgreSQL password
+   - RabbitMQ password
+   - Redis password
+   - JWT signing key
+
+2. Update via Helm values or kubectl:
+
+  helm upgrade {{ .Release.Name }} meridian-console \
+    --set secrets.postgresPassword="<secure-password>" \
+    --set secrets.rabbitmqPassword="<secure-password>" \
+    --set secrets.redisPassword="<secure-password>" \
+    --set secrets.jwtSigningKey="<secure-key>"
+
+3. For production, use external secret management:
+   - Kubernetes External Secrets Operator
+   - HashiCorp Vault
+   - AWS Secrets Manager
+   - Azure Key Vault
+
+--------------------------------------------------------------------------------
+📚 MICROSERVICES DEPLOYED
+--------------------------------------------------------------------------------
+
+The following services are deployed:
+
+{{- if .Values.gateway.enabled }}
+  ✓ Gateway (YARP reverse proxy) - Entry point
+{{- end }}
+{{- if .Values.identity.enabled }}
+  ✓ Identity - Authentication & authorization
+{{- end }}
+{{- if .Values.billing.enabled }}
+  ✓ Billing - SaaS subscriptions
+{{- end }}
+{{- if .Values.servers.enabled }}
+  ✓ Servers - Game server lifecycle
+{{- end }}
+{{- if .Values.nodes.enabled }}
+  ✓ Nodes - Node inventory & health
+{{- end }}
+{{- if .Values.tasks.enabled }}
+  ✓ Tasks - Background job orchestration
+{{- end }}
+{{- if .Values.files.enabled }}
+  ✓ Files - File metadata & transfers
+{{- end }}
+{{- if .Values.mods.enabled }}
+  ✓ Mods - Mod registry & versioning
+{{- end }}
+{{- if .Values.console.enabled }}
+  ✓ Console - Real-time console streaming (SignalR)
+{{- end }}
+{{- if .Values.notifications.enabled }}
+  ✓ Notifications - Email/Discord/webhooks
+{{- end }}
+{{- if .Values.firewall.enabled }}
+  ✓ Firewall - Port & policy management
+{{- end }}
+{{- if .Values.secrets.enabled }}
+  ✓ Secrets - Secret storage & rotation
+{{- end }}
+{{- if .Values.discord.enabled }}
+  ✓ Discord - Discord bot integration
+{{- end }}
+
+--------------------------------------------------------------------------------
+🔍 MONITORING & LOGS
+--------------------------------------------------------------------------------
+
+View logs for a specific service (example: gateway):
+
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=gateway --tail=100 -f
+
+View all service logs:
+
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} --all-containers=true
+
+--------------------------------------------------------------------------------
+📖 NEXT STEPS
+--------------------------------------------------------------------------------
+
+1. Verify all pods are running:
+   kubectl get pods -n {{ .Release.Namespace }}
+
+2. Check service endpoints:
+   kubectl get svc -n {{ .Release.Namespace }}
+
+3. Review the full documentation:
+   https://github.com/SandboxServers/MeridianConsole
+
+4. Configure frontends (Panel, ShoppingCart, Scope) in Azure Static Web Apps
+
+5. Enroll customer-hosted agents to connect to the control plane
+
+--------------------------------------------------------------------------------
+
+For support and issues:
+  https://github.com/SandboxServers/MeridianConsole/issues
+
+Happy gaming! 🎮
