@@ -57,10 +57,14 @@ public class WebhookController : ControllerBase
 
         try
         {
+            _logger.LogInformation("DEBUG: Deserializing payload for event type: {EventType}", eventType);
+
             var payload = JsonSerializer.Deserialize<GitHubWebhookPayload>(body, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
+
+            _logger.LogInformation("DEBUG: Payload deserialized. Null: {IsNull}", payload == null);
 
             if (payload == null)
             {
@@ -70,12 +74,14 @@ public class WebhookController : ControllerBase
             // Handle pull request events
             if (eventType == "pull_request")
             {
+                _logger.LogInformation("DEBUG: Routing to HandlePullRequestEvent");
                 return await HandlePullRequestEvent(payload, cancellationToken);
             }
 
             // Handle issue comment events (for /dhadgar command)
             if (eventType == "issue_comment")
             {
+                _logger.LogInformation("DEBUG: Routing to HandleIssueCommentEvent");
                 return await HandleIssueCommentEvent(payload, cancellationToken);
             }
 
