@@ -4,7 +4,7 @@
 # Global configuration
 global:
   # Container image registry
-  imageRegistry: ""
+  imageRegistry: "meridianconsoleacr-etdvg4cthscffqdf.azurecr.io"
   # Image pull secrets for private registries
   imagePullSecrets: []
   # StorageClass for persistent volumes
@@ -47,7 +47,7 @@ gateway:
   replicaCount: 2
 
   image:
-    repository: meridian/gateway
+    repository: dhadgar/gateway
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -89,7 +89,7 @@ identity:
   replicaCount: 2
 
   image:
-    repository: meridian/identity
+    repository: dhadgar/identity
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -109,7 +109,7 @@ billing:
   replicaCount: 1
 
   image:
-    repository: meridian/billing
+    repository: dhadgar/billing
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -129,7 +129,7 @@ servers:
   replicaCount: 2
 
   image:
-    repository: meridian/servers
+    repository: dhadgar/servers
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -149,7 +149,7 @@ nodes:
   replicaCount: 2
 
   image:
-    repository: meridian/nodes
+    repository: dhadgar/nodes
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -169,7 +169,7 @@ tasks:
   replicaCount: 2
 
   image:
-    repository: meridian/tasks
+    repository: dhadgar/tasks
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -189,7 +189,7 @@ files:
   replicaCount: 1
 
   image:
-    repository: meridian/files
+    repository: dhadgar/files
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -209,7 +209,7 @@ mods:
   replicaCount: 1
 
   image:
-    repository: meridian/mods
+    repository: dhadgar/mods
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -229,7 +229,7 @@ console:
   replicaCount: 2
 
   image:
-    repository: meridian/console
+    repository: dhadgar/console
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -252,7 +252,7 @@ notifications:
   replicaCount: 1
 
   image:
-    repository: meridian/notifications
+    repository: dhadgar/notifications
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -272,7 +272,7 @@ firewall:
   replicaCount: 1
 
   image:
-    repository: meridian/firewall
+    repository: dhadgar/firewall
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -292,7 +292,7 @@ secrets:
   replicaCount: 2
 
   image:
-    repository: meridian/secrets
+    repository: dhadgar/secrets
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -312,7 +312,7 @@ discord:
   replicaCount: 1
 
   image:
-    repository: meridian/discord
+    repository: dhadgar/discord
     tag: latest
     pullPolicy: IfNotPresent
 

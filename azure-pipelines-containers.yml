@@ -1,0 +1,82 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+  paths:
+    include:
+      - src/Dhadgar.Gateway/**
+      - src/Dhadgar.Identity/**
+      - src/Dhadgar.Billing/**
+      - src/Dhadgar.Servers/**
+      - src/Dhadgar.Nodes/**
+      - src/Dhadgar.Tasks/**
+      - src/Dhadgar.Files/**
+      - src/Dhadgar.Mods/**
+      - src/Dhadgar.Console/**
+      - src/Dhadgar.Notifications/**
+      - src/Dhadgar.Firewall/**
+      - src/Dhadgar.Secrets/**
+      - src/Dhadgar.Discord/**
+      - src/Shared/**
+      - Dhadgar.sln
+
+resources:
+  repositories:
+    - repository: YAML
+      type: github
+      endpoint: SandboxServers
+      name: SandboxServers/Azure-Pipeline-YAML
+
+variables:
+  azureSubscription: 'Azure-Sub'
+
+extends:
+  template: Templates/Container-Build/Pipeline/Pipeline.yml@YAML
+  parameters:
+    acrName: 'meridianconsoleacr'
+    acrServiceConnection: 'meridianconsoleacr'
+    pushLatest: true
+    cleanup: true
+    keepCount: 2
+    services:
+      - name: Gateway
+        imageName: dhadgar/gateway
+        dockerfilePath: src/Dhadgar.Gateway/Dockerfile
+      - name: Identity
+        imageName: dhadgar/identity
+        dockerfilePath: src/Dhadgar.Identity/Dockerfile
+      - name: Billing
+        imageName: dhadgar/billing
+        dockerfilePath: src/Dhadgar.Billing/Dockerfile
+      - name: Servers
+        imageName: dhadgar/servers
+        dockerfilePath: src/Dhadgar.Servers/Dockerfile
+      - name: Nodes
+        imageName: dhadgar/nodes
+        dockerfilePath: src/Dhadgar.Nodes/Dockerfile
+      - name: Tasks
+        imageName: dhadgar/tasks
+        dockerfilePath: src/Dhadgar.Tasks/Dockerfile
+      - name: Files
+        imageName: dhadgar/files
+        dockerfilePath: src/Dhadgar.Files/Dockerfile
+      - name: Mods
+        imageName: dhadgar/mods
+        dockerfilePath: src/Dhadgar.Mods/Dockerfile
+      - name: Console
+        imageName: dhadgar/console
+        dockerfilePath: src/Dhadgar.Console/Dockerfile
+      - name: Notifications
+        imageName: dhadgar/notifications
+        dockerfilePath: src/Dhadgar.Notifications/Dockerfile
+      - name: Firewall
+        imageName: dhadgar/firewall
+        dockerfilePath: src/Dhadgar.Firewall/Dockerfile
+      - name: Secrets
+        imageName: dhadgar/secrets
+        dockerfilePath: src/Dhadgar.Secrets/Dockerfile
+      - name: Discord
+        imageName: dhadgar/discord
+        dockerfilePath: src/Dhadgar.Discord/Dockerfile

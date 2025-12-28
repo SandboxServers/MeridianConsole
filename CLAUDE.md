@@ -97,6 +97,57 @@ dotnet user-secrets list --project src/Dhadgar.Identity
 
 **Node.js Projects** (e.g., Dhadgar.Scope): Use environment variables or `.env` files. Create a `.env` file in the project root (add to `.gitignore`) and use `process.env.VARIABLE_NAME` in Node.js code. Never commit actual secrets to the repository.
 
+## Azure Infrastructure
+
+### Azure Container Registry (ACR)
+
+The platform uses Azure Container Registry to store Docker images for all microservices.
+
+**ACR Details**:
+- **Name**: `meridianconsoleacr`
+- **Login Server**: `meridianconsoleacr-etdvg4cthscffqdf.azurecr.io`
+- **Resource Group**: `meridian-rg`
+- **Location**: `centralus`
+- **SKU**: Basic (10 GB storage limit)
+- **Subscription**: `c87357b8-2149-476d-b91c-eb79095634ac`
+- **Created**: 2025-12-27
+- **Admin User**: Disabled (use service principal authentication)
+
+**Image Naming Convention**:
+- All microservice images use the `dhadgar/*` namespace
+- Example: `meridianconsoleacr-etdvg4cthscffqdf.azurecr.io/dhadgar/gateway:latest`
+
+**Authentication**:
+```bash
+# Login to ACR (requires Azure CLI authentication first)
+az acr login --name meridianconsoleacr
+
+# Or use the full login server
+az acr login --name meridianconsoleacr-etdvg4cthscffqdf.azurecr.io
+```
+
+**Verify ACR Contents**:
+```bash
+# List all repositories
+az acr repository list --name meridianconsoleacr --output table
+
+# List tags for a specific repository
+az acr repository show-tags \
+  --name meridianconsoleacr \
+  --repository dhadgar/gateway \
+  --output table
+
+# Check storage usage (Basic plan: 10 GB limit)
+az acr show-usage --name meridianconsoleacr --output table
+```
+
+**Container Build Pipeline**:
+- Pipeline: `azure-pipelines-containers.yml`
+- Builds all 13 microservices in parallel
+- Pushes images to ACR with dual tagging (Build ID + `latest`)
+- Automatic cleanup keeps latest 2 images per service
+- See: `deploy/kubernetes/CONTAINER-BUILD-SETUP.md` for details
+
 ## Parallel Claude Sessions
 
 **Rule**: When running multiple Claude Code sessions simultaneously, each session MUST use its own **git worktree**. This prevents one session from accidentally committing another session's uncommitted work.
