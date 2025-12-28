@@ -31,7 +31,7 @@ jobs:
           # Mistral Devstral - Code-optimized, FREE (correct syntax: config.model not OPENAI.MODEL)
           config.model: "mistralai/devstral-2512:free"
           config.fallback_models: '["mistralai/mistral-7b-instruct:free"]'
-          config.custom_model_max_tokens: "32000"
+          config.custom_model_max_tokens: "262144"
           # Use spirit-of-the-diff bot token
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           # Optional: customize behavior
