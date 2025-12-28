@@ -326,6 +326,29 @@ Use Context7 MCP tools to fetch up-to-date docs for MudBlazor, EF Core, MassTran
 3. **Leverage Context7** - Fetch current library documentation instead of relying on training data
 4. **Follow established patterns** - Check existing services before implementing new ones
 
+### AI-Powered PR Reviews
+
+This repository includes **spirit-of-the-diff**, a free AI-powered code review bot that provides deep-dive analysis of pull requests on demand.
+
+**To trigger a review:**
+```
+Comment /spirit on any pull request
+```
+
+The bot will analyze your changes and provide:
+- Code quality assessment
+- Security concerns identification
+- Recommended focus areas for review
+- Specific improvement suggestions
+
+**Technical details:**
+- Uses OpenRouter + Mistral Devstral (free tier)
+- Custom GitHub App bot identity
+- Manual trigger only (no automatic spam)
+- Works alongside other review bots (CodeRabbit, Qodo, etc.)
+
+**Setup documentation:** See [`docs/SPIRIT_OF_THE_DIFF_SETUP.md`](docs/SPIRIT_OF_THE_DIFF_SETUP.md) for complete configuration details.
+
 ---
 
 ## EF Core migrations (DB-backed services)

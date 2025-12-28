@@ -308,6 +308,45 @@ Uses **Central Package Management**:
 - Selective builds via `servicesCsv` parameter
 - Azure Static Web Apps deployment for frontend apps (Astro and Blazor)
 
+## PR Review Automation
+
+### spirit-of-the-diff Bot
+
+This repository includes **spirit-of-the-diff**, a free AI-powered code review bot using PR-Agent + OpenRouter.
+
+**Usage:**
+```
+Comment /spirit on any pull request to trigger a detailed code review
+```
+
+**What it provides:**
+- Code quality assessment with estimated review effort (1-5 scale)
+- Security concern identification
+- Recommended focus areas for reviewers
+- Specific improvement suggestions with code examples
+- Persistent review that updates with new commits
+
+**Why `/spirit` instead of `/review`?**
+- Avoids conflicts with other PR review bots (Qodo SaaS uses `/review`)
+- Allows running multiple review bots simultaneously
+- Custom command implemented via PR-Agent CLI + GitHub Actions
+
+**Technical implementation:**
+- GitHub Actions workflow: `.github/workflows/pr-agent-review.yml`
+- Triggers on `/spirit` comments (manual only, no automatic spam)
+- Runs PR-Agent CLI with explicit review command
+- Uses GitHub App authentication (spirit-of-the-diff[bot])
+- Free tier: OpenRouter + Mistral Devstral 2512 (262k context window)
+
+**Setup documentation:** [`docs/SPIRIT_OF_THE_DIFF_SETUP.md`](docs/SPIRIT_OF_THE_DIFF_SETUP.md)
+
+**Multiple bots:** This repo may run multiple review bots in parallel:
+- **spirit-of-the-diff** (`/spirit`) - Manual deep-dive reviews (free)
+- **CodeRabbit** - Automatic reviews on commits
+- **Qodo/PR-Agent SaaS** (`/review`) - If configured
+
+All bots can coexist on the same PRs without conflicts.
+
 ## Important Development Patterns
 
 ### Database-per-Service
