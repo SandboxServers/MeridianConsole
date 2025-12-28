@@ -98,6 +98,15 @@ All frontend projects deploy to Azure Static Web Apps via `_swa_publish/wwwroot/
 3. Use Tailwind's Grid utilities for complex layouts (`grid`, `grid-cols-*`)
 4. Leverage responsive prefixes (`md:`, `lg:`) for adaptive layouts
 5. Test edge cases (very long content, empty states, many items)
+
+### Testing Astro/React Components
+For Astro/React projects, common testing approaches include:
+- **Jest** or **Vitest** for unit testing React components
+- **Testing Library** (`@testing-library/react`) for component testing
+- **Vitest Configured for Astro**: Setup in `vitest.config.ts` with Astro integration
+- **Test Files**: Place tests in `src/components/__tests__/` or `src/__tests__/`
+- **Testing Patterns**: Test user interactions, component rendering, props, state changes, and event handlers
+- **Astro-specific**: Test Astro pages and layouts using Astro's testing utilities
 6. Consider Astro layouts for shared page structure
 
 ### When Implementing Forms

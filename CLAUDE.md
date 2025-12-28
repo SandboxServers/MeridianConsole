@@ -53,6 +53,8 @@ npm install
 npm run dev
 ```
 
+**Note**: Both `dotnet watch` and Astro's `npm run dev` support hot reload for rapid development cycles. Scope dev server runs on port 4321 by default (configurable in astro.config.mjs).
+
 ### EF Core Migrations
 
 Services with databases: Identity, Billing, Servers, Nodes, Tasks, Files, Mods, Notifications
@@ -79,7 +81,7 @@ Note: Some services auto-apply migrations in Development mode (see `Program.cs`)
 
 ### Configuration Management
 
-Use `dotnet user-secrets` for sensitive local configuration:
+**.NET Services**: Use `dotnet user-secrets` for sensitive local configuration:
 
 ```bash
 # Initialize user secrets
@@ -92,6 +94,8 @@ dotnet user-secrets set "Discord:BotToken" "your-token" --project src/Dhadgar.Di
 # List secrets
 dotnet user-secrets list --project src/Dhadgar.Identity
 ```
+
+**Node.js Projects** (e.g., Dhadgar.Scope): Use environment variables or `.env` files. Create a `.env` file in the project root (add to `.gitignore`) and use `process.env.VARIABLE_NAME` in Node.js code. Never commit actual secrets to the repository.
 
 ## Parallel Claude Sessions
 
@@ -159,6 +163,8 @@ src/Dhadgar.{Service}/
 │   └── Migrations/
 └── {Service}.csproj
 ```
+
+**Special Case - Dhadgar.Scope**: The Scope project is a Node.js/Astro application wrapped in a .NET shim. Its `.csproj` file invokes `npm install` and `npm build` during `dotnet build`, allowing it to integrate with the .NET solution while using a different build toolchain. This enables running `dotnet build` to build the entire solution including the Scope project.
 
 Common service endpoints (scaffolding):
 - `GET /` - Service banner
@@ -265,8 +271,9 @@ Standard ASP.NET Core configuration hierarchy:
 ## Testing Strategy
 
 - 1:1 project-to-test mapping (23 test projects)
-- xUnit framework
+- xUnit framework for .NET services
 - WebApplicationFactory integration ready (services have `public partial class Program`)
+- Node.js projects (e.g., Dhadgar.Scope.Tests) use Jest or Vitest for unit/integration testing
 - Currently scaffolding with basic assertions
 
 ## Security Architecture (Design Intent)
