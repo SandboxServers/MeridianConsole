@@ -5,8 +5,8 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  pull-requests: read
   contents: read
+  pull-requests: write
 
 jobs:
   coderabbit:
@@ -14,5 +14,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: coderabbitai/ai-pr-reviewer@latest
-        with:
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
