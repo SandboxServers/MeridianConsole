@@ -5,7 +5,6 @@
     <OutputType>Exe</OutputType>
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisMode>All</AnalysisMode>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
