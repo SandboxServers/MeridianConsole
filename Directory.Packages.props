@@ -24,6 +24,9 @@
     <!-- CLI -->
     <PackageVersion Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
 
+    <!-- Security & Code Quality Analyzers -->
+    <PackageVersion Include="SecurityCodeScan.VS2019" Version="5.6.7" />
+
     <!-- Tests -->
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />

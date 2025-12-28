@@ -1,0 +1,155 @@
+name: Code Quality & Security
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'sast-**'  # SAST/linter discovery branches
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# Cancel in-progress runs for the same PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Setup job: Check for Dockerfiles
+  check-dockerfiles:
+    name: Check for Dockerfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has-dockerfiles: ${{ steps.check.outputs.files-found }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check for Dockerfiles
+        id: check
+        run: |
+          if find . -name "Dockerfile*" -type f | grep -q .; then
+            echo "files-found=true" >> $GITHUB_OUTPUT
+          else
+            echo "files-found=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 1: Lint YAML files
+  # Job 1: Lint YAML files
+  yaml-lint:
+    name: Lint YAML
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.1
+        with:
+          python-version: '3.x'
+
+      - name: Install yamllint
+        run: pip install yamllint==1.35.1
+
+      - name: Run yamllint
+        run: yamllint --strict .
+
+  # Job 2: Lint and validate .NET code with security analyzers
+  dotnet-lint:
+    name: Lint .NET (Security SAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3 # v4.0.2
+        with:
+          dotnet-version: '10.0.x'
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build with analyzers (warnings = errors)
+        id: build
+        run: dotnet build --configuration Release --no-restore
+        continue-on-error: true
+        env:
+          CI: 'true'  # Enables TreatWarningsAsErrors in Directory.Build.props
+
+      - name: Check for security warnings
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "::error::Build failed due to analyzer warnings. Please fix security/quality issues."
+          echo "Run 'dotnet build' locally to see detailed warnings."
+          exit 1
+
+  # Job 3: Lint frontend (TypeScript/React/Astro)
+  frontend-lint:
+    name: Lint Frontend (ESLint + Prettier)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/Dhadgar.Scope
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65 # v4.0.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/Dhadgar.Scope/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Check Prettier formatting
+        run: npm run format:check
+
+  # Job 5: Lint Dockerfiles
+  dockerfile-lint:
+    name: Lint Dockerfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: check-dockerfiles
+    # Only run if Dockerfiles exist
+    if: needs.check-dockerfiles.outputs.has-dockerfiles == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        with:
+          dockerfile: '**/Dockerfile*'
+          config: .hadolint.yaml
+
+  # Summary job (all linters must pass)
+  code-quality-summary:
+    name: Code Quality Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [yaml-lint, dotnet-lint, frontend-lint, dockerfile-lint]
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::One or more code quality checks failed"
+          exit 1
+
+      - name: All checks passed
+        run: echo "✅ All code quality and security checks passed!"
