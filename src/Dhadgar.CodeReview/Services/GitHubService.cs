@@ -63,6 +63,8 @@ public class GitHubService
             }
 
             _privateKey = await File.ReadAllTextAsync(_options.PrivateKeyPath);
+            _privateKey = _privateKey.Trim(); // Remove any leading/trailing whitespace
+
             _logger.LogInformation(
                 "Loaded GitHub App private key ({Length} chars, starts with: {Start}, ends with: {End})",
                 _privateKey.Length,
