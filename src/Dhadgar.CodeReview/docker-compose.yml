@@ -40,7 +40,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__CodeReview=/app/data/codereview.db
+      - ConnectionStrings__CodeReview=Data Source=/app/data/codereview.db
       - Ollama__BaseUrl=http://ollama:11434
       - Ollama__Model=deepseek-coder:33b
       - Ollama__TimeoutSeconds=300
