@@ -42,7 +42,8 @@ public class CouncilService
     public async Task<List<CouncilMemberOpinion>> ConsultCouncilAsync(
         ReviewRequest request,
         List<FileDiff> diffs,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ProgressTracker? progressTracker = null)
     {
         _logger.LogInformation("Consulting Council of Greybeards for PR #{Number}", request.PullRequestNumber);
 
@@ -55,14 +56,26 @@ public class CouncilService
         var agentFiles = Directory.GetFiles(_agentsDirectory, "*.md");
         _logger.LogInformation("Found {Count} council members to consult", agentFiles.Length);
 
+        // Update progress tracker with total council members
+        if (progressTracker != null)
+        {
+            await progressTracker.SetCouncilMembersAsync(agentFiles.Length, cancellationToken);
+        }
+
         var opinions = new List<CouncilMemberOpinion>();
 
         foreach (var agentFile in agentFiles)
         {
             try
             {
-                var opinion = await ConsultAgentAsync(agentFile, request, diffs, cancellationToken);
+                var opinion = await ConsultAgentAsync(agentFile, request, diffs, cancellationToken, progressTracker);
                 opinions.Add(opinion);
+
+                // Mark this council member as complete
+                if (progressTracker != null)
+                {
+                    await progressTracker.CompleteCouncilMemberAsync(cancellationToken);
+                }
             }
             catch (Exception ex)
             {
@@ -74,6 +87,12 @@ public class CouncilService
                     IsRelevant = false,
                     Opinion = $"Error consulting agent: {ex.Message}"
                 });
+
+                // Still mark as complete even if failed
+                if (progressTracker != null)
+                {
+                    await progressTracker.CompleteCouncilMemberAsync(cancellationToken);
+                }
             }
         }
 
@@ -87,7 +106,8 @@ public class CouncilService
         string agentFile,
         ReviewRequest request,
         List<FileDiff> diffs,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ProgressTracker? progressTracker = null)
     {
         var agentName = Path.GetFileNameWithoutExtension(agentFile);
         var agentContent = await File.ReadAllTextAsync(agentFile, cancellationToken);
@@ -112,6 +132,12 @@ public class CouncilService
         if (estimatedTokens <= maxPromptTokens)
         {
             // Single call - prompt fits in context window
+            if (progressTracker != null)
+            {
+                await progressTracker.StartCouncilMemberAsync(name, 1, cancellationToken);
+                await progressTracker.UpdateCouncilMemberChunkAsync(1, cancellationToken);
+            }
+
             var response = await _ollamaService.CallOllamaWithSystemPromptAsync(prompt, systemPrompt, cancellationToken);
             opinion = ParseAgentResponse(name, response);
         }
@@ -123,7 +149,7 @@ public class CouncilService
                 name,
                 estimatedTokens);
 
-            opinion = await ConsultAgentChunkedAsync(name, description, systemPrompt, request, diffs, maxPromptTokens, cancellationToken);
+            opinion = await ConsultAgentChunkedAsync(name, description, systemPrompt, request, diffs, maxPromptTokens, cancellationToken, progressTracker);
         }
 
         _logger.LogInformation(
@@ -145,7 +171,8 @@ public class CouncilService
         ReviewRequest request,
         List<FileDiff> diffs,
         int maxPromptTokens,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ProgressTracker? progressTracker = null)
     {
         var chunks = CreateChunks(request, diffs, maxPromptTokens, agentName, description, systemPrompt);
 
@@ -154,6 +181,12 @@ public class CouncilService
             agentName,
             chunks.Count);
 
+        // Update progress tracker with total chunks for this council member
+        if (progressTracker != null)
+        {
+            await progressTracker.StartCouncilMemberAsync(agentName, chunks.Count, cancellationToken);
+        }
+
         var allComments = new List<CouncilComment>();
         var summaries = new List<string>();
         var isRelevant = false;
@@ -161,6 +194,12 @@ public class CouncilService
         for (int i = 0; i < chunks.Count; i++)
         {
             _logger.LogInformation("{Agent}: Processing chunk {Current}/{Total}", agentName, i + 1, chunks.Count);
+
+            // Update progress for this chunk
+            if (progressTracker != null)
+            {
+                await progressTracker.UpdateCouncilMemberChunkAsync(i + 1, cancellationToken);
+            }
 
             var chunkPrompt = BuildAgentChunkPrompt(agentName, description, systemPrompt, request, chunks[i], i + 1, chunks.Count);
             var response = await _ollamaService.CallOllamaWithSystemPromptAsync(chunkPrompt, systemPrompt, cancellationToken);
@@ -454,52 +493,83 @@ public class CouncilService
     {
         try
         {
-            // Try to extract JSON from response
+            // Try to extract JSON from response using proper brace counting
             var jsonStart = response.IndexOf('{');
-            var jsonEnd = response.LastIndexOf('}');
 
-            if (jsonStart >= 0 && jsonEnd > jsonStart)
+            if (jsonStart >= 0)
             {
-                var json = response.Substring(jsonStart, jsonEnd - jsonStart + 1);
-                var parsed = System.Text.Json.JsonDocument.Parse(json);
+                // Find the matching closing brace by tracking nesting level
+                int braceCount = 0;
+                int jsonEnd = -1;
 
-                var root = parsed.RootElement;
-                var isRelevant = root.TryGetProperty("relevant", out var relevantProp) && relevantProp.GetBoolean();
-
-                var opinion = new CouncilMemberOpinion
+                for (int i = jsonStart; i < response.Length; i++)
                 {
-                    AgentName = agentName,
-                    IsRelevant = isRelevant
-                };
-
-                if (!isRelevant)
-                {
-                    opinion.Opinion = root.TryGetProperty("reason", out var reasonProp)
-                        ? reasonProp.GetString() ?? "No comment"
-                        : "No comment";
-                }
-                else
-                {
-                    opinion.Opinion = root.TryGetProperty("summary", out var summaryProp)
-                        ? summaryProp.GetString() ?? ""
-                        : "";
-
-                    if (root.TryGetProperty("comments", out var commentsProp) && commentsProp.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    if (response[i] == '{') braceCount++;
+                    else if (response[i] == '}')
                     {
-                        foreach (var commentElement in commentsProp.EnumerateArray())
+                        braceCount--;
+                        if (braceCount == 0)
                         {
-                            opinion.Comments.Add(new CouncilComment
-                            {
-                                Path = commentElement.TryGetProperty("path", out var pathProp) ? pathProp.GetString() ?? "" : "",
-                                Line = commentElement.TryGetProperty("line", out var lineProp) ? lineProp.GetInt32() : 0,
-                                Severity = commentElement.TryGetProperty("severity", out var sevProp) ? sevProp.GetString() ?? "info" : "info",
-                                Body = commentElement.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : ""
-                            });
+                            jsonEnd = i;
+                            break;
                         }
                     }
                 }
 
-                return opinion;
+                if (jsonEnd > jsonStart)
+                {
+                    var json = response.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                    var parsed = System.Text.Json.JsonDocument.Parse(json);
+
+                    var root = parsed.RootElement;
+                    var isRelevant = root.TryGetProperty("relevant", out var relevantProp) && relevantProp.GetBoolean();
+
+                    var opinion = new CouncilMemberOpinion
+                    {
+                        AgentName = agentName,
+                        IsRelevant = isRelevant
+                    };
+
+                    if (!isRelevant)
+                    {
+                        opinion.Opinion = root.TryGetProperty("reason", out var reasonProp)
+                            ? reasonProp.GetString() ?? "No comment"
+                            : "No comment";
+                    }
+                    else
+                    {
+                        opinion.Opinion = root.TryGetProperty("summary", out var summaryProp)
+                            ? summaryProp.GetString() ?? ""
+                            : "";
+
+                        if (root.TryGetProperty("comments", out var commentsProp) && commentsProp.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var commentElement in commentsProp.EnumerateArray())
+                            {
+                                // Handle nullable line numbers gracefully
+                                int? line = null;
+                                if (commentElement.TryGetProperty("line", out var lineProp))
+                                {
+                                    if (lineProp.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                    {
+                                        line = lineProp.GetInt32();
+                                    }
+                                    // If line is null or not a number, leave it as null
+                                }
+
+                                opinion.Comments.Add(new CouncilComment
+                                {
+                                    Path = commentElement.TryGetProperty("path", out var pathProp) ? pathProp.GetString() ?? "" : "",
+                                    Line = line ?? 0, // Default to 0 if null
+                                    Severity = commentElement.TryGetProperty("severity", out var sevProp) ? sevProp.GetString() ?? "info" : "info",
+                                    Body = commentElement.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : ""
+                                });
+                            }
+                        }
+                    }
+
+                    return opinion;
+                }
             }
 
             // Fallback: couldn't parse JSON

@@ -29,7 +29,7 @@ public class ReviewResponse
 public class ReviewCommentDto
 {
     public required string Path { get; set; }
-    public int Line { get; set; }
+    public int? Line { get; set; } // Nullable to handle cases where LLM doesn't specify line
     public required string Body { get; set; }
 }
 

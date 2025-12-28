@@ -19,6 +19,7 @@ public class ReviewOrchestrator
     private readonly CodeReviewDbContext _dbContext;
     private readonly ReviewOptions _options;
     private readonly ILogger<ReviewOrchestrator> _logger;
+    private readonly ILoggerFactory _loggerFactory;
 
     public ReviewOrchestrator(
         GitHubService gitHubService,
@@ -26,7 +27,8 @@ public class ReviewOrchestrator
         CouncilService councilService,
         CodeReviewDbContext dbContext,
         IOptions<ReviewOptions> options,
-        ILogger<ReviewOrchestrator> logger)
+        ILogger<ReviewOrchestrator> logger,
+        ILoggerFactory loggerFactory)
     {
         _gitHubService = gitHubService;
         _ollamaService = ollamaService;
@@ -34,6 +36,7 @@ public class ReviewOrchestrator
         _dbContext = dbContext;
         _options = options.Value;
         _logger = logger;
+        _loggerFactory = loggerFactory;
     }
 
     /// <summary>
@@ -107,59 +110,48 @@ public class ReviewOrchestrator
 
             // Step 2: Generate review with LLM
             _logger.LogInformation("Generating review with LLM ({Model})...", _options.Model);
-            var reviewResponse = await _ollamaService.GenerateReviewAsync(request, diffs, cancellationToken);
 
-            // Step 2b: Consult Council of Greybeards
-            _logger.LogInformation("Consulting Council of Greybeards...");
-            var councilOpinions = await _councilService.ConsultCouncilAsync(request, diffs, cancellationToken);
-
-            // Merge council opinions into review
-            var mergedReview = MergeCouncilOpinions(reviewResponse, councilOpinions);
-
-            review.Summary = mergedReview.Summary;
-
-            // Store comments in database
-            foreach (var comment in mergedReview.Comments)
+            // Create progress tracker if we have a status comment to update
+            ProgressTracker? progressTracker = null;
+            if (statusCommentId.HasValue)
             {
-                review.Comments.Add(new ReviewComment
-                {
-                    FilePath = comment.Path,
-                    LineNumber = comment.Line,
-                    Body = comment.Body,
-                    CreatedAt = DateTime.UtcNow
-                });
+                progressTracker = new ProgressTracker(
+                    _gitHubService,
+                    _loggerFactory.CreateLogger<ProgressTracker>(),
+                    request.Owner,
+                    request.Repository,
+                    statusCommentId.Value);
             }
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            var reviewResponse = await _ollamaService.GenerateReviewAsync(request, diffs, cancellationToken, progressTracker);
 
-            // Step 3: Post review to GitHub
-            _logger.LogInformation("Posting review to GitHub...");
+            // Step 3: Post main review to GitHub first
+            _logger.LogInformation("Posting main review to GitHub...");
 
             try
             {
-                // Check if we can just update the status comment (for small reviews)
-                const int safeCommentLength = 60000; // Leave buffer for markdown formatting
-                var reviewBody = BuildReviewBody(mergedReview);
+                const int safeCommentLength = 60000;
+                var mainReviewBody = BuildReviewBody(reviewResponse);
 
-                if (statusCommentId.HasValue && reviewBody.Length < safeCommentLength && mergedReview.Comments.Count == 0)
+                if (statusCommentId.HasValue && mainReviewBody.Length < safeCommentLength && reviewResponse.Comments.Count == 0)
                 {
-                    // Small review with no inline comments - just update the ack comment
+                    // Small review with no inline comments - update the ack comment
                     await _gitHubService.UpdateCommentAsync(
                         request.Owner,
                         request.Repository,
                         statusCommentId.Value,
-                        reviewBody,
+                        mainReviewBody,
                         cancellationToken);
                 }
-                else if (mergedReview.Summary.Length > safeCommentLength || mergedReview.Comments.Count > 50)
+                else if (mainReviewBody.Length > safeCommentLength || reviewResponse.Comments.Count > 50)
                 {
                     // Large review - split across multiple comments
                     _logger.LogWarning(
-                        "Review is too large (Summary: {SummaryLength} chars, Comments: {CommentCount}). Splitting across multiple GitHub comments.",
-                        mergedReview.Summary.Length,
-                        mergedReview.Comments.Count);
+                        "Main review is too large (Summary: {SummaryLength} chars, Comments: {CommentCount}). Splitting across multiple GitHub comments.",
+                        reviewResponse.Summary?.Length ?? 0,
+                        reviewResponse.Comments.Count);
 
-                    await PostSplitReviewAsync(request, mergedReview, cancellationToken, statusCommentId);
+                    await PostSplitReviewAsync(request, reviewResponse, cancellationToken, statusCommentId);
                 }
                 else
                 {
@@ -168,7 +160,7 @@ public class ReviewOrchestrator
                         request.Owner,
                         request.Repository,
                         request.PullRequestNumber,
-                        mergedReview,
+                        reviewResponse,
                         cancellationToken);
 
                     review.GitHubReviewId = githubReviewId;
@@ -176,10 +168,10 @@ public class ReviewOrchestrator
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to post review to GitHub, attempting fallback comment");
+                _logger.LogError(ex, "Failed to post main review to GitHub, attempting fallback comment");
 
                 // Fallback: Post as a simple comment
-                var fallbackComment = BuildFallbackComment(mergedReview);
+                var fallbackComment = BuildFallbackComment(reviewResponse);
                 await _gitHubService.PostCommentAsync(
                     request.Owner,
                     request.Repository,
@@ -187,6 +179,47 @@ public class ReviewOrchestrator
                     fallbackComment,
                     cancellationToken);
             }
+
+            // Step 4: Post "council convened" message
+            _logger.LogInformation("Posting council convened message...");
+            try
+            {
+                await _gitHubService.PostCommentAsync(
+                    request.Owner,
+                    request.Repository,
+                    request.PullRequestNumber,
+                    "🧙‍♂️ **The Council of Greybeards has convened to weigh in on this pull request...**\n\n_Consulting domain experts for additional perspectives._",
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to post council convened message");
+            }
+
+            // Step 5: Consult Council of Greybeards
+            _logger.LogInformation("Consulting Council of Greybeards...");
+            var councilOpinions = await _councilService.ConsultCouncilAsync(request, diffs, cancellationToken, progressTracker);
+
+            // Step 6: Post council opinions to GitHub
+            _logger.LogInformation("Posting council opinions to GitHub...");
+            await PostCouncilOpinionsAsync(request, councilOpinions, cancellationToken);
+
+            // Store all feedback in database (main review + council)
+            var mergedReview = MergeCouncilOpinions(reviewResponse, councilOpinions);
+            review.Summary = mergedReview.Summary;
+
+            foreach (var comment in mergedReview.Comments)
+            {
+                review.Comments.Add(new ReviewComment
+                {
+                    FilePath = comment.Path,
+                    LineNumber = comment.Line ?? 0,
+                    Body = comment.Body,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
 
             // Mark as completed
             review.Status = "Completed";
@@ -289,6 +322,75 @@ public class ReviewOrchestrator
                 r.PullRequestNumber == pullRequestNumber &&
                 r.CreatedAt >= cutoff &&
                 r.Status == "Completed");
+    }
+
+    /// <summary>
+    /// Post council opinions as a separate comment on GitHub.
+    /// </summary>
+    private async Task PostCouncilOpinionsAsync(
+        ReviewRequest request,
+        List<CouncilMemberOpinion> councilOpinions,
+        CancellationToken cancellationToken)
+    {
+        var relevantOpinions = councilOpinions.Where(o => o.IsRelevant).ToList();
+
+        if (relevantOpinions.Count == 0)
+        {
+            // No relevant council opinions - post a simple message
+            await _gitHubService.PostCommentAsync(
+                request.Owner,
+                request.Repository,
+                request.PullRequestNumber,
+                "🧙‍♂️ **Council Consultation Complete**\n\nThe Council of Greybeards has reviewed the changes and found no significant concerns requiring their expertise.",
+                cancellationToken);
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("## 🧙‍♂️ Council of Greybeards - Expert Opinions");
+        sb.AppendLine();
+        sb.AppendLine($"The council has consulted {relevantOpinions.Count} expert(s) who provided feedback:");
+        sb.AppendLine();
+
+        foreach (var opinion in relevantOpinions)
+        {
+            sb.AppendLine($"### {opinion.AgentName}");
+            sb.AppendLine();
+            sb.AppendLine(opinion.Opinion);
+            sb.AppendLine();
+
+            if (opinion.Comments.Count > 0)
+            {
+                sb.AppendLine("**Specific concerns:**");
+                foreach (var comment in opinion.Comments)
+                {
+                    var severity = comment.Severity.ToUpper();
+                    var severityEmoji = severity switch
+                    {
+                        "CRITICAL" => "🔴",
+                        "HIGH" => "🟠",
+                        "MEDIUM" => "🟡",
+                        "LOW" => "🔵",
+                        _ => "ℹ️"
+                    };
+
+                    sb.AppendLine($"- {severityEmoji} **{severity}** - `{comment.Path}:{comment.Line}` - {comment.Body}");
+                }
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("---");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("*Council consultation powered by domain-expert agents*");
+
+        await _gitHubService.PostCommentAsync(
+            request.Owner,
+            request.Repository,
+            request.PullRequestNumber,
+            sb.ToString(),
+            cancellationToken);
     }
 
     private string BuildReviewBody(ReviewResponse reviewResponse)

@@ -166,14 +166,21 @@ public class GitHubService
             Body = BuildReviewBody(reviewResponse)
         };
 
-        // Add inline comments
+        // Add inline comments (only those with valid line numbers)
         foreach (var comment in reviewResponse.Comments)
         {
-            review.Comments.Add(new DraftPullRequestReviewComment(
-                path: comment.Path,
-                body: comment.Body,
-                position: comment.Line
-            ));
+            if (comment.Line.HasValue && comment.Line.Value > 0)
+            {
+                review.Comments.Add(new DraftPullRequestReviewComment(
+                    path: comment.Path,
+                    body: comment.Body,
+                    position: comment.Line.Value
+                ));
+            }
+            else
+            {
+                _logger.LogWarning("Skipping comment without valid line number for file {Path}", comment.Path);
+            }
         }
 
         try

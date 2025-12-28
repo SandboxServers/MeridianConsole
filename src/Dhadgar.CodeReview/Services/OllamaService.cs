@@ -32,7 +32,8 @@ public class OllamaService
     public async Task<ReviewResponse> GenerateReviewAsync(
         ReviewRequest request,
         List<FileDiff> diffs,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ProgressTracker? progressTracker = null)
     {
         _logger.LogInformation(
             "Generating review for PR #{Number} in {Repo} using {Model}",
@@ -55,6 +56,12 @@ public class OllamaService
         // If prompt fits in context window, process normally
         if (estimatedTokens <= maxPromptTokens)
         {
+            if (progressTracker != null)
+            {
+                await progressTracker.SetMainReviewChunksAsync(1, cancellationToken);
+                await progressTracker.UpdateMainReviewChunkAsync(1, cancellationToken);
+            }
+
             var response = await CallOllamaAsync(prompt, cancellationToken);
             return ParseReviewResponse(response);
         }
@@ -64,7 +71,7 @@ public class OllamaService
             "PR exceeds context window ({Tokens} tokens). Chunking into multiple reviews.",
             estimatedTokens);
 
-        return await GenerateChunkedReviewAsync(request, diffs, maxPromptTokens, cancellationToken);
+        return await GenerateChunkedReviewAsync(request, diffs, maxPromptTokens, cancellationToken, progressTracker);
     }
 
     private string BuildReviewPrompt(ReviewRequest request, List<FileDiff> diffs)
@@ -239,7 +246,8 @@ public class OllamaService
         ReviewRequest request,
         List<FileDiff> diffs,
         int maxPromptTokens,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ProgressTracker? progressTracker = null)
     {
         var chunks = CreateChunks(request, diffs, maxPromptTokens);
 
@@ -247,12 +255,24 @@ public class OllamaService
             "Split PR into {ChunkCount} chunks for processing",
             chunks.Count);
 
+        // Update progress tracker with total chunks
+        if (progressTracker != null)
+        {
+            await progressTracker.SetMainReviewChunksAsync(chunks.Count, cancellationToken);
+        }
+
         var allComments = new List<ReviewCommentDto>();
         var summaries = new List<string>();
 
         for (int i = 0; i < chunks.Count; i++)
         {
             _logger.LogInformation("Processing chunk {Current}/{Total}", i + 1, chunks.Count);
+
+            // Update progress
+            if (progressTracker != null)
+            {
+                await progressTracker.UpdateMainReviewChunkAsync(i + 1, cancellationToken);
+            }
 
             var chunkPrompt = BuildChunkPrompt(request, chunks[i], i + 1, chunks.Count);
             var response = await CallOllamaAsync(chunkPrompt, cancellationToken);
