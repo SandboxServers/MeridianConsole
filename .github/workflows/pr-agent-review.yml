@@ -24,15 +24,16 @@ jobs:
 
       - name: Run PR-Agent review via CLI
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER.KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           # Install PR-Agent
           pip install pr-agent
 
-          # Run review command directly with explicit PR number
-          pr-agent review \
-            --pr-url="https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}" \
+          # Run review command with correct CLI syntax
+          pr-agent \
+            --pr_url="https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}" \
+            review \
             --config.model="openrouter/mistralai/devstral-2512:free" \
             --config.fallback_models='["openrouter/mistralai/mistral-7b-instruct:free"]' \
             --config.custom_model_max_tokens="262144" \
