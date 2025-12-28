@@ -6,6 +6,7 @@ on:
       - main
       - develop
       - 'feature/**'
+      - 'sast-**'  # SAST/linter discovery branches
   pull_request:
     branches:
       - main
