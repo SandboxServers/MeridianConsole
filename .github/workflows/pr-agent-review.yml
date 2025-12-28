@@ -25,9 +25,8 @@ jobs:
       - name: PR-Agent action
         uses: qodo-ai/pr-agent@main
         env:
-          # OpenRouter configuration
-          OPENAI_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENAI.API_BASE: "https://openrouter.ai/api/v1"
+          # OpenRouter configuration (LiteLLM with openrouter/ prefix requires OPENROUTER_API_KEY)
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           # Mistral Devstral - Code-optimized, FREE (LiteLLM requires openrouter/ prefix)
           config.model: "openrouter/mistralai/devstral-2512:free"
           config.fallback_models: '["openrouter/mistralai/mistral-7b-instruct:free"]'
