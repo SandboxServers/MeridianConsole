@@ -12,8 +12,8 @@ permissions:
 jobs:
   pr-agent:
     runs-on: ubuntu-latest
-    # Only run when someone comments with /review command on a PR
-    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/review') }}
+    # Only run when someone comments with /spirit command on a PR
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/spirit') }}
     steps:
       - name: Generate token for spirit-of-the-diff
         id: generate_token
