@@ -42,3 +42,9 @@ node_modules/
 # Local utility scripts
 scripts/fix-wsl-clipboard-*.sh
 scripts/fix-wsl-clipboard-*.ps1
+
+# gemini-cli settings
+.gemini/
+
+# GitHub App credentials
+gha-creds-*.json

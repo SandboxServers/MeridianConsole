@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Prerequisites
 - .NET SDK 10.0.100 (pinned in `global.json`)
+- Node.js 20+ (for Scope project)
 - Docker (for local PostgreSQL/RabbitMQ/Redis)
 
 ### Start Local Infrastructure
@@ -45,7 +46,14 @@ dotnet run --project src/Dhadgar.Gateway
 
 # Run with watch (auto-reload)
 dotnet watch --project src/Dhadgar.Gateway
+
+# Run Scope project (Astro/React/Tailwind)
+cd src/Dhadgar.Scope
+npm install
+npm run dev
 ```
+
+**Note**: Both `dotnet watch` and Astro's `npm run dev` support hot reload for rapid development cycles. Scope dev server runs on port 4321 by default (configurable in astro.config.mjs).
 
 ### EF Core Migrations
 
@@ -73,7 +81,7 @@ Note: Some services auto-apply migrations in Development mode (see `Program.cs`)
 
 ### Configuration Management
 
-Use `dotnet user-secrets` for sensitive local configuration:
+**.NET Services**: Use `dotnet user-secrets` for sensitive local configuration:
 
 ```bash
 # Initialize user secrets
@@ -86,6 +94,8 @@ dotnet user-secrets set "Discord:BotToken" "your-token" --project src/Dhadgar.Di
 # List secrets
 dotnet user-secrets list --project src/Dhadgar.Identity
 ```
+
+**Node.js Projects** (e.g., Dhadgar.Scope): Use environment variables or `.env` files. Create a `.env` file in the project root (add to `.gitignore`) and use `process.env.VARIABLE_NAME` in Node.js code. Never commit actual secrets to the repository.
 
 ## Parallel Claude Sessions
 
@@ -154,6 +164,8 @@ src/Dhadgar.{Service}/
 └── {Service}.csproj
 ```
 
+**Special Case - Dhadgar.Scope**: The Scope project is a Node.js/Astro application wrapped in a .NET shim. Its `.csproj` file invokes `npm install` and `npm build` during `dotnet build`, allowing it to integrate with the .NET solution while using a different build toolchain. This enables running `dotnet build` to build the entire solution including the Scope project.
+
 Common service endpoints (scaffolding):
 - `GET /` - Service banner
 - `GET /hello` - Hello world
@@ -193,16 +205,17 @@ Three agent projects for customer hardware:
 
 Agents are designed to make outbound-only connections to the control plane (no inbound holes required).
 
-### Frontend (Blazor WebAssembly)
+### Frontend Architecture
 
-Three separate WASM apps:
-- `Dhadgar.Panel` - Main control plane UI
-- `Dhadgar.ShoppingCart` - Marketing/checkout (with Azure Functions `/api`)
-- `Dhadgar.Scope.Client` - Documentation site
+**Important**: The project is in transition from Blazor to modern web stack. Current state:
 
-All use **MudBlazor** for UI components.
+- `Dhadgar.Scope` - Documentation site using **Astro 5.1.1 + React + Tailwind CSS** (✅ Migrated)
+- `Dhadgar.Panel` - Main control plane UI using Blazor WebAssembly (🚧 TODO: Migrate to Astro/React/Tailwind)
+- `Dhadgar.ShoppingCart` - Marketing/checkout using Blazor WebAssembly (🚧 TODO: Migrate to Astro/React/Tailwind)
 
-Azure Static Web Apps deployment: Custom MSBuild targets copy output to `_swa_publish/` directory.
+**Note**: The POC Scope project proves to architectural pattern going forward. Panel and ShoppingCart will be migrated to match this stack.
+
+All frontend projects deploy to Azure Static Web Apps via `_swa_publish/wwwroot/` directory.
 
 ## Configuration Conventions
 
@@ -258,8 +271,9 @@ Standard ASP.NET Core configuration hierarchy:
 ## Testing Strategy
 
 - 1:1 project-to-test mapping (23 test projects)
-- xUnit framework
+- xUnit framework for .NET services
 - WebApplicationFactory integration ready (services have `public partial class Program`)
+- Node.js projects (e.g., Dhadgar.Scope.Tests) use Jest or Vitest for unit/integration testing
 - Currently scaffolding with basic assertions
 
 ## Security Architecture (Design Intent)
@@ -292,7 +306,7 @@ Uses **Central Package Management**:
 - Extends templates from `SandboxServers/Azure-Pipeline-YAML` repo
 - Per-service build/test/deploy
 - Selective builds via `servicesCsv` parameter
-- Azure Static Web Apps deployment for Blazor WASM apps
+- Azure Static Web Apps deployment for frontend apps (Astro and Blazor)
 
 ## Important Development Patterns
 
@@ -330,6 +344,7 @@ Treat these as code names vs product name ("Meridian Console").
 - EF Core DbContexts with migrations
 - Docker Compose local infrastructure
 - One test project per service
+- Dhadgar.Scope site migrated to Astro/React/Tailwind
 
 ### 🚧 Planned (Not Yet Implemented)
 - Real authentication, RBAC, user/org lifecycle
@@ -340,6 +355,8 @@ Treat these as code names vs product name ("Meridian Console").
 - Production-ready UI features
 - Observability stack (structured logging, tracing, dashboards)
 - Kubernetes manifests and Helm charts
+- Migrate Dhadgar.Panel to Astro/React/Tailwind
+- Migrate Dhadgar.ShoppingCart to Astro/React/Tailwind
 
 ## Repository Structure
 
@@ -369,8 +386,9 @@ MeridianConsole/
 - **YARP 2.3.0** for API Gateway
 - **Entity Framework Core 10** with PostgreSQL
 - **MassTransit 8.3.6** + RabbitMQ
-- **Blazor WebAssembly** for frontend
-- **MudBlazor 7.15.0** for UI components
+- **Astro 5.1.1 + React + Tailwind CSS** for frontend (Scope - migrated)
+- **Blazor WebAssembly** for frontend (Panel, ShoppingCart - TODO: migrate)
+- **MudBlazor 7.15.0** for UI components (Blazor projects only)
 - **SignalR** for real-time features
 - **xUnit 2.9.2** for testing
 
@@ -381,7 +399,8 @@ This repository is configured with the **context7 MCP server** for retrieving up
 ### When to Use Context7
 
 Use context7 MCP tools proactively when:
-- Implementing features with MudBlazor components (theming, layouts, forms, etc.)
+- Implementing features with Astro/React components (layouts, routing, etc.)
+- Working with Tailwind CSS utilities and configuration
 - Working with Entity Framework Core patterns (migrations, relationships, queries)
 - Setting up MassTransit consumers, sagas, or messaging patterns
 - Configuring YARP routing, authentication, or middleware
@@ -391,22 +410,28 @@ Use context7 MCP tools proactively when:
 
 1. **Resolve library ID** first using `mcp__context7__resolve-library-id`:
    ```
-   libraryName: "MudBlazor"
+   libraryName: "Astro"
    ```
 
 2. **Fetch documentation** using `mcp__context7__get-library-docs`:
    ```
-   context7CompatibleLibraryID: "/mudblazor/mudblazor"
-   topic: "dark theme customization"
+   context7CompatibleLibraryID: "/withastro/astro"
+   topic: "react integration"
    mode: "code"  (for API references) or "info" (for conceptual guides)
    ```
 
 ### Examples
 
-**MudBlazor theming:**
+**Astro React integration:**
 ```
-resolve-library-id: "MudBlazor"
-get-library-docs: "/mudblazor/mudblazor", topic: "custom dark theme", mode: "code"
+resolve-library-id: "Astro"
+get-library-docs: "/withastro/astro", topic: "react integration", mode: "code"
+```
+
+**Tailwind CSS:**
+```
+resolve-library-id: "Tailwind CSS"
+get-library-docs: "/tailwindlabs/tailwindcss", topic: "responsive utilities", mode: "code"
 ```
 
 **Entity Framework Core:**
@@ -429,15 +454,18 @@ This repository has **15 specialized agents** configured in `.claude/agents/` to
 
 ### Frontend & UI
 
-#### blazor-webdev-expert
-**Use for**: Blazor WebAssembly/Server development, MudBlazor components, responsive design, forms, layouts, navigation, CSS styling, client-side state management.
+#### frontend-expert
+**Use for**: Astro/React/Tailwind development, component architecture, responsive design, forms, layouts, navigation, CSS styling, client-side state management, TypeScript patterns.
 
 **When to invoke**:
-- Creating new Blazor pages or components
+- Creating new Astro pages or React components
 - Implementing forms with validation
-- Styling with MudBlazor or custom CSS
+- Styling with Tailwind CSS
 - Fixing responsive layout issues
 - Building reusable UI components
+- Setting up Astro routing and layouts
+- Working with React integration in Astro
+- TypeScript type safety improvements
 
 ### Architecture & Design
 
