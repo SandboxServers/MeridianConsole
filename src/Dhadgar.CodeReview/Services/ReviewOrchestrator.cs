@@ -3,6 +3,7 @@ using Dhadgar.CodeReview.Data.Entities;
 using Dhadgar.CodeReview.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Octokit;
 using System.Diagnostics;
 
 namespace Dhadgar.CodeReview.Services;
@@ -40,7 +41,8 @@ public class ReviewOrchestrator
     /// </summary>
     public async Task<Data.Entities.CodeReview> PerformReviewAsync(
         ReviewRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        long? statusCommentId = null)
     {
         var stopwatch = Stopwatch.StartNew();
         var repository = $"{request.Owner}/{request.Repository}";
@@ -135,24 +137,33 @@ public class ReviewOrchestrator
 
             try
             {
-                // Check if review needs to be split due to GitHub size limits
-                const int maxGitHubCommentLength = 65536; // GitHub's character limit
+                // Check if we can just update the status comment (for small reviews)
                 const int safeCommentLength = 60000; // Leave buffer for markdown formatting
+                var reviewBody = BuildReviewBody(mergedReview);
 
-                var summaryLength = mergedReview.Summary.Length;
-                var needsSplitting = summaryLength > safeCommentLength || mergedReview.Comments.Count > 50;
-
-                if (needsSplitting)
+                if (statusCommentId.HasValue && reviewBody.Length < safeCommentLength && mergedReview.Comments.Count == 0)
                 {
+                    // Small review with no inline comments - just update the ack comment
+                    await _gitHubService.UpdateCommentAsync(
+                        request.Owner,
+                        request.Repository,
+                        statusCommentId.Value,
+                        reviewBody,
+                        cancellationToken);
+                }
+                else if (mergedReview.Summary.Length > safeCommentLength || mergedReview.Comments.Count > 50)
+                {
+                    // Large review - split across multiple comments
                     _logger.LogWarning(
                         "Review is too large (Summary: {SummaryLength} chars, Comments: {CommentCount}). Splitting across multiple GitHub comments.",
-                        summaryLength,
+                        mergedReview.Summary.Length,
                         mergedReview.Comments.Count);
 
-                    await PostSplitReviewAsync(request, mergedReview, cancellationToken);
+                    await PostSplitReviewAsync(request, mergedReview, cancellationToken, statusCommentId);
                 }
                 else
                 {
+                    // Normal-sized review - post as PR review
                     var githubReviewId = await _gitHubService.PostReviewAsync(
                         request.Owner,
                         request.Repository,
@@ -184,6 +195,24 @@ public class ReviewOrchestrator
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
+            // Add thumbs up reaction to indicate success
+            if (request.TriggerCommentId.HasValue)
+            {
+                try
+                {
+                    await _gitHubService.AddReactionToCommentAsync(
+                        request.Owner,
+                        request.Repository,
+                        request.TriggerCommentId.Value,
+                        ReactionType.Plus1,
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to add thumbs up reaction to comment");
+                }
+            }
+
             _logger.LogInformation(
                 "Code review completed for PR #{Number} in {Duration:F1}s ({CommentCount} comments)",
                 request.PullRequestNumber,
@@ -202,6 +231,24 @@ public class ReviewOrchestrator
             review.DurationSeconds = stopwatch.Elapsed.TotalSeconds;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // Add thumbs down reaction to indicate failure
+            if (request.TriggerCommentId.HasValue)
+            {
+                try
+                {
+                    await _gitHubService.AddReactionToCommentAsync(
+                        request.Owner,
+                        request.Repository,
+                        request.TriggerCommentId.Value,
+                        ReactionType.Confused,
+                        cancellationToken);
+                }
+                catch (Exception reactionEx)
+                {
+                    _logger.LogWarning(reactionEx, "Failed to add thumbs down reaction to comment");
+                }
+            }
 
             // Try to post error comment to GitHub
             try
@@ -242,6 +289,29 @@ public class ReviewOrchestrator
                 r.PullRequestNumber == pullRequestNumber &&
                 r.CreatedAt >= cutoff &&
                 r.Status == "Completed");
+    }
+
+    private string BuildReviewBody(ReviewResponse reviewResponse)
+    {
+        var sb = new System.Text.StringBuilder();
+
+        sb.AppendLine("## 🤖 AI Code Review");
+        sb.AppendLine();
+
+        if (!string.IsNullOrEmpty(reviewResponse.Summary))
+        {
+            sb.AppendLine(reviewResponse.Summary);
+        }
+        else
+        {
+            sb.AppendLine("No issues found. The changes look good! ✅");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("---");
+        sb.AppendLine("*Powered by Dhadgar.CodeReview with DeepSeek Coder*");
+
+        return sb.ToString();
     }
 
     private string BuildFallbackComment(ReviewResponse reviewResponse)
@@ -287,7 +357,8 @@ public class ReviewOrchestrator
     private async Task PostSplitReviewAsync(
         ReviewRequest request,
         ReviewResponse review,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        long? statusCommentId = null)
     {
         const int safeCommentLength = 60000;
 

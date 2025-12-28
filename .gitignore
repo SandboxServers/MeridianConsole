@@ -42,3 +42,10 @@ node_modules/
 # Local utility scripts
 scripts/fix-wsl-clipboard-*.sh
 scripts/fix-wsl-clipboard-*.ps1
+
+# CodeReview service
+src/Dhadgar.CodeReview/secrets/
+src/Dhadgar.CodeReview/*.db
+src/Dhadgar.CodeReview/*.db-shm
+src/Dhadgar.CodeReview/*.db-wal
+src/Dhadgar.CodeReview/logs/

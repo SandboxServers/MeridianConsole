@@ -38,6 +38,10 @@ builder.Services.AddScoped<ReviewOrchestrator>();
 // Register OllamaService with HttpClient
 builder.Services.AddHttpClient<OllamaService>();
 
+// Register ReviewQueueService as a hosted service
+builder.Services.AddSingleton<ReviewQueueService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<ReviewQueueService>());
+
 var app = builder.Build();
 
 // Apply EF Core migrations automatically on startup

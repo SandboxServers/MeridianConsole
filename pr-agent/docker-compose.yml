@@ -2,6 +2,8 @@ version: '3.8'
 
 services:
   pr-agent:
+    env_file:
+      - .env
     image: codiumai/pr-agent:0.31-github_app
     container_name: meridian-pr-agent
     restart: unless-stopped
@@ -13,12 +15,12 @@ services:
       - GITHUB__PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
       - GITHUB__WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
 
-      # OpenRouter Configuration
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-
       # PR-Agent Configuration
       - CONFIG_FILE=/app/configuration.toml
       - LOG_LEVEL=INFO
+
+      - OPENAI__API_BASE=http://litellm:4000/v1
+      - OPENAI__KEY=local-dev-key
 
       - PYTHONWARNINGS=ignore:pkg_resources is deprecated as an API:UserWarning
 
@@ -48,30 +50,42 @@ services:
       - pr-agent
     networks:
       - pr-agent-network
-  # Optional: Ollama for local fallback (if you want fully local option)
-  # Uncomment if running on home server with GPU
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   container_name: meridian-ollama
-  #   restart: unless-stopped
-  #   ports:
-  #     - "11434:11434"
-  #   volumes:
-  #     - ollama-data:/root/.ollama
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   networks:
-  #     - pr-agent-network
+  ollama:
+    image: ollama/ollama:latest
+    container_name: meridian-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - pr-agent-network
+  litellm:
+    platform: linux/amd64
+    image: ghcr.io/berriai/litellm:latest
+    command: ["--config", "/config/litellm.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm.yaml:/config/litellm.yaml:ro
+    environment:
+      # Optional auth; PR-Agent will send this as OPENAI__KEY
+      LITELLM_MASTER_KEY: "local-dev-key"
+    depends_on:
+      - ollama
+    networks:
+      - pr-agent-network
+
+volumes:
+  ollama-data:
 
 networks:
   pr-agent-network:
     driver: bridge
-
-# volumes:
-#   ollama-data:
-

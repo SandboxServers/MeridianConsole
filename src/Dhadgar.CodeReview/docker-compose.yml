@@ -45,7 +45,7 @@ services:
       - Ollama__Model=deepseek-coder:33b
       - Ollama__TimeoutSeconds=300
       - Review__MaxDiffSize=50000
-      - Review__MaxFilesPerReview=20
+      - Review__MaxFilesPerReview=100
       - Review__EnableAutoReview=false
       - AgentsDirectory=/app/agents
       # GitHub credentials from .env file

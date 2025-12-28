@@ -47,7 +47,7 @@ ollama list
 4. Subscribe to **events**:
    - ☑️ Pull request
    - ☑️ Pull request review comment
-   - ☑️ Issue comment (for /review command)
+   - ☑️ Issue comment (for /dhadgar command)
 
 5. Click **Create GitHub App**
 
@@ -124,7 +124,7 @@ This will give you a URL like `https://abc123.ngrok.io`.
 ### 6. Test It!
 
 1. Open a pull request in your repository
-2. Add a comment: `/review`
+2. Add a comment: `/dhadgar`
 3. Watch the logs in your terminal - you should see:
    - Webhook received
    - PR diff fetched

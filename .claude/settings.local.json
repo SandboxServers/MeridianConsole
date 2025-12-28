@@ -6,7 +6,7 @@
       "Bash(dotnet build:*)",
       "Bash(git add:*)",
       "Bash(claude mcp:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
       "Bash(bash:*)"
     ]
   }

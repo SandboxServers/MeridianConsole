@@ -24,7 +24,7 @@ This checklist will help you configure the CodeReview service to review its own 
        - **Metadata**: Read-only
    - **Subscribe to events**:
      - [x] Pull request
-     - [x] Issue comment (for `/review` command)
+     - [x] Issue comment (for `/dhadgar` command)
    - **Where can this GitHub App be installed?**: Only on this account
 
 3. Click **Create GitHub App**
@@ -197,7 +197,7 @@ codereview-service      | [INF] Now listening on: http://[::]:8080
 
 4. **Trigger review**:
    - **Automatic** (if `EnableAutoReview=true` in docker-compose.yml)
-   - **Manual**: Comment `/review` on the PR
+   - **Manual**: Comment `/dhadgar` on the PR
 
 5. **Monitor logs**:
    ```bash

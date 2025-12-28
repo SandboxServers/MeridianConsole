@@ -11,6 +11,7 @@ public class ReviewRequest
     public string? PullRequestTitle { get; set; }
     public string? PullRequestBody { get; set; }
     public string? TriggerSource { get; set; } // "webhook", "comment", "manual"
+    public long? TriggerCommentId { get; set; } // ID of the comment that triggered the review (for reactions)
 }
 
 /// <summary>

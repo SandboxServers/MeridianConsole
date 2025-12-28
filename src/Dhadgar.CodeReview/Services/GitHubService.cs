@@ -194,7 +194,7 @@ public class GitHubService
     /// <summary>
     /// Post a simple comment to a pull request (fallback if review fails).
     /// </summary>
-    public async Task PostCommentAsync(
+    public async Task<long> PostCommentAsync(
         string owner,
         string repo,
         int pullRequestNumber,
@@ -205,7 +205,63 @@ public class GitHubService
 
         _logger.LogInformation("Posting comment to PR #{Number} in {Owner}/{Repo}", pullRequestNumber, owner, repo);
 
-        await client.Issue.Comment.Create(owner, repo, pullRequestNumber, comment);
+        var issueComment = await client.Issue.Comment.Create(owner, repo, pullRequestNumber, comment);
+        return issueComment.Id;
+    }
+
+    /// <summary>
+    /// Update an existing comment.
+    /// </summary>
+    public async Task UpdateCommentAsync(
+        string owner,
+        string repo,
+        long commentId,
+        string newBody,
+        CancellationToken cancellationToken = default)
+    {
+        var client = await GetGitHubClientAsync();
+
+        _logger.LogInformation(
+            "Updating comment {CommentId} in {Owner}/{Repo}",
+            commentId,
+            owner,
+            repo);
+
+        await client.Issue.Comment.Update(owner, repo, commentId, newBody);
+    }
+
+    /// <summary>
+    /// Add a reaction emoji to an issue comment.
+    /// </summary>
+    /// <param name="owner">Repository owner</param>
+    /// <param name="repo">Repository name</param>
+    /// <param name="commentId">Comment ID to react to</param>
+    /// <param name="reactionType">Reaction type (thumbs_up, thumbs_down, rocket, etc.)</param>
+    public async Task AddReactionToCommentAsync(
+        string owner,
+        string repo,
+        long commentId,
+        ReactionType reactionType,
+        CancellationToken cancellationToken = default)
+    {
+        var client = await GetGitHubClientAsync();
+
+        _logger.LogInformation(
+            "Adding reaction '{Reaction}' to comment {CommentId} in {Owner}/{Repo}",
+            reactionType,
+            commentId,
+            owner,
+            repo);
+
+        try
+        {
+            await client.Reaction.IssueComment.Create(owner, repo, commentId, new NewReaction(reactionType));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add reaction to comment: {Message}", ex.Message);
+            throw;
+        }
     }
 
     private string BuildReviewBody(ReviewResponse reviewResponse)

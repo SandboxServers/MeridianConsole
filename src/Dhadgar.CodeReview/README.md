@@ -9,7 +9,7 @@ This service uses a GitHub App to receive webhook events from pull requests and 
 ## Features
 
 - **🚀 GPU-Accelerated**: Leverages your RTX 4090 via Ollama for fast inference
-- **🤖 Automated Reviews**: Triggers on PR updates or via `/review` comment command
+- **🤖 Automated Reviews**: Triggers on PR updates or via `/dhadgar` comment command
 - **💻 Code-Specific**: Optimized for C#/.NET code review with security and best practices focus
 - **📦 Containerized**: Docker Compose deployment with all dependencies
 - **🔒 Standalone**: No dependencies on other Dhadgar services (uses its own SQLite database)
@@ -99,7 +99,7 @@ ngrok http 8080
 
 ### 5. Test It!
 
-Comment `/review` on any pull request where the app is installed.
+Comment `/dhadgar` on any pull request where the app is installed.
 
 ---
 
@@ -196,7 +196,7 @@ ngrok http 5000
 
 ### Manual Trigger
 
-Comment `/review` on any pull request to trigger a code review.
+Comment `/dhadgar` on any pull request to trigger a code review.
 
 ### Automatic Trigger
 

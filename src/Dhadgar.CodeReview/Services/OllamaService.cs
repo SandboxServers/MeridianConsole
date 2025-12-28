@@ -179,24 +179,44 @@ public class OllamaService
         {
             // Try to extract JSON from the response (LLM might include extra text)
             var jsonStart = llmResponse.IndexOf('{');
-            var jsonEnd = llmResponse.LastIndexOf('}');
 
-            if (jsonStart >= 0 && jsonEnd > jsonStart)
+            if (jsonStart >= 0)
             {
-                var json = llmResponse.Substring(jsonStart, jsonEnd - jsonStart + 1);
-                var reviewResponse = JsonSerializer.Deserialize<ReviewResponse>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                // Find the matching closing brace by tracking nesting level
+                int braceCount = 0;
+                int jsonEnd = -1;
 
-                if (reviewResponse != null)
+                for (int i = jsonStart; i < llmResponse.Length; i++)
                 {
-                    _logger.LogInformation("Parsed review response: {CommentCount} comments", reviewResponse.Comments.Count);
-                    return reviewResponse;
+                    if (llmResponse[i] == '{') braceCount++;
+                    else if (llmResponse[i] == '}')
+                    {
+                        braceCount--;
+                        if (braceCount == 0)
+                        {
+                            jsonEnd = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (jsonEnd > jsonStart)
+                {
+                    var json = llmResponse.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                    var reviewResponse = JsonSerializer.Deserialize<ReviewResponse>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                    if (reviewResponse != null)
+                    {
+                        _logger.LogInformation("Parsed review response: {CommentCount} comments", reviewResponse.Comments.Count);
+                        return reviewResponse;
+                    }
                 }
             }
 
-            _logger.LogWarning("Could not parse JSON from LLM response, returning empty review");
+            _logger.LogWarning("Could not find valid JSON object in LLM response");
             return new ReviewResponse
             {
                 Summary = "Failed to parse review response from LLM. Raw response:\n" + llmResponse

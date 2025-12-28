@@ -2,6 +2,7 @@ using Dhadgar.CodeReview.Models;
 using Dhadgar.CodeReview.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Octokit;
 using System.Text;
 using System.Text.Json;
 
@@ -15,18 +16,18 @@ namespace Dhadgar.CodeReview.Controllers;
 public class WebhookController : ControllerBase
 {
     private readonly GitHubService _gitHubService;
-    private readonly ReviewOrchestrator _reviewOrchestrator;
+    private readonly ReviewQueueService _queueService;
     private readonly ReviewOptions _reviewOptions;
     private readonly ILogger<WebhookController> _logger;
 
     public WebhookController(
         GitHubService gitHubService,
-        ReviewOrchestrator reviewOrchestrator,
+        ReviewQueueService queueService,
         IOptions<ReviewOptions> reviewOptions,
         ILogger<WebhookController> logger)
     {
         _gitHubService = gitHubService;
-        _reviewOrchestrator = reviewOrchestrator;
+        _queueService = queueService;
         _reviewOptions = reviewOptions.Value;
         _logger = logger;
     }
@@ -53,30 +54,12 @@ public class WebhookController : ControllerBase
         // Get event type
         var eventType = Request.Headers["X-GitHub-Event"].ToString();
 
-        _logger.LogInformation("Received GitHub webhook: {EventType}", eventType);
-
         try
         {
-            _logger.LogInformation("DEBUG: Deserializing payload for event type: {EventType}", eventType);
-            _logger.LogInformation("DEBUG: Raw payload body (first 500 chars): {Body}", body.Length > 500 ? body[..500] : body);
-
             var payload = JsonSerializer.Deserialize<GitHubWebhookPayload>(body, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
-
-            _logger.LogInformation("DEBUG: Payload deserialized. Null: {IsNull}", payload == null);
-
-            if (payload != null)
-            {
-                _logger.LogInformation(
-                    "DEBUG: Payload structure - Action: {Action}, PullRequest null: {PrNull}, Issue null: {IssueNull}, Comment null: {CommentNull}, Repository: {Repo}",
-                    payload.Action ?? "null",
-                    payload.PullRequest == null,
-                    payload.Issue == null,
-                    payload.Comment == null,
-                    payload.Repository?.FullName ?? "null");
-            }
 
             if (payload == null)
             {
@@ -86,18 +69,16 @@ public class WebhookController : ControllerBase
             // Handle pull request events
             if (eventType == "pull_request")
             {
-                _logger.LogInformation("DEBUG: Routing to HandlePullRequestEvent");
                 return await HandlePullRequestEvent(payload, cancellationToken);
             }
 
             // Handle issue comment events (for /dhadgar command)
             if (eventType == "issue_comment")
             {
-                _logger.LogInformation("DEBUG: Routing to HandleIssueCommentEvent");
                 return await HandleIssueCommentEvent(payload, cancellationToken);
             }
 
-            _logger.LogInformation("Ignoring event type: {EventType}", eventType);
+            // Silent ignore for other event types
             return Ok("Event ignored");
         }
         catch (Exception ex)
@@ -139,57 +120,34 @@ public class WebhookController : ControllerBase
         GitHubWebhookPayload payload,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("DEBUG: HandleIssueCommentEvent - Action: {Action}", payload.Action);
-
+        // Silent checks - only log when /dhadgar is found
         if (payload.Action != "created")
         {
-            _logger.LogInformation("DEBUG: Skipping - action is not 'created': {Action}", payload.Action);
             return Ok("Not a created comment");
         }
 
-        _logger.LogInformation(
-            "DEBUG: Checking payload - Comment null: {CommentNull}, Repository null: {RepoNull}, Issue null: {IssueNull}",
-            payload.Comment == null,
-            payload.Repository == null,
-            payload.Issue == null);
-
         if (payload.Comment == null || payload.Repository == null || payload.Issue == null)
         {
-            _logger.LogWarning("DEBUG: Missing required payload data");
             return BadRequest("Missing comment, repository, or issue data");
         }
-
-        _logger.LogInformation(
-            "DEBUG: Comment user - Login: {Login}, Type: {Type}",
-            payload.Comment.User?.Login ?? "null",
-            payload.Comment.User?.Type ?? "null");
 
         // Ignore comments from bots
         if (payload.Comment.User?.Type == "Bot")
         {
-            _logger.LogInformation("Ignoring comment from bot: {Login}", payload.Comment.User.Login);
             return Ok("Ignored bot comment");
         }
-
-        _logger.LogInformation(
-            "DEBUG: Issue data - Number: {Number}, PullRequestRef null: {PrRefNull}",
-            payload.Issue.Number,
-            payload.Issue.PullRequestRef == null);
 
         // Check if this is a pull request (issues and PRs share the same comment endpoint)
         if (payload.Issue.PullRequestRef == null)
         {
-            _logger.LogWarning("DEBUG: Issue #{Number} does not have PullRequestRef - not a PR comment", payload.Issue.Number);
             return Ok("Not a pull request comment");
         }
 
         // Check for /dhadgar command
         var commentBody = payload.Comment.Body?.Trim() ?? "";
-        _logger.LogInformation("DEBUG: Comment body: '{Body}'", commentBody);
 
         if (!commentBody.Equals("/dhadgar", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogInformation("DEBUG: Comment body '{Body}' does not match '/dhadgar'", commentBody);
             return Ok("Not a dhadgar command");
         }
 
@@ -199,14 +157,34 @@ public class WebhookController : ControllerBase
             payload.Issue.Number,
             payload.Repository.FullName);
 
+        // Add rocket reaction to acknowledge the command
+        var parts = payload.Repository.FullName?.Split('/');
+        if (parts != null && parts.Length == 2)
+        {
+            try
+            {
+                await _gitHubService.AddReactionToCommentAsync(
+                    parts[0],
+                    parts[1],
+                    payload.Comment.Id,
+                    ReactionType.Rocket,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to add rocket reaction to comment");
+            }
+        }
+
         // Create PR payload structure for triggering review
         var prPayload = new GitHubWebhookPayload
         {
-            PullRequest = new PullRequest
+            PullRequest = new Models.PullRequest
             {
                 Number = payload.Issue.Number
             },
-            Repository = payload.Repository
+            Repository = payload.Repository,
+            Comment = payload.Comment // Pass comment for reaction tracking
         };
 
         await TriggerReviewAsync(prPayload, "comment", cancellationToken);
@@ -235,15 +213,6 @@ public class WebhookController : ControllerBase
         var owner = parts[0];
         var repo = parts[1];
 
-        // Check if we already reviewed this recently
-        if (await _reviewOrchestrator.HasRecentReviewAsync(owner, repo, payload.PullRequest.Number))
-        {
-            _logger.LogInformation(
-                "Skipping review for PR #{Number} - already reviewed recently",
-                payload.PullRequest.Number);
-            return;
-        }
-
         var request = new ReviewRequest
         {
             Owner = owner,
@@ -251,24 +220,32 @@ public class WebhookController : ControllerBase
             PullRequestNumber = payload.PullRequest.Number,
             PullRequestTitle = payload.PullRequest.Title,
             PullRequestBody = payload.PullRequest.Body,
-            TriggerSource = triggerSource
+            TriggerSource = triggerSource,
+            TriggerCommentId = payload.Comment?.Id
         };
 
-        // Trigger review asynchronously in a new scope (don't wait for completion)
-        _ = Task.Run(async () =>
+        // Post an acknowledgment comment
+        long? statusCommentId = null;
+        try
         {
-            try
-            {
-                // Create a new scope for the background task to get fresh DbContext
-                using var scope = HttpContext.RequestServices.CreateScope();
-                var orchestrator = scope.ServiceProvider.GetRequiredService<ReviewOrchestrator>();
+            var queuePosition = _queueService.GetQueueLength() + 1;
+            var ackMessage = queuePosition > 1
+                ? $"🚀 **Review queued** (position {queuePosition})\n\nYour review will start shortly."
+                : "🚀 **Review starting...**\n\nAnalyzing changes with the Council of Greybeards.";
 
-                await orchestrator.PerformReviewAsync(request, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error performing review for PR #{Number}", payload.PullRequest.Number);
-            }
-        }, cancellationToken);
+            statusCommentId = await _gitHubService.PostCommentAsync(
+                owner,
+                repo,
+                payload.PullRequest.Number,
+                ackMessage,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to post acknowledgment comment");
+        }
+
+        // Enqueue the review request
+        await _queueService.EnqueueReviewAsync(request, statusCommentId);
     }
 }

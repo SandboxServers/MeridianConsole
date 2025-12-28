@@ -161,7 +161,7 @@ ngrok http 8080
 ### 5. Test
 
 1. Open a PR in your repository
-2. Comment: `/review`
+2. Comment: `/dhadgar`
 3. Watch the magic happen! ✨
 
 ## 📊 Container Architecture
@@ -403,7 +403,7 @@ Your deployment is successful when:
 
 ## 🚀 Next Steps After Deployment
 
-1. **Test on a real PR** - Comment `/review` on a test PR
+1. **Test on a real PR** - Comment `/dhadgar` on a test PR
 2. **Monitor performance** - Watch GPU usage and review times
 3. **Tune prompts** - Edit `OllamaService.cs` to improve reviews
 4. **Adjust model size** - Try 7B for speed or stick with 33B for quality
