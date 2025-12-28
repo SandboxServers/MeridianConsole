@@ -13,6 +13,26 @@ Complete documentation for setting up a free AI-powered PR review bot using PR-A
 
 **Cost:** $0.00 (uses free tier models)
 
+### Why `/spirit` instead of `/review`?
+
+This bot uses the **`/spirit`** command instead of PR-Agent's standard `/review` command to avoid conflicts with other PR review bots:
+
+- **Qodo SaaS bot** (the commercial version of PR-Agent) uses `/review`
+- **Other PR-Agent instances** use `/review`
+- **spirit-of-the-diff** uses `/spirit` for unique identity
+
+**How it works:**
+1. User comments `/spirit` on a PR
+2. GitHub Actions workflow triggers
+3. Workflow runs PR-Agent CLI with explicit `review` command
+4. spirit-of-the-diff bot posts the review
+
+This allows you to run multiple review bots simultaneously without command conflicts. For example:
+- Qodo SaaS for automatic reviews on every commit (trigger: `/review`)
+- spirit-of-the-diff for manual deep-dive reviews (trigger: `/spirit`)
+
+**Technical Implementation:** The workflow listens for `/spirit` comments but invokes PR-Agent's internal `review` command via CLI (`pr-agent --pr_url=... review`), bypassing the event-based comment parsing that would expect `/review`.
+
 ---
 
 ## Prerequisites
@@ -569,9 +589,13 @@ magic number (26) for the expected length, making it fragile.
 - Use spirit-of-the-diff for manual deep-dives
 
 **From Qodo SaaS:**
-- Keep Qodo for automatic reviews
-- Use different command (`/spirit` vs `/review`)
-- Both can run on same PRs
+- Keep Qodo for automatic reviews (responds to `/review`)
+- Use spirit-of-the-diff for manual reviews (responds to `/spirit`)
+- Both can run on same PRs without conflicts
+- Example workflow:
+  1. Push commits → Qodo automatically reviews
+  2. Want deeper analysis → comment `/spirit` → spirit-of-the-diff reviews
+  3. Both bots maintain separate review threads
 
 **From GitHub Copilot:**
 - Copilot is IDE-integrated (different use case)
@@ -668,12 +692,37 @@ github_action_config.auto_improve: "false"
 2. ❌ `32000` tokens → ✅ `262144` tokens
 3. ❌ Missing provider prefix → ✅ `openrouter/`
 4. ❌ `OPENAI_KEY` → ✅ `OPENROUTER_API_KEY` → ✅ `OPENROUTER.KEY`
+5. ❌ `.pr_agent.toml` file → ✅ Environment variables only
+6. ❌ `/review` command → ✅ `/spirit` command
+
+**Command evolution:**
+1. **Initial approach:** Used `/review` with GitHub Action
+   - Problem: PR-Agent saw `/review` in event payload and processed it
+   - Issue: Conflicts with Qodo SaaS bot (also uses `/review`)
+
+2. **Attempted fix:** Changed trigger to `/spirit`
+   - Problem: PR-Agent received "Unknown command: spirit"
+   - Issue: PR-Agent only recognizes built-in commands
+
+3. **Failed workarounds:**
+   - ❌ Tried `GITHUB_ACTION` env var (not supported in Action)
+   - ❌ Tried modifying event payload (Docker mounts before modification)
+   - ❌ Tried posting new `/review` comment (PR-Agent still sees original)
+
+4. **Final solution:** PR-Agent CLI instead of GitHub Action
+   - Workflow triggers on `/spirit` comment
+   - Runs `pr-agent --pr_url=... review` directly via CLI
+   - Bypasses event parsing entirely
+   - Requires `GITHUB.USER_TOKEN` (not `GITHUB_TOKEN`)
 
 **Lessons learned:**
 - PR-Agent uses custom settings format (`.KEY` not `_KEY`)
 - LiteLLM requires provider prefixes for routing
 - Custom models need `config.custom_model_max_tokens`
 - Workflow must be in default branch for `issue_comment` trigger
+- **PR-Agent CLI allows custom triggers that GitHub Action doesn't support**
+- **Environment variable naming:** `GITHUB.USER_TOKEN` for CLI, `GITHUB_TOKEN` for Action
+- **TOML configs can cause issues** - prefer environment variables for CI/CD
 
 **Cost:**
 - Total setup time: ~2 hours (with debugging)
