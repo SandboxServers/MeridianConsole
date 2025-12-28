@@ -17,9 +17,11 @@
   <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
   <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
 </ItemGroup>
-  
+
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <!-- Security analyzer for authentication service -->
+    <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>
 </Project>
 

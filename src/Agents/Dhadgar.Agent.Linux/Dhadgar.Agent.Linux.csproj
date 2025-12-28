@@ -3,10 +3,21 @@
     <AssemblyName>Dhadgar.Agent.Linux</AssemblyName>
     <RootNamespace>Dhadgar.Agent.Linux</RootNamespace>
     <OutputType>Exe</OutputType>
+
+    <!-- Agent code runs on customer hardware - enforce strict security -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisMode>All</AnalysisMode>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
     <ProjectReference Include="..\..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Security analyzers - critical for customer-hosted code -->
+    <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>
 </Project>
