@@ -75,13 +75,14 @@ jobs:
         run: dotnet restore
 
       - name: Build with analyzers (warnings = errors)
+        id: build
         run: dotnet build --configuration Release --no-restore
         continue-on-error: true
         env:
           CI: 'true'  # Enables TreatWarningsAsErrors in Directory.Build.props
 
       - name: Check for security warnings
-        if: failure()
+        if: steps.build.outcome == 'failure'
         run: |
           echo "::error::Build failed due to analyzer warnings. Please fix security/quality issues."
           echo "Run 'dotnet build' locally to see detailed warnings."
