@@ -1,0 +1,9 @@
+# Variables for build stage
+variables:
+  # Helm chart configuration
+  helmChartName: meridian-console
+  helmChartPath: deploy/kubernetes/helm/meridian-console
+  helmVersion: 3.13.0
+
+  # ACR configuration
+  acrName: meridianconsoleacr
