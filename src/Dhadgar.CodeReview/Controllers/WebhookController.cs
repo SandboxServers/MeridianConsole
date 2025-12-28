@@ -73,7 +73,7 @@ public class WebhookController : ControllerBase
                 return await HandlePullRequestEvent(payload, cancellationToken);
             }
 
-            // Handle issue comment events (for /review command)
+            // Handle issue comment events (for /dhadgar command)
             if (eventType == "issue_comment")
             {
                 return await HandleIssueCommentEvent(payload, cancellationToken);
@@ -121,15 +121,30 @@ public class WebhookController : ControllerBase
         GitHubWebhookPayload payload,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation("DEBUG: HandleIssueCommentEvent - Action: {Action}", payload.Action);
+
         if (payload.Action != "created")
         {
+            _logger.LogInformation("DEBUG: Skipping - action is not 'created': {Action}", payload.Action);
             return Ok("Not a created comment");
         }
 
+        _logger.LogInformation(
+            "DEBUG: Checking payload - Comment null: {CommentNull}, Repository null: {RepoNull}, Issue null: {IssueNull}",
+            payload.Comment == null,
+            payload.Repository == null,
+            payload.Issue == null);
+
         if (payload.Comment == null || payload.Repository == null || payload.Issue == null)
         {
+            _logger.LogWarning("DEBUG: Missing required payload data");
             return BadRequest("Missing comment, repository, or issue data");
         }
+
+        _logger.LogInformation(
+            "DEBUG: Comment user - Login: {Login}, Type: {Type}",
+            payload.Comment.User?.Login ?? "null",
+            payload.Comment.User?.Type ?? "null");
 
         // Ignore comments from bots
         if (payload.Comment.User?.Type == "Bot")
@@ -138,21 +153,30 @@ public class WebhookController : ControllerBase
             return Ok("Ignored bot comment");
         }
 
+        _logger.LogInformation(
+            "DEBUG: Issue data - Number: {Number}, PullRequestRef null: {PrRefNull}",
+            payload.Issue.Number,
+            payload.Issue.PullRequestRef == null);
+
         // Check if this is a pull request (issues and PRs share the same comment endpoint)
         if (payload.Issue.PullRequestRef == null)
         {
+            _logger.LogWarning("DEBUG: Issue #{Number} does not have PullRequestRef - not a PR comment", payload.Issue.Number);
             return Ok("Not a pull request comment");
         }
 
-        // Check for /review command
+        // Check for /dhadgar command
         var commentBody = payload.Comment.Body?.Trim() ?? "";
-        if (!commentBody.Equals("/review", StringComparison.OrdinalIgnoreCase))
+        _logger.LogInformation("DEBUG: Comment body: '{Body}'", commentBody);
+
+        if (!commentBody.Equals("/dhadgar", StringComparison.OrdinalIgnoreCase))
         {
-            return Ok("Not a review command");
+            _logger.LogInformation("DEBUG: Comment body '{Body}' does not match '/dhadgar'", commentBody);
+            return Ok("Not a dhadgar command");
         }
 
         _logger.LogInformation(
-            "Review command triggered by {User} on PR #{Number} in {Repo}",
+            "Dhadgar review command triggered by {User} on PR #{Number} in {Repo}",
             payload.Comment.User?.Login,
             payload.Issue.Number,
             payload.Repository.FullName);
