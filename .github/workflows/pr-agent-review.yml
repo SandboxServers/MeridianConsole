@@ -1,8 +1,6 @@
-name: PR-Agent Review
+name: PR-Agent Review (Manual)
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   issue_comment:
     types: [created]
 
@@ -14,7 +12,8 @@ permissions:
 jobs:
   pr-agent:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/')) }}
+    # Only run when someone comments with /review command on a PR
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/review') }}
     steps:
       - name: PR-Agent action
         uses: qodo-ai/pr-agent@main
@@ -26,7 +25,5 @@ jobs:
           OPENAI.MODEL: "mistralai/devstral-2512:free"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional: customize behavior
-          PR_REVIEWER.AUTO_REVIEW: "true"
+          PR_REVIEWER.AUTO_REVIEW: "false"
           PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false"
-          # Enable review on PR updates (synchronize events)
-          GITHUB_ACTION.AUTO_REVIEW: "true"
