@@ -22,34 +22,19 @@ jobs:
           app-id: ${{ secrets.SPIRIT_APP_ID }}
           private-key: ${{ secrets.SPIRIT_PRIVATE_KEY }}
 
-      - name: Rewrite event payload to use /review command
-        run: |
-          # PR-Agent reads the GitHub event payload to get the comment body
-          # We need to rewrite /spirit to /review so PR-Agent recognizes it
-          EVENT_PATH="${{ github.event_path }}"
-
-          # Read current event payload
-          EVENT_JSON=$(cat "$EVENT_PATH")
-
-          # Replace /spirit with /review in the comment body
-          MODIFIED_JSON=$(echo "$EVENT_JSON" | jq '.comment.body = (.comment.body | sub("^/spirit"; "/review"))')
-
-          # Write modified payload back
-          echo "$MODIFIED_JSON" > "$EVENT_PATH"
-
-          echo "Modified comment body in event payload from /spirit to /review"
-
-      - name: PR-Agent action
-        uses: qodo-ai/pr-agent@main
+      - name: Run PR-Agent review via CLI
         env:
-          # OpenRouter configuration (PR-Agent reads OPENROUTER.KEY and sets OPENROUTER_API_KEY internally)
-          OPENROUTER.KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          # Mistral Devstral - Code-optimized, FREE (LiteLLM requires openrouter/ prefix)
-          config.model: "openrouter/mistralai/devstral-2512:free"
-          config.fallback_models: '["openrouter/mistralai/mistral-7b-instruct:free"]'
-          config.custom_model_max_tokens: "262144"
-          # Use spirit-of-the-diff bot token
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
-          # Optional: customize behavior
-          PR_REVIEWER.AUTO_REVIEW: "false"
-          PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false"
+        run: |
+          # Install PR-Agent
+          pip install pr-agent
+
+          # Run review command directly with explicit PR number
+          pr-agent review \
+            --pr-url="https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}" \
+            --config.model="openrouter/mistralai/devstral-2512:free" \
+            --config.fallback_models='["openrouter/mistralai/mistral-7b-instruct:free"]' \
+            --config.custom_model_max_tokens="262144" \
+            --pr_reviewer.auto_review=false \
+            --pr_reviewer.require_tests_review=false
