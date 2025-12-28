@@ -28,8 +28,9 @@ jobs:
           # OpenRouter configuration
           OPENAI_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI.API_BASE: "https://openrouter.ai/api/v1"
-          # Mistral Devstral - Code-optimized, FREE
-          OPENAI.MODEL: "mistralai/devstral-2512:free"
+          # Mistral Devstral - Code-optimized, FREE (correct syntax: config.model not OPENAI.MODEL)
+          config.model: "mistralai/devstral-2512:free"
+          config.fallback_models: '["mistralai/mistral-7b-instruct:free"]'
           # Use spirit-of-the-diff bot token
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           # Optional: customize behavior
