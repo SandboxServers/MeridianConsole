@@ -75,7 +75,7 @@ public class GitHubService
         // Generate JWT token for GitHub App
         _logger.LogInformation("Creating JWT token with AppId: {AppId}", _options.AppId);
         var generator = new GitHubJwtFactory(
-            new StringPrivateKeySource(_privateKey),
+            new FilePrivateKeySource(_options.PrivateKeyPath),  // Use file path directly instead of string
             new GitHubJwtFactoryOptions
             {
                 AppIntegrationId = int.Parse(_options.AppId),
