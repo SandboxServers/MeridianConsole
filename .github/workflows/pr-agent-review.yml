@@ -1,0 +1,30 @@
+name: PR-Agent Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  pr-agent:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/')) }}
+    steps:
+      - name: PR-Agent action
+        uses: qodo-ai/pr-agent@main
+        env:
+          # OpenRouter configuration
+          OPENAI_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI.API_BASE: "https://openrouter.ai/api/v1"
+          # Mistral Devstral - Code-optimized, FREE
+          OPENAI.MODEL: "mistralai/devstral-2512:free"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: customize behavior
+          PR_REVIEWER.AUTO_REVIEW: "true"
+          PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false"

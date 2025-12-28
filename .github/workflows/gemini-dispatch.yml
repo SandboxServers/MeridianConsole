@@ -1,17 +1,21 @@
-name: '🔀 Gemini Dispatch'
+name: '🔀 Gemini Dispatch (DISABLED - quota issues)'
 
+# DISABLED: Gemini free tier has severe quota limits
+# Re-enable by uncommenting the 'on:' triggers below
 on:
-  pull_request:
-    types:
-      - 'opened'
-      - 'synchronize'
-      - 'reopened'
-  pull_request_review_comment:
-    types:
-      - 'created'
-  issue_comment:
-    types:
-      - 'created'
+  workflow_dispatch:  # Manual trigger only
+# Disabled automatic triggers (uncomment to re-enable):
+#  pull_request:
+#    types:
+#      - 'opened'
+#      - 'synchronize'
+#      - 'reopened'
+#  pull_request_review_comment:
+#    types:
+#      - 'created'
+#  issue_comment:
+#    types:
+#      - 'created'
 
 defaults:
   run:

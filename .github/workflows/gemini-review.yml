@@ -1,5 +1,6 @@
-name: '🔎 Gemini Review'
+name: '🔎 Gemini Review (DISABLED - quota issues)'
 
+# DISABLED: Called by gemini-dispatch which is also disabled
 on:
   workflow_call:
     inputs:
