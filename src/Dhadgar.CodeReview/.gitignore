@@ -1,0 +1,14 @@
+# Secrets directory
+secrets/
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# User secrets
+*.user
+
+# Logs
+logs/
+*.log

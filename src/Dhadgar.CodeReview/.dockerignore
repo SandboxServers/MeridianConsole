@@ -1,0 +1,31 @@
+# Build artifacts
+bin/
+obj/
+out/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+logs/
+*.log
+
+# Secrets
+secrets/
+*.pem
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Documentation
+README.md
+SETUP.md

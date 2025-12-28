@@ -28,7 +28,16 @@
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-  <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+
+    <!-- CodeReview Service -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+    <PackageVersion Include="Octokit" Version="13.0.1" />
+    <PackageVersion Include="GitHubJwt" Version="0.0.6" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="1.2.55" />
 
       <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
       <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0" />
