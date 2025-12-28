@@ -40,20 +40,18 @@ builder.Services.AddHttpClient<OllamaService>();
 
 var app = builder.Build();
 
-// Apply EF Core migrations automatically in Development
-if (app.Environment.IsDevelopment())
+// Apply EF Core migrations automatically on startup
+try
 {
-    try
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<CodeReviewDbContext>();
-        db.Database.Migrate();
-        Log.Information("Database migrations applied successfully");
-    }
-    catch (Exception ex)
-    {
-        Log.Warning(ex, "Database migration failed (dev)");
-    }
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<CodeReviewDbContext>();
+    db.Database.Migrate();
+    Log.Information("Database migrations applied successfully");
+}
+catch (Exception ex)
+{
+    Log.Error(ex, "Database migration failed - service may not function correctly");
+    throw; // Fail fast if database can't be initialized
 }
 
 // Configure middleware
