@@ -58,6 +58,7 @@ public class WebhookController : ControllerBase
         try
         {
             _logger.LogInformation("DEBUG: Deserializing payload for event type: {EventType}", eventType);
+            _logger.LogInformation("DEBUG: Raw payload body (first 500 chars): {Body}", body.Length > 500 ? body[..500] : body);
 
             var payload = JsonSerializer.Deserialize<GitHubWebhookPayload>(body, new JsonSerializerOptions
             {
@@ -65,6 +66,17 @@ public class WebhookController : ControllerBase
             });
 
             _logger.LogInformation("DEBUG: Payload deserialized. Null: {IsNull}", payload == null);
+
+            if (payload != null)
+            {
+                _logger.LogInformation(
+                    "DEBUG: Payload structure - Action: {Action}, PullRequest null: {PrNull}, Issue null: {IssueNull}, Comment null: {CommentNull}, Repository: {Repo}",
+                    payload.Action ?? "null",
+                    payload.PullRequest == null,
+                    payload.Issue == null,
+                    payload.Comment == null,
+                    payload.Repository?.FullName ?? "null");
+            }
 
             if (payload == null)
             {
