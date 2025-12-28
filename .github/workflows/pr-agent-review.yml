@@ -33,6 +33,8 @@ jobs:
           config.custom_model_max_tokens: "262144"
           # Use spirit-of-the-diff bot token
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          # Tell PR-Agent to run review command (triggered by /spirit in GitHub)
+          GITHUB_ACTION: "review"
           # Optional: customize behavior
           PR_REVIEWER.AUTO_REVIEW: "false"
           PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false"
