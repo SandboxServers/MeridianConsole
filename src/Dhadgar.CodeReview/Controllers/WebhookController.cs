@@ -254,12 +254,16 @@ public class WebhookController : ControllerBase
             TriggerSource = triggerSource
         };
 
-        // Trigger review asynchronously (don't wait for completion)
+        // Trigger review asynchronously in a new scope (don't wait for completion)
         _ = Task.Run(async () =>
         {
             try
             {
-                await _reviewOrchestrator.PerformReviewAsync(request, cancellationToken);
+                // Create a new scope for the background task to get fresh DbContext
+                using var scope = HttpContext.RequestServices.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ReviewOrchestrator>();
+
+                await orchestrator.PerformReviewAsync(request, cancellationToken);
             }
             catch (Exception ex)
             {
