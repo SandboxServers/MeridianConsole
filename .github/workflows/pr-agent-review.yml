@@ -25,7 +25,7 @@ jobs:
       - name: Run PR-Agent review via CLI
         env:
           OPENROUTER.KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GITHUB.USER_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           # Install PR-Agent
           pip install pr-agent
