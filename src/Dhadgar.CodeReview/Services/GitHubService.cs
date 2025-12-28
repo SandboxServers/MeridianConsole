@@ -63,9 +63,15 @@ public class GitHubService
             }
 
             _privateKey = await File.ReadAllTextAsync(_options.PrivateKeyPath);
+            _logger.LogInformation(
+                "Loaded GitHub App private key ({Length} chars, starts with: {Start}, ends with: {End})",
+                _privateKey.Length,
+                _privateKey[..Math.Min(50, _privateKey.Length)],
+                _privateKey[Math.Max(0, _privateKey.Length - 50)..]);
         }
 
         // Generate JWT token for GitHub App
+        _logger.LogInformation("Creating JWT token with AppId: {AppId}", _options.AppId);
         var generator = new GitHubJwtFactory(
             new StringPrivateKeySource(_privateKey),
             new GitHubJwtFactoryOptions
@@ -74,7 +80,9 @@ public class GitHubService
                 ExpirationSeconds = 600 // 10 minutes (max allowed)
             });
 
+        _logger.LogInformation("Generating JWT token...");
         var jwtToken = generator.CreateEncodedJwtToken();
+        _logger.LogInformation("JWT token generated successfully");
 
         // Create client with JWT
         var appClient = new GitHubClient(new ProductHeaderValue("DhadgarCodeReview"))
