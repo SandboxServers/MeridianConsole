@@ -146,11 +146,11 @@ Each service MUST have:
 **BAD - Cross-service ProjectReference:**
 ```xml
 <!-- In Dhadgar.Servers.csproj -->
-<ProjectReference Include="..\Dhadgar.Identity\Dhadgar.Identity.csproj" />
+<ProjectReference Include="..\\Dhadgar.Identity\\Dhadgar.Identity.csproj" />
 ```
 **GOOD - Use Contracts:**
 ```xml
-<ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+<ProjectReference Include="..\\Shared\\Dhadgar.Contracts\\Dhadgar.Contracts.csproj" />
 ```
 
 **BAD - Direct database access:**

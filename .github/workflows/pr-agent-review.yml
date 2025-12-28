@@ -28,3 +28,5 @@ jobs:
           # Optional: customize behavior
           PR_REVIEWER.AUTO_REVIEW: "true"
           PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false"
+          # Enable review on PR updates (synchronize events)
+          GITHUB_ACTION.AUTO_REVIEW: "true"
