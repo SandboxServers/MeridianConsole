@@ -15,6 +15,13 @@ jobs:
     # Only run when someone comments with /review command on a PR
     if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/review') }}
     steps:
+      - name: Generate token for spirit-of-the-diff
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.SPIRIT_APP_ID }}
+          private-key: ${{ secrets.SPIRIT_PRIVATE_KEY }}
+
       - name: PR-Agent action
         uses: qodo-ai/pr-agent@main
         env:
@@ -23,7 +30,8 @@ jobs:
           OPENAI.API_BASE: "https://openrouter.ai/api/v1"
           # Mistral Devstral - Code-optimized, FREE
           OPENAI.MODEL: "mistralai/devstral-2512:free"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use spirit-of-the-diff bot token
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           # Optional: customize behavior
           PR_REVIEWER.AUTO_REVIEW: "false"
           PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false"
