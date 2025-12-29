@@ -229,8 +229,8 @@ public class MiddlewareUnitTests
     {
         var settings = new[]
         {
-            new KeyValuePair<string, string?>("Cors:AllowedOrigins:0", "https://panel.meridian.console"),
-            new KeyValuePair<string, string?>("Cors:AllowedOrigins:1", "https://shop.meridian.console")
+            new KeyValuePair<string, string?>("Cors:AllowedOrigins:0", "https://panel.meridianconsole.com"),
+            new KeyValuePair<string, string?>("Cors:AllowedOrigins:1", "https://meridianconsole.com")
         };
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(settings)
@@ -244,8 +244,8 @@ public class MiddlewareUnitTests
         var policy = options.Value.GetPolicy(CorsConfiguration.PolicyName);
 
         Assert.NotNull(policy);
-        Assert.Contains("https://panel.meridian.console", policy!.Origins);
-        Assert.Contains("https://shop.meridian.console", policy.Origins);
+        Assert.Contains("https://panel.meridianconsole.com", policy!.Origins);
+        Assert.Contains("https://meridianconsole.com", policy.Origins);
         Assert.True(policy.SupportsCredentials);
     }
 

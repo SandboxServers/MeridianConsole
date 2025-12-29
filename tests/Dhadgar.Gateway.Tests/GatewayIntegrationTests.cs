@@ -20,7 +20,7 @@ public class GatewayWebApplicationFactory : WebApplicationFactory<Program>
         {
             var settings = new[]
             {
-                new KeyValuePair<string, string?>("Cors:AllowedOrigins:0", "https://panel.meridian.console")
+                new KeyValuePair<string, string?>("Cors:AllowedOrigins:0", "https://panel.meridianconsole.com")
             };
             config.AddInMemoryCollection(settings);
         });

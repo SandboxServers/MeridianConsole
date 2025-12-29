@@ -25,23 +25,23 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave14Routes()
+    public void ReverseProxyShouldHave15Routes()
     {
-        // 12 backend services + console hub route + agents route = 14 total
+        // 12 backend services + Better Auth + console hub route + agents route = 15 total
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(14, routes.Count);
+        Assert.Equal(15, routes.Count);
     }
 
     [Fact]
-    public void ReverseProxyShouldHave12Clusters()
+    public void ReverseProxyShouldHave13Clusters()
     {
-        // 12 backend services (agents uses nodes cluster)
+        // 12 backend services + Better Auth (agents uses nodes cluster)
         var clustersSection = _configuration.GetSection("ReverseProxy:Clusters");
         var clusters = clustersSection.GetChildren().ToList();
 
-        Assert.Equal(12, clusters.Count);
+        Assert.Equal(13, clusters.Count);
     }
 
     [Theory]
@@ -57,6 +57,7 @@ public class RouteConfigurationTests
     [InlineData("firewall", "5100")]
     [InlineData("secrets", "5110")]
     [InlineData("discord", "5120")]
+    [InlineData("betterauth", "5130")]
     public void ClusterShouldHaveCorrectPort(string clusterName, string expectedPort)
     {
         var address = _configuration[$"ReverseProxy:Clusters:{clusterName}:Destinations:d1:Address"];
@@ -66,6 +67,7 @@ public class RouteConfigurationTests
 
     [Theory]
     [InlineData("identity-route", "/api/v1/identity/{**catch-all}")]
+    [InlineData("betterauth-route", "/api/v1/betterauth/{**catch-all}")]
     [InlineData("servers-route", "/api/v1/servers/{**catch-all}")]
     [InlineData("console-hub-route", "/hubs/console/{**catch-all}")]
     public void RouteShouldHaveCorrectPathPattern(string routeName, string expectedPath)
