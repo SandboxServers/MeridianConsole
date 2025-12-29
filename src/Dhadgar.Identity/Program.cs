@@ -42,6 +42,9 @@ builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<TokenExchangeService>();
 builder.Services.AddScoped<ILinkedAccountService, LinkedAccountService>();
+builder.Services.AddScoped<OrganizationService>();
+builder.Services.AddScoped<MembershipService>();
+builder.Services.AddScoped<OrganizationSwitchService>();
 
 var authenticationBuilder = builder.Services.AddAuthentication(options =>
 {
@@ -179,6 +182,8 @@ app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", stat
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle)
     .RequireRateLimiting("token-exchange");
 OAuthEndpoints.Map(app);
+OrganizationEndpoints.Map(app);
+MembershipEndpoints.Map(app);
 
 app.Run();
 
