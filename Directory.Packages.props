@@ -12,7 +12,12 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageVersion Include="OpenIddict.AspNetCore" Version="6.0.0" />
+    <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="6.0.0" />
+    <PackageVersion Include="OpenIddict.Validation.AspNetCore" Version="6.0.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.7.27" />
 
     <!-- Messaging -->
     <PackageVersion Include="MassTransit" Version="8.3.6" />

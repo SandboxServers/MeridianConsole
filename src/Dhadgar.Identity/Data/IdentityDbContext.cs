@@ -1,6 +1,7 @@
 using Dhadgar.Identity.Data.Configuration;
 using Dhadgar.Identity.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using OpenIddict.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Data;
 
@@ -27,6 +28,21 @@ public sealed class IdentityDbContext : DbContext
         modelBuilder.ApplyConfiguration(new LinkedAccountConfiguration());
         modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
         modelBuilder.ApplyConfiguration(new ClaimDefinitionConfiguration());
+
+        modelBuilder.UseOpenIddict();
+
+        if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            modelBuilder.Entity<LinkedAccount>().OwnsOne(la => la.ProviderMetadata, metadata =>
+            {
+                metadata.Ignore(m => m.ExtraData);
+            });
+
+            modelBuilder.Entity<Organization>().OwnsOne(o => o.Settings, settings =>
+            {
+                settings.Ignore(s => s.CustomSettings);
+            });
+        }
 
         SeedClaimDefinitions(modelBuilder);
     }
