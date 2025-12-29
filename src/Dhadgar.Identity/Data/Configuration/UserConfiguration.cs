@@ -1,0 +1,44 @@
+using Dhadgar.Identity.Data.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Dhadgar.Identity.Data.Configuration;
+
+public sealed class UserConfiguration : IEntityTypeConfiguration<User>
+{
+    public void Configure(EntityTypeBuilder<User> builder)
+    {
+        builder.ToTable("users");
+
+        builder.HasKey(u => u.Id);
+
+        builder.Property(u => u.ExternalAuthId)
+            .IsRequired()
+            .HasMaxLength(255);
+
+        builder.Property(u => u.Email)
+            .IsRequired()
+            .HasMaxLength(320);
+
+        builder.Property(u => u.Version)
+            .IsRowVersion();
+
+        builder.HasIndex(u => u.ExternalAuthId)
+            .IsUnique()
+            .HasDatabaseName("ix_users_external_auth_id");
+
+        builder.HasIndex(u => u.Email)
+            .HasDatabaseName("ix_users_email");
+
+        builder.HasIndex(u => u.DeletedAt)
+            .HasFilter("\"DeletedAt\" IS NULL")
+            .HasDatabaseName("ix_users_active");
+
+        builder.HasOne(u => u.PreferredOrganization)
+            .WithMany()
+            .HasForeignKey(u => u.PreferredOrganizationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasQueryFilter(u => u.DeletedAt == null);
+    }
+}
