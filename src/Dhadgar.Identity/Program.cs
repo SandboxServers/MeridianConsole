@@ -1,10 +1,13 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
 using Dhadgar.Identity;
+using Dhadgar.Identity.Authentication;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Endpoints;
+using Dhadgar.Identity.OAuth;
 using Dhadgar.Identity.Options;
 using Dhadgar.Identity.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using StackExchange.Redis;
@@ -38,6 +41,29 @@ builder.Services.AddSingleton<IExchangeTokenReplayStore, RedisExchangeTokenRepla
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<TokenExchangeService>();
+builder.Services.AddScoped<ILinkedAccountService, LinkedAccountService>();
+
+var authenticationBuilder = builder.Services.AddAuthentication(options =>
+{
+    options.DefaultSignInScheme = AuthSchemes.External;
+});
+
+authenticationBuilder.AddCookie(AuthSchemes.External, options =>
+{
+    options.Cookie.Name = "__Host-dhadgar-external";
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+    options.SlidingExpiration = false;
+});
+
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    OAuthProviderRegistry.ConfigureMockProviders(authenticationBuilder, AuthSchemes.External);
+}
+else
+{
+    OAuthProviderRegistry.ConfigureProviders(authenticationBuilder, builder.Configuration, builder.Environment, AuthSchemes.External);
+}
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -117,8 +143,6 @@ builder.Services.AddOpenIddict()
         options.UseLocalServer();
         options.UseAspNetCore();
     });
-
-builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
@@ -154,6 +178,7 @@ app.MapGet("/hello", () => Results.Text(Hello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", status = "ok" }));
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle)
     .RequireRateLimiting("token-exchange");
+OAuthEndpoints.Map(app);
 
 app.Run();
 

@@ -12,6 +12,9 @@
   <ItemGroup>
   <PackageReference Include="MassTransit" />
   <PackageReference Include="MassTransit.RabbitMQ" />
+  <PackageReference Include="AspNet.Security.OpenId.Steam" />
+  <PackageReference Include="AspNet.Security.OAuth.BattleNet" />
+  <PackageReference Include="Microsoft.AspNetCore.Authentication.MicrosoftAccount" />
   <PackageReference Include="Microsoft.EntityFrameworkCore" />
   <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
   <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
