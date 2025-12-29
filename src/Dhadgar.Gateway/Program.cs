@@ -1,13 +1,48 @@
 using Dhadgar.Gateway;
+using Dhadgar.Gateway.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
+}
 
-builder.Services.AddReverseProxy().LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+// Add CORS support
+builder.Services.AddMeridianConsoleCors(builder.Configuration);
+
+// Placeholder policies required by YARP route metadata (replace with real policies in Phase 3)
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("TenantScoped", policy => policy.RequireAssertion(_ => true));
+    options.AddPolicy("Agent", policy => policy.RequireAssertion(_ => true));
+});
+
+builder.Services.AddReverseProxy()
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
 var app = builder.Build();
+
+// Middleware pipeline (ORDER MATTERS!)
+// 1. Security headers (earliest to apply to all responses)
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
+// 2. Problem Details exception handler (catch exceptions early)
+app.UseMiddleware<ProblemDetailsMiddleware>();
+
+// 3. CORS (before authentication/authorization)
+app.UseCors(CorsConfiguration.PolicyName);
+
+// 4. Correlation ID tracking (needed by all downstream middleware)
+app.UseMiddleware<CorrelationMiddleware>();
+
+// 5. Request logging (after correlation)
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+// 6. Request enrichment WITH HEADER STRIPPING (before proxy, after correlation)
+//    CRITICAL: Must run after authentication (Phase 3) but shown here for Phase 2
+app.UseMiddleware<RequestEnrichmentMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -15,9 +50,30 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Gateway", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Gateway", status = "ok" }));
+// Gateway endpoints
+app.MapGet("/", () => Results.Ok(new
+{
+    service = "Dhadgar.Gateway",
+    message = Hello.Message,
+    version = typeof(Program).Assembly.GetName().Version?.ToString()
+}))
+.AllowAnonymous()
+.WithTags("Gateway");
+
+app.MapGet("/hello", () => Results.Text(Hello.Message))
+    .AllowAnonymous()
+    .WithTags("Gateway");
+
+app.MapGet("/healthz", () => Results.Ok(new
+{
+    service = "Dhadgar.Gateway",
+    status = "ok",
+    timestamp = DateTime.UtcNow
+}))
+.AllowAnonymous()
+.WithTags("Health");
+
+// YARP reverse proxy
 app.MapReverseProxy();
 
 app.Run();
