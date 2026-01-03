@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Dhadgar.Contracts.Identity;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Options;
@@ -32,6 +33,7 @@ public sealed class TokenExchangeService
     private readonly IExchangeTokenReplayStore _replayStore;
     private readonly IJwtService _jwtService;
     private readonly IPermissionService _permissionService;
+    private readonly IIdentityEventPublisher _eventPublisher;
     private readonly TimeProvider _timeProvider;
     private readonly AuthOptions _authOptions;
     private readonly ILogger<TokenExchangeService> _logger;
@@ -42,6 +44,7 @@ public sealed class TokenExchangeService
         IExchangeTokenReplayStore replayStore,
         IJwtService jwtService,
         IPermissionService permissionService,
+        IIdentityEventPublisher eventPublisher,
         TimeProvider timeProvider,
         IOptions<AuthOptions> authOptions,
         ILogger<TokenExchangeService> logger)
@@ -51,6 +54,7 @@ public sealed class TokenExchangeService
         _replayStore = replayStore;
         _jwtService = jwtService;
         _permissionService = permissionService;
+        _eventPublisher = eventPublisher;
         _timeProvider = timeProvider;
         _authOptions = authOptions.Value;
         _logger = logger;
@@ -94,7 +98,8 @@ public sealed class TokenExchangeService
         User user;
         Organization activeOrg;
         UserOrganization membership;
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var now = _timeProvider.GetUtcNow();
+        var nowUtc = now.UtcDateTime;
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(ct);
 
@@ -106,7 +111,7 @@ public sealed class TokenExchangeService
                     ExternalAuthId = externalAuthId,
                     Email = email,
                     EmailVerified = false,
-                    CreatedAt = now
+                    CreatedAt = nowUtc
                 };
 
             if (user.Id == Guid.Empty)
@@ -115,8 +120,8 @@ public sealed class TokenExchangeService
             }
 
             user.Email = email;
-            user.LastAuthenticatedAt = now;
-            user.UpdatedAt = now;
+            user.LastAuthenticatedAt = nowUtc;
+            user.UpdatedAt = nowUtc;
 
             if (_dbContext.Entry(user).State == EntityState.Detached)
             {
@@ -137,7 +142,7 @@ public sealed class TokenExchangeService
                     Name = "Default Organization",
                     Slug = $"user-{user.Id:N}",
                     OwnerId = user.Id,
-                    CreatedAt = now
+                    CreatedAt = nowUtc
                 };
 
                 membership = new UserOrganization
@@ -145,7 +150,7 @@ public sealed class TokenExchangeService
                     UserId = user.Id,
                     Organization = activeOrg,
                     Role = "owner",
-                    JoinedAt = now,
+                    JoinedAt = nowUtc,
                     IsActive = true
                 };
 
@@ -208,7 +213,7 @@ public sealed class TokenExchangeService
 
         var (accessToken, refreshToken, expiresIn) = await _jwtService.GenerateTokenPairAsync(claims, ct);
 
-        var refreshExpiresAt = now.AddDays(_authOptions.RefreshTokenLifetimeDays);
+        var refreshExpiresAt = nowUtc.AddDays(_authOptions.RefreshTokenLifetimeDays);
         var refreshTokenHash = HashToken(refreshToken);
 
         _dbContext.RefreshTokens.Add(new RefreshToken
@@ -216,11 +221,27 @@ public sealed class TokenExchangeService
             UserId = user.Id,
             OrganizationId = activeOrg.Id,
             TokenHash = refreshTokenHash,
-            IssuedAt = now,
+            IssuedAt = nowUtc,
             ExpiresAt = refreshExpiresAt
         });
 
         await _dbContext.SaveChangesAsync(ct);
+
+        try
+        {
+            await _eventPublisher.PublishUserAuthenticatedAsync(new UserAuthenticated(
+                user.Id,
+                activeOrg.Id,
+                externalAuthId,
+                user.Email,
+                clientApp,
+                permissions,
+                now), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish UserAuthenticated event for user {UserId}", user.Id);
+        }
 
         return new TokenExchangeOutcome(
             true,

@@ -19,6 +19,7 @@ public class TokenExchangeServiceTests
         var replayStore = new InMemoryReplayStore();
         var jwtService = new TestJwtService();
         var permissionService = new PermissionService(context, TimeProvider.System);
+        var eventPublisher = new TestIdentityEventPublisher();
         var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(
             new Dhadgar.Identity.Options.AuthOptions { RefreshTokenLifetimeDays = 7 });
 
@@ -28,6 +29,7 @@ public class TokenExchangeServiceTests
             replayStore,
             jwtService,
             permissionService,
+            eventPublisher,
             TimeProvider.System,
             options,
             NullLogger<TokenExchangeService>.Instance);
@@ -41,6 +43,8 @@ public class TokenExchangeServiceTests
         Assert.Single(context.Organizations);
         Assert.Single(context.UserOrganizations);
         Assert.Single(context.RefreshTokens);
+        Assert.True(eventPublisher.UserAuthenticatedEvents.TryDequeue(out var authEvent));
+        Assert.Equal(outcome.UserId, authEvent.UserId);
     }
 
     [Fact]
@@ -51,6 +55,7 @@ public class TokenExchangeServiceTests
         var replayStore = new RejectingReplayStore();
         var jwtService = new TestJwtService();
         var permissionService = new PermissionService(context, TimeProvider.System);
+        var eventPublisher = new TestIdentityEventPublisher();
         var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(
             new Dhadgar.Identity.Options.AuthOptions { RefreshTokenLifetimeDays = 7 });
 
@@ -60,6 +65,7 @@ public class TokenExchangeServiceTests
             replayStore,
             jwtService,
             permissionService,
+            eventPublisher,
             TimeProvider.System,
             options,
             NullLogger<TokenExchangeService>.Instance);
@@ -68,6 +74,7 @@ public class TokenExchangeServiceTests
 
         Assert.False(outcome.Success);
         Assert.Equal("token_already_used", outcome.Error);
+        Assert.Empty(eventPublisher.UserAuthenticatedEvents);
     }
 
     [Fact]
@@ -78,6 +85,7 @@ public class TokenExchangeServiceTests
         var replayStore = new InMemoryReplayStore();
         var jwtService = new TestJwtService();
         var permissionService = new PermissionService(context, TimeProvider.System);
+        var eventPublisher = new TestIdentityEventPublisher();
         var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(
             new Dhadgar.Identity.Options.AuthOptions { RefreshTokenLifetimeDays = 7 });
 
@@ -87,6 +95,7 @@ public class TokenExchangeServiceTests
             replayStore,
             jwtService,
             permissionService,
+            eventPublisher,
             TimeProvider.System,
             options,
             NullLogger<TokenExchangeService>.Instance);
@@ -95,6 +104,7 @@ public class TokenExchangeServiceTests
 
         Assert.False(outcome.Success);
         Assert.Equal("invalid_exchange_token", outcome.Error);
+        Assert.Empty(eventPublisher.UserAuthenticatedEvents);
     }
 
     private static ClaimsPrincipal CreatePrincipal()

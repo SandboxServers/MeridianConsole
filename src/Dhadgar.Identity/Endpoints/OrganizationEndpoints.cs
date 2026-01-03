@@ -11,7 +11,8 @@ public static class OrganizationEndpoints
         app.MapPost("/organizations", CreateOrganization);
         app.MapPatch("/organizations/{organizationId:guid}", UpdateOrganization);
         app.MapDelete("/organizations/{organizationId:guid}", DeleteOrganization);
-        app.MapPost("/organizations/{organizationId:guid}/switch", SwitchOrganization);
+        app.MapPost("/organizations/{organizationId:guid}/switch", SwitchOrganization)
+            .RequireRateLimiting("auth");
     }
 
     private static async Task<IResult> ListOrganizations(

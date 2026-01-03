@@ -7,7 +7,8 @@ public static class OAuthEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapGet("/oauth/{provider}/link", BeginLink);
+        app.MapGet("/oauth/{provider}/link", BeginLink)
+            .RequireRateLimiting("auth");
     }
 
     private static IResult BeginLink(HttpContext context, string provider, string? returnUrl, IConfiguration configuration)

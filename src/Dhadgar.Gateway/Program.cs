@@ -1,5 +1,7 @@
 using Dhadgar.Gateway;
 using Dhadgar.Gateway.Middleware;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +23,25 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Dhadgar.Gateway"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+        else
+        {
+            tracing.AddOtlpExporter();
+        }
+    });
 
 var app = builder.Build();
 

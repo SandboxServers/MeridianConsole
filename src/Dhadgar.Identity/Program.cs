@@ -7,10 +7,15 @@ using Dhadgar.Identity.Endpoints;
 using Dhadgar.Identity.OAuth;
 using Dhadgar.Identity.Options;
 using Dhadgar.Identity.Services;
+using Dhadgar.Messaging;
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using StackExchange.Redis;
+using IdentityHello = Dhadgar.Identity.Hello;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,7 +86,35 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                QueueLimit = 0
+            }));
 });
+
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddMassTransit(x =>
+    {
+        x.UsingInMemory((ctx, cfg) =>
+        {
+            cfg.ConfigureEndpoints(ctx);
+        });
+    });
+}
+else
+{
+    builder.Services.AddDhadgarMessaging(builder.Configuration);
+}
+
+builder.Services.AddScoped<IIdentityEventPublisher, IdentityEventPublisher>();
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -148,6 +181,25 @@ builder.Services.AddOpenIddict()
     });
 builder.Services.AddAuthorization();
 
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Dhadgar.Identity"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+        else
+        {
+            tracing.AddOtlpExporter();
+        }
+    });
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -176,14 +228,15 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }));
+app.MapGet("/hello", () => Results.Text(IdentityHello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", status = "ok" }));
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle)
     .RequireRateLimiting("token-exchange");
 OAuthEndpoints.Map(app);
 OrganizationEndpoints.Map(app);
 MembershipEndpoints.Map(app);
+WebhookEndpoint.Map(app);
 
 app.Run();
 

@@ -1,7 +1,9 @@
+using Dhadgar.Contracts.Identity;
 using Dhadgar.Identity.Authorization;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.Identity.Services;
 
@@ -31,11 +33,19 @@ public sealed class MembershipService
 {
     private readonly IdentityDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
+    private readonly IIdentityEventPublisher _eventPublisher;
+    private readonly ILogger<MembershipService> _logger;
 
-    public MembershipService(IdentityDbContext dbContext, TimeProvider timeProvider)
+    public MembershipService(
+        IdentityDbContext dbContext,
+        TimeProvider timeProvider,
+        IIdentityEventPublisher eventPublisher,
+        ILogger<MembershipService> logger)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
+        _eventPublisher = eventPublisher;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<MemberSummary>> ListMembersAsync(Guid organizationId, CancellationToken ct = default)
@@ -131,6 +141,19 @@ public sealed class MembershipService
         _dbContext.UserOrganizations.Add(membership);
         await _dbContext.SaveChangesAsync(ct);
 
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            user.Id,
+            membership.Id,
+            MembershipChangeTypes.Invited,
+            membership.Role,
+            null,
+            null,
+            null,
+            null,
+            invitedByUserId,
+            _timeProvider.GetUtcNow()), ct);
+
         return ServiceResult<UserOrganization>.Ok(membership);
     }
 
@@ -162,6 +185,19 @@ public sealed class MembershipService
         membership.JoinedAt = now;
 
         await _dbContext.SaveChangesAsync(ct);
+
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            membership.UserId,
+            membership.Id,
+            MembershipChangeTypes.Accepted,
+            membership.Role,
+            null,
+            null,
+            null,
+            null,
+            userId,
+            _timeProvider.GetUtcNow()), ct);
 
         return ServiceResult<UserOrganization>.Ok(membership);
     }
@@ -196,6 +232,19 @@ public sealed class MembershipService
         membership.IsActive = false;
 
         await _dbContext.SaveChangesAsync(ct);
+
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            membership.UserId,
+            membership.Id,
+            MembershipChangeTypes.Removed,
+            membership.Role,
+            null,
+            null,
+            null,
+            null,
+            null,
+            _timeProvider.GetUtcNow()), ct);
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -245,6 +294,19 @@ public sealed class MembershipService
 
         membership.Role = role;
         await _dbContext.SaveChangesAsync(ct);
+
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            membership.UserId,
+            membership.Id,
+            MembershipChangeTypes.RoleAssigned,
+            membership.Role,
+            null,
+            null,
+            null,
+            null,
+            actorUserId,
+            _timeProvider.GetUtcNow()), ct);
 
         return ServiceResult<UserOrganization>.Ok(membership);
     }
@@ -312,6 +374,19 @@ public sealed class MembershipService
         _dbContext.UserOrganizationClaims.Add(claim);
         await _dbContext.SaveChangesAsync(ct);
 
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            membership.UserId,
+            membership.Id,
+            MembershipChangeTypes.ClaimAdded,
+            membership.Role,
+            request.ClaimType.ToString(),
+            request.ClaimValue,
+            request.ResourceType,
+            request.ResourceId,
+            actorUserId,
+            _timeProvider.GetUtcNow()), ct);
+
         return ServiceResult<UserOrganizationClaim>.Ok(claim);
     }
 
@@ -345,6 +420,35 @@ public sealed class MembershipService
         _dbContext.UserOrganizationClaims.Remove(claim);
         await _dbContext.SaveChangesAsync(ct);
 
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            membership.UserId,
+            membership.Id,
+            MembershipChangeTypes.ClaimRemoved,
+            membership.Role,
+            claim.ClaimType.ToString(),
+            claim.ClaimValue,
+            claim.ResourceType,
+            claim.ResourceId,
+            null,
+            _timeProvider.GetUtcNow()), ct);
+
         return ServiceResult<bool>.Ok(true);
+    }
+
+    private async Task PublishMembershipChangedAsync(OrgMembershipChanged message, CancellationToken ct)
+    {
+        try
+        {
+            await _eventPublisher.PublishOrgMembershipChangedAsync(message, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to publish OrgMembershipChanged event for user {UserId} in org {OrganizationId}",
+                message.UserId,
+                message.OrganizationId);
+        }
     }
 }

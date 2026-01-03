@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
+using Dhadgar.Identity.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace Dhadgar.Identity.Tests;
 public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"identity-tests-{Guid.NewGuid()}";
+    public TestIdentityEventPublisher EventPublisher { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -48,6 +50,9 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
             services.AddDbContext<IdentityDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName)
                     .UseInternalServiceProvider(provider));
+
+            services.RemoveAll<IIdentityEventPublisher>();
+            services.AddSingleton<IIdentityEventPublisher>(EventPublisher);
         });
     }
 
