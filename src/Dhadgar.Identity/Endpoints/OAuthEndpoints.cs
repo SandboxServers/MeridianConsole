@@ -61,7 +61,7 @@ public static class OAuthEndpoints
 
         if (!uri.IsAbsoluteUri)
         {
-            return returnUrl.StartsWith("/", StringComparison.Ordinal);
+            return returnUrl.StartsWith('/');
         }
 
         var allowedHosts = configuration.GetSection("OAuth:AllowedRedirectHosts").Get<string[]>() ?? Array.Empty<string>();

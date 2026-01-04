@@ -1,22 +1,19 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Identity;
 
 namespace Dhadgar.Identity.Data.Entities;
 
-public sealed class User
+/// <summary>
+/// Primary user record backed by ASP.NET Core Identity.
+/// </summary>
+public sealed class User : IdentityUser<Guid>
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
-
     /// <summary>
     /// External authentication ID from Better Auth (sub claim from exchange token)
     /// </summary>
     [Required]
     [MaxLength(255)]
     public string ExternalAuthId { get; set; } = null!;
-
-    [Required]
-    [MaxLength(320)]
-    [EmailAddress]
-    public string Email { get; set; } = null!;
 
     public bool EmailVerified { get; set; }
 

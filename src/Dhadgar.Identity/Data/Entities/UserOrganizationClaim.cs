@@ -46,6 +46,7 @@ public sealed class UserOrganizationClaim
 
 public enum ClaimType
 {
+    None = 0,
     Grant = 1,
     Deny = 2
 }

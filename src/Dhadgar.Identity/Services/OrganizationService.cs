@@ -71,7 +71,7 @@ public sealed class OrganizationService
 
         if (org is null)
         {
-            return ServiceResult<OrganizationDetail>.Fail("org_not_found");
+            return ServiceResult.Fail<OrganizationDetail>("org_not_found");
         }
 
         var detail = new OrganizationDetail(
@@ -84,7 +84,7 @@ public sealed class OrganizationService
             org.UpdatedAt,
             org.DeletedAt);
 
-        return ServiceResult<OrganizationDetail>.Ok(detail);
+        return ServiceResult.Ok(detail);
     }
 
     public async Task<ServiceResult<Organization>> CreateAsync(
@@ -94,13 +94,13 @@ public sealed class OrganizationService
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return ServiceResult<Organization>.Fail("name_required");
+            return ServiceResult.Fail<Organization>("name_required");
         }
 
         var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (user is null)
         {
-            return ServiceResult<Organization>.Fail("user_not_found");
+            return ServiceResult.Fail<Organization>("user_not_found");
         }
 
         var slugSeed = string.IsNullOrWhiteSpace(request.Slug) ? request.Name : request.Slug!;
@@ -136,7 +136,7 @@ public sealed class OrganizationService
 
         await _dbContext.SaveChangesAsync(ct);
 
-        return ServiceResult<Organization>.Ok(org);
+        return ServiceResult.Ok(org);
     }
 
     public async Task<ServiceResult<Organization>> UpdateAsync(
@@ -147,7 +147,7 @@ public sealed class OrganizationService
         var org = await _dbContext.Organizations.FirstOrDefaultAsync(o => o.Id == organizationId, ct);
         if (org is null)
         {
-            return ServiceResult<Organization>.Fail("org_not_found");
+            return ServiceResult.Fail<Organization>("org_not_found");
         }
 
         if (!string.IsNullOrWhiteSpace(request.Name))
@@ -172,7 +172,7 @@ public sealed class OrganizationService
         org.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         await _dbContext.SaveChangesAsync(ct);
-        return ServiceResult<Organization>.Ok(org);
+        return ServiceResult.Ok(org);
     }
 
     public async Task<ServiceResult<bool>> SoftDeleteAsync(Guid organizationId, CancellationToken ct = default)
@@ -180,19 +180,19 @@ public sealed class OrganizationService
         var org = await _dbContext.Organizations.FirstOrDefaultAsync(o => o.Id == organizationId, ct);
         if (org is null)
         {
-            return ServiceResult<bool>.Fail("org_not_found");
+            return ServiceResult.Fail<bool>("org_not_found");
         }
 
         if (org.DeletedAt is not null)
         {
-            return ServiceResult<bool>.Ok(true);
+            return ServiceResult.Ok(true);
         }
 
         org.DeletedAt = _timeProvider.GetUtcNow().UtcDateTime;
         org.UpdatedAt = org.DeletedAt;
 
         await _dbContext.SaveChangesAsync(ct);
-        return ServiceResult<bool>.Ok(true);
+        return ServiceResult.Ok(true);
     }
 
     private async Task<string> EnsureUniqueSlugAsync(string slug, CancellationToken ct)

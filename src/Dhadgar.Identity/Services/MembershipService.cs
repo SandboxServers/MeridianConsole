@@ -80,18 +80,18 @@ public sealed class MembershipService
 
         if (org is null)
         {
-            return ServiceResult<UserOrganization>.Fail("org_not_found");
+            return ServiceResult.Fail<UserOrganization>("org_not_found");
         }
 
         if (!org.Settings.AllowMemberInvites)
         {
-            return ServiceResult<UserOrganization>.Fail("invites_disabled");
+            return ServiceResult.Fail<UserOrganization>("invites_disabled");
         }
 
         var role = string.IsNullOrWhiteSpace(request.Role) ? "viewer" : request.Role!.Trim().ToLowerInvariant();
         if (!RoleDefinitions.IsValidRole(role))
         {
-            return ServiceResult<UserOrganization>.Fail("invalid_role");
+            return ServiceResult.Fail<UserOrganization>("invalid_role");
         }
 
         User? user = null;
@@ -107,7 +107,7 @@ public sealed class MembershipService
 
         if (user is null)
         {
-            return ServiceResult<UserOrganization>.Fail("user_not_found");
+            return ServiceResult.Fail<UserOrganization>("user_not_found");
         }
 
         var activeMembersCount = await _dbContext.UserOrganizations
@@ -116,7 +116,7 @@ public sealed class MembershipService
 
         if (activeMembersCount >= org.Settings.MaxMembers)
         {
-            return ServiceResult<UserOrganization>.Fail("member_limit_reached");
+            return ServiceResult.Fail<UserOrganization>("member_limit_reached");
         }
 
         var existingMembership = await _dbContext.UserOrganizations
@@ -124,7 +124,7 @@ public sealed class MembershipService
 
         if (existingMembership is not null)
         {
-            return ServiceResult<UserOrganization>.Fail(existingMembership.IsActive ? "already_member" : "invitation_exists");
+            return ServiceResult.Fail<UserOrganization>(existingMembership.IsActive ? "already_member" : "invitation_exists");
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -154,7 +154,7 @@ public sealed class MembershipService
             invitedByUserId,
             _timeProvider.GetUtcNow()), ct);
 
-        return ServiceResult<UserOrganization>.Ok(membership);
+        return ServiceResult.Ok(membership);
     }
 
     public async Task<ServiceResult<UserOrganization>> AcceptInviteAsync(
@@ -171,12 +171,12 @@ public sealed class MembershipService
 
         if (membership is null)
         {
-            return ServiceResult<UserOrganization>.Fail("invite_not_found");
+            return ServiceResult.Fail<UserOrganization>("invite_not_found");
         }
 
         if (membership.IsActive)
         {
-            return ServiceResult<UserOrganization>.Ok(membership);
+            return ServiceResult.Ok(membership);
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -199,7 +199,7 @@ public sealed class MembershipService
             userId,
             _timeProvider.GetUtcNow()), ct);
 
-        return ServiceResult<UserOrganization>.Ok(membership);
+        return ServiceResult.Ok(membership);
     }
 
     public async Task<ServiceResult<bool>> RemoveMemberAsync(
@@ -216,7 +216,7 @@ public sealed class MembershipService
 
         if (membership is null)
         {
-            return ServiceResult<bool>.Fail("membership_not_found");
+            return ServiceResult.Fail<bool>("membership_not_found");
         }
 
         var org = await _dbContext.Organizations
@@ -225,7 +225,7 @@ public sealed class MembershipService
 
         if (org is not null && org.OwnerId == targetUserId)
         {
-            return ServiceResult<bool>.Fail("cannot_remove_owner");
+            return ServiceResult.Fail<bool>("cannot_remove_owner");
         }
 
         membership.LeftAt = _timeProvider.GetUtcNow().UtcDateTime;
@@ -246,7 +246,7 @@ public sealed class MembershipService
             null,
             _timeProvider.GetUtcNow()), ct);
 
-        return ServiceResult<bool>.Ok(true);
+        return ServiceResult.Ok(true);
     }
 
     public async Task<ServiceResult<UserOrganization>> AssignRoleAsync(
@@ -258,7 +258,7 @@ public sealed class MembershipService
     {
         if (!RoleDefinitions.IsValidRole(role))
         {
-            return ServiceResult<UserOrganization>.Fail("invalid_role");
+            return ServiceResult.Fail<UserOrganization>("invalid_role");
         }
 
         var actorMembership = await _dbContext.UserOrganizations
@@ -272,12 +272,12 @@ public sealed class MembershipService
 
         if (actorMembership is null)
         {
-            return ServiceResult<UserOrganization>.Fail("actor_not_member");
+            return ServiceResult.Fail<UserOrganization>("actor_not_member");
         }
 
         if (!RoleDefinitions.CanAssignRole(actorMembership.Role, role))
         {
-            return ServiceResult<UserOrganization>.Fail("forbidden_role_assignment");
+            return ServiceResult.Fail<UserOrganization>("forbidden_role_assignment");
         }
 
         var membership = await _dbContext.UserOrganizations
@@ -289,7 +289,7 @@ public sealed class MembershipService
 
         if (membership is null)
         {
-            return ServiceResult<UserOrganization>.Fail("membership_not_found");
+            return ServiceResult.Fail<UserOrganization>("membership_not_found");
         }
 
         membership.Role = role;
@@ -308,7 +308,7 @@ public sealed class MembershipService
             actorUserId,
             _timeProvider.GetUtcNow()), ct);
 
-        return ServiceResult<UserOrganization>.Ok(membership);
+        return ServiceResult.Ok(membership);
     }
 
     public async Task<ServiceResult<UserOrganizationClaim>> AddClaimAsync(
@@ -320,7 +320,7 @@ public sealed class MembershipService
     {
         if (string.IsNullOrWhiteSpace(request.ClaimValue))
         {
-            return ServiceResult<UserOrganizationClaim>.Fail("claim_value_required");
+            return ServiceResult.Fail<UserOrganizationClaim>("claim_value_required");
         }
 
         var knownClaim = await _dbContext.ClaimDefinitions
@@ -329,7 +329,7 @@ public sealed class MembershipService
 
         if (!knownClaim)
         {
-            return ServiceResult<UserOrganizationClaim>.Fail("unknown_claim");
+            return ServiceResult.Fail<UserOrganizationClaim>("unknown_claim");
         }
 
         var membership = await _dbContext.UserOrganizations
@@ -341,7 +341,7 @@ public sealed class MembershipService
 
         if (membership is null)
         {
-            return ServiceResult<UserOrganizationClaim>.Fail("membership_not_found");
+            return ServiceResult.Fail<UserOrganizationClaim>("membership_not_found");
         }
 
         var existing = await _dbContext.UserOrganizationClaims
@@ -355,7 +355,7 @@ public sealed class MembershipService
 
         if (existing is not null)
         {
-            return ServiceResult<UserOrganizationClaim>.Ok(existing);
+            return ServiceResult.Ok(existing);
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -387,7 +387,7 @@ public sealed class MembershipService
             actorUserId,
             _timeProvider.GetUtcNow()), ct);
 
-        return ServiceResult<UserOrganizationClaim>.Ok(claim);
+        return ServiceResult.Ok(claim);
     }
 
     public async Task<ServiceResult<bool>> RemoveClaimAsync(
@@ -406,7 +406,7 @@ public sealed class MembershipService
 
         if (membership is null)
         {
-            return ServiceResult<bool>.Fail("membership_not_found");
+            return ServiceResult.Fail<bool>("membership_not_found");
         }
 
         var claim = await _dbContext.UserOrganizationClaims
@@ -414,7 +414,7 @@ public sealed class MembershipService
 
         if (claim is null)
         {
-            return ServiceResult<bool>.Fail("claim_not_found");
+            return ServiceResult.Fail<bool>("claim_not_found");
         }
 
         _dbContext.UserOrganizationClaims.Remove(claim);
@@ -433,7 +433,7 @@ public sealed class MembershipService
             null,
             _timeProvider.GetUtcNow()), ct);
 
-        return ServiceResult<bool>.Ok(true);
+        return ServiceResult.Ok(true);
     }
 
     private async Task PublishMembershipChangedAsync(OrgMembershipChanged message, CancellationToken ct)

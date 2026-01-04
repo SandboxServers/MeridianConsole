@@ -38,7 +38,8 @@ public class RequestEnrichmentMiddleware
         }
 
         // Ensure request ID exists
-        if (!context.Request.Headers.ContainsKey("X-Request-Id"))
+        if (!context.Request.Headers.TryGetValue("X-Request-Id", out var requestIds) ||
+            string.IsNullOrWhiteSpace(requestIds.ToString()))
         {
             context.Request.Headers["X-Request-Id"] =
                 context.Items["RequestId"]?.ToString() ?? Guid.NewGuid().ToString("N");

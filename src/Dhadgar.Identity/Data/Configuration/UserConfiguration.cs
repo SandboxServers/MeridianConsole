@@ -12,6 +12,15 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasKey(u => u.Id);
 
+        builder.Property(u => u.UserName)
+            .HasMaxLength(256);
+
+        builder.Property(u => u.NormalizedUserName)
+            .HasMaxLength(256);
+
+        builder.Property(u => u.NormalizedEmail)
+            .HasMaxLength(320);
+
         builder.Property(u => u.ExternalAuthId)
             .IsRequired()
             .HasMaxLength(255);
@@ -29,6 +38,12 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasIndex(u => u.Email)
             .HasDatabaseName("ix_users_email");
+
+        builder.HasIndex(u => u.NormalizedEmail)
+            .HasDatabaseName("ix_users_normalized_email");
+
+        builder.HasIndex(u => u.NormalizedUserName)
+            .HasDatabaseName("ix_users_normalized_username");
 
         builder.HasIndex(u => u.DeletedAt)
             .HasFilter("\"DeletedAt\" IS NULL")

@@ -1,15 +1,16 @@
 using Dhadgar.Identity.Data.Configuration;
 using Dhadgar.Identity.Data.Entities;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Data;
 
-public sealed class IdentityDbContext : DbContext
+public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
 {
     public IdentityDbContext(DbContextOptions<IdentityDbContext> options) : base(options) { }
 
-    public DbSet<User> Users => Set<User>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<UserOrganization> UserOrganizations => Set<UserOrganization>();
     public DbSet<UserOrganizationClaim> UserOrganizationClaims => Set<UserOrganizationClaim>();
@@ -17,37 +18,37 @@ public sealed class IdentityDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<ClaimDefinition> ClaimDefinitions => Set<ClaimDefinition>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder builder)
     {
-        base.OnModelCreating(modelBuilder);
+        base.OnModelCreating(builder);
 
-        modelBuilder.ApplyConfiguration(new UserConfiguration());
-        modelBuilder.ApplyConfiguration(new OrganizationConfiguration());
-        modelBuilder.ApplyConfiguration(new UserOrganizationConfiguration());
-        modelBuilder.ApplyConfiguration(new UserOrganizationClaimConfiguration());
-        modelBuilder.ApplyConfiguration(new LinkedAccountConfiguration());
-        modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
-        modelBuilder.ApplyConfiguration(new ClaimDefinitionConfiguration());
+        builder.ApplyConfiguration(new UserConfiguration());
+        builder.ApplyConfiguration(new OrganizationConfiguration());
+        builder.ApplyConfiguration(new UserOrganizationConfiguration());
+        builder.ApplyConfiguration(new UserOrganizationClaimConfiguration());
+        builder.ApplyConfiguration(new LinkedAccountConfiguration());
+        builder.ApplyConfiguration(new RefreshTokenConfiguration());
+        builder.ApplyConfiguration(new ClaimDefinitionConfiguration());
 
-        modelBuilder.UseOpenIddict();
+        builder.UseOpenIddict();
 
         if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
         {
-            modelBuilder.Entity<LinkedAccount>().OwnsOne(la => la.ProviderMetadata, metadata =>
+            builder.Entity<LinkedAccount>().OwnsOne(la => la.ProviderMetadata, metadata =>
             {
                 metadata.Ignore(m => m.ExtraData);
             });
 
-            modelBuilder.Entity<Organization>().OwnsOne(o => o.Settings, settings =>
+            builder.Entity<Organization>().OwnsOne(o => o.Settings, settings =>
             {
                 settings.Ignore(s => s.CustomSettings);
             });
         }
 
-        SeedClaimDefinitions(modelBuilder);
+        SeedClaimDefinitions(builder);
     }
 
-    private static void SeedClaimDefinitions(ModelBuilder modelBuilder)
+    private static void SeedClaimDefinitions(ModelBuilder builder)
     {
         var seedCreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -253,6 +254,6 @@ public sealed class IdentityDbContext : DbContext
             }
         };
 
-        modelBuilder.Entity<ClaimDefinition>().HasData(claims);
+        builder.Entity<ClaimDefinition>().HasData(claims);
     }
 }

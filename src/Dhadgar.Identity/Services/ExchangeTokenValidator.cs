@@ -12,16 +12,17 @@ public interface IExchangeTokenValidator
     Task<ClaimsPrincipal?> ValidateAsync(string exchangeToken, CancellationToken ct = default);
 }
 
-public sealed class ExchangeTokenValidator : IExchangeTokenValidator
+public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposable
 {
     private readonly ExchangeTokenOptions _options;
     private readonly ECDsaSecurityKey _publicKey;
     private readonly JsonWebTokenHandler _tokenHandler = new();
+    private readonly ECDsa? _ecdsa;
 
     public ExchangeTokenValidator(IOptions<ExchangeTokenOptions> options, IHostEnvironment environment)
     {
         _options = options.Value;
-        _publicKey = LoadPublicKey(_options, environment);
+        (_publicKey, _ecdsa) = LoadPublicKey(_options, environment);
     }
 
     public async Task<ClaimsPrincipal?> ValidateAsync(string exchangeToken, CancellationToken ct = default)
@@ -50,7 +51,7 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator
         return result.IsValid ? result.ClaimsIdentity is null ? null : new ClaimsPrincipal(result.ClaimsIdentity) : null;
     }
 
-    private static ECDsaSecurityKey LoadPublicKey(ExchangeTokenOptions options, IHostEnvironment environment)
+    private static (ECDsaSecurityKey Key, ECDsa? Ecdsa) LoadPublicKey(ExchangeTokenOptions options, IHostEnvironment environment)
     {
         var publicKeyPem = options.PublicKeyPem;
 
@@ -70,11 +71,16 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator
             }
 
             var ephemeral = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-            return new ECDsaSecurityKey(ephemeral);
+            return (new ECDsaSecurityKey(ephemeral), ephemeral);
         }
 
         var ecdsa = ECDsa.Create();
         ecdsa.ImportFromPem(publicKeyPem);
-        return new ECDsaSecurityKey(ecdsa);
+        return (new ECDsaSecurityKey(ecdsa), ecdsa);
+    }
+
+    public void Dispose()
+    {
+        _ecdsa?.Dispose();
     }
 }

@@ -5,6 +5,7 @@ using Dhadgar.Contracts.Identity;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Options;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -37,6 +38,7 @@ public sealed class TokenExchangeService
     private readonly TimeProvider _timeProvider;
     private readonly AuthOptions _authOptions;
     private readonly ILogger<TokenExchangeService> _logger;
+    private readonly UserManager<User> _userManager;
 
     public TokenExchangeService(
         IdentityDbContext dbContext,
@@ -47,7 +49,8 @@ public sealed class TokenExchangeService
         IIdentityEventPublisher eventPublisher,
         TimeProvider timeProvider,
         IOptions<AuthOptions> authOptions,
-        ILogger<TokenExchangeService> logger)
+        ILogger<TokenExchangeService> logger,
+        UserManager<User> userManager)
     {
         _dbContext = dbContext;
         _validator = validator;
@@ -58,6 +61,7 @@ public sealed class TokenExchangeService
         _timeProvider = timeProvider;
         _authOptions = authOptions.Value;
         _logger = logger;
+        _userManager = userManager;
     }
 
     public async Task<TokenExchangeOutcome> ExchangeAsync(string exchangeToken, CancellationToken ct = default)
@@ -105,30 +109,52 @@ public sealed class TokenExchangeService
 
         try
         {
-            user = await _dbContext.Users.FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct)
-                ?? new User
+            user = await _userManager.Users.FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct)
+                   ?? await _userManager.FindByEmailAsync(email);
+
+            var isNewUser = user is null;
+
+            if (user is null)
+            {
+                user = new User
                 {
                     ExternalAuthId = externalAuthId,
                     Email = email,
-                    EmailVerified = false,
-                    CreatedAt = nowUtc
+                    UserName = email,
+                    EmailConfirmed = false,
+                    CreatedAt = nowUtc,
+                    LastAuthenticatedAt = nowUtc,
+                    UpdatedAt = nowUtc
                 };
 
-            if (user.Id == Guid.Empty)
+                var createResult = await _userManager.CreateAsync(user);
+                if (!createResult.Succeeded)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return TokenExchangeOutcome.Fail("user_create_failed");
+                }
+            }
+            else
             {
-                user.Id = Guid.NewGuid();
+                user.Email = email;
+                user.UserName = email;
+                user.LastAuthenticatedAt = nowUtc;
+                user.UpdatedAt = nowUtc;
+                await _userManager.UpdateAsync(user);
             }
 
-            user.Email = email;
-            user.LastAuthenticatedAt = nowUtc;
-            user.UpdatedAt = nowUtc;
-
-            if (_dbContext.Entry(user).State == EntityState.Detached)
+            // Link external login to Identity user
+            var loginInfo = new UserLoginInfo("betterauth", externalAuthId, "BetterAuth");
+            var logins = await _userManager.GetLoginsAsync(user);
+            if (logins.All(l => l.LoginProvider != loginInfo.LoginProvider || l.ProviderKey != loginInfo.ProviderKey))
             {
-                _dbContext.Users.Add(user);
+                var addLoginResult = await _userManager.AddLoginAsync(user, loginInfo);
+                if (!addLoginResult.Succeeded)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return TokenExchangeOutcome.Fail("login_link_failed");
+                }
             }
-
-            await _dbContext.SaveChangesAsync(ct);
 
             var memberships = await _dbContext.UserOrganizations
                 .Where(uo => uo.UserId == user.Id && uo.LeftAt == null && uo.IsActive)

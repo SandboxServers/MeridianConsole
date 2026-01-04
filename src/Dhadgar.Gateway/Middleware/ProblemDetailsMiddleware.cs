@@ -13,6 +13,11 @@ public class ProblemDetailsMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<ProblemDetailsMiddleware> _logger;
     private readonly IHostEnvironment _environment;
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     public ProblemDetailsMiddleware(
         RequestDelegate next,
@@ -63,11 +68,7 @@ public class ProblemDetailsMiddleware
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
         context.Response.ContentType = "application/problem+json";
 
-        var json = JsonSerializer.Serialize(problemDetails, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        });
+        var json = JsonSerializer.Serialize(problemDetails, SerializerOptions);
 
         await context.Response.WriteAsync(json);
     }

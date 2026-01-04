@@ -9,13 +9,20 @@ using Dhadgar.Identity.Options;
 using Dhadgar.Identity.Services;
 using Dhadgar.Messaging;
 using MassTransit;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
+using Azure.Security.KeyVault.Certificates;
+using Azure.Security.KeyVault.Keys.Cryptography;
+using Azure.Security.KeyVault.Keys;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
 using IdentityHello = Dhadgar.Identity.Hello;
+using Dhadgar.Identity.Data.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,6 +47,21 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 
     return ConnectionMultiplexer.Connect(connectionString);
 });
+
+// ASP.NET Core Identity (no passwords; external + Better Auth exchange)
+builder.Services.AddIdentityCore<User>(options =>
+    {
+        options.User.RequireUniqueEmail = true;
+        options.SignIn.RequireConfirmedAccount = false;
+        options.Password.RequireDigit = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireUppercase = false;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequiredLength = 12; // unused for Better Auth, but set sane default
+    })
+    .AddRoles<IdentityRole<Guid>>()
+    .AddEntityFrameworkStores<IdentityDbContext>()
+    .AddSignInManager();
 
 builder.Services.AddSingleton<IExchangeTokenValidator, ExchangeTokenValidator>();
 builder.Services.AddSingleton<IExchangeTokenReplayStore, RedisExchangeTokenReplayStore>();
@@ -77,26 +99,81 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.AddPolicy("token-exchange", httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
+
+        if (path == "/api/auth/exchange")
+        {
+            return RateLimitPartition.GetFixedWindowLimiter($"exchange:{ip}", _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
-            }));
+            });
+        }
 
-    options.AddPolicy("auth", httpContext =>
-        RateLimitPartition.GetSlidingWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new SlidingWindowRateLimiterOptions
+        if (path == "/connect/token" || path == "/refresh")
+        {
+            return RateLimitPartition.GetFixedWindowLimiter($"token:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
+        }
+
+        if (path.StartsWith("/connect/authorize") || path.StartsWith("/oauth/"))
+        {
+            return RateLimitPartition.GetSlidingWindowLimiter($"authcb:{ip}", _ => new SlidingWindowRateLimiterOptions
             {
                 PermitLimit = 60,
                 Window = TimeSpan.FromMinutes(1),
                 SegmentsPerWindow = 6,
                 QueueLimit = 0
-            }));
+            });
+        }
+
+        if (path.StartsWith("/webhooks/better-auth"))
+        {
+            return RateLimitPartition.GetFixedWindowLimiter($"webhook:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
+        }
+
+        if (context.User?.Identity?.IsAuthenticated == true)
+        {
+            var orgId = context.User.FindFirst("org_id")?.Value;
+            if (!string.IsNullOrWhiteSpace(orgId))
+            {
+                return RateLimitPartition.GetFixedWindowLimiter($"tenant:{orgId}", _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 100,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0
+                });
+            }
+
+            var clientType = context.User.FindFirst("client_type")?.Value;
+            if (string.Equals(clientType, "agent", StringComparison.OrdinalIgnoreCase))
+            {
+                var agentId = context.User.FindFirst("sub")?.Value ?? ip;
+                return RateLimitPartition.GetFixedWindowLimiter($"agent:{agentId}", _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 500,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0
+                });
+            }
+        }
+
+        // Default: no limiter
+        return RateLimitPartition.GetNoLimiter<string>("nolimit");
+    });
 });
 
 if (builder.Environment.IsEnvironment("Testing"))
@@ -145,23 +222,34 @@ builder.Services.AddOpenIddict()
             "nodes:manage",
             "billing:read");
 
+        var vaultUri = builder.Configuration["Auth:KeyVault:VaultUri"];
+        var signingCertName = builder.Configuration["Auth:KeyVault:SigningKeyName"];
+        var encryptionCertName = builder.Configuration["Auth:KeyVault:EncryptionCertName"];
+
         if (builder.Environment.IsProduction())
         {
-            var signingPath = builder.Configuration["OpenIddict:SigningCertificatePath"];
-            var signingPassword = builder.Configuration["OpenIddict:SigningCertificatePassword"];
-            var encryptionPath = builder.Configuration["OpenIddict:EncryptionCertificatePath"];
-            var encryptionPassword = builder.Configuration["OpenIddict:EncryptionCertificatePassword"];
-
-            if (string.IsNullOrWhiteSpace(signingPath) || string.IsNullOrWhiteSpace(encryptionPath))
+            if (string.IsNullOrWhiteSpace(vaultUri) ||
+                string.IsNullOrWhiteSpace(signingCertName) ||
+                string.IsNullOrWhiteSpace(encryptionCertName))
             {
-                throw new InvalidOperationException("OpenIddict certificates are required in production.");
+                throw new InvalidOperationException("Key Vault certificate configuration is required in production.");
             }
 
-            var signingCert = new X509Certificate2(signingPath, signingPassword);
-            var encryptionCert = new X509Certificate2(encryptionPath, encryptionPassword);
+            var credential = new DefaultAzureCredential();
+            var certClient = new CertificateClient(new Uri(vaultUri), credential);
 
-            options.AddSigningCertificate(signingCert)
-                .AddEncryptionCertificate(encryptionCert);
+            try
+            {
+                var signingCert = certClient.GetCertificate(signingCertName).Value;
+                var encryptionCert = certClient.GetCertificate(encryptionCertName).Value;
+
+                options.AddSigningCertificate(new X509Certificate2(signingCert.Cer))
+                    .AddEncryptionCertificate(new X509Certificate2(encryptionCert.Cer));
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to load OpenIddict certificates from Key Vault.", ex);
+            }
         }
         else
         {
@@ -208,8 +296,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
@@ -231,8 +319,7 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }));
 app.MapGet("/hello", () => Results.Text(IdentityHello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", status = "ok" }));
-app.MapPost("/exchange", TokenExchangeEndpoint.Handle)
-    .RequireRateLimiting("token-exchange");
+app.MapPost("/exchange", TokenExchangeEndpoint.Handle);
 OAuthEndpoints.Map(app);
 OrganizationEndpoints.Map(app);
 MembershipEndpoints.Map(app);
