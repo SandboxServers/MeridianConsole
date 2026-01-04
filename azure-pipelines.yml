@@ -1,33 +1,33 @@
 trigger:
   branches:
     include:
-    - main
-    - develop
+      - main
+      - develop
 
 pr:
   branches:
     include:
-    - main
-    - develop
+      - main
+      - develop
 
 parameters:
-- name: servicesCsv
-  type: string
-  default: ''
-  displayName: 'Services to build (comma-separated). Leave blank = all.'
-- name: buildConfiguration
-  type: string
-  default: Release
-- name: runTests
-  type: boolean
-  default: true
-- name: collectCoverage
-  type: boolean
-  default: true
-- name: deploy
-  type: boolean
-  default: true
-  displayName: 'Deploy release targets (non-PR)'
+  - name: servicesCsv
+    type: string
+    default: ''
+    displayName: 'Services to build (comma-separated). Leave blank = all.'
+  - name: buildConfiguration
+    type: string
+    default: Release
+  - name: runTests
+    type: boolean
+    default: true
+  - name: collectCoverage
+    type: boolean
+    default: true
+  - name: deploy
+    type: boolean
+    default: true
+    displayName: 'Deploy release targets (non-PR)'
 
 variables:
   # Uses the new `trim()` pipeline expression function (Sprint 248) to be resilient to whitespace.
@@ -35,11 +35,11 @@ variables:
 
 resources:
   repositories:
-  - repository: pipelinePatterns
-    type: github
-    endpoint: github.com_SandboxServers
-    name: SandboxServers/Azure-Pipeline-YAML
-    ref: refs/heads/main
+    - repository: pipelinePatterns
+      type: github
+      endpoint: github.com_SandboxServers
+      name: SandboxServers/Azure-Pipeline-YAML
+      ref: refs/heads/main
 
 extends:
   template: Templates/Dhadgar.CI/Pipeline/Pipeline.yml@pipelinePatterns
