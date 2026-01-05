@@ -43,6 +43,15 @@ public class ProblemDetailsMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
+        // Cannot modify the response after headers/body have started
+        if (context.Response.HasStarted)
+        {
+            _logger.LogWarning(
+                "Cannot write problem details response after headers sent. Exception: {ExceptionType}",
+                exception.GetType().Name);
+            return;
+        }
+
         var traceId = context.Items["CorrelationId"]?.ToString() ?? "unknown";
 
         _logger.LogError(exception,
@@ -70,6 +79,6 @@ public class ProblemDetailsMiddleware
 
         var json = JsonSerializer.Serialize(problemDetails, SerializerOptions);
 
-        await context.Response.WriteAsync(json);
+        await context.Response.WriteAsync(json, context.RequestAborted);
     }
 }

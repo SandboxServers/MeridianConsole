@@ -104,7 +104,7 @@ builder.Services.AddRateLimiter(options =>
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
 
-        if (path == "/api/auth/exchange")
+        if (path == "/exchange")
         {
             return RateLimitPartition.GetFixedWindowLimiter($"exchange:{ip}", _ => new FixedWindowRateLimiterOptions
             {

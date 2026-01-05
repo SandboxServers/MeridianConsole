@@ -39,7 +39,6 @@ jobs:
           fi
 
   # Job 1: Lint YAML files
-  # Job 1: Lint YAML files
   yaml-lint:
     name: Lint YAML
     runs-on: ubuntu-latest

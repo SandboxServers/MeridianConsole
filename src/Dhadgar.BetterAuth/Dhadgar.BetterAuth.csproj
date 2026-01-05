@@ -20,7 +20,7 @@
     <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
     <NpmCommand Condition="'$(OS)' != 'Windows_NT'">npm</NpmCommand>
     <BetterAuthProjectDir>$(MSBuildProjectDirectory)</BetterAuthProjectDir>
-    <NodeModulesDir>$(BetterAuthProjectDir)\node_modules</NodeModulesDir>
+    <NodeModulesDir>$(BetterAuthProjectDir)/node_modules</NodeModulesDir>
   </PropertyGroup>
 
   <Target Name="DisableDotNetRestore" BeforeTargets="Restore">

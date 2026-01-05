@@ -5,5 +5,5 @@ namespace Dhadgar.Agent.Core;
 /// </summary>
 public static class Hello
 {
-    public static readonly string Message = "Hello from Dhadgar.Agent.Core";
+    public const string Message = "Hello from Dhadgar.Agent.Core";
 }

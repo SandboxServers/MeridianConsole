@@ -51,7 +51,12 @@ public class CorrelationMiddleware
         if (context.Request.Headers.TryGetValue(CorrelationIdHeader, out var correlationHeader)
             && !string.IsNullOrWhiteSpace(correlationHeader))
         {
-            return correlationHeader.ToString();
+            var candidate = correlationHeader.ToString().Trim();
+            // Allow only safe characters, reasonable length
+            if (candidate.Length <= 64 && System.Text.RegularExpressions.Regex.IsMatch(candidate, @"^[A-Za-z0-9_\-:.]+$"))
+            {
+                return candidate;
+            }
         }
 
         var activity = Activity.Current;

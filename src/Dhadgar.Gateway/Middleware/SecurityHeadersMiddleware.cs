@@ -22,7 +22,6 @@ public class SecurityHeadersMiddleware
         // Prevent XSS attacks
         headers["X-Content-Type-Options"] = "nosniff";
         headers["X-Frame-Options"] = "DENY";
-        headers["X-XSS-Protection"] = "1; mode=block";
 
         // Content Security Policy (restrictive for API)
         headers["Content-Security-Policy"] =
@@ -42,8 +41,7 @@ public class SecurityHeadersMiddleware
                 "max-age=31536000; includeSubDomains; preload";
         }
 
-        // Remove server header
-        headers.Remove("Server");
+        // Remove server header (handled via Kestrel config in Program)
         headers.Remove("X-Powered-By");
 
         await _next(context);

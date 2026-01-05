@@ -63,6 +63,11 @@ app.post("/api/v1/betterauth/exchange", async (req, res) => {
 
 app.all("/api/v1/betterauth/*", toNodeHandler(auth));
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Dhadgar.BetterAuth listening on http://localhost:${port}`);
+});
+
+server.on('error', (err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
