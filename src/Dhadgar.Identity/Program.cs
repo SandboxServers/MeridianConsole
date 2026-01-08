@@ -236,6 +236,12 @@ builder.Services.AddOpenIddict()
     })
     .AddServer(options =>
     {
+        var issuer = builder.Configuration["Auth:Issuer"];
+        if (!string.IsNullOrWhiteSpace(issuer))
+        {
+            options.SetIssuer(new Uri(issuer));
+        }
+
         options.SetAuthorizationEndpointUris("connect/authorize")
             .SetTokenEndpointUris("connect/token")
             .SetUserInfoEndpointUris("connect/userinfo")

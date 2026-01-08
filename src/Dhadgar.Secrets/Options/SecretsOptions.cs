@@ -7,11 +7,23 @@ public sealed class SecretsOptions
     public string KeyVaultUri { get; set; } = string.Empty;
 
     /// <summary>
+    /// Permission names required to access secrets.
+    /// </summary>
+    public SecretsPermissionsOptions Permissions { get; set; } = new();
+
+    /// <summary>
     /// Secret names that are allowed to be dispensed by this service.
     /// Identity service has its own direct Key Vault access for core secrets.
     /// This service dispenses OAuth and other application secrets.
     /// </summary>
     public AllowedSecretsOptions AllowedSecrets { get; set; } = new();
+}
+
+public sealed class SecretsPermissionsOptions
+{
+    public string OAuthRead { get; set; } = "secrets:read:oauth";
+    public string BetterAuthRead { get; set; } = "secrets:read:betterauth";
+    public string InfrastructureRead { get; set; } = "secrets:read:infrastructure";
 }
 
 public sealed class AllowedSecretsOptions
