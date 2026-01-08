@@ -114,4 +114,4 @@ public static class SecretsEndpoints
 
 public record SecretResponse(string Name, string Value);
 public record SecretsResponse(Dictionary<string, string> Secrets);
-public record BatchSecretsRequest(List<string> SecretNames);
+public record BatchSecretsRequest(IReadOnlyList<string> SecretNames);

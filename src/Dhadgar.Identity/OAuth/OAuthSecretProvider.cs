@@ -107,5 +107,7 @@ public sealed class OAuthSecretProvider : IDisposable
     /// </summary>
     public string? XboxClientSecret => GetSecret("oauth-xbox-client-secret");
 
+#pragma warning disable CA1812 // Instantiated via JSON deserialization
     private sealed record SecretsResponse(Dictionary<string, string> Secrets);
+#pragma warning restore CA1812
 }
