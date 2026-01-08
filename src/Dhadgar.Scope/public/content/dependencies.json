@@ -1,13 +1,7 @@
 {
   "generatedFrom": "meridian-console-scope-v4.5.html SECTION 13 servicesData",
   "generatedAt": "2025-12-24T04:58:08.006282Z",
-  "layers": [
-    "external",
-    "presentation",
-    "core",
-    "business",
-    "foundation"
-  ],
+  "layers": ["external", "presentation", "core", "business", "foundation"],
   "nodes": [
     {
       "id": "postgresql",
@@ -97,10 +91,7 @@
         "API response caching (5-60 second TTL)"
       ],
       "dependencies": [],
-      "dependents": [
-        "Nodes",
-        "Tasks"
-      ],
+      "dependents": ["Nodes", "Tasks"],
       "endpoints": [
         "Redis protocol on port 6379",
         "Persistence via RDB snapshots + AOF",
@@ -122,9 +113,7 @@
         "CDN for static assets"
       ],
       "dependencies": [],
-      "dependents": [
-        "Nodes"
-      ],
+      "dependents": ["Nodes"],
       "endpoints": [
         "Cloudflare API v4",
         "Programmatic DNS updates",
@@ -144,13 +133,8 @@
         "Automated renewal via DNS-01 challenges"
       ],
       "dependencies": [],
-      "dependents": [
-        "Nodes"
-      ],
-      "endpoints": [
-        "ACME v2 API",
-        "DNS-01 challenge via Cloudflare"
-      ]
+      "dependents": ["Nodes"],
+      "endpoints": ["ACME v2 API", "DNS-01 challenge via Cloudflare"]
     },
     {
       "id": "unifi-controller",
@@ -165,13 +149,8 @@
         "Network topology visibility"
       ],
       "dependencies": [],
-      "dependents": [
-        "Firewall"
-      ],
-      "endpoints": [
-        "UniFi Controller API",
-        "SSH for direct rule application"
-      ]
+      "dependents": ["Firewall"],
+      "endpoints": ["UniFi Controller API", "SSH for direct rule application"]
     },
     {
       "id": "stripe",
@@ -187,13 +166,8 @@
         "PCI compliance"
       ],
       "dependencies": [],
-      "dependents": [
-        "Billing"
-      ],
-      "endpoints": [
-        "Stripe API v1",
-        "Webhook events for payment updates"
-      ]
+      "dependents": ["Billing"],
+      "endpoints": ["Stripe API v1", "Webhook events for payment updates"]
     },
     {
       "id": "paypal",
@@ -208,13 +182,8 @@
         "IPN (Instant Payment Notification) handling"
       ],
       "dependencies": [],
-      "dependents": [
-        "Billing"
-      ],
-      "endpoints": [
-        "PayPal REST API",
-        "IPN endpoint for payment notifications"
-      ]
+      "dependents": ["Billing"],
+      "endpoints": ["PayPal REST API", "IPN endpoint for payment notifications"]
     },
     {
       "id": "identity",
@@ -230,16 +199,8 @@
         "API key management for service-to-service auth",
         "Password reset and email verification"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ"
-      ],
-      "dependents": [
-        "Gateway",
-        "Billing",
-        "Servers",
-        "Web UI"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ"],
+      "dependents": ["Gateway", "Billing", "Servers", "Web UI"],
       "endpoints": [
         "POST /auth/register - User registration",
         "POST /auth/login - User authentication",
@@ -262,13 +223,8 @@
         "Request/response logging and metrics",
         "Circuit breaker pattern for failing services"
       ],
-      "dependencies": [
-        "Identity",
-        "RabbitMQ"
-      ],
-      "dependents": [
-        "Web UI"
-      ],
+      "dependencies": ["Identity", "RabbitMQ"],
+      "dependents": ["Web UI"],
       "endpoints": [
         "/* - Routes all API traffic",
         "/health - Gateway health check",
@@ -290,12 +246,7 @@
         "Coordinate with Windows/Linux agents for provisioning",
         "Health checks and alerting for hardware failures"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "Redis",
-        "Let's Encrypt",
-        "Cloudflare"
-      ],
+      "dependencies": ["PostgreSQL", "Redis", "Let's Encrypt", "Cloudflare"],
       "dependents": [
         "Secrets",
         "Servers",
@@ -326,11 +277,7 @@
         "Audit logging for secret access",
         "Provide secrets to authorized services only"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ",
-        "Nodes"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ", "Nodes"],
       "dependents": [],
       "endpoints": [
         "GET /secrets/:key - Retrieve secret",
@@ -353,16 +300,8 @@
         "Generate invoices and receipts",
         "Track usage for metered billing"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ",
-        "Identity",
-        "Stripe",
-        "PayPal"
-      ],
-      "dependents": [
-        "Web UI"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ", "Identity", "Stripe", "PayPal"],
+      "dependents": ["Web UI"],
       "endpoints": [
         "POST /billing/subscribe - Create subscription",
         "POST /billing/upgrade - Upgrade plan",
@@ -384,17 +323,8 @@
         "Monitor server status and player counts",
         "Schedule automated backups and restarts"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ",
-        "Nodes",
-        "Identity"
-      ],
-      "dependents": [
-        "Console",
-        "Discord",
-        "Web UI"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ", "Nodes", "Identity"],
+      "dependents": ["Console", "Discord", "Web UI"],
       "endpoints": [
         "POST /servers - Create server",
         "POST /servers/:id/start - Start server",
@@ -417,11 +347,7 @@
         "Retry failed jobs with exponential backoff",
         "Track job status and progress"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ",
-        "Redis"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ", "Redis"],
       "dependents": [],
       "endpoints": [
         "POST /tasks - Queue new task",
@@ -444,13 +370,8 @@
         "Enforce storage quotas per user",
         "Generate pre-signed URLs for direct uploads"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "Nodes"
-      ],
-      "dependents": [
-        "Mods"
-      ],
+      "dependencies": ["PostgreSQL", "Nodes"],
+      "dependents": ["Mods"],
       "endpoints": [
         "GET /files/:serverId - List files",
         "POST /files/:serverId/upload - Upload file",
@@ -472,10 +393,7 @@
         "Support multiple concurrent console sessions",
         "Buffer last 1000 lines of console output"
       ],
-      "dependencies": [
-        "Servers",
-        "Nodes"
-      ],
+      "dependencies": ["Servers", "Nodes"],
       "dependents": [],
       "endpoints": [
         "WS /console/:serverId - WebSocket connection",
@@ -497,10 +415,7 @@
         "Track mod versions and changelogs",
         "Sync mod lists across server clusters"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "Files"
-      ],
+      "dependencies": ["PostgreSQL", "Files"],
       "dependents": [],
       "endpoints": [
         "GET /mods/search - Search mod repositories",
@@ -523,11 +438,7 @@
         "Support notification preferences per user",
         "Track delivery status and failures"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ",
-        "Discord"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ", "Discord"],
       "dependents": [],
       "endpoints": [
         "POST /notifications/send - Send notification",
@@ -549,12 +460,7 @@
         "Track rule changes and audit logs",
         "Automated DDoS mitigation rules"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ",
-        "Nodes",
-        "UniFi Controller"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ", "Nodes", "UniFi Controller"],
       "dependents": [],
       "endpoints": [
         "POST /firewall/rules - Add firewall rule",
@@ -577,15 +483,8 @@
         "Support ticket creation from Discord",
         "Server administration via Discord slash commands"
       ],
-      "dependencies": [
-        "PostgreSQL",
-        "RabbitMQ",
-        "Notifications",
-        "Servers"
-      ],
-      "dependents": [
-        "Notifications"
-      ],
+      "dependencies": ["PostgreSQL", "RabbitMQ", "Notifications", "Servers"],
+      "dependents": ["Notifications"],
       "endpoints": [
         "POST /discord/webhook - Incoming Discord webhook",
         "POST /discord/send - Send Discord message",
@@ -606,12 +505,7 @@
         "Client-side routing and state management",
         "Static asset delivery via CDN"
       ],
-      "dependencies": [
-        "Gateway",
-        "Identity",
-        "Billing",
-        "Servers"
-      ],
+      "dependencies": ["Gateway", "Identity", "Billing", "Servers"],
       "dependents": [],
       "endpoints": [
         "/ - Landing page",
@@ -634,9 +528,7 @@
         "Report health metrics to Nodes service",
         "Handle Windows-specific game server requirements"
       ],
-      "dependencies": [
-        "Nodes"
-      ],
+      "dependencies": ["Nodes"],
       "dependents": [],
       "endpoints": [
         "Runs as Windows Service",
@@ -658,9 +550,7 @@
         "Report health metrics to Nodes service",
         "Handle containerized game server deployments"
       ],
-      "dependencies": [
-        "Nodes"
-      ],
+      "dependencies": ["Nodes"],
       "dependents": [],
       "endpoints": [
         "Runs as systemd service",

@@ -56,7 +56,7 @@ export interface ArchitectureNode {
   id: string;
   name: string;
   district: string;
-  kind: 'service' | 'agent' | 'db' | 'foundation' | 'external' | 'client';
+  kind: "service" | "agent" | "db" | "foundation" | "external" | "client";
   emoji: string;
   description: string;
   position: ArchitecturePoint;
@@ -69,7 +69,7 @@ export interface ArchitectureEdge {
   id: string;
   source: string;
   target: string;
-  kind: 'http' | 'ws' | 'amqp' | 'db' | 'dns' | 'other';
+  kind: "http" | "ws" | "amqp" | "db" | "dns" | "other";
   label: string;
 }
 
@@ -103,7 +103,7 @@ export interface DbServiceSchema {
 
 export interface DbSchemaItem {
   id: string;
-  kind: 'table' | 'view' | 'function' | 'enum' | 'type';
+  kind: "table" | "view" | "function" | "enum" | "type";
   details: string[];
 }
 

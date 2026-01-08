@@ -93,9 +93,7 @@
         {
           "id": "identity.user_status",
           "kind": "enum",
-          "details": [
-            "values: active, invited, locked, disabled"
-          ]
+          "details": ["values: active, invited, locked, disabled"]
         }
       ],
       "relationships": [
@@ -205,16 +203,12 @@
         {
           "id": "billing.subscription_status",
           "kind": "enum",
-          "details": [
-            "values: trialing, active, past_due, cancelled, paused"
-          ]
+          "details": ["values: trialing, active, past_due, cancelled, paused"]
         },
         {
           "id": "billing.invoice_status",
           "kind": "enum",
-          "details": [
-            "values: open, paid, void"
-          ]
+          "details": ["values: open, paid, void"]
         }
       ],
       "relationships": [
@@ -313,30 +307,22 @@
         {
           "id": "servers.server_state",
           "kind": "enum",
-          "details": [
-            "values: stopped, starting, running, stopping, crashed, updating"
-          ]
+          "details": ["values: stopped, starting, running, stopping, crashed, updating"]
         },
         {
           "id": "servers.user_db_target",
           "kind": "enum",
-          "details": [
-            "values: managed, byo"
-          ]
+          "details": ["values: managed, byo"]
         },
         {
           "id": "servers.backup_kind",
           "kind": "enum",
-          "details": [
-            "values: manual, scheduled"
-          ]
+          "details": ["values: manual, scheduled"]
         },
         {
           "id": "servers.backup_status",
           "kind": "enum",
-          "details": [
-            "values: queued, running, succeeded, failed"
-          ]
+          "details": ["values: queued, running, succeeded, failed"]
         }
       ],
       "relationships": [
@@ -422,9 +408,7 @@
         {
           "id": "nodes.node_status",
           "kind": "enum",
-          "details": [
-            "values: active, draining, disabled"
-          ]
+          "details": ["values: active, draining, disabled"]
         }
       ],
       "relationships": [
@@ -498,9 +482,7 @@
         {
           "id": "tasks.job_status",
           "kind": "enum",
-          "details": [
-            "values: queued, running, succeeded, failed, cancelled"
-          ]
+          "details": ["values: queued, running, succeeded, failed, cancelled"]
         }
       ],
       "relationships": [
@@ -565,23 +547,17 @@
         {
           "id": "files.artifact_kind",
           "kind": "enum",
-          "details": [
-            "values: backup, world, config, log_bundle, image"
-          ]
+          "details": ["values: backup, world, config, log_bundle, image"]
         },
         {
           "id": "files.transfer_direction",
           "kind": "enum",
-          "details": [
-            "values: upload, download"
-          ]
+          "details": ["values: upload, download"]
         },
         {
           "id": "files.transfer_status",
           "kind": "enum",
-          "details": [
-            "values: queued, ready, running, succeeded, failed, expired"
-          ]
+          "details": ["values: queued, ready, running, succeeded, failed, expired"]
         }
       ],
       "relationships": [
@@ -661,16 +637,12 @@
         {
           "id": "notifications.channel",
           "kind": "enum",
-          "details": [
-            "values: email, webhook, discord, inapp"
-          ]
+          "details": ["values: email, webhook, discord, inapp"]
         },
         {
           "id": "notifications.delivery_status",
           "kind": "enum",
-          "details": [
-            "values: queued, running, sent, failed"
-          ]
+          "details": ["values: queued, running, sent, failed"]
         }
       ],
       "relationships": [
@@ -732,16 +704,12 @@
         {
           "id": "firewall.policy_mode",
           "kind": "enum",
-          "details": [
-            "values: allowlist, blocklist"
-          ]
+          "details": ["values: allowlist, blocklist"]
         },
         {
           "id": "firewall.direction",
           "kind": "enum",
-          "details": [
-            "values: inbound, outbound"
-          ]
+          "details": ["values: inbound, outbound"]
         }
       ],
       "relationships": [
@@ -819,16 +787,12 @@
         {
           "id": "agent.agent_status",
           "kind": "enum",
-          "details": [
-            "values: pending, active, disabled"
-          ]
+          "details": ["values: pending, active, disabled"]
         },
         {
           "id": "agent.command_status",
           "kind": "enum",
-          "details": [
-            "values: queued, running, succeeded, failed"
-          ]
+          "details": ["values: queued, running, succeeded, failed"]
         }
       ],
       "relationships": [
