@@ -74,6 +74,10 @@ builder.Services.AddScoped<OrganizationService>();
 builder.Services.AddScoped<MembershipService>();
 builder.Services.AddScoped<OrganizationSwitchService>();
 
+// Memory cache for webhook secret caching
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IWebhookSecretProvider, WebhookSecretProvider>();
+
 var authenticationBuilder = builder.Services.AddAuthentication(options =>
 {
     options.DefaultSignInScheme = AuthSchemes.External;

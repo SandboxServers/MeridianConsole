@@ -23,6 +23,7 @@ public static class WebhookEndpoint
         HttpContext context,
         IdentityDbContext dbContext,
         IIdentityEventPublisher eventPublisher,
+        IWebhookSecretProvider secretProvider,
         IOptions<WebhookOptions> webhookOptions,
         IHostEnvironment environment,
         TimeProvider timeProvider,
@@ -38,8 +39,23 @@ public static class WebhookEndpoint
         var rawBody = await reader.ReadToEndAsync(ct);
         context.Request.Body.Position = 0;
 
+        // Get the webhook secret from Key Vault
+        string? secret;
+        try
+        {
+            secret = await secretProvider.GetBetterAuthSecretAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to retrieve webhook secret from Key Vault");
+            return Results.Problem(
+                title: "Configuration Error",
+                detail: "Unable to validate webhook signature",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
         // Validate webhook signature
-        if (!ValidateSignature(context, rawBody, options, environment, logger))
+        if (!ValidateSignature(context, rawBody, secret, options, environment, logger))
         {
             return Results.Unauthorized();
         }
@@ -160,20 +176,21 @@ public static class WebhookEndpoint
     private static bool ValidateSignature(
         HttpContext context,
         string rawBody,
+        string? secret,
         WebhookOptions options,
         IHostEnvironment environment,
         ILogger logger)
     {
-        // In development, allow skipping validation if no secret is configured
-        if (string.IsNullOrWhiteSpace(options.BetterAuthSecret))
+        // In development, allow skipping validation if no secret is available
+        if (string.IsNullOrWhiteSpace(secret))
         {
             if (environment.IsDevelopment())
             {
-                logger.LogWarning("Webhook signature validation skipped - no secret configured (Development only)");
+                logger.LogWarning("Webhook signature validation skipped - no secret available (Development only)");
                 return true;
             }
 
-            logger.LogError("Webhook signature validation failed - no secret configured in production");
+            logger.LogError("Webhook signature validation failed - no secret available in production");
             return false;
         }
 
@@ -232,7 +249,7 @@ public static class WebhookEndpoint
 
         // Compute expected signature: HMAC-SHA256(timestamp.body, secret)
         var signedPayload = $"{timestamp}.{rawBody}";
-        var secretBytes = Encoding.UTF8.GetBytes(options.BetterAuthSecret);
+        var secretBytes = Encoding.UTF8.GetBytes(secret);
         var payloadBytes = Encoding.UTF8.GetBytes(signedPayload);
 
         var expectedSignature = Convert.ToHexString(HMACSHA256.HashData(secretBytes, payloadBytes)).ToLowerInvariant();
