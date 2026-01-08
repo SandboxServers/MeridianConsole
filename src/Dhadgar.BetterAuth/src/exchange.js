@@ -20,12 +20,19 @@ async function getPrivateKey() {
 }
 
 function resolveClientApp({ bodyClientApp, origin, allowedApps }) {
-  if (origin?.includes("panel.meridianconsole.com")) {
-    return "panel";
-  }
-
-  if (origin?.includes("meridianconsole.com")) {
-    return "shop";
+  // Use strict hostname comparison to prevent origin spoofing
+  if (origin) {
+    try {
+      const url = new URL(origin);
+      if (url.hostname === "panel.meridianconsole.com") {
+        return "panel";
+      }
+      if (url.hostname === "meridianconsole.com" || url.hostname === "www.meridianconsole.com") {
+        return "shop";
+      }
+    } catch {
+      // Invalid origin URL, fall through
+    }
   }
 
   if (bodyClientApp && allowedApps.includes(bodyClientApp)) {
