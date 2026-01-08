@@ -68,14 +68,14 @@ public sealed class JwtService : IJwtService, IDisposable
     {
         // Prefer Key Vault key if configured
         if (!string.IsNullOrWhiteSpace(options.KeyVault?.VaultUri) &&
-            !string.IsNullOrWhiteSpace(options.KeyVault.SigningKeyName))
+            !string.IsNullOrWhiteSpace(options.KeyVault.JwtSigningKeyName))
         {
             var credential = new DefaultAzureCredential();
             var secretClient = new SecretClient(new Uri(options.KeyVault!.VaultUri), credential);
 
             try
             {
-                var secret = secretClient.GetSecret(options.KeyVault.SigningKeyName);
+                var secret = secretClient.GetSecret(options.KeyVault.JwtSigningKeyName);
                 var pem = secret.Value.Value;
                 var ecdsa = ECDsa.Create();
                 ecdsa.ImportFromPem(pem);

@@ -22,6 +22,7 @@ public class SecurityHeadersMiddleware
         // Prevent XSS attacks
         headers["X-Content-Type-Options"] = "nosniff";
         headers["X-Frame-Options"] = "DENY";
+        headers.Remove("X-XSS-Protection");
 
         // Content Security Policy (restrictive for API)
         headers["Content-Security-Policy"] =

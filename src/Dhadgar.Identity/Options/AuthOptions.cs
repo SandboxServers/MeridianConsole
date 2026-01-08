@@ -23,8 +23,10 @@ public sealed class ExchangeTokenOptions
 public sealed class KeyVaultOptions
 {
     public string VaultUri { get; set; } = string.Empty;
-    public string SigningKeyName { get; set; } = string.Empty;
-    public string EncryptionCertName { get; set; } = string.Empty;
+    public string SigningCertName { get; set; } = "identity-signing-cert";
+    public string EncryptionCertName { get; set; } = "identity-encryption-cert";
+    public string ExchangePublicKeyName { get; set; } = "identity-exchange-public-key";
+    public string JwtSigningKeyName { get; set; } = "identity-jwt-signing-key";
 }
 
 public sealed class WebhookOptions

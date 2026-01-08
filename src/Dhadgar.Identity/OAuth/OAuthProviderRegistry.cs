@@ -29,12 +29,13 @@ public static class OAuthProviderRegistry
         AuthenticationBuilder builder,
         IConfiguration configuration,
         IHostEnvironment environment,
+        OAuthSecretProvider secrets,
         string signInScheme)
     {
-        ConfigureSteam(builder, configuration, environment, signInScheme);
-        ConfigureBattleNet(builder, configuration, environment, signInScheme);
-        ConfigureEpic(builder, configuration, environment, signInScheme);
-        ConfigureXbox(builder, configuration, environment, signInScheme);
+        ConfigureSteam(builder, configuration, environment, secrets, signInScheme);
+        ConfigureBattleNet(builder, configuration, environment, secrets, signInScheme);
+        ConfigureEpic(builder, configuration, environment, secrets, signInScheme);
+        ConfigureXbox(builder, configuration, environment, secrets, signInScheme);
     }
 
     public static void ConfigureMockProviders(AuthenticationBuilder builder, string signInScheme)
@@ -60,9 +61,12 @@ public static class OAuthProviderRegistry
         AuthenticationBuilder builder,
         IConfiguration configuration,
         IHostEnvironment environment,
+        OAuthSecretProvider secrets,
         string signInScheme)
     {
-        var applicationKey = GetSetting(configuration, "OAuth:Steam:ApplicationKey", environment, Steam);
+        // Key Vault first, then configuration fallback
+        var applicationKey = secrets.SteamApiKey
+            ?? GetSetting(configuration, "OAuth:Steam:ApplicationKey", environment, Steam);
 
         builder.AddSteam(Steam, options =>
         {
@@ -82,10 +86,14 @@ public static class OAuthProviderRegistry
         AuthenticationBuilder builder,
         IConfiguration configuration,
         IHostEnvironment environment,
+        OAuthSecretProvider secrets,
         string signInScheme)
     {
-        var clientId = GetSetting(configuration, "OAuth:BattleNet:ClientId", environment, BattleNet);
-        var clientSecret = GetSetting(configuration, "OAuth:BattleNet:ClientSecret", environment, BattleNet);
+        // Key Vault first, then configuration fallback
+        var clientId = secrets.BattleNetClientId
+            ?? GetSetting(configuration, "OAuth:BattleNet:ClientId", environment, BattleNet);
+        var clientSecret = secrets.BattleNetClientSecret
+            ?? GetSetting(configuration, "OAuth:BattleNet:ClientSecret", environment, BattleNet);
         var region = configuration["OAuth:BattleNet:Region"];
 
         builder.AddBattleNet(BattleNet, options =>
@@ -108,10 +116,15 @@ public static class OAuthProviderRegistry
         AuthenticationBuilder builder,
         IConfiguration configuration,
         IHostEnvironment environment,
+        OAuthSecretProvider secrets,
         string signInScheme)
     {
-        var clientId = GetSetting(configuration, "OAuth:Epic:ClientId", environment, Epic);
-        var clientSecret = GetSetting(configuration, "OAuth:Epic:ClientSecret", environment, Epic);
+        // Key Vault first, then configuration fallback
+        var clientId = secrets.EpicClientId
+            ?? GetSetting(configuration, "OAuth:Epic:ClientId", environment, Epic);
+        var clientSecret = secrets.EpicClientSecret
+            ?? GetSetting(configuration, "OAuth:Epic:ClientSecret", environment, Epic);
+        // Endpoints come from config only (not secrets)
         var authorizationEndpoint = GetSetting(configuration, "OAuth:Epic:AuthorizationEndpoint", environment, Epic);
         var tokenEndpoint = GetSetting(configuration, "OAuth:Epic:TokenEndpoint", environment, Epic);
         var userInfoEndpoint = GetSetting(configuration, "OAuth:Epic:UserInformationEndpoint", environment, Epic);
@@ -134,10 +147,14 @@ public static class OAuthProviderRegistry
         AuthenticationBuilder builder,
         IConfiguration configuration,
         IHostEnvironment environment,
+        OAuthSecretProvider secrets,
         string signInScheme)
     {
-        var clientId = GetSetting(configuration, "OAuth:Xbox:ClientId", environment, Xbox);
-        var clientSecret = GetSetting(configuration, "OAuth:Xbox:ClientSecret", environment, Xbox);
+        // Key Vault first, then configuration fallback
+        var clientId = secrets.XboxClientId
+            ?? GetSetting(configuration, "OAuth:Xbox:ClientId", environment, Xbox);
+        var clientSecret = secrets.XboxClientSecret
+            ?? GetSetting(configuration, "OAuth:Xbox:ClientSecret", environment, Xbox);
 
         builder.AddMicrosoftAccount(Xbox, options =>
         {

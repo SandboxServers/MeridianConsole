@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Dhadgar.Identity.Migrations
+namespace Dhadgar.Identity.Data.Migrations
 {
     /// <inheritdoc />
     public partial class AddOpenIddict : Migration

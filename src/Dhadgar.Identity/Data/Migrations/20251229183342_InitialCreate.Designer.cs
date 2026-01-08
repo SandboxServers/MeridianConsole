@@ -10,7 +10,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Dhadgar.Identity.Migrations
+namespace Dhadgar.Identity.Data.Migrations
 {
     [DbContext(typeof(IdentityDbContext))]
     [Migration("20251229183342_InitialCreate")]

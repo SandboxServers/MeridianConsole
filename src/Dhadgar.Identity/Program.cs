@@ -100,7 +100,17 @@ if (builder.Environment.IsEnvironment("Testing"))
 }
 else
 {
-    OAuthProviderRegistry.ConfigureProviders(authenticationBuilder, builder.Configuration, builder.Environment, AuthSchemes.External);
+    // Load gaming OAuth secrets from Secrets Service at startup
+    var secretsServiceUrl = builder.Configuration["SecretsService:Url"] ?? "http://localhost:5000";
+    var oauthSecrets = new OAuthSecretProvider(secretsServiceUrl);
+    oauthSecrets.LoadSecretsAsync().GetAwaiter().GetResult();
+
+    OAuthProviderRegistry.ConfigureProviders(
+        authenticationBuilder,
+        builder.Configuration,
+        builder.Environment,
+        oauthSecrets,
+        AuthSchemes.External);
 }
 
 builder.Services.AddRateLimiter(options =>
@@ -231,38 +241,39 @@ builder.Services.AddOpenIddict()
             "billing:read");
 
         var vaultUri = builder.Configuration["Auth:KeyVault:VaultUri"];
-        var signingCertName = builder.Configuration["Auth:KeyVault:SigningKeyName"];
+        var signingCertName = builder.Configuration["Auth:KeyVault:SigningCertName"];
         var encryptionCertName = builder.Configuration["Auth:KeyVault:EncryptionCertName"];
 
-        if (builder.Environment.IsProduction())
+        // Always use Key Vault for certificates (including local dev)
+        if (string.IsNullOrWhiteSpace(vaultUri) ||
+            string.IsNullOrWhiteSpace(signingCertName) ||
+            string.IsNullOrWhiteSpace(encryptionCertName))
         {
-            if (string.IsNullOrWhiteSpace(vaultUri) ||
-                string.IsNullOrWhiteSpace(signingCertName) ||
-                string.IsNullOrWhiteSpace(encryptionCertName))
-            {
-                throw new InvalidOperationException("Key Vault certificate configuration is required in production.");
-            }
-
-            var credential = new DefaultAzureCredential();
-            var certClient = new CertificateClient(new Uri(vaultUri), credential);
-
-            try
-            {
-                var signingCert = certClient.GetCertificate(signingCertName).Value;
-                var encryptionCert = certClient.GetCertificate(encryptionCertName).Value;
-
-                options.AddSigningCertificate(new X509Certificate2(signingCert.Cer))
-                    .AddEncryptionCertificate(new X509Certificate2(encryptionCert.Cer));
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("Failed to load OpenIddict certificates from Key Vault.", ex);
-            }
+            throw new InvalidOperationException(
+                "Key Vault certificate configuration is required. " +
+                "Configure Auth:KeyVault:VaultUri, SigningCertName, and EncryptionCertName. " +
+                "Ensure you are logged in via 'az login' for local development.");
         }
-        else
+
+        var credential = new DefaultAzureCredential();
+        var certClient = new CertificateClient(new Uri(vaultUri), credential);
+
+        try
         {
-            options.AddEphemeralEncryptionKey();
-            options.AddEphemeralSigningKey();
+            // DownloadCertificate returns X509Certificate2 with private key (required for signing)
+            // GetCertificate only returns public cert metadata which cannot be used for signing
+            var signingCert = certClient.DownloadCertificate(signingCertName);
+            var encryptionCert = certClient.DownloadCertificate(encryptionCertName);
+
+            options.AddSigningCertificate(signingCert)
+                .AddEncryptionCertificate(encryptionCert);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to load OpenIddict certificates from Key Vault ({vaultUri}). " +
+                $"Ensure you are logged in via 'az login' and have Key Vault Certificates User role. " +
+                $"Error: {ex.Message}", ex);
         }
 
         options.UseAspNetCore()

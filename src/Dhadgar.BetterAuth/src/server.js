@@ -2,8 +2,14 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
-import { auth } from "./auth.js";
-import { createExchangeToken } from "./exchange.js";
+import { loadSecrets } from "./secrets-client.js";
+
+// Load secrets from Secrets Service before initializing the app
+await loadSecrets();
+
+// Import auth after secrets are loaded (it depends on env vars)
+const { auth } = await import("./auth.js");
+const { createExchangeToken } = await import("./exchange.js");
 
 const app = express();
 const port = Number(process.env.PORT ?? 5130);
@@ -57,6 +63,7 @@ app.post("/api/v1/betterauth/exchange", async (req, res) => {
 
     return res.json({ exchangeToken });
   } catch (error) {
+    console.error("Exchange token error:", error);
     return res.status(500).json({ error: "exchange_failed" });
   }
 });
