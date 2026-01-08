@@ -36,8 +36,10 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
     <>
       {/* Backdrop */}
       <div
+        role="presentation"
         className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm transition-opacity lg:hidden"
         onClick={onClose}
+        onKeyDown={(e) => e.key === 'Escape' && onClose()}
       />
 
       {/* Drawer */}

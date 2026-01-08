@@ -7,7 +7,7 @@ import { Chip } from '../ui/Chip';
 import { Button } from '../ui/Button';
 import { Alert } from '../ui/Alert';
 
-declare const cytoscape: (options: any) => Core;
+declare const cytoscape: (options: Record<string, unknown>) => Core;
 
 const LAYER_ORDER = ['external', 'presentation', 'core', 'business', 'foundation'];
 
@@ -41,7 +41,7 @@ export function DependencyGraph() {
 
   // Build elements for Cytoscape
   const buildElements = useCallback((graphData: DependencyGraphData) => {
-    const elements: any[] = [];
+    const elements: Array<{ data: Record<string, string | undefined> }> = [];
 
     graphData.nodes.forEach((n) => {
       const label = `${n.emoji ? n.emoji + ' ' : ''}${n.name}`;
@@ -216,7 +216,8 @@ export function DependencyGraph() {
         cy.destroy();
         cyRef.current = null;
       };
-    } catch (err) {
+    } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- error handler for initialization failure
       setInitError(true);
     }
   }, [data, buildElements, applyPresetPositions]);
@@ -362,7 +363,7 @@ export function DependencyGraph() {
 
           {initError && (
             <Alert severity="warning" className="mt-3" dense>
-              Graph renderer failed to initialize. If you're behind a strict network, the Cytoscape CDN may be blocked.
+              Graph renderer failed to initialize. If you&apos;re behind a strict network, the Cytoscape CDN may be blocked.
               Check DevTools console for details.
             </Alert>
           )}
@@ -393,8 +394,10 @@ export function DependencyGraph() {
       {drawerOpen && (
         <>
           <div
+            role="presentation"
             className="fixed inset-0 z-50 hidden bg-black/60 md:block lg:hidden"
             onClick={() => setDrawerOpen(false)}
+            onKeyDown={(e) => e.key === 'Escape' && setDrawerOpen(false)}
           />
           <div className="fixed bottom-0 left-0 right-0 z-50 hidden max-h-[70vh] overflow-auto rounded-t-2xl border-t border-white/10 bg-slate-950/90 p-4 shadow-2xl backdrop-blur md:block lg:hidden">
             <div className="flex items-center justify-between">

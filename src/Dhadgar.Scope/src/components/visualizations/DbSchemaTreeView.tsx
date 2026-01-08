@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { DbSchemaCatalog, DbServiceSchema, DbSchemaItem } from '../../lib/types';
+import type { DbSchemaCatalog, DbSchemaItem } from '../../lib/types';
 
 export function DbSchemaTreeView() {
   const [data, setData] = useState<DbSchemaCatalog | null>(null);

@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import type { ChangeEventHandler } from 'react';
+import type { ChangeEventHandler, ReactNode } from 'react';
 
 interface TextFieldProps {
   value: string;
@@ -9,7 +9,7 @@ interface TextFieldProps {
   clearable?: boolean;
   onClear?: () => void;
   className?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
 }
 
 export function TextField({

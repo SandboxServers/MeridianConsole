@@ -6,11 +6,15 @@ import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import security from "eslint-plugin-security";
+import astroPlugin from "eslint-plugin-astro";
 
 export default [
   js.configs.recommended,
+  // Astro files - use Astro plugin's recommended config
+  ...astroPlugin.configs.recommended,
+  // TypeScript/React files
   {
-    files: ["**/*.{ts,tsx,astro}"],
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
