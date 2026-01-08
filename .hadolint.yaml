@@ -1,0 +1,16 @@
+# Hadolint configuration for Dockerfile linting
+# See: https://github.com/hadolint/hadolint#configure
+
+# Trusted registries (images from these don't need explicit tags)
+trustedRegistries:
+  - mcr.microsoft.com
+  - meridianconsoleacr-etdvg4cthscffqdf.azurecr.io
+
+# Rule severity overrides
+# DL3008: Pin versions in apt-get install (warning instead of error for dev)
+override:
+  warning:
+    - DL3008
+
+# Ignore rules (use sparingly)
+ignored: []
