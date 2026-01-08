@@ -8,6 +8,9 @@
     <AnalysisMode>All</AnalysisMode>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+
+    <!-- CA1303: Agents don't need localization for console output -->
+    <NoWarn>$(NoWarn);CA1303</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
