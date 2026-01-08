@@ -117,6 +117,18 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+    options.AddPolicy("auth", context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetSlidingWindowLimiter($"auth:{ip}", _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 6,
+            QueueLimit = 0
+        });
+    });
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
     {
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -240,6 +252,14 @@ builder.Services.AddOpenIddict()
             "nodes:manage",
             "billing:read");
 
+        if (builder.Environment.IsEnvironment("Testing"))
+        {
+            // Avoid Key Vault dependency in tests.
+            options.AddDevelopmentSigningCertificate()
+                .AddDevelopmentEncryptionCertificate();
+        }
+        else
+        {
         var vaultUri = builder.Configuration["Auth:KeyVault:VaultUri"];
         var signingCertName = builder.Configuration["Auth:KeyVault:SigningCertName"];
         var encryptionCertName = builder.Configuration["Auth:KeyVault:EncryptionCertName"];
@@ -274,6 +294,7 @@ builder.Services.AddOpenIddict()
                 $"Failed to load OpenIddict certificates from Key Vault ({vaultUri}). " +
                 $"Ensure you are logged in via 'az login' and have Key Vault Certificates User role. " +
                 $"Error: {ex.Message}", ex);
+        }
         }
 
         options.UseAspNetCore()

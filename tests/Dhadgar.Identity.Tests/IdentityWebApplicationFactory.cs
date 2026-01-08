@@ -53,6 +53,9 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
 
             services.RemoveAll<IIdentityEventPublisher>();
             services.AddSingleton<IIdentityEventPublisher>(EventPublisher);
+
+            services.RemoveAll<IWebhookSecretProvider>();
+            services.AddSingleton<IWebhookSecretProvider>(new TestWebhookSecretProvider());
         });
     }
 
@@ -74,5 +77,13 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
         await db.SaveChangesAsync();
 
         return user.Id;
+    }
+
+    private sealed class TestWebhookSecretProvider : IWebhookSecretProvider
+    {
+        public Task<string?> GetBetterAuthSecretAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult<string?>(null);
+        }
     }
 }

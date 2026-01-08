@@ -74,7 +74,7 @@ public class GatewayIntegrationTests : IClassFixture<GatewayWebApplicationFactor
 
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
-        Assert.Equal("1; mode=block", response.Headers.GetValues("X-XSS-Protection").Single());
+        Assert.False(response.Headers.Contains("X-XSS-Protection"));
         Assert.Equal("strict-origin-when-cross-origin", response.Headers.GetValues("Referrer-Policy").Single());
         Assert.Equal("default-src 'none'; frame-ancestors 'none'",
             response.Headers.GetValues("Content-Security-Policy").Single());

@@ -66,7 +66,7 @@ public class MiddlewareUnitTests
 
         var identity = new ClaimsIdentity(new[]
         {
-            new Claim("tenant_id", "tenant-1"),
+            new Claim("org_id", "tenant-1"),
             new Claim("sub", "user-1"),
             new Claim("client_type", "agent")
         }, "TestAuth");
@@ -190,7 +190,7 @@ public class MiddlewareUnitTests
 
         Assert.Equal("nosniff", context.Response.Headers["X-Content-Type-Options"].ToString());
         Assert.Equal("DENY", context.Response.Headers["X-Frame-Options"].ToString());
-        Assert.Equal("1; mode=block", context.Response.Headers["X-XSS-Protection"].ToString());
+        Assert.False(context.Response.Headers.ContainsKey("X-XSS-Protection"));
         Assert.False(context.Response.Headers.ContainsKey("Strict-Transport-Security"));
     }
 

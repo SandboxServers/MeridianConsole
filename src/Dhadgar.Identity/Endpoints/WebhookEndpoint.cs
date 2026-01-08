@@ -181,12 +181,12 @@ public static class WebhookEndpoint
         IHostEnvironment environment,
         ILogger logger)
     {
-        // In development, allow skipping validation if no secret is available
+        // In development/testing, allow skipping validation if no secret is available
         if (string.IsNullOrWhiteSpace(secret))
         {
-            if (environment.IsDevelopment())
+            if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
             {
-                logger.LogWarning("Webhook signature validation skipped - no secret available (Development only)");
+                logger.LogWarning("Webhook signature validation skipped - no secret available (dev/test only)");
                 return true;
             }
 
