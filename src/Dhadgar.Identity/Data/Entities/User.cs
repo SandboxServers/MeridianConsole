@@ -36,7 +36,8 @@ public sealed class User : IdentityUser<Guid>
     public DateTime? DeletedAt { get; set; }
 
     /// <summary>
-    /// PostgreSQL xmin-based optimistic concurrency
+    /// PostgreSQL xmin-based optimistic concurrency token.
+    /// With Npgsql 7.0+, IsRowVersion() on uint automatically maps to PostgreSQL xmin system column.
     /// </summary>
     public uint Version { get; set; }
 

@@ -1,6 +1,8 @@
+using System.Net;
 using Dhadgar.Gateway;
 using Dhadgar.Gateway.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
 using OpenTelemetry.Resources;
@@ -26,8 +28,8 @@ builder.Services.AddMeridianConsoleCors(builder.Configuration);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["Jwt:Issuer"];
-        options.Audience = builder.Configuration["Jwt:Audience"];
+        options.Authority = builder.Configuration["Auth:Issuer"];
+        options.Audience = builder.Configuration["Auth:Audience"];
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -36,7 +38,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             ClockSkew = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue<int?>("Jwt:ClockSkewSeconds") ?? 60)
+                builder.Configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60)
         };
         options.RefreshOnIssuerKeyNotFound = true;
     });
@@ -71,10 +73,7 @@ builder.Services.AddOpenTelemetry()
         {
             tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
         }
-        else
-        {
-            tracing.AddOtlpExporter();
-        }
+        // OTLP export requires explicit endpoint configuration; skipped when not set
     });
 
 // Rate limiting (global + route policies)
@@ -137,9 +136,76 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+// Configure ForwardedHeaders to trust Cloudflare proxy
+// SECURITY: Only trust X-Forwarded-* headers from known Cloudflare IP ranges
+// Without this, attackers could spoof CF-Connecting-IP or X-Forwarded-For headers
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 2; // Cloudflare + potential internal proxy
+
+    // Cloudflare IPv4 ranges (https://www.cloudflare.com/ips-v4)
+    var cloudflareIpv4Ranges = new[]
+    {
+        "173.245.48.0/20",
+        "103.21.244.0/22",
+        "103.22.200.0/22",
+        "103.31.4.0/22",
+        "141.101.64.0/18",
+        "108.162.192.0/18",
+        "190.93.240.0/20",
+        "188.114.96.0/20",
+        "197.234.240.0/22",
+        "198.41.128.0/17",
+        "162.158.0.0/15",
+        "104.16.0.0/13",
+        "104.24.0.0/14",
+        "172.64.0.0/13",
+        "131.0.72.0/22"
+    };
+
+    // Cloudflare IPv6 ranges (https://www.cloudflare.com/ips-v6)
+    var cloudflareIpv6Ranges = new[]
+    {
+        "2400:cb00::/32",
+        "2606:4700::/32",
+        "2803:f800::/32",
+        "2405:b500::/32",
+        "2405:8100::/32",
+        "2a06:98c0::/29",
+        "2c0f:f248::/32"
+    };
+
+    foreach (var range in cloudflareIpv4Ranges)
+    {
+        if (System.Net.IPNetwork.TryParse(range, out var network))
+        {
+            options.KnownIPNetworks.Add(network);
+        }
+    }
+
+    foreach (var range in cloudflareIpv6Ranges)
+    {
+        if (System.Net.IPNetwork.TryParse(range, out var network))
+        {
+            options.KnownIPNetworks.Add(network);
+        }
+    }
+
+    // Allow localhost for development
+    if (builder.Environment.IsDevelopment())
+    {
+        options.KnownProxies.Add(IPAddress.Loopback);
+        options.KnownProxies.Add(IPAddress.IPv6Loopback);
+    }
+});
+
 var app = builder.Build();
 
 // Middleware pipeline (ORDER MATTERS!)
+// 0. ForwardedHeaders MUST run first to set correct RemoteIpAddress before any other middleware
+app.UseForwardedHeaders();
+
 // 1. Security headers (earliest to apply to all responses)
 app.UseMiddleware<SecurityHeadersMiddleware>();
 

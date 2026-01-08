@@ -27,7 +27,7 @@
     <Message Importance="high" Text="Skipping .NET restore for Dhadgar.BetterAuth (Node.js project)" />
   </Target>
 
-  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(BetterAuthProjectDir)\package.json;$(BetterAuthProjectDir)\package-lock.json" Outputs="$(NodeModulesDir)\.package-lock.json">
+  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(BetterAuthProjectDir)/package.json;$(BetterAuthProjectDir)/package-lock.json" Outputs="$(NodeModulesDir)/.package-lock.json">
     <Message Importance="high" Text="Running npm install for Dhadgar.BetterAuth..." />
     <Exec Command="$(NpmCommand) install" WorkingDirectory="$(BetterAuthProjectDir)" />
   </Target>

@@ -29,6 +29,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasMaxLength(320);
 
+        // PostgreSQL xmin-based optimistic concurrency via Npgsql 7.0+ convention:
+        // When IsRowVersion() is used on a uint property, Npgsql automatically maps it to PostgreSQL's xmin system column.
+        // This is PostgreSQL-native and avoids the SQL Server byte[] rowversion pattern.
         builder.Property(u => u.Version)
             .IsRowVersion();
 

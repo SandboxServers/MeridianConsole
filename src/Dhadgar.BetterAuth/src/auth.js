@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 
-const trustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+export const trustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);

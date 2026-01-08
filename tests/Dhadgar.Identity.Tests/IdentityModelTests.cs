@@ -10,10 +10,16 @@ namespace Dhadgar.Identity.Tests;
 
 public class IdentityModelTests
 {
+    // Uses design-time connection string with no password (password-less local dev or env var).
+    // For CI/CD, set DHADGAR_TEST_CONNECTION_STRING environment variable.
+    private static readonly string ConnectionString =
+        Environment.GetEnvironmentVariable("DHADGAR_TEST_CONNECTION_STRING")
+        ?? "Host=localhost;Port=5432;Database=dhadgar_identity_test;Username=dhadgar;Password=";
+
     private static IdentityDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
-            .UseNpgsql("Host=localhost;Port=5432;Database=dhadgar_identity_test;Username=dhadgar;Password=dhadgar")
+            .UseNpgsql(ConnectionString)
             .Options;
 
         return new IdentityDbContext(options);
@@ -105,6 +111,7 @@ public class IdentityModelTests
 
         Assert.NotNull(entity);
 
+        // With Npgsql 7.0+, IsRowVersion() on a uint property maps to PostgreSQL xmin system column.
         var versionProperty = entity!.FindProperty(nameof(User.Version));
 
         Assert.NotNull(versionProperty);

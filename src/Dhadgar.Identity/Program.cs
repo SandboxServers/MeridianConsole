@@ -201,8 +201,13 @@ builder.Services.AddRateLimiter(options =>
             }
         }
 
-        // Default: no limiter
-        return RateLimitPartition.GetNoLimiter<string>("nolimit");
+        // Default: conservative limit for unmatched/unauthenticated requests
+        return RateLimitPartition.GetFixedWindowLimiter($"default:{ip}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
     });
 });
 
@@ -322,10 +327,7 @@ builder.Services.AddOpenTelemetry()
         {
             tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
         }
-        else
-        {
-            tracing.AddOtlpExporter();
-        }
+        // OTLP export requires explicit endpoint configuration; skipped when not set
     });
 
 var app = builder.Build();

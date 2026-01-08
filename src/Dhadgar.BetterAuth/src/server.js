@@ -8,16 +8,11 @@ import { loadSecrets } from "./secrets-client.js";
 await loadSecrets();
 
 // Import auth after secrets are loaded (it depends on env vars)
-const { auth } = await import("./auth.js");
+const { auth, trustedOrigins } = await import("./auth.js");
 const { createExchangeToken } = await import("./exchange.js");
 
 const app = express();
 const port = Number(process.env.PORT ?? 5130);
-
-const trustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
 
 app.use(express.json());
 
