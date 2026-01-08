@@ -1,12 +1,9 @@
 using System.Security.Claims;
 using Dhadgar.Identity.Data;
-using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Services;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -28,7 +25,7 @@ public class TokenExchangeServiceTests
         var eventPublisher = new TestIdentityEventPublisher();
         var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(
             new Dhadgar.Identity.Options.AuthOptions { RefreshTokenLifetimeDays = 7 });
-        using var userManager = CreateUserManager(context);
+        var lookupNormalizer = new UpperInvariantLookupNormalizer();
 
         var service = new TokenExchangeService(
             context,
@@ -40,7 +37,7 @@ public class TokenExchangeServiceTests
             TimeProvider.System,
             options,
             NullLogger<TokenExchangeService>.Instance,
-            userManager);
+            lookupNormalizer);
 
         var outcome = await service.ExchangeAsync("token");
 
@@ -66,7 +63,7 @@ public class TokenExchangeServiceTests
         var eventPublisher = new TestIdentityEventPublisher();
         var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(
             new Dhadgar.Identity.Options.AuthOptions { RefreshTokenLifetimeDays = 7 });
-        using var userManager = CreateUserManager(context);
+        var lookupNormalizer = new UpperInvariantLookupNormalizer();
 
         var service = new TokenExchangeService(
             context,
@@ -78,7 +75,7 @@ public class TokenExchangeServiceTests
             TimeProvider.System,
             options,
             NullLogger<TokenExchangeService>.Instance,
-            userManager);
+            lookupNormalizer);
 
         var outcome = await service.ExchangeAsync("token");
 
@@ -98,7 +95,7 @@ public class TokenExchangeServiceTests
         var eventPublisher = new TestIdentityEventPublisher();
         var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(
             new Dhadgar.Identity.Options.AuthOptions { RefreshTokenLifetimeDays = 7 });
-        using var userManager = CreateUserManager(context);
+        var lookupNormalizer = new UpperInvariantLookupNormalizer();
 
         var service = new TokenExchangeService(
             context,
@@ -110,7 +107,7 @@ public class TokenExchangeServiceTests
             TimeProvider.System,
             options,
             NullLogger<TokenExchangeService>.Instance,
-            userManager);
+            lookupNormalizer);
 
         var outcome = await service.ExchangeAsync("token");
 
@@ -140,23 +137,6 @@ public class TokenExchangeServiceTests
             .Options;
 
         return new IdentityContext(options);
-    }
-
-    private static UserManager<User> CreateUserManager(IdentityContext context)
-    {
-#pragma warning disable CA2000 // UserManager will dispose the store
-        var store = new UserStore<User, IdentityRole<Guid>, IdentityContext, Guid>(context);
-#pragma warning restore CA2000
-        return new UserManager<User>(
-            store,
-            Microsoft.Extensions.Options.Options.Create(new IdentityOptions()),
-            new PasswordHasher<User>(),
-            new IUserValidator<User>[] { new UserValidator<User>() },
-            new IPasswordValidator<User>[] { new PasswordValidator<User>() },
-            new UpperInvariantLookupNormalizer(),
-            new IdentityErrorDescriber(),
-            new ServiceCollection().AddLogging().BuildServiceProvider(),
-            NullLogger<UserManager<User>>.Instance);
     }
 
     private sealed class TestExchangeTokenValidator : IExchangeTokenValidator
