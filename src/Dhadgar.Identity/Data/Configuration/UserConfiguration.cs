@@ -40,9 +40,11 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasDatabaseName("ix_users_email");
 
         builder.HasIndex(u => u.NormalizedEmail)
+            .IsUnique()
             .HasDatabaseName("ix_users_normalized_email");
 
         builder.HasIndex(u => u.NormalizedUserName)
+            .IsUnique()
             .HasDatabaseName("ix_users_normalized_username");
 
         builder.HasIndex(u => u.DeletedAt)

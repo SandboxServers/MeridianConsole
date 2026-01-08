@@ -38,7 +38,7 @@ public sealed class TokenExchangeService
     private readonly TimeProvider _timeProvider;
     private readonly AuthOptions _authOptions;
     private readonly ILogger<TokenExchangeService> _logger;
-    private readonly UserManager<User> _userManager;
+    private readonly ILookupNormalizer _lookupNormalizer;
 
     public TokenExchangeService(
         IdentityDbContext dbContext,
@@ -50,7 +50,7 @@ public sealed class TokenExchangeService
         TimeProvider timeProvider,
         IOptions<AuthOptions> authOptions,
         ILogger<TokenExchangeService> logger,
-        UserManager<User> userManager)
+        ILookupNormalizer lookupNormalizer)
     {
         _dbContext = dbContext;
         _validator = validator;
@@ -61,7 +61,7 @@ public sealed class TokenExchangeService
         _timeProvider = timeProvider;
         _authOptions = authOptions.Value;
         _logger = logger;
-        _userManager = userManager;
+        _lookupNormalizer = lookupNormalizer;
     }
 
     public async Task<TokenExchangeOutcome> ExchangeAsync(string exchangeToken, CancellationToken ct = default)
@@ -105,117 +105,141 @@ public sealed class TokenExchangeService
         var now = _timeProvider.GetUtcNow();
         var nowUtc = now.UtcDateTime;
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(ct);
+        // Use an execution strategy to handle transient failures
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
 
-        try
+        await strategy.ExecuteAsync(async () =>
         {
-            user = await _userManager.Users.FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct)
-                   ?? await _userManager.FindByEmailAsync(email);
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(ct);
 
-            var isNewUser = user is null;
-
-            if (user is null)
+            try
             {
-                user = new User
+                // Query for existing user - use DbContext directly for read consistency
+                var normalizedEmail = _lookupNormalizer.NormalizeEmail(email);
+                user = await _dbContext.Users
+                           .FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct)
+                       ?? await _dbContext.Users
+                           .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
+
+                if (user is null)
                 {
-                    ExternalAuthId = externalAuthId,
-                    Email = email,
-                    UserName = email,
-                    EmailConfirmed = false,
-                    CreatedAt = nowUtc,
-                    LastAuthenticatedAt = nowUtc,
-                    UpdatedAt = nowUtc
-                };
-
-                var createResult = await _userManager.CreateAsync(user);
-                if (!createResult.Succeeded)
-                {
-                    await transaction.RollbackAsync(ct);
-                    return TokenExchangeOutcome.Fail("user_create_failed");
-                }
-            }
-            else
-            {
-                user.Email = email;
-                user.UserName = email;
-                user.LastAuthenticatedAt = nowUtc;
-                user.UpdatedAt = nowUtc;
-                await _userManager.UpdateAsync(user);
-            }
-
-            // Link external login to Identity user
-            var loginInfo = new UserLoginInfo("betterauth", externalAuthId, "BetterAuth");
-            var logins = await _userManager.GetLoginsAsync(user);
-            if (logins.All(l => l.LoginProvider != loginInfo.LoginProvider || l.ProviderKey != loginInfo.ProviderKey))
-            {
-                var addLoginResult = await _userManager.AddLoginAsync(user, loginInfo);
-                if (!addLoginResult.Succeeded)
-                {
-                    await transaction.RollbackAsync(ct);
-                    return TokenExchangeOutcome.Fail("login_link_failed");
-                }
-            }
-
-            var memberships = await _dbContext.UserOrganizations
-                .Where(uo => uo.UserId == user.Id && uo.LeftAt == null && uo.IsActive)
-                .OrderBy(uo => uo.JoinedAt)
-                .ToListAsync(ct);
-
-            if (memberships.Count == 0)
-            {
-                activeOrg = new Organization
-                {
-                    Name = "Default Organization",
-                    Slug = $"user-{user.Id:N}",
-                    OwnerId = user.Id,
-                    CreatedAt = nowUtc
-                };
-
-                membership = new UserOrganization
-                {
-                    UserId = user.Id,
-                    Organization = activeOrg,
-                    Role = "owner",
-                    JoinedAt = nowUtc,
-                    IsActive = true
-                };
-
-                _dbContext.Organizations.Add(activeOrg);
-                _dbContext.UserOrganizations.Add(membership);
-
-                user.PreferredOrganizationId = activeOrg.Id;
-            }
-            else
-            {
-                membership = memberships.First();
-
-                if (user.PreferredOrganizationId.HasValue)
-                {
-                    var preferred = memberships.FirstOrDefault(uo => uo.OrganizationId == user.PreferredOrganizationId.Value);
-                    if (preferred is not null)
+                    // Create user directly via DbContext (not UserManager) for transaction atomicity
+                    user = new User
                     {
-                        membership = preferred;
+                        Id = Guid.NewGuid(),
+                        ExternalAuthId = externalAuthId,
+                        Email = email,
+                        NormalizedEmail = normalizedEmail,
+                        UserName = email,
+                        NormalizedUserName = _lookupNormalizer.NormalizeName(email),
+                        EmailConfirmed = false,
+                        SecurityStamp = Guid.NewGuid().ToString(),
+                        ConcurrencyStamp = Guid.NewGuid().ToString(),
+                        CreatedAt = nowUtc,
+                        LastAuthenticatedAt = nowUtc,
+                        UpdatedAt = nowUtc
+                    };
+
+                    _dbContext.Users.Add(user);
+                }
+                else
+                {
+                    // Update user directly via DbContext for transaction atomicity
+                    user.Email = email;
+                    user.NormalizedEmail = normalizedEmail;
+                    user.UserName = email;
+                    user.NormalizedUserName = _lookupNormalizer.NormalizeName(email);
+                    user.LastAuthenticatedAt = nowUtc;
+                    user.UpdatedAt = nowUtc;
+                }
+
+                // Check for existing login link - use DbContext directly
+                var existingLogin = await _dbContext.UserLogins
+                    .AnyAsync(l => l.UserId == user.Id &&
+                                   l.LoginProvider == "betterauth" &&
+                                   l.ProviderKey == externalAuthId, ct);
+
+                if (!existingLogin)
+                {
+                    // Add login directly via DbContext for transaction atomicity
+                    _dbContext.UserLogins.Add(new IdentityUserLogin<Guid>
+                    {
+                        UserId = user.Id,
+                        LoginProvider = "betterauth",
+                        ProviderKey = externalAuthId,
+                        ProviderDisplayName = "BetterAuth"
+                    });
+                }
+
+                var memberships = await _dbContext.UserOrganizations
+                    .Where(uo => uo.UserId == user.Id && uo.LeftAt == null && uo.IsActive)
+                    .OrderBy(uo => uo.JoinedAt)
+                    .ToListAsync(ct);
+
+                if (memberships.Count == 0)
+                {
+                    activeOrg = new Organization
+                    {
+                        Name = "Default Organization",
+                        Slug = $"user-{user.Id:N}",
+                        OwnerId = user.Id,
+                        CreatedAt = nowUtc
+                    };
+
+                    membership = new UserOrganization
+                    {
+                        UserId = user.Id,
+                        Organization = activeOrg,
+                        Role = "owner",
+                        JoinedAt = nowUtc,
+                        IsActive = true
+                    };
+
+                    _dbContext.Organizations.Add(activeOrg);
+                    _dbContext.UserOrganizations.Add(membership);
+
+                    user.PreferredOrganizationId = activeOrg.Id;
+                }
+                else
+                {
+                    membership = memberships.First();
+
+                    if (user.PreferredOrganizationId.HasValue)
+                    {
+                        var preferred = memberships.FirstOrDefault(uo => uo.OrganizationId == user.PreferredOrganizationId.Value);
+                        if (preferred is not null)
+                        {
+                            membership = preferred;
+                        }
+                    }
+
+                    activeOrg = await _dbContext.Organizations
+                        .FirstAsync(o => o.Id == membership.OrganizationId, ct);
+
+                    if (user.PreferredOrganizationId != activeOrg.Id)
+                    {
+                        user.PreferredOrganizationId = activeOrg.Id;
                     }
                 }
 
-                activeOrg = await _dbContext.Organizations
-                    .FirstAsync(o => o.Id == membership.OrganizationId, ct);
-
-                if (user.PreferredOrganizationId != activeOrg.Id)
-                {
-                    user.PreferredOrganizationId = activeOrg.Id;
-                }
+                // Single SaveChangesAsync for all changes - ensures atomicity
+                await _dbContext.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
             }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(ct);
+                _logger.LogError(ex, "Token exchange failed for external user {ExternalAuthId}", externalAuthId);
+                throw;
+            }
+        });
 
-            await _dbContext.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            await transaction.RollbackAsync(ct);
-            _logger.LogError(ex, "Token exchange failed for external user {ExternalAuthId}", externalAuthId);
-            throw;
-        }
+        // Re-fetch user after transaction (strategy.ExecuteAsync doesn't return values cleanly)
+        var normalizedEmailFinal = _lookupNormalizer.NormalizeEmail(email);
+        user = (await _dbContext.Users.FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct))!;
+        activeOrg = await _dbContext.Organizations.FirstAsync(o => o.Id == user.PreferredOrganizationId, ct);
+        membership = await _dbContext.UserOrganizations
+            .FirstAsync(uo => uo.UserId == user.Id && uo.OrganizationId == activeOrg.Id, ct);
 
         var permissions = await _permissionService.CalculatePermissionsAsync(user.Id, activeOrg.Id, ct);
 
@@ -223,7 +247,7 @@ public sealed class TokenExchangeService
         {
             new("sub", user.Id.ToString()),
             new("org_id", activeOrg.Id.ToString()),
-            new("email", user.Email),
+            new("email", user.Email!),
             new("role", membership.Role)
         };
 
@@ -259,7 +283,7 @@ public sealed class TokenExchangeService
                 user.Id,
                 activeOrg.Id,
                 externalAuthId,
-                user.Email,
+                user.Email!,
                 clientApp,
                 permissions,
                 now), ct);

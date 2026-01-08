@@ -497,6 +497,7 @@ namespace Dhadgar.Identity.Migrations
                         .HasDatabaseName("ix_users_external_auth_id");
 
                     b.HasIndex("NormalizedEmail")
+                        .IsUnique()
                         .HasDatabaseName("ix_users_normalized_email");
 
                     b.HasIndex("NormalizedUserName")

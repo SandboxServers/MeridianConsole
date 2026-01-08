@@ -102,10 +102,11 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
+    // SECURITY: Only use JWT claim for tenant identification - never trust client headers
+    // Unauthenticated requests fall back to IP-based limiting
     options.AddPolicy("PerTenant", httpContext =>
     {
         var tenantId = httpContext.User.FindFirst("org_id")?.Value
-                       ?? httpContext.Request.Headers["X-Tenant-Id"].FirstOrDefault()
                        ?? httpContext.Connection.RemoteIpAddress?.ToString()
                        ?? "unknown";
 

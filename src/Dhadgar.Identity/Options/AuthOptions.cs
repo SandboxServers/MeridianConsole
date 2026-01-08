@@ -26,3 +26,22 @@ public sealed class KeyVaultOptions
     public string SigningKeyName { get; set; } = string.Empty;
     public string EncryptionCertName { get; set; } = string.Empty;
 }
+
+public sealed class WebhookOptions
+{
+    /// <summary>
+    /// Shared secret for HMAC-SHA256 signature validation of Better Auth webhooks.
+    /// Must be configured in production; validation is skipped if empty in Development.
+    /// </summary>
+    public string BetterAuthSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Header name containing the webhook signature.
+    /// </summary>
+    public string SignatureHeader { get; set; } = "X-Webhook-Signature";
+
+    /// <summary>
+    /// Maximum allowed clock skew for timestamp validation (in seconds).
+    /// </summary>
+    public int MaxTimestampAgeSeconds { get; set; } = 300;
+}

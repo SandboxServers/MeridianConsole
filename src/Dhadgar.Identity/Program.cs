@@ -34,6 +34,7 @@ builder.Services.AddDbContext<IdentityDbContext>(options =>
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.Configure<ExchangeTokenOptions>(builder.Configuration.GetSection("Auth:Exchange"));
+builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection("Webhooks"));
 
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -80,7 +81,10 @@ var authenticationBuilder = builder.Services.AddAuthentication(options =>
 
 authenticationBuilder.AddCookie(AuthSchemes.External, options =>
 {
+    // __Host- prefix requires: Secure=true, Path="/", no Domain attribute
     options.Cookie.Name = "__Host-dhadgar-external";
+    options.Cookie.Path = "/";
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.SameSite = SameSiteMode.Lax;
     options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
     options.SlidingExpiration = false;

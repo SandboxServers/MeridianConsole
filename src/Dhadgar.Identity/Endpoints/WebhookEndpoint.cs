@@ -1,9 +1,13 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Dhadgar.Contracts.Identity;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
+using Dhadgar.Identity.Options;
 using Dhadgar.Identity.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Dhadgar.Identity.Endpoints;
 
@@ -19,17 +23,33 @@ public static class WebhookEndpoint
         HttpContext context,
         IdentityDbContext dbContext,
         IIdentityEventPublisher eventPublisher,
+        IOptions<WebhookOptions> webhookOptions,
+        IHostEnvironment environment,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
-        // TODO: Validate Better Auth webhook signature before processing.
-        using var document = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: ct);
+        var logger = loggerFactory.CreateLogger("WebhookEndpoint");
+        var options = webhookOptions.Value;
+
+        // Read the raw body for signature validation
+        context.Request.EnableBuffering();
+        using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true);
+        var rawBody = await reader.ReadToEndAsync(ct);
+        context.Request.Body.Position = 0;
+
+        // Validate webhook signature
+        if (!ValidateSignature(context, rawBody, options, environment, logger))
+        {
+            return Results.Unauthorized();
+        }
+
+        using var document = JsonDocument.Parse(rawBody);
         if (!TryGetEventName(document.RootElement, out var eventName))
         {
             return Results.BadRequest(new { error = "missing_event" });
         }
-        var logger = loggerFactory.CreateLogger("WebhookEndpoint");
+
         var data = document.RootElement.TryGetProperty("data", out var dataElement)
             ? dataElement
             : default;
@@ -131,6 +151,102 @@ public static class WebhookEndpoint
                 logger.LogInformation("Better Auth webhook {Event} received with no handler.", eventName);
                 return Results.Ok();
         }
+    }
+
+    /// <summary>
+    /// Validates the webhook signature using HMAC-SHA256.
+    /// Format: "t=timestamp,v1=signature" where signature = HMAC-SHA256(timestamp.body, secret)
+    /// </summary>
+    private static bool ValidateSignature(
+        HttpContext context,
+        string rawBody,
+        WebhookOptions options,
+        IHostEnvironment environment,
+        ILogger logger)
+    {
+        // In development, allow skipping validation if no secret is configured
+        if (string.IsNullOrWhiteSpace(options.BetterAuthSecret))
+        {
+            if (environment.IsDevelopment())
+            {
+                logger.LogWarning("Webhook signature validation skipped - no secret configured (Development only)");
+                return true;
+            }
+
+            logger.LogError("Webhook signature validation failed - no secret configured in production");
+            return false;
+        }
+
+        var signatureHeader = context.Request.Headers[options.SignatureHeader].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(signatureHeader))
+        {
+            logger.LogWarning("Webhook signature validation failed - missing {Header} header", options.SignatureHeader);
+            return false;
+        }
+
+        // Parse signature header: "t=timestamp,v1=signature"
+        var parts = signatureHeader.Split(',');
+        string? timestamp = null;
+        string? signature = null;
+
+        foreach (var part in parts)
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length != 2) continue;
+
+            switch (kv[0].Trim())
+            {
+                case "t":
+                    timestamp = kv[1].Trim();
+                    break;
+                case "v1":
+                    signature = kv[1].Trim();
+                    break;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(timestamp) || string.IsNullOrWhiteSpace(signature))
+        {
+            logger.LogWarning("Webhook signature validation failed - invalid signature format");
+            return false;
+        }
+
+        // Validate timestamp to prevent replay attacks
+        if (long.TryParse(timestamp, out var timestampSeconds))
+        {
+            var webhookTime = DateTimeOffset.FromUnixTimeSeconds(timestampSeconds);
+            var now = DateTimeOffset.UtcNow;
+            var age = Math.Abs((now - webhookTime).TotalSeconds);
+
+            if (age > options.MaxTimestampAgeSeconds)
+            {
+                logger.LogWarning("Webhook signature validation failed - timestamp too old ({AgeSeconds}s)", age);
+                return false;
+            }
+        }
+        else
+        {
+            logger.LogWarning("Webhook signature validation failed - invalid timestamp format");
+            return false;
+        }
+
+        // Compute expected signature: HMAC-SHA256(timestamp.body, secret)
+        var signedPayload = $"{timestamp}.{rawBody}";
+        var secretBytes = Encoding.UTF8.GetBytes(options.BetterAuthSecret);
+        var payloadBytes = Encoding.UTF8.GetBytes(signedPayload);
+
+        var expectedSignature = Convert.ToHexString(HMACSHA256.HashData(secretBytes, payloadBytes)).ToLowerInvariant();
+
+        // Use constant-time comparison to prevent timing attacks
+        if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(expectedSignature),
+                Encoding.UTF8.GetBytes(signature.ToLowerInvariant())))
+        {
+            logger.LogWarning("Webhook signature validation failed - signature mismatch");
+            return false;
+        }
+
+        return true;
     }
 
     private static bool TryGetEventName(JsonElement element, out string eventName)

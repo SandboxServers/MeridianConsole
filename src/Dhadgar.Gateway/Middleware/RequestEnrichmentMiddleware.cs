@@ -47,9 +47,10 @@ public class RequestEnrichmentMiddleware
 
         var requestId = context.Request.Headers["X-Request-Id"].ToString();
 
-        // Extract tenant from JWT and inject (if authenticated)
+        // Extract tenant/org from JWT and inject (if authenticated)
         // Now safe because we stripped any client-supplied X-Tenant-Id above
-        var tenantId = context.User.FindFirst("tenant_id")?.Value;
+        // Note: JWT uses "org_id" claim (see TokenExchangeService)
+        var tenantId = context.User.FindFirst("org_id")?.Value;
         if (!string.IsNullOrEmpty(tenantId))
         {
             context.Request.Headers["X-Tenant-Id"] = tenantId;
