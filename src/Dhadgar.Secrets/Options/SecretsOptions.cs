@@ -1,5 +1,7 @@
 namespace Dhadgar.Secrets.Options;
 
+#pragma warning disable CA1002 // Do not expose generic lists - Options classes require List<T> for configuration binding
+
 public sealed class SecretsOptions
 {
     public string KeyVaultUri { get; set; } = string.Empty;
@@ -69,3 +71,5 @@ public sealed class AllowedSecretsOptions
         "redis-password"
     ];
 }
+
+#pragma warning restore CA1002

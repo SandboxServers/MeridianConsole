@@ -8,17 +8,29 @@ namespace Dhadgar.Identity.OAuth;
 /// Identity service has direct Key Vault access for core secrets (signing certs, JWT keys),
 /// but gaming OAuth secrets are retrieved via the Secrets Service.
 /// </summary>
-public sealed class OAuthSecretProvider
+public sealed class OAuthSecretProvider : IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly Dictionary<string, string> _secrets = new(StringComparer.OrdinalIgnoreCase);
+    private bool _disposed;
 
-    public OAuthSecretProvider(string secretsServiceUrl)
+    public OAuthSecretProvider(Uri secretsServiceUri)
     {
+        ArgumentNullException.ThrowIfNull(secretsServiceUri);
+        var baseUri = secretsServiceUri.ToString().TrimEnd('/') + "/";
         _httpClient = new HttpClient
         {
-            BaseAddress = new Uri(secretsServiceUrl.TrimEnd('/') + "/")
+            BaseAddress = new Uri(baseUri)
         };
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _httpClient.Dispose();
+            _disposed = true;
+        }
     }
 
     /// <summary>
@@ -95,5 +107,5 @@ public sealed class OAuthSecretProvider
     /// </summary>
     public string? XboxClientSecret => GetSecret("oauth-xbox-client-secret");
 
-    private record SecretsResponse(Dictionary<string, string> Secrets);
+    private sealed record SecretsResponse(Dictionary<string, string> Secrets);
 }

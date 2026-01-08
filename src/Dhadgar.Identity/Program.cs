@@ -102,7 +102,7 @@ else
 {
     // Load gaming OAuth secrets from Secrets Service at startup
     var secretsServiceUrl = builder.Configuration["SecretsService:Url"] ?? "http://localhost:5000";
-    var oauthSecrets = new OAuthSecretProvider(secretsServiceUrl);
+    using var oauthSecrets = new OAuthSecretProvider(new Uri(secretsServiceUrl));
     oauthSecrets.LoadSecretsAsync().GetAwaiter().GetResult();
 
     OAuthProviderRegistry.ConfigureProviders(
