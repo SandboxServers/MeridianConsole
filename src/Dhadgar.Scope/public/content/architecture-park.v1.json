@@ -62,14 +62,8 @@
         "x": -660,
         "y": -300
       },
-      "ports": [
-        "HTTPS 443",
-        "WSS 443"
-      ],
-      "endpoints": [
-        "/ui/*",
-        "/ws/console/*"
-      ],
+      "ports": ["HTTPS 443", "WSS 443"],
+      "endpoints": ["/ui/*", "/ws/console/*"],
       "responsibilities": [
         "Renders the UI",
         "Initiates console sessions",
@@ -87,19 +81,9 @@
         "x": -430,
         "y": -330
       },
-      "ports": [
-        "DNS 53",
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "DNS zones",
-        "API token / scoped key"
-      ],
-      "responsibilities": [
-        "Public DNS hosting",
-        "Optional proxy/WAF",
-        "ACME DNS-01 support"
-      ]
+      "ports": ["DNS 53", "HTTPS 443"],
+      "endpoints": ["DNS zones", "API token / scoped key"],
+      "responsibilities": ["Public DNS hosting", "Optional proxy/WAF", "ACME DNS-01 support"]
     },
     {
       "id": "gateway",
@@ -112,14 +96,8 @@
         "x": -120,
         "y": -350
       },
-      "ports": [
-        "HTTPS 443",
-        "WSS 443"
-      ],
-      "endpoints": [
-        "/api/*",
-        "/ws/*"
-      ],
+      "ports": ["HTTPS 443", "WSS 443"],
+      "endpoints": ["/api/*", "/ws/*"],
       "responsibilities": [
         "Routes requests to services",
         "Terminates TLS",
@@ -137,12 +115,8 @@
         "x": 100,
         "y": -360
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/identity/*"
-      ],
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/identity/*"],
       "responsibilities": [
         "Users/tenants/roles",
         "Token issuance + validation",
@@ -160,17 +134,9 @@
         "x": 300,
         "y": -330
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/billing/*"
-      ],
-      "responsibilities": [
-        "Subscriptions + entitlements",
-        "Invoicing",
-        "Usage/metering ingestion"
-      ]
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/billing/*"],
+      "responsibilities": ["Subscriptions + entitlements", "Invoicing", "Usage/metering ingestion"]
     },
     {
       "id": "servers",
@@ -183,12 +149,8 @@
         "x": -20,
         "y": -180
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/servers/*"
-      ],
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/servers/*"],
       "responsibilities": [
         "Server provisioning",
         "Instance state machine",
@@ -206,12 +168,8 @@
         "x": 180,
         "y": -170
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/nodes/*"
-      ],
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/nodes/*"],
       "responsibilities": [
         "Node registry",
         "Placement inputs (capacity, tags)",
@@ -229,12 +187,8 @@
         "x": 380,
         "y": -170
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/tasks/*"
-      ],
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/tasks/*"],
       "responsibilities": [
         "Workflow engine",
         "Queues + retries",
@@ -252,17 +206,9 @@
         "x": -160,
         "y": -90
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/files/*"
-      ],
-      "responsibilities": [
-        "Manifests",
-        "Signed URLs / staged uploads",
-        "Transfer auditing"
-      ]
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/files/*"],
+      "responsibilities": ["Manifests", "Signed URLs / staged uploads", "Transfer auditing"]
     },
     {
       "id": "notifications",
@@ -275,17 +221,9 @@
         "x": 40,
         "y": -70
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/notify/*"
-      ],
-      "responsibilities": [
-        "Templated notifications",
-        "Delivery fan-out",
-        "Preference controls"
-      ]
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/notify/*"],
+      "responsibilities": ["Templated notifications", "Delivery fan-out", "Preference controls"]
     },
     {
       "id": "firewall",
@@ -298,17 +236,9 @@
         "x": 240,
         "y": -70
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "/api/firewall/*"
-      ],
-      "responsibilities": [
-        "Allow/deny policies",
-        "Per-tenant policies",
-        "Push rules to agents"
-      ]
+      "ports": ["HTTPS 443"],
+      "endpoints": ["/api/firewall/*"],
+      "responsibilities": ["Allow/deny policies", "Per-tenant policies", "Push rules to agents"]
     },
     {
       "id": "agent_host",
@@ -321,19 +251,9 @@
         "x": 520,
         "y": -240
       },
-      "ports": [
-        "WSS 443 (agent channel)",
-        "Game ports (UDP/TCP)"
-      ],
-      "endpoints": [
-        "Agent gRPC/WS endpoint",
-        "Node telemetry"
-      ],
-      "responsibilities": [
-        "Runs agent daemon",
-        "Executes workloads",
-        "Reports health and metrics"
-      ]
+      "ports": ["WSS 443 (agent channel)", "Game ports (UDP/TCP)"],
+      "endpoints": ["Agent gRPC/WS endpoint", "Node telemetry"],
+      "responsibilities": ["Runs agent daemon", "Executes workloads", "Reports health and metrics"]
     },
     {
       "id": "agent",
@@ -346,14 +266,8 @@
         "x": 710,
         "y": -180
       },
-      "ports": [
-        "WSS 443",
-        "Local Docker/Podman socket"
-      ],
-      "endpoints": [
-        "/agent/ws",
-        "/agent/metrics"
-      ],
+      "ports": ["WSS 443", "Local Docker/Podman socket"],
+      "endpoints": ["/agent/ws", "/agent/metrics"],
       "responsibilities": [
         "Secure command execution",
         "Log + console streaming",
@@ -371,17 +285,9 @@
         "x": 640,
         "y": -50
       },
-      "ports": [
-        "UDP/TCP game ports"
-      ],
-      "endpoints": [
-        "Game-specific protocols"
-      ],
-      "responsibilities": [
-        "Runs gameplay logic",
-        "Writes/reads game DB",
-        "Produces logs/events"
-      ]
+      "ports": ["UDP/TCP game ports"],
+      "endpoints": ["Game-specific protocols"],
+      "responsibilities": ["Runs gameplay logic", "Writes/reads game DB", "Produces logs/events"]
     },
     {
       "id": "platform_pg",
@@ -394,17 +300,9 @@
         "x": -120,
         "y": 220
       },
-      "ports": [
-        "Postgres 5432"
-      ],
-      "endpoints": [
-        "platform-pg:5432"
-      ],
-      "responsibilities": [
-        "Stores platform state",
-        "HA failover/replication",
-        "Backups + PITR"
-      ]
+      "ports": ["Postgres 5432"],
+      "endpoints": ["platform-pg:5432"],
+      "responsibilities": ["Stores platform state", "HA failover/replication", "Backups + PITR"]
     },
     {
       "id": "user_pg",
@@ -417,12 +315,8 @@
         "x": 160,
         "y": 240
       },
-      "ports": [
-        "Postgres 5432"
-      ],
-      "endpoints": [
-        "user-pg:5432"
-      ],
+      "ports": ["Postgres 5432"],
+      "endpoints": ["user-pg:5432"],
       "responsibilities": [
         "Managed user DB hosting",
         "Backups (optional)",
@@ -440,12 +334,8 @@
         "x": 360,
         "y": 270
       },
-      "ports": [
-        "Postgres 5432"
-      ],
-      "endpoints": [
-        "customer-db:5432"
-      ],
+      "ports": ["Postgres 5432"],
+      "endpoints": ["customer-db:5432"],
       "responsibilities": [
         "Customer owns infra",
         "Meridian provisions DBs via IAM/network access",
@@ -463,18 +353,9 @@
         "x": -660,
         "y": 140
       },
-      "ports": [
-        "AMQP 5672",
-        "Mgmt 15672"
-      ],
-      "endpoints": [
-        "amqp://rabbitmq:5672"
-      ],
-      "responsibilities": [
-        "Work queues",
-        "Pub/Sub events",
-        "Delayed/retry patterns"
-      ]
+      "ports": ["AMQP 5672", "Mgmt 15672"],
+      "endpoints": ["amqp://rabbitmq:5672"],
+      "responsibilities": ["Work queues", "Pub/Sub events", "Delayed/retry patterns"]
     },
     {
       "id": "redis",
@@ -487,17 +368,9 @@
         "x": -500,
         "y": 280
       },
-      "ports": [
-        "Redis 6379"
-      ],
-      "endpoints": [
-        "redis://redis:6379"
-      ],
-      "responsibilities": [
-        "Cache",
-        "Short-lived state",
-        "Distributed locks (optional)"
-      ]
+      "ports": ["Redis 6379"],
+      "endpoints": ["redis://redis:6379"],
+      "responsibilities": ["Cache", "Short-lived state", "Distributed locks (optional)"]
     },
     {
       "id": "objectstore",
@@ -510,18 +383,9 @@
         "x": 500,
         "y": 380
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "blob/container",
-        "s3://bucket"
-      ],
-      "responsibilities": [
-        "Store large blobs",
-        "Signed upload/download",
-        "Versioning / retention"
-      ]
+      "ports": ["HTTPS 443"],
+      "endpoints": ["blob/container", "s3://bucket"],
+      "responsibilities": ["Store large blobs", "Signed upload/download", "Versioning / retention"]
     },
     {
       "id": "discord",
@@ -534,17 +398,9 @@
         "x": 720,
         "y": 330
       },
-      "ports": [
-        "HTTPS 443"
-      ],
-      "endpoints": [
-        "Discord Webhooks",
-        "Bot API"
-      ],
-      "responsibilities": [
-        "Deliver messages",
-        "Command hooks (optional)"
-      ]
+      "ports": ["HTTPS 443"],
+      "endpoints": ["Discord Webhooks", "Bot API"],
+      "responsibilities": ["Deliver messages", "Command hooks (optional)"]
     }
   ],
   "edges": [
@@ -774,66 +630,32 @@
         {
           "title": "1) User hits the dashboard",
           "body": "The browser loads the UI and calls the Gateway for data. Everything control-plane starts here.",
-          "focusNodes": [
-            "client_browser",
-            "gateway"
-          ],
-          "focusEdges": [
-            "e_client_gateway"
-          ]
+          "focusNodes": ["client_browser", "gateway"],
+          "focusEdges": ["e_client_gateway"]
         },
         {
           "title": "2) Auth + tenant context",
           "body": "Gateway validates tokens and asks Identity for user/tenant/role policy.",
-          "focusNodes": [
-            "gateway",
-            "identity",
-            "platform_pg"
-          ],
-          "focusEdges": [
-            "e_gateway_identity",
-            "e_identity_pg"
-          ]
+          "focusNodes": ["gateway", "identity", "platform_pg"],
+          "focusEdges": ["e_gateway_identity", "e_identity_pg"]
         },
         {
           "title": "3) Locate the instance",
           "body": "Server operations flow through Servers Service, which consults Nodes for placement and live health.",
-          "focusNodes": [
-            "gateway",
-            "servers",
-            "nodes"
-          ],
-          "focusEdges": [
-            "e_gateway_servers",
-            "e_servers_nodes",
-            "e_gateway_nodes"
-          ]
+          "focusNodes": ["gateway", "servers", "nodes"],
+          "focusEdges": ["e_gateway_servers", "e_servers_nodes", "e_gateway_nodes"]
         },
         {
           "title": "4) Establish a live channel",
           "body": "Gateway upgrades to WebSocket and bridges to the Agent\u2019s secure control channel.",
-          "focusNodes": [
-            "gateway",
-            "agent",
-            "agent_host"
-          ],
-          "focusEdges": [
-            "e_agent_ws",
-            "e_agent_host"
-          ]
+          "focusNodes": ["gateway", "agent", "agent_host"],
+          "focusEdges": ["e_agent_ws", "e_agent_host"]
         },
         {
           "title": "5) Stream output from the workload",
           "body": "Agent fans in logs/console stream from the host and returns it to the UI over WSS.",
-          "focusNodes": [
-            "agent_host",
-            "gameserver",
-            "agent",
-            "client_browser"
-          ],
-          "focusEdges": [
-            "e_agent_gameserver"
-          ]
+          "focusNodes": ["agent_host", "gameserver", "agent", "client_browser"],
+          "focusEdges": ["e_agent_gameserver"]
         }
       ]
     },
@@ -844,37 +666,20 @@
         {
           "title": "1) A workflow is created",
           "body": "A provisioning action starts a Tasks workflow and is enqueued via RabbitMQ for workers.",
-          "focusNodes": [
-            "tasks",
-            "rabbit"
-          ],
-          "focusEdges": [
-            "e_tasks_rabbit",
-            "e_tasks_pg"
-          ]
+          "focusNodes": ["tasks", "rabbit"],
+          "focusEdges": ["e_tasks_rabbit", "e_tasks_pg"]
         },
         {
           "title": "2) Choose the user DB target",
           "body": "SaaS can place customer game databases on the managed User DB cluster or a BYO DB server, as long as we have IAM + network reachability.",
-          "focusNodes": [
-            "user_pg",
-            "byo_user_pg",
-            "tasks"
-          ],
+          "focusNodes": ["user_pg", "byo_user_pg", "tasks"],
           "focusEdges": []
         },
         {
           "title": "3) Workload writes the schema",
           "body": "Gameservers own their internal schema. Meridian provisions the DB and may be kind enough to back it up.",
-          "focusNodes": [
-            "gameserver",
-            "user_pg",
-            "byo_user_pg"
-          ],
-          "focusEdges": [
-            "e_gameserver_userdb",
-            "e_gameserver_byodb"
-          ]
+          "focusNodes": ["gameserver", "user_pg", "byo_user_pg"],
+          "focusEdges": ["e_gameserver_userdb", "e_gameserver_byodb"]
         }
       ]
     },
@@ -885,27 +690,14 @@
         {
           "title": "1) One physical DB server",
           "body": "KiP runs all service schemas together on a single DB server (often BYO).",
-          "focusNodes": [
-            "byo_user_pg"
-          ],
+          "focusNodes": ["byo_user_pg"],
           "focusEdges": []
         },
         {
           "title": "2) Schemas act like \u201cvirtual DBs\u201d",
           "body": "Each microservice still uses a default schema (identity.*, servers.*, \u2026) \u2014 same EF model, different physical topology.",
-          "focusNodes": [
-            "identity",
-            "servers",
-            "nodes",
-            "tasks",
-            "byo_user_pg"
-          ],
-          "focusEdges": [
-            "e_identity_pg",
-            "e_servers_pg",
-            "e_nodes_pg",
-            "e_tasks_pg"
-          ]
+          "focusNodes": ["identity", "servers", "nodes", "tasks", "byo_user_pg"],
+          "focusEdges": ["e_identity_pg", "e_servers_pg", "e_nodes_pg", "e_tasks_pg"]
         }
       ]
     }

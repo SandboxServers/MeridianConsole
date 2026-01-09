@@ -10,6 +10,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dhadgar.Agent.Windows", "sr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dhadgar.Billing", "src\Dhadgar.Billing\Dhadgar.Billing.csproj", "{6DFAB25F-DA36-4B59-B944-7140880AEEAF}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dhadgar.BetterAuth", "src\Dhadgar.BetterAuth\Dhadgar.BetterAuth.csproj", "{A37C217B-A63B-4587-8039-E7E753F4755E}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dhadgar.Cli", "src\Dhadgar.Cli\Dhadgar.Cli.csproj", "{43E0505A-0B81-44DA-B5B6-BB98DF4CB7F5}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dhadgar.Console", "src\Dhadgar.Console\Dhadgar.Console.csproj", "{CB174484-640D-4ADF-82FE-50A2EBEE52B5}"
@@ -104,6 +106,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A37C217B-A63B-4587-8039-E7E753F4755E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A37C217B-A63B-4587-8039-E7E753F4755E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A37C217B-A63B-4587-8039-E7E753F4755E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A37C217B-A63B-4587-8039-E7E753F4755E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F6E70CFE-9798-4E90-92B1-A6C3F4ECFD16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F6E70CFE-9798-4E90-92B1-A6C3F4ECFD16}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F6E70CFE-9798-4E90-92B1-A6C3F4ECFD16}.Release|Any CPU.ActiveCfg = Release|Any CPU

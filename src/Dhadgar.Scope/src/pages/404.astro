@@ -1,11 +1,13 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
-import { MainLayout } from '../components/layout/MainLayout';
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { MainLayout } from "../components/layout/MainLayout";
 ---
 
 <BaseLayout title="Page Not Found">
   <MainLayout client:load>
-    <div class="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center text-center">
+    <div
+      class="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center text-center"
+    >
       <div class="rounded-2xl border border-white/10 bg-white/5 p-8">
         <div class="text-6xl font-bold text-white/20">404</div>
         <h1 class="mt-4 text-2xl font-bold">Page Not Found</h1>

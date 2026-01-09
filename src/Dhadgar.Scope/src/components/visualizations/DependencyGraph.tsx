@@ -1,29 +1,29 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Core, EventObject } from 'cytoscape';
-import type { DependencyGraphData, DependencyNode } from '../../lib/types';
-import { DependencyDetailsPanel } from './DependencyDetailsPanel';
-import { TextField } from '../ui/TextField';
-import { Chip } from '../ui/Chip';
-import { Button } from '../ui/Button';
-import { Alert } from '../ui/Alert';
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { Core, EventObject } from "cytoscape";
+import type { DependencyGraphData, DependencyNode } from "../../lib/types";
+import { DependencyDetailsPanel } from "./DependencyDetailsPanel";
+import { TextField } from "../ui/TextField";
+import { Chip } from "../ui/Chip";
+import { Button } from "../ui/Button";
+import { Alert } from "../ui/Alert";
 
-declare const cytoscape: (options: any) => Core;
+declare const cytoscape: (options: Record<string, unknown>) => Core;
 
-const LAYER_ORDER = ['external', 'presentation', 'core', 'business', 'foundation'];
+const LAYER_ORDER = ["external", "presentation", "core", "business", "foundation"];
 
 const LAYER_COLORS: Record<string, string> = {
-  external: '#0F766E',
-  presentation: '#4338CA',
-  core: '#6D28D9',
-  business: '#1D4ED8',
-  foundation: '#B45309',
+  external: "#0F766E",
+  presentation: "#4338CA",
+  core: "#6D28D9",
+  business: "#1D4ED8",
+  foundation: "#B45309",
 };
 
 export function DependencyGraph() {
   const [data, setData] = useState<DependencyGraphData | null>(null);
   const [selected, setSelected] = useState<DependencyNode | null>(null);
-  const [query, setQuery] = useState('');
-  const [mobileView, setMobileView] = useState<'graph' | 'details'>('graph');
+  const [query, setQuery] = useState("");
+  const [mobileView, setMobileView] = useState<"graph" | "details">("graph");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [initError, setInitError] = useState(false);
 
@@ -33,7 +33,7 @@ export function DependencyGraph() {
 
   // Load data
   useEffect(() => {
-    fetch('/content/dependencies.json')
+    fetch("/content/dependencies.json")
       .then((res) => res.json())
       .then((d: DependencyGraphData) => setData(d))
       .catch(() => setInitError(true));
@@ -41,10 +41,10 @@ export function DependencyGraph() {
 
   // Build elements for Cytoscape
   const buildElements = useCallback((graphData: DependencyGraphData) => {
-    const elements: any[] = [];
+    const elements: Array<{ data: Record<string, string | undefined> }> = [];
 
     graphData.nodes.forEach((n) => {
-      const label = `${n.emoji ? n.emoji + ' ' : ''}${n.name}`;
+      const label = `${n.emoji ? n.emoji + " " : ""}${n.name}`;
       elements.push({
         data: {
           id: n.id,
@@ -61,7 +61,7 @@ export function DependencyGraph() {
           id: e.id,
           source: e.source,
           target: e.target,
-          relationship: e.relationship || 'depends_on',
+          relationship: e.relationship || "depends_on",
         },
       });
     });
@@ -73,7 +73,7 @@ export function DependencyGraph() {
   const applyPresetPositions = useCallback((nodes: DependencyNode[], cy: Core) => {
     const grouped: Record<string, DependencyNode[]> = {};
     nodes.forEach((n) => {
-      const key = n.layer || 'business';
+      const key = n.layer || "business";
       grouped[key] = grouped[key] || [];
       grouped[key].push(n);
     });
@@ -99,7 +99,7 @@ export function DependencyGraph() {
 
   // Initialize Cytoscape
   useEffect(() => {
-    if (!data || !containerRef.current || typeof cytoscape === 'undefined') return;
+    if (!data || !containerRef.current || typeof cytoscape === "undefined") return;
 
     try {
       const elements = buildElements(data);
@@ -107,54 +107,54 @@ export function DependencyGraph() {
       const cy = cytoscape({
         container: containerRef.current,
         elements,
-        layout: { name: 'preset' },
+        layout: { name: "preset" },
         wheelSensitivity: 0.2,
         minZoom: 0.2,
         maxZoom: 2.0,
-        selectionType: 'single',
+        selectionType: "single",
         style: [
           {
-            selector: 'node',
+            selector: "node",
             style: {
-              shape: 'round-rectangle',
+              shape: "round-rectangle",
               width: 170,
               height: 44,
-              'background-color': '#111827',
-              'border-width': 1,
-              'border-color': '#334155',
-              label: 'data(label)',
-              'text-wrap': 'ellipsis',
-              'text-max-width': 160,
-              'font-size': 12,
-              color: '#E5E7EB',
-              'text-outline-width': 0,
+              "background-color": "#111827",
+              "border-width": 1,
+              "border-color": "#334155",
+              label: "data(label)",
+              "text-wrap": "ellipsis",
+              "text-max-width": 160,
+              "font-size": 12,
+              color: "#E5E7EB",
+              "text-outline-width": 0,
             },
           },
           ...LAYER_ORDER.map((layer) => ({
             selector: `node[layer = "${layer}"]`,
-            style: { 'background-color': LAYER_COLORS[layer] },
+            style: { "background-color": LAYER_COLORS[layer] },
           })),
           {
-            selector: 'edge',
+            selector: "edge",
             style: {
-              'curve-style': 'bezier',
+              "curve-style": "bezier",
               width: 2,
-              'line-color': '#94A3B8',
-              'target-arrow-color': '#94A3B8',
-              'target-arrow-shape': 'triangle',
-              'arrow-scale': 0.9,
+              "line-color": "#94A3B8",
+              "target-arrow-color": "#94A3B8",
+              "target-arrow-shape": "triangle",
+              "arrow-scale": 0.9,
               opacity: 0.85,
             },
           },
           {
-            selector: '.dh-selected',
+            selector: ".dh-selected",
             style: {
-              'border-width': 3,
-              'border-color': '#F59E0B',
+              "border-width": 3,
+              "border-color": "#F59E0B",
             },
           },
           {
-            selector: '.dh-dim',
+            selector: ".dh-dim",
             style: {
               opacity: 0.15,
             },
@@ -176,28 +176,28 @@ export function DependencyGraph() {
       cy.fit(undefined, 30);
 
       // Node click handler
-      cy.on('tap', 'node', (evt: EventObject) => {
+      cy.on("tap", "node", (evt: EventObject) => {
         const nodeId = evt.target.id();
         const node = data.nodes.find((n) => n.id === nodeId);
         if (node) {
           setSelected(node);
-          setMobileView('details');
+          setMobileView("details");
           setDrawerOpen(true);
 
-          cy.elements().removeClass('dh-selected');
-          evt.target.addClass('dh-selected');
+          cy.elements().removeClass("dh-selected");
+          evt.target.addClass("dh-selected");
           cy.animate({ center: { eles: evt.target } }, { duration: 200 });
         }
       });
 
       // Background click handler
-      cy.on('tap', (evt: EventObject) => {
+      cy.on("tap", (evt: EventObject) => {
         if (evt.target === cy) {
           setSelected(null);
-          setMobileView('graph');
+          setMobileView("graph");
           setDrawerOpen(false);
-          cy.elements().removeClass('dh-selected');
-          cy.elements().removeClass('dh-dim');
+          cy.elements().removeClass("dh-selected");
+          cy.elements().removeClass("dh-dim");
         }
       });
 
@@ -209,14 +209,15 @@ export function DependencyGraph() {
           cyRef.current.fit(undefined, 30);
         }
       };
-      window.addEventListener('resize', handleResize);
+      window.addEventListener("resize", handleResize);
 
       return () => {
-        window.removeEventListener('resize', handleResize);
+        window.removeEventListener("resize", handleResize);
         cy.destroy();
         cyRef.current = null;
       };
-    } catch (err) {
+    } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- error handler for initialization failure
       setInitError(true);
     }
   }, [data, buildElements, applyPresetPositions]);
@@ -228,15 +229,15 @@ export function DependencyGraph() {
 
     const q = query.toLowerCase().trim();
     if (!q) {
-      cy.elements().removeClass('dh-dim');
+      cy.elements().removeClass("dh-dim");
       return;
     }
 
-    const matches = cy.nodes().filter((n) => (n.data('name') || '').toLowerCase().includes(q));
-    cy.elements().addClass('dh-dim');
-    matches.removeClass('dh-dim');
-    matches.connectedEdges().removeClass('dh-dim');
-    matches.connectedEdges().connectedNodes().removeClass('dh-dim');
+    const matches = cy.nodes().filter((n) => (n.data("name") || "").toLowerCase().includes(q));
+    cy.elements().addClass("dh-dim");
+    matches.removeClass("dh-dim");
+    matches.connectedEdges().removeClass("dh-dim");
+    matches.connectedEdges().connectedNodes().removeClass("dh-dim");
   }, [query]);
 
   const handleFit = () => {
@@ -247,7 +248,7 @@ export function DependencyGraph() {
     const cy = cyRef.current;
     if (!cy) return;
 
-    cy.elements().removeClass('dh-dim');
+    cy.elements().removeClass("dh-dim");
     Object.entries(initialPositionsRef.current).forEach(([id, pos]) => {
       const el = cy.getElementById(id);
       if (el.length) el.position(pos);
@@ -263,18 +264,18 @@ export function DependencyGraph() {
     setSelected(node);
     const el = cyRef.current.getElementById(node.id);
     if (el.length) {
-      cyRef.current.elements().removeClass('dh-selected');
-      el.addClass('dh-selected');
+      cyRef.current.elements().removeClass("dh-selected");
+      el.addClass("dh-selected");
       cyRef.current.animate({ center: { eles: el } }, { duration: 200 });
     }
   };
 
   const handleClear = () => {
     setSelected(null);
-    setMobileView('graph');
+    setMobileView("graph");
     setDrawerOpen(false);
-    cyRef.current?.elements().removeClass('dh-selected');
-    cyRef.current?.elements().removeClass('dh-dim');
+    cyRef.current?.elements().removeClass("dh-selected");
+    cyRef.current?.elements().removeClass("dh-dim");
   };
 
   return (
@@ -285,7 +286,8 @@ export function DependencyGraph() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Interactive Dependency Map</h1>
             <p className="mt-2 text-white/75">
-              Click a node to inspect its responsibilities, endpoints, and relationships. Use search to jump.
+              Click a node to inspect its responsibilities, endpoints, and relationships. Use search
+              to jump.
             </p>
           </div>
 
@@ -295,10 +297,15 @@ export function DependencyGraph() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Try: Gateway, RabbitMQ, Nodes..."
               clearable
-              onClear={() => setQuery('')}
+              onClear={() => setQuery("")}
               icon={
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
                 </svg>
               }
             />
@@ -310,18 +317,18 @@ export function DependencyGraph() {
           <div className="flex w-full rounded-2xl border border-white/10 bg-white/5 p-1">
             <button
               type="button"
-              onClick={() => setMobileView('graph')}
+              onClick={() => setMobileView("graph")}
               className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-                mobileView === 'graph' ? 'bg-white/10 text-white' : 'text-white/70'
+                mobileView === "graph" ? "bg-white/10 text-white" : "text-white/70"
               }`}
             >
               Graph
             </button>
             <button
               type="button"
-              onClick={() => setMobileView('details')}
+              onClick={() => setMobileView("details")}
               className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-                mobileView === 'details' ? 'bg-white/10 text-white' : 'text-white/70'
+                mobileView === "details" ? "bg-white/10 text-white" : "text-white/70"
               }`}
             >
               Details
@@ -332,7 +339,9 @@ export function DependencyGraph() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Graph panel */}
-        <div className={`lg:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-3 ${mobileView === 'details' ? 'hidden md:block' : ''}`}>
+        <div
+          className={`lg:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-3 ${mobileView === "details" ? "hidden md:block" : ""}`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-3">
             <div className="flex flex-wrap gap-2">
               <Chip>Scroll / pinch to zoom</Chip>
@@ -341,8 +350,12 @@ export function DependencyGraph() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={handleFit} size="small">Fit</Button>
-              <Button onClick={handleReset} size="small">Reset</Button>
+              <Button onClick={handleFit} size="small">
+                Fit
+              </Button>
+              <Button onClick={handleReset} size="small">
+                Reset
+              </Button>
               <Button
                 onClick={() => setDrawerOpen(!drawerOpen)}
                 size="small"
@@ -362,8 +375,8 @@ export function DependencyGraph() {
 
           {initError && (
             <Alert severity="warning" className="mt-3" dense>
-              Graph renderer failed to initialize. If you're behind a strict network, the Cytoscape CDN may be blocked.
-              Check DevTools console for details.
+              Graph renderer failed to initialize. If you&apos;re behind a strict network, the
+              Cytoscape CDN may be blocked. Check DevTools console for details.
             </Alert>
           )}
         </div>
@@ -380,7 +393,7 @@ export function DependencyGraph() {
       </div>
 
       {/* Phone details panel (tabbed) */}
-      <div className={`md:hidden ${mobileView === 'details' ? '' : 'hidden'}`}>
+      <div className={`md:hidden ${mobileView === "details" ? "" : "hidden"}`}>
         <DependencyDetailsPanel
           selected={selected}
           onSelectByName={handleSelectByName}
@@ -393,8 +406,10 @@ export function DependencyGraph() {
       {drawerOpen && (
         <>
           <div
+            role="presentation"
             className="fixed inset-0 z-50 hidden bg-black/60 md:block lg:hidden"
             onClick={() => setDrawerOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && setDrawerOpen(false)}
           />
           <div className="fixed bottom-0 left-0 right-0 z-50 hidden max-h-[70vh] overflow-auto rounded-t-2xl border-t border-white/10 bg-slate-950/90 p-4 shadow-2xl backdrop-blur md:block lg:hidden">
             <div className="flex items-center justify-between">
@@ -405,7 +420,12 @@ export function DependencyGraph() {
                 className="rounded-lg border border-white/10 bg-white/5 p-1.5 transition-colors hover:bg-white/10"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>

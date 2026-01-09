@@ -4,10 +4,11 @@ interface Props {
   description?: string;
 }
 
-const { title, description = 'Meridian Console Scope Navigator - Architecture and delivery map' } = Astro.props;
+const { title, description = "Meridian Console Scope Navigator - Architecture and delivery map" } =
+  Astro.props;
 ---
 
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
@@ -19,16 +20,21 @@ const { title, description = 'Meridian Console Scope Navigator - Architecture an
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
 
     <!-- Cytoscape.js for graph visualizations -->
     <script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js" is:inline></script>
   </head>
-  <body class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-black text-white font-sans antialiased">
+  <body
+    class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-black text-white font-sans antialiased"
+  >
     <slot />
   </body>
 </html>
 
 <style is:global>
-  @import '../styles/global.css';
+  @import "../styles/global.css";
 </style>

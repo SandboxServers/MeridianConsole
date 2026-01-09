@@ -12,11 +12,35 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageVersion Include="OpenIddict.AspNetCore" Version="7.0.0" />
+    <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.0.0" />
+    <PackageVersion Include="OpenIddict.Validation.AspNetCore" Version="7.0.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.7.27" />
+    <PackageVersion Include="AspNet.Security.OpenId.Steam" Version="10.0.0" />
+    <PackageVersion Include="AspNet.Security.OAuth.BattleNet" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.MicrosoftAccount" Version="10.0.0" />
 
     <!-- Messaging -->
     <PackageVersion Include="MassTransit" Version="8.3.6" />
     <PackageVersion Include="MassTransit.RabbitMQ" Version="8.3.6" />
+
+    <!-- Observability -->
+    <PackageVersion Include="OpenTelemetry" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
+    <PackageVersion Include="Azure.Identity" Version="1.11.4" />
+    <PackageVersion Include="Azure.Security.KeyVault.Keys" Version="4.7.0" />
+    <PackageVersion Include="Azure.Security.KeyVault.Certificates" Version="4.6.0" />
+    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.6.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.KeyVaultExtensions" Version="6.35.0" />
+    <PackageVersion Include="Microsoft.Rest.ClientRuntime" Version="2.3.24" />
 
     <!-- Gateway -->
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
@@ -31,6 +55,7 @@
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
   <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.6.2" />
 
       <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />

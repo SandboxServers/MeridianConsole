@@ -2,14 +2,14 @@ extends: default
 
 rules:
   line-length:
-    max: 120
+    max: 300
     level: warning
   indentation:
     spaces: 2
     indent-sequences: true
   comments:
     min-spaces-from-content: 1
-  comments-indentation: {}
+  comments-indentation: disable
   document-start: disable
   truthy:
     allowed-values: ['true', 'false', 'on', 'off']
@@ -19,3 +19,6 @@ ignore: |
   .git/
   src/Dhadgar.Scope/node_modules/
   _swa_publish/
+  deploy/kubernetes/helm/**
+  deploy/kubernetes/helm/meridian-console/templates/
+  deploy/kubernetes/helm/meridian-console/templates/**

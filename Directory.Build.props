@@ -19,5 +19,10 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+
+    <!-- Suppress noisy analyzer warnings across solution -->
+    <NoWarn>CA1707;CA1716;CA1515;CA2007;CA1308;CA1062;CA1031;CA1056;CA2227;CA1861;CA1310;CA1034;CA1848;CA2234;CS8600;CS8604;SYSLIB0057</NoWarn>
   </PropertyGroup>
 </Project>

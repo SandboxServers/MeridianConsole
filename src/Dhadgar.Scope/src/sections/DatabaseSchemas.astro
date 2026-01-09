@@ -1,14 +1,14 @@
 ---
 // Section 10: Database Schemas
-import { DbSchemaTreeView } from '../components/visualizations/DbSchemaTreeView';
+import { DbSchemaTreeView } from "../components/visualizations/DbSchemaTreeView";
 ---
 
 <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
   <h2 class="mb-4 text-2xl font-bold">Section 10: Database Schemas</h2>
 
   <p class="mb-6 text-white/70">
-    Each microservice owns its own PostgreSQL database schema. Browse tables, views, functions,
-    and relationships for each service.
+    Each microservice owns its own PostgreSQL database schema. Browse tables, views, functions, and
+    relationships for each service.
   </p>
 
   <DbSchemaTreeView client:load />

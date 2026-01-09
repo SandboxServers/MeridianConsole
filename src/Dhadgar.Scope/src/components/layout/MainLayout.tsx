@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Sidebar } from './Sidebar';
-import { MobileDrawer } from './MobileDrawer';
-import type { ReactNode } from 'react';
+import { useState } from "react";
+import { Sidebar } from "./Sidebar";
+import { MobileDrawer } from "./MobileDrawer";
+import type { ReactNode } from "react";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -25,7 +25,12 @@ export function MainLayout({ children }: MainLayoutProps) {
           className="rounded-lg border border-white/10 bg-white/5 p-2 transition-colors hover:bg-white/10"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </button>
       </div>
@@ -39,9 +44,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         </aside>
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 scope-content">
-          {children}
-        </main>
+        <main className="min-w-0 flex-1 scope-content">{children}</main>
       </div>
 
       {/* Mobile drawer */}
