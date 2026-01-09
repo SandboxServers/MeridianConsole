@@ -34,11 +34,12 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
 COPY --from=build /app/publish .
-RUN chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app /home/appuser
 USER appuser
 
+ENV HOME=/home/appuser
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 EXPOSE 8080

@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
 using Dhadgar.Identity;
@@ -17,7 +19,10 @@ using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys.Cryptography;
 using Azure.Security.KeyVault.Keys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
+using OpenIddict.Server;
+using OpenIddict.Server.AspNetCore;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
@@ -30,7 +35,17 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<IdentityDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"));
+
+    // Suppress pending model changes warning in development/Docker environments
+    // where we want auto-migration without requiring new migration files
+    if (builder.Configuration.GetValue<bool>("Database:AutoMigrate"))
+    {
+        options.ConfigureWarnings(w => w.Ignore(
+            Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    }
+});
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.Configure<ExchangeTokenOptions>(builder.Configuration.GetSection("Auth:Exchange"));
@@ -236,6 +251,9 @@ builder.Services.AddOpenIddict()
     })
     .AddServer(options =>
     {
+        var defaultAudience = builder.Configuration["Auth:Audience"];
+        var wifAudience = builder.Configuration["OpenIddict:Wif:Audience"] ?? "api://AzureADTokenExchange";
+
         var issuer = builder.Configuration["Auth:Issuer"];
         if (!string.IsNullOrWhiteSpace(issuer))
         {
@@ -261,42 +279,53 @@ builder.Services.AddOpenIddict()
             "servers:read",
             "servers:write",
             "nodes:manage",
-            "billing:read");
+            "billing:read",
+            "wif");
 
-        if (builder.Environment.IsEnvironment("Testing"))
+        var useDevelopmentCertificates = builder.Configuration.GetValue<bool>("Auth:UseDevelopmentCertificates");
+
+        if (builder.Environment.IsEnvironment("Testing") || useDevelopmentCertificates)
         {
-            // Avoid Key Vault dependency in tests.
+            // Use ephemeral development certificates for testing or when explicitly enabled via config.
+            // This allows Docker containers to run without Key Vault access.
             options.AddDevelopmentSigningCertificate()
                 .AddDevelopmentEncryptionCertificate();
+
+            // Disable access token encryption in development so JWT Bearer auth works
+            // without needing the decryption key at each service
+            options.DisableAccessTokenEncryption();
         }
         else
         {
-        var vaultUri = builder.Configuration["Auth:KeyVault:VaultUri"];
-        var signingCertName = builder.Configuration["Auth:KeyVault:SigningCertName"];
-        var encryptionCertName = builder.Configuration["Auth:KeyVault:EncryptionCertName"];
+            var vaultUri = builder.Configuration["Auth:KeyVault:VaultUri"];
+            var signingCertName = builder.Configuration["Auth:KeyVault:SigningCertName"];
+            var encryptionCertName = builder.Configuration["Auth:KeyVault:EncryptionCertName"];
 
-        // Always use Key Vault for certificates (including local dev)
-        if (string.IsNullOrWhiteSpace(vaultUri) ||
-            string.IsNullOrWhiteSpace(signingCertName) ||
-            string.IsNullOrWhiteSpace(encryptionCertName))
-        {
-            throw new InvalidOperationException(
-                "Key Vault certificate configuration is required. " +
-                "Configure Auth:KeyVault:VaultUri, SigningCertName, and EncryptionCertName. " +
-                "Ensure you are logged in via 'az login' for local development.");
-        }
+            // Always use Key Vault for certificates outside explicit dev overrides
+            if (string.IsNullOrWhiteSpace(vaultUri) ||
+                string.IsNullOrWhiteSpace(signingCertName) ||
+                string.IsNullOrWhiteSpace(encryptionCertName))
+            {
+                throw new InvalidOperationException(
+                    "Key Vault certificate configuration is required. " +
+                    "Configure Auth:KeyVault:VaultUri, SigningCertName, and EncryptionCertName. " +
+                    "Ensure you are logged in via 'az login' for local development.");
+            }
 
         var credential = new DefaultAzureCredential();
-        var certClient = new CertificateClient(new Uri(vaultUri), credential);
+        var vaultUriValue = new Uri(vaultUri);
+        var certClient = new CertificateClient(vaultUriValue, credential);
+        var secretClient = new SecretClient(vaultUriValue, credential);
 
         try
         {
             // DownloadCertificate returns X509Certificate2 with private key (required for signing)
             // GetCertificate only returns public cert metadata which cannot be used for signing
-            var signingCert = certClient.DownloadCertificate(signingCertName);
-            var encryptionCert = certClient.DownloadCertificate(encryptionCertName);
+            var signingCert = LoadKeyVaultCertificate(certClient, secretClient, signingCertName);
+            var encryptionCert = LoadKeyVaultCertificate(certClient, secretClient, encryptionCertName);
 
-            options.AddSigningCertificate(signingCert)
+            var signingKey = CreateSigningKey(signingCert);
+            options.AddSigningKey(signingKey)
                 .AddEncryptionCertificate(encryptionCert);
         }
         catch (Exception ex)
@@ -304,14 +333,55 @@ builder.Services.AddOpenIddict()
             throw new InvalidOperationException(
                 $"Failed to load OpenIddict certificates from Key Vault ({vaultUri}). " +
                 $"Ensure you are logged in via 'az login' and have Key Vault Certificates User role. " +
+                $"If the certificate is not exportable, ensure a private key is available via the Key Vault secret. " +
                 $"Error: {ex.Message}", ex);
         }
         }
 
-        options.UseAspNetCore()
-            .EnableAuthorizationEndpointPassthrough()
-            .EnableTokenEndpointPassthrough()
-            .EnableUserInfoEndpointPassthrough();
+        var aspNetCoreBuilder = options.UseAspNetCore();
+
+        // Allow HTTP for development/Docker environments (internal service-to-service calls)
+        if (builder.Environment.IsDevelopment() || useDevelopmentCertificates)
+        {
+            aspNetCoreBuilder.DisableTransportSecurityRequirement();
+        }
+
+        options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(eventBuilder =>
+            eventBuilder.UseInlineHandler(context =>
+            {
+                if (!context.Request.IsClientCredentialsGrantType())
+                {
+                    return ValueTask.CompletedTask;
+                }
+
+                if (string.IsNullOrWhiteSpace(context.ClientId))
+                {
+                    context.Reject(
+                        OpenIddictConstants.Errors.InvalidRequest,
+                        "ClientId is required for client credentials grant.");
+                    return ValueTask.CompletedTask;
+                }
+
+                var identity = new ClaimsIdentity(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+                identity.AddClaim(OpenIddictConstants.Claims.Subject, context.ClientId);
+                identity.AddClaim(OpenIddictConstants.Claims.ClientId, context.ClientId);
+
+                var principal = new ClaimsPrincipal(identity);
+                var scopes = context.Request.GetScopes();
+                principal.SetScopes(scopes);
+
+                if (scopes.Contains("wif", StringComparer.OrdinalIgnoreCase))
+                {
+                    principal.SetAudiences(wifAudience);
+                }
+                else if (!string.IsNullOrWhiteSpace(defaultAudience))
+                {
+                    principal.SetAudiences(defaultAudience);
+                }
+
+                context.SignIn(principal);
+                return ValueTask.CompletedTask;
+            }));
     })
     .AddValidation(options =>
     {
@@ -348,32 +418,190 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
-// Optional: apply EF Core migrations automatically during local/dev runs.
-if (app.Environment.IsDevelopment())
+// Apply EF Core migrations automatically during local/dev runs or when configured.
+var autoMigrate = app.Environment.IsDevelopment() ||
+    app.Configuration.GetValue<bool>("Database:AutoMigrate");
+
+if (autoMigrate)
 {
-    try
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-        db.Database.Migrate();
-    }
-    catch (Exception ex)
-    {
-        // Keep startup resilient for first-run dev scenarios.
-        app.Logger.LogWarning(ex, "DB migration failed (dev).");
-    }
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+    db.Database.Migrate();
+    app.Logger.LogInformation("Database migrations applied successfully.");
+
+    await SeedDevOpenIddictClientAsync(app.Services, app.Configuration, app.Logger);
 }
 
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }));
 app.MapGet("/hello", () => Results.Text(IdentityHello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", status = "ok" }));
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle);
+
+
 OAuthEndpoints.Map(app);
 OrganizationEndpoints.Map(app);
 MembershipEndpoints.Map(app);
 WebhookEndpoint.Map(app);
 
 app.Run();
+
+static async Task SeedDevOpenIddictClientAsync(
+    IServiceProvider services,
+    IConfiguration configuration,
+    ILogger logger)
+{
+    var enabled = configuration.GetValue<bool?>("OpenIddict:DevClient:Enabled") ?? true;
+    if (!enabled)
+    {
+        return;
+    }
+
+    var clientId = configuration["OpenIddict:DevClient:ClientId"] ?? "dev-client";
+    var clientSecret = configuration["OpenIddict:DevClient:ClientSecret"] ?? "dev-secret";
+
+    if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+    {
+        logger.LogWarning("Dev OpenIddict client is missing ClientId/ClientSecret; skipping seed.");
+        return;
+    }
+
+    using var scope = services.CreateScope();
+    var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+
+    if (await manager.FindByClientIdAsync(clientId) is not null)
+    {
+        return;
+    }
+
+    var descriptor = new OpenIddictApplicationDescriptor
+    {
+        ClientId = clientId,
+        ClientSecret = clientSecret,
+        DisplayName = "Dev Client",
+        Permissions =
+        {
+            OpenIddictConstants.Permissions.Endpoints.Token,
+            OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+            OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
+            OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Profile,
+            OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Email,
+            OpenIddictConstants.Permissions.Prefixes.Scope + "servers:read",
+            OpenIddictConstants.Permissions.Prefixes.Scope + "servers:write",
+            OpenIddictConstants.Permissions.Prefixes.Scope + "nodes:manage",
+            OpenIddictConstants.Permissions.Prefixes.Scope + "billing:read",
+            OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
+        }
+    };
+
+    var redirectUris = configuration.GetSection("OpenIddict:DevClient:RedirectUris").Get<string[]>() ?? [];
+    foreach (var uri in redirectUris)
+    {
+        if (Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
+        {
+            descriptor.RedirectUris.Add(parsed);
+        }
+    }
+
+    if (descriptor.RedirectUris.Count > 0)
+    {
+        descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
+        descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode);
+        descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+    }
+
+    await manager.CreateAsync(descriptor);
+    logger.LogInformation("Seeded dev OpenIddict client {ClientId}.", clientId);
+}
+
+static X509Certificate2 LoadKeyVaultCertificate(
+    CertificateClient certificateClient,
+    SecretClient secretClient,
+    string certificateName)
+{
+    var secret = secretClient.GetSecret(certificateName).Value;
+    var secretValue = secret.Value;
+    if (string.IsNullOrWhiteSpace(secretValue))
+    {
+        throw new InvalidOperationException(
+            $"Key Vault secret '{certificateName}' is empty. " +
+            "Ensure the certificate is marked exportable or import a PFX with a private key.");
+    }
+
+    byte[] pfxBytes;
+    try
+    {
+        pfxBytes = Convert.FromBase64String(secretValue);
+    }
+    catch (FormatException ex)
+    {
+        throw new InvalidOperationException(
+            $"Key Vault secret '{certificateName}' is not valid base64 PFX data.", ex);
+    }
+
+    var certificate = TryLoadCertificate(pfxBytes);
+    if (certificate is not null)
+    {
+        return certificate;
+    }
+
+    // Fall back to the certificate object (public-only) to improve error details.
+    var publicOnly = certificateClient.DownloadCertificate(certificateName).Value;
+    if (publicOnly.HasPrivateKey)
+    {
+        return publicOnly;
+    }
+
+    throw new InvalidOperationException(
+        $"Key Vault secret '{certificateName}' does not contain a usable private key.");
+}
+
+static X509Certificate2? TryLoadCertificate(byte[] pfxBytes)
+{
+    var candidates = new[]
+    {
+        X509KeyStorageFlags.EphemeralKeySet | X509KeyStorageFlags.Exportable,
+        X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable,
+        X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable
+    };
+
+    foreach (var flags in candidates)
+    {
+        try
+        {
+            var cert = new X509Certificate2(pfxBytes, (string?)null, flags);
+            if (cert.HasPrivateKey)
+            {
+                return cert;
+            }
+        }
+        catch (CryptographicException)
+        {
+            // Try the next key storage option.
+        }
+    }
+
+    return null;
+}
+
+static SecurityKey CreateSigningKey(X509Certificate2 certificate)
+{
+    ArgumentNullException.ThrowIfNull(certificate);
+
+    var rsa = certificate.GetRSAPrivateKey();
+    if (rsa is not null)
+    {
+        return new RsaSecurityKey(rsa) { KeyId = certificate.Thumbprint };
+    }
+
+    var ecdsa = certificate.GetECDsaPrivateKey();
+    if (ecdsa is not null)
+    {
+        return new ECDsaSecurityKey(ecdsa) { KeyId = certificate.Thumbprint };
+    }
+
+    throw new InvalidOperationException(
+        $"Signing certificate '{certificate.Subject}' does not expose a usable private key.");
+}
 
 // Required for WebApplicationFactory<Program> integration tests.
 public partial class Program { }

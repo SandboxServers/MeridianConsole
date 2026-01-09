@@ -181,6 +181,19 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 
 Default credentials for all services: `dhadgar` / `dhadgar`
 
+### 1b. Run Services in Docker (Optional)
+
+If you want the .NET services running inside containers (instead of `dotnet run`), use the
+compose override in `deploy/compose/docker-compose.services.yml`:
+
+```bash
+docker compose -f deploy/compose/docker-compose.dev.yml -f deploy/compose/docker-compose.services.yml up -d --build
+```
+
+This exposes the Gateway at `http://localhost:5000` and each service at ports `5010` through `5120`.
+The Identity container enables development signing certificates and the Secrets container uses the
+development provider by default (see `deploy/compose/docker-compose.services.yml`).
+
 #### Check Infrastructure Status
 ```bash
 docker compose -f deploy/compose/docker-compose.dev.yml ps

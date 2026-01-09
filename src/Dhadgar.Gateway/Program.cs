@@ -1,5 +1,6 @@
 using System.Net;
 using Dhadgar.Gateway;
+using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -59,6 +60,9 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+
+// HttpClient for diagnostics endpoints
+builder.Services.AddHttpClient();
 
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
@@ -236,6 +240,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Diagnostics endpoints (Development only)
+app.MapDiagnosticsEndpoints();
 
 // Gateway endpoints
 app.MapGet("/", () => Results.Ok(new

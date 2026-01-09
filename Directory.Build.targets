@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <ComposeDevFile>$(MSBuildThisFileDirectory)deploy/compose/docker-compose.dev.yml</ComposeDevFile>
+    <ComposeServicesFile>$(MSBuildThisFileDirectory)deploy/compose/docker-compose.services.yml</ComposeServicesFile>
+  </PropertyGroup>
+
+  <Target Name="ComposeRelease">
+    <Exec Command="docker compose -f &quot;$(ComposeDevFile)&quot; -f &quot;$(ComposeServicesFile)&quot; up -d --build" />
+  </Target>
+
+  <Target Name="ComposeDown">
+    <Exec Command="docker compose -f &quot;$(ComposeDevFile)&quot; -f &quot;$(ComposeServicesFile)&quot; down" />
+  </Target>
+</Project>

@@ -68,6 +68,11 @@ public static class OAuthProviderRegistry
         var applicationKey = secrets.SteamApiKey
             ?? GetSetting(configuration, "OAuth:Steam:ApplicationKey", environment, Steam);
 
+        if (string.IsNullOrWhiteSpace(applicationKey))
+        {
+            return;
+        }
+
         builder.AddSteam(Steam, options =>
         {
             options.SignInScheme = signInScheme;
@@ -95,6 +100,11 @@ public static class OAuthProviderRegistry
         var clientSecret = secrets.BattleNetClientSecret
             ?? GetSetting(configuration, "OAuth:BattleNet:ClientSecret", environment, BattleNet);
         var region = configuration["OAuth:BattleNet:Region"];
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return;
+        }
 
         builder.AddBattleNet(BattleNet, options =>
         {
@@ -129,6 +139,15 @@ public static class OAuthProviderRegistry
         var tokenEndpoint = GetSetting(configuration, "OAuth:Epic:TokenEndpoint", environment, Epic);
         var userInfoEndpoint = GetSetting(configuration, "OAuth:Epic:UserInformationEndpoint", environment, Epic);
 
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret) ||
+            string.IsNullOrWhiteSpace(authorizationEndpoint) ||
+            string.IsNullOrWhiteSpace(tokenEndpoint) ||
+            string.IsNullOrWhiteSpace(userInfoEndpoint))
+        {
+            return;
+        }
+
         builder.AddEpicGames(Epic, options =>
         {
             options.SignInScheme = signInScheme;
@@ -155,6 +174,11 @@ public static class OAuthProviderRegistry
             ?? GetSetting(configuration, "OAuth:Xbox:ClientId", environment, Xbox);
         var clientSecret = secrets.XboxClientSecret
             ?? GetSetting(configuration, "OAuth:Xbox:ClientSecret", environment, Xbox);
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return;
+        }
 
         builder.AddMicrosoftAccount(Xbox, options =>
         {
