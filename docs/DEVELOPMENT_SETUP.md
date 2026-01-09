@@ -181,7 +181,47 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 
 Default credentials for all services: `dhadgar` / `dhadgar`
 
+### 1b. Run Services in Docker (Optional)
+
+If you want the .NET services running inside containers (instead of `dotnet run`), use the
+compose override in `deploy/compose/docker-compose.services.yml`:
+
+```bash
+docker compose -f deploy/compose/docker-compose.dev.yml -f deploy/compose/docker-compose.services.yml up -d --build
+```
+
+This exposes the Gateway at `http://localhost:5000` and each service at ports `5010` through `5120`.
+The Identity container enables development signing certificates and the Secrets container uses the
+development provider by default (see `deploy/compose/docker-compose.services.yml`).
+
+#### Generating Development TLS Certificates
+
+The Gateway expects these files in `deploy/certs` (as configured in
+`deploy/compose/docker-compose.services.yml`):
+- `deploy/certs/dev.meridianconsole.com.pem`
+- `deploy/certs/dev.meridianconsole.com.key`
+
+Create a self-signed pair with OpenSSL:
+
+```bash
+mkdir -p deploy/certs
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout deploy/certs/dev.meridianconsole.com.key \
+  -out deploy/certs/dev.meridianconsole.com.pem \
+  -days 365 -subj "/CN=dev.meridianconsole.com"
+```
+
+Or with mkcert:
+
+```bash
+mkcert -cert-file deploy/certs/dev.meridianconsole.com.pem \
+  -key-file deploy/certs/dev.meridianconsole.com.key dev.meridianconsole.com
+```
+
+After the files exist, re-run the compose command above to start the Gateway.
+
 #### Check Infrastructure Status
+
 ```bash
 docker compose -f deploy/compose/docker-compose.dev.yml ps
 ```

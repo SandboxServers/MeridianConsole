@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.Identity.OAuth;
 
@@ -30,12 +31,13 @@ public static class OAuthProviderRegistry
         IConfiguration configuration,
         IHostEnvironment environment,
         OAuthSecretProvider secrets,
-        string signInScheme)
+        string signInScheme,
+        ILogger logger)
     {
-        ConfigureSteam(builder, configuration, environment, secrets, signInScheme);
-        ConfigureBattleNet(builder, configuration, environment, secrets, signInScheme);
-        ConfigureEpic(builder, configuration, environment, secrets, signInScheme);
-        ConfigureXbox(builder, configuration, environment, secrets, signInScheme);
+        ConfigureSteam(builder, configuration, environment, secrets, signInScheme, logger);
+        ConfigureBattleNet(builder, configuration, environment, secrets, signInScheme, logger);
+        ConfigureEpic(builder, configuration, environment, secrets, signInScheme, logger);
+        ConfigureXbox(builder, configuration, environment, secrets, signInScheme, logger);
     }
 
     public static void ConfigureMockProviders(AuthenticationBuilder builder, string signInScheme)
@@ -62,11 +64,18 @@ public static class OAuthProviderRegistry
         IConfiguration configuration,
         IHostEnvironment environment,
         OAuthSecretProvider secrets,
-        string signInScheme)
+        string signInScheme,
+        ILogger logger)
     {
         // Key Vault first, then configuration fallback
         var applicationKey = secrets.SteamApiKey
             ?? GetSetting(configuration, "OAuth:Steam:ApplicationKey", environment, Steam);
+
+        if (string.IsNullOrWhiteSpace(applicationKey))
+        {
+            logger.LogWarning("Skipping {Provider} OAuth provider: ApplicationKey not configured.", Steam);
+            return;
+        }
 
         builder.AddSteam(Steam, options =>
         {
@@ -87,7 +96,8 @@ public static class OAuthProviderRegistry
         IConfiguration configuration,
         IHostEnvironment environment,
         OAuthSecretProvider secrets,
-        string signInScheme)
+        string signInScheme,
+        ILogger logger)
     {
         // Key Vault first, then configuration fallback
         var clientId = secrets.BattleNetClientId
@@ -95,6 +105,14 @@ public static class OAuthProviderRegistry
         var clientSecret = secrets.BattleNetClientSecret
             ?? GetSetting(configuration, "OAuth:BattleNet:ClientSecret", environment, BattleNet);
         var region = configuration["OAuth:BattleNet:Region"];
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            logger.LogWarning(
+                "Skipping {Provider} OAuth provider: ClientId/ClientSecret not configured.",
+                BattleNet);
+            return;
+        }
 
         builder.AddBattleNet(BattleNet, options =>
         {
@@ -117,7 +135,8 @@ public static class OAuthProviderRegistry
         IConfiguration configuration,
         IHostEnvironment environment,
         OAuthSecretProvider secrets,
-        string signInScheme)
+        string signInScheme,
+        ILogger logger)
     {
         // Key Vault first, then configuration fallback
         var clientId = secrets.EpicClientId
@@ -128,6 +147,41 @@ public static class OAuthProviderRegistry
         var authorizationEndpoint = GetSetting(configuration, "OAuth:Epic:AuthorizationEndpoint", environment, Epic);
         var tokenEndpoint = GetSetting(configuration, "OAuth:Epic:TokenEndpoint", environment, Epic);
         var userInfoEndpoint = GetSetting(configuration, "OAuth:Epic:UserInformationEndpoint", environment, Epic);
+
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret) ||
+            string.IsNullOrWhiteSpace(authorizationEndpoint) ||
+            string.IsNullOrWhiteSpace(tokenEndpoint) ||
+            string.IsNullOrWhiteSpace(userInfoEndpoint))
+        {
+            var missing = new List<string>();
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                missing.Add("ClientId");
+            }
+            if (string.IsNullOrWhiteSpace(clientSecret))
+            {
+                missing.Add("ClientSecret");
+            }
+            if (string.IsNullOrWhiteSpace(authorizationEndpoint))
+            {
+                missing.Add("AuthorizationEndpoint");
+            }
+            if (string.IsNullOrWhiteSpace(tokenEndpoint))
+            {
+                missing.Add("TokenEndpoint");
+            }
+            if (string.IsNullOrWhiteSpace(userInfoEndpoint))
+            {
+                missing.Add("UserInformationEndpoint");
+            }
+
+            logger.LogWarning(
+                "Skipping {Provider} OAuth provider: missing {Missing}.",
+                Epic,
+                string.Join(", ", missing));
+            return;
+        }
 
         builder.AddEpicGames(Epic, options =>
         {
@@ -148,13 +202,20 @@ public static class OAuthProviderRegistry
         IConfiguration configuration,
         IHostEnvironment environment,
         OAuthSecretProvider secrets,
-        string signInScheme)
+        string signInScheme,
+        ILogger logger)
     {
         // Key Vault first, then configuration fallback
         var clientId = secrets.XboxClientId
             ?? GetSetting(configuration, "OAuth:Xbox:ClientId", environment, Xbox);
         var clientSecret = secrets.XboxClientSecret
             ?? GetSetting(configuration, "OAuth:Xbox:ClientSecret", environment, Xbox);
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            logger.LogWarning("Skipping {Provider} OAuth provider: ClientId/ClientSecret not configured.", Xbox);
+            return;
+        }
 
         builder.AddMicrosoftAccount(Xbox, options =>
         {

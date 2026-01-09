@@ -6,7 +6,9 @@
       "Bash(dotnet build:*)",
       "Bash(git add:*)",
       "Bash(claude mcp:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(docker compose:*)",
+      "Bash(curl:*)"
     ]
   }
 }

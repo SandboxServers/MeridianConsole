@@ -20,12 +20,24 @@ builder.Services.AddMemoryCache();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["Auth:Issuer"];
+        var issuer = builder.Configuration["Auth:Issuer"];
+        var metadataAddress = builder.Configuration["Auth:MetadataAddress"];
+
+        options.Authority = issuer;
         options.Audience = builder.Configuration["Auth:Audience"];
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+
+        // Support separate MetadataAddress for internal service discovery in Docker/K8s
+        // Token issuer remains external URL but JWKS is fetched from internal address
+        if (!string.IsNullOrWhiteSpace(metadataAddress))
+        {
+            options.MetadataAddress = metadataAddress;
+        }
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
+            ValidIssuer = issuer, // Explicitly set to match token issuer
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
@@ -37,8 +49,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// Register the Key Vault secret provider
-builder.Services.AddSingleton<ISecretProvider, KeyVaultSecretProvider>();
+var useDevelopmentProvider = builder.Configuration.GetValue<bool>("Secrets:UseDevelopmentProvider");
+
+if (useDevelopmentProvider && builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<ISecretProvider, DevelopmentSecretProvider>();
+}
+else
+{
+    // Default to Key Vault for non-dev environments or when explicitly configured.
+    builder.Services.AddSingleton<ISecretProvider, KeyVaultSecretProvider>();
+}
 
 var app = builder.Build();
 

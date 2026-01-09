@@ -1,0 +1,198 @@
+x-service-env: &service-env
+  ASPNETCORE_ENVIRONMENT: Development
+  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dhadgar_platform;Username=dhadgar;Password=dhadgar
+  ConnectionStrings__RabbitMqHost: rabbitmq
+  RabbitMq__Username: dhadgar
+  RabbitMq__Password: dhadgar
+
+x-service-depends: &service-depends
+  postgres:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_started
+
+x-service-depends-redis: &service-depends-redis
+  postgres:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_started
+  redis:
+    condition: service_started
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Gateway/Dockerfile
+    environment:
+      <<: *service-env
+      ASPNETCORE_ENVIRONMENT: Development
+      Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity
+      Auth__Audience: meridian-api
+      ASPNETCORE_URLS: https://+:443;http://+:8080
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/dev.meridianconsole.com.pem
+      ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /https/dev.meridianconsole.com.key
+      OpenIddict__DevClient__ClientId: dev-client
+      OpenIddict__DevClient__ClientSecret: dev-secret
+      ReverseProxy__Clusters__betterauth__Destinations__d1__Address: http://betterauth:8080/
+      ReverseProxy__Clusters__identity__Destinations__d1__Address: http://identity:8080/
+      ReverseProxy__Clusters__billing__Destinations__d1__Address: http://billing:8080/
+      ReverseProxy__Clusters__servers__Destinations__d1__Address: http://servers:8080/
+      ReverseProxy__Clusters__nodes__Destinations__d1__Address: http://nodes:8080/
+      ReverseProxy__Clusters__tasks__Destinations__d1__Address: http://tasks:8080/
+      ReverseProxy__Clusters__files__Destinations__d1__Address: http://files:8080/
+      ReverseProxy__Clusters__console__Destinations__d1__Address: http://console:8080/
+      ReverseProxy__Clusters__mods__Destinations__d1__Address: http://mods:8080/
+      ReverseProxy__Clusters__notifications__Destinations__d1__Address: http://notifications:8080/
+      ReverseProxy__Clusters__firewall__Destinations__d1__Address: http://firewall:8080/
+      ReverseProxy__Clusters__secrets__Destinations__d1__Address: http://secrets:8080/
+      ReverseProxy__Clusters__discord__Destinations__d1__Address: http://discord:8080/
+    ports:
+      - "443:443"
+      - "5000:8080"
+    volumes:
+      - ../certs:/https:ro
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  identity:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Identity/Dockerfile
+    environment:
+      <<: *service-env
+      Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity
+      Auth__Audience: meridian-api
+      Redis__ConnectionString: redis:6379,password=dhadgar
+      Auth__UseDevelopmentCertificates: ${AUTH_USE_DEV_CERTS:-true}
+      Auth__KeyVault__VaultUri: ${AUTH_KEYVAULT_URI:-}
+      Auth__KeyVault__SigningCertName: ${AUTH_KEYVAULT_SIGNING_CERT_NAME:-}
+      Auth__KeyVault__EncryptionCertName: ${AUTH_KEYVAULT_ENCRYPTION_CERT_NAME:-}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      SecretsService__Url: http://secrets:8080
+      OpenIddict__DevClient__ClientId: dev-client
+      OpenIddict__DevClient__ClientSecret: dev-secret
+      OpenIddict__Wif__Audience: ${OPENIDDICT_WIF_AUDIENCE:-api://AzureADTokenExchange}
+      Database__AutoMigrate: "true"
+    ports:
+      - "5010:8080"
+    depends_on: *service-depends-redis
+    restart: unless-stopped
+
+  billing:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Billing/Dockerfile
+    environment: *service-env
+    ports:
+      - "5020:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  servers:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Servers/Dockerfile
+    environment: *service-env
+    ports:
+      - "5030:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  nodes:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Nodes/Dockerfile
+    environment: *service-env
+    ports:
+      - "5040:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  tasks:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Tasks/Dockerfile
+    environment: *service-env
+    ports:
+      - "5050:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  files:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Files/Dockerfile
+    environment: *service-env
+    ports:
+      - "5060:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  console:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Console/Dockerfile
+    environment: *service-env
+    ports:
+      - "5070:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  mods:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Mods/Dockerfile
+    environment: *service-env
+    ports:
+      - "5080:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  notifications:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Notifications/Dockerfile
+    environment: *service-env
+    ports:
+      - "5090:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  firewall:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Firewall/Dockerfile
+    environment: *service-env
+    ports:
+      - "5100:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  secrets:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Secrets/Dockerfile
+    environment:
+      <<: *service-env
+      ASPNETCORE_ENVIRONMENT: Development
+      Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity
+      Auth__Audience: meridian-api
+      Auth__MetadataAddress: http://identity:8080/.well-known/openid-configuration
+      Secrets__UseDevelopmentProvider: "true"
+    ports:
+      - "5110:8080"
+    depends_on: *service-depends
+    restart: unless-stopped
+
+  discord:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Discord/Dockerfile
+    environment: *service-env
+    ports:
+      - "5120:8080"
+    depends_on: *service-depends
+    restart: unless-stopped

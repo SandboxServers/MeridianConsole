@@ -98,6 +98,8 @@ public sealed class KeyVaultSecretProvider : ISecretProvider
 
     public async Task<Dictionary<string, string>> GetSecretsAsync(IEnumerable<string> secretNames, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(secretNames);
+
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var tasks = secretNames
