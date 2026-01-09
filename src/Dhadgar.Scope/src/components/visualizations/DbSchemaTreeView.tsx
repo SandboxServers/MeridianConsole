@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
-import type { DbSchemaCatalog, DbServiceSchema, DbSchemaItem } from '../../lib/types';
+import { useState, useEffect } from "react";
+import type { DbSchemaCatalog, DbSchemaItem } from "../../lib/types";
 
 export function DbSchemaTreeView() {
   const [data, setData] = useState<DbSchemaCatalog | null>(null);
-  const [selectedService, setSelectedService] = useState<string>('');
-  const [expandedKinds, setExpandedKinds] = useState<Set<string>>(new Set(['table']));
+  const [selectedService, setSelectedService] = useState<string>("");
+  const [expandedKinds, setExpandedKinds] = useState<Set<string>>(new Set(["table"]));
   const [selectedItem, setSelectedItem] = useState<DbSchemaItem | null>(null);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
-    fetch('/content/db-schemas.v1.json')
+    fetch("/content/db-schemas.v1.json")
       .then((res) => res.json())
       .then((d: DbSchemaCatalog) => {
         setData(d);
@@ -36,21 +36,23 @@ export function DbSchemaTreeView() {
   };
 
   const kindLabels: Record<string, string> = {
-    table: 'Tables',
-    view: 'Views',
-    function: 'Functions',
-    enum: 'Enums',
-    type: 'Types',
+    table: "Tables",
+    view: "Views",
+    function: "Functions",
+    enum: "Enums",
+    type: "Types",
   };
 
-  const filteredItems = currentService?.items.filter((item) =>
-    item.id.toLowerCase().includes(filter.toLowerCase())
-  ) || [];
+  const filteredItems =
+    currentService?.items.filter((item) => item.id.toLowerCase().includes(filter.toLowerCase())) ||
+    [];
 
-  const itemsByKind = ['table', 'view', 'function', 'enum', 'type'].map((kind) => ({
-    kind,
-    items: filteredItems.filter((i) => i.kind === kind),
-  })).filter((g) => g.items.length > 0);
+  const itemsByKind = ["table", "view", "function", "enum", "type"]
+    .map((kind) => ({
+      kind,
+      items: filteredItems.filter((i) => i.kind === kind),
+    }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <div className="space-y-4">
@@ -65,7 +67,9 @@ export function DbSchemaTreeView() {
           className="flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
         >
           {data.services.map((s) => (
-            <option key={s.key} value={s.key}>{s.name}</option>
+            <option key={s.key} value={s.key}>
+              {s.name}
+            </option>
           ))}
         </select>
 
@@ -99,10 +103,10 @@ export function DbSchemaTreeView() {
                       type="button"
                       onClick={() => setSelectedItem(item)}
                       className={`flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm transition-colors hover:bg-white/5 ${
-                        selectedItem?.id === item.id ? 'bg-white/10' : ''
+                        selectedItem?.id === item.id ? "bg-white/10" : ""
                       }`}
                     >
-                      <span className="font-mono text-white/80">{item.id.split('.').pop()}</span>
+                      <span className="font-mono text-white/80">{item.id.split(".").pop()}</span>
                     </button>
                   ))}
                 </div>
@@ -123,11 +127,13 @@ export function DbSchemaTreeView() {
               {selectedItem.details.length > 0 && (
                 <div>
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-white/60">
-                    {selectedItem.kind === 'table' ? 'Columns' : 'Details'}
+                    {selectedItem.kind === "table" ? "Columns" : "Details"}
                   </h4>
                   <ul className="mt-2 space-y-1">
                     {selectedItem.details.map((d, i) => (
-                      <li key={i} className="font-mono text-sm text-white/80">{d}</li>
+                      <li key={i} className="font-mono text-sm text-white/80">
+                        {d}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -135,8 +141,18 @@ export function DbSchemaTreeView() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <svg className="h-12 w-12 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+              <svg
+                className="h-12 w-12 text-white/20"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+                />
               </svg>
               <p className="mt-4 text-sm text-white/60">Select an item to see details</p>
             </div>
@@ -150,7 +166,9 @@ export function DbSchemaTreeView() {
           <h4 className="text-xs font-semibold uppercase tracking-wide text-white/60">Notes</h4>
           <ul className="mt-2 space-y-1">
             {data.notes.map((note, i) => (
-              <li key={i} className="text-sm text-white/70">{note}</li>
+              <li key={i} className="text-sm text-white/70">
+                {note}
+              </li>
             ))}
           </ul>
         </div>

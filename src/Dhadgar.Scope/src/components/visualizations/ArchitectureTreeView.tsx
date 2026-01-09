@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react';
-import type { ArchitectureGraphData, ArchitectureNode } from '../../lib/types';
+import { useState, useEffect } from "react";
+import type { ArchitectureGraphData, ArchitectureNode } from "../../lib/types";
 
 export function ArchitectureTreeView() {
   const [data, setData] = useState<ArchitectureGraphData | null>(null);
   const [expandedDistricts, setExpandedDistricts] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<ArchitectureNode | null>(null);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
-    fetch('/content/architecture-park.v1.json')
+    fetch("/content/architecture-park.v1.json")
       .then((res) => res.json())
       .then(setData);
   }, []);
@@ -37,12 +37,12 @@ export function ArchitectureTreeView() {
   }));
 
   const kindColors: Record<string, string> = {
-    service: 'bg-indigo-600',
-    agent: 'bg-purple-600',
-    db: 'bg-amber-600',
-    foundation: 'bg-teal-600',
-    external: 'bg-gray-600',
-    client: 'bg-blue-600',
+    service: "bg-indigo-600",
+    agent: "bg-purple-600",
+    db: "bg-amber-600",
+    foundation: "bg-teal-600",
+    external: "bg-gray-600",
+    client: "bg-blue-600",
   };
 
   return (
@@ -77,10 +77,12 @@ export function ArchitectureTreeView() {
                       type="button"
                       onClick={() => setSelectedNode(node)}
                       className={`flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm transition-colors hover:bg-white/5 ${
-                        selectedNode?.id === node.id ? 'bg-white/10' : ''
+                        selectedNode?.id === node.id ? "bg-white/10" : ""
                       }`}
                     >
-                      <span className={`h-2 w-2 rounded-full ${kindColors[node.kind] || 'bg-gray-500'}`} />
+                      <span
+                        className={`h-2 w-2 rounded-full ${kindColors[node.kind] || "bg-gray-500"}`}
+                      />
                       <span>{node.emoji}</span>
                       <span>{node.name}</span>
                     </button>
@@ -101,7 +103,9 @@ export function ArchitectureTreeView() {
                   <h3 className="text-lg font-bold">{selectedNode.name}</h3>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${kindColors[selectedNode.kind] || 'bg-gray-500'}`} />
+                  <span
+                    className={`h-2 w-2 rounded-full ${kindColors[selectedNode.kind] || "bg-gray-500"}`}
+                  />
                   <span className="text-xs text-white/60 capitalize">{selectedNode.kind}</span>
                 </div>
               </div>
@@ -112,7 +116,9 @@ export function ArchitectureTreeView() {
 
               {selectedNode.responsibilities.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-white/60">Responsibilities</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-white/60">
+                    Responsibilities
+                  </h4>
                   <ul className="mt-2 space-y-1">
                     {selectedNode.responsibilities.map((r, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-white/80">
@@ -126,10 +132,14 @@ export function ArchitectureTreeView() {
 
               {selectedNode.ports.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-white/60">Ports</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-white/60">
+                    Ports
+                  </h4>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {selectedNode.ports.map((p, i) => (
-                      <span key={i} className="rounded-lg bg-white/5 px-2 py-1 text-xs font-mono">{p}</span>
+                      <span key={i} className="rounded-lg bg-white/5 px-2 py-1 text-xs font-mono">
+                        {p}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -137,8 +147,18 @@ export function ArchitectureTreeView() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <svg className="h-12 w-12 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <svg
+                className="h-12 w-12 text-white/20"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
               </svg>
               <p className="mt-4 text-sm text-white/60">Select a node to see details</p>
             </div>

@@ -6,7 +6,9 @@
   <h2 class="mb-4 text-2xl font-bold">Section 8: Certificate Management</h2>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">TLS Strategy</h3>
-  <p class="mb-4 text-white/70">All communications encrypted with TLS. Different certificate sources for different tiers.</p>
+  <p class="mb-4 text-white/70">
+    All communications encrypted with TLS. Different certificate sources for different tiers.
+  </p>
 
   <table class="scope-table mb-6">
     <thead>
@@ -18,7 +20,11 @@
     </thead>
     <tbody>
       <tr><td>Public endpoints</td><td>Cloudflare (edge)</td><td>Automatic</td></tr>
-      <tr><td>Control plane internal</td><td>cert-manager + Let's Encrypt</td><td>90 days auto-renew</td></tr>
+      <tr
+        ><td>Control plane internal</td><td>cert-manager + Let's Encrypt</td><td
+          >90 days auto-renew</td
+        ></tr
+      >
       <tr><td>Agent mTLS</td><td>Internal CA (planned)</td><td>24-48 hours</td></tr>
       <tr><td>Database connections</td><td>Self-signed (internal only)</td><td>Annual</td></tr>
     </tbody>
@@ -36,6 +42,7 @@
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Key Storage</h3>
   <div class="scope-callout">
-    Private keys never leave their origin. Agent keys generated on-device, control plane keys in Kubernetes secrets.
+    Private keys never leave their origin. Agent keys generated on-device, control plane keys in
+    Kubernetes secrets.
   </div>
 </div>

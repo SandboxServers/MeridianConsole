@@ -48,3 +48,4 @@ scripts/fix-wsl-clipboard-*.ps1
 
 # GitHub App credentials
 gha-creds-*.json
+.secrets/
