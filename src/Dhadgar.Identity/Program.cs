@@ -11,6 +11,7 @@ using Dhadgar.Identity.Options;
 using Dhadgar.Identity.Services;
 using Dhadgar.Messaging;
 using MassTransit;
+using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Azure.Identity;
@@ -118,14 +119,22 @@ else
     // Load gaming OAuth secrets from Secrets Service at startup
     var secretsServiceUrl = builder.Configuration["SecretsService:Url"] ?? "http://localhost:5000";
     using var oauthSecrets = new OAuthSecretProvider(new Uri(secretsServiceUrl));
-    oauthSecrets.LoadSecretsAsync().GetAwaiter().GetResult();
+    await oauthSecrets.LoadSecretsAsync();
+
+    using var oauthLoggerFactory = LoggerFactory.Create(logging =>
+    {
+        logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
+        logging.AddConsole();
+    });
+    var oauthLogger = oauthLoggerFactory.CreateLogger("OAuthProviders");
 
     OAuthProviderRegistry.ConfigureProviders(
         authenticationBuilder,
         builder.Configuration,
         builder.Environment,
         oauthSecrets,
-        AuthSchemes.External);
+        AuthSchemes.External,
+        oauthLogger);
 }
 
 builder.Services.AddRateLimiter(options =>
@@ -257,15 +266,28 @@ builder.Services.AddOpenIddict()
         var issuer = builder.Configuration["Auth:Issuer"];
         if (!string.IsNullOrWhiteSpace(issuer))
         {
-            options.SetIssuer(new Uri(issuer));
-        }
+            var issuerUri = new Uri(issuer.TrimEnd('/') + "/");
+            options.SetIssuer(issuerUri);
 
-        options.SetAuthorizationEndpointUris("connect/authorize")
-            .SetTokenEndpointUris("connect/token")
-            .SetUserInfoEndpointUris("connect/userinfo")
-            .SetIntrospectionEndpointUris("connect/introspect")
-            .SetRevocationEndpointUris("connect/revocation")
-            .SetJsonWebKeySetEndpointUris(".well-known/jwks.json");
+            // Set both absolute URIs (for discovery document) and relative paths (for internal routing)
+            // OpenIddict uses the first URI for the discovery document and matches requests against all URIs
+            options.SetAuthorizationEndpointUris(new Uri(issuerUri, "connect/authorize"), new Uri("connect/authorize", UriKind.Relative))
+                .SetTokenEndpointUris(new Uri(issuerUri, "connect/token"), new Uri("connect/token", UriKind.Relative))
+                .SetUserInfoEndpointUris(new Uri(issuerUri, "connect/userinfo"), new Uri("connect/userinfo", UriKind.Relative))
+                .SetIntrospectionEndpointUris(new Uri(issuerUri, "connect/introspect"), new Uri("connect/introspect", UriKind.Relative))
+                .SetRevocationEndpointUris(new Uri(issuerUri, "connect/revocation"), new Uri("connect/revocation", UriKind.Relative))
+                .SetJsonWebKeySetEndpointUris(new Uri(issuerUri, ".well-known/jwks.json"), new Uri(".well-known/jwks.json", UriKind.Relative));
+        }
+        else
+        {
+            // Fallback to relative URIs if issuer not configured
+            options.SetAuthorizationEndpointUris("connect/authorize")
+                .SetTokenEndpointUris("connect/token")
+                .SetUserInfoEndpointUris("connect/userinfo")
+                .SetIntrospectionEndpointUris("connect/introspect")
+                .SetRevocationEndpointUris("connect/revocation")
+                .SetJsonWebKeySetEndpointUris(".well-known/jwks.json");
+        }
 
         options.AllowAuthorizationCodeFlow()
             .RequireProofKeyForCodeExchange()
@@ -338,7 +360,8 @@ builder.Services.AddOpenIddict()
         }
         }
 
-        var aspNetCoreBuilder = options.UseAspNetCore();
+        var aspNetCoreBuilder = options.UseAspNetCore()
+            .EnableStatusCodePagesIntegration();
 
         // Allow HTTP for development/Docker environments (internal service-to-service calls)
         if (builder.Environment.IsDevelopment() || useDevelopmentCertificates)
@@ -347,11 +370,11 @@ builder.Services.AddOpenIddict()
         }
 
         options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(eventBuilder =>
-            eventBuilder.UseInlineHandler(context =>
+            eventBuilder.UseInlineHandler(async context =>
             {
-                if (!context.Request.IsClientCredentialsGrantType())
+                if (context.Request is null || !context.Request.IsClientCredentialsGrantType())
                 {
-                    return ValueTask.CompletedTask;
+                    return;
                 }
 
                 if (string.IsNullOrWhiteSpace(context.ClientId))
@@ -359,7 +382,59 @@ builder.Services.AddOpenIddict()
                     context.Reject(
                         OpenIddictConstants.Errors.InvalidRequest,
                         "ClientId is required for client credentials grant.");
-                    return ValueTask.CompletedTask;
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(context.Request.ClientSecret))
+                {
+                    context.Reject(
+                        OpenIddictConstants.Errors.InvalidClient,
+                        "ClientSecret is required for client credentials grant.");
+                    return;
+                }
+
+                var httpRequest = OpenIddictServerAspNetCoreHelpers.GetHttpRequest(context.Transaction);
+                var httpContext = httpRequest?.HttpContext;
+                if (httpContext is null)
+                {
+                    context.Reject(OpenIddictConstants.Errors.ServerError, "HTTP context unavailable.");
+                    return;
+                }
+
+                var manager = httpContext.RequestServices.GetRequiredService<IOpenIddictApplicationManager>();
+                var application = await manager.FindByClientIdAsync(context.ClientId);
+                if (application is null ||
+                    !await manager.ValidateClientSecretAsync(application, context.Request.ClientSecret))
+                {
+                    context.Reject(OpenIddictConstants.Errors.InvalidClient, "Invalid client credentials.");
+                    return;
+                }
+
+                if (!await manager.HasPermissionAsync(application, OpenIddictConstants.Permissions.Endpoints.Token) ||
+                    !await manager.HasPermissionAsync(application, OpenIddictConstants.Permissions.GrantTypes.ClientCredentials))
+                {
+                    context.Reject(OpenIddictConstants.Errors.UnauthorizedClient, "Client is not allowed to use client credentials.");
+                    return;
+                }
+
+                var permissions = await manager.GetPermissionsAsync(application);
+                var allowedScopes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var permission in permissions)
+                {
+                    if (permission.StartsWith(OpenIddictConstants.Permissions.Prefixes.Scope, StringComparison.OrdinalIgnoreCase))
+                    {
+                        allowedScopes.Add(permission[OpenIddictConstants.Permissions.Prefixes.Scope.Length..]);
+                    }
+                }
+
+                var requestedScopes = context.Request.GetScopes().ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var scope in requestedScopes)
+                {
+                    if (!allowedScopes.Contains(scope))
+                    {
+                        context.Reject(OpenIddictConstants.Errors.InvalidScope, $"Scope '{scope}' is not allowed for this client.");
+                        return;
+                    }
                 }
 
                 var identity = new ClaimsIdentity(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
@@ -367,10 +442,9 @@ builder.Services.AddOpenIddict()
                 identity.AddClaim(OpenIddictConstants.Claims.ClientId, context.ClientId);
 
                 var principal = new ClaimsPrincipal(identity);
-                var scopes = context.Request.GetScopes();
-                principal.SetScopes(scopes);
+                principal.SetScopes(requestedScopes);
 
-                if (scopes.Contains("wif", StringComparer.OrdinalIgnoreCase))
+                if (requestedScopes.Contains("wif", StringComparer.OrdinalIgnoreCase))
                 {
                     principal.SetAudiences(wifAudience);
                 }
@@ -380,8 +454,11 @@ builder.Services.AddOpenIddict()
                 }
 
                 context.SignIn(principal);
-                return ValueTask.CompletedTask;
             }));
+
+        // Azure WIF compatibility: Replace at+jwt with JWT typ header for WIF tokens
+        options.AddEventHandler<OpenIddictServerEvents.ApplyTokenResponseContext>(eventBuilder =>
+            eventBuilder.UseInlineHandler(AzureWifTokenHandler.ApplyTokenResponse));
     })
     .AddValidation(options =>
     {
@@ -415,8 +492,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseAuthentication();
-app.UseRateLimiter();
 app.UseAuthorization();
+app.UseRateLimiter();
+
+// Ensure OpenIddict server middleware runs to handle token requests
+// This must come after UseAuthentication/UseAuthorization but before endpoints
+//app.UseMiddleware<OpenIddictServerMiddleware>(); // Not needed - UseAuthentication() triggers it
 
 // Apply EF Core migrations automatically during local/dev runs or when configured.
 var autoMigrate = app.Environment.IsDevelopment() ||
@@ -426,7 +507,7 @@ if (autoMigrate)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-    db.Database.Migrate();
+    await db.Database.MigrateAsync();
     app.Logger.LogInformation("Database migrations applied successfully.");
 
     await SeedDevOpenIddictClientAsync(app.Services, app.Configuration, app.Logger);
@@ -437,13 +518,12 @@ app.MapGet("/hello", () => Results.Text(IdentityHello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", status = "ok" }));
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle);
 
-
 OAuthEndpoints.Map(app);
 OrganizationEndpoints.Map(app);
 MembershipEndpoints.Map(app);
 WebhookEndpoint.Map(app);
 
-app.Run();
+await app.RunAsync();
 
 static async Task SeedDevOpenIddictClientAsync(
     IServiceProvider services,

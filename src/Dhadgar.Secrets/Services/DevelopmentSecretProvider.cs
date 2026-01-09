@@ -1,5 +1,6 @@
 using Dhadgar.Secrets.Options;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Dhadgar.Secrets.Services;
@@ -8,11 +9,14 @@ public sealed class DevelopmentSecretProvider : ISecretProvider
 {
     private readonly Dictionary<string, string> _secrets;
     private readonly HashSet<string> _allowedSecrets;
+    private readonly ILogger<DevelopmentSecretProvider> _logger;
 
     public DevelopmentSecretProvider(
         IConfiguration configuration,
-        IOptions<SecretsOptions> options)
+        IOptions<SecretsOptions> options,
+        ILogger<DevelopmentSecretProvider> logger)
     {
+        _logger = logger;
         var secretSection = configuration.GetSection("Secrets:Development:Secrets");
         _secrets = secretSection.GetChildren()
             .Select(child => (Key: child.Key, Value: child.Value))
@@ -35,14 +39,24 @@ public sealed class DevelopmentSecretProvider : ISecretProvider
     {
         if (!IsAllowed(secretName))
         {
+            _logger.LogDebug("Secret {SecretName} is not in the allowed list.", secretName);
             return Task.FromResult<string?>(null);
         }
 
-        return Task.FromResult(_secrets.TryGetValue(secretName, out var value) ? value : null);
+        if (_secrets.TryGetValue(secretName, out var value))
+        {
+            _logger.LogDebug("Retrieved secret {SecretName} from development provider.", secretName);
+            return Task.FromResult<string?>(value);
+        }
+
+        _logger.LogWarning("Development secret {SecretName} was not found.", secretName);
+        return Task.FromResult<string?>(null);
     }
 
     public Task<Dictionary<string, string>> GetSecretsAsync(IEnumerable<string> secretNames, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(secretNames);
+
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var secretName in secretNames.Where(IsAllowed))
@@ -50,6 +64,11 @@ public sealed class DevelopmentSecretProvider : ISecretProvider
             if (_secrets.TryGetValue(secretName, out var value))
             {
                 result[secretName] = value;
+                _logger.LogDebug("Retrieved secret {SecretName} from development provider.", secretName);
+            }
+            else
+            {
+                _logger.LogWarning("Development secret {SecretName} was not found.", secretName);
             }
         }
 
