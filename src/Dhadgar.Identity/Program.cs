@@ -456,9 +456,10 @@ builder.Services.AddOpenIddict()
                 context.SignIn(principal);
             }));
 
-        // Azure WIF compatibility: Replace at+jwt with JWT typ header for WIF tokens
-        options.AddEventHandler<OpenIddictServerEvents.ApplyTokenResponseContext>(eventBuilder =>
-            eventBuilder.UseInlineHandler(AzureWifTokenHandler.ApplyTokenResponse));
+        // Azure WIF compatibility: Replace at+jwt with JWT typ header for WIF access tokens before signing.
+        options.AddEventHandler<OpenIddictServerEvents.GenerateTokenContext>(eventBuilder =>
+            eventBuilder.UseInlineHandler(AzureWifTokenHandler.ApplyAccessTokenType)
+                .SetOrder(OpenIddictServerHandlers.Protection.GenerateIdentityModelToken.Descriptor.Order - 50));
     })
     .AddValidation(options =>
     {
