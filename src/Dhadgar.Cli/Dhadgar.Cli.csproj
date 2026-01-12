@@ -1,15 +1,41 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <AssemblyName>Dhadgar.Cli</AssemblyName>
+    <AssemblyName>dhadgar</AssemblyName>
     <RootNamespace>Dhadgar.Cli</RootNamespace>
     <OutputType>Exe</OutputType>
+
+    <!-- Global Tool Configuration -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>dhadgar</ToolCommandName>
+    <PackageId>Dhadgar.Cli</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Meridian Console Team</Authors>
+    <Description>Beautiful command-line interface for Meridian Console game server control plane</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
   </ItemGroup>
+
+  <!-- Auto-install as global tool after build (not publish to avoid infinite loop) -->
+  <Target Name="InstallGlobalTool" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' AND '$(SkipGlobalToolInstall)' != 'true'">
+    <PropertyGroup>
+      <ToolPackageDir>$(MSBuildProjectDirectory)\..\..\dist\tools</ToolPackageDir>
+    </PropertyGroup>
+
+    <Message Text="Packing CLI as NuGet global tool..." Importance="high" />
+    <Exec Command="dotnet pack $(MSBuildProjectFullPath) -c Release -o $(ToolPackageDir) --no-build -p:SkipGlobalToolInstall=true" />
+
+    <Message Text="Installing/updating dhadgar global tool..." Importance="high" />
+    <Exec Command="dotnet tool uninstall --global Dhadgar.Cli" IgnoreExitCode="true" />
+    <Exec Command="dotnet tool install --global --add-source $(ToolPackageDir) Dhadgar.Cli" />
+
+    <Message Text="✓ Global tool 'dhadgar' installed successfully!" Importance="high" />
+  </Target>
 </Project>

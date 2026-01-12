@@ -8,9 +8,15 @@ namespace Dhadgar.Secrets.Services;
 
 public interface ISecretProvider
 {
+    // Read operations
     Task<string?> GetSecretAsync(string secretName, CancellationToken ct = default);
     Task<Dictionary<string, string>> GetSecretsAsync(IEnumerable<string> secretNames, CancellationToken ct = default);
     bool IsAllowed(string secretName);
+
+    // Write operations
+    Task<bool> SetSecretAsync(string secretName, string value, CancellationToken ct = default);
+    Task<(string Version, DateTime CreatedAt)> RotateSecretAsync(string secretName, CancellationToken ct = default);
+    Task<bool> DeleteSecretAsync(string secretName, CancellationToken ct = default);
 }
 
 public sealed class KeyVaultSecretProvider : ISecretProvider
@@ -121,5 +127,107 @@ public sealed class KeyVaultSecretProvider : ISecretProvider
         }
 
         return result;
+    }
+
+    public async Task<bool> SetSecretAsync(string secretName, string value, CancellationToken ct = default)
+    {
+        // Security check: only allow writing to allowed secrets
+        if (!IsAllowed(secretName))
+        {
+            _logger.LogWarning("Attempted to write non-allowed secret: {SecretName}", secretName);
+            return false;
+        }
+
+        // Validate size (25KB limit for Azure Key Vault)
+        const int maxSizeBytes = 25 * 1024;
+        var valueBytes = System.Text.Encoding.UTF8.GetByteCount(value);
+        if (valueBytes > maxSizeBytes)
+        {
+            _logger.LogError("Secret {SecretName} exceeds size limit: {Size} bytes (max: {MaxSize} bytes)",
+                secretName, valueBytes, maxSizeBytes);
+            throw new InvalidOperationException($"Secret value exceeds {maxSizeBytes} byte limit");
+        }
+
+        try
+        {
+            await _client.SetSecretAsync(secretName, value, ct);
+
+            // Invalidate cache
+            var cacheKey = $"secret:{secretName}";
+            _cache.Remove(cacheKey);
+
+            _logger.LogInformation("Set secret {SecretName} in Key Vault", secretName);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set secret {SecretName} in Key Vault", secretName);
+            throw;
+        }
+    }
+
+    public async Task<(string Version, DateTime CreatedAt)> RotateSecretAsync(string secretName, CancellationToken ct = default)
+    {
+        // Security check
+        if (!IsAllowed(secretName))
+        {
+            _logger.LogWarning("Attempted to rotate non-allowed secret: {SecretName}", secretName);
+            throw new UnauthorizedAccessException($"Secret '{secretName}' is not in the allowed list");
+        }
+
+        try
+        {
+            // Generate a new cryptographically secure random value (32 bytes = 256 bits)
+            var newValue = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
+            // Set the new secret value (Key Vault automatically creates a new version)
+            var response = await _client.SetSecretAsync(secretName, newValue, ct);
+
+            // Invalidate cache
+            var cacheKey = $"secret:{secretName}";
+            _cache.Remove(cacheKey);
+
+            _logger.LogInformation("Rotated secret {SecretName} to version {Version}", secretName, response.Value.Properties.Version);
+
+            return (response.Value.Properties.Version ?? "unknown", response.Value.Properties.CreatedOn?.UtcDateTime ?? DateTime.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to rotate secret {SecretName} in Key Vault", secretName);
+            throw;
+        }
+    }
+
+    public async Task<bool> DeleteSecretAsync(string secretName, CancellationToken ct = default)
+    {
+        // Security check
+        if (!IsAllowed(secretName))
+        {
+            _logger.LogWarning("Attempted to delete non-allowed secret: {SecretName}", secretName);
+            return false;
+        }
+
+        try
+        {
+            // Start delete operation (soft delete if enabled on vault)
+            await _client.StartDeleteSecretAsync(secretName, ct);
+
+            // Invalidate cache
+            var cacheKey = $"secret:{secretName}";
+            _cache.Remove(cacheKey);
+
+            _logger.LogInformation("Deleted secret {SecretName} from Key Vault", secretName);
+            return true;
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+        {
+            _logger.LogWarning("Attempted to delete non-existent secret: {SecretName}", secretName);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete secret {SecretName} from Key Vault", secretName);
+            throw;
+        }
     }
 }

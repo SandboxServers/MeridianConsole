@@ -74,4 +74,52 @@ public sealed class DevelopmentSecretProvider : ISecretProvider
 
         return Task.FromResult(result);
     }
+
+    public Task<bool> SetSecretAsync(string secretName, string value, CancellationToken ct = default)
+    {
+        if (!IsAllowed(secretName))
+        {
+            _logger.LogWarning("Attempted to write non-allowed secret: {SecretName}", secretName);
+            return Task.FromResult(false);
+        }
+
+        _secrets[secretName] = value;
+        _logger.LogInformation("Set secret {SecretName} in development provider", secretName);
+        return Task.FromResult(true);
+    }
+
+    public Task<(string Version, DateTime CreatedAt)> RotateSecretAsync(string secretName, CancellationToken ct = default)
+    {
+        if (!IsAllowed(secretName))
+        {
+            throw new UnauthorizedAccessException($"Secret '{secretName}' is not in the allowed list");
+        }
+
+        // Generate new value
+        var newValue = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        _secrets[secretName] = newValue;
+
+        var version = Guid.NewGuid().ToString();
+        var createdAt = DateTime.UtcNow;
+
+        _logger.LogInformation("Rotated secret {SecretName} to version {Version}", secretName, version);
+        return Task.FromResult((version, createdAt));
+    }
+
+    public Task<bool> DeleteSecretAsync(string secretName, CancellationToken ct = default)
+    {
+        if (!IsAllowed(secretName))
+        {
+            _logger.LogWarning("Attempted to delete non-allowed secret: {SecretName}", secretName);
+            return Task.FromResult(false);
+        }
+
+        var removed = _secrets.Remove(secretName);
+        if (removed)
+        {
+            _logger.LogInformation("Deleted secret {SecretName} from development provider", secretName);
+        }
+
+        return Task.FromResult(removed);
+    }
 }

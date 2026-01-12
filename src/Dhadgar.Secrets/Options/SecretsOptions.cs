@@ -7,6 +7,12 @@ public sealed class SecretsOptions
     public string KeyVaultUri { get; set; } = string.Empty;
 
     /// <summary>
+    /// Azure subscription ID for Key Vault management operations.
+    /// Can also be set via AZURE_SUBSCRIPTION_ID environment variable.
+    /// </summary>
+    public string? AzureSubscriptionId { get; set; }
+
+    /// <summary>
     /// Permission names required to access secrets.
     /// </summary>
     public SecretsPermissionsOptions Permissions { get; set; } = new();
