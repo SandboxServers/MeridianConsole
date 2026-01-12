@@ -20,7 +20,7 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) {
-        return callback(null, true);
+        ret                                                                                                                                                                                                                                                                                                                                                                                                                                                                     urn callback(null, true);
       }
 
       if (trustedOrigins.length === 0 || trustedOrigins.includes(origin)) {

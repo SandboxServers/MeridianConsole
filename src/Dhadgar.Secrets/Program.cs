@@ -61,6 +61,12 @@ else
     builder.Services.AddSingleton<ISecretProvider, KeyVaultSecretProvider>();
 }
 
+// Certificate provider (always use Key Vault)
+builder.Services.AddSingleton<ICertificateProvider, KeyVaultCertificateProvider>();
+
+// Key Vault manager for vault CRUD operations
+builder.Services.AddSingleton<IKeyVaultManager, AzureKeyVaultManager>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -78,7 +84,10 @@ app.MapGet("/hello", () => Results.Text(Hello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Secrets", status = "ok" }));
 
 // Secrets API endpoints
-app.MapSecretsEndpoints();
+app.MapSecretsEndpoints();           // Read operations
+app.MapSecretWriteEndpoints();       // Write operations (set, rotate, delete)
+app.MapCertificateEndpoints();       // Certificate management
+app.MapKeyVaultEndpoints();          // Key Vault management
 
 app.Run();
 
