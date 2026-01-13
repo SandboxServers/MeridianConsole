@@ -1,11 +1,11 @@
 using Dhadgar.Gateway.Options;
-using Dhadgar.ServiceDefaults.Readiness;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Yarp.ReverseProxy;
 
 namespace Dhadgar.Gateway.Readiness;
 
-public sealed class YarpReadinessCheck : IReadinessCheck
+public sealed class YarpReadinessCheck : IHealthCheck
 {
     private readonly IProxyStateLookup _proxyStateLookup;
     private readonly ReadyzOptions _options;
@@ -16,7 +16,7 @@ public sealed class YarpReadinessCheck : IReadinessCheck
         _options = options.Value ?? new ReadyzOptions();
     }
 
-    public Task<ReadinessResult> CheckAsync(CancellationToken ct)
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken)
     {
         var requiredClusters = _options.RequiredClusters;
         var minimumAvailable = Math.Max(0, _options.MinimumAvailableDestinations);
@@ -71,17 +71,17 @@ public sealed class YarpReadinessCheck : IReadinessCheck
             }
         }
 
-        var details = new
+        var data = new Dictionary<string, object>
         {
-            requiredClusters,
-            minimumAvailable,
-            failOnMissingCluster = failOnMissing,
-            clusters,
-            failures
+            ["requiredClusters"] = requiredClusters.ToArray(),
+            ["minimumAvailable"] = minimumAvailable,
+            ["failOnMissingCluster"] = failOnMissing,
+            ["clusters"] = clusters,
+            ["failures"] = failures
         };
 
         return Task.FromResult(failures.Count == 0
-            ? ReadinessResult.Ready(details)
-            : ReadinessResult.NotReady(details));
+            ? HealthCheckResult.Healthy(data: data)
+            : HealthCheckResult.Unhealthy(data: data));
     }
 }

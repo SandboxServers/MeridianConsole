@@ -1,11 +1,11 @@
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Services;
-using Dhadgar.ServiceDefaults.Readiness;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Dhadgar.Secrets.Readiness;
 
-public sealed class SecretsReadinessCheck : IReadinessCheck
+public sealed class SecretsReadinessCheck : IHealthCheck
 {
     private readonly ISecretProvider _secretProvider;
     private readonly ICertificateProvider _certificateProvider;
@@ -27,19 +27,19 @@ public sealed class SecretsReadinessCheck : IReadinessCheck
         _logger = logger;
     }
 
-    public async Task<ReadinessResult> CheckAsync(CancellationToken ct)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken)
     {
-        var details = new Dictionary<string, object?>();
+        var details = new Dictionary<string, object>();
 
-        var secretsReady = await CheckSecretsAsync(details, ct);
-        var certificatesReady = await CheckCertificatesAsync(details, ct);
+        var secretsReady = await CheckSecretsAsync(details, cancellationToken);
+        var certificatesReady = await CheckCertificatesAsync(details, cancellationToken);
 
         return secretsReady && certificatesReady
-            ? ReadinessResult.Ready(details)
-            : ReadinessResult.NotReady(details);
+            ? HealthCheckResult.Healthy(data: details)
+            : HealthCheckResult.Unhealthy(data: details);
     }
 
-    private async Task<bool> CheckSecretsAsync(Dictionary<string, object?> details, CancellationToken ct)
+    private async Task<bool> CheckSecretsAsync(Dictionary<string, object> details, CancellationToken ct)
     {
         if (_secretProvider is DevelopmentSecretProvider)
         {
@@ -75,7 +75,7 @@ public sealed class SecretsReadinessCheck : IReadinessCheck
         }
     }
 
-    private async Task<bool> CheckCertificatesAsync(Dictionary<string, object?> details, CancellationToken ct)
+    private async Task<bool> CheckCertificatesAsync(Dictionary<string, object> details, CancellationToken ct)
     {
         if (!_readinessOptions.CheckCertificates)
         {

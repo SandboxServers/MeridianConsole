@@ -1,5 +1,5 @@
-using Dhadgar.ServiceDefaults.Readiness;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -11,65 +11,73 @@ public static class ServiceDefaultsExtensions
     public static IServiceCollection AddDhadgarServiceDefaults(this IServiceCollection services)
     {
         services.AddHealthChecks()
-            .AddCheck("self", () => HealthCheckResult.Healthy());
+            .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
 
         return services;
     }
 
     public static WebApplication MapDhadgarDefaultEndpoints(this WebApplication app)
     {
-        app.MapGet("/healthz", () => Results.Ok(new
+        Task WriteHealthResponseAsync(HttpContext context, HealthReport report)
         {
-            service = app.Environment.ApplicationName,
-            status = "ok",
-            timestamp = DateTime.UtcNow
-        }))
-        .AllowAnonymous()
-        .WithTags("Health");
-
-        app.MapDhadgarReadinessEndpoints();
-        return app;
-    }
-
-    public static WebApplication MapDhadgarReadinessEndpoints(this WebApplication app)
-    {
-        app.MapGet("/livez", () => Results.Ok(new
-        {
-            service = app.Environment.ApplicationName,
-            status = "live",
-            timestamp = DateTime.UtcNow
-        }))
-        .AllowAnonymous()
-        .WithTags("Health");
-
-        app.MapGet("/readyz", async (IReadinessCheck? readinessCheck, CancellationToken ct) =>
-        {
-            ReadinessResult result;
-
-            if (readinessCheck is null)
-            {
-                result = ReadinessResult.Ready();
-            }
-            else
-            {
-                result = await readinessCheck.CheckAsync(ct);
-            }
-
             var payload = new Dictionary<string, object?>
             {
                 ["service"] = app.Environment.ApplicationName,
-                ["status"] = result.IsReady ? "ready" : "unhealthy",
+                ["status"] = report.Status == HealthStatus.Healthy ? "ok" : "unhealthy",
                 ["timestamp"] = DateTime.UtcNow
             };
 
-            if (result.Details is not null)
+            if (report.Entries.Count > 0)
             {
-                payload["details"] = result.Details;
+                var checks = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in report.Entries)
+                {
+                    var entryPayload = new Dictionary<string, object?>
+                    {
+                        ["status"] = entry.Value.Status.ToString(),
+                        ["duration_ms"] = entry.Value.Duration.TotalMilliseconds
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(entry.Value.Description))
+                    {
+                        entryPayload["description"] = entry.Value.Description;
+                    }
+
+                    if (entry.Value.Data.Count > 0)
+                    {
+                        entryPayload["data"] = entry.Value.Data;
+                    }
+
+                    checks[entry.Key] = entryPayload;
+                }
+
+                payload["checks"] = checks;
             }
 
-            return Results.Json(payload, statusCode: result.IsReady
-                ? StatusCodes.Status200OK
-                : StatusCodes.Status503ServiceUnavailable);
+            context.Response.ContentType = "application/json";
+            return context.Response.WriteAsJsonAsync(payload);
+        }
+
+        app.MapHealthChecks("/healthz", new HealthCheckOptions
+        {
+            Predicate = _ => true,
+            ResponseWriter = WriteHealthResponseAsync
+        })
+        .AllowAnonymous()
+        .WithTags("Health");
+
+        app.MapHealthChecks("/livez", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("live"),
+            ResponseWriter = WriteHealthResponseAsync
+        })
+        .AllowAnonymous()
+        .WithTags("Health");
+
+        app.MapHealthChecks("/readyz", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("ready"),
+            ResponseWriter = WriteHealthResponseAsync
         })
         .AllowAnonymous()
         .WithTags("Health");

@@ -1,8 +1,8 @@
 using System.Net;
-using Dhadgar.Identity.Readiness;
+using System.Linq;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Xunit;
 
 namespace Dhadgar.Identity.Tests.Integration;
@@ -19,7 +19,7 @@ public sealed class ReadinessIntegrationTests : IClassFixture<IdentityWebApplica
     [Fact]
     public async Task ReadyzReturnsOkWhenRedisIsHealthy()
     {
-        using var client = CreateClient(new StubRedisReadinessProbe(success: true));
+        using var client = CreateClient(success: true);
 
         var response = await client.GetAsync("/readyz");
 
@@ -29,21 +29,37 @@ public sealed class ReadinessIntegrationTests : IClassFixture<IdentityWebApplica
     [Fact]
     public async Task ReadyzReturnsServiceUnavailableWhenRedisIsDown()
     {
-        using var client = CreateClient(new StubRedisReadinessProbe(success: false));
+        using var client = CreateClient(success: false);
 
         var response = await client.GetAsync("/readyz");
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
-    private HttpClient CreateClient(IRedisReadinessProbe probe)
+    private HttpClient CreateClient(bool success)
     {
         var factory = _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<IRedisReadinessProbe>();
-                services.AddSingleton(probe);
+                services.Configure<HealthCheckServiceOptions>(options =>
+                {
+                    var remaining = options.Registrations
+                        .Where(registration => !string.Equals(registration.Name, "identity_ready", StringComparison.Ordinal))
+                        .ToList();
+
+                    options.Registrations.Clear();
+                    foreach (var registration in remaining)
+                    {
+                        options.Registrations.Add(registration);
+                    }
+
+                    options.Registrations.Add(new HealthCheckRegistration(
+                        "identity_ready",
+                        new StubHealthCheck(success),
+                        HealthStatus.Unhealthy,
+                        tags: new[] { "ready" }));
+                });
             });
         });
 
@@ -53,20 +69,20 @@ public sealed class ReadinessIntegrationTests : IClassFixture<IdentityWebApplica
         });
     }
 
-    private sealed class StubRedisReadinessProbe : IRedisReadinessProbe
+    private sealed class StubHealthCheck : IHealthCheck
     {
         private readonly bool _success;
 
-        public StubRedisReadinessProbe(bool success)
+        public StubHealthCheck(bool success)
         {
             _success = success;
         }
 
-        public Task<RedisReadinessResult> CheckAsync(CancellationToken ct)
+        public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct)
         {
             return Task.FromResult(_success
-                ? RedisReadinessResult.Ready(TimeSpan.FromMilliseconds(1))
-                : RedisReadinessResult.NotReady("redis_unavailable"));
+                ? HealthCheckResult.Healthy()
+                : HealthCheckResult.Unhealthy("redis_unavailable"));
         }
     }
 }

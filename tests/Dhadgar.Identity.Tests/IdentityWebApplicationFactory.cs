@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
-using Dhadgar.Identity.Readiness;
 using Dhadgar.Identity.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -68,10 +67,8 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
 
             services.RemoveAll<IConnectionMultiplexer>();
             services.RemoveAll<IExchangeTokenReplayStore>();
-            services.RemoveAll<IRedisReadinessProbe>();
 
             services.AddSingleton<IExchangeTokenReplayStore>(new InMemoryExchangeTokenReplayStore());
-            services.AddSingleton<IRedisReadinessProbe>(new StubRedisReadinessProbe());
 
             services.RemoveAll<IIdentityEventPublisher>();
             services.AddSingleton<IIdentityEventPublisher>(EventPublisher);
@@ -117,14 +114,6 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
         {
             var expiresAt = DateTimeOffset.UtcNow.Add(ttl);
             return Task.FromResult(_entries.TryAdd(jti, expiresAt));
-        }
-    }
-
-    private sealed class StubRedisReadinessProbe : IRedisReadinessProbe
-    {
-        public Task<RedisReadinessResult> CheckAsync(CancellationToken ct)
-        {
-            return Task.FromResult(RedisReadinessResult.Ready(TimeSpan.Zero));
         }
     }
 

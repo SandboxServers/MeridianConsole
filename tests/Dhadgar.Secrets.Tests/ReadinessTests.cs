@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Readiness;
 using Dhadgar.Secrets.Services;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -26,9 +27,9 @@ public class ReadinessTests
             OptionsFactory.Create(readinessOptions),
             CreateLogger());
 
-        var result = await check.CheckAsync(CancellationToken.None);
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
-        Assert.True(result.IsReady);
+        Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
     [Fact]
@@ -43,9 +44,9 @@ public class ReadinessTests
             OptionsFactory.Create(readinessOptions),
             CreateLogger());
 
-        var result = await check.CheckAsync(CancellationToken.None);
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
-        Assert.False(result.IsReady);
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
     }
 
     [Fact]
@@ -63,9 +64,9 @@ public class ReadinessTests
             OptionsFactory.Create(readinessOptions),
             CreateLogger());
 
-        var result = await check.CheckAsync(CancellationToken.None);
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
-        Assert.True(result.IsReady);
+        Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
     private static SecretsOptions BuildSecretsOptions()

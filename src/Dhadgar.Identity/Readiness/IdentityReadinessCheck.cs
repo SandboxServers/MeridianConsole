@@ -1,38 +1,39 @@
 using Dhadgar.Identity.Data;
-using Dhadgar.ServiceDefaults.Readiness;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using StackExchange.Redis;
 
 namespace Dhadgar.Identity.Readiness;
 
-public sealed class IdentityReadinessCheck : IReadinessCheck
+public sealed class IdentityReadinessCheck : IHealthCheck
 {
     private readonly IdentityDbContext _dbContext;
-    private readonly IRedisReadinessProbe _redisProbe;
+    private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<IdentityReadinessCheck> _logger;
 
     public IdentityReadinessCheck(
         IdentityDbContext dbContext,
-        IRedisReadinessProbe redisProbe,
+        IConnectionMultiplexer redis,
         ILogger<IdentityReadinessCheck> logger)
     {
         _dbContext = dbContext;
-        _redisProbe = redisProbe;
+        _redis = redis;
         _logger = logger;
     }
 
-    public async Task<ReadinessResult> CheckAsync(CancellationToken ct)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken)
     {
-        var details = new Dictionary<string, object?>();
+        var details = new Dictionary<string, object>();
 
-        var dbReady = await CheckPostgresAsync(details, ct);
-        var redisReady = await CheckRedisAsync(details, ct);
+        var dbReady = await CheckPostgresAsync(details, cancellationToken);
+        var redisReady = await CheckRedisAsync(details, cancellationToken);
 
         return dbReady && redisReady
-            ? ReadinessResult.Ready(details)
-            : ReadinessResult.NotReady(details);
+            ? HealthCheckResult.Healthy(data: details)
+            : HealthCheckResult.Unhealthy(data: details);
     }
 
-    private async Task<bool> CheckPostgresAsync(Dictionary<string, object?> details, CancellationToken ct)
+    private async Task<bool> CheckPostgresAsync(Dictionary<string, object> details, CancellationToken ct)
     {
         try
         {
@@ -49,22 +50,22 @@ public sealed class IdentityReadinessCheck : IReadinessCheck
         }
     }
 
-    private async Task<bool> CheckRedisAsync(Dictionary<string, object?> details, CancellationToken ct)
+    private async Task<bool> CheckRedisAsync(Dictionary<string, object> details, CancellationToken ct)
     {
-        var result = await _redisProbe.CheckAsync(ct);
-        if (result.IsReady)
+        try
         {
+            var db = _redis.GetDatabase();
+            var latency = await db.PingAsync();
             details["redis"] = "ok";
-            if (result.LatencyMs is not null)
-            {
-                details["redis_latency_ms"] = result.LatencyMs;
-            }
+            details["redis_latency_ms"] = latency.TotalMilliseconds;
             return true;
         }
-
-        details["redis"] = "error";
-        details["redis_error"] = result.Error ?? "unknown";
-        _logger.LogWarning("Redis readiness check failed: {Error}", result.Error);
-        return false;
+        catch (Exception ex)
+        {
+            details["redis"] = "error";
+            details["redis_error"] = ex.Message;
+            _logger.LogWarning(ex, "Redis readiness check failed.");
+            return false;
+        }
     }
 }

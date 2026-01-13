@@ -273,7 +273,12 @@ public sealed class TokenExchangeService
 
         // Re-fetch user after transaction (strategy.ExecuteAsync doesn't return values cleanly)
         var normalizedEmailFinal = _lookupNormalizer.NormalizeEmail(email);
-        user = (await _dbContext.Users.FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct))!;
+        user = await _dbContext.Users.FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct);
+        if (user is null)
+        {
+            _logger.LogError("Failed to find user with external auth ID {ExternalAuthId} after transaction.", externalAuthId);
+            return TokenExchangeOutcome.Fail("user_not_found_post_transaction");
+        }
         activeOrg = await _dbContext.Organizations.FirstAsync(o => o.Id == user.PreferredOrganizationId, ct);
         membership = await _dbContext.UserOrganizations
             .FirstAsync(uo => uo.UserId == user.Id && uo.OrganizationId == activeOrg.Id, ct);

@@ -27,7 +27,6 @@ using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Middleware;
-using Dhadgar.ServiceDefaults.Readiness;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -97,8 +96,8 @@ builder.Services.AddScoped<MembershipService>();
 builder.Services.AddScoped<OrganizationSwitchService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<RoleService>();
-builder.Services.AddSingleton<IRedisReadinessProbe, RedisReadinessProbe>();
-builder.Services.AddScoped<IReadinessCheck, IdentityReadinessCheck>();
+builder.Services.AddHealthChecks()
+    .AddCheck<IdentityReadinessCheck>("identity_ready", tags: ["ready"]);
 
 // Memory cache for webhook secret caching
 builder.Services.AddMemoryCache();
@@ -563,8 +562,7 @@ if (autoMigrate)
 
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }));
 app.MapGet("/hello", () => Results.Text(IdentityHello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", status = "ok" }));
-app.MapDhadgarReadinessEndpoints();
+app.MapDhadgarDefaultEndpoints();
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle);
 
 OAuthEndpoints.Map(app);

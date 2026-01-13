@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dhadgar.Gateway.Options;
 using Dhadgar.Gateway.Readiness;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Xunit;
 using Yarp.ReverseProxy;
 using Yarp.ReverseProxy.Model;
@@ -24,10 +25,10 @@ public class ReadinessTests
         });
 
         var check = new YarpReadinessCheck(proxyStateLookup, options);
-        var result = await check.CheckAsync(CancellationToken.None);
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
-        Assert.False(result.IsReady);
-        Assert.NotNull(result.Details);
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.NotEmpty(result.Data);
     }
 
     [Fact]
@@ -42,9 +43,9 @@ public class ReadinessTests
         });
 
         var check = new YarpReadinessCheck(proxyStateLookup, options);
-        var result = await check.CheckAsync(CancellationToken.None);
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
-        Assert.True(result.IsReady);
+        Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
     [Fact]
@@ -63,9 +64,9 @@ public class ReadinessTests
         });
 
         var check = new YarpReadinessCheck(proxyStateLookup, options);
-        var result = await check.CheckAsync(CancellationToken.None);
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
-        Assert.False(result.IsReady);
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
     }
 
     [Fact]
@@ -84,9 +85,9 @@ public class ReadinessTests
         });
 
         var check = new YarpReadinessCheck(proxyStateLookup, options);
-        var result = await check.CheckAsync(CancellationToken.None);
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
 
-        Assert.True(result.IsReady);
+        Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
     private static ClusterState BuildCluster(string clusterId, int all, int available)
