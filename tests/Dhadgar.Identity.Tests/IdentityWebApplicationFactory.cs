@@ -22,7 +22,7 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
     public static ECDsa CreateExchangeTokenKey()
     {
         var ecdsa = ECDsa.Create();
-        ecdsa.ImportParameters(ExchangeTokenKey.Parameters);
+        ecdsa.ImportFromPem(ExchangeTokenKey.PrivateKeyPem);
         return ecdsa;
     }
 
@@ -117,15 +117,16 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
         }
     }
 
-    private sealed record ExchangeTokenKeyMaterial(ECParameters Parameters, string PublicKeyPem);
+    private sealed record ExchangeTokenKeyMaterial(string PrivateKeyPem, string PublicKeyPem);
 
     private static ExchangeTokenKeyMaterial CreateExchangeTokenKeyMaterial()
     {
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var parameters = ecdsa.ExportParameters(true);
+        var privateKey = ecdsa.ExportPkcs8PrivateKey();
         var publicKey = ecdsa.ExportSubjectPublicKeyInfo();
-        var pem = new string(PemEncoding.Write("PUBLIC KEY", publicKey));
-        return new ExchangeTokenKeyMaterial(parameters, pem);
+        var privatePem = new string(PemEncoding.Write("PRIVATE KEY", privateKey));
+        var publicPem = new string(PemEncoding.Write("PUBLIC KEY", publicKey));
+        return new ExchangeTokenKeyMaterial(privatePem, publicPem);
     }
 
 }

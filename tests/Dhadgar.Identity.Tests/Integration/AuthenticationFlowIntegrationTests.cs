@@ -11,6 +11,7 @@ using Dhadgar.Identity.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -25,7 +26,6 @@ public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityW
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private ExchangeTokenOptions? _exchangeOptions;
-    private static readonly ECDsa ExchangeSigningKey = IdentityWebApplicationFactory.CreateExchangeTokenKey();
 
     public AuthenticationFlowIntegrationTests(IdentityWebApplicationFactory factory)
     {
@@ -270,8 +270,18 @@ public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityW
             throw new InvalidOperationException("Exchange token options not initialized.");
         }
 
+        var signingKey = IdentityWebApplicationFactory.CreateExchangeTokenKey();
+
         var iat = issuedAt ?? DateTimeOffset.UtcNow;
         var exp = expiresIn ?? TimeSpan.FromSeconds(60);
+
+        var securityKey = new ECDsaSecurityKey(signingKey)
+        {
+            CryptoProviderFactory = new CryptoProviderFactory
+            {
+                CacheSignatureProviders = false
+            }
+        };
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
@@ -290,12 +300,18 @@ public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityW
             IssuedAt = iat.UtcDateTime,
             NotBefore = iat.UtcDateTime,
             SigningCredentials = new SigningCredentials(
-                new ECDsaSecurityKey(ExchangeSigningKey),
+                securityKey,
                 SecurityAlgorithms.EcdsaSha256)
         };
 
-        var handler = new JwtSecurityTokenHandler();
-        handler.OutboundClaimTypeMap.Clear();
-        return handler.CreateEncodedJwt(tokenDescriptor);
+        var handler = new JsonWebTokenHandler();
+        try
+        {
+            return handler.CreateToken(tokenDescriptor);
+        }
+        finally
+        {
+            signingKey.Dispose();
+        }
     }
 }
