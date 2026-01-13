@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Prerequisites
 - .NET SDK 10.0.100 (pinned in `global.json`)
 - Node.js 20+ (for Scope project)
-- Docker (for local PostgreSQL/RabbitMQ/Redis)
+- Docker (for local infrastructure: PostgreSQL, RabbitMQ, Redis, Grafana, Prometheus, Loki, OpenTelemetry Collector)
 
 ### Start Local Infrastructure
 ```bash
@@ -23,6 +23,12 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 ```
 
 Default credentials for all services: `dhadgar` / `dhadgar`
+
+**Services included:**
+- **Core**: PostgreSQL (5432), RabbitMQ (5672, 15672), Redis (6379)
+- **Observability**: Grafana (3000), Prometheus (9090), Loki (3100), OTLP Collector (4317, 4318)
+
+See `deploy/compose/README.md` for detailed infrastructure documentation and troubleshooting.
 
 ### Build & Test
 ```bash
@@ -96,6 +102,18 @@ dotnet user-secrets list --project src/Dhadgar.Identity
 ```
 
 **Node.js Projects** (e.g., Dhadgar.Scope): Use environment variables or `.env` files. Create a `.env` file in the project root (add to `.gitignore`) and use `process.env.VARIABLE_NAME` in Node.js code. Never commit actual secrets to the repository.
+
+#### OpenTelemetry Configuration (Optional)
+
+To enable observability export from services (optional, for local debugging):
+
+```bash
+# Gateway example
+dotnet user-secrets init --project src/Dhadgar.Gateway
+dotnet user-secrets set "OpenTelemetry:OtlpEndpoint" "http://localhost:4317" --project src/Dhadgar.Gateway
+```
+
+This enables traces, metrics, and logs to flow to the OTLP Collector → Prometheus/Loki → Grafana.
 
 ## Azure Infrastructure
 
@@ -197,7 +215,7 @@ Without separate worktrees, parallel Claude sessions share the same working dire
 - `Dhadgar.Contracts` (DTOs, message contracts)
 - `Dhadgar.Shared` (utilities, primitives)
 - `Dhadgar.Messaging` (MassTransit/RabbitMQ conventions)
-- `Dhadgar.ServiceDefaults` (common service wiring)
+- `Dhadgar.ServiceDefaults` (common service wiring, middleware, observability)
 
 **Runtime Communication**:
 - HTTP: Typed clients configured with base URLs
@@ -221,6 +239,16 @@ Common service endpoints (scaffolding):
 - `GET /` - Service banner
 - `GET /hello` - Hello world
 - `GET /healthz` - Health probe
+
+### Centralized Middleware
+
+Core middleware components live in `Dhadgar.ServiceDefaults` for reuse across all services:
+
+- **CorrelationMiddleware**: Ensures every request has correlation, request, and trace IDs for distributed tracing
+- **ProblemDetailsMiddleware**: Transforms exceptions into RFC 7807 Problem Details responses
+- **RequestLoggingMiddleware**: Logs HTTP requests/responses with correlation context
+
+Services automatically inherit these when referencing ServiceDefaults. All middleware includes OpenTelemetry integration for distributed tracing.
 
 ### Gateway (YARP)
 
@@ -432,7 +460,9 @@ Treat these as code names vs product name ("Meridian Console").
 - Swagger in Development mode
 - YARP Gateway routing structure
 - EF Core DbContexts with migrations
-- Docker Compose local infrastructure
+- Docker Compose with full observability stack (Grafana, Prometheus, Loki, OTLP Collector)
+- Centralized middleware in ServiceDefaults (correlation tracking, problem details, request logging)
+- OpenTelemetry instrumentation (tracing, metrics, logging with correlation IDs)
 - One test project per service
 - Dhadgar.Scope site migrated to Astro/React/Tailwind
 
@@ -443,7 +473,7 @@ Treat these as code names vs product name ("Meridian Console").
 - Agent enrollment with mTLS
 - MassTransit message consumers, retries, DLQs
 - Production-ready UI features
-- Observability stack (structured logging, tracing, dashboards)
+- Advanced observability features (log filtering, custom metrics, alerting rules)
 - Kubernetes manifests and Helm charts
 - Migrate Dhadgar.Panel to Astro/React/Tailwind
 - Migrate Dhadgar.ShoppingCart to Astro/React/Tailwind
@@ -476,6 +506,8 @@ MeridianConsole/
 - **YARP 2.3.0** for API Gateway
 - **Entity Framework Core 10** with PostgreSQL
 - **MassTransit 8.3.6** + RabbitMQ
+- **OpenTelemetry 1.14.0** for distributed tracing and metrics
+- **Grafana + Prometheus + Loki** for observability (local dev)
 - **Astro 5.1.1 + React + Tailwind CSS** for frontend (Scope - migrated)
 - **Blazor WebAssembly** for frontend (Panel, ShoppingCart - TODO: migrate)
 - **MudBlazor 7.15.0** for UI components (Blazor projects only)
