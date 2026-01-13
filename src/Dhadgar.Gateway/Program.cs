@@ -68,7 +68,15 @@ builder.Services.AddReverseProxy()
 builder.Services.AddHttpClient();
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
+Uri? otlpUri = null;
+if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+{
+    if (!Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out otlpUri))
+    {
+        Console.WriteLine($"Warning: Invalid OpenTelemetry:OtlpEndpoint '{otlpEndpoint}'. OTLP export disabled.");
+        otlpUri = null;
+    }
+}
 var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Gateway");
 
 builder.Logging.AddOpenTelemetry(options =>

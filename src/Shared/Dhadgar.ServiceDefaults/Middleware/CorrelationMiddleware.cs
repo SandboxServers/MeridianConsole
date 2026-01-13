@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 
@@ -9,7 +10,7 @@ namespace Dhadgar.ServiceDefaults.Middleware;
 /// </summary>
 public sealed class CorrelationMiddleware
 {
-    private static readonly Regex CorrelationPattern = new("^[A-Za-z0-9_\\-:.]+$", RegexOptions.Compiled);
+    private static readonly Regex CorrelationPattern = new("^[A-Za-z0-9-]+$", RegexOptions.Compiled);
     private const string CorrelationIdHeader = "X-Correlation-Id";
     private const string RequestIdHeader = "X-Request-Id";
     private const string TraceIdHeader = "X-Trace-Id";
@@ -56,7 +57,8 @@ public sealed class CorrelationMiddleware
                 context.Response.Headers[TraceStateHeader] = activity.TraceStateString;
             }
 
-            var baggage = string.Join(",", activity.Baggage.Select(item => $"{item.Key}={item.Value}"));
+            var baggage = string.Join(",", activity.Baggage.Select(item =>
+                $"{WebUtility.UrlEncode(item.Key)}={WebUtility.UrlEncode(item.Value)}"));
             if (!string.IsNullOrWhiteSpace(baggage))
             {
                 context.Response.Headers[BaggageHeader] = baggage;
