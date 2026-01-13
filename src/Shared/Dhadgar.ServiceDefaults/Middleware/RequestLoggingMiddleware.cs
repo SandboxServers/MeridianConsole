@@ -1,11 +1,13 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
-namespace Dhadgar.Gateway.Middleware;
+namespace Dhadgar.ServiceDefaults.Middleware;
 
 /// <summary>
 /// Middleware that logs HTTP requests and responses with correlation context.
 /// </summary>
-public class RequestLoggingMiddleware
+public sealed class RequestLoggingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<RequestLoggingMiddleware> _logger;

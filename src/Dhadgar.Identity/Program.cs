@@ -24,6 +24,9 @@ using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
+using Dhadgar.ServiceDefaults.Middleware;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
@@ -470,18 +473,49 @@ builder.Services.AddOpenIddict()
     });
 builder.Services.AddAuthorization();
 
+var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
+var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Identity");
+
+builder.Logging.AddOpenTelemetry(options =>
+{
+    options.SetResourceBuilder(resourceBuilder);
+    options.IncludeFormattedMessage = true;
+    options.IncludeScopes = true;
+    options.ParseStateValues = true;
+
+    if (otlpUri is not null)
+    {
+        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
+    }
+});
+
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing
-            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Dhadgar.Identity"))
+            .SetResourceBuilder(resourceBuilder)
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation();
 
-        var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        if (otlpUri is not null)
         {
-            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
+        }
+        // OTLP export requires explicit endpoint configuration; skipped when not set
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddProcessInstrumentation();
+
+        if (otlpUri is not null)
+        {
+            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
         }
         // OTLP export requires explicit endpoint configuration; skipped when not set
     });
@@ -494,6 +528,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

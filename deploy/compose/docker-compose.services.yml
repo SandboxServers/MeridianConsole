@@ -34,6 +34,7 @@ services:
       ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /https/dev.meridianconsole.com.key
       OpenIddict__DevClient__ClientId: dev-client
       OpenIddict__DevClient__ClientSecret: dev-secret
+      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       ReverseProxy__Clusters__betterauth__Destinations__d1__Address: http://betterauth:8080/
       ReverseProxy__Clusters__identity__Destinations__d1__Address: http://identity:8080/
       ReverseProxy__Clusters__billing__Destinations__d1__Address: http://billing:8080/
@@ -75,6 +76,7 @@ services:
       OpenIddict__DevClient__ClientId: dev-client
       OpenIddict__DevClient__ClientSecret: dev-secret
       OpenIddict__Wif__Audience: ${OPENIDDICT_WIF_AUDIENCE:-api://AzureADTokenExchange}
+      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       Database__AutoMigrate: "true"
     ports:
       - "5010:8080"
@@ -182,6 +184,7 @@ services:
       Auth__Audience: meridian-api
       Auth__MetadataAddress: http://identity:8080/.well-known/openid-configuration
       Secrets__UseDevelopmentProvider: "true"
+      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
     ports:
       - "5110:8080"
     depends_on: *service-depends

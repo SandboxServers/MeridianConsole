@@ -2,8 +2,13 @@ using Dhadgar.Secrets;
 using Dhadgar.Secrets.Endpoints;
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Services;
+using Dhadgar.ServiceDefaults.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +54,53 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
+var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Secrets");
+
+builder.Logging.AddOpenTelemetry(options =>
+{
+    options.SetResourceBuilder(resourceBuilder);
+    options.IncludeFormattedMessage = true;
+    options.IncludeScopes = true;
+    options.ParseStateValues = true;
+
+    if (otlpUri is not null)
+    {
+        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
+    }
+});
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (otlpUri is not null)
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
+        }
+        // OTLP export requires explicit endpoint configuration; skipped when not set
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddProcessInstrumentation();
+
+        if (otlpUri is not null)
+        {
+            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
+        }
+        // OTLP export requires explicit endpoint configuration; skipped when not set
+    });
+
 var useDevelopmentProvider = builder.Configuration.GetValue<bool>("Secrets:UseDevelopmentProvider");
 
 if (useDevelopmentProvider && builder.Environment.IsDevelopment())
@@ -75,6 +127,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
