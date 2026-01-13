@@ -17,6 +17,8 @@ public sealed class ListVaultsCommand
             return 1;
         }
 
+        var exitCode = 0;
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
@@ -33,6 +35,14 @@ public sealed class ListVaultsCommand
                 catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to load Key Vaults:[/] {ex.Message}");
+                    exitCode = 1;
+                    return;
+                }
+
+                if (response?.Vaults is null)
+                {
+                    AnsiConsole.MarkupLine("\n[red]Failed to load Key Vault list[/]");
+                    exitCode = 1;
                     return;
                 }
 
@@ -76,7 +86,7 @@ public sealed class ListVaultsCommand
                 AnsiConsole.MarkupLine($"\n[dim]Total: {response.Vaults.Count} vault(s)[/]");
             });
 
-        return 0;
+        return exitCode;
     }
 
 }

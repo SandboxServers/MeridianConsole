@@ -94,13 +94,23 @@ public class CreateOrganizationRequest
 public class UpdateOrganizationRequest
 {
     [JsonPropertyName("name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; set; }
 
     [JsonPropertyName("slug")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Slug { get; set; }
 
     [JsonPropertyName("settings")]
-    public OrganizationSettingsResponse? Settings { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public OrganizationSettingsUpdateRequest? Settings { get; set; }
+}
+
+public class OrganizationSettingsUpdateRequest
+{
+    [JsonPropertyName("customSettings")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? CustomSettings { get; set; }
 }
 
 public class OrganizationDetailResponse

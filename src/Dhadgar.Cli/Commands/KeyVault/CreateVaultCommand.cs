@@ -56,6 +56,8 @@ public sealed class CreateVaultCommand
                     }));
         }
 
+        var exitCode = 0;
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
@@ -70,39 +72,40 @@ public sealed class CreateVaultCommand
                         new CreateVaultRequest { Name = name, Location = location },
                         ct);
 
-                    if (response is not null)
+                    if (response is null)
                     {
-                        var grid = new Grid()
-                            .AddColumn()
-                            .AddColumn();
-
-                        grid.AddRow("[bold]Name:[/]", $"[cyan]{response.Name}[/]");
-                        grid.AddRow("[bold]URI:[/]", $"[dim]{response.VaultUri}[/]");
-                        grid.AddRow("[bold]Location:[/]", $"[dim]{response.Location}[/]");
-                        grid.AddRow("[bold]Resource Group:[/]", $"[dim]{response.ResourceGroup}[/]");
-                        grid.AddRow("[bold]Created:[/]", $"[dim]{response.CreatedAt:g} UTC[/]");
-
-                        var panel = new Panel(grid)
-                        {
-                            Border = BoxBorder.Rounded,
-                            BorderStyle = new Style(Color.Green),
-                            Padding = new Padding(2, 1),
-                            Header = new PanelHeader(" Key Vault Created ", Justify.Left)
-                        };
-
-                        AnsiConsole.Write(panel);
-
-                        AnsiConsole.MarkupLine($"\n[dim]It may take a few minutes for the vault to be fully provisioned.[/]");
-                        AnsiConsole.MarkupLine($"[dim]Use [cyan]dhadgar keyvault list[/] to view all vaults[/]");
+                        AnsiConsole.MarkupLine("\n[red]Failed to create Key Vault[/]");
+                        exitCode = 1;
+                        return;
                     }
-                    else
+
+                    var grid = new Grid()
+                        .AddColumn()
+                        .AddColumn();
+
+                    grid.AddRow("[bold]Name:[/]", $"[cyan]{response.Name}[/]");
+                    grid.AddRow("[bold]URI:[/]", $"[dim]{response.VaultUri}[/]");
+                    grid.AddRow("[bold]Location:[/]", $"[dim]{response.Location}[/]");
+                    grid.AddRow("[bold]Resource Group:[/]", $"[dim]{response.ResourceGroup}[/]");
+                    grid.AddRow("[bold]Created:[/]", $"[dim]{response.CreatedAt:g} UTC[/]");
+
+                    var panel = new Panel(grid)
                     {
-                        AnsiConsole.MarkupLine($"[yellow]Warning:[/] Vault may have been created but no confirmation received");
-                    }
+                        Border = BoxBorder.Rounded,
+                        BorderStyle = new Style(Color.Green),
+                        Padding = new Padding(2, 1),
+                        Header = new PanelHeader(" Key Vault Created ", Justify.Left)
+                    };
+
+                    AnsiConsole.Write(panel);
+
+                    AnsiConsole.MarkupLine($"\n[dim]It may take a few minutes for the vault to be fully provisioned.[/]");
+                    AnsiConsole.MarkupLine($"[dim]Use [cyan]dhadgar keyvault list[/] to view all vaults[/]");
                 }
                 catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to create Key Vault:[/] {ex.Message}");
+                    exitCode = 1;
 
                     if (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
                     {
@@ -115,7 +118,7 @@ public sealed class CreateVaultCommand
                 }
             });
 
-        return 0;
+        return exitCode;
     }
 
 }

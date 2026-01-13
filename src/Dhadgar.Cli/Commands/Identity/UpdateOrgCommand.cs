@@ -32,13 +32,16 @@ public sealed class UpdateOrgCommand
 
         try
         {
-            OrganizationSettingsResponse? settings = null;
+            OrganizationSettingsUpdateRequest? settings = null;
             if (!string.IsNullOrWhiteSpace(description))
             {
-                var detail = await identityApi.GetOrganizationAsync(orgId, ct);
-                settings = detail.Settings ?? new OrganizationSettingsResponse();
-                settings.CustomSettings ??= new Dictionary<string, string>();
-                settings.CustomSettings["description"] = description.Trim();
+                settings = new OrganizationSettingsUpdateRequest
+                {
+                    CustomSettings = new Dictionary<string, string>
+                    {
+                        ["description"] = description.Trim()
+                    }
+                };
             }
 
             var request = new UpdateOrganizationRequest

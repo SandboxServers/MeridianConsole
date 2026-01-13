@@ -39,17 +39,15 @@ public sealed class CreateOrgCommand
                 return IdentityCommandHelpers.WriteError("invalid_response", "Create response missing organization id.");
             }
 
-            var detail = created.Settings is null
-                ? await identityApi.GetOrganizationAsync(created.Id, ct)
-                : created;
-
-            var settings = detail.Settings ?? new OrganizationSettingsResponse();
-            settings.CustomSettings ??= new Dictionary<string, string>();
-            settings.CustomSettings["description"] = description.Trim();
-
             var updateRequest = new UpdateOrganizationRequest
             {
-                Settings = settings
+                Settings = new OrganizationSettingsUpdateRequest
+                {
+                    CustomSettings = new Dictionary<string, string>
+                    {
+                        ["description"] = description.Trim()
+                    }
+                }
             };
 
             var updated = await identityApi.UpdateOrganizationAsync(created.Id, updateRequest, ct);
