@@ -23,7 +23,7 @@ public sealed class AuthenticatedHttpClient : IDisposable
         }
     }
 
-    public async Task<TResponse?> GetAsync<TResponse>(string url, CancellationToken ct = default)
+    public async Task<TResponse?> GetAsync<TResponse>(Uri url, CancellationToken ct = default)
     {
         try
         {
@@ -39,7 +39,7 @@ public sealed class AuthenticatedHttpClient : IDisposable
     }
 
     public async Task<TResponse?> PostAsync<TRequest, TResponse>(
-        string url,
+        Uri url,
         TRequest request,
         CancellationToken ct = default)
     {
@@ -56,7 +56,7 @@ public sealed class AuthenticatedHttpClient : IDisposable
         }
     }
 
-    public async Task<bool> PostAsync<TRequest>(string url, TRequest request, CancellationToken ct = default)
+    public async Task<bool> PostAsync<TRequest>(Uri url, TRequest request, CancellationToken ct = default)
     {
         try
         {
@@ -72,7 +72,7 @@ public sealed class AuthenticatedHttpClient : IDisposable
     }
 
     public async Task<TResponse?> PutAsync<TRequest, TResponse>(
-        string url,
+        Uri url,
         TRequest request,
         CancellationToken ct = default)
     {
@@ -90,7 +90,7 @@ public sealed class AuthenticatedHttpClient : IDisposable
     }
 
     public async Task<TResponse?> PatchAsync<TRequest, TResponse>(
-        string url,
+        Uri url,
         TRequest request,
         CancellationToken ct = default)
     {
@@ -107,7 +107,7 @@ public sealed class AuthenticatedHttpClient : IDisposable
         }
     }
 
-    public async Task<bool> DeleteAsync(string url, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(Uri url, CancellationToken ct = default)
     {
         try
         {

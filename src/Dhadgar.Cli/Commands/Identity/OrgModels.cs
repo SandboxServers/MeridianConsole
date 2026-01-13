@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Dhadgar.Cli.Commands.Identity;
 
-internal sealed class CreateOrganizationRequest
+public sealed class CreateOrganizationRequest
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
@@ -11,7 +11,7 @@ internal sealed class CreateOrganizationRequest
     public string? Slug { get; set; }
 }
 
-internal sealed class UpdateOrganizationRequest
+public sealed class UpdateOrganizationRequest
 {
     [JsonPropertyName("name")]
     public string? Name { get; set; }
@@ -23,7 +23,7 @@ internal sealed class UpdateOrganizationRequest
     public OrganizationSettingsResponse? Settings { get; set; }
 }
 
-internal sealed class OrganizationDetailResponse
+public sealed class OrganizationDetailResponse
 {
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
@@ -50,7 +50,7 @@ internal sealed class OrganizationDetailResponse
     public DateTime? DeletedAt { get; set; }
 }
 
-internal sealed class OrganizationSettingsResponse
+public sealed class OrganizationSettingsResponse
 {
     [JsonPropertyName("allowMemberInvites")]
     public bool AllowMemberInvites { get; set; } = true;

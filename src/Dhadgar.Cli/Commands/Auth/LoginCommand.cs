@@ -10,12 +10,12 @@ public sealed class LoginCommand
     public static async Task<int> ExecuteAsync(
         string? clientId,
         string? clientSecret,
-        string? identityUrl,
+        Uri? identityUrl,
         CancellationToken ct)
     {
         var config = CliConfig.Load();
 
-        identityUrl ??= config.EffectiveIdentityUrl;
+        identityUrl ??= new Uri(config.EffectiveIdentityUrl);
 
         AnsiConsole.Write(
             new FigletText("Dhadgar")
@@ -49,7 +49,7 @@ public sealed class LoginCommand
             .StartAsync("[dim]Authenticating...[/]", async ctx =>
             {
                 using var client = new HttpClient();
-                var tokenUrl = $"{identityUrl.TrimEnd('/')}/connect/token";
+                var tokenUrl = new Uri($"{identityUrl.ToString().TrimEnd('/')}/connect/token");
 
                 var request = new FormUrlEncodedContent(new Dictionary<string, string>
                 {
@@ -81,7 +81,7 @@ public sealed class LoginCommand
 
                     config.AccessToken = tokenResponse.AccessToken;
                     config.RefreshToken = tokenResponse.RefreshToken;
-                    config.IdentityUrl = identityUrl;
+                    config.IdentityUrl = identityUrl.ToString().TrimEnd('/');
                     config.TokenExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn - 60);
                     config.Save();
 
@@ -111,7 +111,7 @@ public sealed class LoginCommand
         return 1;
     }
 
-    private sealed record TokenResponse(
+    public sealed record TokenResponse(
         [property: JsonPropertyName("access_token")] string AccessToken,
         [property: JsonPropertyName("refresh_token")] string? RefreshToken,
         [property: JsonPropertyName("expires_in")] int ExpiresIn,

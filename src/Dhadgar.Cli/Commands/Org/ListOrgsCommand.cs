@@ -26,7 +26,7 @@ public sealed class ListOrgsCommand
             {
                 using var client = new AuthenticatedHttpClient(config);
                 var orgs = await client.GetAsync<List<OrgListItem>>(
-                    $"{identityUrl.TrimEnd('/')}/organizations",
+                    new Uri($"{identityUrl.TrimEnd('/')}/organizations"),
                     ct);
 
                 if (orgs is null || orgs.Count == 0)
@@ -73,7 +73,7 @@ public sealed class ListOrgsCommand
         return 0;
     }
 
-    private sealed record OrgListItem(
+    public sealed record OrgListItem(
         [property: JsonPropertyName("id")] Guid? Id,
         [property: JsonPropertyName("name")] string? Name,
         [property: JsonPropertyName("role")] string? Role,

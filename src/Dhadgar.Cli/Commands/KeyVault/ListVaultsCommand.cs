@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure;
@@ -26,7 +27,7 @@ public sealed class ListVaultsCommand
             {
                 using var client = new AuthenticatedHttpClient(config);
                 var response = await client.GetAsync<VaultsResponse>(
-                    $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults",
+                    new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults"),
                     ct);
 
                 if (response?.Vaults is null || response.Vaults.Count == 0)
@@ -72,12 +73,12 @@ public sealed class ListVaultsCommand
         return 0;
     }
 
-    private sealed record VaultsResponse(
-        [property: JsonPropertyName("vaults")] List<VaultItem> Vaults);
+    public sealed record VaultsResponse(
+        [property: JsonPropertyName("vaults")] Collection<VaultItem> Vaults);
 
-    private sealed record VaultItem(
+    public sealed record VaultItem(
         [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("vaultUri")] string VaultUri,
+        [property: JsonPropertyName("vaultUri")] Uri VaultUri,
         [property: JsonPropertyName("location")] string Location,
         [property: JsonPropertyName("secretCount")] int SecretCount,
         [property: JsonPropertyName("enabled")] bool Enabled);

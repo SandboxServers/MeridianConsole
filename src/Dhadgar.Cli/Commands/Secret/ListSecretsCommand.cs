@@ -40,7 +40,7 @@ public sealed class ListSecretsCommand
             {
                 using var client = new AuthenticatedHttpClient(config);
                 var response = await client.GetAsync<SecretsResponse>(
-                    $"{secretsUrl.TrimEnd('/')}{endpoint}",
+                    new Uri($"{secretsUrl.TrimEnd('/')}{endpoint}"),
                     ct);
 
                 if (response?.Secrets is null || response.Secrets.Count == 0)
@@ -90,6 +90,6 @@ public sealed class ListSecretsCommand
         return 0;
     }
 
-    private sealed record SecretsResponse(
+    public sealed record SecretsResponse(
         [property: JsonPropertyName("secrets")] Dictionary<string, string>? Secrets);
 }

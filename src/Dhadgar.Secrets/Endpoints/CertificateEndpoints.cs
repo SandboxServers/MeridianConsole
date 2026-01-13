@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Dhadgar.Secrets.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -63,14 +64,14 @@ public static class CertificateEndpoints
 
         var certificates = await provider.ListCertificatesAsync(null, ct);
 
-        return Results.Ok(new CertificatesResponse(certificates.Select(c => new CertificateItem(
+        return Results.Ok(new CertificatesResponse(new Collection<CertificateItem>(certificates.Select(c => new CertificateItem(
             Name: c.Name,
             Subject: c.Subject,
             Issuer: c.Issuer,
             ExpiresAt: c.ExpiresAt,
             Thumbprint: c.Thumbprint,
             Enabled: c.Enabled
-        )).ToList()));
+        )).ToList())));
     }
 
     private static async Task<IResult> ListVaultCertificates(
@@ -86,14 +87,14 @@ public static class CertificateEndpoints
 
         var certificates = await provider.ListCertificatesAsync(vaultName, ct);
 
-        return Results.Ok(new CertificatesResponse(certificates.Select(c => new CertificateItem(
+        return Results.Ok(new CertificatesResponse(new Collection<CertificateItem>(certificates.Select(c => new CertificateItem(
             Name: c.Name,
             Subject: c.Subject,
             Issuer: c.Issuer,
             ExpiresAt: c.ExpiresAt,
             Thumbprint: c.Thumbprint,
             Enabled: c.Enabled
-        )).ToList()));
+        )).ToList())));
     }
 
     private static async Task<IResult> ImportCertificate(
@@ -131,7 +132,7 @@ public static class CertificateEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            if (ex.Message.Contains("already exists"))
+            if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Conflict(new { error = ex.Message });
             }
@@ -175,7 +176,7 @@ public static class CertificateEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            if (ex.Message.Contains("already exists"))
+            if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Conflict(new { error = ex.Message });
             }
@@ -213,7 +214,7 @@ public static class CertificateEndpoints
     }
 }
 
-public record CertificatesResponse(List<CertificateItem> Certificates);
+public record CertificatesResponse(Collection<CertificateItem> Certificates);
 public record CertificateItem(string Name, string Subject, string Issuer, DateTime ExpiresAt, string Thumbprint, bool Enabled);
 public record ImportCertificateRequest(string Name, string CertificateData, string? Password);
 public record ImportCertificateResponse(string Name, string Subject, string Issuer, string Thumbprint, DateTime ExpiresAt);

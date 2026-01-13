@@ -51,11 +51,11 @@ var authCmd = new Command("auth", "Authentication and token management");
 var authLoginCmd = new Command("login", "Authenticate with the Identity service");
 var clientIdOpt = new Option<string?>("--client-id", "Client ID (defaults to dev-client)");
 var clientSecretOpt = new Option<string?>("--client-secret", "Client secret (defaults to dev-secret)");
-var identityUrlOpt = new Option<string?>("--identity-url", "Identity service URL");
+var identityUrlOpt = new Option<Uri?>("--identity-url", "Identity service URL");
 authLoginCmd.AddOption(clientIdOpt);
 authLoginCmd.AddOption(clientSecretOpt);
 authLoginCmd.AddOption(identityUrlOpt);
-authLoginCmd.SetHandler(async (string? clientId, string? clientSecret, string? identityUrl) =>
+authLoginCmd.SetHandler(async (string? clientId, string? clientSecret, Uri? identityUrl) =>
 {
     await LoginCommand.ExecuteAsync(clientId, clientSecret, identityUrl, CancellationToken.None);
 }, clientIdOpt, clientSecretOpt, identityUrlOpt);

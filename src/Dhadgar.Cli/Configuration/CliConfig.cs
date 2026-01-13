@@ -10,6 +10,11 @@ public sealed class CliConfig
         ".dhadgar");
 
     private static readonly string ConfigFilePath = Path.Combine(ConfigDirectory, "config.json");
+    private static readonly JsonSerializerOptions SaveOptions = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     [JsonPropertyName("gateway_url")]
     public string? GatewayUrl { get; set; }
@@ -73,13 +78,7 @@ public sealed class CliConfig
     {
         Directory.CreateDirectory(ConfigDirectory);
 
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        };
-
-        var json = JsonSerializer.Serialize(this, options);
+        var json = JsonSerializer.Serialize(this, SaveOptions);
         File.WriteAllText(ConfigFilePath, json);
     }
 

@@ -102,7 +102,7 @@ public sealed class HealthCommand
         return 0;
     }
 
-    private sealed record HealthResponse(
+    public sealed record HealthResponse(
         [property: JsonPropertyName("status")] string? Status,
         [property: JsonPropertyName("service")] string? Service);
 }

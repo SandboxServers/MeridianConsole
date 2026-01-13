@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure;
@@ -36,7 +37,7 @@ public sealed class ListMembersCommand
             {
                 using var client = new AuthenticatedHttpClient(config);
                 var members = await client.GetAsync<List<MemberListItem>>(
-                    $"{identityUrl.TrimEnd('/')}/organizations/{orgId}/members",
+                    new Uri($"{identityUrl.TrimEnd('/')}/organizations/{orgId}/members"),
                     ct);
 
                 if (members is null || members.Count == 0)
@@ -73,7 +74,7 @@ public sealed class ListMembersCommand
                     };
 
                     var joinedDate = member.JoinedAt.HasValue
-                        ? member.JoinedAt.Value.ToLocalTime().ToString("yyyy-MM-dd")
+                        ? member.JoinedAt.Value.ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                         : "[dim]n/a[/]";
 
                     table.AddRow(
@@ -91,7 +92,7 @@ public sealed class ListMembersCommand
         return 0;
     }
 
-    private sealed record MemberListItem(
+    public sealed record MemberListItem(
         [property: JsonPropertyName("id")] Guid? Id,
         [property: JsonPropertyName("email")] string? Email,
         [property: JsonPropertyName("role")] string? Role,

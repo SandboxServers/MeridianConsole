@@ -37,7 +37,7 @@ public sealed class CreateOrgCommand
 
                 var request = new CreateOrgRequest(name);
                 var response = await client.PostAsync<CreateOrgRequest, CreateOrgResponse>(
-                    $"{identityUrl.TrimEnd('/')}/organizations",
+                    new Uri($"{identityUrl.TrimEnd('/')}/organizations"),
                     request,
                     ct);
 
@@ -73,9 +73,9 @@ public sealed class CreateOrgCommand
         return 0;
     }
 
-    private sealed record CreateOrgRequest(
+    public sealed record CreateOrgRequest(
         [property: JsonPropertyName("name")] string Name);
 
-    private sealed record CreateOrgResponse(
+    public sealed record CreateOrgResponse(
         [property: JsonPropertyName("id")] Guid? Id);
 }

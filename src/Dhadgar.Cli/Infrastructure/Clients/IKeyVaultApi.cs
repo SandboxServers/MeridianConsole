@@ -1,4 +1,5 @@
 using Refit;
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 
 namespace Dhadgar.Cli.Infrastructure.Clients;
@@ -27,7 +28,7 @@ public interface IKeyVaultApi
 public class KeyVaultListResponse
 {
     [JsonPropertyName("vaults")]
-    public List<KeyVaultSummary> Vaults { get; set; } = new();
+    public Collection<KeyVaultSummary> Vaults { get; set; } = new();
 }
 
 public class KeyVaultSummary

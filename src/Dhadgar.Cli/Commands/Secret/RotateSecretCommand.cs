@@ -42,7 +42,7 @@ public sealed class RotateSecretCommand
                 try
                 {
                     var response = await client.PostAsync<RotateRequest, RotateResponse>(
-                        $"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}/rotate",
+                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}/rotate"),
                         new RotateRequest(),
                         ct);
 
@@ -99,9 +99,9 @@ public sealed class RotateSecretCommand
         return 0;
     }
 
-    private sealed record RotateRequest();
+    public sealed record RotateRequest();
 
-    private sealed record RotateResponse(
+    public sealed record RotateResponse(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("version")] string Version,
         [property: JsonPropertyName("rotatedAt")] DateTime RotatedAt,

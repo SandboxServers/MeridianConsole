@@ -81,7 +81,7 @@ public sealed class UpdateVaultCommand
                 try
                 {
                     var response = await client.PatchAsync<UpdateVaultRequest, UpdateVaultResponse>(
-                        $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}",
+                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}"),
                         request,
                         ct);
 
@@ -138,7 +138,7 @@ public sealed class UpdateVaultCommand
     private static string FormatBool(bool value) =>
         value ? "[green]Enabled[/]" : "[dim]Disabled[/]";
 
-    private sealed record UpdateVaultRequest
+    public sealed record UpdateVaultRequest
     {
         [JsonPropertyName("enableSoftDelete")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -157,7 +157,7 @@ public sealed class UpdateVaultCommand
         public string? Sku { get; init; }
     }
 
-    private sealed record UpdateVaultResponse(
+    public sealed record UpdateVaultResponse(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("enableSoftDelete")] bool EnableSoftDelete,
         [property: JsonPropertyName("enablePurgeProtection")] bool EnablePurgeProtection,

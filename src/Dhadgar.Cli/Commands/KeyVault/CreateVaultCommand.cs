@@ -68,7 +68,7 @@ public sealed class CreateVaultCommand
                 try
                 {
                     var response = await client.PostAsync<CreateVaultRequest, CreateVaultResponse>(
-                        $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults",
+                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults"),
                         new CreateVaultRequest(name, location),
                         ct);
 
@@ -120,13 +120,13 @@ public sealed class CreateVaultCommand
         return 0;
     }
 
-    private sealed record CreateVaultRequest(
+    public sealed record CreateVaultRequest(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("location")] string Location);
 
-    private sealed record CreateVaultResponse(
+    public sealed record CreateVaultResponse(
         [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("vaultUri")] string VaultUri,
+        [property: JsonPropertyName("vaultUri")] Uri VaultUri,
         [property: JsonPropertyName("location")] string Location,
         [property: JsonPropertyName("resourceGroup")] string ResourceGroup,
         [property: JsonPropertyName("createdAt")] DateTime CreatedAt);

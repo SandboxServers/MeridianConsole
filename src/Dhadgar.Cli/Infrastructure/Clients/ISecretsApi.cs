@@ -1,4 +1,5 @@
 using Refit;
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 
 namespace Dhadgar.Cli.Infrastructure.Clients;
@@ -33,7 +34,7 @@ public interface ISecretsApi
 public class SecretListResponse
 {
     [JsonPropertyName("secrets")]
-    public List<SecretInfo> Secrets { get; set; } = new();
+    public Collection<SecretInfo> Secrets { get; set; } = new();
 }
 
 public class SecretInfo
@@ -99,7 +100,7 @@ public class SecretRotateResponse
 public class CertificateListResponse
 {
     [JsonPropertyName("certificates")]
-    public List<CertificateInfo> Certificates { get; set; } = new();
+    public Collection<CertificateInfo> Certificates { get; set; } = new();
 }
 
 public class CertificateInfo

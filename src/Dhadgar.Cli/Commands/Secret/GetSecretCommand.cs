@@ -26,7 +26,7 @@ public sealed class GetSecretCommand
             {
                 using var client = new AuthenticatedHttpClient(config);
                 var response = await client.GetAsync<SecretResponse>(
-                    $"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}",
+                    new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}"),
                     ct);
 
                 if (response?.Value is null)
@@ -82,7 +82,7 @@ public sealed class GetSecretCommand
         return 0;
     }
 
-    private sealed record SecretResponse(
+    public sealed record SecretResponse(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("value")] string Value);
 }

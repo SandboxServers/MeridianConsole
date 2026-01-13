@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure;
@@ -33,7 +34,7 @@ public sealed class SwitchOrgCommand
                 using var client = new AuthenticatedHttpClient(config);
 
                 var response = await client.PostAsync<object, SwitchResponse>(
-                    $"{identityUrl.TrimEnd('/')}/organizations/{orgGuid}/switch",
+                    new Uri($"{identityUrl.TrimEnd('/')}/organizations/{orgGuid}/switch"),
                     new { },
                     ct);
 
@@ -72,10 +73,10 @@ public sealed class SwitchOrgCommand
         return 0;
     }
 
-    private sealed record SwitchResponse(
+    public sealed record SwitchResponse(
         [property: JsonPropertyName("accessToken")] string? AccessToken,
         [property: JsonPropertyName("refreshToken")] string? RefreshToken,
         [property: JsonPropertyName("expiresIn")] int ExpiresIn,
         [property: JsonPropertyName("organizationId")] Guid? OrganizationId,
-        [property: JsonPropertyName("permissions")] List<string>? Permissions);
+        [property: JsonPropertyName("permissions")] Collection<string>? Permissions);
 }

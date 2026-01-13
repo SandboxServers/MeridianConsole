@@ -26,7 +26,7 @@ public sealed class SetSecretCommand
             }
 
             AnsiConsole.MarkupLine("[dim]Reading secret value from stdin...[/]");
-            value = Console.In.ReadToEnd().TrimEnd();
+            value = (await Console.In.ReadToEndAsync(ct)).TrimEnd();
 
             if (string.IsNullOrWhiteSpace(value))
             {
@@ -68,7 +68,7 @@ public sealed class SetSecretCommand
                 try
                 {
                     var response = await client.PutAsync<SetSecretRequest, SetSecretResponse>(
-                        $"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}",
+                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}"),
                         new SetSecretRequest(value),
                         ct);
 
@@ -104,10 +104,10 @@ public sealed class SetSecretCommand
         return 0;
     }
 
-    private sealed record SetSecretRequest(
+    public sealed record SetSecretRequest(
         [property: JsonPropertyName("value")] string Value);
 
-    private sealed record SetSecretResponse(
+    public sealed record SetSecretResponse(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("updated")] bool Updated);
 }

@@ -59,6 +59,7 @@ public sealed class ImportCertificateCommand
         var url = string.IsNullOrWhiteSpace(vaultName)
             ? $"{secretsUrl.TrimEnd('/')}/api/v1/certificates"
             : $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}/certificates";
+        var requestUri = new Uri(url);
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
@@ -74,7 +75,7 @@ public sealed class ImportCertificateCommand
                     var certBase64 = Convert.ToBase64String(certBytes);
 
                     var response = await client.PostAsync<ImportCertRequest, ImportCertResponse>(
-                        url,
+                        requestUri,
                         new ImportCertRequest(name, certBase64, password),
                         ct);
 
@@ -139,12 +140,12 @@ public sealed class ImportCertificateCommand
         return 0;
     }
 
-    private sealed record ImportCertRequest(
+    public sealed record ImportCertRequest(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("certificateData")] string CertificateData,
         [property: JsonPropertyName("password")] string? Password);
 
-    private sealed record ImportCertResponse(
+    public sealed record ImportCertResponse(
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("subject")] string Subject,
         [property: JsonPropertyName("issuer")] string Issuer,

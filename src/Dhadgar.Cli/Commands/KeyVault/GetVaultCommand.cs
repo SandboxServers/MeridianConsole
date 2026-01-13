@@ -29,7 +29,7 @@ public sealed class GetVaultCommand
                 try
                 {
                     var response = await client.GetAsync<VaultDetailResponse>(
-                        $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}",
+                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}"),
                         ct);
 
                     if (response == null)
@@ -141,9 +141,9 @@ public sealed class GetVaultCommand
             ? "[green]Enabled[/]"
             : "[red]Disabled[/]";
 
-    private sealed record VaultDetailResponse(
+    public sealed record VaultDetailResponse(
         [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("vaultUri")] string VaultUri,
+        [property: JsonPropertyName("vaultUri")] Uri VaultUri,
         [property: JsonPropertyName("location")] string Location,
         [property: JsonPropertyName("resourceGroup")] string ResourceGroup,
         [property: JsonPropertyName("sku")] string Sku,
