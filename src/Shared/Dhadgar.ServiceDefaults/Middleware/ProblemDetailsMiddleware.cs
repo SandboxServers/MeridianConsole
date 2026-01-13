@@ -59,17 +59,19 @@ public sealed class ProblemDetailsMiddleware
             "Unhandled exception. TraceId: {TraceId}, Path: {Path}",
             traceId, context.Request.Path);
 
+        var includeDetails = _environment.IsDevelopment() || _environment.IsEnvironment("Testing");
+
         var problemDetails = new
         {
             type = "https://meridian.console/errors/internal-server-error",
             title = "Internal Server Error",
             status = (int)HttpStatusCode.InternalServerError,
-            detail = _environment.IsDevelopment()
+            detail = includeDetails
                 ? exception.Message
                 : "An unexpected error occurred. Please contact support with the trace ID.",
             instance = context.Request.Path.ToString(),
             traceId = traceId,
-            extensions = _environment.IsDevelopment()
+            extensions = includeDetails
                 ? new { stackTrace = exception.StackTrace }
                 : null
         };

@@ -8,7 +8,8 @@
       "Bash(claude mcp:*)",
       "Bash(bash:*)",
       "Bash(docker compose:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(dotnet test:*)"
     ]
   }
 }

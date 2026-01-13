@@ -1,8 +1,12 @@
 using Dhadgar.Secrets;
 using Dhadgar.Secrets.Endpoints;
 using Dhadgar.Secrets.Options;
+using Dhadgar.Secrets.Readiness;
 using Dhadgar.Secrets.Services;
+using SecretsHello = Dhadgar.Secrets.Hello;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Readiness;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Logs;
@@ -17,6 +21,7 @@ builder.Services.AddSwaggerGen();
 
 // Configure options
 builder.Services.Configure<SecretsOptions>(builder.Configuration.GetSection("Secrets"));
+builder.Services.Configure<SecretsReadinessOptions>(builder.Configuration.GetSection("Readiness"));
 
 // Add memory cache for secret caching
 builder.Services.AddMemoryCache();
@@ -53,6 +58,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<IReadinessCheck, SecretsReadinessCheck>();
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
@@ -134,9 +140,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // Standard service endpoints
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Secrets", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Secrets", message = SecretsHello.Message }));
+app.MapGet("/hello", () => Results.Text(SecretsHello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Secrets", status = "ok" }));
+app.MapDhadgarReadinessEndpoints();
 
 // Secrets API endpoints
 app.MapSecretsEndpoints();           // Read operations

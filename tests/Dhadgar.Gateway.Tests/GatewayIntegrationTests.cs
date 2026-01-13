@@ -45,6 +45,22 @@ public class GatewayIntegrationTests : IClassFixture<GatewayWebApplicationFactor
     }
 
     [Fact]
+    public async Task LivezEndpointReturnsOk()
+    {
+        var response = await _client.GetAsync("/livez");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReadyzEndpointReturnsOk()
+    {
+        var response = await _client.GetAsync("/readyz");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ResponseIncludesCorrelationHeaders()
     {
         var response = await _client.GetAsync("/healthz");

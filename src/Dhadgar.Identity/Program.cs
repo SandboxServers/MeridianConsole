@@ -9,6 +9,7 @@ using Dhadgar.Identity.Endpoints;
 using Dhadgar.Identity.OAuth;
 using Dhadgar.Identity.Options;
 using Dhadgar.Identity.Services;
+using Dhadgar.Identity.Readiness;
 using Dhadgar.Messaging;
 using MassTransit;
 using Microsoft.AspNetCore;
@@ -24,7 +25,9 @@ using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
+using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.Readiness;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -94,6 +97,8 @@ builder.Services.AddScoped<MembershipService>();
 builder.Services.AddScoped<OrganizationSwitchService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<RoleService>();
+builder.Services.AddSingleton<IRedisReadinessProbe, RedisReadinessProbe>();
+builder.Services.AddScoped<IReadinessCheck, IdentityReadinessCheck>();
 
 // Memory cache for webhook secret caching
 builder.Services.AddMemoryCache();
@@ -369,7 +374,7 @@ builder.Services.AddOpenIddict()
             .EnableStatusCodePagesIntegration();
 
         // Allow HTTP for development/Docker environments (internal service-to-service calls)
-        if (builder.Environment.IsDevelopment() || useDevelopmentCertificates)
+        if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing") || useDevelopmentCertificates)
         {
             aspNetCoreBuilder.DisableTransportSecurityRequirement();
         }
@@ -533,7 +538,10 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseRateLimiter();
+}
 
 // Ensure OpenIddict server middleware runs to handle token requests
 // This must come after UseAuthentication/UseAuthorization but before endpoints
@@ -556,6 +564,7 @@ if (autoMigrate)
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }));
 app.MapGet("/hello", () => Results.Text(IdentityHello.Message));
 app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Identity", status = "ok" }));
+app.MapDhadgarReadinessEndpoints();
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle);
 
 OAuthEndpoints.Map(app);
