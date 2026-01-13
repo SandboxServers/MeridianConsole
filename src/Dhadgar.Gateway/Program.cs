@@ -2,7 +2,11 @@ using System.Net;
 using Dhadgar.Gateway;
 using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
+using Dhadgar.Gateway.Options;
+using Dhadgar.Gateway.Readiness;
+using GatewayHello = Dhadgar.Gateway.Hello;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
@@ -27,6 +31,9 @@ if (!builder.Environment.IsEnvironment("Testing"))
 
 // Add CORS support
 builder.Services.AddMeridianConsoleCors(builder.Configuration);
+builder.Services.Configure<ReadyzOptions>(builder.Configuration.GetSection("Readyz"));
+builder.Services.AddHealthChecks()
+    .AddCheck<YarpReadinessCheck>("yarp_ready", tags: ["ready"]);
 
 // Authentication/authorization
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -290,24 +297,17 @@ app.MapDiagnosticsEndpoints();
 app.MapGet("/", () => Results.Ok(new
 {
     service = "Dhadgar.Gateway",
-    message = Hello.Message,
+    message = GatewayHello.Message,
     version = typeof(Program).Assembly.GetName().Version?.ToString()
 }))
 .AllowAnonymous()
 .WithTags("Gateway");
 
-app.MapGet("/hello", () => Results.Text(Hello.Message))
+app.MapGet("/hello", () => Results.Text(GatewayHello.Message))
     .AllowAnonymous()
     .WithTags("Gateway");
 
-app.MapGet("/healthz", () => Results.Ok(new
-{
-    service = "Dhadgar.Gateway",
-    status = "ok",
-    timestamp = DateTime.UtcNow
-}))
-.AllowAnonymous()
-.WithTags("Health");
+app.MapDhadgarDefaultEndpoints();
 
 // YARP reverse proxy
 app.MapReverseProxy()

@@ -50,3 +50,5 @@ scripts/fix-wsl-clipboard-*.ps1
 gha-creds-*.json
 .secrets/
 dist/tools/*
+
+tmpclaude-*

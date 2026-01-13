@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Services;
@@ -7,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using StackExchange.Redis;
 
 namespace Dhadgar.Identity.Tests;
 
@@ -14,6 +17,14 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
 {
     private readonly string _databaseName = $"identity-tests-{Guid.NewGuid()}";
     public TestIdentityEventPublisher EventPublisher { get; } = new();
+    private static readonly ExchangeTokenKeyMaterial ExchangeTokenKey = CreateExchangeTokenKeyMaterial();
+
+    public static ECDsa CreateExchangeTokenKey()
+    {
+        var ecdsa = ECDsa.Create();
+        ecdsa.ImportFromPem(ExchangeTokenKey.PrivateKeyPem);
+        return ecdsa;
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -34,7 +45,10 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
                 ["OAuth:Xbox:ClientId"] = "mock",
                 ["OAuth:Xbox:ClientSecret"] = "mock",
                 ["OAuth:AllowedRedirectHosts:0"] = "panel.meridianconsole.com",
-                ["OAuth:AllowedRedirectHosts:1"] = "meridianconsole.com"
+                ["OAuth:AllowedRedirectHosts:1"] = "meridianconsole.com",
+                ["Auth:Exchange:PublicKeyPem"] = ExchangeTokenKey.PublicKeyPem,
+                ["Auth:KeyVault:VaultUri"] = string.Empty,
+                ["Auth:KeyVault:ExchangePublicKeyName"] = string.Empty
             };
 
             config.AddInMemoryCollection(settings);
@@ -43,13 +57,18 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<IdentityDbContext>>();
-            var provider = new ServiceCollection()
+            var efProvider = new ServiceCollection()
                 .AddEntityFrameworkInMemoryDatabase()
                 .BuildServiceProvider();
 
             services.AddDbContext<IdentityDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName)
-                    .UseInternalServiceProvider(provider));
+                    .UseInternalServiceProvider(efProvider));
+
+            services.RemoveAll<IConnectionMultiplexer>();
+            services.RemoveAll<IExchangeTokenReplayStore>();
+
+            services.AddSingleton<IExchangeTokenReplayStore>(new InMemoryExchangeTokenReplayStore());
 
             services.RemoveAll<IIdentityEventPublisher>();
             services.AddSingleton<IIdentityEventPublisher>(EventPublisher);
@@ -86,4 +105,28 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
             return Task.FromResult<string?>(null);
         }
     }
+
+    private sealed class InMemoryExchangeTokenReplayStore : IExchangeTokenReplayStore
+    {
+        private readonly ConcurrentDictionary<string, DateTimeOffset> _entries = new();
+
+        public Task<bool> MarkAsUsedAsync(string jti, TimeSpan ttl, CancellationToken ct = default)
+        {
+            var expiresAt = DateTimeOffset.UtcNow.Add(ttl);
+            return Task.FromResult(_entries.TryAdd(jti, expiresAt));
+        }
+    }
+
+    private sealed record ExchangeTokenKeyMaterial(string PrivateKeyPem, string PublicKeyPem);
+
+    private static ExchangeTokenKeyMaterial CreateExchangeTokenKeyMaterial()
+    {
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var privateKey = ecdsa.ExportPkcs8PrivateKey();
+        var publicKey = ecdsa.ExportSubjectPublicKeyInfo();
+        var privatePem = new string(PemEncoding.Write("PRIVATE KEY", privateKey));
+        var publicPem = new string(PemEncoding.Write("PUBLIC KEY", publicKey));
+        return new ExchangeTokenKeyMaterial(privatePem, publicPem);
+    }
+
 }
