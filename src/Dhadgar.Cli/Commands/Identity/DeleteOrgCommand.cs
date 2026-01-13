@@ -1,4 +1,6 @@
 using Dhadgar.Cli.Configuration;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 
 namespace Dhadgar.Cli.Commands.Identity;
 
@@ -29,13 +31,13 @@ public sealed class DeleteOrgCommand
             return 0;
         }
 
-        using var client = IdentityCommandHelpers.CreateClient(config);
-        var url = $"{config.EffectiveIdentityUrl.TrimEnd('/')}/organizations/{orgId}";
-        var response = await client.DeleteAsync(url, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
+        using var factory = new ApiClientFactory(config);
+        var identityApi = factory.CreateIdentityClient();
 
-        if (response.IsSuccessStatusCode)
+        try
         {
+            await identityApi.DeleteOrganizationAsync(orgId, ct);
+
             IdentityCommandHelpers.WriteJson(new
             {
                 deleted = true,
@@ -43,8 +45,10 @@ public sealed class DeleteOrgCommand
             });
             return 0;
         }
-
-        return IdentityCommandHelpers.WriteHttpError(response, body);
+        catch (ApiException ex)
+        {
+            return IdentityCommandHelpers.WriteApiError(ex);
+        }
     }
 
     private static bool ConfirmDelete(string orgId)

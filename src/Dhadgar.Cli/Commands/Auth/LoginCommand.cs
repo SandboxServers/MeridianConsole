@@ -1,6 +1,6 @@
-using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Auth;
@@ -48,32 +48,24 @@ public sealed class LoginCommand
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Authenticating...[/]", async ctx =>
             {
-                using var client = new HttpClient();
-                var tokenUrl = new Uri($"{identityUrl.ToString().TrimEnd('/')}/connect/token");
+                using var factory = new ApiClientFactory(
+                    gatewayUrl: new Uri(config.EffectiveGatewayUrl),
+                    identityUrl: identityUrl);
+                var identityApi = factory.CreateIdentityClient();
 
-                var request = new FormUrlEncodedContent(new Dictionary<string, string>
+                var request = new Dictionary<string, string>
                 {
                     ["grant_type"] = "client_credentials",
                     ["client_id"] = clientId,
                     ["client_secret"] = clientSecret,
                     ["scope"] = "openid profile email servers:read servers:write nodes:manage"
-                });
+                };
 
                 try
                 {
-                    var response = await client.PostAsync(tokenUrl, request, ct);
-                    var content = await response.Content.ReadAsStringAsync(ct);
+                    var tokenResponse = await identityApi.GetTokenAsync(request, ct);
 
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        AnsiConsole.MarkupLine($"[red]Authentication failed:[/] {response.StatusCode}");
-                        AnsiConsole.MarkupLine($"[dim]{content}[/]");
-                        return;
-                    }
-
-                    var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(ct);
-
-                    if (tokenResponse?.AccessToken is null)
+                    if (string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
                     {
                         AnsiConsole.MarkupLine("[red]Failed to parse token response[/]");
                         return;
@@ -87,9 +79,13 @@ public sealed class LoginCommand
 
                     ctx.Status("[green]Authentication successful![/]");
                 }
-                catch (Exception ex)
+                catch (ApiException ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Error:[/] {ex.Message}");
+                    AnsiConsole.MarkupLine($"[red]Authentication failed:[/] {ex.Message}");
+                    if (!string.IsNullOrWhiteSpace(ex.Content))
+                    {
+                        AnsiConsole.MarkupLine($"[dim]{ex.Content}[/]");
+                    }
                 }
             });
 
@@ -111,9 +107,4 @@ public sealed class LoginCommand
         return 1;
     }
 
-    public sealed record TokenResponse(
-        [property: JsonPropertyName("access_token")] string AccessToken,
-        [property: JsonPropertyName("refresh_token")] string? RefreshToken,
-        [property: JsonPropertyName("expires_in")] int ExpiresIn,
-        [property: JsonPropertyName("token_type")] string TokenType);
 }

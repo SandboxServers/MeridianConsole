@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.KeyVault;
@@ -17,26 +17,17 @@ public sealed class GetVaultCommand
             return 1;
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
-
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Loading Key Vault details...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
+                using var factory = new ApiClientFactory(config);
+                var keyVaultApi = factory.CreateKeyVaultClient();
 
                 try
                 {
-                    var response = await client.GetAsync<VaultDetailResponse>(
-                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}"),
-                        ct);
-
-                    if (response == null)
-                    {
-                        AnsiConsole.MarkupLine($"[red]Vault '{vaultName}' not found[/]");
-                        return;
-                    }
+                    var response = await keyVaultApi.GetVaultAsync(vaultName, ct);
 
                     // Main properties grid
                     var propsGrid = new Grid()
@@ -48,7 +39,6 @@ public sealed class GetVaultCommand
                     propsGrid.AddRow("[bold]Location:[/]", $"[dim]{response.Location}[/]");
                     propsGrid.AddRow("[bold]Resource Group:[/]", $"[dim]{response.ResourceGroup}[/]");
                     propsGrid.AddRow("[bold]SKU:[/]", $"[dim]{response.Sku}[/]");
-                    propsGrid.AddRow("[bold]Tenant ID:[/]", $"[dim]{response.TenantId}[/]");
 
                     var propsPanel = new Panel(propsGrid)
                     {
@@ -115,7 +105,7 @@ public sealed class GetVaultCommand
                         AnsiConsole.MarkupLine("[red]⚠[/] [yellow]Purge Protection is disabled. Soft-deleted items can be permanently purged.[/]");
                     }
                 }
-                catch (HttpRequestException ex)
+                catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to retrieve vault details:[/] {ex.Message}");
 
@@ -141,21 +131,4 @@ public sealed class GetVaultCommand
             ? "[green]Enabled[/]"
             : "[red]Disabled[/]";
 
-    public sealed record VaultDetailResponse(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("vaultUri")] Uri VaultUri,
-        [property: JsonPropertyName("location")] string Location,
-        [property: JsonPropertyName("resourceGroup")] string ResourceGroup,
-        [property: JsonPropertyName("sku")] string Sku,
-        [property: JsonPropertyName("tenantId")] string TenantId,
-        [property: JsonPropertyName("enableSoftDelete")] bool EnableSoftDelete,
-        [property: JsonPropertyName("enablePurgeProtection")] bool EnablePurgeProtection,
-        [property: JsonPropertyName("softDeleteRetentionDays")] int SoftDeleteRetentionDays,
-        [property: JsonPropertyName("enableRbacAuthorization")] bool EnableRbacAuthorization,
-        [property: JsonPropertyName("publicNetworkAccess")] string PublicNetworkAccess,
-        [property: JsonPropertyName("secretCount")] int SecretCount,
-        [property: JsonPropertyName("keyCount")] int KeyCount,
-        [property: JsonPropertyName("certificateCount")] int CertificateCount,
-        [property: JsonPropertyName("createdAt")] DateTime CreatedAt,
-        [property: JsonPropertyName("updatedAt")] DateTime UpdatedAt);
 }

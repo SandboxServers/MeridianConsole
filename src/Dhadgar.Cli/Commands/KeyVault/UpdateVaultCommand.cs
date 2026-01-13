@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.KeyVault;
@@ -69,21 +69,17 @@ public sealed class UpdateVaultCommand
             return 0;
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
-
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Updating Key Vault '{vaultName}'...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
+                using var factory = new ApiClientFactory(config);
+                var keyVaultApi = factory.CreateKeyVaultClient();
 
                 try
                 {
-                    var response = await client.PatchAsync<UpdateVaultRequest, UpdateVaultResponse>(
-                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}"),
-                        request,
-                        ct);
+                    var response = await keyVaultApi.UpdateVaultAsync(vaultName, request, ct);
 
                     if (response != null)
                     {
@@ -113,7 +109,7 @@ public sealed class UpdateVaultCommand
                         AnsiConsole.MarkupLine($"[yellow]Warning:[/] Vault may have been updated but no confirmation received");
                     }
                 }
-                catch (HttpRequestException ex)
+                catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to update Key Vault:[/] {ex.Message}");
 
@@ -138,29 +134,4 @@ public sealed class UpdateVaultCommand
     private static string FormatBool(bool value) =>
         value ? "[green]Enabled[/]" : "[dim]Disabled[/]";
 
-    public sealed record UpdateVaultRequest
-    {
-        [JsonPropertyName("enableSoftDelete")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public bool? EnableSoftDelete { get; init; }
-
-        [JsonPropertyName("enablePurgeProtection")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public bool? EnablePurgeProtection { get; init; }
-
-        [JsonPropertyName("softDeleteRetentionDays")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public int? SoftDeleteRetentionDays { get; init; }
-
-        [JsonPropertyName("sku")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? Sku { get; init; }
-    }
-
-    public sealed record UpdateVaultResponse(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("enableSoftDelete")] bool EnableSoftDelete,
-        [property: JsonPropertyName("enablePurgeProtection")] bool EnablePurgeProtection,
-        [property: JsonPropertyName("softDeleteRetentionDays")] int SoftDeleteRetentionDays,
-        [property: JsonPropertyName("sku")] string Sku);
 }

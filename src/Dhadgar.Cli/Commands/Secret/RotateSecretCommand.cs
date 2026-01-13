@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Secret;
@@ -30,21 +30,17 @@ public sealed class RotateSecretCommand
             }
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
-
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Rotating secret '{secretName}'...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
+                using var factory = new ApiClientFactory(config);
+                var secretsApi = factory.CreateSecretsClient();
 
                 try
                 {
-                    var response = await client.PostAsync<RotateRequest, RotateResponse>(
-                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}/rotate"),
-                        new RotateRequest(),
-                        ct);
+                    var response = await secretsApi.RotateSecretAsync(secretName, ct);
 
                     if (response != null)
                     {
@@ -81,7 +77,7 @@ public sealed class RotateSecretCommand
                         AnsiConsole.MarkupLine($"[yellow]Warning:[/] Rotation may have occurred but no confirmation received");
                     }
                 }
-                catch (HttpRequestException ex)
+                catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to rotate secret:[/] {ex.Message}");
 
@@ -98,12 +94,4 @@ public sealed class RotateSecretCommand
 
         return 0;
     }
-
-    public sealed record RotateRequest();
-
-    public sealed record RotateResponse(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("version")] string Version,
-        [property: JsonPropertyName("rotatedAt")] DateTime RotatedAt,
-        [property: JsonPropertyName("expiresAt")] DateTime? ExpiresAt);
 }

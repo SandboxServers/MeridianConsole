@@ -1,5 +1,5 @@
+using Dhadgar.Cli.Configuration;
 using Refit;
-using System.Text.Json.Serialization;
 
 namespace Dhadgar.Cli.Infrastructure.Clients;
 
@@ -47,6 +47,15 @@ public sealed class ApiClientFactory : IDisposable
         _gatewayClient = CreateClient(_gatewayUri, _gatewayHandler);
     }
 
+    public ApiClientFactory(CliConfig config)
+        : this(
+            gatewayUrl: new Uri(config.EffectiveGatewayUrl),
+            identityUrl: new Uri(config.EffectiveIdentityUrl),
+            secretsUrl: NormalizeSecretsBase(config.SecretsUrl ?? config.EffectiveGatewayUrl),
+            accessToken: config.AccessToken)
+    {
+    }
+
     public IIdentityApi CreateIdentityClient()
     {
         return RestService.For<IIdentityApi>(_identityClient);
@@ -65,6 +74,21 @@ public sealed class ApiClientFactory : IDisposable
     public IGatewayApi CreateGatewayClient()
     {
         return RestService.For<IGatewayApi>(_gatewayClient);
+    }
+
+    public IHealthApi CreateGatewayHealthClient()
+    {
+        return RestService.For<IHealthApi>(_gatewayClient);
+    }
+
+    public IHealthApi CreateIdentityHealthClient()
+    {
+        return RestService.For<IHealthApi>(_identityClient);
+    }
+
+    public IHealthApi CreateSecretsHealthClient()
+    {
+        return RestService.For<IHealthApi>(_secretsClient);
     }
 
     public void Dispose()
@@ -93,6 +117,30 @@ public sealed class ApiClientFactory : IDisposable
         {
             BaseAddress = baseAddress
         };
+    }
+
+    private static Uri NormalizeSecretsBase(string rawUrl)
+    {
+        var uri = new Uri(rawUrl);
+        var path = uri.AbsolutePath.TrimEnd('/');
+        const string suffix = "/api/v1/secrets";
+
+        if (path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            path = path[..^suffix.Length];
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                path = "/";
+            }
+
+            var builder = new UriBuilder(uri)
+            {
+                Path = path
+            };
+            return builder.Uri;
+        }
+
+        return uri;
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
-using System.Net.Http.Json;
 using Dhadgar.Cli.Configuration;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 
 namespace Dhadgar.Cli.Commands.Identity;
 
@@ -26,38 +27,33 @@ public sealed class UpdateOrgCommand
                 "Provide --name and/or --description.");
         }
 
-        using var client = IdentityCommandHelpers.CreateClient(config);
-        var baseUrl = config.EffectiveIdentityUrl.TrimEnd('/');
+        using var factory = new ApiClientFactory(config);
+        var identityApi = factory.CreateIdentityClient();
 
-        OrganizationSettingsResponse? settings = null;
-        if (!string.IsNullOrWhiteSpace(description))
+        try
         {
-            var getResponse = await client.GetAsync($"{baseUrl}/organizations/{orgId}", ct);
-            var getBody = await getResponse.Content.ReadAsStringAsync(ct);
-
-            if (!getResponse.IsSuccessStatusCode)
+            OrganizationSettingsResponse? settings = null;
+            if (!string.IsNullOrWhiteSpace(description))
             {
-                return IdentityCommandHelpers.WriteHttpError(getResponse, getBody);
+                var detail = await identityApi.GetOrganizationAsync(orgId, ct);
+                settings = detail.Settings ?? new OrganizationSettingsResponse();
+                settings.CustomSettings ??= new Dictionary<string, string>();
+                settings.CustomSettings["description"] = description.Trim();
             }
 
-            var detail = IdentityCommandHelpers.Deserialize<OrganizationDetailResponse>(getBody);
-            if (detail is null)
+            var request = new UpdateOrganizationRequest
             {
-                return IdentityCommandHelpers.WriteError("invalid_response", "Failed to parse organization detail.");
-            }
+                Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
+                Settings = settings
+            };
 
-            settings = detail.Settings ?? new OrganizationSettingsResponse();
-            settings.CustomSettings ??= new Dictionary<string, string>();
-            settings.CustomSettings["description"] = description.Trim();
+            var updated = await identityApi.UpdateOrganizationAsync(orgId, request, ct);
+            IdentityCommandHelpers.WriteJson(updated);
+            return 0;
         }
-
-        var request = new UpdateOrganizationRequest
+        catch (ApiException ex)
         {
-            Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
-            Settings = settings
-        };
-
-        var response = await client.PatchAsJsonAsync($"{baseUrl}/organizations/{orgId}", request, ct);
-        return await IdentityCommandHelpers.WriteJsonResponseAsync(response, ct);
+            return IdentityCommandHelpers.WriteApiError(ex);
+        }
     }
 }

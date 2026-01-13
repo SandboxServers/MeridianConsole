@@ -1,4 +1,6 @@
 using Dhadgar.Cli.Configuration;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 
 namespace Dhadgar.Cli.Commands.Identity;
 
@@ -13,10 +15,18 @@ public sealed class ListOrgsCommand
             return exitCode;
         }
 
-        using var client = IdentityCommandHelpers.CreateClient(config);
-        var url = $"{config.EffectiveIdentityUrl.TrimEnd('/')}/organizations";
-        var response = await client.GetAsync(url, ct);
+        using var factory = new ApiClientFactory(config);
+        var identityApi = factory.CreateIdentityClient();
 
-        return await IdentityCommandHelpers.WriteJsonResponseAsync(response, ct);
+        try
+        {
+            var response = await identityApi.GetOrganizationsAsync(ct);
+            IdentityCommandHelpers.WriteJson(response);
+            return 0;
+        }
+        catch (ApiException ex)
+        {
+            return IdentityCommandHelpers.WriteApiError(ex);
+        }
     }
 }

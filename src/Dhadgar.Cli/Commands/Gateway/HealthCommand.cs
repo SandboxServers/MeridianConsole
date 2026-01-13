@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Gateway;
@@ -12,11 +12,12 @@ public sealed class HealthCommand
     {
         var config = CliConfig.Load();
 
+        using var factory = new ApiClientFactory(config);
         var services = new[]
         {
-            ("Gateway", $"{config.EffectiveGatewayUrl}/healthz"),
-            ("Identity", $"{config.EffectiveIdentityUrl}/healthz"),
-            ("Secrets", $"{config.EffectiveSecretsUrl}/healthz")
+            ("Gateway", factory.CreateGatewayHealthClient()),
+            ("Identity", factory.CreateIdentityHealthClient()),
+            ("Secrets", factory.CreateSecretsHealthClient())
         };
 
         var table = new Table()
@@ -30,57 +31,34 @@ public sealed class HealthCommand
         await AnsiConsole.Live(table)
             .StartAsync(async ctx =>
             {
-                foreach (var (serviceName, url) in services)
+                foreach (var (serviceName, healthApi) in services)
                 {
-                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-
-                    // Add authentication header if available
-                    if (!string.IsNullOrWhiteSpace(config.AccessToken))
-                    {
-                        client.DefaultRequestHeaders.Authorization =
-                            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", config.AccessToken);
-                    }
-
                     var sw = Stopwatch.StartNew();
                     string status;
                     string message = "";
 
                     try
                     {
-                        var response = await client.GetAsync(url, ct);
+                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                        var response = await healthApi.GetHealthAsync(timeoutCts.Token);
                         sw.Stop();
 
-                        if (response.IsSuccessStatusCode)
-                        {
-                            status = "[green]✓ Healthy[/]";
-
-                            try
-                            {
-                                var healthResponse = await response.Content.ReadFromJsonAsync<HealthResponse>(ct);
-                                message = healthResponse?.Status ?? "ok";
-                            }
-                            catch
-                            {
-                                message = "ok";
-                            }
-                        }
-                        else
-                        {
-                            status = $"[yellow]⚠ {(int)response.StatusCode}[/]";
-                            message = response.ReasonPhrase ?? "error";
-                        }
+                        status = "[green]û Healthy[/]";
+                        message = response?.Status ?? "ok";
                     }
                     catch (TaskCanceledException)
                     {
                         sw.Stop();
-                        status = "[red]✗ Timeout[/]";
+                        status = "[red]? Timeout[/]";
                         message = "No response within 5s";
                     }
-                    catch (HttpRequestException ex)
+                    catch (ApiException ex)
                     {
                         sw.Stop();
-                        status = "[red]✗ Unreachable[/]";
-                        message = ex.Message;
+                        status = $"[yellow]? {(int)ex.StatusCode}[/]";
+                        message = ex.StatusCode.ToString();
                     }
 
                     var responseTime = sw.ElapsedMilliseconds < 100
@@ -101,8 +79,4 @@ public sealed class HealthCommand
 
         return 0;
     }
-
-    public sealed record HealthResponse(
-        [property: JsonPropertyName("status")] string? Status,
-        [property: JsonPropertyName("service")] string? Service);
 }

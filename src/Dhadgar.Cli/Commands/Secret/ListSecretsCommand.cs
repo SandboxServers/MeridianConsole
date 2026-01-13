@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Secret;
@@ -17,12 +17,11 @@ public sealed class ListSecretsCommand
             return 1;
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
         var endpoint = category.ToLowerInvariant() switch
         {
-            "oauth" => "/api/v1/secrets/oauth",
-            "betterauth" => "/api/v1/secrets/betterauth",
-            "infrastructure" => "/api/v1/secrets/infrastructure",
+            "oauth" => "oauth",
+            "betterauth" => "betterauth",
+            "infrastructure" => "infrastructure",
             _ => null
         };
 
@@ -38,12 +37,27 @@ public sealed class ListSecretsCommand
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Loading {category} secrets...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
-                var response = await client.GetAsync<SecretsResponse>(
-                    new Uri($"{secretsUrl.TrimEnd('/')}{endpoint}"),
-                    ct);
+                using var factory = new ApiClientFactory(config);
+                var secretsApi = factory.CreateSecretsClient();
 
-                if (response?.Secrets is null || response.Secrets.Count == 0)
+                SecretsResponse response;
+                try
+                {
+                    response = endpoint switch
+                    {
+                        "oauth" => await secretsApi.GetOAuthSecretsAsync(ct),
+                        "betterauth" => await secretsApi.GetBetterAuthSecretsAsync(ct),
+                        "infrastructure" => await secretsApi.GetInfrastructureSecretsAsync(ct),
+                        _ => throw new InvalidOperationException("Unsupported secrets category.")
+                    };
+                }
+                catch (ApiException ex)
+                {
+                    AnsiConsole.MarkupLine($"\n[red]Failed to load secrets:[/] {ex.Message}");
+                    return;
+                }
+
+                if (response.Secrets.Count == 0)
                 {
                     AnsiConsole.MarkupLine($"\n[yellow]No {category} secrets found.[/]");
                     return;
@@ -90,6 +104,4 @@ public sealed class ListSecretsCommand
         return 0;
     }
 
-    public sealed record SecretsResponse(
-        [property: JsonPropertyName("secrets")] Dictionary<string, string>? Secrets);
 }

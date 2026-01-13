@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Secret;
@@ -56,20 +56,19 @@ public sealed class SetSecretCommand
             return 1;
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
-
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Setting secret '{secretName}'...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
+                using var factory = new ApiClientFactory(config);
+                var secretsApi = factory.CreateSecretsClient();
 
                 try
                 {
-                    var response = await client.PutAsync<SetSecretRequest, SetSecretResponse>(
-                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}"),
-                        new SetSecretRequest(value),
+                    var response = await secretsApi.SetSecretAsync(
+                        secretName,
+                        new SetSecretRequest { Value = value },
                         ct);
 
                     if (response != null)
@@ -90,7 +89,7 @@ public sealed class SetSecretCommand
                         AnsiConsole.MarkupLine($"[yellow]Warning:[/] Secret may have been updated but no confirmation received");
                     }
                 }
-                catch (HttpRequestException ex)
+                catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to set secret:[/] {ex.Message}");
 
@@ -104,10 +103,4 @@ public sealed class SetSecretCommand
         return 0;
     }
 
-    public sealed record SetSecretRequest(
-        [property: JsonPropertyName("value")] string Value);
-
-    public sealed record SetSecretResponse(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("updated")] bool Updated);
 }

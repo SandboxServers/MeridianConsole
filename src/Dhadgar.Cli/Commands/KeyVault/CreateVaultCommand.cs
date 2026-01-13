@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.KeyVault;
@@ -56,23 +56,21 @@ public sealed class CreateVaultCommand
                     }));
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
-
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Creating Key Vault '{name}'...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
+                using var factory = new ApiClientFactory(config);
+                var keyVaultApi = factory.CreateKeyVaultClient();
 
                 try
                 {
-                    var response = await client.PostAsync<CreateVaultRequest, CreateVaultResponse>(
-                        new Uri($"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults"),
-                        new CreateVaultRequest(name, location),
+                    var response = await keyVaultApi.CreateVaultAsync(
+                        new CreateVaultRequest { Name = name, Location = location },
                         ct);
 
-                    if (response != null)
+                    if (response is not null)
                     {
                         var grid = new Grid()
                             .AddColumn()
@@ -102,7 +100,7 @@ public sealed class CreateVaultCommand
                         AnsiConsole.MarkupLine($"[yellow]Warning:[/] Vault may have been created but no confirmation received");
                     }
                 }
-                catch (HttpRequestException ex)
+                catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to create Key Vault:[/] {ex.Message}");
 
@@ -120,14 +118,4 @@ public sealed class CreateVaultCommand
         return 0;
     }
 
-    public sealed record CreateVaultRequest(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("location")] string Location);
-
-    public sealed record CreateVaultResponse(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("vaultUri")] Uri VaultUri,
-        [property: JsonPropertyName("location")] string Location,
-        [property: JsonPropertyName("resourceGroup")] string ResourceGroup,
-        [property: JsonPropertyName("createdAt")] DateTime CreatedAt);
 }

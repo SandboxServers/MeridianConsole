@@ -1,4 +1,5 @@
 using Refit;
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 
 namespace Dhadgar.Cli.Infrastructure.Clients;
@@ -9,31 +10,31 @@ namespace Dhadgar.Cli.Infrastructure.Clients;
 public interface IIdentityApi
 {
     [Post("/connect/token")]
-    Task<TokenResponse> GetTokenAsync([Body] TokenRequest request, CancellationToken ct = default);
+    [Headers("Content-Type: application/x-www-form-urlencoded")]
+    Task<TokenResponse> GetTokenAsync(
+        [Body(BodySerializationMethod.UrlEncoded)] Dictionary<string, string> request,
+        CancellationToken ct = default);
 
     [Get("/organizations")]
     Task<List<OrganizationResponse>> GetOrganizationsAsync(CancellationToken ct = default);
 
-    [Get("/organizations/{orgId}/members")]
-    Task<List<MemberResponse>> GetMembersAsync(string orgId, CancellationToken ct = default);
+    [Get("/organizations/{orgId}")]
+    Task<OrganizationDetailResponse> GetOrganizationAsync(string orgId, CancellationToken ct = default);
 
     [Post("/organizations")]
-    Task<OrganizationResponse> CreateOrganizationAsync([Body] CreateOrganizationRequest request, CancellationToken ct = default);
-}
+    Task<OrganizationDetailResponse> CreateOrganizationAsync([Body] CreateOrganizationRequest request, CancellationToken ct = default);
 
-public class TokenRequest
-{
-    [JsonPropertyName("grant_type")]
-    public string GrantType { get; set; } = "client_credentials";
+    [Patch("/organizations/{orgId}")]
+    Task<OrganizationDetailResponse> UpdateOrganizationAsync(string orgId, [Body] UpdateOrganizationRequest request, CancellationToken ct = default);
 
-    [JsonPropertyName("client_id")]
-    public string ClientId { get; set; } = string.Empty;
+    [Delete("/organizations/{orgId}")]
+    Task DeleteOrganizationAsync(string orgId, CancellationToken ct = default);
 
-    [JsonPropertyName("client_secret")]
-    public string ClientSecret { get; set; } = string.Empty;
+    [Post("/organizations/{orgId}/switch")]
+    Task<SwitchOrganizationResponse> SwitchOrganizationAsync(string orgId, CancellationToken ct = default);
 
-    [JsonPropertyName("scope")]
-    public string Scope { get; set; } = "api://AzureADTokenExchange";
+    [Get("/organizations/{orgId}/members")]
+    Task<List<MemberResponse>> GetMembersAsync(string orgId, CancellationToken ct = default);
 }
 
 public class TokenResponse
@@ -76,10 +77,88 @@ public class MemberResponse
 
     [JsonPropertyName("status")]
     public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("joinedAt")]
+    public DateTime? JoinedAt { get; set; }
 }
 
 public class CreateOrganizationRequest
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("slug")]
+    public string? Slug { get; set; }
+}
+
+public class UpdateOrganizationRequest
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("slug")]
+    public string? Slug { get; set; }
+
+    [JsonPropertyName("settings")]
+    public OrganizationSettingsResponse? Settings { get; set; }
+}
+
+public class OrganizationDetailResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("slug")]
+    public string Slug { get; set; } = string.Empty;
+
+    [JsonPropertyName("ownerId")]
+    public string OwnerId { get; set; } = string.Empty;
+
+    [JsonPropertyName("settings")]
+    public OrganizationSettingsResponse? Settings { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; }
+
+    [JsonPropertyName("updatedAt")]
+    public DateTime? UpdatedAt { get; set; }
+
+    [JsonPropertyName("deletedAt")]
+    public DateTime? DeletedAt { get; set; }
+}
+
+public class OrganizationSettingsResponse
+{
+    [JsonPropertyName("allowMemberInvites")]
+    public bool AllowMemberInvites { get; set; } = true;
+
+    [JsonPropertyName("requireEmailVerification")]
+    public bool RequireEmailVerification { get; set; } = true;
+
+    [JsonPropertyName("maxMembers")]
+    public int MaxMembers { get; set; } = 10;
+
+    [JsonPropertyName("customSettings")]
+    public Dictionary<string, string> CustomSettings { get; set; } = new();
+}
+
+public class SwitchOrganizationResponse
+{
+    [JsonPropertyName("accessToken")]
+    public string? AccessToken { get; set; }
+
+    [JsonPropertyName("refreshToken")]
+    public string? RefreshToken { get; set; }
+
+    [JsonPropertyName("expiresIn")]
+    public int ExpiresIn { get; set; }
+
+    [JsonPropertyName("organizationId")]
+    public string? OrganizationId { get; set; }
+
+    [JsonPropertyName("permissions")]
+    public Collection<string>? Permissions { get; set; }
 }

@@ -3,7 +3,6 @@ using Dhadgar.Cli.Commands.Auth;
 using Dhadgar.Cli.Commands.Help;
 using Dhadgar.Cli.Commands.Gateway;
 using Dhadgar.Cli.Commands.Member;
-using Dhadgar.Cli.Commands.Org;
 using Dhadgar.Cli.Commands.Secret;
 using Dhadgar.Cli.Commands.KeyVault;
 using Dhadgar.Cli.Commands.Version;
@@ -13,6 +12,7 @@ using IdentityGetOrgCommand = Dhadgar.Cli.Commands.Identity.GetOrgCommand;
 using IdentityCreateOrgCommand = Dhadgar.Cli.Commands.Identity.CreateOrgCommand;
 using IdentityUpdateOrgCommand = Dhadgar.Cli.Commands.Identity.UpdateOrgCommand;
 using IdentityDeleteOrgCommand = Dhadgar.Cli.Commands.Identity.DeleteOrgCommand;
+using IdentitySwitchOrgCommand = Dhadgar.Cli.Commands.Identity.SwitchOrgCommand;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
 
@@ -33,7 +33,6 @@ root.SetHandler(() =>
 
     table.AddRow("[cyan]dhadgar auth[/]", "[dim]Authentication commands (login, status, logout)[/]");
     table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs CRUD)[/]");
-    table.AddRow("[cyan]dhadgar org[/]", "[dim]Organization management (list, create, switch)[/]");
     table.AddRow("[cyan]dhadgar member[/]", "[dim]Member management (list, invite, remove)[/]");
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
@@ -133,45 +132,22 @@ identityOrgsDeleteCmd.SetHandler(async (string orgId, bool force) =>
     await IdentityDeleteOrgCommand.ExecuteAsync(orgId, force, CancellationToken.None);
 }, identityDeleteOrgIdArg, identityDeleteForceOpt);
 
+var identityOrgsSwitchCmd = new Command("switch", "Switch to an organization");
+var identitySwitchOrgIdArg = new Argument<string>("org-id", "Organization ID");
+identityOrgsSwitchCmd.AddArgument(identitySwitchOrgIdArg);
+identityOrgsSwitchCmd.SetHandler(async (string orgId) =>
+{
+    await IdentitySwitchOrgCommand.ExecuteAsync(orgId, CancellationToken.None);
+}, identitySwitchOrgIdArg);
+
 identityOrgsCmd.AddCommand(identityOrgsListCmd);
 identityOrgsCmd.AddCommand(identityOrgsGetCmd);
 identityOrgsCmd.AddCommand(identityOrgsCreateCmd);
 identityOrgsCmd.AddCommand(identityOrgsUpdateCmd);
 identityOrgsCmd.AddCommand(identityOrgsDeleteCmd);
+identityOrgsCmd.AddCommand(identityOrgsSwitchCmd);
 
 identityCmd.AddCommand(identityOrgsCmd);
-
-// ============================================================================
-// ORG COMMANDS
-// ============================================================================
-
-var orgCmd = new Command("org", "Organization management");
-
-var orgListCmd = new Command("list", "List your organizations");
-orgListCmd.SetHandler(async () =>
-{
-    await ListOrgsCommand.ExecuteAsync(CancellationToken.None);
-});
-
-var orgCreateCmd = new Command("create", "Create a new organization");
-var orgNameArg = new Argument<string?>("name", "Organization name (optional, will prompt)") { Arity = ArgumentArity.ZeroOrOne };
-orgCreateCmd.AddArgument(orgNameArg);
-orgCreateCmd.SetHandler(async (string? name) =>
-{
-    await CreateOrgCommand.ExecuteAsync(name, CancellationToken.None);
-}, orgNameArg);
-
-var orgSwitchCmd = new Command("switch", "Switch to a different organization");
-var orgIdArg = new Argument<string>("org-id", "Organization ID to switch to");
-orgSwitchCmd.AddArgument(orgIdArg);
-orgSwitchCmd.SetHandler(async (string orgId) =>
-{
-    await SwitchOrgCommand.ExecuteAsync(orgId, CancellationToken.None);
-}, orgIdArg);
-
-orgCmd.AddCommand(orgListCmd);
-orgCmd.AddCommand(orgCreateCmd);
-orgCmd.AddCommand(orgSwitchCmd);
 
 // ============================================================================
 // MEMBER COMMANDS
@@ -399,7 +375,6 @@ ping.SetHandler(async (string url) =>
 
 root.AddCommand(authCmd);
 root.AddCommand(identityCmd);
-root.AddCommand(orgCmd);
 root.AddCommand(memberCmd);
 root.AddCommand(secretCmd);
 root.AddCommand(keyvaultCmd);

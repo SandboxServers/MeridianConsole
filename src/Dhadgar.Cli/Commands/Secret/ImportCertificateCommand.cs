@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Secret;
@@ -55,18 +55,13 @@ public sealed class ImportCertificateCommand
                     .PromptStyle("green"));
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
-        var url = string.IsNullOrWhiteSpace(vaultName)
-            ? $"{secretsUrl.TrimEnd('/')}/api/v1/certificates"
-            : $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}/certificates";
-        var requestUri = new Uri(url);
-
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Importing certificate '{name}'...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
+                using var factory = new ApiClientFactory(config);
+                var secretsApi = factory.CreateSecretsClient();
 
                 try
                 {
@@ -74,10 +69,16 @@ public sealed class ImportCertificateCommand
                     var certBytes = await File.ReadAllBytesAsync(certPath, ct);
                     var certBase64 = Convert.ToBase64String(certBytes);
 
-                    var response = await client.PostAsync<ImportCertRequest, ImportCertResponse>(
-                        requestUri,
-                        new ImportCertRequest(name, certBase64, password),
-                        ct);
+                    var request = new ImportCertificateRequest
+                    {
+                        Name = name,
+                        CertificateData = certBase64,
+                        Password = password
+                    };
+
+                    var response = string.IsNullOrWhiteSpace(vaultName)
+                        ? await secretsApi.ImportCertificateAsync(request, ct)
+                        : await secretsApi.ImportVaultCertificateAsync(vaultName, request, ct);
 
                     if (response != null)
                     {
@@ -114,7 +115,7 @@ public sealed class ImportCertificateCommand
                         AnsiConsole.MarkupLine($"[yellow]Warning:[/] Certificate may have been imported but no confirmation received");
                     }
                 }
-                catch (HttpRequestException ex)
+                catch (ApiException ex)
                 {
                     AnsiConsole.MarkupLine($"\n[red]Failed to import certificate:[/] {ex.Message}");
 
@@ -139,16 +140,4 @@ public sealed class ImportCertificateCommand
 
         return 0;
     }
-
-    public sealed record ImportCertRequest(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("certificateData")] string CertificateData,
-        [property: JsonPropertyName("password")] string? Password);
-
-    public sealed record ImportCertResponse(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("subject")] string Subject,
-        [property: JsonPropertyName("issuer")] string Issuer,
-        [property: JsonPropertyName("thumbprint")] string Thumbprint,
-        [property: JsonPropertyName("expiresAt")] DateTime ExpiresAt);
 }

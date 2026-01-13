@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+using Refit;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
@@ -18,19 +18,6 @@ internal static class IdentityCommandHelpers
         PropertyNameCaseInsensitive = true
     };
 
-    public static HttpClient CreateClient(CliConfig config)
-    {
-        var client = new HttpClient();
-
-        if (!string.IsNullOrWhiteSpace(config.AccessToken))
-        {
-            client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", config.AccessToken);
-        }
-
-        return client;
-    }
-
     public static bool TryEnsureAuthenticated(CliConfig config, out int exitCode)
     {
         if (config.IsAuthenticated())
@@ -43,49 +30,32 @@ internal static class IdentityCommandHelpers
         return false;
     }
 
-    public static async Task<int> WriteJsonResponseAsync(HttpResponseMessage response, CancellationToken ct)
-    {
-        var body = await response.Content.ReadAsStringAsync(ct);
-
-        if (response.IsSuccessStatusCode)
-        {
-            if (string.IsNullOrWhiteSpace(body))
-            {
-                WriteJson(new { ok = true });
-                return 0;
-            }
-
-            var element = JsonSerializer.Deserialize<JsonElement>(body, InputOptions);
-            WriteJson(element);
-            return 0;
-        }
-
-        return WriteHttpError(response, body);
-    }
-
     public static int WriteError(string code, string message, object? details = null)
     {
         WriteJson(new { error = code, message, details });
         return 1;
     }
 
-    public static int WriteHttpError(HttpResponseMessage response, string body)
+    public static int WriteApiError(ApiException ex)
     {
         object? details = null;
 
-        if (!string.IsNullOrWhiteSpace(body))
+        if (!string.IsNullOrWhiteSpace(ex.Content))
         {
             try
             {
-                details = JsonSerializer.Deserialize<JsonElement>(body, InputOptions);
+                details = JsonSerializer.Deserialize<JsonElement>(ex.Content, InputOptions);
             }
             catch (JsonException)
             {
-                details = body;
+                details = ex.Content;
             }
         }
 
-        return WriteError("http_error", $"{(int)response.StatusCode} {response.ReasonPhrase}", details);
+        var statusCode = (int)ex.StatusCode;
+        var reason = ex.StatusCode.ToString();
+
+        return WriteError("http_error", $"{statusCode} {reason}", details);
     }
 
     public static void WriteJson(object value)

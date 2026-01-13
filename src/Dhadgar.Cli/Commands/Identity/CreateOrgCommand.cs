@@ -1,6 +1,6 @@
-using System.Text.Json;
-using System.Net.Http.Json;
 using Dhadgar.Cli.Configuration;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 
 namespace Dhadgar.Cli.Commands.Identity;
 
@@ -20,77 +20,45 @@ public sealed class CreateOrgCommand
             return IdentityCommandHelpers.WriteError("name_required", "Organization name is required.");
         }
 
-        using var client = IdentityCommandHelpers.CreateClient(config);
-        var baseUrl = config.EffectiveIdentityUrl.TrimEnd('/');
+        using var factory = new ApiClientFactory(config);
+        var identityApi = factory.CreateIdentityClient();
         var request = new CreateOrganizationRequest { Name = name.Trim() };
 
-        var response = await client.PostAsJsonAsync($"{baseUrl}/organizations", request, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            return IdentityCommandHelpers.WriteHttpError(response, body);
-        }
+            var created = await identityApi.CreateOrganizationAsync(request, ct);
 
-        if (string.IsNullOrWhiteSpace(description))
-        {
-            if (string.IsNullOrWhiteSpace(body))
+            if (string.IsNullOrWhiteSpace(description))
             {
-                return IdentityCommandHelpers.WriteError("invalid_response", "Create response was empty.");
+                IdentityCommandHelpers.WriteJson(created);
+                return 0;
             }
 
-            var element = JsonSerializer.Deserialize<JsonElement>(body);
-            IdentityCommandHelpers.WriteJson(element);
+            if (string.IsNullOrWhiteSpace(created.Id))
+            {
+                return IdentityCommandHelpers.WriteError("invalid_response", "Create response missing organization id.");
+            }
+
+            var detail = created.Settings is null
+                ? await identityApi.GetOrganizationAsync(created.Id, ct)
+                : created;
+
+            var settings = detail.Settings ?? new OrganizationSettingsResponse();
+            settings.CustomSettings ??= new Dictionary<string, string>();
+            settings.CustomSettings["description"] = description.Trim();
+
+            var updateRequest = new UpdateOrganizationRequest
+            {
+                Settings = settings
+            };
+
+            var updated = await identityApi.UpdateOrganizationAsync(created.Id, updateRequest, ct);
+            IdentityCommandHelpers.WriteJson(updated);
             return 0;
         }
-
-        var createResponse = IdentityCommandHelpers.Deserialize<JsonElement>(body);
-        if (createResponse.ValueKind != JsonValueKind.Object ||
-            !createResponse.TryGetProperty("id", out var idElement))
+        catch (ApiException ex)
         {
-            return IdentityCommandHelpers.WriteError("invalid_response", "Create response missing organization id.");
+            return IdentityCommandHelpers.WriteApiError(ex);
         }
-
-        var orgId = idElement.GetString();
-        if (string.IsNullOrWhiteSpace(orgId))
-        {
-            return IdentityCommandHelpers.WriteError("invalid_response", "Create response contained an empty id.");
-        }
-
-        return await UpdateDescriptionAsync(client, baseUrl, orgId, description.Trim(), ct);
-    }
-
-    private static async Task<int> UpdateDescriptionAsync(
-        HttpClient client,
-        string baseUrl,
-        string orgId,
-        string description,
-        CancellationToken ct)
-    {
-        var getResponse = await client.GetAsync($"{baseUrl}/organizations/{orgId}", ct);
-        var getBody = await getResponse.Content.ReadAsStringAsync(ct);
-
-        if (!getResponse.IsSuccessStatusCode)
-        {
-            return IdentityCommandHelpers.WriteHttpError(getResponse, getBody);
-        }
-
-        var detail = IdentityCommandHelpers.Deserialize<OrganizationDetailResponse>(getBody);
-        if (detail is null)
-        {
-            return IdentityCommandHelpers.WriteError("invalid_response", "Failed to parse organization detail.");
-        }
-
-        var settings = detail.Settings ?? new OrganizationSettingsResponse();
-        settings.CustomSettings ??= new Dictionary<string, string>();
-        settings.CustomSettings["description"] = description;
-
-        var updateRequest = new UpdateOrganizationRequest
-        {
-            Settings = settings
-        };
-
-        var updateResponse = await client.PatchAsJsonAsync($"{baseUrl}/organizations/{orgId}", updateRequest, ct);
-        return await IdentityCommandHelpers.WriteJsonResponseAsync(updateResponse, ct);
     }
 }
