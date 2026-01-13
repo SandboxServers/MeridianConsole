@@ -10,13 +10,10 @@ pr:
       - main
       - develop
 
-pool:
-  name: "Sandbox Servers Agents"
-
 parameters:
   - name: servicesCsv
     type: string
-    default: ''
+    default: all
     displayName: 'Services to build (comma-separated). Leave blank = all.'
   - name: buildConfiguration
     type: string
@@ -34,7 +31,11 @@ parameters:
 
 variables:
   # Uses the new `trim()` pipeline expression function (Sprint 248) to be resilient to whitespace.
-  servicesCsvNormalized: ${{ format(',{0},', replace(replace(trim(parameters.servicesCsv), ' ', ''), ';', ',')) }}
+  - name: servicesCsvNormalized
+    ${{ if or(eq(trim(parameters.servicesCsv), ''), eq(lower(trim(parameters.servicesCsv)), 'all'), eq(trim(parameters.servicesCsv), '*')) }}:
+      value: ',,'
+    ${{ else }}:
+      value: ${{ format(',{0},', replace(replace(trim(parameters.servicesCsv), ' ', ''), ';', ',')) }}
 
 resources:
   repositories:
