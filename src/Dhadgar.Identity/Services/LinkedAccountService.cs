@@ -24,6 +24,7 @@ public sealed record LinkedAccountResult(
 public interface ILinkedAccountService
 {
     Task<LinkedAccountResult> LinkAsync(Guid userId, ExternalAccountInfo info, CancellationToken ct = default);
+    Task<ServiceResult<bool>> UnlinkAsync(Guid userId, Guid linkedAccountId, CancellationToken ct = default);
 }
 
 public sealed class LinkedAccountService : ILinkedAccountService
@@ -97,5 +98,21 @@ public sealed class LinkedAccountService : ILinkedAccountService
             userId);
 
         return LinkedAccountResult.SuccessResult(existing);
+    }
+
+    public async Task<ServiceResult<bool>> UnlinkAsync(Guid userId, Guid linkedAccountId, CancellationToken ct = default)
+    {
+        var account = await _dbContext.LinkedAccounts
+            .FirstOrDefaultAsync(la => la.Id == linkedAccountId && la.UserId == userId, ct);
+
+        if (account is null)
+        {
+            return ServiceResult.Fail<bool>("linked_account_not_found");
+        }
+
+        _dbContext.LinkedAccounts.Remove(account);
+        await _dbContext.SaveChangesAsync(ct);
+
+        return ServiceResult.Ok(true);
     }
 }

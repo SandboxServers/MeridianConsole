@@ -37,8 +37,27 @@ public sealed class PermissionService : IPermissionService
             return Array.Empty<string>();
         }
 
-        var roleDefinition = RoleDefinitions.GetRole(membership.Role);
-        var permissions = new HashSet<string>(roleDefinition.ImpliedClaims, StringComparer.OrdinalIgnoreCase);
+        var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (RoleDefinitions.IsValidRole(membership.Role))
+        {
+            var roleDefinition = RoleDefinitions.GetRole(membership.Role);
+            permissions.UnionWith(roleDefinition.ImpliedClaims);
+        }
+        else
+        {
+            var normalized = membership.Role.Trim().ToUpperInvariant();
+            var customRole = await _dbContext.OrganizationRoles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(role =>
+                    role.OrganizationId == organizationId &&
+                    role.NormalizedName == normalized, ct);
+
+            if (customRole is not null)
+            {
+                permissions.UnionWith(customRole.Permissions);
+            }
+        }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 

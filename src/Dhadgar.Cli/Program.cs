@@ -13,6 +13,19 @@ using IdentityCreateOrgCommand = Dhadgar.Cli.Commands.Identity.CreateOrgCommand;
 using IdentityUpdateOrgCommand = Dhadgar.Cli.Commands.Identity.UpdateOrgCommand;
 using IdentityDeleteOrgCommand = Dhadgar.Cli.Commands.Identity.DeleteOrgCommand;
 using IdentitySwitchOrgCommand = Dhadgar.Cli.Commands.Identity.SwitchOrgCommand;
+using IdentitySearchOrgsCommand = Dhadgar.Cli.Commands.Identity.SearchOrgsCommand;
+using IdentityListUsersCommand = Dhadgar.Cli.Commands.Identity.ListUsersCommand;
+using IdentityGetUserCommand = Dhadgar.Cli.Commands.Identity.GetUserCommand;
+using IdentityCreateUserCommand = Dhadgar.Cli.Commands.Identity.CreateUserCommand;
+using IdentityUpdateUserCommand = Dhadgar.Cli.Commands.Identity.UpdateUserCommand;
+using IdentityDeleteUserCommand = Dhadgar.Cli.Commands.Identity.DeleteUserCommand;
+using IdentitySearchUsersCommand = Dhadgar.Cli.Commands.Identity.SearchUsersCommand;
+using IdentityListRolesCommand = Dhadgar.Cli.Commands.Identity.ListRolesCommand;
+using IdentityGetRoleCommand = Dhadgar.Cli.Commands.Identity.GetRoleCommand;
+using IdentityCreateRoleCommand = Dhadgar.Cli.Commands.Identity.CreateRoleCommand;
+using IdentityAssignRoleCommand = Dhadgar.Cli.Commands.Identity.AssignRoleCommand;
+using IdentityRevokeRoleCommand = Dhadgar.Cli.Commands.Identity.RevokeRoleCommand;
+using IdentitySearchRolesCommand = Dhadgar.Cli.Commands.Identity.SearchRolesCommand;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
 
@@ -32,7 +45,7 @@ root.SetHandler(() =>
         .AddColumn("");
 
     table.AddRow("[cyan]dhadgar auth[/]", "[dim]Authentication commands (login, status, logout)[/]");
-    table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs CRUD)[/]");
+table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs/users/roles)[/]");
     table.AddRow("[cyan]dhadgar member[/]", "[dim]Member management (list, invite, remove)[/]");
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
@@ -140,14 +153,185 @@ identityOrgsSwitchCmd.SetHandler(async (string orgId) =>
     await IdentitySwitchOrgCommand.ExecuteAsync(orgId, CancellationToken.None);
 }, identitySwitchOrgIdArg);
 
+var identityOrgsSearchCmd = new Command("search", "Search organizations");
+var identityOrgsQueryOpt = new Option<string>("--query", "Search query") { IsRequired = true };
+identityOrgsSearchCmd.AddOption(identityOrgsQueryOpt);
+identityOrgsSearchCmd.SetHandler(async (string query) =>
+{
+    await IdentitySearchOrgsCommand.ExecuteAsync(query, CancellationToken.None);
+}, identityOrgsQueryOpt);
+
 identityOrgsCmd.AddCommand(identityOrgsListCmd);
 identityOrgsCmd.AddCommand(identityOrgsGetCmd);
 identityOrgsCmd.AddCommand(identityOrgsCreateCmd);
 identityOrgsCmd.AddCommand(identityOrgsUpdateCmd);
 identityOrgsCmd.AddCommand(identityOrgsDeleteCmd);
 identityOrgsCmd.AddCommand(identityOrgsSwitchCmd);
+identityOrgsCmd.AddCommand(identityOrgsSearchCmd);
 
 identityCmd.AddCommand(identityOrgsCmd);
+
+// ========================================================================
+// IDENTITY USERS COMMANDS
+// ========================================================================
+
+var identityUsersCmd = new Command("users", "User management");
+
+var identityUsersListCmd = new Command("list", "List users");
+var identityUsersListOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityUsersListCmd.AddOption(identityUsersListOrgOpt);
+identityUsersListCmd.SetHandler(async (string? orgId) =>
+{
+    await IdentityListUsersCommand.ExecuteAsync(orgId, CancellationToken.None);
+}, identityUsersListOrgOpt);
+
+var identityUsersGetCmd = new Command("get", "Get a user by id");
+var identityUserIdArg = new Argument<string>("user-id", "User ID");
+var identityUsersGetOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityUsersGetCmd.AddArgument(identityUserIdArg);
+identityUsersGetCmd.AddOption(identityUsersGetOrgOpt);
+identityUsersGetCmd.SetHandler(async (string userId, string? orgId) =>
+{
+    await IdentityGetUserCommand.ExecuteAsync(userId, orgId, CancellationToken.None);
+}, identityUserIdArg, identityUsersGetOrgOpt);
+
+var identityUsersCreateCmd = new Command("create", "Create a user");
+var identityUserEmailOpt = new Option<string>("--email", "User email") { IsRequired = true };
+var identityUserOrgOpt = new Option<string>("--org", "Organization ID") { IsRequired = true };
+var identityUserNameOpt = new Option<string?>("--name", "Display name");
+identityUsersCreateCmd.AddOption(identityUserEmailOpt);
+identityUsersCreateCmd.AddOption(identityUserOrgOpt);
+identityUsersCreateCmd.AddOption(identityUserNameOpt);
+identityUsersCreateCmd.SetHandler(async (string email, string orgId, string? name) =>
+{
+    await IdentityCreateUserCommand.ExecuteAsync(email, orgId, name, CancellationToken.None);
+}, identityUserEmailOpt, identityUserOrgOpt, identityUserNameOpt);
+
+var identityUsersUpdateCmd = new Command("update", "Update a user");
+var identityUsersUpdateIdArg = new Argument<string>("user-id", "User ID");
+var identityUsersUpdateEmailOpt = new Option<string?>("--email", "User email");
+var identityUsersUpdateNameOpt = new Option<string?>("--name", "Display name");
+var identityUsersUpdateOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityUsersUpdateCmd.AddArgument(identityUsersUpdateIdArg);
+identityUsersUpdateCmd.AddOption(identityUsersUpdateEmailOpt);
+identityUsersUpdateCmd.AddOption(identityUsersUpdateNameOpt);
+identityUsersUpdateCmd.AddOption(identityUsersUpdateOrgOpt);
+identityUsersUpdateCmd.SetHandler(async (string userId, string? email, string? name, string? orgId) =>
+{
+    await IdentityUpdateUserCommand.ExecuteAsync(userId, email, name, orgId, CancellationToken.None);
+}, identityUsersUpdateIdArg, identityUsersUpdateEmailOpt, identityUsersUpdateNameOpt, identityUsersUpdateOrgOpt);
+
+var identityUsersDeleteCmd = new Command("delete", "Delete a user");
+var identityUsersDeleteIdArg = new Argument<string>("user-id", "User ID");
+var identityUsersDeleteForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+var identityUsersDeleteOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityUsersDeleteCmd.AddArgument(identityUsersDeleteIdArg);
+identityUsersDeleteCmd.AddOption(identityUsersDeleteForceOpt);
+identityUsersDeleteCmd.AddOption(identityUsersDeleteOrgOpt);
+identityUsersDeleteCmd.SetHandler(async (string userId, bool force, string? orgId) =>
+{
+    await IdentityDeleteUserCommand.ExecuteAsync(userId, orgId, force, CancellationToken.None);
+}, identityUsersDeleteIdArg, identityUsersDeleteForceOpt, identityUsersDeleteOrgOpt);
+
+var identityUsersSearchCmd = new Command("search", "Search users");
+var identityUsersSearchQueryOpt = new Option<string>("--query", "Search query") { IsRequired = true };
+var identityUsersSearchOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityUsersSearchCmd.AddOption(identityUsersSearchQueryOpt);
+identityUsersSearchCmd.AddOption(identityUsersSearchOrgOpt);
+identityUsersSearchCmd.SetHandler(async (string query, string? orgId) =>
+{
+    await IdentitySearchUsersCommand.ExecuteAsync(query, orgId, CancellationToken.None);
+}, identityUsersSearchQueryOpt, identityUsersSearchOrgOpt);
+
+identityUsersCmd.AddCommand(identityUsersListCmd);
+identityUsersCmd.AddCommand(identityUsersGetCmd);
+identityUsersCmd.AddCommand(identityUsersCreateCmd);
+identityUsersCmd.AddCommand(identityUsersUpdateCmd);
+identityUsersCmd.AddCommand(identityUsersDeleteCmd);
+identityUsersCmd.AddCommand(identityUsersSearchCmd);
+
+identityCmd.AddCommand(identityUsersCmd);
+
+// ========================================================================
+// IDENTITY ROLES COMMANDS
+// ========================================================================
+
+var identityRolesCmd = new Command("roles", "Role management");
+
+var identityRolesListCmd = new Command("list", "List roles");
+var identityRolesListOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesListCmd.AddOption(identityRolesListOrgOpt);
+identityRolesListCmd.SetHandler(async (string? orgId) =>
+{
+    await IdentityListRolesCommand.ExecuteAsync(orgId, CancellationToken.None);
+}, identityRolesListOrgOpt);
+
+var identityRolesGetCmd = new Command("get", "Get a role by id");
+var identityRoleIdArg = new Argument<string>("role-id", "Role ID");
+var identityRolesGetOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesGetCmd.AddArgument(identityRoleIdArg);
+identityRolesGetCmd.AddOption(identityRolesGetOrgOpt);
+identityRolesGetCmd.SetHandler(async (string roleId, string? orgId) =>
+{
+    await IdentityGetRoleCommand.ExecuteAsync(roleId, orgId, CancellationToken.None);
+}, identityRoleIdArg, identityRolesGetOrgOpt);
+
+var identityRolesCreateCmd = new Command("create", "Create a role");
+var identityRoleNameOpt = new Option<string>("--name", "Role name") { IsRequired = true };
+var identityRoleOrgOpt = new Option<string>("--org", "Organization ID") { IsRequired = true };
+var identityRoleDescriptionOpt = new Option<string?>("--description", "Role description");
+var identityRolePermissionsOpt = new Option<string?>("--permissions", "Comma-separated permissions");
+identityRolesCreateCmd.AddOption(identityRoleNameOpt);
+identityRolesCreateCmd.AddOption(identityRoleOrgOpt);
+identityRolesCreateCmd.AddOption(identityRoleDescriptionOpt);
+identityRolesCreateCmd.AddOption(identityRolePermissionsOpt);
+identityRolesCreateCmd.SetHandler(async (string name, string orgId, string? description, string? permissions) =>
+{
+    await IdentityCreateRoleCommand.ExecuteAsync(name, orgId, description, permissions, CancellationToken.None);
+}, identityRoleNameOpt, identityRoleOrgOpt, identityRoleDescriptionOpt, identityRolePermissionsOpt);
+
+var identityRolesAssignCmd = new Command("assign", "Assign a role to a user");
+var identityRolesAssignRoleArg = new Argument<string>("role-id", "Role ID");
+var identityRolesAssignUserOpt = new Option<string>("--user", "User ID") { IsRequired = true };
+var identityRolesAssignOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesAssignCmd.AddArgument(identityRolesAssignRoleArg);
+identityRolesAssignCmd.AddOption(identityRolesAssignUserOpt);
+identityRolesAssignCmd.AddOption(identityRolesAssignOrgOpt);
+identityRolesAssignCmd.SetHandler(async (string roleId, string userId, string? orgId) =>
+{
+    await IdentityAssignRoleCommand.ExecuteAsync(roleId, userId, orgId, CancellationToken.None);
+}, identityRolesAssignRoleArg, identityRolesAssignUserOpt, identityRolesAssignOrgOpt);
+
+var identityRolesRevokeCmd = new Command("revoke", "Revoke a role from a user");
+var identityRolesRevokeRoleArg = new Argument<string>("role-id", "Role ID");
+var identityRolesRevokeUserOpt = new Option<string>("--user", "User ID") { IsRequired = true };
+var identityRolesRevokeOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesRevokeCmd.AddArgument(identityRolesRevokeRoleArg);
+identityRolesRevokeCmd.AddOption(identityRolesRevokeUserOpt);
+identityRolesRevokeCmd.AddOption(identityRolesRevokeOrgOpt);
+identityRolesRevokeCmd.SetHandler(async (string roleId, string userId, string? orgId) =>
+{
+    await IdentityRevokeRoleCommand.ExecuteAsync(roleId, userId, orgId, CancellationToken.None);
+}, identityRolesRevokeRoleArg, identityRolesRevokeUserOpt, identityRolesRevokeOrgOpt);
+
+var identityRolesSearchCmd = new Command("search", "Search roles");
+var identityRolesSearchQueryOpt = new Option<string>("--query", "Search query") { IsRequired = true };
+var identityRolesSearchOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesSearchCmd.AddOption(identityRolesSearchQueryOpt);
+identityRolesSearchCmd.AddOption(identityRolesSearchOrgOpt);
+identityRolesSearchCmd.SetHandler(async (string query, string? orgId) =>
+{
+    await IdentitySearchRolesCommand.ExecuteAsync(query, orgId, CancellationToken.None);
+}, identityRolesSearchQueryOpt, identityRolesSearchOrgOpt);
+
+identityRolesCmd.AddCommand(identityRolesListCmd);
+identityRolesCmd.AddCommand(identityRolesGetCmd);
+identityRolesCmd.AddCommand(identityRolesCreateCmd);
+identityRolesCmd.AddCommand(identityRolesAssignCmd);
+identityRolesCmd.AddCommand(identityRolesRevokeCmd);
+identityRolesCmd.AddCommand(identityRolesSearchCmd);
+
+identityCmd.AddCommand(identityRolesCmd);
 
 // ============================================================================
 // MEMBER COMMANDS

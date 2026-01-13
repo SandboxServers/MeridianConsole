@@ -15,6 +15,9 @@ public sealed class User : IdentityUser<Guid>
     [MaxLength(255)]
     public string ExternalAuthId { get; set; } = null!;
 
+    [MaxLength(200)]
+    public string? DisplayName { get; set; }
+
     public bool EmailVerified { get; set; }
 
     /// <summary>

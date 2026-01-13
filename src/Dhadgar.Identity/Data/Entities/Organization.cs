@@ -35,6 +35,7 @@ public sealed class Organization
 
     public User Owner { get; set; } = null!;
     public ICollection<UserOrganization> Members { get; set; } = new List<UserOrganization>();
+    public ICollection<OrganizationRole> Roles { get; set; } = new List<OrganizationRole>();
 }
 
 public sealed class OrganizationSettings
