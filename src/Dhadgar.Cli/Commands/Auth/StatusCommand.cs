@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dhadgar.Cli.Configuration;
 using Spectre.Console;
 
@@ -24,7 +25,7 @@ public sealed class StatusCommand
         if (config.IsAuthenticated())
         {
             table.AddRow("Authentication", "[green]✓ Authenticated[/]");
-            table.AddRow("Token Expires", config.TokenExpiresAt?.ToLocalTime().ToString("g") ?? "[dim]unknown[/]");
+            table.AddRow("Token Expires", config.TokenExpiresAt?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "[dim]unknown[/]");
         }
         else
         {

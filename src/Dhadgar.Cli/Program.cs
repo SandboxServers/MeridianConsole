@@ -1,11 +1,18 @@
 using System.CommandLine;
 using Dhadgar.Cli.Commands.Auth;
+using Dhadgar.Cli.Commands.Help;
 using Dhadgar.Cli.Commands.Gateway;
 using Dhadgar.Cli.Commands.Member;
-using Dhadgar.Cli.Commands.Org;
 using Dhadgar.Cli.Commands.Secret;
 using Dhadgar.Cli.Commands.KeyVault;
+using Dhadgar.Cli.Commands.Version;
 using Spectre.Console;
+using IdentityListOrgsCommand = Dhadgar.Cli.Commands.Identity.ListOrgsCommand;
+using IdentityGetOrgCommand = Dhadgar.Cli.Commands.Identity.GetOrgCommand;
+using IdentityCreateOrgCommand = Dhadgar.Cli.Commands.Identity.CreateOrgCommand;
+using IdentityUpdateOrgCommand = Dhadgar.Cli.Commands.Identity.UpdateOrgCommand;
+using IdentityDeleteOrgCommand = Dhadgar.Cli.Commands.Identity.DeleteOrgCommand;
+using IdentitySwitchOrgCommand = Dhadgar.Cli.Commands.Identity.SwitchOrgCommand;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
 
@@ -25,11 +32,13 @@ root.SetHandler(() =>
         .AddColumn("");
 
     table.AddRow("[cyan]dhadgar auth[/]", "[dim]Authentication commands (login, status, logout)[/]");
-    table.AddRow("[cyan]dhadgar org[/]", "[dim]Organization management (list, create, switch)[/]");
+    table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs CRUD)[/]");
     table.AddRow("[cyan]dhadgar member[/]", "[dim]Member management (list, invite, remove)[/]");
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
     table.AddRow("[cyan]dhadgar gateway[/]", "[dim]Gateway diagnostics (health check)[/]");
+    table.AddRow("[cyan]dhadgar commands[/]", "[dim]List available commands and usage[/]");
+    table.AddRow("[cyan]dhadgar version[/]", "[dim]Show CLI build and breaking change info[/]");
 
     AnsiConsole.Write(table);
 
@@ -45,11 +54,11 @@ var authCmd = new Command("auth", "Authentication and token management");
 var authLoginCmd = new Command("login", "Authenticate with the Identity service");
 var clientIdOpt = new Option<string?>("--client-id", "Client ID (defaults to dev-client)");
 var clientSecretOpt = new Option<string?>("--client-secret", "Client secret (defaults to dev-secret)");
-var identityUrlOpt = new Option<string?>("--identity-url", "Identity service URL");
+var identityUrlOpt = new Option<Uri?>("--identity-url", "Identity service URL");
 authLoginCmd.AddOption(clientIdOpt);
 authLoginCmd.AddOption(clientSecretOpt);
 authLoginCmd.AddOption(identityUrlOpt);
-authLoginCmd.SetHandler(async (string? clientId, string? clientSecret, string? identityUrl) =>
+authLoginCmd.SetHandler(async (string? clientId, string? clientSecret, Uri? identityUrl) =>
 {
     await LoginCommand.ExecuteAsync(clientId, clientSecret, identityUrl, CancellationToken.None);
 }, clientIdOpt, clientSecretOpt, identityUrlOpt);
@@ -71,36 +80,74 @@ authCmd.AddCommand(authStatusCmd);
 authCmd.AddCommand(authLogoutCmd);
 
 // ============================================================================
-// ORG COMMANDS
+// IDENTITY COMMANDS
 // ============================================================================
 
-var orgCmd = new Command("org", "Organization management");
+var identityCmd = new Command("identity", "Identity service commands");
+var identityOrgsCmd = new Command("orgs", "Organization management");
 
-var orgListCmd = new Command("list", "List your organizations");
-orgListCmd.SetHandler(async () =>
+var identityOrgsListCmd = new Command("list", "List organizations");
+identityOrgsListCmd.SetHandler(async () =>
 {
-    await ListOrgsCommand.ExecuteAsync(CancellationToken.None);
+    await IdentityListOrgsCommand.ExecuteAsync(CancellationToken.None);
 });
 
-var orgCreateCmd = new Command("create", "Create a new organization");
-var orgNameArg = new Argument<string?>("name", "Organization name (optional, will prompt)") { Arity = ArgumentArity.ZeroOrOne };
-orgCreateCmd.AddArgument(orgNameArg);
-orgCreateCmd.SetHandler(async (string? name) =>
+var identityOrgsGetCmd = new Command("get", "Get an organization by id");
+var identityOrgIdArg = new Argument<string>("org-id", "Organization ID");
+identityOrgsGetCmd.AddArgument(identityOrgIdArg);
+identityOrgsGetCmd.SetHandler(async (string orgId) =>
 {
-    await CreateOrgCommand.ExecuteAsync(name, CancellationToken.None);
-}, orgNameArg);
+    await IdentityGetOrgCommand.ExecuteAsync(orgId, CancellationToken.None);
+}, identityOrgIdArg);
 
-var orgSwitchCmd = new Command("switch", "Switch to a different organization");
-var orgIdArg = new Argument<string>("org-id", "Organization ID to switch to");
-orgSwitchCmd.AddArgument(orgIdArg);
-orgSwitchCmd.SetHandler(async (string orgId) =>
+var identityOrgsCreateCmd = new Command("create", "Create an organization");
+var identityOrgNameOpt = new Option<string>("--name", "Organization name") { IsRequired = true };
+var identityOrgDescriptionOpt = new Option<string?>("--description", "Organization description");
+identityOrgsCreateCmd.AddOption(identityOrgNameOpt);
+identityOrgsCreateCmd.AddOption(identityOrgDescriptionOpt);
+identityOrgsCreateCmd.SetHandler(async (string name, string? description) =>
 {
-    await SwitchOrgCommand.ExecuteAsync(orgId, CancellationToken.None);
-}, orgIdArg);
+    await IdentityCreateOrgCommand.ExecuteAsync(name, description, CancellationToken.None);
+}, identityOrgNameOpt, identityOrgDescriptionOpt);
 
-orgCmd.AddCommand(orgListCmd);
-orgCmd.AddCommand(orgCreateCmd);
-orgCmd.AddCommand(orgSwitchCmd);
+var identityOrgsUpdateCmd = new Command("update", "Update an organization");
+var identityUpdateOrgIdArg = new Argument<string>("org-id", "Organization ID");
+var identityUpdateNameOpt = new Option<string?>("--name", "Organization name");
+var identityUpdateDescriptionOpt = new Option<string?>("--description", "Organization description");
+identityOrgsUpdateCmd.AddArgument(identityUpdateOrgIdArg);
+identityOrgsUpdateCmd.AddOption(identityUpdateNameOpt);
+identityOrgsUpdateCmd.AddOption(identityUpdateDescriptionOpt);
+identityOrgsUpdateCmd.SetHandler(async (string orgId, string? name, string? description) =>
+{
+    await IdentityUpdateOrgCommand.ExecuteAsync(orgId, name, description, CancellationToken.None);
+}, identityUpdateOrgIdArg, identityUpdateNameOpt, identityUpdateDescriptionOpt);
+
+var identityOrgsDeleteCmd = new Command("delete", "Delete an organization");
+var identityDeleteOrgIdArg = new Argument<string>("org-id", "Organization ID");
+var identityDeleteForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+identityOrgsDeleteCmd.AddArgument(identityDeleteOrgIdArg);
+identityOrgsDeleteCmd.AddOption(identityDeleteForceOpt);
+identityOrgsDeleteCmd.SetHandler(async (string orgId, bool force) =>
+{
+    await IdentityDeleteOrgCommand.ExecuteAsync(orgId, force, CancellationToken.None);
+}, identityDeleteOrgIdArg, identityDeleteForceOpt);
+
+var identityOrgsSwitchCmd = new Command("switch", "Switch to an organization");
+var identitySwitchOrgIdArg = new Argument<string>("org-id", "Organization ID");
+identityOrgsSwitchCmd.AddArgument(identitySwitchOrgIdArg);
+identityOrgsSwitchCmd.SetHandler(async (string orgId) =>
+{
+    await IdentitySwitchOrgCommand.ExecuteAsync(orgId, CancellationToken.None);
+}, identitySwitchOrgIdArg);
+
+identityOrgsCmd.AddCommand(identityOrgsListCmd);
+identityOrgsCmd.AddCommand(identityOrgsGetCmd);
+identityOrgsCmd.AddCommand(identityOrgsCreateCmd);
+identityOrgsCmd.AddCommand(identityOrgsUpdateCmd);
+identityOrgsCmd.AddCommand(identityOrgsDeleteCmd);
+identityOrgsCmd.AddCommand(identityOrgsSwitchCmd);
+
+identityCmd.AddCommand(identityOrgsCmd);
 
 // ============================================================================
 // MEMBER COMMANDS
@@ -280,6 +327,26 @@ gatewayHealthCmd.SetHandler(async () =>
 gatewayCmd.AddCommand(gatewayHealthCmd);
 
 // ============================================================================
+// COMMANDS LIST
+// ============================================================================
+
+var commandsCmd = new Command("commands", "List available commands and usage");
+commandsCmd.SetHandler(async () =>
+{
+    await CommandsCommand.ExecuteAsync(root);
+});
+
+// ============================================================================
+// VERSION COMMAND
+// ============================================================================
+
+var versionCmd = new Command("version", "Show CLI build and breaking change info");
+versionCmd.SetHandler(async () =>
+{
+    await VersionCommand.ExecuteAsync();
+});
+
+// ============================================================================
 // LEGACY PING COMMAND (keeping for backwards compatibility)
 // ============================================================================
 
@@ -307,11 +374,13 @@ ping.SetHandler(async (string url) =>
 // ============================================================================
 
 root.AddCommand(authCmd);
-root.AddCommand(orgCmd);
+root.AddCommand(identityCmd);
 root.AddCommand(memberCmd);
 root.AddCommand(secretCmd);
 root.AddCommand(keyvaultCmd);
 root.AddCommand(gatewayCmd);
+root.AddCommand(commandsCmd);
+root.AddCommand(versionCmd);
 root.AddCommand(ping);
 
 return await root.InvokeAsync(args);

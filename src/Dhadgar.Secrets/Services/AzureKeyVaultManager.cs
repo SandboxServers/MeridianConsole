@@ -43,13 +43,20 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
             var subscription = await _armClient.GetSubscriptionResource(new ResourceIdentifier($"/subscriptions/{_subscriptionId}")).GetAsync(ct);
             var vaults = new List<VaultSummary>();
 
-            foreach (var vault in subscription.Value.GetKeyVaults())
+            await foreach (var vault in subscription.Value.GetKeyVaultsAsync(cancellationToken: ct))
             {
-                var secretCount = await CountSecretsAsync(vault.Data.Properties.VaultUri.ToString(), ct);
+                var vaultUri = vault.Data.Properties.VaultUri;
+                if (vaultUri is null)
+                {
+                    _logger.LogWarning("Vault {VaultName} does not expose a URI; skipping secret count.", vault.Data.Name);
+                    continue;
+                }
+
+                var secretCount = await CountSecretsAsync(vaultUri, ct);
 
                 vaults.Add(new VaultSummary(
                     Name: vault.Data.Name,
-                    VaultUri: vault.Data.Properties.VaultUri.ToString(),
+                    VaultUri: vaultUri,
                     Location: vault.Data.Location.Name,
                     SecretCount: secretCount,
                     Enabled: true // Vaults don't have a direct "enabled" property
@@ -74,7 +81,7 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
 
             // Find vault by name across all resource groups
             KeyVaultResource? targetVault = null;
-            foreach (var vault in subscription.Value.GetKeyVaults())
+            await foreach (var vault in subscription.Value.GetKeyVaultsAsync(cancellationToken: ct))
             {
                 if (vault.Data.Name.Equals(vaultName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -89,7 +96,13 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
                 return null;
             }
 
-            var vaultUri = targetVault.Data.Properties.VaultUri.ToString();
+            var vaultUri = targetVault.Data.Properties.VaultUri;
+            if (vaultUri is null)
+            {
+                _logger.LogWarning("Vault {VaultName} does not expose a URI.", vaultName);
+                return null;
+            }
+
             var secretCount = await CountSecretsAsync(vaultUri, ct);
             var keyCount = await CountKeysAsync(vaultUri, ct);
             var certCount = await CountCertificatesAsync(vaultUri, ct);
@@ -185,9 +198,12 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
             _logger.LogInformation("Created Key Vault {VaultName}", request.Name);
 
             // Return vault details
+            var createdVaultUri = vault.Data.Properties.VaultUri
+                ?? throw new InvalidOperationException($"Vault '{request.Name}' does not expose a URI.");
+
             return new VaultDetail(
                 Name: vault.Data.Name,
-                VaultUri: vault.Data.Properties.VaultUri.ToString(),
+                VaultUri: createdVaultUri,
                 Location: vault.Data.Location.Name,
                 ResourceGroup: resourceGroupName,
                 Sku: vault.Data.Properties.Sku.Name.ToString(),
@@ -219,7 +235,7 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
 
             // Find vault
             KeyVaultResource? targetVault = null;
-            foreach (var vault in subscription.Value.GetKeyVaults())
+            await foreach (var vault in subscription.Value.GetKeyVaultsAsync(cancellationToken: ct))
             {
                 if (vault.Data.Name.Equals(vaultName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -277,7 +293,8 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
             _logger.LogInformation("Updated vault {VaultName}", vaultName);
 
             // Get current counts
-            var vaultUri = updatedVault.Data.Properties.VaultUri.ToString();
+            var vaultUri = updatedVault.Data.Properties.VaultUri
+                ?? throw new InvalidOperationException($"Vault '{vaultName}' does not expose a URI.");
             var secretCount = await CountSecretsAsync(vaultUri, ct);
             var keyCount = await CountKeysAsync(vaultUri, ct);
             var certCount = await CountCertificatesAsync(vaultUri, ct);
@@ -317,7 +334,7 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
             // Find vault
             KeyVaultResource? targetVault = null;
             string? location = null;
-            foreach (var vault in subscription.Value.GetKeyVaults())
+            await foreach (var vault in subscription.Value.GetKeyVaultsAsync(cancellationToken: ct))
             {
                 if (vault.Data.Name.Equals(vaultName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -350,7 +367,8 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
                     // For now, purge is not implemented. To purge manually, use:
                     // az keyvault purge --name {vaultName} --location {location}
 
-                    _logger.LogWarning("Purge requested for vault {VaultName} but automatic purging is not yet implemented. Use 'az keyvault purge --name {VaultName} --location {Location}' to purge manually.", vaultName, location);
+                    var purgeCommand = $"az keyvault purge --name {vaultName} --location {location}";
+                    _logger.LogWarning("Purge requested for vault {VaultName} but automatic purging is not yet implemented. Use '{PurgeCommand}' to purge manually.", vaultName, purgeCommand);
                 }
                 catch (Exception ex)
                 {
@@ -369,11 +387,11 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
     }
 
     // Helper methods to count vault contents
-    private async Task<int> CountSecretsAsync(string vaultUri, CancellationToken ct)
+    private async Task<int> CountSecretsAsync(Uri vaultUri, CancellationToken ct)
     {
         try
         {
-            var client = new SecretClient(new Uri(vaultUri), _credential);
+            var client = new SecretClient(vaultUri, _credential);
             var count = 0;
             await foreach (var _ in client.GetPropertiesOfSecretsAsync(ct))
             {
@@ -387,11 +405,11 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
         }
     }
 
-    private async Task<int> CountKeysAsync(string vaultUri, CancellationToken ct)
+    private async Task<int> CountKeysAsync(Uri vaultUri, CancellationToken ct)
     {
         try
         {
-            var client = new KeyClient(new Uri(vaultUri), _credential);
+            var client = new KeyClient(vaultUri, _credential);
             var count = 0;
             await foreach (var _ in client.GetPropertiesOfKeysAsync(cancellationToken: ct))
             {
@@ -405,11 +423,11 @@ public sealed class AzureKeyVaultManager : IKeyVaultManager
         }
     }
 
-    private async Task<int> CountCertificatesAsync(string vaultUri, CancellationToken ct)
+    private async Task<int> CountCertificatesAsync(Uri vaultUri, CancellationToken ct)
     {
         try
         {
-            var client = new CertificateClient(new Uri(vaultUri), _credential);
+            var client = new CertificateClient(vaultUri, _credential);
             var count = 0;
             await foreach (var _ in client.GetPropertiesOfCertificatesAsync(cancellationToken: ct))
             {

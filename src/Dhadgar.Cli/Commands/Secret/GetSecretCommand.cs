@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Secret;
@@ -17,23 +17,30 @@ public sealed class GetSecretCommand
             return 1;
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var secretsApi = factory.CreateSecretsClient();
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Retrieving secret '{secretName}'...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
-                var response = await client.GetAsync<SecretResponse>(
-                    $"{secretsUrl.TrimEnd('/')}/api/v1/secrets/{secretName}",
-                    ct);
-
-                if (response?.Value is null)
-                {
-                    AnsiConsole.MarkupLine($"\n[red]Secret '{secretName}' not found or access denied.[/]");
-                    return;
-                }
+                    SecretResponse response;
+                    try
+                    {
+                        response = await secretsApi.GetSecretAsync(secretName, ct);
+                    }
+                    catch (ApiException ex)
+                    {
+                        AnsiConsole.MarkupLine($"\n[red]Failed to retrieve secret:[/] {ex.Message}");
+                        return;
+                    }
 
                 var displayValue = reveal
                     ? response.Value
@@ -82,7 +89,4 @@ public sealed class GetSecretCommand
         return 0;
     }
 
-    private sealed record SecretResponse(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("value")] string Value);
 }

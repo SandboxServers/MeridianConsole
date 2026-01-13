@@ -2,14 +2,14 @@ namespace Dhadgar.Secrets.Services;
 
 public record VaultSummary(
     string Name,
-    string VaultUri,
+    Uri VaultUri,
     string Location,
     int SecretCount,
     bool Enabled);
 
 public record VaultDetail(
     string Name,
-    string VaultUri,
+    Uri VaultUri,
     string Location,
     string ResourceGroup,
     string Sku,

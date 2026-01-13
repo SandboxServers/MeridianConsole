@@ -1,6 +1,7 @@
-using System.Text.Json.Serialization;
+using System.Globalization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Member;
@@ -23,27 +24,40 @@ public sealed class ListMembersCommand
         {
             AnsiConsole.MarkupLine("[yellow]No organization specified.[/]");
             AnsiConsole.MarkupLine("[dim]Use:[/] [cyan]dhadgar member list <org-id>[/]");
-            AnsiConsole.MarkupLine("[dim]Or set current org with:[/] [cyan]dhadgar org switch <org-id>[/]");
+            AnsiConsole.MarkupLine("[dim]Or set current org with:[/] [cyan]dhadgar identity orgs switch <org-id>[/]");
             return 1;
         }
 
-        var identityUrl = config.EffectiveIdentityUrl;
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var identityApi = factory.CreateIdentityClient();
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Loading members...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
-                var members = await client.GetAsync<List<MemberListItem>>(
-                    $"{identityUrl.TrimEnd('/')}/organizations/{orgId}/members",
-                    ct);
+                    List<MemberResponse> members;
+                    try
+                    {
+                        members = await identityApi.GetMembersAsync(orgId, ct);
+                    }
+                    catch (ApiException ex)
+                    {
+                        AnsiConsole.MarkupLine($"\n[red]Failed to load members:[/] {ex.Message}");
+                        return;
+                    }
 
-                if (members is null || members.Count == 0)
-                {
-                    AnsiConsole.MarkupLine("\n[yellow]No members found.[/]");
-                    return;
-                }
+                    if (members.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine("\n[yellow]No members found.[/]");
+                        return;
+                    }
 
                 var table = new Table()
                     .Border(TableBorder.Rounded)
@@ -73,28 +87,26 @@ public sealed class ListMembersCommand
                     };
 
                     var joinedDate = member.JoinedAt.HasValue
-                        ? member.JoinedAt.Value.ToLocalTime().ToString("yyyy-MM-dd")
+                        ? member.JoinedAt.Value.ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                         : "[dim]n/a[/]";
 
+                    var idDisplay = member.Id.Length > 8
+                        ? $"{member.Id[..8]}..."
+                        : member.Id;
+
                     table.AddRow(
-                        $"[dim]{member.Id?.ToString()[..8]}...[/]",
-                        member.Email ?? "[dim]unknown[/]",
+                        $"[dim]{idDisplay}[/]",
+                        string.IsNullOrWhiteSpace(member.Email) ? "[dim]unknown[/]" : member.Email,
                         $"[{roleColor}]{member.Role}[/]",
                         statusIcon,
                         joinedDate);
                 }
 
-                AnsiConsole.Write(table);
+                    AnsiConsole.Write(table);
                 AnsiConsole.MarkupLine($"\n[dim]Total: {members.Count} member(s)[/]");
             });
 
         return 0;
     }
 
-    private sealed record MemberListItem(
-        [property: JsonPropertyName("id")] Guid? Id,
-        [property: JsonPropertyName("email")] string? Email,
-        [property: JsonPropertyName("role")] string? Role,
-        [property: JsonPropertyName("status")] string? Status,
-        [property: JsonPropertyName("joinedAt")] DateTime? JoinedAt);
 }

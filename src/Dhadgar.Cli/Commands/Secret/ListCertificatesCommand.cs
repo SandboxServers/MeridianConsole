@@ -1,6 +1,8 @@
-using System.Text.Json.Serialization;
+using System.Globalization;
+using Dhadgar.Cli.Commands;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Secret;
@@ -17,20 +19,39 @@ public sealed class ListCertificatesCommand
             return 1;
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
-        var url = string.IsNullOrWhiteSpace(vaultName)
-            ? $"{secretsUrl.TrimEnd('/')}/api/v1/certificates"
-            : $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults/{vaultName}/certificates";
+        if (!string.IsNullOrWhiteSpace(vaultName) && !CommandValidation.TryValidateVaultName(vaultName))
+        {
+            return 1;
+        }
+
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var secretsApi = factory.CreateSecretsClient();
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Loading certificates...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
-                var response = await client.GetAsync<CertificatesResponse>(url, ct);
+                    CertificateListResponse response;
+                    try
+                    {
+                        response = string.IsNullOrWhiteSpace(vaultName)
+                            ? await secretsApi.GetCertificatesAsync(ct)
+                            : await secretsApi.GetVaultCertificatesAsync(vaultName, ct);
+                    }
+                    catch (ApiException ex)
+                    {
+                        AnsiConsole.MarkupLine($"\n[red]Failed to load certificates:[/] {ex.Message}");
+                        return;
+                    }
 
-                if (response?.Certificates is null || response.Certificates.Count == 0)
+                if (response.Certificates.Count == 0)
                 {
                     AnsiConsole.MarkupLine("\n[yellow]No certificates found.[/]");
                     AnsiConsole.MarkupLine("[dim]Use [cyan]dhadgar secret import-cert[/] to add a certificate[/]");
@@ -50,7 +71,7 @@ public sealed class ListCertificatesCommand
                 {
                     var expiresIn = cert.ExpiresAt - DateTime.UtcNow;
                     var expiryColor = expiresIn.TotalDays < 30 ? "red" : expiresIn.TotalDays < 90 ? "yellow" : "green";
-                    var expiryText = cert.ExpiresAt.ToString("yyyy-MM-dd");
+                    var expiryText = cert.ExpiresAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
                     var statusIcon = cert.Enabled ? "●" : "○";
                     var statusColor = cert.Enabled ? "green" : "dim";
@@ -99,14 +120,4 @@ public sealed class ListCertificatesCommand
         return issuer.Length > 30 ? issuer[..27] + "..." : issuer;
     }
 
-    private sealed record CertificatesResponse(
-        [property: JsonPropertyName("certificates")] List<CertificateItem> Certificates);
-
-    private sealed record CertificateItem(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("subject")] string Subject,
-        [property: JsonPropertyName("issuer")] string Issuer,
-        [property: JsonPropertyName("expiresAt")] DateTime ExpiresAt,
-        [property: JsonPropertyName("thumbprint")] string Thumbprint,
-        [property: JsonPropertyName("enabled")] bool Enabled);
 }

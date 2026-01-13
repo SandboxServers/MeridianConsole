@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
-using Dhadgar.Cli.Infrastructure;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.KeyVault;
@@ -17,19 +17,43 @@ public sealed class ListVaultsCommand
             return 1;
         }
 
-        var secretsUrl = config.EffectiveSecretsUrl;
+        var exitCode = 0;
+
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var keyVaultApi = factory.CreateKeyVaultClient();
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Loading Key Vaults...[/]", async ctx =>
             {
-                using var client = new AuthenticatedHttpClient(config);
-                var response = await client.GetAsync<VaultsResponse>(
-                    $"{secretsUrl.TrimEnd('/')}/api/v1/keyvaults",
-                    ct);
 
-                if (response?.Vaults is null || response.Vaults.Count == 0)
+                KeyVaultListResponse response;
+                try
+                {
+                    response = await keyVaultApi.GetVaultsAsync(ct);
+                }
+                catch (ApiException ex)
+                {
+                    AnsiConsole.MarkupLine($"\n[red]Failed to load Key Vaults:[/] {ex.Message}");
+                    exitCode = 1;
+                    return;
+                }
+
+                if (response?.Vaults is null)
+                {
+                    AnsiConsole.MarkupLine("\n[red]Failed to load Key Vault list[/]");
+                    exitCode = 1;
+                    return;
+                }
+
+                if (response.Vaults.Count == 0)
                 {
                     AnsiConsole.MarkupLine("\n[yellow]No Key Vaults found.[/]");
                     AnsiConsole.MarkupLine("[dim]Use [cyan]dhadgar keyvault create[/] to create a new vault[/]");
@@ -65,20 +89,11 @@ public sealed class ListVaultsCommand
                     Header = new PanelHeader(" Azure Key Vaults ", Justify.Left)
                 };
 
-                AnsiConsole.Write(panel);
+                    AnsiConsole.Write(panel);
                 AnsiConsole.MarkupLine($"\n[dim]Total: {response.Vaults.Count} vault(s)[/]");
             });
 
-        return 0;
+        return exitCode;
     }
 
-    private sealed record VaultsResponse(
-        [property: JsonPropertyName("vaults")] List<VaultItem> Vaults);
-
-    private sealed record VaultItem(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("vaultUri")] string VaultUri,
-        [property: JsonPropertyName("location")] string Location,
-        [property: JsonPropertyName("secretCount")] int SecretCount,
-        [property: JsonPropertyName("enabled")] bool Enabled);
 }

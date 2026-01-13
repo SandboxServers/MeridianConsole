@@ -1,6 +1,6 @@
-using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using Dhadgar.Cli.Configuration;
+using Dhadgar.Cli.Infrastructure.Clients;
+using Refit;
 using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands.Auth;
@@ -10,12 +10,21 @@ public sealed class LoginCommand
     public static async Task<int> ExecuteAsync(
         string? clientId,
         string? clientSecret,
-        string? identityUrl,
+        Uri? identityUrl,
         CancellationToken ct)
     {
         var config = CliConfig.Load();
 
-        identityUrl ??= config.EffectiveIdentityUrl;
+        if (identityUrl is null)
+        {
+            if (!Uri.TryCreate(config.EffectiveIdentityUrl, UriKind.Absolute, out var parsedIdentityUrl))
+            {
+                AnsiConsole.MarkupLine($"[red]Invalid Identity URL:[/] {Markup.Escape(config.EffectiveIdentityUrl)}");
+                return 1;
+            }
+
+            identityUrl = parsedIdentityUrl;
+        }
 
         AnsiConsole.Write(
             new FigletText("Dhadgar")
@@ -43,54 +52,51 @@ public sealed class LoginCommand
         }
 
         // Request token using client credentials flow
+        using var factory = ApiClientFactory.TryCreate(config, null, identityUrl, null, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var identityApi = factory.CreateIdentityClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Authenticating...[/]", async ctx =>
             {
-                using var client = new HttpClient();
-                var tokenUrl = $"{identityUrl.TrimEnd('/')}/connect/token";
-
-                var request = new FormUrlEncodedContent(new Dictionary<string, string>
-                {
-                    ["grant_type"] = "client_credentials",
-                    ["client_id"] = clientId,
-                    ["client_secret"] = clientSecret,
-                    ["scope"] = "openid profile email servers:read servers:write nodes:manage"
-                });
-
-                try
-                {
-                    var response = await client.PostAsync(tokenUrl, request, ct);
-                    var content = await response.Content.ReadAsStringAsync(ct);
-
-                    if (!response.IsSuccessStatusCode)
+                    var request = new Dictionary<string, string>
                     {
-                        AnsiConsole.MarkupLine($"[red]Authentication failed:[/] {response.StatusCode}");
-                        AnsiConsole.MarkupLine($"[dim]{content}[/]");
-                        return;
-                    }
+                        ["grant_type"] = "client_credentials",
+                        ["client_id"] = clientId,
+                        ["client_secret"] = clientSecret,
+                        ["scope"] = "openid profile email servers:read servers:write nodes:manage"
+                    };
 
-                    var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(ct);
-
-                    if (tokenResponse?.AccessToken is null)
+                    try
                     {
-                        AnsiConsole.MarkupLine("[red]Failed to parse token response[/]");
-                        return;
+                        var tokenResponse = await identityApi.GetTokenAsync(request, ct);
+
+                        if (string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+                        {
+                            AnsiConsole.MarkupLine("[red]Failed to parse token response[/]");
+                            return;
+                        }
+
+                        config.AccessToken = tokenResponse.AccessToken;
+                        config.RefreshToken = tokenResponse.RefreshToken;
+                        config.IdentityUrl = identityUrl.ToString().TrimEnd('/');
+                        config.TokenExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn - 60);
+                        config.Save();
+
+                        ctx.Status("[green]Authentication successful![/]");
                     }
-
-                    config.AccessToken = tokenResponse.AccessToken;
-                    config.RefreshToken = tokenResponse.RefreshToken;
-                    config.IdentityUrl = identityUrl;
-                    config.TokenExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn - 60);
-                    config.Save();
-
-                    ctx.Status("[green]Authentication successful![/]");
-                }
-                catch (Exception ex)
-                {
-                    AnsiConsole.MarkupLine($"[red]Error:[/] {ex.Message}");
-                }
+                    catch (ApiException ex)
+                    {
+                        AnsiConsole.MarkupLine($"[red]Authentication failed:[/] {(int)ex.StatusCode} {ex.StatusCode}");
+                        WriteSafeApiErrorDetails(ex);
+                    }
             });
 
         if (config.IsAuthenticated())
@@ -111,9 +117,48 @@ public sealed class LoginCommand
         return 1;
     }
 
-    private sealed record TokenResponse(
-        [property: JsonPropertyName("access_token")] string AccessToken,
-        [property: JsonPropertyName("refresh_token")] string? RefreshToken,
-        [property: JsonPropertyName("expires_in")] int ExpiresIn,
-        [property: JsonPropertyName("token_type")] string TokenType);
+    private static void WriteSafeApiErrorDetails(ApiException ex)
+    {
+        if (string.IsNullOrWhiteSpace(ex.Content))
+        {
+            return;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(ex.Content);
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                return;
+            }
+
+            string? error = null;
+            string? description = null;
+
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (property.NameEquals("error"))
+                {
+                    error = property.Value.ToString();
+                }
+                else if (property.NameEquals("error_description"))
+                {
+                    description = property.Value.ToString();
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(error) || !string.IsNullOrWhiteSpace(description))
+            {
+                var detail = string.IsNullOrWhiteSpace(description)
+                    ? error
+                    : $"{error}: {description}";
+                AnsiConsole.MarkupLine($"[dim]{Markup.Escape(detail)}[/]");
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Ignore malformed error payloads to avoid leaking raw content.
+        }
+    }
+
 }

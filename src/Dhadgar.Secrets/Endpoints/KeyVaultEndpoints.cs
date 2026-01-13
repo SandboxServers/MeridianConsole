@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Dhadgar.Secrets.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -66,13 +67,13 @@ public static class KeyVaultEndpoints
 
         var vaults = await manager.ListVaultsAsync(ct);
 
-        return Results.Ok(new VaultsResponse(vaults.Select(v => new VaultItem(
+        return Results.Ok(new VaultsResponse(new Collection<VaultItem>(vaults.Select(v => new VaultItem(
             Name: v.Name,
             VaultUri: v.VaultUri,
             Location: v.Location,
             SecretCount: v.SecretCount,
             Enabled: v.Enabled
-        )).ToList()));
+        )).ToList())));
     }
 
     private static async Task<IResult> GetVault(
@@ -159,7 +160,7 @@ public static class KeyVaultEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            if (ex.Message.Contains("exists"))
+            if (ex.Message.Contains("exists", StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Conflict(new { error = ex.Message });
             }
@@ -215,7 +216,7 @@ public static class KeyVaultEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            if (ex.Message.Contains("not found"))
+            if (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
                 return Results.NotFound(new { error = ex.Message });
             }
@@ -253,12 +254,12 @@ public static class KeyVaultEndpoints
     }
 }
 
-public record VaultsResponse(List<VaultItem> Vaults);
-public record VaultItem(string Name, string VaultUri, string Location, int SecretCount, bool Enabled);
+public record VaultsResponse(Collection<VaultItem> Vaults);
+public record VaultItem(string Name, Uri VaultUri, string Location, int SecretCount, bool Enabled);
 
 public record VaultDetailResponse(
     string Name,
-    string VaultUri,
+    Uri VaultUri,
     string Location,
     string ResourceGroup,
     string Sku,

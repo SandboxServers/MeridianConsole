@@ -1,4 +1,5 @@
 using Refit;
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 
 namespace Dhadgar.Cli.Infrastructure.Clients;
@@ -15,7 +16,7 @@ public interface IKeyVaultApi
     Task<KeyVaultResponse> GetVaultAsync(string vaultName, CancellationToken ct = default);
 
     [Post("/api/v1/keyvaults")]
-    Task<KeyVaultCreateResponse> CreateVaultAsync([Body] CreateVaultRequest request, CancellationToken ct = default);
+    Task<KeyVaultResponse> CreateVaultAsync([Body] CreateVaultRequest request, CancellationToken ct = default);
 
     [Patch("/api/v1/keyvaults/{vaultName}")]
     Task<KeyVaultResponse> UpdateVaultAsync(string vaultName, [Body] UpdateVaultRequest request, CancellationToken ct = default);
@@ -27,7 +28,7 @@ public interface IKeyVaultApi
 public class KeyVaultListResponse
 {
     [JsonPropertyName("vaults")]
-    public List<KeyVaultSummary> Vaults { get; set; } = new();
+    public Collection<KeyVaultSummary> Vaults { get; set; } = new();
 }
 
 public class KeyVaultSummary
@@ -35,8 +36,8 @@ public class KeyVaultSummary
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
-    [JsonPropertyName("uri")]
-    public string Uri { get; set; } = string.Empty;
+    [JsonPropertyName("vaultUri")]
+    public string VaultUri { get; set; } = string.Empty;
 
     [JsonPropertyName("location")]
     public string Location { get; set; } = string.Empty;
@@ -53,8 +54,8 @@ public class KeyVaultResponse
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
-    [JsonPropertyName("uri")]
-    public string Uri { get; set; } = string.Empty;
+    [JsonPropertyName("vaultUri")]
+    public string VaultUri { get; set; } = string.Empty;
 
     [JsonPropertyName("location")]
     public string Location { get; set; } = string.Empty;
@@ -74,20 +75,26 @@ public class KeyVaultResponse
     [JsonPropertyName("certificateCount")]
     public int CertificateCount { get; set; }
 
-    [JsonPropertyName("softDeleteEnabled")]
-    public bool SoftDeleteEnabled { get; set; }
+    [JsonPropertyName("enableSoftDelete")]
+    public bool EnableSoftDelete { get; set; }
 
     [JsonPropertyName("softDeleteRetentionDays")]
     public int SoftDeleteRetentionDays { get; set; }
 
-    [JsonPropertyName("purgeProtectionEnabled")]
-    public bool PurgeProtectionEnabled { get; set; }
+    [JsonPropertyName("enablePurgeProtection")]
+    public bool EnablePurgeProtection { get; set; }
+
+    [JsonPropertyName("enableRbacAuthorization")]
+    public bool EnableRbacAuthorization { get; set; }
+
+    [JsonPropertyName("publicNetworkAccess")]
+    public string PublicNetworkAccess { get; set; } = string.Empty;
 
     [JsonPropertyName("createdAt")]
     public DateTime CreatedAt { get; set; }
 
-    [JsonPropertyName("enabled")]
-    public bool Enabled { get; set; }
+    [JsonPropertyName("updatedAt")]
+    public DateTime UpdatedAt { get; set; }
 }
 
 public class CreateVaultRequest
@@ -99,28 +106,13 @@ public class CreateVaultRequest
     public string Location { get; set; } = string.Empty;
 }
 
-public class KeyVaultCreateResponse
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
-
-    [JsonPropertyName("uri")]
-    public string Uri { get; set; } = string.Empty;
-
-    [JsonPropertyName("resourceId")]
-    public string ResourceId { get; set; } = string.Empty;
-
-    [JsonPropertyName("createdAt")]
-    public DateTime CreatedAt { get; set; }
-}
-
 public class UpdateVaultRequest
 {
-    [JsonPropertyName("softDeleteEnabled")]
-    public bool? SoftDeleteEnabled { get; set; }
+    [JsonPropertyName("enableSoftDelete")]
+    public bool? EnableSoftDelete { get; set; }
 
-    [JsonPropertyName("purgeProtectionEnabled")]
-    public bool? PurgeProtectionEnabled { get; set; }
+    [JsonPropertyName("enablePurgeProtection")]
+    public bool? EnablePurgeProtection { get; set; }
 
     [JsonPropertyName("softDeleteRetentionDays")]
     public int? SoftDeleteRetentionDays { get; set; }
