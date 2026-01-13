@@ -1,10 +1,12 @@
 using System.CommandLine;
 using Dhadgar.Cli.Commands.Auth;
+using Dhadgar.Cli.Commands.Help;
 using Dhadgar.Cli.Commands.Gateway;
 using Dhadgar.Cli.Commands.Member;
 using Dhadgar.Cli.Commands.Org;
 using Dhadgar.Cli.Commands.Secret;
 using Dhadgar.Cli.Commands.KeyVault;
+using Dhadgar.Cli.Commands.Version;
 using Spectre.Console;
 using IdentityListOrgsCommand = Dhadgar.Cli.Commands.Identity.ListOrgsCommand;
 using IdentityGetOrgCommand = Dhadgar.Cli.Commands.Identity.GetOrgCommand;
@@ -36,6 +38,8 @@ root.SetHandler(() =>
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
     table.AddRow("[cyan]dhadgar gateway[/]", "[dim]Gateway diagnostics (health check)[/]");
+    table.AddRow("[cyan]dhadgar commands[/]", "[dim]List available commands and usage[/]");
+    table.AddRow("[cyan]dhadgar version[/]", "[dim]Show CLI build and breaking change info[/]");
 
     AnsiConsole.Write(table);
 
@@ -347,6 +351,26 @@ gatewayHealthCmd.SetHandler(async () =>
 gatewayCmd.AddCommand(gatewayHealthCmd);
 
 // ============================================================================
+// COMMANDS LIST
+// ============================================================================
+
+var commandsCmd = new Command("commands", "List available commands and usage");
+commandsCmd.SetHandler(async () =>
+{
+    await CommandsCommand.ExecuteAsync(root);
+});
+
+// ============================================================================
+// VERSION COMMAND
+// ============================================================================
+
+var versionCmd = new Command("version", "Show CLI build and breaking change info");
+versionCmd.SetHandler(async () =>
+{
+    await VersionCommand.ExecuteAsync();
+});
+
+// ============================================================================
 // LEGACY PING COMMAND (keeping for backwards compatibility)
 // ============================================================================
 
@@ -380,6 +404,8 @@ root.AddCommand(memberCmd);
 root.AddCommand(secretCmd);
 root.AddCommand(keyvaultCmd);
 root.AddCommand(gatewayCmd);
+root.AddCommand(commandsCmd);
+root.AddCommand(versionCmd);
 root.AddCommand(ping);
 
 return await root.InvokeAsync(args);

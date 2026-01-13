@@ -11,6 +11,8 @@
     <Version>0.1.0</Version>
     <Authors>Meridian Console Team</Authors>
     <Description>Beautiful command-line interface for Meridian Console game server control plane</Description>
+    <BuildDateUtc>$([System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))</BuildDateUtc>
+    <BreakingChangeUtc>2026-01-12T00:00:00Z</BreakingChangeUtc>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +24,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="BuildDateUtc" Value="$(BuildDateUtc)" />
+    <AssemblyMetadata Include="BreakingChangeUtc" Value="$(BreakingChangeUtc)" />
   </ItemGroup>
 
   <!-- Auto-install as global tool after build (not publish to avoid infinite loop) -->
