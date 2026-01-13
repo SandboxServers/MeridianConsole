@@ -11,7 +11,8 @@ pr:
       - develop
 
 pool:
-  name: Sandbox Servers Agents
+  name: "Sandbox Servers Agents"
+
 parameters:
   - name: servicesCsv
     type: string
