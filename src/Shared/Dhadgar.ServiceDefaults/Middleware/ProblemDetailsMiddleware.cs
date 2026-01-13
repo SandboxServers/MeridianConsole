@@ -1,14 +1,16 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-namespace Dhadgar.Gateway.Middleware;
+namespace Dhadgar.ServiceDefaults.Middleware;
 
 /// <summary>
 /// Middleware that transforms exceptions into RFC 7807 Problem Details responses.
-/// Ensures consistent error handling across all backend services.
 /// </summary>
-public class ProblemDetailsMiddleware
+public sealed class ProblemDetailsMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ProblemDetailsMiddleware> _logger;
@@ -43,7 +45,6 @@ public class ProblemDetailsMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        // Cannot modify the response after headers/body have started
         if (context.Response.HasStarted)
         {
             _logger.LogWarning(
@@ -55,7 +56,7 @@ public class ProblemDetailsMiddleware
         var traceId = context.Items["CorrelationId"]?.ToString() ?? "unknown";
 
         _logger.LogError(exception,
-            "Unhandled exception in Gateway. TraceId: {TraceId}, Path: {Path}",
+            "Unhandled exception. TraceId: {TraceId}, Path: {Path}",
             traceId, context.Request.Path);
 
         var problemDetails = new
@@ -68,7 +69,6 @@ public class ProblemDetailsMiddleware
                 : "An unexpected error occurred. Please contact support with the trace ID.",
             instance = context.Request.Path.ToString(),
             traceId = traceId,
-            // Include stack trace only in Development
             extensions = _environment.IsDevelopment()
                 ? new { stackTrace = exception.StackTrace }
                 : null

@@ -2,10 +2,13 @@ using System.Net;
 using Dhadgar.Gateway;
 using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
+using Dhadgar.ServiceDefaults.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -64,18 +67,57 @@ builder.Services.AddReverseProxy()
 // HttpClient for diagnostics endpoints
 builder.Services.AddHttpClient();
 
+var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+Uri? otlpUri = null;
+if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+{
+    if (!Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out otlpUri))
+    {
+        Console.WriteLine($"Warning: Invalid OpenTelemetry:OtlpEndpoint '{otlpEndpoint}'. OTLP export disabled.");
+        otlpUri = null;
+    }
+}
+var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Gateway");
+
+builder.Logging.AddOpenTelemetry(options =>
+{
+    options.SetResourceBuilder(resourceBuilder);
+    options.IncludeFormattedMessage = true;
+    options.IncludeScopes = true;
+    options.ParseStateValues = true;
+
+    if (otlpUri is not null)
+    {
+        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
+    }
+});
+
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing
-            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Dhadgar.Gateway"))
+            .SetResourceBuilder(resourceBuilder)
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation();
 
-        var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        if (otlpUri is not null)
         {
-            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
+        }
+        // OTLP export requires explicit endpoint configuration; skipped when not set
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddProcessInstrumentation();
+
+        if (otlpUri is not null)
+        {
+            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
         }
         // OTLP export requires explicit endpoint configuration; skipped when not set
     });
@@ -213,27 +255,27 @@ app.UseForwardedHeaders();
 // 1. Security headers (earliest to apply to all responses)
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-// 2. Problem Details exception handler (catch exceptions early)
-app.UseMiddleware<ProblemDetailsMiddleware>();
-
-// 3. CORS (before authentication/authorization)
-app.UseCors(CorsConfiguration.PolicyName);
-
-// 4. Correlation ID tracking (needed by all downstream middleware)
+// 2. Correlation ID tracking (needed by all downstream middleware)
 app.UseMiddleware<CorrelationMiddleware>();
 
-// 5. Authentication/authorization
+// 3. Problem Details exception handler (catch exceptions early)
+app.UseMiddleware<ProblemDetailsMiddleware>();
+
+// 4. Request logging (wraps downstream pipeline)
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+// 5. CORS (before authentication/authorization)
+app.UseCors(CorsConfiguration.PolicyName);
+
+// 6. Authentication/authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 6. Rate limiting (after auth so tenant/agent context is available)
+// 7. Rate limiting (after auth so tenant/agent context is available)
 app.UseRateLimiter();
 
-// 7. Request enrichment WITH HEADER STRIPPING (runs after auth to inject validated claims)
+// 8. Request enrichment WITH HEADER STRIPPING (runs after auth to inject validated claims)
 app.UseMiddleware<RequestEnrichmentMiddleware>();
-
-// 8. Request logging (after enrichment)
-app.UseMiddleware<RequestLoggingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
