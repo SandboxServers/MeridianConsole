@@ -6,6 +6,11 @@ using Dhadgar.Cli.Commands.Org;
 using Dhadgar.Cli.Commands.Secret;
 using Dhadgar.Cli.Commands.KeyVault;
 using Spectre.Console;
+using IdentityListOrgsCommand = Dhadgar.Cli.Commands.Identity.ListOrgsCommand;
+using IdentityGetOrgCommand = Dhadgar.Cli.Commands.Identity.GetOrgCommand;
+using IdentityCreateOrgCommand = Dhadgar.Cli.Commands.Identity.CreateOrgCommand;
+using IdentityUpdateOrgCommand = Dhadgar.Cli.Commands.Identity.UpdateOrgCommand;
+using IdentityDeleteOrgCommand = Dhadgar.Cli.Commands.Identity.DeleteOrgCommand;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
 
@@ -25,6 +30,7 @@ root.SetHandler(() =>
         .AddColumn("");
 
     table.AddRow("[cyan]dhadgar auth[/]", "[dim]Authentication commands (login, status, logout)[/]");
+    table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs CRUD)[/]");
     table.AddRow("[cyan]dhadgar org[/]", "[dim]Organization management (list, create, switch)[/]");
     table.AddRow("[cyan]dhadgar member[/]", "[dim]Member management (list, invite, remove)[/]");
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
@@ -69,6 +75,67 @@ authLogoutCmd.SetHandler(async () =>
 authCmd.AddCommand(authLoginCmd);
 authCmd.AddCommand(authStatusCmd);
 authCmd.AddCommand(authLogoutCmd);
+
+// ============================================================================
+// IDENTITY COMMANDS
+// ============================================================================
+
+var identityCmd = new Command("identity", "Identity service commands");
+var identityOrgsCmd = new Command("orgs", "Organization management");
+
+var identityOrgsListCmd = new Command("list", "List organizations");
+identityOrgsListCmd.SetHandler(async () =>
+{
+    await IdentityListOrgsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var identityOrgsGetCmd = new Command("get", "Get an organization by id");
+var identityOrgIdArg = new Argument<string>("org-id", "Organization ID");
+identityOrgsGetCmd.AddArgument(identityOrgIdArg);
+identityOrgsGetCmd.SetHandler(async (string orgId) =>
+{
+    await IdentityGetOrgCommand.ExecuteAsync(orgId, CancellationToken.None);
+}, identityOrgIdArg);
+
+var identityOrgsCreateCmd = new Command("create", "Create an organization");
+var identityOrgNameOpt = new Option<string>("--name", "Organization name") { IsRequired = true };
+var identityOrgDescriptionOpt = new Option<string?>("--description", "Organization description");
+identityOrgsCreateCmd.AddOption(identityOrgNameOpt);
+identityOrgsCreateCmd.AddOption(identityOrgDescriptionOpt);
+identityOrgsCreateCmd.SetHandler(async (string name, string? description) =>
+{
+    await IdentityCreateOrgCommand.ExecuteAsync(name, description, CancellationToken.None);
+}, identityOrgNameOpt, identityOrgDescriptionOpt);
+
+var identityOrgsUpdateCmd = new Command("update", "Update an organization");
+var identityUpdateOrgIdArg = new Argument<string>("org-id", "Organization ID");
+var identityUpdateNameOpt = new Option<string?>("--name", "Organization name");
+var identityUpdateDescriptionOpt = new Option<string?>("--description", "Organization description");
+identityOrgsUpdateCmd.AddArgument(identityUpdateOrgIdArg);
+identityOrgsUpdateCmd.AddOption(identityUpdateNameOpt);
+identityOrgsUpdateCmd.AddOption(identityUpdateDescriptionOpt);
+identityOrgsUpdateCmd.SetHandler(async (string orgId, string? name, string? description) =>
+{
+    await IdentityUpdateOrgCommand.ExecuteAsync(orgId, name, description, CancellationToken.None);
+}, identityUpdateOrgIdArg, identityUpdateNameOpt, identityUpdateDescriptionOpt);
+
+var identityOrgsDeleteCmd = new Command("delete", "Delete an organization");
+var identityDeleteOrgIdArg = new Argument<string>("org-id", "Organization ID");
+var identityDeleteForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+identityOrgsDeleteCmd.AddArgument(identityDeleteOrgIdArg);
+identityOrgsDeleteCmd.AddOption(identityDeleteForceOpt);
+identityOrgsDeleteCmd.SetHandler(async (string orgId, bool force) =>
+{
+    await IdentityDeleteOrgCommand.ExecuteAsync(orgId, force, CancellationToken.None);
+}, identityDeleteOrgIdArg, identityDeleteForceOpt);
+
+identityOrgsCmd.AddCommand(identityOrgsListCmd);
+identityOrgsCmd.AddCommand(identityOrgsGetCmd);
+identityOrgsCmd.AddCommand(identityOrgsCreateCmd);
+identityOrgsCmd.AddCommand(identityOrgsUpdateCmd);
+identityOrgsCmd.AddCommand(identityOrgsDeleteCmd);
+
+identityCmd.AddCommand(identityOrgsCmd);
 
 // ============================================================================
 // ORG COMMANDS
@@ -307,6 +374,7 @@ ping.SetHandler(async (string url) =>
 // ============================================================================
 
 root.AddCommand(authCmd);
+root.AddCommand(identityCmd);
 root.AddCommand(orgCmd);
 root.AddCommand(memberCmd);
 root.AddCommand(secretCmd);
