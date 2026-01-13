@@ -70,7 +70,7 @@ public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<Identi
     public async Task ClientCredentials_WithValidCredentials_IssuesAccessToken()
     {
         // Arrange: Client credentials grant request
-        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = DevClientId,
@@ -113,7 +113,7 @@ public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<Identi
     public async Task ClientCredentials_WithInvalidClientId_Returns400()
     {
         // Arrange: Invalid client ID
-        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = "invalid-client",
@@ -136,7 +136,7 @@ public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<Identi
     public async Task ClientCredentials_WithInvalidClientSecret_Returns400()
     {
         // Arrange: Invalid client secret
-        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = DevClientId,
@@ -159,7 +159,7 @@ public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<Identi
     public async Task ClientCredentials_WithUnauthorizedScope_Returns400()
     {
         // Arrange: Request scope not granted to this client
-        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = DevClientId,
@@ -182,7 +182,7 @@ public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<Identi
     public async Task ClientCredentials_WithWifScope_IssuesAzureCompatibleToken()
     {
         // Arrange: Request WIF scope for Azure Workload Identity Federation
-        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = DevClientId,
@@ -215,7 +215,7 @@ public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<Identi
     public async Task ClientCredentials_CanRequestMultipleScopes()
     {
         // Arrange: Request multiple scopes
-        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = DevClientId,
@@ -250,7 +250,7 @@ public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<Identi
     public async Task ClientCredentials_WithMissingGrantType_Returns400()
     {
         // Arrange: Missing grant_type
-        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = DevClientId,
             ["client_secret"] = DevClientSecret,

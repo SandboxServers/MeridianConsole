@@ -51,7 +51,7 @@ public sealed class OAuthProviderIntegrationTests : IClassFixture<IdentityWebApp
         {
             Assert.NotNull(response.Headers.Location);
             // In testing environment, mock providers redirect to example.test
-            Assert.Contains("example.test", response.Headers.Location.ToString());
+            Assert.Contains("example.test", response.Headers.Location.ToString(), StringComparison.Ordinal);
         }
     }
 

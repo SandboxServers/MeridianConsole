@@ -25,6 +25,7 @@ public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityW
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private ExchangeTokenOptions? _exchangeOptions;
+    private static readonly ECDsa ExchangeSigningKey = IdentityWebApplicationFactory.CreateExchangeTokenKey();
 
     public AuthenticationFlowIntegrationTests(IdentityWebApplicationFactory factory)
     {
@@ -269,8 +270,6 @@ public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityW
             throw new InvalidOperationException("Exchange token options not initialized.");
         }
 
-        var signingKey = IdentityWebApplicationFactory.CreateExchangeTokenKey();
-
         var iat = issuedAt ?? DateTimeOffset.UtcNow;
         var exp = expiresIn ?? TimeSpan.FromSeconds(60);
 
@@ -291,7 +290,7 @@ public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityW
             IssuedAt = iat.UtcDateTime,
             NotBefore = iat.UtcDateTime,
             SigningCredentials = new SigningCredentials(
-                new ECDsaSecurityKey(signingKey),
+                new ECDsaSecurityKey(ExchangeSigningKey),
                 SecurityAlgorithms.EcdsaSha256)
         };
 
