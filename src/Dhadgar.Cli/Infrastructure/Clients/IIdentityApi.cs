@@ -35,6 +35,53 @@ public interface IIdentityApi
 
     [Get("/organizations/{orgId}/members")]
     Task<List<MemberResponse>> GetMembersAsync(string orgId, CancellationToken ct = default);
+
+    [Get("/organizations/{orgId}/users")]
+    Task<List<UserSummaryResponse>> GetUsersAsync(string orgId, CancellationToken ct = default);
+
+    [Get("/organizations/{orgId}/users/{userId}")]
+    Task<UserDetailResponse> GetUserAsync(string orgId, string userId, CancellationToken ct = default);
+
+    [Post("/organizations/{orgId}/users")]
+    Task<UserDetailResponse> CreateUserAsync(string orgId, [Body] CreateUserRequest request, CancellationToken ct = default);
+
+    [Patch("/organizations/{orgId}/users/{userId}")]
+    Task<UserDetailResponse> UpdateUserAsync(string orgId, string userId, [Body] UpdateUserRequest request, CancellationToken ct = default);
+
+    [Delete("/organizations/{orgId}/users/{userId}")]
+    Task DeleteUserAsync(string orgId, string userId, CancellationToken ct = default);
+
+    [Get("/organizations/{orgId}/users/search")]
+    Task<List<UserSummaryResponse>> SearchUsersAsync(
+        string orgId,
+        [AliasAs("query")] string query,
+        CancellationToken ct = default);
+
+    [Get("/organizations/search")]
+    Task<List<OrganizationResponse>> SearchOrganizationsAsync(
+        [AliasAs("query")] string query,
+        CancellationToken ct = default);
+
+    [Get("/organizations/{orgId}/roles")]
+    Task<List<RoleSummaryResponse>> GetRolesAsync(string orgId, CancellationToken ct = default);
+
+    [Get("/organizations/{orgId}/roles/{roleId}")]
+    Task<RoleSummaryResponse> GetRoleAsync(string orgId, string roleId, CancellationToken ct = default);
+
+    [Post("/organizations/{orgId}/roles")]
+    Task<RoleSummaryResponse> CreateRoleAsync(string orgId, [Body] CreateRoleRequest request, CancellationToken ct = default);
+
+    [Post("/organizations/{orgId}/roles/{roleId}/assign")]
+    Task<RoleAssignmentResponse> AssignRoleAsync(string orgId, string roleId, [Body] RoleAssignmentRequest request, CancellationToken ct = default);
+
+    [Post("/organizations/{orgId}/roles/{roleId}/revoke")]
+    Task<RoleAssignmentResponse> RevokeRoleAsync(string orgId, string roleId, [Body] RoleAssignmentRequest request, CancellationToken ct = default);
+
+    [Get("/organizations/{orgId}/roles/search")]
+    Task<List<RoleSummaryResponse>> SearchRolesAsync(
+        string orgId,
+        [AliasAs("query")] string query,
+        CancellationToken ct = default);
 }
 
 public class TokenResponse
@@ -60,8 +107,17 @@ public class OrganizationResponse
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
+    [JsonPropertyName("slug")]
+    public string? Slug { get; set; }
+
     [JsonPropertyName("role")]
     public string Role { get; set; } = string.Empty;
+
+    [JsonPropertyName("isActive")]
+    public bool? IsActive { get; set; }
+
+    [JsonPropertyName("ownerId")]
+    public string? OwnerId { get; set; }
 }
 
 public class MemberResponse
@@ -171,4 +227,174 @@ public class SwitchOrganizationResponse
 
     [JsonPropertyName("permissions")]
     public Collection<string>? Permissions { get; set; }
+}
+
+public class UserSummaryResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = string.Empty;
+
+    [JsonPropertyName("isActive")]
+    public bool IsActive { get; set; }
+
+    [JsonPropertyName("joinedAt")]
+    public DateTime JoinedAt { get; set; }
+
+    [JsonPropertyName("linkedProviders")]
+    public Collection<string>? LinkedProviders { get; set; }
+}
+
+public class UserDetailResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("emailVerified")]
+    public bool EmailVerified { get; set; }
+
+    [JsonPropertyName("hasPasskeysRegistered")]
+    public bool HasPasskeysRegistered { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; }
+
+    [JsonPropertyName("updatedAt")]
+    public DateTime? UpdatedAt { get; set; }
+
+    [JsonPropertyName("lastAuthenticatedAt")]
+    public DateTime? LastAuthenticatedAt { get; set; }
+
+    [JsonPropertyName("organizationId")]
+    public string OrganizationId { get; set; } = string.Empty;
+
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = string.Empty;
+
+    [JsonPropertyName("isActive")]
+    public bool IsActive { get; set; }
+
+    [JsonPropertyName("joinedAt")]
+    public DateTime JoinedAt { get; set; }
+
+    [JsonPropertyName("linkedAccounts")]
+    public Collection<LinkedAccountResponse>? LinkedAccounts { get; set; }
+}
+
+public class LinkedAccountResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("provider")]
+    public string Provider { get; set; } = string.Empty;
+
+    [JsonPropertyName("providerAccountId")]
+    public string ProviderAccountId { get; set; } = string.Empty;
+
+    [JsonPropertyName("metadata")]
+    public LinkedAccountMetadataResponse? Metadata { get; set; }
+
+    [JsonPropertyName("linkedAt")]
+    public DateTime LinkedAt { get; set; }
+
+    [JsonPropertyName("lastUsedAt")]
+    public DateTime? LastUsedAt { get; set; }
+}
+
+public class LinkedAccountMetadataResponse
+{
+    [JsonPropertyName("avatarUrl")]
+    public string? AvatarUrl { get; set; }
+
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
+
+    [JsonPropertyName("extraData")]
+    public Dictionary<string, string>? ExtraData { get; set; }
+}
+
+public class CreateUserRequest
+{
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [JsonPropertyName("displayName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DisplayName { get; set; }
+}
+
+public class UpdateUserRequest
+{
+    [JsonPropertyName("email")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Email { get; set; }
+
+    [JsonPropertyName("displayName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DisplayName { get; set; }
+}
+
+public class RoleSummaryResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("isSystem")]
+    public bool IsSystem { get; set; }
+
+    [JsonPropertyName("permissions")]
+    public Collection<string>? Permissions { get; set; }
+}
+
+public class CreateRoleRequest
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("permissions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Collection<string>? Permissions { get; set; }
+}
+
+public class RoleAssignmentRequest
+{
+    [JsonPropertyName("userId")]
+    public string UserId { get; set; } = string.Empty;
+}
+
+public class RoleAssignmentResponse
+{
+    [JsonPropertyName("userId")]
+    public string UserId { get; set; } = string.Empty;
+
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = string.Empty;
 }

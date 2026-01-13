@@ -88,8 +88,9 @@ public sealed class MembershipService
             return ServiceResult.Fail<UserOrganization>("invites_disabled");
         }
 
-        var role = string.IsNullOrWhiteSpace(request.Role) ? "viewer" : request.Role!.Trim().ToLowerInvariant();
-        if (!RoleDefinitions.IsValidRole(role))
+        var roleInput = string.IsNullOrWhiteSpace(request.Role) ? "viewer" : request.Role!;
+        var roleResolution = await ResolveRoleAsync(organizationId, roleInput, ct);
+        if (roleResolution is null)
         {
             return ServiceResult.Fail<UserOrganization>("invalid_role");
         }
@@ -132,7 +133,7 @@ public sealed class MembershipService
         {
             UserId = user.Id,
             OrganizationId = organizationId,
-            Role = role,
+            Role = roleResolution.Name,
             IsActive = false,
             JoinedAt = now,
             InvitedByUserId = invitedByUserId
@@ -256,7 +257,8 @@ public sealed class MembershipService
         string role,
         CancellationToken ct = default)
     {
-        if (!RoleDefinitions.IsValidRole(role))
+        var roleResolution = await ResolveRoleAsync(organizationId, role, ct);
+        if (roleResolution is null)
         {
             return ServiceResult.Fail<UserOrganization>("invalid_role");
         }
@@ -275,7 +277,9 @@ public sealed class MembershipService
             return ServiceResult.Fail<UserOrganization>("actor_not_member");
         }
 
-        if (!RoleDefinitions.CanAssignRole(actorMembership.Role, role))
+        if (roleResolution.IsSystem &&
+            RoleDefinitions.IsValidRole(actorMembership.Role) &&
+            !RoleDefinitions.CanAssignRole(actorMembership.Role, roleResolution.Name))
         {
             return ServiceResult.Fail<UserOrganization>("forbidden_role_assignment");
         }
@@ -292,7 +296,7 @@ public sealed class MembershipService
             return ServiceResult.Fail<UserOrganization>("membership_not_found");
         }
 
-        membership.Role = role;
+        membership.Role = roleResolution.Name;
         await _dbContext.SaveChangesAsync(ct);
 
         await PublishMembershipChangedAsync(new OrgMembershipChanged(
@@ -451,4 +455,34 @@ public sealed class MembershipService
                 message.OrganizationId);
         }
     }
+
+    private async Task<RoleResolution?> ResolveRoleAsync(
+        Guid organizationId,
+        string roleInput,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(roleInput))
+        {
+            return null;
+        }
+
+        var trimmed = roleInput.Trim();
+        if (RoleDefinitions.IsValidRole(trimmed))
+        {
+            return new RoleResolution(trimmed.ToLowerInvariant(), true);
+        }
+
+        var normalized = trimmed.ToUpperInvariant();
+        var customRole = await _dbContext.OrganizationRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(role =>
+                role.OrganizationId == organizationId &&
+                role.NormalizedName == normalized, ct);
+
+        return customRole is null
+            ? null
+            : new RoleResolution(customRole.Name, false);
+    }
+
+    private sealed record RoleResolution(string Name, bool IsSystem);
 }

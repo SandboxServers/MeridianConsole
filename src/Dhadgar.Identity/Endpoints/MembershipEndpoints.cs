@@ -1,4 +1,3 @@
-using Dhadgar.Identity.Authorization;
 using Dhadgar.Identity.Services;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -147,8 +146,8 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        var role = request.Role?.Trim().ToLowerInvariant() ?? string.Empty;
-        if (!RoleDefinitions.IsValidRole(role))
+        var role = request.Role?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(role))
         {
             return Results.BadRequest(new { error = "invalid_role" });
         }

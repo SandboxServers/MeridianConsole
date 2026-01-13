@@ -63,6 +63,45 @@ public sealed class OrganizationService
         return memberships;
     }
 
+    public async Task<IReadOnlyCollection<OrganizationSummary>> SearchForUserAsync(
+        Guid userId,
+        string query,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return Array.Empty<OrganizationSummary>();
+        }
+
+        var term = query.Trim();
+        var pattern = $"%{term}%";
+
+        var memberships = await _dbContext.UserOrganizations
+            .AsNoTracking()
+            .Where(uo => uo.UserId == userId && uo.LeftAt == null)
+            .Join(_dbContext.Organizations.AsNoTracking(),
+                membership => membership.OrganizationId,
+                org => org.Id,
+                (membership, org) => new
+                {
+                    membership,
+                    org
+                })
+            .Where(entry =>
+                EF.Functions.Like(entry.org.Name, pattern) ||
+                EF.Functions.Like(entry.org.Slug, pattern))
+            .Select(entry => new OrganizationSummary(
+                entry.org.Id,
+                entry.org.Name,
+                entry.org.Slug,
+                entry.membership.Role,
+                entry.membership.IsActive,
+                entry.org.OwnerId))
+            .ToListAsync(ct);
+
+        return memberships;
+    }
+
     public async Task<ServiceResult<OrganizationDetail>> GetAsync(Guid organizationId, CancellationToken ct = default)
     {
         var org = await _dbContext.Organizations

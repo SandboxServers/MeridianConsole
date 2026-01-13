@@ -89,6 +89,8 @@ builder.Services.AddScoped<ILinkedAccountService, LinkedAccountService>();
 builder.Services.AddScoped<OrganizationService>();
 builder.Services.AddScoped<MembershipService>();
 builder.Services.AddScoped<OrganizationSwitchService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<RoleService>();
 
 // Memory cache for webhook secret caching
 builder.Services.AddMemoryCache();
@@ -522,6 +524,9 @@ app.MapPost("/exchange", TokenExchangeEndpoint.Handle);
 OAuthEndpoints.Map(app);
 OrganizationEndpoints.Map(app);
 MembershipEndpoints.Map(app);
+UserEndpoints.Map(app);
+RoleEndpoints.Map(app);
+SearchEndpoints.Map(app);
 WebhookEndpoint.Map(app);
 
 await app.RunAsync();

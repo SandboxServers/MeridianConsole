@@ -17,6 +17,7 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
     public DbSet<LinkedAccount> LinkedAccounts => Set<LinkedAccount>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<ClaimDefinition> ClaimDefinitions => Set<ClaimDefinition>();
+    public DbSet<OrganizationRole> OrganizationRoles => Set<OrganizationRole>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -29,6 +30,7 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
         builder.ApplyConfiguration(new LinkedAccountConfiguration());
         builder.ApplyConfiguration(new RefreshTokenConfiguration());
         builder.ApplyConfiguration(new ClaimDefinitionConfiguration());
+        builder.ApplyConfiguration(new OrganizationRoleConfiguration());
 
         builder.UseOpenIddict();
 

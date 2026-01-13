@@ -10,8 +10,8 @@ public sealed class UserOrganization
     public Guid OrganizationId { get; set; }
 
     /// <summary>
-    /// Role within this organization (owner, admin, operator, viewer)
-    /// Role implies a set of claims (see RoleDefinitions)
+    /// Role within this organization (system or custom).
+    /// Role implies a set of claims (system definitions or organization roles).
     /// </summary>
     [Required]
     [MaxLength(50)]
