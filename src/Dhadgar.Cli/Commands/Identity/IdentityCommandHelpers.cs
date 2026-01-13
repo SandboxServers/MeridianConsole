@@ -7,6 +7,10 @@ namespace Dhadgar.Cli.Commands.Identity;
 
 internal static class IdentityCommandHelpers
 {
+    private static readonly bool IncludeErrorDetails =
+        string.Equals(Environment.GetEnvironmentVariable("DHADGAR_CLI_DEBUG"), "1", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("DHADGAR_CLI_DEBUG"), "true", StringComparison.OrdinalIgnoreCase);
+
     private static readonly JsonSerializerOptions OutputOptions = new()
     {
         WriteIndented = true,
@@ -32,7 +36,7 @@ internal static class IdentityCommandHelpers
 
     public static int WriteError(string code, string message, object? details = null)
     {
-        WriteJson(new { error = code, message, details });
+        WriteJson(new { error = code, message, details = SanitizeDetails(details) });
         return 1;
     }
 
@@ -72,5 +76,69 @@ internal static class IdentityCommandHelpers
         }
 
         return JsonSerializer.Deserialize<T>(body, InputOptions);
+    }
+
+    private static object? SanitizeDetails(object? details)
+    {
+        if (details is null)
+        {
+            return null;
+        }
+
+        if (IncludeErrorDetails)
+        {
+            return details;
+        }
+
+        if (details is JsonElement element)
+        {
+            return ExtractSafeDetails(element);
+        }
+
+        if (details is string)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static Dictionary<string, string>? ExtractSafeDetails(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var safe = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!IsSafeErrorField(property.Name))
+            {
+                continue;
+            }
+
+            if (property.Value.ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+
+            safe[property.Name] = property.Value.ToString();
+        }
+
+        return safe.Count == 0 ? null : safe;
+    }
+
+    private static bool IsSafeErrorField(string name)
+    {
+        return name.Equals("error", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("error_description", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("error_uri", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("message", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("code", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("correlation_id", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("trace_id", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("request_id", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("requestId", StringComparison.OrdinalIgnoreCase);
     }
 }

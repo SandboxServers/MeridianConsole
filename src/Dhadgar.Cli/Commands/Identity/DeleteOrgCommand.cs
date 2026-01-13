@@ -31,7 +31,12 @@ public sealed class DeleteOrgCommand
             return 0;
         }
 
-        using var factory = new ApiClientFactory(config);
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            return IdentityCommandHelpers.WriteError("invalid_config", error);
+        }
+
         var identityApi = factory.CreateIdentityClient();
 
         try

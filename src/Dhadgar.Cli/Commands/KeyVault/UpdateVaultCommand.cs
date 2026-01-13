@@ -1,3 +1,4 @@
+using Dhadgar.Cli.Commands;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
 using Refit;
@@ -20,6 +21,11 @@ public sealed class UpdateVaultCommand
         if (!config.IsAuthenticated())
         {
             AnsiConsole.MarkupLine("[red]Not authenticated.[/] Run [cyan]dhadgar auth login[/] first.");
+            return 1;
+        }
+
+        if (!CommandValidation.TryValidateVaultName(vaultName))
+        {
             return 1;
         }
 
@@ -69,13 +75,20 @@ public sealed class UpdateVaultCommand
             return 0;
         }
 
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var keyVaultApi = factory.CreateKeyVaultClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Updating Key Vault '{vaultName}'...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var keyVaultApi = factory.CreateKeyVaultClient();
 
                 try
                 {

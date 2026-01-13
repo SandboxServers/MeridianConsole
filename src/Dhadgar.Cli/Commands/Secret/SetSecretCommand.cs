@@ -56,20 +56,26 @@ public sealed class SetSecretCommand
             return 1;
         }
 
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var secretsApi = factory.CreateSecretsClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Setting secret '{secretName}'...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var secretsApi = factory.CreateSecretsClient();
-
-                try
-                {
-                    var response = await secretsApi.SetSecretAsync(
-                        secretName,
-                        new SetSecretRequest { Value = value },
-                        ct);
+                    try
+                    {
+                        var response = await secretsApi.SetSecretAsync(
+                            secretName,
+                            new SetSecretRequest { Value = value },
+                            ct);
 
                     if (response != null)
                     {

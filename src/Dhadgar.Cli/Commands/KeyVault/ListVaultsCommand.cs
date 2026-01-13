@@ -19,13 +19,20 @@ public sealed class ListVaultsCommand
 
         var exitCode = 0;
 
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var keyVaultApi = factory.CreateKeyVaultClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Loading Key Vaults...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var keyVaultApi = factory.CreateKeyVaultClient();
 
                 KeyVaultListResponse response;
                 try
@@ -82,7 +89,7 @@ public sealed class ListVaultsCommand
                     Header = new PanelHeader(" Azure Key Vaults ", Justify.Left)
                 };
 
-                AnsiConsole.Write(panel);
+                    AnsiConsole.Write(panel);
                 AnsiConsole.MarkupLine($"\n[dim]Total: {response.Vaults.Count} vault(s)[/]");
             });
 

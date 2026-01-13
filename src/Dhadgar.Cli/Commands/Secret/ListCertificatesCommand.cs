@@ -1,4 +1,5 @@
 using System.Globalization;
+using Dhadgar.Cli.Commands;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
 using Refit;
@@ -18,26 +19,37 @@ public sealed class ListCertificatesCommand
             return 1;
         }
 
+        if (!string.IsNullOrWhiteSpace(vaultName) && !CommandValidation.TryValidateVaultName(vaultName))
+        {
+            return 1;
+        }
+
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var secretsApi = factory.CreateSecretsClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Loading certificates...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var secretsApi = factory.CreateSecretsClient();
-
-                CertificateListResponse response;
-                try
-                {
-                    response = string.IsNullOrWhiteSpace(vaultName)
-                        ? await secretsApi.GetCertificatesAsync(ct)
-                        : await secretsApi.GetVaultCertificatesAsync(vaultName, ct);
-                }
-                catch (ApiException ex)
-                {
-                    AnsiConsole.MarkupLine($"\n[red]Failed to load certificates:[/] {ex.Message}");
-                    return;
-                }
+                    CertificateListResponse response;
+                    try
+                    {
+                        response = string.IsNullOrWhiteSpace(vaultName)
+                            ? await secretsApi.GetCertificatesAsync(ct)
+                            : await secretsApi.GetVaultCertificatesAsync(vaultName, ct);
+                    }
+                    catch (ApiException ex)
+                    {
+                        AnsiConsole.MarkupLine($"\n[red]Failed to load certificates:[/] {ex.Message}");
+                        return;
+                    }
 
                 if (response.Certificates.Count == 0)
                 {

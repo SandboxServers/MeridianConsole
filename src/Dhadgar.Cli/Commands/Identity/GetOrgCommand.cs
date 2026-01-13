@@ -20,7 +20,12 @@ public sealed class GetOrgCommand
             return IdentityCommandHelpers.WriteError("org_id_required", "Organization ID is required.");
         }
 
-        using var factory = new ApiClientFactory(config);
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            return IdentityCommandHelpers.WriteError("invalid_config", error);
+        }
+
         var identityApi = factory.CreateIdentityClient();
 
         try

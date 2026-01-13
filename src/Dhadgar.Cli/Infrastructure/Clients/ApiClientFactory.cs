@@ -49,11 +49,45 @@ public sealed class ApiClientFactory : IDisposable
 
     public ApiClientFactory(CliConfig config)
         : this(
-            gatewayUrl: new Uri(config.EffectiveGatewayUrl),
-            identityUrl: new Uri(config.EffectiveIdentityUrl),
-            secretsUrl: NormalizeSecretsBase(config.SecretsUrl ?? config.EffectiveGatewayUrl),
+            gatewayUrl: EnsureAbsoluteUri(config.EffectiveGatewayUrl, "Gateway URL"),
+            identityUrl: EnsureAbsoluteUri(config.EffectiveIdentityUrl, "Identity URL"),
+            secretsUrl: NormalizeSecretsBase(EnsureAbsoluteUri(config.SecretsUrl ?? config.EffectiveGatewayUrl, "Secrets URL")),
             accessToken: config.AccessToken)
     {
+    }
+
+    public static ApiClientFactory? TryCreate(
+        CliConfig config,
+        out string error)
+    {
+        return TryCreate(config, null, null, null, out error);
+    }
+
+    public static ApiClientFactory? TryCreate(
+        CliConfig config,
+        Uri? gatewayUrlOverride,
+        Uri? identityUrlOverride,
+        Uri? secretsUrlOverride,
+        out string error)
+    {
+        error = string.Empty;
+
+        if (!TryResolveUri(gatewayUrlOverride, config.EffectiveGatewayUrl, "Gateway URL", out var gatewayUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveUri(identityUrlOverride, config.EffectiveIdentityUrl, "Identity URL", out var identityUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveSecretsUri(secretsUrlOverride, config.SecretsUrl ?? config.EffectiveGatewayUrl, out var secretsUri, out error))
+        {
+            return null;
+        }
+
+        return new ApiClientFactory(gatewayUri, identityUri, secretsUri, config.AccessToken);
     }
 
     public IIdentityApi CreateIdentityClient()
@@ -119,9 +153,8 @@ public sealed class ApiClientFactory : IDisposable
         };
     }
 
-    private static Uri NormalizeSecretsBase(string rawUrl)
+    private static Uri NormalizeSecretsBase(Uri uri)
     {
-        var uri = new Uri(rawUrl);
         var path = uri.AbsolutePath.TrimEnd('/');
         const string suffix = "/api/v1/secrets";
 
@@ -138,6 +171,81 @@ public sealed class ApiClientFactory : IDisposable
                 Path = path
             };
             return builder.Uri;
+        }
+
+        return uri;
+    }
+
+    private static bool TryResolveUri(
+        Uri? overrideUri,
+        string rawUrl,
+        string label,
+        out Uri uri,
+        out string error)
+    {
+        if (overrideUri is not null)
+        {
+            if (!overrideUri.IsAbsoluteUri)
+            {
+                error = $"Invalid {label}: '{overrideUri}'";
+                uri = null!;
+                return false;
+            }
+
+            uri = overrideUri!;
+            error = string.Empty;
+            return true;
+        }
+
+        if (!Uri.TryCreate(rawUrl, UriKind.Absolute, out var parsed) || parsed is null)
+        {
+            error = $"Invalid {label}: '{rawUrl}'";
+            uri = null!;
+            return false;
+        }
+
+        uri = parsed;
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryResolveSecretsUri(
+        Uri? overrideUri,
+        string rawUrl,
+        out Uri uri,
+        out string error)
+    {
+        if (overrideUri is not null)
+        {
+            if (!overrideUri.IsAbsoluteUri)
+            {
+                error = $"Invalid Secrets URL: '{overrideUri}'";
+                uri = null!;
+                return false;
+            }
+
+            uri = NormalizeSecretsBase(overrideUri!);
+            error = string.Empty;
+            return true;
+        }
+
+        if (!Uri.TryCreate(rawUrl, UriKind.Absolute, out var parsed) || parsed is null)
+        {
+            error = $"Invalid Secrets URL: '{rawUrl}'";
+            uri = null!;
+            return false;
+        }
+
+        uri = NormalizeSecretsBase(parsed);
+        error = string.Empty;
+        return true;
+    }
+
+    private static Uri EnsureAbsoluteUri(string rawUrl, string label)
+    {
+        if (!Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri))
+        {
+            throw new InvalidOperationException($"Invalid {label}: '{rawUrl}'");
         }
 
         return uri;

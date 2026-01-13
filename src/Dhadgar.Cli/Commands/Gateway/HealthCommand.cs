@@ -12,7 +12,13 @@ public sealed class HealthCommand
     {
         var config = CliConfig.Load();
 
-        using var factory = new ApiClientFactory(config);
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
         var services = new[]
         {
             ("Gateway", factory.CreateGatewayHealthClient()),

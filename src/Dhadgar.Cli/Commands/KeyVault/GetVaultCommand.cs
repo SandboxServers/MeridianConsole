@@ -1,3 +1,4 @@
+using Dhadgar.Cli.Commands;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
 using Refit;
@@ -17,13 +18,25 @@ public sealed class GetVaultCommand
             return 1;
         }
 
+        if (!CommandValidation.TryValidateVaultName(vaultName))
+        {
+            return 1;
+        }
+
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var keyVaultApi = factory.CreateKeyVaultClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Loading Key Vault details...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var keyVaultApi = factory.CreateKeyVaultClient();
 
                 try
                 {

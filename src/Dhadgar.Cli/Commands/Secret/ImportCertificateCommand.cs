@@ -1,3 +1,4 @@
+using Dhadgar.Cli.Commands;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
 using Refit;
@@ -19,6 +20,11 @@ public sealed class ImportCertificateCommand
         if (!config.IsAuthenticated())
         {
             AnsiConsole.MarkupLine("[red]Not authenticated.[/] Run [cyan]dhadgar auth login[/] first.");
+            return 1;
+        }
+
+        if (!string.IsNullOrWhiteSpace(vaultName) && !CommandValidation.TryValidateVaultName(vaultName))
+        {
             return 1;
         }
 
@@ -55,14 +61,20 @@ public sealed class ImportCertificateCommand
                     .PromptStyle("green"));
         }
 
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var secretsApi = factory.CreateSecretsClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Importing certificate '{name}'...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var secretsApi = factory.CreateSecretsClient();
-
                 try
                 {
                     // Read certificate file as base64

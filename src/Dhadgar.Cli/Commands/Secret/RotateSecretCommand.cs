@@ -30,14 +30,20 @@ public sealed class RotateSecretCommand
             }
         }
 
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var secretsApi = factory.CreateSecretsClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Rotating secret '{secretName}'...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var secretsApi = factory.CreateSecretsClient();
-
                 try
                 {
                     var response = await secretsApi.RotateSecretAsync(secretName, ct);

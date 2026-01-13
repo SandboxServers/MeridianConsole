@@ -28,30 +28,36 @@ public sealed class ListMembersCommand
             return 1;
         }
 
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var identityApi = factory.CreateIdentityClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync("[dim]Loading members...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var identityApi = factory.CreateIdentityClient();
+                    List<MemberResponse> members;
+                    try
+                    {
+                        members = await identityApi.GetMembersAsync(orgId, ct);
+                    }
+                    catch (ApiException ex)
+                    {
+                        AnsiConsole.MarkupLine($"\n[red]Failed to load members:[/] {ex.Message}");
+                        return;
+                    }
 
-                List<MemberResponse> members;
-                try
-                {
-                    members = await identityApi.GetMembersAsync(orgId, ct);
-                }
-                catch (ApiException ex)
-                {
-                    AnsiConsole.MarkupLine($"\n[red]Failed to load members:[/] {ex.Message}");
-                    return;
-                }
-
-                if (members.Count == 0)
-                {
-                    AnsiConsole.MarkupLine("\n[yellow]No members found.[/]");
-                    return;
-                }
+                    if (members.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine("\n[yellow]No members found.[/]");
+                        return;
+                    }
 
                 var table = new Table()
                     .Border(TableBorder.Rounded)
@@ -96,7 +102,7 @@ public sealed class ListMembersCommand
                         joinedDate);
                 }
 
-                AnsiConsole.Write(table);
+                    AnsiConsole.Write(table);
                 AnsiConsole.MarkupLine($"\n[dim]Total: {members.Count} member(s)[/]");
             });
 

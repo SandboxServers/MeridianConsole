@@ -20,9 +20,15 @@ public sealed class CreateOrgCommand
             return IdentityCommandHelpers.WriteError("name_required", "Organization name is required.");
         }
 
-        using var factory = new ApiClientFactory(config);
-        var identityApi = factory.CreateIdentityClient();
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            return IdentityCommandHelpers.WriteError("invalid_config", error);
+        }
+
         var request = new CreateOrganizationRequest { Name = name.Trim() };
+
+        var identityApi = factory.CreateIdentityClient();
 
         try
         {

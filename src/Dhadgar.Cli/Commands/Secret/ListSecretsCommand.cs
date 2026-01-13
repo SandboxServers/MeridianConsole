@@ -32,30 +32,36 @@ public sealed class ListSecretsCommand
             return 1;
         }
 
+        using var factory = ApiClientFactory.TryCreate(config, out var error);
+        if (factory is null)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            return 1;
+        }
+
+        var secretsApi = factory.CreateSecretsClient();
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
             .StartAsync($"[dim]Loading {category} secrets...[/]", async ctx =>
             {
-                using var factory = new ApiClientFactory(config);
-                var secretsApi = factory.CreateSecretsClient();
-
-                SecretsResponse response;
-                try
-                {
-                    response = endpoint switch
+                    SecretsResponse response;
+                    try
                     {
-                        "oauth" => await secretsApi.GetOAuthSecretsAsync(ct),
-                        "betterauth" => await secretsApi.GetBetterAuthSecretsAsync(ct),
-                        "infrastructure" => await secretsApi.GetInfrastructureSecretsAsync(ct),
-                        _ => throw new InvalidOperationException("Unsupported secrets category.")
-                    };
-                }
-                catch (ApiException ex)
-                {
-                    AnsiConsole.MarkupLine($"\n[red]Failed to load secrets:[/] {ex.Message}");
-                    return;
-                }
+                        response = endpoint switch
+                        {
+                            "oauth" => await secretsApi.GetOAuthSecretsAsync(ct),
+                            "betterauth" => await secretsApi.GetBetterAuthSecretsAsync(ct),
+                            "infrastructure" => await secretsApi.GetInfrastructureSecretsAsync(ct),
+                            _ => throw new InvalidOperationException("Unsupported secrets category.")
+                        };
+                    }
+                    catch (ApiException ex)
+                    {
+                        AnsiConsole.MarkupLine($"\n[red]Failed to load secrets:[/] {ex.Message}");
+                        return;
+                    }
 
                 if (response.Secrets.Count == 0)
                 {
