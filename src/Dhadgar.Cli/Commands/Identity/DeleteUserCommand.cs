@@ -68,9 +68,16 @@ public sealed class DeleteUserCommand
 
     private static bool ConfirmDelete(string userId)
     {
+        if (Console.IsInputRedirected)
+        {
+            Console.Error.WriteLine("Non-interactive mode detected. Use --force to delete.");
+            return false;
+        }
+
         Console.Error.Write($"Delete user {userId}? [y/N]: ");
         var input = Console.ReadLine();
-        return input?.Trim().Equals("y", StringComparison.OrdinalIgnoreCase) == true ||
-               input?.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase) == true;
+        var trimmedInput = input?.Trim();
+        return "y".Equals(trimmedInput, StringComparison.OrdinalIgnoreCase) ||
+               "yes".Equals(trimmedInput, StringComparison.OrdinalIgnoreCase);
     }
 }

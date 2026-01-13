@@ -10,11 +10,11 @@ public sealed class OrganizationRole
     public Guid OrganizationId { get; set; }
 
     [Required]
-    [MaxLength(100)]
+    [MaxLength(50)]
     public string Name { get; set; } = null!;
 
     [Required]
-    [MaxLength(100)]
+    [MaxLength(50)]
     public string NormalizedName { get; set; } = null!;
 
     [MaxLength(500)]

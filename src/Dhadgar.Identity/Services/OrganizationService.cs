@@ -74,7 +74,8 @@ public sealed class OrganizationService
         }
 
         var term = query.Trim();
-        var pattern = $"%{term}%";
+        var pattern = $"%{EscapeLikePattern(term)}%";
+        var escape = "\\";
 
         var memberships = await _dbContext.UserOrganizations
             .AsNoTracking()
@@ -86,10 +87,10 @@ public sealed class OrganizationService
                 {
                     membership,
                     org
-                })
+            })
             .Where(entry =>
-                EF.Functions.Like(entry.org.Name, pattern) ||
-                EF.Functions.Like(entry.org.Slug, pattern))
+                EF.Functions.Like(entry.org.Name, pattern, escape) ||
+                EF.Functions.Like(entry.org.Slug, pattern, escape))
             .Select(entry => new OrganizationSummary(
                 entry.org.Id,
                 entry.org.Name,
@@ -100,6 +101,14 @@ public sealed class OrganizationService
             .ToListAsync(ct);
 
         return memberships;
+    }
+
+    private static string EscapeLikePattern(string value)
+    {
+        return value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 
     public async Task<ServiceResult<OrganizationDetail>> GetAsync(Guid organizationId, CancellationToken ct = default)

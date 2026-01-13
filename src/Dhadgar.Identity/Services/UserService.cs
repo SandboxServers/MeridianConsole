@@ -47,6 +47,9 @@ public sealed record UserUpdateRequest(
 
 public sealed class UserService
 {
+    private const int MaxEmailLength = 320;
+    private const int MaxDisplayNameLength = 200;
+
     private readonly IdentityDbContext _dbContext;
     private readonly ILookupNormalizer _lookupNormalizer;
     private readonly TimeProvider _timeProvider;
@@ -123,19 +126,22 @@ public sealed class UserService
         }
 
         var term = query.Trim();
-        var pattern = $"%{term}%";
+        var pattern = $"%{EscapeLikePattern(term)}%";
+        var escape = "\\";
+        var linkedUserIds = _dbContext.LinkedAccounts
+            .Where(la =>
+                EF.Functions.Like(la.Provider, pattern, escape) ||
+                EF.Functions.Like(la.ProviderAccountId, pattern, escape))
+            .Select(la => la.UserId);
 
         var members = await _dbContext.UserOrganizations
             .AsNoTracking()
             .Where(uo => uo.OrganizationId == organizationId && uo.LeftAt == null)
             .Where(uo =>
-                EF.Functions.Like(uo.User.Email, pattern) ||
-                (uo.User.DisplayName != null && EF.Functions.Like(uo.User.DisplayName, pattern)) ||
-                (uo.User.UserName != null && EF.Functions.Like(uo.User.UserName, pattern)) ||
-                _dbContext.LinkedAccounts.Any(la =>
-                    la.UserId == uo.UserId &&
-                    (EF.Functions.Like(la.Provider, pattern) ||
-                     EF.Functions.Like(la.ProviderAccountId, pattern))))
+                EF.Functions.Like(uo.User.Email, pattern, escape) ||
+                (uo.User.DisplayName != null && EF.Functions.Like(uo.User.DisplayName, pattern, escape)) ||
+                (uo.User.UserName != null && EF.Functions.Like(uo.User.UserName, pattern, escape)) ||
+                linkedUserIds.Contains(uo.UserId))
             .Select(uo => new
             {
                 uo.UserId,
@@ -178,6 +184,14 @@ public sealed class UserService
                     member.JoinedAt,
                     providersByUser.TryGetValue(member.UserId, out var providers) ? providers : Array.Empty<string>()))
             .ToArray();
+    }
+
+    private static string EscapeLikePattern(string value)
+    {
+        return value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 
     public async Task<ServiceResult<UserDetail>> GetAsync(
@@ -239,6 +253,17 @@ public sealed class UserService
         if (string.IsNullOrWhiteSpace(request.Email))
         {
             return ServiceResult.Fail<UserDetail>("email_required");
+        }
+
+        if (request.Email.Trim().Length > MaxEmailLength)
+        {
+            return ServiceResult.Fail<UserDetail>("email_too_long");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.DisplayName) &&
+            request.DisplayName.Trim().Length > MaxDisplayNameLength)
+        {
+            return ServiceResult.Fail<UserDetail>("display_name_too_long");
         }
 
         var org = await _dbContext.Organizations
@@ -368,6 +393,11 @@ public sealed class UserService
         if (!string.IsNullOrWhiteSpace(request.Email))
         {
             var normalizedEmail = _lookupNormalizer.NormalizeEmail(request.Email.Trim());
+            if (request.Email.Trim().Length > MaxEmailLength)
+            {
+                return ServiceResult.Fail<UserDetail>("email_too_long");
+            }
+
             if (!string.Equals(user.NormalizedEmail, normalizedEmail, StringComparison.Ordinal))
             {
                 var emailExists = await _dbContext.Users
@@ -387,6 +417,11 @@ public sealed class UserService
 
         if (!string.IsNullOrWhiteSpace(request.DisplayName))
         {
+            if (request.DisplayName.Trim().Length > MaxDisplayNameLength)
+            {
+                return ServiceResult.Fail<UserDetail>("display_name_too_long");
+            }
+
             user.DisplayName = request.DisplayName.Trim();
         }
 
@@ -446,21 +481,20 @@ public sealed class UserService
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var user = membership.User;
 
-        if (user.DeletedAt is null)
-        {
-            user.DeletedAt = now;
-        }
+        membership.LeftAt = now;
+        membership.IsActive = false;
 
         user.UpdatedAt = now;
 
-        var memberships = await _dbContext.UserOrganizations
-            .Where(uo => uo.UserId == userId && uo.LeftAt == null)
-            .ToListAsync(ct);
+        var otherMembershipsExist = await _dbContext.UserOrganizations
+            .AnyAsync(uo => uo.UserId == userId && uo.LeftAt == null, ct);
 
-        foreach (var entry in memberships)
+        if (!otherMembershipsExist)
         {
-            entry.LeftAt = now;
-            entry.IsActive = false;
+            if (user.DeletedAt is null)
+            {
+                user.DeletedAt = now;
+            }
         }
 
         await _dbContext.SaveChangesAsync(ct);

@@ -252,8 +252,7 @@ public sealed class TokenExchangeService
         catch (InvalidOperationException ex) when (ex.Message == "external_auth_conflict")
         {
             _logger.LogWarning(
-                "External auth ID mismatch for exchange token. Email {Email} is already linked.",
-                email);
+                "External auth ID mismatch for exchange token. User is already linked.");
             return TokenExchangeOutcome.Fail("external_auth_conflict");
         }
 

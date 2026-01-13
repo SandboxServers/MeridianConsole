@@ -140,6 +140,11 @@ public sealed class RoleService
         }
 
         var trimmedName = request.Name.Trim();
+        if (trimmedName.Length > 50)
+        {
+            return ServiceResult.Fail<RoleSummary>("role_name_too_long");
+        }
+
         if (RoleDefinitions.IsValidRole(trimmedName))
         {
             return ServiceResult.Fail<RoleSummary>("reserved_role_name");
@@ -240,6 +245,23 @@ public sealed class RoleService
         if (resolution is null)
         {
             return ServiceResult.Fail<RoleAssignmentResult>("role_not_found");
+        }
+
+        var membership = await _dbContext.UserOrganizations
+            .FirstOrDefaultAsync(uo =>
+                uo.OrganizationId == organizationId &&
+                uo.UserId == targetUserId &&
+                uo.LeftAt == null,
+                ct);
+
+        if (membership is null)
+        {
+            return ServiceResult.Fail<RoleAssignmentResult>("user_not_found");
+        }
+
+        if (!string.Equals(membership.Role, resolution.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult.Fail<RoleAssignmentResult>("role_not_assigned");
         }
 
         var result = await membershipService.AssignRoleAsync(

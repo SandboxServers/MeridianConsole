@@ -22,11 +22,11 @@ public sealed class OrganizationRoleConfiguration : IEntityTypeConfiguration<Org
 
         builder.Property(role => role.Name)
             .IsRequired()
-            .HasMaxLength(100);
+            .HasMaxLength(50);
 
         builder.Property(role => role.NormalizedName)
             .IsRequired()
-            .HasMaxLength(100);
+            .HasMaxLength(50);
 
         builder.Property(role => role.Description)
             .HasMaxLength(500);
