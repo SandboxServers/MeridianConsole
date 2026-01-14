@@ -33,7 +33,13 @@ if [ "$(id -u)" -eq 0 ]; then
 
   mkdir -p "${work_dir}" /azp/_diag
   chown -R azp:azp "${work_dir}" /azp/_diag
-  exec su-exec azp "$0" "$@"
+  if command -v gosu >/dev/null 2>&1; then
+    exec gosu azp "$0" "$@"
+  elif command -v su-exec >/dev/null 2>&1; then
+    exec su-exec azp "$0" "$@"
+  else
+    exec su -s /bin/bash azp -c "$0 $*"
+  fi
 fi
 
 # Map legacy VSTS environment variables to AZP

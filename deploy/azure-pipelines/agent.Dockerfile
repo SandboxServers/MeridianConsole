@@ -1,46 +1,56 @@
-FROM alpine:3.21
+FROM ubuntu:22.04
 
 ARG AGENT_VERSION=4.266.2
 ARG AGENT_PACKAGE_URL=
 ARG DOTNET_SDK_VERSION=
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Install base dependencies
-RUN apk add --no-cache \
-    bash \
-    ca-certificates \
-    curl \
-    git \
-    jq \
-    make \
-    g++ \
-    python3 \
-    su-exec \
-    icu-libs \
-    libstdc++ \
-    openssl \
-    krb5-libs \
-    zlib \
-    libgcc \
-    libintl
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        git \
+        jq \
+        make \
+        g++ \
+        python3 \
+        python3-pip \
+        unzip \
+        gnupg \
+        lsb-release \
+        libicu70 \
+        libssl3 \
+        libkrb5-3 \
+        zlib1g \
+        libstdc++6 \
+        libc6 \
+        gosu \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Microsoft package sources (PowerShell + Azure CLI)
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+        | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" \
+        > /etc/apt/sources.list.d/microsoft-prod.list \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ jammy main" \
+        > /etc/apt/sources.list.d/azure-cli.list
+
+# Install Azure CLI and PowerShell
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        azure-cli \
+        powershell \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20 (required for npm in pipelines)
-RUN apk add --no-cache nodejs npm
-
-# Install Azure CLI (slim, no dependencies)
-RUN apk add --no-cache py3-pip \
-    && pip3 install --no-cache-dir --break-system-packages azure-cli \
-    && az --version
-
-# Install PowerShell
-RUN apk add --no-cache \
-    libgdiplus \
-    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
-    && curl -L https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/powershell-7.4.6-linux-musl-x64.tar.gz -o /tmp/powershell.tar.gz \
-    && mkdir -p /opt/microsoft/powershell/7 \
-    && tar zxf /tmp/powershell.tar.gz -C /opt/microsoft/powershell/7 \
-    && chmod +x /opt/microsoft/powershell/7/pwsh \
-    && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
-    && rm /tmp/powershell.tar.gz
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install .NET SDK
 ENV DOTNET_ROOT=/usr/share/dotnet
@@ -59,7 +69,7 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && rm /tmp/dotnet-install.sh /tmp/global.json
 
 # Create azp user
-RUN adduser -D -h /azp azp
+RUN useradd --create-home --home-dir /azp --shell /bin/bash azp
 WORKDIR /azp
 
 # Install Azure DevOps agent
@@ -77,5 +87,4 @@ COPY deploy/azure-pipelines/start.sh /azp/start.sh
 RUN chmod +x /azp/start.sh
 
 # Use tini for proper signal handling
-RUN apk add --no-cache tini
-ENTRYPOINT ["/sbin/tini", "--", "/azp/start.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/azp/start.sh"]
