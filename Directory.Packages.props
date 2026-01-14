@@ -65,6 +65,7 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
   <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.0" />
 
       <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
