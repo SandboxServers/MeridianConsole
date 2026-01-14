@@ -15,8 +15,23 @@ if [ "$(id -u)" -eq 0 ]; then
     fi
   fi
 
-  mkdir -p /azp/_work /azp/_tool /azp/_diag
-  chown -R azp:azp /azp/_work /azp/_tool /azp/_diag
+  if [ -z "${AZP_WORK:-}" ]; then
+    base_work="${VSTS_WORK:-_work}"
+    if [ "${base_work}" = "/azp/_work" ] || [ "${base_work}" = "_work" ]; then
+      AZP_WORK="${base_work%/}/${AZP_AGENT_NAME}"
+    else
+      AZP_WORK="${base_work}"
+    fi
+    export AZP_WORK
+  fi
+
+  work_dir="${AZP_WORK}"
+  if [[ "${work_dir}" != /* ]]; then
+    work_dir="/azp/${work_dir}"
+  fi
+
+  mkdir -p "${work_dir}" /azp/_diag
+  chown -R azp:azp "${work_dir}" /azp/_diag
   exec gosu azp "$0" "$@"
 fi
 
