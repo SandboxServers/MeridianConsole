@@ -10,6 +10,7 @@ services:
         AGENT_VERSION: ${AZP_AGENT_VERSION:-4.266.2}
         DOTNET_SDK_VERSION: ${DOTNET_SDK_VERSION:-}
     restart: unless-stopped
+    stop_grace_period: 45s
     environment:
       AZP_URL: ${AZP_URL}
       AZP_TOKEN: ${AZP_TOKEN}

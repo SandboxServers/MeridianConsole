@@ -31,6 +31,23 @@ parameters:
     type: boolean
     default: true
     displayName: 'Deploy release targets (non-PR)'
+  # Infrastructure and deployment parameters
+  - name: environment
+    type: string
+    default: dev
+    displayName: 'Target environment'
+    values:
+      - dev
+      - staging
+      - prod
+  - name: provisionInfrastructure
+    type: boolean
+    default: false
+    displayName: 'Provision Azure infrastructure (Key Vaults, App Registrations)'
+  - name: provisionDns
+    type: boolean
+    default: false
+    displayName: 'Configure Cloudflare DNS records'
 
 variables:
   # Uses the new `trim()` pipeline expression function (Sprint 248) to be resilient to whitespace.
@@ -56,63 +73,87 @@ extends:
     runTests: ${{ parameters.runTests }}
     collectCoverage: ${{ parameters.collectCoverage }}
     deploy: ${{ parameters.deploy }}
+    # Infrastructure and deployment settings
+    environment: ${{ parameters.environment }}
+    provisionInfrastructure: ${{ parameters.provisionInfrastructure }}
+    provisionDns: ${{ parameters.provisionDns }}
+    azureServiceConnection: 'Azure-Sub'
+    acrServiceConnection: 'meridianconsoleacr'
+    acrLoginServer: 'meridianconsoleacr-etdvg4cthscffqdf.azurecr.io'
+    tenantId: $(AZURE_TENANT_ID)
+    cloudflareApiToken: $(CLOUDFLARE_API_TOKEN)
     services:
+      # Agent binaries - distributed to customer hardware
       - id: Dhadgar.Agent.Core
         projectPath: src/Agents/Dhadgar.Agent.Core/Dhadgar.Agent.Core.csproj
         testProjectPath: tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj
-        deploy:
+        deploy:  # Shared library, no deployment
       - id: Dhadgar.Agent.Linux
         projectPath: src/Agents/Dhadgar.Agent.Linux/Dhadgar.Agent.Linux.csproj
         testProjectPath: tests/Dhadgar.Agent.Linux.Tests/Dhadgar.Agent.Linux.Tests.csproj
-        deploy:
+        deploy: agent
+        agent:
+          runtimes: 'linux-x64'
+          storageAccount: meridianconsoleblob
+          containerName: agent-releases
       - id: Dhadgar.Agent.Windows
         projectPath: src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj
         testProjectPath: tests/Dhadgar.Agent.Windows.Tests/Dhadgar.Agent.Windows.Tests.csproj
-        deploy:
+        deploy: agent
+        agent:
+          runtimes: 'win-x64'
+          storageAccount: meridianconsoleblob
+          containerName: agent-releases
+      # Microservices - deployed via Docker Compose to dev environment
       - id: Dhadgar.Billing
         projectPath: src/Dhadgar.Billing/Dhadgar.Billing.csproj
         testProjectPath: tests/Dhadgar.Billing.Tests/Dhadgar.Billing.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Cli
         projectPath: src/Dhadgar.Cli/Dhadgar.Cli.csproj
         testProjectPath: tests/Dhadgar.Cli.Tests/Dhadgar.Cli.Tests.csproj
-        deploy:
+        deploy: cli
+        cli:
+          runtimes: 'win-x64;linux-x64;osx-x64'
+          publishToGitHub: true
+          storageAccount: meridianconsoleblob
+          containerName: cli-releases
       - id: Dhadgar.Console
         projectPath: src/Dhadgar.Console/Dhadgar.Console.csproj
         testProjectPath: tests/Dhadgar.Console.Tests/Dhadgar.Console.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Discord
         projectPath: src/Dhadgar.Discord/Dhadgar.Discord.csproj
         testProjectPath: tests/Dhadgar.Discord.Tests/Dhadgar.Discord.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Files
         projectPath: src/Dhadgar.Files/Dhadgar.Files.csproj
         testProjectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Firewall
         projectPath: src/Dhadgar.Firewall/Dhadgar.Firewall.csproj
         testProjectPath: tests/Dhadgar.Firewall.Tests/Dhadgar.Firewall.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Gateway
         projectPath: src/Dhadgar.Gateway/Dhadgar.Gateway.csproj
         testProjectPath: tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Identity
         projectPath: src/Dhadgar.Identity/Dhadgar.Identity.csproj
         testProjectPath: tests/Dhadgar.Identity.Tests/Dhadgar.Identity.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Mods
         projectPath: src/Dhadgar.Mods/Dhadgar.Mods.csproj
         testProjectPath: tests/Dhadgar.Mods.Tests/Dhadgar.Mods.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Nodes
         projectPath: src/Dhadgar.Nodes/Dhadgar.Nodes.csproj
         testProjectPath: tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Notifications
         projectPath: src/Dhadgar.Notifications/Dhadgar.Notifications.csproj
         testProjectPath: tests/Dhadgar.Notifications.Tests/Dhadgar.Notifications.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Scope
         projectPath: src/Dhadgar.Scope/Dhadgar.Scope.csproj
         testProjectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
@@ -135,19 +176,20 @@ extends:
       - id: Dhadgar.Secrets
         projectPath: src/Dhadgar.Secrets/Dhadgar.Secrets.csproj
         testProjectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Servers
         projectPath: src/Dhadgar.Servers/Dhadgar.Servers.csproj
         testProjectPath: tests/Dhadgar.Servers.Tests/Dhadgar.Servers.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Tasks
         projectPath: src/Dhadgar.Tasks/Dhadgar.Tasks.csproj
         testProjectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
-        deploy:
+        deploy: compose
       - id: Dhadgar.Panel
         projectPath: src/Dhadgar.Panel/Dhadgar.Panel.csproj
         testProjectPath: tests/Dhadgar.Panel.Tests/Dhadgar.Panel.Tests.csproj
-        deploy:
+        deploy:  # TODO: Migrate to SWA when Panel is migrated to Astro
+      # Shared libraries - no deployment
       - id: Dhadgar.Contracts
         projectPath: src/Shared/Dhadgar.Contracts/Dhadgar.Contracts.csproj
         testProjectPath: tests/Dhadgar.Contracts.Tests/Dhadgar.Contracts.Tests.csproj

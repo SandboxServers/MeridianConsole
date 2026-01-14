@@ -1,39 +1,48 @@
-FROM ubuntu:22.04
+FROM alpine:3.21
 
-ARG DEBIAN_FRONTEND=noninteractive
 ARG AGENT_VERSION=4.266.2
 ARG AGENT_PACKAGE_URL=
 ARG DOTNET_SDK_VERSION=
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        git \
-        gnupg \
-        jq \
-        lsb-release \
-        make \
-        g++ \
-        python3 \
-        gosu \
-        unzip \
-        libicu70 \
-        libssl3 \
-    && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-        | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" \
-        > /etc/apt/sources.list.d/microsoft-prod.list \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ jammy main" \
-        > /etc/apt/sources.list.d/azure-cli.list \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        nodejs \
-        powershell \
-        azure-cli \
-    && rm -rf /var/lib/apt/lists/*
+# Install base dependencies
+RUN apk add --no-cache \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    make \
+    g++ \
+    python3 \
+    su-exec \
+    icu-libs \
+    libstdc++ \
+    openssl \
+    krb5-libs \
+    zlib \
+    libgcc \
+    libintl
 
+# Install Node.js 20 (required for npm in pipelines)
+RUN apk add --no-cache nodejs npm
+
+# Install Azure CLI (slim, no dependencies)
+RUN apk add --no-cache py3-pip \
+    && pip3 install --no-cache-dir --break-system-packages azure-cli \
+    && az --version
+
+# Install PowerShell
+RUN apk add --no-cache \
+    libgdiplus \
+    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
+    && curl -L https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/powershell-7.4.6-linux-musl-x64.tar.gz -o /tmp/powershell.tar.gz \
+    && mkdir -p /opt/microsoft/powershell/7 \
+    && tar zxf /tmp/powershell.tar.gz -C /opt/microsoft/powershell/7 \
+    && chmod +x /opt/microsoft/powershell/7/pwsh \
+    && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
+    && rm /tmp/powershell.tar.gz
+
+# Install .NET SDK
 ENV DOTNET_ROOT=/usr/share/dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
 
@@ -49,21 +58,24 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && /tmp/dotnet-install.sh --version "${sdk_version}" --install-dir "${DOTNET_ROOT}" \
     && rm /tmp/dotnet-install.sh /tmp/global.json
 
-RUN useradd --create-home --home-dir /azp azp
+# Create azp user
+RUN adduser -D -h /azp azp
 WORKDIR /azp
 
+# Install Azure DevOps agent
 RUN if [ -n "${AGENT_PACKAGE_URL}" ]; then \
       agent_url="${AGENT_PACKAGE_URL}"; \
     else \
-      agent_url="https://download.agent.dev.azure.com/agent/4.266.2/vsts-agent-linux-x64-4.266.2.tar.gz"; \
+      agent_url="https://download.agent.dev.azure.com/agent/${AGENT_VERSION}/vsts-agent-linux-x64-${AGENT_VERSION}.tar.gz"; \
     fi \
     && curl -fL --retry 5 --retry-connrefused --retry-delay 2 "${agent_url}" -o /tmp/agent.tgz \
     && tar -xzf /tmp/agent.tgz -C /azp \
     && rm /tmp/agent.tgz \
-    && ./bin/installdependencies.sh
-
-COPY deploy/azure-pipelines/start.sh /azp/start.sh
-RUN chmod +x /azp/start.sh \
     && chown -R azp:azp /azp
 
-ENTRYPOINT ["/azp/start.sh"]
+COPY deploy/azure-pipelines/start.sh /azp/start.sh
+RUN chmod +x /azp/start.sh
+
+# Use tini for proper signal handling
+RUN apk add --no-cache tini
+ENTRYPOINT ["/sbin/tini", "--", "/azp/start.sh"]
