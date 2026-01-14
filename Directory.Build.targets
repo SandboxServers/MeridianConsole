@@ -11,4 +11,8 @@
   <Target Name="ComposeDown">
     <Exec Command="docker compose --project-directory &quot;$(MSBuildThisFileDirectory)&quot; -f &quot;$(ComposeDevFile)&quot; -f &quot;$(ComposeServicesFile)&quot; down" />
   </Target>
+
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+  </ItemGroup>
 </Project>
