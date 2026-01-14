@@ -12,7 +12,7 @@
     <Exec Command="docker compose --project-directory &quot;$(MSBuildThisFileDirectory)&quot; -f &quot;$(ComposeDevFile)&quot; -f &quot;$(ComposeServicesFile)&quot; down" />
   </Target>
 
-  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+  <ItemGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
     <PackageReference Include="coverlet.collector" PrivateAssets="all" />
   </ItemGroup>
 </Project>
