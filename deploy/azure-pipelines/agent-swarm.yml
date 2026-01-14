@@ -2,16 +2,26 @@ name: dhadgar-dev-agents
 
 services:
   azdo-agent:
-    image: mcr.microsoft.com/azure-pipelines/vsts-agent:latest
+    image: dhadgar-azdo-agent:latest
+    build:
+      context: ../..
+      dockerfile: deploy/azure-pipelines/agent.Dockerfile
+      args:
+        AGENT_VERSION: ${AZP_AGENT_VERSION:-4.266.2}
+        DOTNET_SDK_VERSION: ${DOTNET_SDK_VERSION:-}
     restart: unless-stopped
     environment:
+      AZP_URL: ${AZP_URL}
+      AZP_TOKEN: ${AZP_TOKEN}
+      AZP_POOL: ${AZP_POOL}
+      AZP_WORK: ${AZP_WORK}
       VSTS_ACCOUNT: ${VSTS_ACCOUNT}
       VSTS_TOKEN: ${VSTS_TOKEN}
       VSTS_POOL: ${VSTS_POOL:-Default}
-      VSTS_WORK: /azp/agent/_work
-      # Leave VSTS_AGENT unset when scaling
+      VSTS_WORK: /azp/_work
+      # Leave AZP_AGENT_NAME unset when scaling
     volumes:
-      - azp-agent-work:/azp/agent/_work
+      - azp-agent-work:/azp/_work
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - dhadgar-dev
