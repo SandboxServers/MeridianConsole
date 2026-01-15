@@ -1,3 +1,5 @@
+# Meridian Console CI/CD Pipeline
+# Security scanning enabled with SAST, SCA, Container, IaC, Secrets, SBOM
 trigger:
   branches:
     include:
