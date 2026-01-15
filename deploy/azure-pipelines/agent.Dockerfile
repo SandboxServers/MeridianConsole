@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG AGENT_VERSION=4.266.2
 ARG AGENT_PACKAGE_URL=
@@ -21,8 +21,8 @@ RUN apt-get update \
         unzip \
         gnupg \
         lsb-release \
-        libicu70 \
-        libssl3 \
+        libicu74 \
+        libssl3t64 \
         libkrb5-3 \
         zlib1g \
         libstdc++6 \
@@ -34,9 +34,9 @@ RUN apt-get update \
 # Microsoft package sources (PowerShell + Azure CLI)
 RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
         | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" \
         > /etc/apt/sources.list.d/microsoft-prod.list \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ jammy main" \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ noble main" \
         > /etc/apt/sources.list.d/azure-cli.list
 
 # Install Azure CLI and PowerShell
@@ -50,6 +50,18 @@ RUN apt-get update \
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI (for building container images via mounted socket)
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        | gpg --dearmor -o /usr/share/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        docker-ce-cli \
+        docker-buildx-plugin \
+        docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
 # Install .NET SDK
@@ -68,7 +80,8 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && /tmp/dotnet-install.sh --version "${sdk_version}" --install-dir "${DOTNET_ROOT}" \
     && rm /tmp/dotnet-install.sh /tmp/global.json
 
-# Create azp user
+# Create azp user and add to docker group for socket access
+# Note: The docker group GID may vary on the host; start.sh handles this dynamically
 RUN useradd --create-home --home-dir /azp --shell /bin/bash azp
 WORKDIR /azp
 

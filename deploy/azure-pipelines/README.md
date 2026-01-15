@@ -1,10 +1,10 @@
 # Azure DevOps Self-Hosted Agents
 
-This directory contains a minimal, Alpine-based Docker setup for running self-hosted Azure DevOps agents.
+This directory contains a Docker setup for running self-hosted Azure DevOps agents with full glibc compatibility.
 
 ## Overview
 
-**Image Base**: Alpine Linux 3.21 (~5MB base vs Ubuntu's ~77MB)
+**Image Base**: Ubuntu 24.04 LTS (Noble Numbat)
 
 **Key Features**:
 - ✅ Automatic agent deregistration on shutdown (no orphaned agents!)
@@ -18,7 +18,14 @@ This directory contains a minimal, Alpine-based Docker setup for running self-ho
 - Node.js 20 + npm
 - Azure CLI
 - PowerShell 7
+- Docker CLI + Buildx + Compose plugins
 - Git, curl, jq, make, g++, Python3
+
+**Why Ubuntu 24.04 instead of Alpine?**
+- Full glibc compatibility (no musl issues with native binaries)
+- Official Microsoft package repos for PowerShell and Azure CLI
+- Proven compatibility with Azure DevOps agent
+- Better Docker CLI support
 
 ## Quick Start
 
@@ -170,15 +177,15 @@ docker compose -f agent-swarm.yml logs -f azdo-agent
 - Agent pool doesn't exist
 - Network connectivity to Azure DevOps
 
-## Image Size Comparison
+## Image Size
 
-| Base Image | Compressed Size | Uncompressed Size |
-|------------|-----------------|-------------------|
-| Ubuntu 22.04 | ~77 MB | ~196 MB |
-| Alpine 3.21 | ~5 MB | ~12 MB |
-| **Savings** | **~93%** | **~94%** |
+**Ubuntu 24.04 LTS base**: ~77 MB compressed, ~196 MB uncompressed
+**Final agent image** (with all tools): ~650-750 MB
 
-Final agent image (with all tools): ~350 MB vs ~800+ MB with Ubuntu
+The image is larger than Alpine-based alternatives but provides:
+- Full glibc compatibility (no musl workarounds)
+- Native Microsoft tooling support
+- Stable, enterprise-ready LTS base
 
 ## Advanced Configuration
 
@@ -215,10 +222,19 @@ Edit `agent.Dockerfile`:
 
 ```dockerfile
 # Add your tools here
-RUN apk add --no-cache \
-    terraform \
-    kubectl \
-    helm
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        terraform \
+        kubectl \
+        helm \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+Or install from external sources:
+
+```dockerfile
+# Example: Install Helm
+RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 ```
 
 Then rebuild:
@@ -279,24 +295,26 @@ The agent mounts `/var/run/docker.sock` for:
 
 **Warning**: This grants the agent full Docker daemon access. Only run trusted pipelines.
 
-### Alpine vs Ubuntu
+### Ubuntu LTS vs Alpine
 
-Alpine uses musl libc instead of glibc. Most .NET and Node.js tooling works fine, but edge cases exist:
+This image uses Ubuntu 24.04 LTS for maximum compatibility:
 
-- Some native npm packages may fail (rare)
-- Pre-compiled binaries expecting glibc won't work
+**Pros**:
+- Full glibc support (all native binaries work)
+- Official Microsoft repos for PowerShell, Azure CLI
+- Docker CE packages available
+- Enterprise support available
 
-If you encounter compatibility issues, switch back to Ubuntu:
+**Cons**:
+- Larger image size (~650-750 MB vs Alpine's ~350 MB)
+- Slower to download and extract
 
-```dockerfile
-FROM ubuntu:22.04
-# Change apk commands to apt-get
-# Change su-exec to gosu
-```
+If image size is critical and you don't need Microsoft tooling, consider Alpine. Otherwise, Ubuntu provides the most reliable experience for Azure DevOps agents.
 
 ## References
 
 - [Azure DevOps Agent Documentation](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/docker)
-- [Alpine Linux Package Search](https://pkgs.alpinelinux.org/packages)
+- [Ubuntu 24.04 Packages](https://packages.ubuntu.com/noble/)
 - [Docker Compose Scale](https://docs.docker.com/compose/compose-file/deploy/#replicas)
 - [tini Init System](https://github.com/krallin/tini)
+- [Microsoft Linux Software Repository](https://learn.microsoft.com/en-us/linux/packages)

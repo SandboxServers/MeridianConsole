@@ -3,6 +3,30 @@ set -euo pipefail
 
 # Step-down from root to azp user if running as root
 if [ "$(id -u)" -eq 0 ]; then
+  # Fix Docker socket permissions if mounted
+  # The host's docker group GID may differ from the container's
+  if [ -S /var/run/docker.sock ]; then
+    DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+    echo "Docker socket detected with GID: ${DOCKER_GID}"
+
+    # Special case: GID 0 (root group) - just add azp to root group
+    if [ "${DOCKER_GID}" = "0" ]; then
+      usermod -aG root azp 2>/dev/null || true
+      echo "Docker socket owned by root group (GID 0), added azp to root group"
+    else
+      # Normal case: create or modify docker group to match host GID
+      if ! getent group docker >/dev/null 2>&1; then
+        groupadd -g "${DOCKER_GID}" docker
+        echo "Created docker group with GID: ${DOCKER_GID}"
+      elif [ "$(getent group docker | cut -d: -f3)" != "${DOCKER_GID}" ]; then
+        groupmod -g "${DOCKER_GID}" docker
+        echo "Modified docker group to GID: ${DOCKER_GID}"
+      fi
+      usermod -aG docker azp 2>/dev/null || true
+      echo "Added azp user to docker group"
+    fi
+  fi
+
   if [ -z "${AZP_AGENT_NAME:-}" ] && [ -S /var/run/docker.sock ] && [ -n "${HOSTNAME:-}" ]; then
     container_name="$(
       curl -fsS --unix-socket /var/run/docker.sock \
