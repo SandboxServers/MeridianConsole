@@ -16,6 +16,7 @@
   <PackageReference Include="Microsoft.EntityFrameworkCore" />
   <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
   <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  <PackageReference Include="SendGrid" />
 </ItemGroup>
   
   <ItemGroup>

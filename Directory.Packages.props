@@ -26,6 +26,12 @@
     <PackageVersion Include="MassTransit" Version="8.3.6" />
     <PackageVersion Include="MassTransit.RabbitMQ" Version="8.3.6" />
 
+    <!-- Discord -->
+    <PackageVersion Include="Discord.Net" Version="3.13.0" />
+
+    <!-- Email -->
+    <PackageVersion Include="SendGrid" Version="9.29.3" />
+
     <!-- Observability -->
     <PackageVersion Include="OpenTelemetry" Version="1.14.0" />
     <PackageVersion Include="OpenTelemetry.Api" Version="1.14.0" />

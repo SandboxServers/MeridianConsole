@@ -4,19 +4,22 @@
       <RootNamespace>Dhadgar.Discord</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-  <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
-  <ProjectReference Include="..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
-  <ProjectReference Include="..\Shared\Dhadgar.Messaging\Dhadgar.Messaging.csproj" />
-  <ProjectReference Include="..\Shared\Dhadgar.ServiceDefaults\Dhadgar.ServiceDefaults.csproj" />
-</ItemGroup>
-<ItemGroup>
-  <PackageReference Include="MassTransit" />
-  <PackageReference Include="MassTransit.RabbitMQ" />
-  <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-</ItemGroup>
-  
-  <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" />
-  </ItemGroup>
-</Project>
+      <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+      <ProjectReference Include="..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+      <ProjectReference Include="..\Shared\Dhadgar.Messaging\Dhadgar.Messaging.csproj" />
+      <ProjectReference Include="..\Shared\Dhadgar.ServiceDefaults\Dhadgar.ServiceDefaults.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="MassTransit" />
+      <PackageReference Include="MassTransit.RabbitMQ" />
+      <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+      <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+      <PackageReference Include="Discord.Net" />
+    </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Swashbuckle.AspNetCore" />
+    </ItemGroup>
+  </Project>
