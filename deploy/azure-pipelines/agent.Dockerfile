@@ -64,6 +64,42 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
         docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Java 17 (for OWASP Dependency-Check)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openjdk-17-jdk \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+# Install security scanning tools
+# Semgrep (SAST)
+RUN pip3 install --no-cache-dir semgrep checkov --break-system-packages
+
+# OWASP Dependency-Check (SCA)
+RUN curl -fsSL https://github.com/jeremylong/DependencyCheck/releases/download/v11.1.0/dependency-check-11.1.0-release.zip -o /tmp/dep-check.zip \
+    && unzip /tmp/dep-check.zip -d /opt \
+    && rm /tmp/dep-check.zip \
+    && chmod +x /opt/dependency-check/bin/dependency-check.sh \
+    && ln -s /opt/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check
+
+# Trivy (Container scanning)
+RUN curl -fsSL https://github.com/aquasecurity/trivy/releases/download/v0.58.1/trivy_0.58.1_Linux-64bit.tar.gz -o /tmp/trivy.tar.gz \
+    && tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy \
+    && rm /tmp/trivy.tar.gz \
+    && chmod +x /usr/local/bin/trivy
+
+# GitLeaks (Secrets scanning)
+RUN curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz \
+    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
+    && rm /tmp/gitleaks.tar.gz \
+    && chmod +x /usr/local/bin/gitleaks
+
+# Syft (SBOM generation)
+RUN curl -fsSL https://github.com/anchore/syft/releases/download/v1.18.1/syft_1.18.1_linux_amd64.tar.gz -o /tmp/syft.tar.gz \
+    && tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft \
+    && rm /tmp/syft.tar.gz \
+    && chmod +x /usr/local/bin/syft
+
 # Install .NET SDK
 ENV DOTNET_ROOT=/usr/share/dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"

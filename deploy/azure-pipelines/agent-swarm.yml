@@ -11,6 +11,8 @@ services:
         DOTNET_SDK_VERSION: ${DOTNET_SDK_VERSION:-}
     restart: unless-stopped
     stop_grace_period: 45s
+    env_file:
+      - azdo-agent.env
     environment:
       AZP_URL: ${AZP_URL}
       AZP_TOKEN: ${AZP_TOKEN}
