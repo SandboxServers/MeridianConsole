@@ -1,0 +1,36 @@
+# Dockerfile for Dhadgar.Notifications (Artifact-based build)
+# Uses pre-built artifacts from Azure Pipelines Build stage
+# Build context: Solution root (MeridianConsole/)
+#
+# Pipeline usage:
+# - Build stage publishes artifacts to: src-Dhadgar_Notifications
+# - BuildContainer job passes: --build-arg BUILD_ARTIFACT_PATH=$(Pipeline.Workspace)/artifacts/src-Dhadgar_Notifications
+
+ARG BUILD_ARTIFACT_PATH=/fallback/artifacts
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+# Install curl for healthchecks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Copy pre-built artifacts from pipeline
+ARG BUILD_ARTIFACT_PATH
+COPY ${BUILD_ARTIFACT_PATH}/ .
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Runtime configuration
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3     CMD curl -f http://localhost:8080/healthz || exit 1
+
+ENTRYPOINT ["dotnet", "Dhadgar.Notifications.dll"]
