@@ -34,6 +34,10 @@ parameters:
     type: boolean
     default: true
     displayName: 'Deploy release targets (non-PR)'
+  - name: publishContainers
+    type: boolean
+    default: true
+    displayName: 'Publish container images to ACR (costs money, non-PR only)'
   # Infrastructure and deployment parameters
   - name: environments
     type: stringList
@@ -83,6 +87,7 @@ extends:
     testInSingleJob: ${{ parameters.testInSingleJob }}
     testTargetPath: 'Dhadgar.sln'
     deploy: ${{ parameters.deploy }}
+    publishContainers: ${{ parameters.publishContainers }}
     # Infrastructure and deployment settings
     environmentsCsvNormalized: ${{ variables.environmentsCsvNormalized }}
     provisionInfrastructure: ${{ parameters.provisionInfrastructure }}
