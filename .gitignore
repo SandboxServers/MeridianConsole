@@ -38,6 +38,7 @@ node_modules/
 
 # Build artifacts
 .astro/
+.docker-artifacts/
 
 # Local utility scripts
 scripts/fix-wsl-clipboard-*.sh
