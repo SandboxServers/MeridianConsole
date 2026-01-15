@@ -61,7 +61,7 @@ parameters:
     displayName: 'Configure Cloudflare DNS records'
 
 variables:
-  - group: secruity-scanning
+  - group: security-scanning
   # Uses the new `trim()` pipeline expression function (Sprint 248) to be resilient to whitespace.
   - name: servicesCsvNormalized
     ${{ if or(eq(trim(parameters.servicesCsv), ''), eq(lower(trim(parameters.servicesCsv)), 'all'), eq(trim(parameters.servicesCsv), '*')) }}:
