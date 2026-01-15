@@ -27,6 +27,9 @@ parameters:
   - name: collectCoverage
     type: boolean
     default: true
+  - name: testInSingleJob
+    type: boolean
+    default: true
   - name: deploy
     type: boolean
     default: true
@@ -72,12 +75,14 @@ extends:
     buildConfiguration: ${{ parameters.buildConfiguration }}
     runTests: ${{ parameters.runTests }}
     collectCoverage: ${{ parameters.collectCoverage }}
+    testInSingleJob: ${{ parameters.testInSingleJob }}
+    testTargetPath: 'Dhadgar.sln'
     deploy: ${{ parameters.deploy }}
     # Infrastructure and deployment settings
     environment: ${{ parameters.environment }}
     provisionInfrastructure: ${{ parameters.provisionInfrastructure }}
     provisionDns: ${{ parameters.provisionDns }}
-    azureServiceConnection: 'Azure-Sub'
+    azureServiceConnection: 'meridian-rg-sc-2'
     acrServiceConnection: 'meridianconsoleacr'
     acrLoginServer: 'meridianconsoleacr-etdvg4cthscffqdf.azurecr.io'
     tenantId: $(AZURE_TENANT_ID)
