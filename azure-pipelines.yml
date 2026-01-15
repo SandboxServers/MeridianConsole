@@ -35,11 +35,13 @@ parameters:
     default: true
     displayName: 'Deploy release targets (non-PR)'
   # Infrastructure and deployment parameters
-  - name: environment
-    type: string
-    default: dev
-    displayName: 'Target environment'
+  - name: environments
+    type: stringList
+    default:
+      - dev
+    displayName: 'Target environments (multi-select)'
     values:
+      - localdev
       - dev
       - staging
       - prod
@@ -59,6 +61,9 @@ variables:
       value: ',,'
     ${{ else }}:
       value: ${{ format(',{0},', replace(replace(trim(parameters.servicesCsv), ' ', ''), ';', ',')) }}
+  - name: environmentsCsvNormalized
+    # Convert stringList to normalized CSV format: ,item1,item2,item3,
+    value: ${{ format(',{0},', join(',', parameters.environments)) }}
 
 resources:
   repositories:
@@ -79,7 +84,7 @@ extends:
     testTargetPath: 'Dhadgar.sln'
     deploy: ${{ parameters.deploy }}
     # Infrastructure and deployment settings
-    environment: ${{ parameters.environment }}
+    environmentsCsvNormalized: ${{ variables.environmentsCsvNormalized }}
     provisionInfrastructure: ${{ parameters.provisionInfrastructure }}
     provisionDns: ${{ parameters.provisionDns }}
     azureServiceConnection: 'meridian-rg-sc-2'
