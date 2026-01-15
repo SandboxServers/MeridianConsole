@@ -26,6 +26,9 @@ builder.Services.AddHttpClient<IDiscordCredentialProvider, DiscordCredentialProv
 
 builder.Services.AddHttpClient(); // For webhook posts
 
+// Platform health checking
+builder.Services.AddHttpClient<IPlatformHealthService, PlatformHealthService>();
+
 // Discord bot
 builder.Services.AddSingleton<DiscordBotService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscordBotService>());
@@ -87,6 +90,15 @@ app.MapGet("/api/v1/discord/logs", async (
         .ToListAsync(ct);
 
     return Results.Ok(logs);
+});
+
+// Platform health check endpoint
+app.MapGet("/api/v1/platform/health", async (
+    IPlatformHealthService healthService,
+    CancellationToken ct) =>
+{
+    var status = await healthService.CheckAllServicesAsync(ct);
+    return Results.Ok(status);
 });
 
 app.Run();

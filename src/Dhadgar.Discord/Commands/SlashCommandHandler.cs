@@ -1,4 +1,5 @@
 using Dhadgar.Discord.Data;
+using Dhadgar.Discord.Services;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
@@ -96,17 +97,64 @@ public sealed class SlashCommandHandler
 
     private async Task HandleStatusCommandAsync(SocketSlashCommand command)
     {
-        var embed = new EmbedBuilder()
-            .WithTitle("Meridian Console Status")
-            .WithColor(Color.Green)
-            .AddField("Discord Bot", "Online", inline: true)
-            .AddField("Environment", Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production", inline: true)
-            .AddField("Uptime", GetUptime(), inline: true)
-            .WithCurrentTimestamp()
-            .WithFooter("Meridian Console")
-            .Build();
+        // Defer response since health checks may take a moment
+        await command.DeferAsync();
 
-        await command.RespondAsync(embed: embed);
+        using var scope = _serviceProvider.CreateScope();
+        var healthService = scope.ServiceProvider.GetRequiredService<IPlatformHealthService>();
+
+        var healthStatus = await healthService.CheckAllServicesAsync();
+
+        // Build status embed with service health
+        var embedBuilder = new EmbedBuilder()
+            .WithTitle("Meridian Console Platform Status")
+            .WithCurrentTimestamp()
+            .WithFooter("Meridian Console");
+
+        // Overall status color
+        if (healthStatus.UnhealthyCount == 0)
+        {
+            embedBuilder.WithColor(Color.Green);
+            embedBuilder.WithDescription($"All {healthStatus.HealthyCount} services operational");
+        }
+        else if (healthStatus.HealthyCount == 0)
+        {
+            embedBuilder.WithColor(Color.Red);
+            embedBuilder.WithDescription("All services are down!");
+        }
+        else
+        {
+            embedBuilder.WithColor(Color.Orange);
+            embedBuilder.WithDescription($"{healthStatus.HealthyCount}/{healthStatus.Services.Count} services operational");
+        }
+
+        // Group services by status for cleaner display
+        var healthyServices = healthStatus.Services.Where(s => s.IsHealthy).ToList();
+        var unhealthyServices = healthStatus.Services.Where(s => !s.IsHealthy).ToList();
+
+        // Show healthy services
+        if (healthyServices.Count > 0)
+        {
+            var healthyText = string.Join("\n", healthyServices.Select(s =>
+                $":green_circle: **{s.ServiceName}** ({s.ResponseTimeMs}ms)"));
+            embedBuilder.AddField("Healthy", healthyText, inline: false);
+        }
+
+        // Show unhealthy services
+        if (unhealthyServices.Count > 0)
+        {
+            var unhealthyText = string.Join("\n", unhealthyServices.Select(s =>
+                $":red_circle: **{s.ServiceName}** - {s.Error ?? "Unknown error"}"));
+            embedBuilder.AddField("Unhealthy", unhealthyText, inline: false);
+        }
+
+        // Add system info
+        embedBuilder.AddField("Environment",
+            Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
+            inline: true);
+        embedBuilder.AddField("Bot Uptime", GetUptime(), inline: true);
+
+        await command.FollowupAsync(embed: embedBuilder.Build());
     }
 
     private async Task HandleLogsCommandAsync(SocketSlashCommand command)
