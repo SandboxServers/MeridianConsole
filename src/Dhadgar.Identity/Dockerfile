@@ -29,12 +29,12 @@ COPY ["src/Shared/", "src/Shared/"]
 WORKDIR /src/src/Dhadgar.Identity
 RUN dotnet publish "Dhadgar.Identity.csproj"     -c Release     -o /app/publish     --no-restore     /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl
 
-RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
+RUN addgroup -S appuser && adduser -S appuser -G appuser -h /home/appuser
 COPY --from=build /app/publish .
 RUN chown -R appuser:appuser /app /home/appuser
 USER appuser

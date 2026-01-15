@@ -56,7 +56,7 @@ The security scanning stage includes 6 scanning categories:
 
 ---
 
-### 2. Obtain Free NVD API Key (Recommended)
+### 2. Obtain Free NVD API Key (✅ WIRED IN - Just add the key)
 
 **Why**: Speeds up OWASP Dependency-Check scans from 15+ minutes to 2-3 minutes
 
@@ -64,25 +64,37 @@ The security scanning stage includes 6 scanning categories:
 1. Visit: https://nvd.nist.gov/developers/request-an-api-key
 2. Fill out the form (use `steve@sandboxservers.com` or your email)
 3. Receive API key via email (instant)
-4. Add to Azure DevOps Pipeline Library as secret variable `NVD_API_KEY`
+4. Add to Azure DevOps Pipeline as secret variable
 
-**How to add secret variable**:
-```
-Azure DevOps → Pipelines → Library → Variable Groups → Create/Edit Group
-Name: dhadgar-security-scanning
-Variables:
-  - Name: NVD_API_KEY
-  - Value: <your-api-key>
-  - Type: Secret (toggle lock icon)
-```
+**How to add secret variable** (2 options):
 
-**Then reference in pipeline**:
-```yaml
-variables:
-  - group: dhadgar-security-scanning
-```
+#### Option A: Variable Group (Recommended - Reusable)
+1. Go to: Azure DevOps → Pipelines → Library → Variable Groups
+2. Click "**+ Variable group**"
+3. Name: `dhadgar-security-scanning`
+4. Click "**+ Add**"
+   - Name: `NVD_API_KEY`
+   - Value: `<paste your API key here>`
+   - Click the **lock icon** to mark as secret
+5. Click "**Save**"
+6. Add this to `azure-pipelines.yml` (under `variables:`):
+   ```yaml
+   variables:
+     - group: dhadgar-security-scanning
+   ```
 
-**Status**: ⏳ Pending (OPTIONAL but recommended)
+#### Option B: Pipeline Variable (Quick - Single pipeline)
+1. Go to: Azure DevOps → Pipelines → Select "Meridian Console" pipeline
+2. Click "**Edit**" → "**Variables**" (top right)
+3. Click "**+ New variable**"
+   - Name: `NVD_API_KEY`
+   - Value: `<paste your API key here>`
+   - Check "**Keep this value secret**"
+4. Click "**OK**" → "**Save**"
+
+**Already Wired**: The pipeline is already configured to use `$(NVD_API_KEY)` - just add the secret!
+
+**Status**: ⏳ Pending - Just needs the API key value added
 
 ---
 

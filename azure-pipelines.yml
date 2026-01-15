@@ -59,6 +59,7 @@ parameters:
     displayName: 'Configure Cloudflare DNS records'
 
 variables:
+  - group: secruity-scanning
   # Uses the new `trim()` pipeline expression function (Sprint 248) to be resilient to whitespace.
   - name: servicesCsvNormalized
     ${{ if or(eq(trim(parameters.servicesCsv), ''), eq(lower(trim(parameters.servicesCsv)), 'all'), eq(trim(parameters.servicesCsv), '*')) }}:
@@ -97,6 +98,8 @@ extends:
     acrLoginServer: 'meridianconsoleacr-etdvg4cthscffqdf.azurecr.io'
     tenantId: $(AZURE_TENANT_ID)
     cloudflareApiToken: $(CLOUDFLARE_API_TOKEN)
+    runSecurityScans: true
+    nvdApiKey: $(NVD_API_KEY)
     services:
       # Agent binaries - distributed to customer hardware
       - id: Dhadgar.Agent.Core
