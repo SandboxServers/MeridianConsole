@@ -61,6 +61,21 @@ npm run dev
 
 **Note**: Both `dotnet watch` and Astro's `npm run dev` support hot reload for rapid development cycles. Scope dev server runs on port 4321 by default (configurable in astro.config.mjs).
 
+### CLI Tool (dhadgar)
+
+The CLI tool auto-installs as a global .NET tool during local development:
+
+```bash
+# Build the CLI (auto-installs as 'dhadgar' global tool)
+dotnet build src/Dhadgar.Cli -c Release
+
+# Use the CLI
+dhadgar --help
+dhadgar servers list
+```
+
+**CI/CD Note**: The pipeline automatically skips global tool installation during builds by passing `/p:SkipGlobalToolInstall=true`.
+
 ### EF Core Migrations
 
 Services with databases: Identity, Billing, Servers, Nodes, Tasks, Files, Mods, Notifications
