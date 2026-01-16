@@ -87,9 +87,9 @@ public class RequestEnrichmentMiddleware
             context.Request.Headers["X-Roles"] = string.Join(",", roles);
         }
 
-        // Add client IP for backend services
+        // Add client IP for backend services (only if we have a real IP)
         var clientIp = GetClientIpAddress(context);
-        if (!string.IsNullOrEmpty(clientIp))
+        if (clientIp is not null)
         {
             context.Request.Headers["X-Real-IP"] = clientIp;
         }
@@ -100,12 +100,13 @@ public class RequestEnrichmentMiddleware
         await _next(context);
     }
 
-    private static string GetClientIpAddress(HttpContext context)
+    private static string? GetClientIpAddress(HttpContext context)
     {
         // SECURITY: RemoteIpAddress is already set correctly by ForwardedHeaders middleware
         // which validates X-Forwarded-For headers against known Cloudflare IP ranges.
         // Do NOT manually parse CF-Connecting-IP or X-Forwarded-For headers here as that
         // bypasses the trusted proxy validation and allows IP spoofing attacks.
-        return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        // Returns null if no IP available - don't emit misleading "unknown" header.
+        return context.Connection.RemoteIpAddress?.ToString();
     }
 }

@@ -39,7 +39,7 @@ public sealed class ServicesCommand
                     {
                         var status = health.IsHealthy
                             ? "[green]Healthy[/]"
-                            : $"[red]{health.Error ?? "Unhealthy"}[/]";
+                            : $"[red]{Markup.Escape(health.Error ?? "Unhealthy")}[/]";
 
                         var responseTime = health.ResponseTimeMs < 100
                             ? $"[green]{health.ResponseTimeMs}ms[/]"
@@ -48,10 +48,10 @@ public sealed class ServicesCommand
                                 : $"[red]{health.ResponseTimeMs}ms[/]";
 
                         table.AddRow(
-                            $"[cyan]{name}[/]",
+                            $"[cyan]{Markup.Escape(name)}[/]",
                             status,
                             responseTime,
-                            $"[dim]{health.Url}[/]");
+                            health.Url is not null ? $"[dim]{Markup.Escape(health.Url)}[/]" : "[dim]-[/]");
                     }
 
                     AnsiConsole.Write(table);

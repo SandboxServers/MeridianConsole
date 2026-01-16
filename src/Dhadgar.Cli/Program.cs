@@ -623,25 +623,25 @@ var gatewayCmd = new Command("gateway", "Gateway and infrastructure diagnostics"
 var gatewayHealthCmd = new Command("health", "Check health of all services");
 gatewayHealthCmd.SetHandler(async (InvocationContext ctx) =>
 {
-    await HealthCommand.ExecuteAsync(ctx.GetCancellationToken());
+    ctx.ExitCode = await HealthCommand.ExecuteAsync(ctx.GetCancellationToken());
 });
 
 var gatewayServicesCmd = new Command("services", "List all backend services health (Development only)");
 gatewayServicesCmd.SetHandler(async (InvocationContext ctx) =>
 {
-    await ServicesCommand.ExecuteAsync(ctx.GetCancellationToken());
+    ctx.ExitCode = await ServicesCommand.ExecuteAsync(ctx.GetCancellationToken());
 });
 
 var gatewayRoutesCmd = new Command("routes", "List all gateway routes (Development only)");
 gatewayRoutesCmd.SetHandler(async (InvocationContext ctx) =>
 {
-    await RoutesCommand.ExecuteAsync(ctx.GetCancellationToken());
+    ctx.ExitCode = await RoutesCommand.ExecuteAsync(ctx.GetCancellationToken());
 });
 
 var gatewayClustersCmd = new Command("clusters", "List all YARP clusters (Development only)");
 gatewayClustersCmd.SetHandler(async (InvocationContext ctx) =>
 {
-    await ClustersCommand.ExecuteAsync(ctx.GetCancellationToken());
+    ctx.ExitCode = await ClustersCommand.ExecuteAsync(ctx.GetCancellationToken());
 });
 
 gatewayCmd.AddCommand(gatewayHealthCmd);

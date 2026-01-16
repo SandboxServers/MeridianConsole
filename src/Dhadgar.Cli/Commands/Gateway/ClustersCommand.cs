@@ -36,14 +36,14 @@ public sealed class ClustersCommand
             {
                 var status = cluster.HealthStatus == "Healthy"
                     ? "[green]Healthy[/]"
-                    : $"[red]{cluster.HealthStatus}[/]";
+                    : $"[red]{Markup.Escape(cluster.HealthStatus)}[/]";
 
                 var available = cluster.AvailableDestinations == cluster.TotalDestinations
                     ? $"[green]{cluster.AvailableDestinations}[/]"
                     : $"[yellow]{cluster.AvailableDestinations}[/]";
 
                 table.AddRow(
-                    $"[cyan]{cluster.ClusterId}[/]",
+                    $"[cyan]{Markup.Escape(cluster.ClusterId)}[/]",
                     status,
                     available,
                     cluster.TotalDestinations.ToString(System.Globalization.CultureInfo.InvariantCulture));
