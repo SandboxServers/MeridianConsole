@@ -80,8 +80,8 @@ steps:
       # Package the chart
       helm package meridian-console
 
-      # Get chart version
-      CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}')
+      # Get chart version (strip any Windows CRLF line endings)
+      CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}' | tr -d '\r')
       CHART_FILE="meridian-console-${CHART_VERSION}.tgz"
 
       echo "=== Publishing Chart ==="
