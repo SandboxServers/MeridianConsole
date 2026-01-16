@@ -37,11 +37,11 @@ public sealed class RoutesCommand
             foreach (var route in response.Routes.OrderBy(r => r.Order ?? 999).ThenBy(r => r.RouteId))
             {
                 table.AddRow(
-                    $"[cyan]{route.RouteId}[/]",
-                    route.Path,
-                    $"[yellow]{route.ClusterId}[/]",
-                    route.AuthorizationPolicy ?? "[dim]default[/]",
-                    route.RateLimiterPolicy ?? "[dim]none[/]",
+                    $"[cyan]{Markup.Escape(route.RouteId)}[/]",
+                    Markup.Escape(route.Path),
+                    $"[yellow]{Markup.Escape(route.ClusterId)}[/]",
+                    route.AuthorizationPolicy is not null ? Markup.Escape(route.AuthorizationPolicy) : "[dim]default[/]",
+                    route.RateLimiterPolicy is not null ? Markup.Escape(route.RateLimiterPolicy) : "[dim]none[/]",
                     route.Order?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "[dim]-[/]");
             }
 

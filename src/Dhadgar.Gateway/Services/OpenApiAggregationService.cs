@@ -174,8 +174,21 @@ public class OpenApiAggregationService
                     {
                         if (operation is JsonObject op)
                         {
-                            // Replace tags with just the service name for clean grouping
-                            op["tags"] = new JsonArray(service.Name);
+                            // Prepend service name to existing tags for grouping while preserving context
+                            var existingTags = op["tags"] as JsonArray ?? new JsonArray();
+                            var hasServiceTag = existingTags.Any(t => t?.GetValue<string>() == service.Name);
+                            if (!hasServiceTag)
+                            {
+                                var newTags = new JsonArray(service.Name);
+                                foreach (var tag in existingTags)
+                                {
+                                    if (tag is not null)
+                                    {
+                                        newTags.Add(JsonNode.Parse(tag.ToJsonString()));
+                                    }
+                                }
+                                op["tags"] = newTags;
+                            }
 
                             // Update schema references to include service prefix
                             UpdateSchemaRefs(op, service.Name);

@@ -79,10 +79,18 @@ public class CircuitBreakerMiddleware
             return;
         }
 
-        await _next(context);
-
-        // Track response for circuit state
-        TrackResponse(circuitState, serviceId, context.Response.StatusCode);
+        try
+        {
+            await _next(context);
+            // Track response for circuit state
+            TrackResponse(circuitState, serviceId, context.Response.StatusCode);
+        }
+        catch (Exception)
+        {
+            // Treat unhandled exception as failure (500) for circuit breaker tracking
+            TrackResponse(circuitState, serviceId, StatusCodes.Status500InternalServerError);
+            throw;
+        }
     }
 
     private bool IsCircuitOpen(CircuitState state, string serviceId)

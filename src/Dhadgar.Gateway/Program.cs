@@ -217,6 +217,13 @@ builder.Services.AddRateLimiter(options =>
         {
             partitionKey = "unknown";
         }
+        else if (ip.IsIPv6LinkLocal)
+        {
+            // SECURITY: Link-local addresses (fe80::) are not globally unique and can be
+            // reused across different networks/interfaces. Treat them as a special bucket
+            // to prevent multiple clients from unfairly sharing the same rate limit.
+            partitionKey = "unknown-linklocal";
+        }
         else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
                  !ip.IsIPv4MappedToIPv6)
         {
