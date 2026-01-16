@@ -53,3 +53,5 @@ gha-creds-*.json
 dist/tools/*
 
 tmpclaude-*
+
+.mcp.json

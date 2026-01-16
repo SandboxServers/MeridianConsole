@@ -10,6 +10,22 @@ public sealed class AuthOptions
     public string SigningKeyPem { get; set; } = string.Empty;
     public string SigningKeyKid { get; set; } = string.Empty;
     public KeyVaultOptions KeyVault { get; set; } = new();
+    public EmailVerificationOptions EmailVerification { get; set; } = new();
+}
+
+public sealed class EmailVerificationOptions
+{
+    /// <summary>
+    /// If true, authentication will fail for users with unverified email addresses.
+    /// Default: false (allow unverified users to authenticate).
+    /// </summary>
+    public bool RequireVerifiedEmail { get; set; }
+
+    /// <summary>
+    /// Operations that require verified email even when RequireVerifiedEmail is false.
+    /// Example values: "billing", "admin", "org:delete"
+    /// </summary>
+    public IReadOnlyList<string> OperationsRequiringVerification { get; set; } = [];
 }
 
 public sealed class ExchangeTokenOptions

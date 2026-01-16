@@ -91,7 +91,7 @@ public sealed class OrganizationSwitchIntegrationTests : IClassFixture<IdentityW
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/organizations/{org2Id}/switch");
-        request.Headers.Add("X-User-Id", userId.ToString());
+        IdentityWebApplicationFactory.AddTestAuth(request, userId);
 
         var response = await _client.SendAsync(request);
 
@@ -180,7 +180,7 @@ public sealed class OrganizationSwitchIntegrationTests : IClassFixture<IdentityW
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/organizations/{nonMemberOrgId}/switch");
-        request.Headers.Add("X-User-Id", userId.ToString());
+        IdentityWebApplicationFactory.AddTestAuth(request, userId);
 
         var response = await _client.SendAsync(request);
 
@@ -236,7 +236,7 @@ public sealed class OrganizationSwitchIntegrationTests : IClassFixture<IdentityW
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/organizations/{orgId}/switch");
-        request.Headers.Add("X-User-Id", userId.ToString());
+        IdentityWebApplicationFactory.AddTestAuth(request, userId);
 
         var response = await _client.SendAsync(request);
 
@@ -310,7 +310,7 @@ public sealed class OrganizationSwitchIntegrationTests : IClassFixture<IdentityW
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/organizations/{memberOrgId}/switch");
-        request.Headers.Add("X-User-Id", userId.ToString());
+        IdentityWebApplicationFactory.AddTestAuth(request, userId);
 
         var response = await _client.SendAsync(request);
 
