@@ -82,6 +82,45 @@ public interface IIdentityApi
         string orgId,
         [AliasAs("query")] string query,
         CancellationToken ct = default);
+
+    // Role update/delete/members endpoints
+    [Patch("/organizations/{orgId}/roles/{roleId}")]
+    Task<RoleSummaryResponse> UpdateRoleAsync(string orgId, string roleId, [Body] UpdateRoleRequest request, CancellationToken ct = default);
+
+    [Delete("/organizations/{orgId}/roles/{roleId}")]
+    Task DeleteRoleAsync(string orgId, string roleId, CancellationToken ct = default);
+
+    [Get("/organizations/{orgId}/roles/{roleId}/members")]
+    Task<List<RoleMemberResponse>> GetRoleMembersAsync(string orgId, string roleId, CancellationToken ct = default);
+
+    // /me self-service endpoints
+    [Get("/me")]
+    Task<MeProfileResponse> GetMyProfileAsync(CancellationToken ct = default);
+
+    [Patch("/me")]
+    Task<MeProfileResponse> UpdateMyProfileAsync([Body] UpdateProfileRequest request, CancellationToken ct = default);
+
+    [Get("/me/organizations")]
+    Task<MyOrganizationsResponse> GetMyOrganizationsAsync(CancellationToken ct = default);
+
+    [Get("/me/linked-accounts")]
+    Task<MyLinkedAccountsResponse> GetMyLinkedAccountsAsync(CancellationToken ct = default);
+
+    [Get("/me/permissions")]
+    Task<MyPermissionsResponse> GetMyPermissionsAsync(CancellationToken ct = default);
+
+    // Session management endpoints
+    [Get("/me/sessions")]
+    Task<List<SessionResponse>> GetMySessionsAsync(CancellationToken ct = default);
+
+    [Delete("/me/sessions/{sessionId}")]
+    Task RevokeSessionAsync(string sessionId, CancellationToken ct = default);
+
+    [Post("/me/sessions/revoke-all")]
+    Task<RevokeAllSessionsResponse> RevokeAllSessionsAsync(CancellationToken ct = default);
+
+    [Post("/logout")]
+    Task LogoutAsync(CancellationToken ct = default);
 }
 
 public class TokenResponse
@@ -397,4 +436,159 @@ public class RoleAssignmentResponse
 
     [JsonPropertyName("role")]
     public string Role { get; set; } = string.Empty;
+}
+
+public class UpdateRoleRequest
+{
+    [JsonPropertyName("name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("description")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("permissions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Collection<string>? Permissions { get; set; }
+}
+
+public class RoleMemberResponse
+{
+    [JsonPropertyName("userId")]
+    public string UserId { get; set; } = string.Empty;
+
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("joinedAt")]
+    public DateTime JoinedAt { get; set; }
+}
+
+public class MeProfileResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("emailVerified")]
+    public bool EmailVerified { get; set; }
+
+    [JsonPropertyName("preferredOrganizationId")]
+    public string? PreferredOrganizationId { get; set; }
+
+    [JsonPropertyName("hasPasskeysRegistered")]
+    public bool HasPasskeysRegistered { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; }
+
+    [JsonPropertyName("lastAuthenticatedAt")]
+    public DateTime? LastAuthenticatedAt { get; set; }
+}
+
+public class UpdateProfileRequest
+{
+    [JsonPropertyName("displayName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("preferredOrganizationId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PreferredOrganizationId { get; set; }
+}
+
+public class MyOrganizationsResponse
+{
+    [JsonPropertyName("organizations")]
+    public Collection<MyOrganizationEntry> Organizations { get; set; } = [];
+}
+
+public class MyOrganizationEntry
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("slug")]
+    public string? Slug { get; set; }
+
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = string.Empty;
+
+    [JsonPropertyName("joinedAt")]
+    public DateTime JoinedAt { get; set; }
+
+    [JsonPropertyName("isPreferred")]
+    public bool IsPreferred { get; set; }
+}
+
+public class MyLinkedAccountsResponse
+{
+    [JsonPropertyName("linkedAccounts")]
+    public Collection<MyLinkedAccountEntry> LinkedAccounts { get; set; } = [];
+}
+
+public class MyLinkedAccountEntry
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("provider")]
+    public string Provider { get; set; } = string.Empty;
+
+    [JsonPropertyName("providerDisplayName")]
+    public string? ProviderDisplayName { get; set; }
+
+    [JsonPropertyName("linkedAt")]
+    public DateTime LinkedAt { get; set; }
+
+    [JsonPropertyName("lastUsedAt")]
+    public DateTime? LastUsedAt { get; set; }
+}
+
+public class MyPermissionsResponse
+{
+    [JsonPropertyName("organizationId")]
+    public string OrganizationId { get; set; } = string.Empty;
+
+    [JsonPropertyName("permissions")]
+    public Collection<string> Permissions { get; set; } = [];
+}
+
+public class SessionResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("organizationId")]
+    public string OrganizationId { get; set; } = string.Empty;
+
+    [JsonPropertyName("deviceInfo")]
+    public string? DeviceInfo { get; set; }
+
+    [JsonPropertyName("issuedAt")]
+    public DateTime IssuedAt { get; set; }
+
+    [JsonPropertyName("expiresAt")]
+    public DateTime ExpiresAt { get; set; }
+
+    [JsonPropertyName("isCurrent")]
+    public bool IsCurrent { get; set; }
+}
+
+public class RevokeAllSessionsResponse
+{
+    [JsonPropertyName("revokedCount")]
+    public int RevokedCount { get; set; }
 }

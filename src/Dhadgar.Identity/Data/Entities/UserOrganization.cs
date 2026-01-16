@@ -25,6 +25,12 @@ public sealed class UserOrganization
     public Guid? InvitedByUserId { get; set; }
     public DateTime? InvitationAcceptedAt { get; set; }
 
+    /// <summary>
+    /// When the invitation expires (null for no expiration or already accepted invites).
+    /// Pending invitations with expired dates should be treated as rejected.
+    /// </summary>
+    public DateTime? InvitationExpiresAt { get; set; }
+
     public User User { get; set; } = null!;
     public Organization Organization { get; set; } = null!;
     public User? InvitedBy { get; set; }

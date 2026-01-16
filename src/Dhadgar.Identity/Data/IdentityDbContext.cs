@@ -18,6 +18,7 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<ClaimDefinition> ClaimDefinitions => Set<ClaimDefinition>();
     public DbSet<OrganizationRole> OrganizationRoles => Set<OrganizationRole>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -31,8 +32,15 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
         builder.ApplyConfiguration(new RefreshTokenConfiguration());
         builder.ApplyConfiguration(new ClaimDefinitionConfiguration());
         builder.ApplyConfiguration(new OrganizationRoleConfiguration());
+        builder.ApplyConfiguration(new AuditEventConfiguration());
 
         builder.UseOpenIddict();
+
+        // Global query filters for soft-delete
+        // These automatically exclude deleted records from all queries
+        // Use IgnoreQueryFilters() when you need to include deleted records
+        builder.Entity<User>().HasQueryFilter(u => u.DeletedAt == null);
+        builder.Entity<Organization>().HasQueryFilter(o => o.DeletedAt == null);
 
         if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
         {

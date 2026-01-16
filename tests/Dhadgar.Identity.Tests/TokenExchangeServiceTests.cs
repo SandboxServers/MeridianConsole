@@ -116,6 +116,131 @@ public class TokenExchangeServiceTests
         Assert.Empty(eventPublisher.UserAuthenticatedEvents);
     }
 
+    [Fact]
+    public async Task Exchange_WithUnverifiedEmailAndEnforcementEnabled_RejectsToken()
+    {
+        // Arrange: Create context with email verification enforcement enabled
+        using var context = CreateContext();
+        var validator = new TestExchangeTokenValidator(CreatePrincipal());
+        var replayStore = new InMemoryReplayStore();
+        var jwtService = new ClaimCapturingJwtService();
+        var permissionService = new PermissionService(context, TimeProvider.System);
+        var eventPublisher = new TestIdentityEventPublisher();
+
+        // Enable email verification requirement
+        var authOptions = new Dhadgar.Identity.Options.AuthOptions
+        {
+            RefreshTokenLifetimeDays = 7,
+            EmailVerification = new Dhadgar.Identity.Options.EmailVerificationOptions
+            {
+                RequireVerifiedEmail = true
+            }
+        };
+        var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(authOptions);
+        var lookupNormalizer = new UpperInvariantLookupNormalizer();
+
+        var service = new TokenExchangeService(
+            context,
+            validator,
+            replayStore,
+            jwtService,
+            permissionService,
+            eventPublisher,
+            TimeProvider.System,
+            options,
+            NullLogger<TokenExchangeService>.Instance,
+            lookupNormalizer);
+
+        // Act
+        var outcome = await service.ExchangeAsync("token");
+
+        // Assert: Should fail because email is not verified and enforcement is enabled
+        Assert.False(outcome.Success);
+        Assert.Equal("email_not_verified", outcome.Error);
+    }
+
+    [Fact]
+    public async Task Exchange_WithUnverifiedEmailAndEnforcementDisabled_Succeeds()
+    {
+        // Arrange: Create context with email verification enforcement disabled (default)
+        using var context = CreateContext();
+        var validator = new TestExchangeTokenValidator(CreatePrincipal());
+        var replayStore = new InMemoryReplayStore();
+        var jwtService = new ClaimCapturingJwtService();
+        var permissionService = new PermissionService(context, TimeProvider.System);
+        var eventPublisher = new TestIdentityEventPublisher();
+
+        // Email verification NOT required (default)
+        var authOptions = new Dhadgar.Identity.Options.AuthOptions
+        {
+            RefreshTokenLifetimeDays = 7,
+            EmailVerification = new Dhadgar.Identity.Options.EmailVerificationOptions
+            {
+                RequireVerifiedEmail = false
+            }
+        };
+        var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(authOptions);
+        var lookupNormalizer = new UpperInvariantLookupNormalizer();
+
+        var service = new TokenExchangeService(
+            context,
+            validator,
+            replayStore,
+            jwtService,
+            permissionService,
+            eventPublisher,
+            TimeProvider.System,
+            options,
+            NullLogger<TokenExchangeService>.Instance,
+            lookupNormalizer);
+
+        // Act
+        var outcome = await service.ExchangeAsync("token");
+
+        // Assert: Should succeed even with unverified email
+        Assert.True(outcome.Success);
+        Assert.NotNull(outcome.AccessToken);
+    }
+
+    [Fact]
+    public async Task Exchange_TokenIncludesEmailVerifiedClaim()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var validator = new TestExchangeTokenValidator(CreatePrincipal());
+        var replayStore = new InMemoryReplayStore();
+        var jwtService = new ClaimCapturingJwtService();
+        var permissionService = new PermissionService(context, TimeProvider.System);
+        var eventPublisher = new TestIdentityEventPublisher();
+        var options = new OptionsWrapper<Dhadgar.Identity.Options.AuthOptions>(
+            new Dhadgar.Identity.Options.AuthOptions { RefreshTokenLifetimeDays = 7 });
+        var lookupNormalizer = new UpperInvariantLookupNormalizer();
+
+        var service = new TokenExchangeService(
+            context,
+            validator,
+            replayStore,
+            jwtService,
+            permissionService,
+            eventPublisher,
+            TimeProvider.System,
+            options,
+            NullLogger<TokenExchangeService>.Instance,
+            lookupNormalizer);
+
+        // Act
+        var outcome = await service.ExchangeAsync("token");
+
+        // Assert: Token should include email_verified claim
+        Assert.True(outcome.Success);
+        Assert.NotNull(jwtService.CapturedClaims);
+
+        var emailVerifiedClaim = jwtService.CapturedClaims
+            .FirstOrDefault(c => c.Type == "email_verified");
+        Assert.NotNull(emailVerifiedClaim);
+        Assert.Equal("false", emailVerifiedClaim.Value); // New users have unverified email by default
+    }
+
     private static ClaimsPrincipal CreatePrincipal()
     {
         var identity = new ClaimsIdentity(new[]
@@ -174,5 +299,18 @@ public class TokenExchangeServiceTests
             IEnumerable<Claim> claims,
             CancellationToken ct = default)
             => Task.FromResult(("access-token", "refresh-token", 900));
+    }
+
+    private sealed class ClaimCapturingJwtService : IJwtService
+    {
+        public IReadOnlyList<Claim>? CapturedClaims { get; private set; }
+
+        public Task<(string AccessToken, string RefreshToken, int ExpiresIn)> GenerateTokenPairAsync(
+            IEnumerable<Claim> claims,
+            CancellationToken ct = default)
+        {
+            CapturedClaims = claims.ToList();
+            return Task.FromResult(("access-token", "refresh-token", 900));
+        }
     }
 }

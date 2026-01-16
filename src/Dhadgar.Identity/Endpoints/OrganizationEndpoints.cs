@@ -13,6 +13,7 @@ public static class OrganizationEndpoints
         app.MapDelete("/organizations/{organizationId:guid}", DeleteOrganization);
         app.MapPost("/organizations/{organizationId:guid}/switch", SwitchOrganization)
             .RequireRateLimiting("auth");
+        app.MapPost("/organizations/{organizationId:guid}/transfer-ownership", TransferOwnership);
     }
 
     private static async Task<IResult> ListOrganizations(
@@ -157,4 +158,37 @@ public static class OrganizationEndpoints
             permissions = outcome.Permissions
         });
     }
+
+    private static async Task<IResult> TransferOwnership(
+        HttpContext context,
+        Guid organizationId,
+        TransferOwnershipRequest request,
+        OrganizationService organizationService,
+        CancellationToken ct)
+    {
+        if (!EndpointHelpers.TryGetUserId(context, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await organizationService.TransferOwnershipAsync(
+            organizationId,
+            userId,
+            request.NewOwnerId,
+            ct);
+
+        if (!result.Success)
+        {
+            return result.Error switch
+            {
+                "not_owner" => Results.Forbid(),
+                "org_not_found" => Results.NotFound(new { error = result.Error }),
+                _ => Results.BadRequest(new { error = result.Error })
+            };
+        }
+
+        return Results.Ok(new { message = "Ownership transferred successfully" });
+    }
 }
+
+public sealed record TransferOwnershipRequest(Guid NewOwnerId);

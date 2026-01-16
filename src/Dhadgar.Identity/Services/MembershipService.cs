@@ -29,6 +29,30 @@ public sealed record MemberClaimRequest(
     Guid? ResourceId,
     DateTime? ExpiresAt);
 
+/// <summary>
+/// Summary of a pending invitation for a user.
+/// </summary>
+public sealed record PendingInvitationSummary(
+    Guid MembershipId,
+    Guid OrganizationId,
+    string OrganizationName,
+    string Role,
+    Guid? InvitedByUserId,
+    string? InvitedByEmail,
+    DateTime InvitedAt,
+    DateTime? ExpiresAt);
+
+/// <summary>
+/// Options for invitation behavior.
+/// </summary>
+public sealed class InvitationOptions
+{
+    /// <summary>
+    /// Default invitation expiration in days. Set to 0 for no expiration.
+    /// </summary>
+    public int DefaultExpirationDays { get; set; } = 7;
+}
+
 public sealed class MembershipService
 {
     private readonly IdentityDbContext _dbContext;
@@ -129,6 +153,8 @@ public sealed class MembershipService
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var expiresAt = now.AddDays(7); // Default 7-day expiration
+
         var membership = new UserOrganization
         {
             UserId = user.Id,
@@ -136,7 +162,8 @@ public sealed class MembershipService
             Role = roleResolution.Name,
             IsActive = false,
             JoinedAt = now,
-            InvitedByUserId = invitedByUserId
+            InvitedByUserId = invitedByUserId,
+            InvitationExpiresAt = expiresAt
         };
 
         _dbContext.UserOrganizations.Add(membership);
@@ -181,8 +208,16 @@ public sealed class MembershipService
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        // Check if invitation has expired
+        if (membership.InvitationExpiresAt.HasValue && membership.InvitationExpiresAt.Value < now)
+        {
+            return ServiceResult.Fail<UserOrganization>("invite_expired");
+        }
+
         membership.IsActive = true;
         membership.InvitationAcceptedAt = now;
+        membership.InvitationExpiresAt = null; // Clear expiration once accepted
         membership.JoinedAt = now;
 
         await _dbContext.SaveChangesAsync(ct);
@@ -438,6 +473,253 @@ public sealed class MembershipService
             _timeProvider.GetUtcNow()), ct);
 
         return ServiceResult.Ok(true);
+    }
+
+    /// <summary>
+    /// Get all pending invitations for a user across all organizations.
+    /// </summary>
+    public async Task<IReadOnlyCollection<PendingInvitationSummary>> GetPendingInvitationsForUserAsync(
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var invitations = await _dbContext.UserOrganizations
+            .AsNoTracking()
+            .Where(uo =>
+                uo.UserId == userId &&
+                !uo.IsActive &&
+                uo.LeftAt == null &&
+                (uo.InvitationExpiresAt == null || uo.InvitationExpiresAt > now))
+            .Join(_dbContext.Organizations.AsNoTracking(),
+                uo => uo.OrganizationId,
+                o => o.Id,
+                (uo, o) => new { Membership = uo, Organization = o })
+            .Select(x => new PendingInvitationSummary(
+                x.Membership.Id,
+                x.Membership.OrganizationId,
+                x.Organization.Name,
+                x.Membership.Role,
+                x.Membership.InvitedByUserId,
+                null, // Will be filled separately if needed
+                x.Membership.JoinedAt,
+                x.Membership.InvitationExpiresAt))
+            .ToListAsync(ct);
+
+        return invitations;
+    }
+
+    /// <summary>
+    /// Reject a pending invitation (user declines to join).
+    /// </summary>
+    public async Task<ServiceResult<bool>> RejectInviteAsync(
+        Guid organizationId,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var membership = await _dbContext.UserOrganizations
+            .FirstOrDefaultAsync(uo =>
+                uo.OrganizationId == organizationId &&
+                uo.UserId == userId &&
+                !uo.IsActive &&
+                uo.LeftAt == null,
+                ct);
+
+        if (membership is null)
+        {
+            return ServiceResult.Fail<bool>("invite_not_found");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        // Check if already expired
+        if (membership.InvitationExpiresAt.HasValue && membership.InvitationExpiresAt.Value < now)
+        {
+            return ServiceResult.Fail<bool>("invite_expired");
+        }
+
+        membership.LeftAt = now;
+        membership.IsActive = false;
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            membership.UserId,
+            membership.Id,
+            MembershipChangeTypes.Rejected,
+            membership.Role,
+            null,
+            null,
+            null,
+            null,
+            userId,
+            _timeProvider.GetUtcNow()), ct);
+
+        return ServiceResult.Ok(true);
+    }
+
+    /// <summary>
+    /// Withdraw a pending invitation (inviter revokes the invite).
+    /// </summary>
+    public async Task<ServiceResult<bool>> WithdrawInviteAsync(
+        Guid organizationId,
+        Guid targetUserId,
+        Guid actorUserId,
+        CancellationToken ct = default)
+    {
+        var membership = await _dbContext.UserOrganizations
+            .FirstOrDefaultAsync(uo =>
+                uo.OrganizationId == organizationId &&
+                uo.UserId == targetUserId &&
+                !uo.IsActive &&
+                uo.LeftAt == null,
+                ct);
+
+        if (membership is null)
+        {
+            return ServiceResult.Fail<bool>("invite_not_found");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        membership.LeftAt = now;
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await PublishMembershipChangedAsync(new OrgMembershipChanged(
+            organizationId,
+            membership.UserId,
+            membership.Id,
+            MembershipChangeTypes.Withdrawn,
+            membership.Role,
+            null,
+            null,
+            null,
+            null,
+            actorUserId,
+            _timeProvider.GetUtcNow()), ct);
+
+        return ServiceResult.Ok(true);
+    }
+
+    /// <summary>
+    /// Mark expired invitations as left (called by cleanup service).
+    /// </summary>
+    public async Task<int> MarkExpiredInvitationsAsync(CancellationToken ct = default)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var expiredCount = await _dbContext.UserOrganizations
+            .Where(uo =>
+                !uo.IsActive &&
+                uo.LeftAt == null &&
+                uo.InvitationExpiresAt != null &&
+                uo.InvitationExpiresAt < now)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.LeftAt, now),
+                ct);
+
+        return expiredCount;
+    }
+
+    /// <summary>
+    /// Bulk invite multiple users to an organization.
+    /// Returns per-item results (partial success is possible).
+    /// </summary>
+    public async Task<BulkOperationResult<Guid>> BulkInviteAsync(
+        Guid organizationId,
+        Guid invitedByUserId,
+        IReadOnlyCollection<MemberInviteRequest> requests,
+        CancellationToken ct = default)
+    {
+        const int maxBulkSize = 50;
+
+        if (requests.Count == 0)
+        {
+            return new BulkOperationResult<Guid>([], []);
+        }
+
+        if (requests.Count > maxBulkSize)
+        {
+            var error = new BulkItemError<Guid>(Guid.Empty, "too_many_requests", $"Maximum {maxBulkSize} invites per request");
+            return new BulkOperationResult<Guid>([], [error]);
+        }
+
+        var succeeded = new List<Guid>();
+        var failed = new List<BulkItemError<Guid>>();
+
+        foreach (var request in requests)
+        {
+            var itemId = request.UserId ?? Guid.Empty;
+            try
+            {
+                var result = await InviteAsync(organizationId, invitedByUserId, request, ct);
+                if (result.Success && result.Value is not null)
+                {
+                    succeeded.Add(result.Value.UserId);
+                }
+                else
+                {
+                    failed.Add(new BulkItemError<Guid>(itemId, result.Error ?? "unknown_error", null));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during bulk invite for {Email}", request.Email);
+                failed.Add(new BulkItemError<Guid>(itemId, "internal_error", ex.Message));
+            }
+        }
+
+        return new BulkOperationResult<Guid>(succeeded, failed);
+    }
+
+    /// <summary>
+    /// Bulk remove multiple members from an organization.
+    /// Returns per-item results (partial success is possible).
+    /// </summary>
+    public async Task<BulkOperationResult<Guid>> BulkRemoveAsync(
+        Guid organizationId,
+        IReadOnlyCollection<Guid> memberIds,
+        CancellationToken ct = default)
+    {
+        const int maxBulkSize = 50;
+
+        if (memberIds.Count == 0)
+        {
+            return new BulkOperationResult<Guid>([], []);
+        }
+
+        if (memberIds.Count > maxBulkSize)
+        {
+            var error = new BulkItemError<Guid>(Guid.Empty, "too_many_requests", $"Maximum {maxBulkSize} removals per request");
+            return new BulkOperationResult<Guid>([], [error]);
+        }
+
+        var succeeded = new List<Guid>();
+        var failed = new List<BulkItemError<Guid>>();
+
+        foreach (var memberId in memberIds)
+        {
+            try
+            {
+                var result = await RemoveMemberAsync(organizationId, memberId, ct);
+                if (result.Success)
+                {
+                    succeeded.Add(memberId);
+                }
+                else
+                {
+                    failed.Add(new BulkItemError<Guid>(memberId, result.Error ?? "unknown_error", null));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during bulk remove for member {MemberId}", memberId);
+                failed.Add(new BulkItemError<Guid>(memberId, "internal_error", ex.Message));
+            }
+        }
+
+        return new BulkOperationResult<Guid>(succeeded, failed);
     }
 
     private async Task PublishMembershipChangedAsync(OrgMembershipChanged message, CancellationToken ct)

@@ -126,6 +126,9 @@ public static class OAuthProviderRegistry
                 options.Region = parsedRegion;
             }
 
+            // SECURITY: Enable PKCE if supported by the provider
+            options.UsePkce = true;
+
             OAuthLinkingHandler.Configure(options, BattleNet);
         });
     }
@@ -193,6 +196,10 @@ public static class OAuthProviderRegistry
             options.TokenEndpoint = tokenEndpoint;
             options.UserInformationEndpoint = userInfoEndpoint;
             options.SaveTokens = false;
+
+            // SECURITY: Enable PKCE if supported by the provider
+            options.UsePkce = true;
+
             OAuthLinkingHandler.Configure(options, Epic);
         });
     }
@@ -224,6 +231,11 @@ public static class OAuthProviderRegistry
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.Scope.Add("xboxlive.signin");
+
+            // SECURITY: Enable PKCE (Proof Key for Code Exchange)
+            // Prevents authorization code interception attacks
+            options.UsePkce = true;
+
             OAuthLinkingHandler.Configure(options, Xbox);
         });
     }

@@ -27,7 +27,7 @@ public sealed class OAuthLinkingTests : IClassFixture<IdentityWebApplicationFact
         });
 
         using var linkRequest = new HttpRequestMessage(HttpMethod.Get, "/oauth/steam/link");
-        linkRequest.Headers.Add("X-User-Id", userId.ToString("D"));
+        IdentityWebApplicationFactory.AddTestAuth(linkRequest, userId);
 
         var linkResponse = await client.SendAsync(linkRequest);
 
@@ -65,7 +65,7 @@ public sealed class OAuthLinkingTests : IClassFixture<IdentityWebApplicationFact
         var client = _factory.CreateClient();
 
         using var linkRequest = new HttpRequestMessage(HttpMethod.Get, "/oauth/unknown/link");
-        linkRequest.Headers.Add("X-User-Id", userId.ToString("D"));
+        IdentityWebApplicationFactory.AddTestAuth(linkRequest, userId);
 
         var response = await client.SendAsync(linkRequest);
 

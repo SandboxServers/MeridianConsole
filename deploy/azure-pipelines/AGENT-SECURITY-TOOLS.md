@@ -223,6 +223,25 @@ ls -l /var/run/docker.sock
 
 The pipeline automatically passes this to OWASP Dependency-Check via the `nvdApiKey` parameter.
 
+### OWASP Dependency-Check Database Storage
+
+**Symptom**: First scan is slow (5-15 minutes) on every pipeline run.
+
+**Cause**: The NVD database (~200MB) is stored in `$(Agent.TempDirectory)` which is ephemeral and cleaned up between runs.
+
+**Fix** (optional, for faster subsequent scans):
+
+1. Create a persistent volume in [agent-swarm.yml](agent-swarm.yml):
+   ```yaml
+   volumes:
+     - azp-agent-work:/azp/_work
+     - dependency-check-data:/azp/_work/_tool/dependency-check-data
+   ```
+
+2. Update Security.yml to use the persistent path (instead of `$(Agent.TempDirectory)/dependency-check-data`)
+
+**Trade-off**: Persistence saves 5-10 minutes per scan but uses ~500MB disk space per agent.
+
 ## Cost Optimization
 
 **Estimated savings per pipeline run**:
