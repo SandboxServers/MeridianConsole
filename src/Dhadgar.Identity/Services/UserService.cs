@@ -486,6 +486,12 @@ public sealed class UserService
 
         user.UpdatedAt = now;
 
+        // Revoke all refresh tokens for this organization membership
+        // This prevents the user from using existing tokens after removal
+        await _dbContext.RefreshTokens
+            .Where(t => t.UserId == userId && t.OrganizationId == organizationId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAt, now), ct);
+
         var otherMembershipsExist = await _dbContext.UserOrganizations
             .AnyAsync(uo => uo.UserId == userId && uo.LeftAt == null, ct);
 
@@ -494,10 +500,82 @@ public sealed class UserService
             if (user.DeletedAt is null)
             {
                 user.DeletedAt = now;
+
+                // User is being fully soft-deleted, revoke ALL their remaining tokens
+                await _dbContext.RefreshTokens
+                    .Where(t => t.UserId == userId && t.RevokedAt == null)
+                    .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAt, now), ct);
             }
         }
 
         await _dbContext.SaveChangesAsync(ct);
+        return ServiceResult.Ok(true);
+    }
+
+    /// <summary>
+    /// User requests deletion of their own account.
+    /// Sets a 30-day grace period before permanent deletion and immediately revokes all tokens.
+    /// </summary>
+    public async Task<ServiceResult<DateTime>> RequestDeletionAsync(
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null, ct);
+
+        if (user is null)
+        {
+            return ServiceResult.Fail<DateTime>("user_not_found");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var scheduledDeletion = now.AddDays(30);
+
+        // Mark user as pending deletion
+        user.DeletedAt = scheduledDeletion;
+        user.UpdatedAt = now;
+
+        // Immediately revoke all refresh tokens
+        await _dbContext.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAt, now), ct);
+
+        // Mark all organization memberships as inactive
+        await _dbContext.UserOrganizations
+            .Where(uo => uo.UserId == userId && uo.LeftAt == null)
+            .ExecuteUpdateAsync(uo => uo
+                .SetProperty(x => x.IsActive, false)
+                .SetProperty(x => x.LeftAt, now), ct);
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        return ServiceResult.Ok(scheduledDeletion);
+    }
+
+    /// <summary>
+    /// Cancels a pending account deletion request.
+    /// Only works if the deletion hasn't been finalized yet.
+    /// </summary>
+    public async Task<ServiceResult<bool>> CancelDeletionAsync(
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt != null && u.DeletedAt > now, ct);
+
+        if (user is null)
+        {
+            return ServiceResult.Fail<bool>("user_not_found_or_already_deleted");
+        }
+
+        // Clear the scheduled deletion
+        user.DeletedAt = null;
+        user.UpdatedAt = now;
+
+        await _dbContext.SaveChangesAsync(ct);
+
         return ServiceResult.Ok(true);
     }
 }

@@ -23,9 +23,13 @@ using IdentitySearchUsersCommand = Dhadgar.Cli.Commands.Identity.SearchUsersComm
 using IdentityListRolesCommand = Dhadgar.Cli.Commands.Identity.ListRolesCommand;
 using IdentityGetRoleCommand = Dhadgar.Cli.Commands.Identity.GetRoleCommand;
 using IdentityCreateRoleCommand = Dhadgar.Cli.Commands.Identity.CreateRoleCommand;
+using IdentityUpdateRoleCommand = Dhadgar.Cli.Commands.Identity.UpdateRoleCommand;
+using IdentityDeleteRoleCommand = Dhadgar.Cli.Commands.Identity.DeleteRoleCommand;
+using IdentityListRoleMembersCommand = Dhadgar.Cli.Commands.Identity.ListRoleMembersCommand;
 using IdentityAssignRoleCommand = Dhadgar.Cli.Commands.Identity.AssignRoleCommand;
 using IdentityRevokeRoleCommand = Dhadgar.Cli.Commands.Identity.RevokeRoleCommand;
 using IdentitySearchRolesCommand = Dhadgar.Cli.Commands.Identity.SearchRolesCommand;
+using Dhadgar.Cli.Commands.Me;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
 
@@ -45,7 +49,8 @@ root.SetHandler(() =>
         .AddColumn("");
 
     table.AddRow("[cyan]dhadgar auth[/]", "[dim]Authentication commands (login, status, logout)[/]");
-table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs/users/roles)[/]");
+    table.AddRow("[cyan]dhadgar me[/]", "[dim]Self-service (profile, sessions, permissions)[/]");
+    table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs/users/roles)[/]");
     table.AddRow("[cyan]dhadgar member[/]", "[dim]Member management (list, invite, remove)[/]");
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
@@ -290,6 +295,42 @@ identityRolesCreateCmd.SetHandler(async (string name, string orgId, string? desc
     await IdentityCreateRoleCommand.ExecuteAsync(name, orgId, description, permissions, CancellationToken.None);
 }, identityRoleNameOpt, identityRoleOrgOpt, identityRoleDescriptionOpt, identityRolePermissionsOpt);
 
+var identityRolesUpdateCmd = new Command("update", "Update a role");
+var identityRolesUpdateIdArg = new Argument<string>("role-id", "Role ID");
+var identityRolesUpdateNameOpt = new Option<string?>("--name", "Role name");
+var identityRolesUpdateDescriptionOpt = new Option<string?>("--description", "Role description");
+var identityRolesUpdatePermissionsOpt = new Option<string?>("--permissions", "Comma-separated permissions");
+var identityRolesUpdateOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesUpdateCmd.AddArgument(identityRolesUpdateIdArg);
+identityRolesUpdateCmd.AddOption(identityRolesUpdateNameOpt);
+identityRolesUpdateCmd.AddOption(identityRolesUpdateDescriptionOpt);
+identityRolesUpdateCmd.AddOption(identityRolesUpdatePermissionsOpt);
+identityRolesUpdateCmd.AddOption(identityRolesUpdateOrgOpt);
+identityRolesUpdateCmd.SetHandler(async (string roleId, string? name, string? description, string? permissions, string? orgId) =>
+{
+    await IdentityUpdateRoleCommand.ExecuteAsync(roleId, orgId, name, description, permissions, CancellationToken.None);
+}, identityRolesUpdateIdArg, identityRolesUpdateNameOpt, identityRolesUpdateDescriptionOpt, identityRolesUpdatePermissionsOpt, identityRolesUpdateOrgOpt);
+
+var identityRolesDeleteCmd = new Command("delete", "Delete a role");
+var identityRolesDeleteIdArg = new Argument<string>("role-id", "Role ID");
+var identityRolesDeleteOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesDeleteCmd.AddArgument(identityRolesDeleteIdArg);
+identityRolesDeleteCmd.AddOption(identityRolesDeleteOrgOpt);
+identityRolesDeleteCmd.SetHandler(async (string roleId, string? orgId) =>
+{
+    await IdentityDeleteRoleCommand.ExecuteAsync(roleId, orgId, CancellationToken.None);
+}, identityRolesDeleteIdArg, identityRolesDeleteOrgOpt);
+
+var identityRolesMembersCmd = new Command("members", "List members with a role");
+var identityRolesMembersIdArg = new Argument<string>("role-id", "Role ID");
+var identityRolesMembersOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesMembersCmd.AddArgument(identityRolesMembersIdArg);
+identityRolesMembersCmd.AddOption(identityRolesMembersOrgOpt);
+identityRolesMembersCmd.SetHandler(async (string roleId, string? orgId) =>
+{
+    await IdentityListRoleMembersCommand.ExecuteAsync(roleId, orgId, CancellationToken.None);
+}, identityRolesMembersIdArg, identityRolesMembersOrgOpt);
+
 var identityRolesAssignCmd = new Command("assign", "Assign a role to a user");
 var identityRolesAssignRoleArg = new Argument<string>("role-id", "Role ID");
 var identityRolesAssignUserOpt = new Option<string>("--user", "User ID") { IsRequired = true };
@@ -327,11 +368,87 @@ identityRolesSearchCmd.SetHandler(async (string query, string? orgId) =>
 identityRolesCmd.AddCommand(identityRolesListCmd);
 identityRolesCmd.AddCommand(identityRolesGetCmd);
 identityRolesCmd.AddCommand(identityRolesCreateCmd);
+identityRolesCmd.AddCommand(identityRolesUpdateCmd);
+identityRolesCmd.AddCommand(identityRolesDeleteCmd);
+identityRolesCmd.AddCommand(identityRolesMembersCmd);
 identityRolesCmd.AddCommand(identityRolesAssignCmd);
 identityRolesCmd.AddCommand(identityRolesRevokeCmd);
 identityRolesCmd.AddCommand(identityRolesSearchCmd);
 
 identityCmd.AddCommand(identityRolesCmd);
+
+// ============================================================================
+// ME COMMANDS (Self-service)
+// ============================================================================
+
+var meCmd = new Command("me", "Self-service commands for current user");
+
+var meProfileCmd = new Command("profile", "Get your profile information");
+meProfileCmd.SetHandler(async () =>
+{
+    await GetProfileCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meUpdateProfileCmd = new Command("update", "Update your profile");
+var meDisplayNameOpt = new Option<string?>("--name", "Display name");
+var mePreferredOrgOpt = new Option<string?>("--preferred-org", "Preferred organization ID");
+meUpdateProfileCmd.AddOption(meDisplayNameOpt);
+meUpdateProfileCmd.AddOption(mePreferredOrgOpt);
+meUpdateProfileCmd.SetHandler(async (string? displayName, string? preferredOrgId) =>
+{
+    await UpdateProfileCommand.ExecuteAsync(displayName, preferredOrgId, CancellationToken.None);
+}, meDisplayNameOpt, mePreferredOrgOpt);
+
+var meOrgsCmd = new Command("orgs", "List your organizations");
+meOrgsCmd.SetHandler(async () =>
+{
+    await ListOrganizationsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meLinkedAccountsCmd = new Command("linked-accounts", "List your linked accounts");
+meLinkedAccountsCmd.SetHandler(async () =>
+{
+    await ListLinkedAccountsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var mePermissionsCmd = new Command("permissions", "List your permissions");
+mePermissionsCmd.SetHandler(async () =>
+{
+    await ListPermissionsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meSessionsCmd = new Command("sessions", "Session management");
+
+var meSessionsListCmd = new Command("list", "List your active sessions");
+meSessionsListCmd.SetHandler(async () =>
+{
+    await ListSessionsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meSessionsRevokeCmd = new Command("revoke", "Revoke a session");
+var meSessionIdArg = new Argument<string>("session-id", "Session ID to revoke");
+meSessionsRevokeCmd.AddArgument(meSessionIdArg);
+meSessionsRevokeCmd.SetHandler(async (string sessionId) =>
+{
+    await RevokeSessionCommand.ExecuteAsync(sessionId, CancellationToken.None);
+}, meSessionIdArg);
+
+var meSessionsRevokeAllCmd = new Command("revoke-all", "Revoke all sessions (logout everywhere)");
+meSessionsRevokeAllCmd.SetHandler(async () =>
+{
+    await RevokeAllSessionsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+meSessionsCmd.AddCommand(meSessionsListCmd);
+meSessionsCmd.AddCommand(meSessionsRevokeCmd);
+meSessionsCmd.AddCommand(meSessionsRevokeAllCmd);
+
+meCmd.AddCommand(meProfileCmd);
+meCmd.AddCommand(meUpdateProfileCmd);
+meCmd.AddCommand(meOrgsCmd);
+meCmd.AddCommand(meLinkedAccountsCmd);
+meCmd.AddCommand(mePermissionsCmd);
+meCmd.AddCommand(meSessionsCmd);
 
 // ============================================================================
 // MEMBER COMMANDS
@@ -558,6 +675,7 @@ ping.SetHandler(async (string url) =>
 // ============================================================================
 
 root.AddCommand(authCmd);
+root.AddCommand(meCmd);
 root.AddCommand(identityCmd);
 root.AddCommand(memberCmd);
 root.AddCommand(secretCmd);
