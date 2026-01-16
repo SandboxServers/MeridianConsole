@@ -1,6 +1,7 @@
 using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.OpenApi;
+using Microsoft.Extensions.Options;
 using Dhadgar.Gateway;
 using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
@@ -183,16 +184,18 @@ builder.Services.AddRateLimiter(options =>
         var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterTime)
             ? (int)retryAfterTime.TotalSeconds
             : 60; // Default to 60 seconds
-        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-        await context.HttpContext.Response.WriteAsJsonAsync(new
+        var problemDetails = new Microsoft.AspNetCore.Mvc.ProblemDetails
         {
-            type = "https://httpstatuses.com/429",
-            title = "Too Many Requests",
-            status = 429,
-            detail = "Request rate limit exceeded. Please retry after the specified time.",
-            instance = context.HttpContext.Request.Path.Value
-        }, cancellationToken: cancellationToken);
+            Type = "https://httpstatuses.com/429",
+            Title = "Too Many Requests",
+            Status = StatusCodes.Status429TooManyRequests,
+            Detail = "Request rate limit exceeded. Please retry after the specified time.",
+            Instance = context.HttpContext.Request.Path.Value
+        };
+
+        await context.HttpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken: cancellationToken);
     };
 
     options.AddPolicy("Global", _ =>
@@ -282,45 +285,34 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+// Configure Cloudflare IP service for dynamic IP range fetching
+builder.Services.AddOptions<CloudflareOptions>()
+    .Bind(builder.Configuration.GetSection(CloudflareOptions.SectionName))
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<ICloudflareIpService, CloudflareIpService>(client =>
+{
+    var timeout = builder.Configuration.GetValue<int?>("Cloudflare:FetchTimeoutSeconds") ?? 30;
+    client.Timeout = TimeSpan.FromSeconds(timeout);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Dhadgar-Gateway/1.0");
+});
+
+builder.Services.AddHostedService<CloudflareIpHostedService>();
+
 // Configure ForwardedHeaders to trust Cloudflare proxy
 // SECURITY: Only trust X-Forwarded-* headers from known Cloudflare IP ranges
 // Without this, attackers could spoof CF-Connecting-IP or X-Forwarded-For headers
+builder.Services.AddSingleton<IPostConfigureOptions<ForwardedHeadersOptions>>(sp =>
+{
+    var cloudflareService = sp.GetRequiredService<ICloudflareIpService>();
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+    return new CloudflareForwardedHeadersPostConfigure(cloudflareService, env);
+});
+
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.ForwardLimit = 2; // Cloudflare + potential internal proxy
-
-    // Load Cloudflare IP ranges from configuration
-    var cloudflareIpv4Ranges = builder.Configuration
-        .GetSection("Cloudflare:IPv4Ranges")
-        .Get<string[]>() ?? [];
-
-    var cloudflareIpv6Ranges = builder.Configuration
-        .GetSection("Cloudflare:IPv6Ranges")
-        .Get<string[]>() ?? [];
-
-    foreach (var range in cloudflareIpv4Ranges)
-    {
-        if (System.Net.IPNetwork.TryParse(range, out var network))
-        {
-            options.KnownIPNetworks.Add(network);
-        }
-    }
-
-    foreach (var range in cloudflareIpv6Ranges)
-    {
-        if (System.Net.IPNetwork.TryParse(range, out var network))
-        {
-            options.KnownIPNetworks.Add(network);
-        }
-    }
-
-    // Allow localhost for development
-    if (builder.Environment.IsDevelopment())
-    {
-        options.KnownProxies.Add(IPAddress.Loopback);
-        options.KnownProxies.Add(IPAddress.IPv6Loopback);
-    }
 });
 
 var app = builder.Build();

@@ -2,19 +2,42 @@ namespace Dhadgar.Gateway.Options;
 
 /// <summary>
 /// Configuration options for Cloudflare proxy IP ranges.
-/// These IPs are used to validate X-Forwarded-For headers.
+/// IP ranges are fetched dynamically from Cloudflare's published endpoints.
+/// Fallback ranges can be configured for offline/air-gapped scenarios.
 /// </summary>
 public class CloudflareOptions
 {
     public const string SectionName = "Cloudflare";
 
     /// <summary>
-    /// Cloudflare IPv4 ranges. See https://www.cloudflare.com/ips-v4
+    /// Whether to enable dynamic IP fetching from Cloudflare.
+    /// Default: true. Set to false to only use fallback ranges.
     /// </summary>
-    public string[] IPv4Ranges { get; set; } = Array.Empty<string>();
+    public bool EnableDynamicFetch { get; set; } = true;
 
     /// <summary>
-    /// Cloudflare IPv6 ranges. See https://www.cloudflare.com/ips-v6
+    /// How often to refresh IP ranges from Cloudflare (in minutes).
+    /// Default: 60 minutes. Cloudflare IPs rarely change.
     /// </summary>
-    public string[] IPv6Ranges { get; set; } = Array.Empty<string>();
+    public int RefreshIntervalMinutes { get; set; } = 60;
+
+    /// <summary>
+    /// Timeout for fetching IP ranges from Cloudflare (in seconds).
+    /// Default: 30 seconds.
+    /// </summary>
+    public int FetchTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Fallback IPv4 ranges for offline/air-gapped scenarios.
+    /// Used when dynamic fetch is disabled or fails on startup.
+    /// See https://www.cloudflare.com/ips-v4
+    /// </summary>
+    public string[] FallbackIPv4Ranges { get; set; } = [];
+
+    /// <summary>
+    /// Fallback IPv6 ranges for offline/air-gapped scenarios.
+    /// Used when dynamic fetch is disabled or fails on startup.
+    /// See https://www.cloudflare.com/ips-v6
+    /// </summary>
+    public string[] FallbackIPv6Ranges { get; set; } = [];
 }

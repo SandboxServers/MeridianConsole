@@ -31,11 +31,13 @@ public static class RoleEndpoints
 
         group.MapPost("/{roleId}/assign", AssignRole)
             .WithName("AssignRole")
-            .WithDescription("Assign a role to a user");
+            .WithDescription("Assign a role to a user")
+            .RequireRateLimiting("Auth");
 
         group.MapPost("/{roleId}/revoke", RevokeRole)
             .WithName("RevokeRole")
-            .WithDescription("Revoke a role from a user");
+            .WithDescription("Revoke a role from a user")
+            .RequireRateLimiting("Auth");
 
         group.MapGet("/{roleId}/members", GetRoleMembers)
             .WithName("GetRoleMembers")

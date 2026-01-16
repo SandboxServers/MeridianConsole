@@ -115,8 +115,10 @@ public static class SwaggerTestHelper
     }
 
     /// <summary>
-    /// Verifies basic service health endpoints are documented in swagger.
-    /// Most services should have /, /hello, and /healthz endpoints.
+    /// Verifies basic service endpoints are documented in swagger.
+    /// Most services should have / and /hello endpoints.
+    /// Note: Health check endpoints (/healthz, /livez, /readyz) use MapHealthChecks which
+    /// does not integrate with OpenAPI, so they are not included in swagger.json.
     /// </summary>
     /// <typeparam name="TEntryPoint">The Program class of the service under test.</typeparam>
     /// <param name="factory">The WebApplicationFactory for the service.</param>
@@ -126,6 +128,6 @@ public static class SwaggerTestHelper
         string swaggerPath = "/swagger/v1/swagger.json")
         where TEntryPoint : class
     {
-        await VerifySwaggerContainsPathsAsync(factory, ["/", "/hello", "/healthz"], swaggerPath);
+        await VerifySwaggerContainsPathsAsync(factory, ["/", "/hello"], swaggerPath);
     }
 }

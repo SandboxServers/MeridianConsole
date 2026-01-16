@@ -52,12 +52,12 @@ public sealed class RoutesCommand
         }
         catch (ApiException ex)
         {
-            AnsiConsole.MarkupLine($"[red]API error: {ex.StatusCode} - {ex.Message}[/]");
+            AnsiConsole.MarkupLine($"[red]API error: {ex.StatusCode} - {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Error: {ex.Message}[/]");
+            AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
     }

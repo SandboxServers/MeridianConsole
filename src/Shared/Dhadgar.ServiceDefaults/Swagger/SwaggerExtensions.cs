@@ -35,39 +35,11 @@ public static class SwaggerExtensions
                 Description = description
             });
 
-            // Apply any additional configuration
+            // Apply any additional configuration (including security if needed)
             configureOptions?.Invoke(options);
         });
 
         return services;
-    }
-
-    /// <summary>
-    /// Adds Swagger/OpenAPI services with JWT Bearer authentication support.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="title">The API title shown in Swagger UI.</param>
-    /// <param name="description">The API description shown in Swagger UI.</param>
-    /// <param name="configureOptions">Optional additional Swagger configuration.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddMeridianSwaggerWithAuth(
-        this IServiceCollection services,
-        string title,
-        string description,
-        Action<SwaggerGenOptions>? configureOptions = null)
-    {
-        return services.AddMeridianSwagger(title, description, options =>
-        {
-            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-            {
-                Name = "Authorization",
-                Scheme = "bearer",
-                BearerFormat = "JWT",
-                Description = "Enter your JWT token"
-            });
-
-            configureOptions?.Invoke(options);
-        });
     }
 
     /// <summary>

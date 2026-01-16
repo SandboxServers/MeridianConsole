@@ -74,10 +74,10 @@ public sealed class HealthCommand
                             : $"[red]{sw.ElapsedMilliseconds}ms[/]";
 
                     table.AddRow(
-                        $"[cyan]{serviceName}[/]",
+                        $"[cyan]{Markup.Escape(serviceName)}[/]",
                         status,
                         responseTime,
-                        $"[dim]{message}[/]");
+                        $"[dim]{Markup.Escape(message)}[/]");
 
                     ctx.Refresh();
                 }

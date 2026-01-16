@@ -88,7 +88,7 @@ Note: Some services auto-apply migrations in Development mode (see `Program.cs`)
 dotnet user-secrets init --project src/Dhadgar.Identity
 
 # Set secrets
-dotnet user-secrets set "Auth:SigningKey" "dev-only-key" --project src/Dhadgar.Identity
+dotnet user-secrets set "Auth:SigningKey" "dev-only-key-at-least-32-bytes-long" --project src/Dhadgar.Identity
 dotnet user-secrets set "Discord:BotToken" "your-token" --project src/Dhadgar.Discord
 
 # List secrets

@@ -1,5 +1,6 @@
-using Refit;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using Refit;
 
 namespace Dhadgar.Cli.Infrastructure.Clients;
 
@@ -75,7 +76,7 @@ public class ReadinessResponse
     public string Status { get; set; } = string.Empty;
 
     [JsonPropertyName("data")]
-    public Dictionary<string, object> Data { get; set; } = new();
+    public Dictionary<string, JsonElement> Data { get; set; } = new();
 }
 
 public class AllServicesHealthResponse

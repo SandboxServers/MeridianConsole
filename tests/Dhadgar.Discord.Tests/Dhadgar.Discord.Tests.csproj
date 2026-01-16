@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
     <AssemblyName>Dhadgar.Discord.Tests</AssemblyName>
     <RootNamespace>Dhadgar.Discord.Tests</RootNamespace>
   </PropertyGroup>

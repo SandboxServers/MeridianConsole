@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
     <AssemblyName>Dhadgar.Firewall.Tests</AssemblyName>
     <RootNamespace>Dhadgar.Firewall.Tests</RootNamespace>
   </PropertyGroup>

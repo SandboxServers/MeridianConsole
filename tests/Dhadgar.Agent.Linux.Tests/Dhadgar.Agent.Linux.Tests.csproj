@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
     <AssemblyName>Dhadgar.Agent.Linux.Tests</AssemblyName>
     <RootNamespace>Dhadgar.Agent.Linux.Tests</RootNamespace>
   </PropertyGroup>

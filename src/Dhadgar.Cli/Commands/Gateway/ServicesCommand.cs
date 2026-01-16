@@ -55,19 +55,19 @@ public sealed class ServicesCommand
                     }
 
                     AnsiConsole.Write(table);
-                    AnsiConsole.MarkupLine($"\n[dim]{response.Summary}[/]");
+                    AnsiConsole.MarkupLine($"\n[dim]{Markup.Escape(response.Summary ?? string.Empty)}[/]");
                 });
 
             return 0;
         }
         catch (ApiException ex)
         {
-            AnsiConsole.MarkupLine($"[red]API error: {ex.StatusCode} - {ex.Message}[/]");
+            AnsiConsole.MarkupLine($"[red]API error: {ex.StatusCode} - {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Error: {ex.Message}[/]");
+            AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
     }

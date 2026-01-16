@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -192,7 +193,7 @@ public class CircuitBreakerMiddleware
     {
         context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         context.Response.ContentType = "application/problem+json";
-        context.Response.Headers["Retry-After"] = _options.OpenDurationSeconds.ToString();
+        context.Response.Headers["Retry-After"] = _options.OpenDurationSeconds.ToString(CultureInfo.InvariantCulture);
 
         var problemDetails = new ProblemDetails
         {

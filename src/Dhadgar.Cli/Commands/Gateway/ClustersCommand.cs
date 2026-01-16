@@ -36,14 +36,14 @@ public sealed class ClustersCommand
             {
                 var status = cluster.HealthStatus == "Healthy"
                     ? "[green]Healthy[/]"
-                    : $"[red]{Markup.Escape(cluster.HealthStatus)}[/]";
+                    : $"[red]{Markup.Escape(cluster.HealthStatus ?? "Unknown")}[/]";
 
                 var available = cluster.AvailableDestinations == cluster.TotalDestinations
                     ? $"[green]{cluster.AvailableDestinations}[/]"
                     : $"[yellow]{cluster.AvailableDestinations}[/]";
 
                 table.AddRow(
-                    $"[cyan]{Markup.Escape(cluster.ClusterId)}[/]",
+                    $"[cyan]{Markup.Escape(cluster.ClusterId ?? string.Empty)}[/]",
                     status,
                     available,
                     cluster.TotalDestinations.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -56,12 +56,12 @@ public sealed class ClustersCommand
         }
         catch (ApiException ex)
         {
-            AnsiConsole.MarkupLine($"[red]API error: {ex.StatusCode} - {ex.Message}[/]");
+            AnsiConsole.MarkupLine($"[red]API error: {ex.StatusCode} - {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Error: {ex.Message}[/]");
+            AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
     }

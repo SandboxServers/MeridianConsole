@@ -49,16 +49,16 @@ public class OpenApiAggregationService
 
     public async Task<JsonObject> GetAggregatedSpecAsync(CancellationToken cancellationToken = default)
     {
-        if (_cache.TryGetValue(CacheKey, out JsonObject? cached) && cached is not null)
+        // Use GetOrCreateAsync to prevent cache stampede - multiple concurrent requests
+        // will coalesce into a single BuildAggregatedSpecAsync call
+        var result = await _cache.GetOrCreateAsync(CacheKey, async entry =>
         {
-            return cached;
-        }
+            entry.SetAbsoluteExpiration(CacheDuration);
+            return await BuildAggregatedSpecAsync(cancellationToken);
+        });
 
-        var aggregated = await BuildAggregatedSpecAsync(cancellationToken);
-
-        _cache.Set(CacheKey, aggregated, CacheDuration);
-
-        return aggregated;
+        // GetOrCreateAsync can return null if the factory returns null
+        return result ?? await BuildAggregatedSpecAsync(cancellationToken);
     }
 
     private async Task<JsonObject> BuildAggregatedSpecAsync(CancellationToken cancellationToken)

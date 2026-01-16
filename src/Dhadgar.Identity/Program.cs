@@ -54,14 +54,10 @@ builder.Services.AddSwaggerGen(options =>
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.Http,
-        Name = "Authorization",
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In = ParameterLocation.Header,
         Description = "Enter your JWT token"
     });
-
-    // Note: Security requirement simplified for OpenApi v2.x compatibility
 });
 
 // SECURITY: Configure request body size limits to prevent DoS attacks

@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
     <AssemblyName>Dhadgar.Messaging.Tests</AssemblyName>
     <RootNamespace>Dhadgar.Messaging.Tests</RootNamespace>
   </PropertyGroup>
