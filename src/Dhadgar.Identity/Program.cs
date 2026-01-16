@@ -222,27 +222,12 @@ builder.Services.AddRateLimiter(options =>
             });
         }
 
-        // Rate limit invitations: 10/hour per user within org context
-        // The per-user limit is the primary control since all invites require authentication
-        // Org-level abuse is mitigated by limiting each user's invite rate
+        // Rate limit invitations: 10/hour per user globally across all orgs
+        // This prevents abuse where a user could spam invites to multiple organizations
         if (path.Contains("/members/invite", StringComparison.OrdinalIgnoreCase) && context.User?.Identity?.IsAuthenticated == true)
         {
             var userId = context.User.FindFirst("sub")?.Value;
-            var orgId = context.User.FindFirst("org_id")?.Value;
 
-            // Use composite key (user+org) to enforce per-user limit within each org
-            // This prevents a user from sending 10/hour to EACH org they belong to
-            if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(orgId))
-            {
-                return RateLimitPartition.GetFixedWindowLimiter($"invite:user:{userId}:org:{orgId}", _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 10,
-                    Window = TimeSpan.FromHours(1),
-                    QueueLimit = 0
-                });
-            }
-
-            // Fallback to per-user limit if only userId is available
             if (!string.IsNullOrWhiteSpace(userId))
             {
                 return RateLimitPartition.GetFixedWindowLimiter($"invite:user:{userId}", _ => new FixedWindowRateLimiterOptions
@@ -531,14 +516,14 @@ builder.Services.AddOpenIddict()
                     return;
                 }
 
-                // Get the principal that was stored when the refresh token was issued
-                var existingPrincipal = context.Transaction.Properties.TryGetValue(
-                    OpenIddictServerAspNetCoreConstants.Properties.RefreshTokenPrincipal,
-                    out var principal) ? principal as ClaimsPrincipal : null;
-
-                // Fall back to getting from the authorization if not available
-                existingPrincipal ??= await httpContext.AuthenticateAsync(
-                    OpenIddictServerAspNetCoreDefaults.AuthenticationScheme) is { Principal: { } p } ? p : null;
+                // Prefer the validated principal provided by OpenIddict for refresh token requests
+                // Fall back to transaction properties or HTTP authentication if not available
+                var existingPrincipal = context.Principal
+                    ?? (context.Transaction.Properties.TryGetValue(
+                        OpenIddictServerAspNetCoreConstants.Properties.RefreshTokenPrincipal,
+                        out var principal) ? principal as ClaimsPrincipal : null)
+                    ?? (await httpContext.AuthenticateAsync(
+                        OpenIddictServerAspNetCoreDefaults.AuthenticationScheme) is { Principal: { } p } ? p : null);
 
                 var userIdClaim = existingPrincipal?.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
                 if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
@@ -603,10 +588,10 @@ builder.Services.AddOpenIddict()
 // Configure authorization with default policy requiring authenticated users
 // NOTE: FallbackPolicy is NOT used because it blocks OpenIddict's internal endpoints
 // Each endpoint group must explicitly call .RequireAuthorization() as needed
+// The default authentication scheme (OpenIddict validation) handles bearer tokens automatically
 builder.Services.AddAuthorizationBuilder()
     .SetDefaultPolicy(new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
-        .AddAuthenticationSchemes(AuthSchemes.Bearer)
         .Build())
     .AddPolicy("OrgMember", policy => policy
         .RequireAuthenticatedUser()
