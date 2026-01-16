@@ -39,6 +39,7 @@
 
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.OpenApi" />
     <!-- Security analyzer for authentication service -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>

@@ -1,22 +1,20 @@
 using Dhadgar.Mods;
-using Microsoft.EntityFrameworkCore;
 using Dhadgar.Mods.Data;
+using Dhadgar.ServiceDefaults.Swagger;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddMeridianSwagger(
+    title: "Dhadgar Mods API",
+    description: "Mod registry and versioning for Meridian Console");
 
 builder.Services.AddDbContext<ModsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseMeridianSwagger();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
@@ -34,9 +32,12 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Mods", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Mods", status = "ok" }));
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Mods", message = Hello.Message }))
+    .WithTags("Health").WithName("ModsServiceInfo");
+app.MapGet("/hello", () => Results.Text(Hello.Message))
+    .WithTags("Health").WithName("ModsHello");
+app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Mods", status = "ok" }))
+    .WithTags("Health").WithName("ModsHealth");
 
 app.Run();
 

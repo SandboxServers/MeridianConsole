@@ -97,4 +97,29 @@ public class GatewayIntegrationTests : IClassFixture<GatewayWebApplicationFactor
         Assert.Equal("accelerometer=(), camera=(), geolocation=(), microphone=(), payment=()",
             response.Headers.GetValues("Permissions-Policy").Single());
     }
+
+    [Fact]
+    public async Task ResponseIncludesCacheControlHeaders()
+    {
+        var response = await _client.GetAsync("/healthz");
+
+        Assert.True(response.Headers.Contains("Cache-Control"));
+        Assert.True(response.Headers.Contains("Pragma"));
+
+        var cacheControl = response.Headers.GetValues("Cache-Control").Single();
+        // At minimum, no-store and no-cache must be present to prevent caching
+        Assert.Contains("no-store", cacheControl, StringComparison.Ordinal);
+        Assert.Contains("no-cache", cacheControl, StringComparison.Ordinal);
+
+        Assert.Equal("no-cache", response.Headers.GetValues("Pragma").Single());
+    }
+
+    [Fact]
+    public async Task ResponseIncludesDnsPrefetchControlHeader()
+    {
+        var response = await _client.GetAsync("/healthz");
+
+        Assert.True(response.Headers.Contains("X-DNS-Prefetch-Control"));
+        Assert.Equal("off", response.Headers.GetValues("X-DNS-Prefetch-Control").Single());
+    }
 }

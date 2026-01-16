@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
+using Microsoft.OpenApi;
 using Dhadgar.Identity;
 using Dhadgar.Identity.Authentication;
 using Dhadgar.Identity.Data;
@@ -40,7 +41,26 @@ using Dhadgar.Identity.Data.Entities;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Dhadgar Identity API",
+        Version = "v1",
+        Description = "Identity and access management API for Meridian Console"
+    });
+
+    // Add JWT Bearer authentication to Swagger UI
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Enter your JWT token"
+    });
+
+    // Note: Security requirement simplified for OpenApi v2.x compatibility
+});
 
 // SECURITY: Configure request body size limits to prevent DoS attacks
 builder.ConfigureRequestLimits(options =>
@@ -669,7 +689,8 @@ builder.Services.AddOpenTelemetry()
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// Enable Swagger in Development and Testing environments
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -708,14 +729,23 @@ if (autoMigrate)
 
 // Anonymous endpoints (no authentication required)
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }))
+    .WithTags("Health")
+    .WithName("ServiceInfo")
+    .WithDescription("Get service information")
     .AllowAnonymous();
 app.MapGet("/hello", () => Results.Text(IdentityHello.Message))
+    .WithTags("Health")
+    .WithName("Hello")
+    .WithDescription("Simple hello endpoint")
     .AllowAnonymous();
 app.MapDhadgarDefaultEndpoints(); // Health checks - already configured as anonymous in ServiceDefaults
 
 // Token exchange endpoint - uses its own validation (Better Auth exchange tokens)
 // This must be anonymous as it's the entry point for authentication
 app.MapPost("/exchange", TokenExchangeEndpoint.Handle)
+    .WithTags("Authentication")
+    .WithName("TokenExchange")
+    .WithDescription("Exchange a Better Auth token for a JWT access token and refresh token")
     .AllowAnonymous();
 
 // OAuth provider endpoints

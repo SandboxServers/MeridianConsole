@@ -8,12 +8,32 @@ public static class UserEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapGet("/organizations/{organizationId:guid}/users", ListUsers);
-        app.MapGet("/organizations/{organizationId:guid}/users/{userId:guid}", GetUser);
-        app.MapPost("/organizations/{organizationId:guid}/users", CreateUser);
-        app.MapPatch("/organizations/{organizationId:guid}/users/{userId:guid}", UpdateUser);
-        app.MapDelete("/organizations/{organizationId:guid}/users/{userId:guid}", DeleteUser);
-        app.MapDelete("/organizations/{organizationId:guid}/users/{userId:guid}/linked-accounts/{linkedAccountId:guid}", UnlinkAccount);
+        var group = app.MapGroup("/organizations/{organizationId:guid}/users")
+            .WithTags("Users");
+
+        group.MapGet("", ListUsers)
+            .WithName("ListUsers")
+            .WithDescription("List all users in an organization");
+
+        group.MapGet("/{userId:guid}", GetUser)
+            .WithName("GetUser")
+            .WithDescription("Get user details by ID");
+
+        group.MapPost("", CreateUser)
+            .WithName("CreateUser")
+            .WithDescription("Create a new user in the organization");
+
+        group.MapPatch("/{userId:guid}", UpdateUser)
+            .WithName("UpdateUser")
+            .WithDescription("Update user details");
+
+        group.MapDelete("/{userId:guid}", DeleteUser)
+            .WithName("DeleteUser")
+            .WithDescription("Soft-delete a user");
+
+        group.MapDelete("/{userId:guid}/linked-accounts/{linkedAccountId:guid}", UnlinkAccount)
+            .WithName("UnlinkAccount")
+            .WithDescription("Unlink an OAuth provider account from a user");
     }
 
     private static async Task<IResult> ListUsers(

@@ -17,6 +17,9 @@ public static class WebhookEndpoint
     {
         // Webhook endpoint uses signature validation instead of JWT auth
         app.MapPost("/webhooks/better-auth", Handle)
+            .WithTags("Webhooks")
+            .WithName("BetterAuthWebhook")
+            .WithDescription("Receive webhook events from Better Auth (user lifecycle events)")
             .AllowAnonymous()
             .RequireRateLimiting("auth");
     }

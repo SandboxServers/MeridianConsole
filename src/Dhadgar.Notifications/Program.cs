@@ -1,22 +1,20 @@
 using Dhadgar.Notifications;
-using Microsoft.EntityFrameworkCore;
 using Dhadgar.Notifications.Data;
+using Dhadgar.ServiceDefaults.Swagger;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddMeridianSwagger(
+    title: "Dhadgar Notifications API",
+    description: "Email, Discord, and webhook notifications for Meridian Console");
 
 builder.Services.AddDbContext<NotificationsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseMeridianSwagger();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
@@ -34,9 +32,12 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Notifications", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Notifications", status = "ok" }));
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Notifications", message = Hello.Message }))
+    .WithTags("Health").WithName("NotificationsServiceInfo");
+app.MapGet("/hello", () => Results.Text(Hello.Message))
+    .WithTags("Health").WithName("NotificationsHello");
+app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Notifications", status = "ok" }))
+    .WithTags("Health").WithName("NotificationsHealth");
 
 app.Run();
 

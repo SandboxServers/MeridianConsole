@@ -8,6 +8,7 @@ using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -16,7 +17,15 @@ using OpenTelemetry.Trace;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Dhadgar Secrets API",
+        Version = "v1",
+        Description = "Secret storage and rotation for Meridian Console"
+    });
+});
 
 // Configure options
 builder.Services.Configure<SecretsOptions>(builder.Configuration.GetSection("Secrets"));

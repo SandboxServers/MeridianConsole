@@ -6,6 +6,7 @@ namespace Dhadgar.ServiceDefaults.Middleware;
 
 /// <summary>
 /// Middleware that logs HTTP requests and responses with correlation context.
+/// Uses logging scopes to automatically include correlation IDs in all log messages.
 /// </summary>
 public sealed class RequestLoggingMiddleware
 {
@@ -21,37 +22,46 @@ public sealed class RequestLoggingMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var correlationId = context.Items["CorrelationId"]?.ToString() ?? "unknown";
+        var requestId = context.Items["RequestId"]?.ToString() ?? "unknown";
         var stopwatch = Stopwatch.StartNew();
 
-        try
+        // Use logging scopes to add correlation context to all log messages
+        using (_logger.BeginScope(new Dictionary<string, object>
         {
-            await _next(context);
-            stopwatch.Stop();
-
-            var level = context.Response.StatusCode >= 500
-                ? LogLevel.Error
-                : context.Response.StatusCode >= 400
-                    ? LogLevel.Warning
-                    : LogLevel.Information;
-
-            _logger.Log(level,
-                "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs}ms [CorrelationId: {CorrelationId}]",
-                context.Request.Method,
-                context.Request.Path,
-                context.Response.StatusCode,
-                stopwatch.ElapsedMilliseconds,
-                correlationId);
-        }
-        catch (Exception ex)
+            ["CorrelationId"] = correlationId,
+            ["RequestId"] = requestId,
+            ["RequestMethod"] = context.Request.Method,
+            ["RequestPath"] = context.Request.Path.Value ?? "/"
+        }))
         {
-            stopwatch.Stop();
-            _logger.LogError(ex,
-                "HTTP {Method} {Path} failed after {ElapsedMs}ms [CorrelationId: {CorrelationId}]",
-                context.Request.Method,
-                context.Request.Path,
-                stopwatch.ElapsedMilliseconds,
-                correlationId);
-            throw;
+            try
+            {
+                await _next(context);
+                stopwatch.Stop();
+
+                var level = context.Response.StatusCode >= 500
+                    ? LogLevel.Error
+                    : context.Response.StatusCode >= 400
+                        ? LogLevel.Warning
+                        : LogLevel.Information;
+
+                _logger.Log(level,
+                    "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs}ms",
+                    context.Request.Method,
+                    context.Request.Path,
+                    context.Response.StatusCode,
+                    stopwatch.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogError(ex,
+                    "HTTP {Method} {Path} failed after {ElapsedMs}ms",
+                    context.Request.Method,
+                    context.Request.Path,
+                    stopwatch.ElapsedMilliseconds);
+                throw;
+            }
         }
     }
 }

@@ -1,22 +1,20 @@
 using Dhadgar.Files;
-using Microsoft.EntityFrameworkCore;
 using Dhadgar.Files.Data;
+using Dhadgar.ServiceDefaults.Swagger;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddMeridianSwagger(
+    title: "Dhadgar Files API",
+    description: "File metadata and transfer orchestration for Meridian Console");
 
 builder.Services.AddDbContext<FilesDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseMeridianSwagger();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
@@ -34,9 +32,12 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Files", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Files", status = "ok" }));
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Files", message = Hello.Message }))
+    .WithTags("Health").WithName("FilesServiceInfo");
+app.MapGet("/hello", () => Results.Text(Hello.Message))
+    .WithTags("Health").WithName("FilesHello");
+app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Files", status = "ok" }))
+    .WithTags("Health").WithName("FilesHealth");
 
 app.Run();
 

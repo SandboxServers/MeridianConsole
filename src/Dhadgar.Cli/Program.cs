@@ -625,7 +625,28 @@ gatewayHealthCmd.SetHandler(async () =>
     await HealthCommand.ExecuteAsync(CancellationToken.None);
 });
 
+var gatewayServicesCmd = new Command("services", "List all backend services health (Development only)");
+gatewayServicesCmd.SetHandler(async () =>
+{
+    await ServicesCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var gatewayRoutesCmd = new Command("routes", "List all gateway routes (Development only)");
+gatewayRoutesCmd.SetHandler(async () =>
+{
+    await RoutesCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var gatewayClustersCmd = new Command("clusters", "List all YARP clusters (Development only)");
+gatewayClustersCmd.SetHandler(async () =>
+{
+    await ClustersCommand.ExecuteAsync(CancellationToken.None);
+});
+
 gatewayCmd.AddCommand(gatewayHealthCmd);
+gatewayCmd.AddCommand(gatewayServicesCmd);
+gatewayCmd.AddCommand(gatewayRoutesCmd);
+gatewayCmd.AddCommand(gatewayClustersCmd);
 
 // ============================================================================
 // COMMANDS LIST

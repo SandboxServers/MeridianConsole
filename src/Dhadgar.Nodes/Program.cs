@@ -1,22 +1,20 @@
 using Dhadgar.Nodes;
-using Microsoft.EntityFrameworkCore;
 using Dhadgar.Nodes.Data;
+using Dhadgar.ServiceDefaults.Swagger;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddMeridianSwagger(
+    title: "Dhadgar Nodes API",
+    description: "Node inventory, health, and capacity management for Meridian Console");
 
 builder.Services.AddDbContext<NodesDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseMeridianSwagger();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
@@ -34,9 +32,12 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Nodes", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Nodes", status = "ok" }));
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Nodes", message = Hello.Message }))
+    .WithTags("Health").WithName("NodesServiceInfo");
+app.MapGet("/hello", () => Results.Text(Hello.Message))
+    .WithTags("Health").WithName("NodesHello");
+app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Nodes", status = "ok" }))
+    .WithTags("Health").WithName("NodesHealth");
 
 app.Run();
 

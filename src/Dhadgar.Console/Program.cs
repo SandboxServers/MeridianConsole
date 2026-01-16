@@ -1,24 +1,25 @@
 using Dhadgar.Console;
 using Dhadgar.Console.Hubs;
+using Dhadgar.ServiceDefaults.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddMeridianSwagger(
+    title: "Dhadgar Console API",
+    description: "Real-time console streaming via SignalR for Meridian Console");
 
 builder.Services.AddSignalR();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseMeridianSwagger();
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Console", message = Hello.Message }));
-app.MapGet("/hello", () => Results.Text(Hello.Message));
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Console", status = "ok" }));
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Console", message = Hello.Message }))
+    .WithTags("Health").WithName("ConsoleServiceInfo");
+app.MapGet("/hello", () => Results.Text(Hello.Message))
+    .WithTags("Health").WithName("ConsoleHello");
+app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Console", status = "ok" }))
+    .WithTags("Health").WithName("ConsoleHealth");
 app.MapHub<ConsoleHub>("/hubs/console");
 
 app.Run();

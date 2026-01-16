@@ -6,14 +6,40 @@ public static class RoleEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapGet("/organizations/{organizationId:guid}/roles", ListRoles);
-        app.MapGet("/organizations/{organizationId:guid}/roles/{roleId}", GetRole);
-        app.MapPost("/organizations/{organizationId:guid}/roles", CreateRole);
-        app.MapPatch("/organizations/{organizationId:guid}/roles/{roleId}", UpdateRole);
-        app.MapDelete("/organizations/{organizationId:guid}/roles/{roleId}", DeleteRole);
-        app.MapPost("/organizations/{organizationId:guid}/roles/{roleId}/assign", AssignRole);
-        app.MapPost("/organizations/{organizationId:guid}/roles/{roleId}/revoke", RevokeRole);
-        app.MapGet("/organizations/{organizationId:guid}/roles/{roleId}/members", GetRoleMembers);
+        var group = app.MapGroup("/organizations/{organizationId:guid}/roles")
+            .WithTags("Roles");
+
+        group.MapGet("", ListRoles)
+            .WithName("ListRoles")
+            .WithDescription("List all roles available in the organization");
+
+        group.MapGet("/{roleId}", GetRole)
+            .WithName("GetRole")
+            .WithDescription("Get role details by ID");
+
+        group.MapPost("", CreateRole)
+            .WithName("CreateRole")
+            .WithDescription("Create a custom role in the organization");
+
+        group.MapPatch("/{roleId}", UpdateRole)
+            .WithName("UpdateRole")
+            .WithDescription("Update a custom role");
+
+        group.MapDelete("/{roleId}", DeleteRole)
+            .WithName("DeleteRole")
+            .WithDescription("Delete a custom role");
+
+        group.MapPost("/{roleId}/assign", AssignRole)
+            .WithName("AssignRole")
+            .WithDescription("Assign a role to a user");
+
+        group.MapPost("/{roleId}/revoke", RevokeRole)
+            .WithName("RevokeRole")
+            .WithDescription("Revoke a role from a user");
+
+        group.MapGet("/{roleId}/members", GetRoleMembers)
+            .WithName("GetRoleMembers")
+            .WithDescription("List all members with a specific role");
     }
 
     private static async Task<IResult> ListRoles(

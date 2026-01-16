@@ -26,6 +26,7 @@
   
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.OpenApi" />
   </ItemGroup>
 </Project>
 

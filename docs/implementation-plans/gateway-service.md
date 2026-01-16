@@ -1,9 +1,57 @@
 # Gateway Service Implementation Plan
 
 **Service**: Dhadgar.Gateway
-**Status**: First service implementation (Identity service follows next)
+**Status**: Core implementation complete, hardening complete
 **Date**: 2024-12-28
+**Last Updated**: 2026-01-16
 **Microservices Architecture**: 13 backend services + Gateway
+
+---
+
+## Gateway Hardening (2026-01-16)
+
+A comprehensive hardening pass was completed on the Gateway service. Key improvements:
+
+### Security Fixes
+- **Internal endpoint blocking**: Added `identity-internal-block` route with `DenyAll` policy (Order: 1)
+- **Header stripping**: Added `X-Real-IP` to stripped security headers
+- **IP resolution**: Fixed `GetClientIpAddress` to use `RemoteIpAddress` (set by ForwardedHeaders middleware) instead of manual header parsing
+- **Route ordering**: All routes now have explicit `Order` values (1=block, 10=auth, 20=standard, 30=catch-all)
+
+### Security Enhancements
+- **Cache-Control headers**: Added `no-store, no-cache, must-revalidate` to all API responses
+- **DNS prefetch control**: Added `X-DNS-Prefetch-Control: off` header
+- **Cookie security**: Changed Console cluster cookie `SecurePolicy` to `Always`
+- **Token masking**: Diagnostic endpoints now mask WIF tokens
+- **CORS validation**: Production requires explicit `AllowedOrigins` configuration
+
+### Health & Resilience
+- **Passive health checks**: Added to `billing` and `secrets` clusters
+- **Global request timeout**: Set default to 30 seconds (Files cluster has 5 min override)
+- **Request size limits**: Added 10 MB default via Kestrel
+- **Cloudflare IP configuration**: Moved hardcoded IPs to `appsettings.json`
+
+### Rate Limiting
+- **IPv6 subnet-based limiting**: Rate limits now use /64 prefix for IPv6 addresses to prevent rotation attacks
+
+### Circuit Breaker & Retry
+- **Circuit breaker middleware**: Per-cluster circuit breakers with configurable thresholds
+- **Retry policy middleware**: Optional retry support via cluster metadata
+
+### CLI Commands
+- `dhadgar gateway services` - List all backend services health
+- `dhadgar gateway routes` - List all gateway routes
+- `dhadgar gateway clusters` - List all YARP clusters
+
+### Tests Added
+- `SecurityTests.cs` - Header spoofing prevention tests
+- `RateLimitingBehaviorTests.cs` - IPv6 rate limiting tests
+- `CircuitBreakerTests.cs` - Circuit breaker behavior tests
+- Updated route count tests for new internal-block route
+
+### Documentation
+- `docs/gateway-authentication.md` - Authentication and authorization guide
+- `docs/runbooks/gateway-operations.md` - Operations runbook
 
 ---
 
