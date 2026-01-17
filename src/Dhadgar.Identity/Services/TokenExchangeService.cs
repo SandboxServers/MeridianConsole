@@ -305,7 +305,8 @@ public sealed class TokenExchangeService
             new("org_id", activeOrg.Id.ToString()),
             new("email", user.Email!),
             new("role", membership.Role),
-            new("email_verified", emailVerified.ToString().ToLowerInvariant())
+            new("email_verified", emailVerified.ToString().ToLowerInvariant()),
+            new("principal_type", "user")
         };
 
         if (!string.IsNullOrWhiteSpace(clientApp))
