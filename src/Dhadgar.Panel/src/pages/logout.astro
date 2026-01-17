@@ -1,0 +1,22 @@
+---
+// Server-side logout - clear any server-side session state
+// Client will handle clearing tokens
+---
+
+<script>
+  // Clear client-side storage and redirect
+  sessionStorage.removeItem('meridian_access_token');
+  sessionStorage.removeItem('meridian_refresh_token');
+  sessionStorage.removeItem('meridian_expires_at');
+  window.location.href = '/login';
+</script>
+
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Logging out...</title>
+  </head>
+  <body class="bg-[#0A0E17] text-white flex items-center justify-center min-h-screen">
+    <p>Logging out...</p>
+  </body>
+</html>

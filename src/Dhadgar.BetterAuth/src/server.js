@@ -20,7 +20,7 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) {
-        ret                                                                                                                                                                                                                                                                                                                                                                                                                                                                     urn callback(null, true);
+        return callback(null, true);
       }
 
       if (trustedOrigins.length === 0 || trustedOrigins.includes(origin)) {
@@ -63,6 +63,7 @@ app.post("/api/v1/betterauth/exchange", async (req, res) => {
   }
 });
 
+// Better Auth handles all auth routes
 app.all("/api/v1/betterauth/*", toNodeHandler(auth));
 
 const server = app.listen(port, () => {

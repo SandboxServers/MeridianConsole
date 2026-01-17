@@ -80,15 +80,23 @@ steps:
       # Package the chart
       helm package meridian-console
 
-      # Get chart version (strip any Windows CRLF line endings)
-      CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}' | tr -d '\r')
+      # Get chart version (strip any whitespace/CRLF/newlines)
+      CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}' | tr -d '\r\n ')
       CHART_FILE="meridian-console-${CHART_VERSION}.tgz"
 
       echo "=== Publishing Chart ==="
       echo "Chart: meridian-console"
-      echo "Version: $CHART_VERSION"
+      echo "Version: [$CHART_VERSION]"
+      echo "File: [$CHART_FILE]"
       echo "Registry: $ACR_LOGIN_SERVER"
       echo "========================"
+
+      # Verify the file exists before pushing
+      if [ ! -f "$CHART_FILE" ]; then
+        echo "❌ Error: Chart file not found: $CHART_FILE"
+        ls -la *.tgz 2>/dev/null || echo "No .tgz files found"
+        exit 1
+      fi
 
       # Push to ACR as OCI artifact
       helm push "$CHART_FILE" oci://$ACR_LOGIN_SERVER/helm

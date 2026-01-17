@@ -180,10 +180,17 @@ services:
     environment:
       <<: *service-env
       ASPNETCORE_ENVIRONMENT: Development
-      Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity
+      Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity/
       Auth__Audience: meridian-api
       Auth__MetadataAddress: http://identity:8080/.well-known/openid-configuration
+      Auth__InternalBaseUrl: http://identity:8080
       Secrets__UseDevelopmentProvider: "true"
+      # Development secrets for local testing
+      Secrets__Development__Secrets__betterauth-secret: dev-betterauth-secret-change-in-prod-32chars!
+      Secrets__Development__Secrets__betterauth-exchange-private-key: ${BETTERAUTH_EXCHANGE_PRIVATE_KEY:-}
+      Secrets__Development__Secrets__postgres-password: dhadgar
+      Secrets__Development__Secrets__oauth-discord-client-id: ${OAUTH_DISCORD_CLIENT_ID:-}
+      Secrets__Development__Secrets__oauth-discord-client-secret: ${OAUTH_DISCORD_CLIENT_SECRET:-}
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
     ports:
       - "5110:8080"
@@ -198,4 +205,67 @@ services:
     ports:
       - "5120:8080"
     depends_on: *service-depends
+    restart: unless-stopped
+
+  betterauth:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.BetterAuth/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      SECRETS_SERVICE_URL: http://secrets:8080
+      IDENTITY_SERVICE_URL: http://identity:8080
+      SERVICE_CLIENT_ID: dev-client
+      SERVICE_CLIENT_SECRET: dev-secret
+      BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
+      BETTER_AUTH_TRUSTED_ORIGINS: https://dev.meridianconsole.com,https://cart.meridianconsole.com,https://panel.meridianconsole.com,http://localhost:4321,http://localhost:4322
+      BETTER_AUTH_CLIENT_APPS: panel,shop
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: dhadgar_platform
+      POSTGRES_USERNAME: dhadgar
+      POSTGRES_PASSWORD: dhadgar
+      EXCHANGE_TOKEN_AUDIENCE: https://dev.meridianconsole.com/api/v1/identity/exchange
+      EXCHANGE_TOKEN_ISSUER: https://dev.meridianconsole.com/api/v1/betterauth
+      EXCHANGE_TOKEN_KID: betterauth-exchange-v1
+    ports:
+      - "5130:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      identity:
+        condition: service_healthy
+      secrets:
+        condition: service_started
+    restart: unless-stopped
+
+  panel:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.Panel/Dockerfile
+      args:
+        PUBLIC_GATEWAY_URL: https://dev.meridianconsole.com
+        PUBLIC_BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8080
+    ports:
+      - "4321:8080"
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  shoppingcart:
+    build:
+      context: ../..
+      dockerfile: src/Dhadgar.ShoppingCart/Dockerfile
+      args:
+        PUBLIC_GATEWAY_URL: https://dev.meridianconsole.com
+        PUBLIC_BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
+    ports:
+      - "4322:8080"
+    depends_on:
+      - gateway
     restart: unless-stopped

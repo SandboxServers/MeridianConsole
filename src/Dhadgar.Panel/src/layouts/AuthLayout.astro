@@ -1,0 +1,29 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div class="min-h-screen relative overflow-hidden">
+    <!-- Background grid pattern -->
+    <div class="absolute inset-0 bg-grid-pattern bg-grid opacity-30"></div>
+
+    <!-- Gradient overlays -->
+    <div class="absolute inset-0 bg-gradient-to-b from-space-dark via-transparent to-space-dark"></div>
+    <div class="absolute inset-0 bg-gradient-to-r from-cyber-cyan/5 via-transparent to-cyber-magenta/5"></div>
+
+    <!-- Ambient glow effects -->
+    <div class="absolute top-0 left-1/4 w-96 h-96 bg-cyber-cyan/10 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-cyber-magenta/10 rounded-full blur-3xl"></div>
+
+    <!-- Content -->
+    <div class="relative z-10">
+      <slot />
+    </div>
+  </div>
+</BaseLayout>

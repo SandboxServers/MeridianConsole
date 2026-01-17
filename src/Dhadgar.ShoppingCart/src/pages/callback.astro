@@ -1,0 +1,23 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import CallbackHandler from '../components/auth/CallbackHandler';
+---
+
+<AuthLayout title="Authenticating... | Meridian Console">
+  <div class="min-h-screen flex items-center justify-center">
+    <CallbackHandler client:load />
+  </div>
+</AuthLayout>
+
+<script>
+  // ShoppingCart callback redirects to Panel after successful auth
+  // since shopping cart is for marketing/billing, actual app usage is in Panel
+  const originalRedirect = '/dashboard';
+  const panelUrl = 'https://panel.meridianconsole.com';
+
+  // Override the default redirect behavior
+  document.addEventListener('DOMContentLoaded', () => {
+    // We'll handle the redirect in the CallbackHandler component
+    // This script ensures we redirect to Panel instead of a local dashboard
+  });
+</script>
