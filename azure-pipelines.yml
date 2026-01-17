@@ -180,19 +180,18 @@ extends:
         deploy: swa
         swa:
           apiTokenVar: Dhadgar_Swa_ApiToken
-          appLocation: .
+          appLocation: src/Dhadgar.Scope
           outputLocation: _swa_publish/wwwroot
-          appBuildCommand: dotnet publish src/Dhadgar.Scope/Dhadgar.Scope.csproj -c $(BuildConfiguration) -o _swa_publish
+          appBuildCommand: npm install && npm run build
       - id: Dhadgar.ShoppingCart
         projectPath: src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj
         testProjectPath: tests/Dhadgar.ShoppingCart.Tests/Dhadgar.ShoppingCart.Tests.csproj
         deploy: swa
         swa:
           apiTokenVar: Dhadgar_ShoppingCart_Swa_ApiToken
-          appLocation: .
+          appLocation: src/Dhadgar.ShoppingCart
           outputLocation: _swa_publish/wwwroot
-          # No apiLocation - Astro static site doesn't have Azure Functions
-          appBuildCommand: dotnet publish src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj -c $(BuildConfiguration) -o _swa_publish
+          appBuildCommand: npm install && npm run build
       - id: Dhadgar.Secrets
         projectPath: src/Dhadgar.Secrets/Dhadgar.Secrets.csproj
         testProjectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
