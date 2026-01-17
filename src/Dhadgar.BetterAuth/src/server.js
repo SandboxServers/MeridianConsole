@@ -2,13 +2,42 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
+import { getMigrations } from "better-auth/db";
 import { loadSecrets } from "./secrets-client.js";
 
 // Load secrets from Secrets Service before initializing the app
 await loadSecrets();
 
 // Import auth after secrets are loaded (it depends on env vars)
-const { auth, trustedOrigins } = await import("./auth.js");
+const { auth, authConfig, trustedOrigins } = await import("./auth.js");
+
+// Run database migrations on startup
+async function runMigrations() {
+  console.log("Checking for database migrations...");
+  try {
+    const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(authConfig);
+
+    if (toBeCreated.length === 0 && toBeAdded.length === 0) {
+      console.log("  Database schema is up to date");
+      return;
+    }
+
+    if (toBeCreated.length > 0) {
+      console.log(`  Tables to create: ${toBeCreated.map(t => t.table).join(", ")}`);
+    }
+    if (toBeAdded.length > 0) {
+      console.log(`  Fields to add: ${toBeAdded.map(t => `${t.table}.${t.fields?.join(", ")}`).join("; ")}`);
+    }
+
+    await runMigrations();
+    console.log("  Migrations completed successfully");
+  } catch (error) {
+    console.error("  Migration error:", error.message);
+    // Don't exit - the tables might already exist
+  }
+}
+
+await runMigrations();
 const { createExchangeToken } = await import("./exchange.js");
 
 const app = express();

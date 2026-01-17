@@ -83,7 +83,8 @@ if (configuredProviders.length > 0) {
   console.log("  OAuth providers: (none configured)");
 }
 
-export const auth = betterAuth({
+// Export config for use by getMigrations
+export const authConfig = {
   appName: "Meridian Console",
   baseURL: baseUrl,
   basePath: "/api/v1/betterauth",
@@ -100,4 +101,6 @@ export const auth = betterAuth({
     requireEmailVerification: false
   },
   socialProviders
-});
+};
+
+export const auth = betterAuth(authConfig);
