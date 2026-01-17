@@ -6,9 +6,20 @@ public static class SearchEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapGet("/organizations/search", SearchOrganizations);
-        app.MapGet("/organizations/{organizationId:guid}/users/search", SearchUsers);
-        app.MapGet("/organizations/{organizationId:guid}/roles/search", SearchRoles);
+        app.MapGet("/organizations/search", SearchOrganizations)
+            .WithTags("Search")
+            .WithName("SearchOrganizations")
+            .WithDescription("Search organizations the current user belongs to");
+
+        app.MapGet("/organizations/{organizationId:guid}/users/search", SearchUsers)
+            .WithTags("Search")
+            .WithName("SearchUsers")
+            .WithDescription("Search users within an organization");
+
+        app.MapGet("/organizations/{organizationId:guid}/roles/search", SearchRoles)
+            .WithTags("Search")
+            .WithName("SearchRoles")
+            .WithDescription("Search roles within an organization");
     }
 
     private static async Task<IResult> SearchOrganizations(

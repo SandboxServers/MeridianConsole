@@ -24,9 +24,25 @@ public class SecurityHeadersMiddleware
         headers["X-Frame-Options"] = "DENY";
         headers.Remove("X-XSS-Protection");
 
-        // Content Security Policy (restrictive for API)
-        headers["Content-Security-Policy"] =
-            "default-src 'none'; frame-ancestors 'none'";
+        // Content Security Policy
+        // Use permissive CSP for Swagger UI in development/testing, restrictive for API endpoints
+        var path = context.Request.Path.Value ?? "";
+        var isSwaggerPath = path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||
+                            path.StartsWith("/scalar", StringComparison.OrdinalIgnoreCase) ||
+                            path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase);
+        var isDevOrTest = _environment.IsDevelopment() || _environment.IsEnvironment("Testing");
+
+        if (isDevOrTest && isSwaggerPath)
+        {
+            // Allow Swagger/Scalar UI to load its resources - no CSP restrictions
+            // This is safe because Swagger is only enabled in dev/test environments
+        }
+        else if (!isSwaggerPath)
+        {
+            // Restrictive CSP for API endpoints only (not swagger paths)
+            headers["Content-Security-Policy"] =
+                "default-src 'none'; frame-ancestors 'none'";
+        }
 
         // Referrer policy
         headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
@@ -34,6 +50,13 @@ public class SecurityHeadersMiddleware
         // Permissions policy (disable unnecessary features)
         headers["Permissions-Policy"] =
             "accelerometer=(), camera=(), geolocation=(), microphone=(), payment=()";
+
+        // Cache control - prevent caching of API responses
+        headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+        headers["Pragma"] = "no-cache";
+
+        // Prevent DNS prefetching to external domains
+        headers["X-DNS-Prefetch-Control"] = "off";
 
         // HSTS (production only, 1 year)
         if (!_environment.IsDevelopment())

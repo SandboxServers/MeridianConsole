@@ -7,19 +7,55 @@ public static class MembershipEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapGet("/organizations/{organizationId:guid}/members", ListMembers);
-        app.MapPost("/organizations/{organizationId:guid}/members/invite", InviteMember)
+        var group = app.MapGroup("/organizations/{organizationId:guid}/members")
+            .WithTags("Memberships");
+
+        group.MapGet("", ListMembers)
+            .WithName("ListMembers")
+            .WithDescription("List all members in an organization");
+
+        group.MapPost("/invite", InviteMember)
+            .WithName("InviteMember")
+            .WithDescription("Invite a user to join the organization")
             .RequireRateLimiting("invite");
-        app.MapPost("/organizations/{organizationId:guid}/members/accept", AcceptInvite);
-        app.MapPost("/organizations/{organizationId:guid}/members/reject", RejectInvite);
-        app.MapDelete("/organizations/{organizationId:guid}/invitations/{targetUserId:guid}", WithdrawInvitation);
-        app.MapDelete("/organizations/{organizationId:guid}/members/{memberId:guid}", RemoveMember);
-        app.MapPost("/organizations/{organizationId:guid}/members/{memberId:guid}/role", AssignRole);
-        app.MapPost("/organizations/{organizationId:guid}/members/{memberId:guid}/claims", AddClaim);
-        app.MapDelete("/organizations/{organizationId:guid}/members/{memberId:guid}/claims/{claimId:guid}", RemoveClaim);
-        app.MapPost("/organizations/{organizationId:guid}/members/bulk-invite", BulkInviteMembers)
+
+        group.MapPost("/accept", AcceptInvite)
+            .WithName("AcceptInvite")
+            .WithDescription("Accept a pending invitation to join an organization");
+
+        group.MapPost("/reject", RejectInvite)
+            .WithName("RejectInvite")
+            .WithDescription("Reject a pending invitation");
+
+        app.MapDelete("/organizations/{organizationId:guid}/invitations/{targetUserId:guid}", WithdrawInvitation)
+            .WithTags("Memberships")
+            .WithName("WithdrawInvitation")
+            .WithDescription("Withdraw a pending invitation (inviter revokes)");
+
+        group.MapDelete("/{memberId:guid}", RemoveMember)
+            .WithName("RemoveMember")
+            .WithDescription("Remove a member from the organization");
+
+        group.MapPost("/{memberId:guid}/role", AssignRole)
+            .WithName("AssignMemberRole")
+            .WithDescription("Assign a role to a member");
+
+        group.MapPost("/{memberId:guid}/claims", AddClaim)
+            .WithName("AddMemberClaim")
+            .WithDescription("Add a custom claim to a member");
+
+        group.MapDelete("/{memberId:guid}/claims/{claimId:guid}", RemoveClaim)
+            .WithName("RemoveMemberClaim")
+            .WithDescription("Remove a custom claim from a member");
+
+        group.MapPost("/bulk-invite", BulkInviteMembers)
+            .WithName("BulkInviteMembers")
+            .WithDescription("Invite multiple users to the organization")
             .RequireRateLimiting("invite");
-        app.MapPost("/organizations/{organizationId:guid}/members/bulk-remove", BulkRemoveMembers);
+
+        group.MapPost("/bulk-remove", BulkRemoveMembers)
+            .WithName("BulkRemoveMembers")
+            .WithDescription("Remove multiple members from the organization");
     }
 
     private static async Task<IResult> ListMembers(

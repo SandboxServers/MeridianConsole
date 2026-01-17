@@ -1,16 +1,20 @@
 using System.Net;
+using System.Threading.RateLimiting;
+using Microsoft.OpenApi;
+using Microsoft.Extensions.Options;
 using Dhadgar.Gateway;
 using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
 using Dhadgar.Gateway.Options;
 using Dhadgar.Gateway.Readiness;
+using Dhadgar.Gateway.Services;
 using GatewayHello = Dhadgar.Gateway.Hello;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.Resilience;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
-using System.Threading.RateLimiting;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -21,17 +25,39 @@ var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.AddServerHeader = false;
+    // Default 10 MB request body limit; Files service has its own 5-minute timeout for large uploads
+    options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
 });
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("gateway", new OpenApiInfo
+        {
+            Title = "Dhadgar Gateway API",
+            Version = "v1",
+            Description = "API Gateway endpoints (health checks, diagnostics)"
+        });
+    });
 }
 
 // Add CORS support
-builder.Services.AddMeridianConsoleCors(builder.Configuration);
-builder.Services.Configure<ReadyzOptions>(builder.Configuration.GetSection("Readyz"));
+builder.Services.AddMeridianConsoleCors(builder.Configuration, builder.Environment);
+
+// Configure options with validation
+builder.Services.AddOptions<ReadyzOptions>()
+    .Bind(builder.Configuration.GetSection("Readyz"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// Add circuit breaker (shared resilience library)
+builder.Services.AddCircuitBreaker(builder.Configuration);
+
+// Add Problem Details for standardized error responses
+builder.Services.AddProblemDetails();
+
 builder.Services.AddHealthChecks()
     .AddCheck<YarpReadinessCheck>("yarp_ready", tags: ["ready"]);
 
@@ -66,6 +92,12 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser();
         policy.RequireClaim("client_type", "agent");
     });
+
+    // SECURITY: DenyAll policy for blocking internal endpoints from external access
+    options.AddPolicy("DenyAll", policy =>
+    {
+        policy.RequireAssertion(_ => false);
+    });
 });
 
 builder.Services.AddReverseProxy()
@@ -73,6 +105,12 @@ builder.Services.AddReverseProxy()
 
 // HttpClient for diagnostics endpoints
 builder.Services.AddHttpClient();
+
+// Memory cache and OpenAPI aggregation service
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("OpenApiAggregation")
+    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton<OpenApiAggregationService>();
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 Uri? otlpUri = null;
@@ -105,7 +143,8 @@ builder.Services.AddOpenTelemetry()
         tracing
             .SetResourceBuilder(resourceBuilder)
             .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+            .AddHttpClientInstrumentation()
+            .AddSource("Yarp.ReverseProxy"); // Add YARP distributed tracing
 
         if (otlpUri is not null)
         {
@@ -120,7 +159,8 @@ builder.Services.AddOpenTelemetry()
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation();
+            .AddProcessInstrumentation()
+            .AddMeter("Dhadgar.ServiceDefaults.CircuitBreaker"); // Custom circuit breaker metrics
 
         if (otlpUri is not null)
         {
@@ -134,6 +174,30 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+    // Add Retry-After header when rate limited
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/problem+json";
+
+        // Calculate retry after based on rate limiter window
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterTime)
+            ? (int)retryAfterTime.TotalSeconds
+            : 60; // Default to 60 seconds
+        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var problemDetails = new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Type = "https://httpstatuses.com/429",
+            Title = "Too Many Requests",
+            Status = StatusCodes.Status429TooManyRequests,
+            Detail = "Request rate limit exceeded. Please retry after the specified time.",
+            Instance = context.HttpContext.Request.Path.Value
+        };
+
+        await context.HttpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken: cancellationToken);
+    };
+
     options.AddPolicy("Global", _ =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: "global",
@@ -144,15 +208,47 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
+    // SECURITY: Use /64 prefix for IPv6 to prevent address rotation attacks
+    // IPv6 users typically get at least a /64 prefix, so rotating within that
+    // range would bypass IP-based rate limiting if we used full addresses
     options.AddPolicy("Auth", httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+    {
+        var ip = httpContext.Connection.RemoteIpAddress;
+        string partitionKey;
+
+        if (ip == null)
+        {
+            partitionKey = "unknown";
+        }
+        else if (ip.IsIPv6LinkLocal)
+        {
+            // SECURITY: Link-local addresses (fe80::) are not globally unique and can be
+            // reused across different networks/interfaces. Treat them as a special bucket
+            // to prevent multiple clients from unfairly sharing the same rate limit.
+            partitionKey = "unknown-linklocal";
+        }
+        else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
+                 !ip.IsIPv4MappedToIPv6)
+        {
+            // Use /64 prefix for IPv6 to prevent rotation attacks
+            var bytes = ip.GetAddressBytes();
+            Array.Clear(bytes, 8, 8); // Zero out host portion (last 64 bits)
+            partitionKey = new IPAddress(bytes).ToString();
+        }
+        else
+        {
+            partitionKey = ip.ToString();
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: partitionKey,
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:Auth:PermitLimit") ?? 30,
                 Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int?>("RateLimiting:Policies:Auth:WindowSeconds") ?? 60),
                 QueueLimit = 0
-            }));
+            });
+    });
 
     // SECURITY: Only use JWT claim for tenant identification - never trust client headers
     // Unauthenticated requests fall back to IP-based limiting
@@ -189,68 +285,34 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+// Configure Cloudflare IP service for dynamic IP range fetching
+builder.Services.AddOptions<CloudflareOptions>()
+    .Bind(builder.Configuration.GetSection(CloudflareOptions.SectionName))
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<ICloudflareIpService, CloudflareIpService>(client =>
+{
+    var timeout = builder.Configuration.GetValue<int?>("Cloudflare:FetchTimeoutSeconds") ?? 30;
+    client.Timeout = TimeSpan.FromSeconds(timeout);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Dhadgar-Gateway/1.0");
+});
+
+builder.Services.AddHostedService<CloudflareIpHostedService>();
+
 // Configure ForwardedHeaders to trust Cloudflare proxy
 // SECURITY: Only trust X-Forwarded-* headers from known Cloudflare IP ranges
 // Without this, attackers could spoof CF-Connecting-IP or X-Forwarded-For headers
+builder.Services.AddSingleton<IPostConfigureOptions<ForwardedHeadersOptions>>(sp =>
+{
+    var cloudflareService = sp.GetRequiredService<ICloudflareIpService>();
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+    return new CloudflareForwardedHeadersPostConfigure(cloudflareService, env);
+});
+
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.ForwardLimit = 2; // Cloudflare + potential internal proxy
-
-    // Cloudflare IPv4 ranges (https://www.cloudflare.com/ips-v4)
-    var cloudflareIpv4Ranges = new[]
-    {
-        "173.245.48.0/20",
-        "103.21.244.0/22",
-        "103.22.200.0/22",
-        "103.31.4.0/22",
-        "141.101.64.0/18",
-        "108.162.192.0/18",
-        "190.93.240.0/20",
-        "188.114.96.0/20",
-        "197.234.240.0/22",
-        "198.41.128.0/17",
-        "162.158.0.0/15",
-        "104.16.0.0/13",
-        "104.24.0.0/14",
-        "172.64.0.0/13",
-        "131.0.72.0/22"
-    };
-
-    // Cloudflare IPv6 ranges (https://www.cloudflare.com/ips-v6)
-    var cloudflareIpv6Ranges = new[]
-    {
-        "2400:cb00::/32",
-        "2606:4700::/32",
-        "2803:f800::/32",
-        "2405:b500::/32",
-        "2405:8100::/32",
-        "2a06:98c0::/29",
-        "2c0f:f248::/32"
-    };
-
-    foreach (var range in cloudflareIpv4Ranges)
-    {
-        if (System.Net.IPNetwork.TryParse(range, out var network))
-        {
-            options.KnownIPNetworks.Add(network);
-        }
-    }
-
-    foreach (var range in cloudflareIpv6Ranges)
-    {
-        if (System.Net.IPNetwork.TryParse(range, out var network))
-        {
-            options.KnownIPNetworks.Add(network);
-        }
-    }
-
-    // Allow localhost for development
-    if (builder.Environment.IsDevelopment())
-    {
-        options.KnownProxies.Add(IPAddress.Loopback);
-        options.KnownProxies.Add(IPAddress.IPv6Loopback);
-    }
 });
 
 var app = builder.Build();
@@ -284,10 +346,37 @@ app.UseRateLimiter();
 // 8. Request enrichment WITH HEADER STRIPPING (runs after auth to inject validated claims)
 app.UseMiddleware<RequestEnrichmentMiddleware>();
 
+// 9. YARP circuit breaker adapter - extracts cluster ID for circuit breaker
+// Must run before circuit breaker middleware
+app.UseYarpCircuitBreakerAdapter();
+
+// 10. Circuit breaker - protects against cascading failures (shared resilience library)
+// Uses ICircuitBreakerStateStore for distributed scenarios and TimeProvider for testability
+app.UseCircuitBreaker();
+
 if (app.Environment.IsDevelopment())
 {
+    // Serve aggregated OpenAPI spec at a path that won't be intercepted by UseSwagger middleware
+    app.MapGet("/openapi/all.json", async (OpenApiAggregationService aggregator, CancellationToken ct) =>
+    {
+        var spec = await aggregator.GetAggregatedSpecAsync(ct);
+        return Results.Json(spec, contentType: "application/json");
+    })
+    .AllowAnonymous()
+    .ExcludeFromDescription();
+
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        // Single aggregated spec containing all services (served from /openapi/all.json)
+        options.SwaggerEndpoint("/openapi/all.json", "All Services");
+
+        // Individual service specs (still available if needed)
+        options.SwaggerEndpoint("/swagger/gateway/swagger.json", "Gateway Only");
+
+        options.DocumentTitle = "Meridian Console API";
+        options.RoutePrefix = "swagger";
+    });
 }
 
 // Diagnostics endpoints (Development only)

@@ -17,6 +17,18 @@ namespace Dhadgar.Identity.Data.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
 
+            // SAFETY: Check for role names that would be truncated before shrinking the column
+            // This prevents silent data loss during migration
+            migrationBuilder.Sql(@"
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM organization_roles WHERE char_length(""Name"") > 50) THEN
+                        RAISE EXCEPTION 'Cannot shrink organization_roles.Name to 50 chars: existing data would be truncated. Please update or remove roles with names longer than 50 characters before applying this migration.';
+                    END IF;
+                END
+                $$;
+            ");
+
             migrationBuilder.AlterColumn<string>(
                 name: "Name",
                 table: "organization_roles",

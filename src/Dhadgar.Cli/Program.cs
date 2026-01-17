@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using Dhadgar.Cli.Commands.Auth;
 using Dhadgar.Cli.Commands.Help;
 using Dhadgar.Cli.Commands.Gateway;
@@ -620,12 +621,33 @@ keyvaultCmd.AddCommand(vaultUpdateCmd);
 var gatewayCmd = new Command("gateway", "Gateway and infrastructure diagnostics");
 
 var gatewayHealthCmd = new Command("health", "Check health of all services");
-gatewayHealthCmd.SetHandler(async () =>
+gatewayHealthCmd.SetHandler(async (InvocationContext ctx) =>
 {
-    await HealthCommand.ExecuteAsync(CancellationToken.None);
+    ctx.ExitCode = await HealthCommand.ExecuteAsync(ctx.GetCancellationToken());
+});
+
+var gatewayServicesCmd = new Command("services", "List all backend services health (Development only)");
+gatewayServicesCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    ctx.ExitCode = await ServicesCommand.ExecuteAsync(ctx.GetCancellationToken());
+});
+
+var gatewayRoutesCmd = new Command("routes", "List all gateway routes (Development only)");
+gatewayRoutesCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    ctx.ExitCode = await RoutesCommand.ExecuteAsync(ctx.GetCancellationToken());
+});
+
+var gatewayClustersCmd = new Command("clusters", "List all YARP clusters (Development only)");
+gatewayClustersCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    ctx.ExitCode = await ClustersCommand.ExecuteAsync(ctx.GetCancellationToken());
 });
 
 gatewayCmd.AddCommand(gatewayHealthCmd);
+gatewayCmd.AddCommand(gatewayServicesCmd);
+gatewayCmd.AddCommand(gatewayRoutesCmd);
+gatewayCmd.AddCommand(gatewayClustersCmd);
 
 // ============================================================================
 // COMMANDS LIST

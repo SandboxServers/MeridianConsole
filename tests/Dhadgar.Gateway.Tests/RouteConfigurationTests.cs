@@ -25,13 +25,13 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave15Routes()
+    public void ReverseProxyShouldHave16Routes()
     {
-        // 12 backend services + Better Auth + console hub route + agents route = 15 total
+        // 12 backend services + Better Auth + console hub route + agents route + internal-block = 16 total
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(15, routes.Count);
+        Assert.Equal(16, routes.Count);
     }
 
     [Fact]
@@ -83,6 +83,60 @@ public class RouteConfigurationTests
             .GetValue<bool>("ReverseProxy:Clusters:console:SessionAffinity:Enabled");
 
         Assert.True(sessionAffinityEnabled);
+    }
+
+    [Fact]
+    public void InternalBlockRouteShouldHaveDenyAllPolicy()
+    {
+        var policy = _configuration["ReverseProxy:Routes:identity-internal-block:AuthorizationPolicy"];
+        var path = _configuration["ReverseProxy:Routes:identity-internal-block:Match:Path"];
+        var order = _configuration.GetValue<int?>("ReverseProxy:Routes:identity-internal-block:Order");
+
+        Assert.Equal("DenyAll", policy);
+        Assert.Equal("/api/v1/identity/internal/{**catch-all}", path);
+        Assert.Equal(1, order);
+    }
+
+    [Fact]
+    public void InternalBlockRoute_ShouldHaveLowestOrder()
+    {
+        var routesSection = _configuration.GetSection("ReverseProxy:Routes");
+        var routes = routesSection.GetChildren()
+            .Select(r => new
+            {
+                RouteId = r.Key,
+                Order = r.GetValue<int?>("Order") ?? 999
+            })
+            .OrderBy(r => r.Order)
+            .ToList();
+
+        // Internal block route should be first (Order=1)
+        Assert.Equal("identity-internal-block", routes.First().RouteId);
+    }
+
+    [Theory]
+    [InlineData("identity-internal-block", 1)]
+    [InlineData("identity-route", 10)]
+    [InlineData("betterauth-route", 10)]
+    [InlineData("servers-route", 20)]
+    [InlineData("nodes-route", 20)]
+    [InlineData("agents-route", 30)]
+    public void RouteShouldHaveCorrectOrder(string routeName, int expectedOrder)
+    {
+        var order = _configuration.GetValue<int?>($"ReverseProxy:Routes:{routeName}:Order");
+        Assert.Equal(expectedOrder, order);
+    }
+
+    [Fact]
+    public void AllRoutesShouldHaveExplicitOrder()
+    {
+        var routesSection = _configuration.GetSection("ReverseProxy:Routes");
+        var routesWithoutOrder = routesSection.GetChildren()
+            .Where(r => r.GetValue<int?>("Order") == null)
+            .Select(r => r.Key)
+            .ToList();
+
+        Assert.Empty(routesWithoutOrder);
     }
 
     [Theory]

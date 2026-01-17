@@ -9,6 +9,9 @@ public static class OAuthEndpoints
     public static void Map(WebApplication app)
     {
         app.MapGet("/oauth/{provider}/link", BeginLink)
+            .WithTags("OAuth")
+            .WithName("BeginOAuthLink")
+            .WithDescription("Begin OAuth provider account linking flow")
             .RequireRateLimiting("auth");
     }
 

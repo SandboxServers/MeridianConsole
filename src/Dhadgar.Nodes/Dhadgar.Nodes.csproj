@@ -1,25 +1,27 @@
-  <Project Sdk="Microsoft.NET.Sdk.Web">
-    <PropertyGroup>
-      <AssemblyName>Dhadgar.Nodes</AssemblyName>
-      <RootNamespace>Dhadgar.Nodes</RootNamespace>
-    </PropertyGroup>
-    <ItemGroup>
-  <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
-  <ProjectReference Include="..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
-  <ProjectReference Include="..\Shared\Dhadgar.Messaging\Dhadgar.Messaging.csproj" />
-  <ProjectReference Include="..\Shared\Dhadgar.ServiceDefaults\Dhadgar.ServiceDefaults.csproj" />
-</ItemGroup>
-<ItemGroup>
-  <PackageReference Include="MassTransit" />
-  <PackageReference Include="MassTransit.RabbitMQ" />
-  <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-  <PackageReference Include="Microsoft.EntityFrameworkCore" />
-  <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
-  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-</ItemGroup>
-  
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>Dhadgar.Nodes</AssemblyName>
+    <RootNamespace>Dhadgar.Nodes</RootNamespace>
+  </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+    <ProjectReference Include="..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+    <ProjectReference Include="..\Shared\Dhadgar.Messaging\Dhadgar.Messaging.csproj" />
+    <ProjectReference Include="..\Shared\Dhadgar.ServiceDefaults\Dhadgar.ServiceDefaults.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MassTransit" />
+    <PackageReference Include="MassTransit.RabbitMQ" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Process" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
   </ItemGroup>
 </Project>
-
