@@ -29,6 +29,13 @@ public sealed record MemberClaimRequest(
     Guid? ResourceId,
     DateTime? ExpiresAt);
 
+public sealed record ClaimInfo(
+    Guid Id,
+    string Type,
+    string Value,
+    DateTime? ExpiresAt,
+    DateTime CreatedAt);
+
 /// <summary>
 /// Summary of a pending invitation for a user.
 /// </summary>
@@ -348,6 +355,38 @@ public sealed class MembershipService
             _timeProvider.GetUtcNow()), ct);
 
         return ServiceResult.Ok(membership);
+    }
+
+    public async Task<ServiceResult<IReadOnlyCollection<ClaimInfo>>> ListClaimsAsync(
+        Guid organizationId,
+        Guid targetUserId,
+        CancellationToken ct = default)
+    {
+        var membership = await _dbContext.UserOrganizations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(uo =>
+                uo.OrganizationId == organizationId &&
+                uo.UserId == targetUserId &&
+                uo.LeftAt == null,
+                ct);
+
+        if (membership is null)
+        {
+            return ServiceResult.Fail<IReadOnlyCollection<ClaimInfo>>("membership_not_found");
+        }
+
+        var claims = await _dbContext.UserOrganizationClaims
+            .AsNoTracking()
+            .Where(c => c.UserOrganizationId == membership.Id)
+            .Select(c => new ClaimInfo(
+                c.Id,
+                c.ClaimType.ToString().ToLowerInvariant(),
+                c.ClaimValue,
+                c.ExpiresAt,
+                c.GrantedAt))
+            .ToListAsync(ct);
+
+        return ServiceResult.Ok<IReadOnlyCollection<ClaimInfo>>(claims);
     }
 
     public async Task<ServiceResult<UserOrganizationClaim>> AddClaimAsync(

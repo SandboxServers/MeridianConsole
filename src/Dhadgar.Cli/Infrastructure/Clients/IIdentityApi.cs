@@ -121,6 +121,16 @@ public interface IIdentityApi
 
     [Post("/logout")]
     Task LogoutAsync(CancellationToken ct = default);
+
+    // Member claim management endpoints
+    [Get("/organizations/{orgId}/members/{memberId}/claims")]
+    Task<MemberClaimsResponse> GetMemberClaimsAsync(string orgId, string memberId, CancellationToken ct = default);
+
+    [Post("/organizations/{orgId}/members/{memberId}/claims")]
+    Task<AddClaimResponse> AddMemberClaimAsync(string orgId, string memberId, [Body] AddClaimRequest request, CancellationToken ct = default);
+
+    [Delete("/organizations/{orgId}/members/{memberId}/claims/{claimId}")]
+    Task RemoveMemberClaimAsync(string orgId, string memberId, string claimId, CancellationToken ct = default);
 }
 
 public class TokenResponse
@@ -591,4 +601,50 @@ public class RevokeAllSessionsResponse
 {
     [JsonPropertyName("revokedCount")]
     public int RevokedCount { get; set; }
+}
+
+public class MemberClaimsResponse
+{
+    [JsonPropertyName("memberId")]
+    public string MemberId { get; set; } = string.Empty;
+
+    [JsonPropertyName("claims")]
+    public Collection<MemberClaimEntry> Claims { get; set; } = [];
+}
+
+public class MemberClaimEntry
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+
+    [JsonPropertyName("value")]
+    public string Value { get; set; } = string.Empty;
+
+    [JsonPropertyName("expiresAt")]
+    public DateTime? ExpiresAt { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; }
+}
+
+public class AddClaimRequest
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "grant";
+
+    [JsonPropertyName("value")]
+    public string Value { get; set; } = string.Empty;
+
+    [JsonPropertyName("expiresAt")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTime? ExpiresAt { get; set; }
+}
+
+public class AddClaimResponse
+{
+    [JsonPropertyName("claimId")]
+    public string ClaimId { get; set; } = string.Empty;
 }

@@ -30,6 +30,9 @@ using IdentityListRoleMembersCommand = Dhadgar.Cli.Commands.Identity.ListRoleMem
 using IdentityAssignRoleCommand = Dhadgar.Cli.Commands.Identity.AssignRoleCommand;
 using IdentityRevokeRoleCommand = Dhadgar.Cli.Commands.Identity.RevokeRoleCommand;
 using IdentitySearchRolesCommand = Dhadgar.Cli.Commands.Identity.SearchRolesCommand;
+using GrantClaimCommand = Dhadgar.Cli.Commands.Identity.GrantClaimCommand;
+using RevokeClaimCommand = Dhadgar.Cli.Commands.Identity.RevokeClaimCommand;
+using ListClaimsCommand = Dhadgar.Cli.Commands.Identity.ListClaimsCommand;
 using Dhadgar.Cli.Commands.Me;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
@@ -379,6 +382,56 @@ identityRolesCmd.AddCommand(identityRolesSearchCmd);
 identityCmd.AddCommand(identityRolesCmd);
 
 // ============================================================================
+// IDENTITY MEMBERS COMMANDS (Claim management)
+// ============================================================================
+
+var identityMembersCmd = new Command("members", "Member claim management");
+
+var identityMembersGrantCmd = new Command("grant", "Grant a permission to a member");
+var grantMemberIdArg = new Argument<string>("member-id", "Member ID (user ID)");
+var grantPermissionArg = new Argument<string>("permission", "Permission to grant (e.g., secrets:read:oauth)");
+var grantOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+var grantExpiresOpt = new Option<string?>("--expires", "Expiration (e.g., 1h, 7d, 30d, or ISO 8601 date)");
+identityMembersGrantCmd.AddArgument(grantMemberIdArg);
+identityMembersGrantCmd.AddArgument(grantPermissionArg);
+identityMembersGrantCmd.AddOption(grantOrgOpt);
+identityMembersGrantCmd.AddOption(grantExpiresOpt);
+identityMembersGrantCmd.SetHandler(async (string memberId, string permission, string? orgId, string? expires) =>
+{
+    await GrantClaimCommand.ExecuteAsync(memberId, permission, orgId, expires, CancellationToken.None);
+}, grantMemberIdArg, grantPermissionArg, grantOrgOpt, grantExpiresOpt);
+
+var identityMembersRevokeCmd = new Command("revoke", "Revoke a claim from a member");
+var revokeMemberIdArg = new Argument<string>("member-id", "Member ID (user ID)");
+var revokeClaimIdArg = new Argument<string>("claim-id", "Claim ID to revoke");
+var revokeOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+var revokeForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+identityMembersRevokeCmd.AddArgument(revokeMemberIdArg);
+identityMembersRevokeCmd.AddArgument(revokeClaimIdArg);
+identityMembersRevokeCmd.AddOption(revokeOrgOpt);
+identityMembersRevokeCmd.AddOption(revokeForceOpt);
+identityMembersRevokeCmd.SetHandler(async (string memberId, string claimId, string? orgId, bool force) =>
+{
+    await RevokeClaimCommand.ExecuteAsync(memberId, claimId, orgId, force, CancellationToken.None);
+}, revokeMemberIdArg, revokeClaimIdArg, revokeOrgOpt, revokeForceOpt);
+
+var identityMembersClaimsCmd = new Command("claims", "List custom claims for a member");
+var claimsMemberIdArg = new Argument<string>("member-id", "Member ID (user ID)");
+var claimsOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityMembersClaimsCmd.AddArgument(claimsMemberIdArg);
+identityMembersClaimsCmd.AddOption(claimsOrgOpt);
+identityMembersClaimsCmd.SetHandler(async (string memberId, string? orgId) =>
+{
+    await ListClaimsCommand.ExecuteAsync(memberId, orgId, CancellationToken.None);
+}, claimsMemberIdArg, claimsOrgOpt);
+
+identityMembersCmd.AddCommand(identityMembersGrantCmd);
+identityMembersCmd.AddCommand(identityMembersRevokeCmd);
+identityMembersCmd.AddCommand(identityMembersClaimsCmd);
+
+identityCmd.AddCommand(identityMembersCmd);
+
+// ============================================================================
 // ME COMMANDS (Self-service)
 // ============================================================================
 
@@ -517,6 +570,16 @@ secretRotateCmd.SetHandler(async (string name, bool force) =>
     await RotateSecretCommand.ExecuteAsync(name, force, CancellationToken.None);
 }, rotateSecretNameArg, forceOpt);
 
+var secretDeleteCmd = new Command("delete", "Delete a secret");
+var deleteSecretNameArg = new Argument<string>("name", "Secret name");
+var deleteSecretForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+secretDeleteCmd.AddArgument(deleteSecretNameArg);
+secretDeleteCmd.AddOption(deleteSecretForceOpt);
+secretDeleteCmd.SetHandler(async (string name, bool force) =>
+{
+    await DeleteSecretCommand.ExecuteAsync(name, force, CancellationToken.None);
+}, deleteSecretNameArg, deleteSecretForceOpt);
+
 var certListCmd = new Command("list-certs", "List certificates");
 var certVaultNameOpt = new Option<string?>("--vault", "Key Vault name (optional)");
 certListCmd.AddOption(certVaultNameOpt);
@@ -543,6 +606,7 @@ secretCmd.AddCommand(secretGetCmd);
 secretCmd.AddCommand(secretListCmd);
 secretCmd.AddCommand(secretSetCmd);
 secretCmd.AddCommand(secretRotateCmd);
+secretCmd.AddCommand(secretDeleteCmd);
 secretCmd.AddCommand(certListCmd);
 secretCmd.AddCommand(certImportCmd);
 
@@ -609,10 +673,21 @@ vaultUpdateCmd.SetHandler(async (
     await UpdateVaultCommand.ExecuteAsync(name, softDelete, purgeProtection, retention, sku, CancellationToken.None);
 }, vaultUpdateNameArg, enableSoftDeleteOpt, disableSoftDeleteOpt, enablePurgeProtectionOpt, disablePurgeProtectionOpt, retentionDaysOpt, skuOpt);
 
+var vaultDeleteCmd = new Command("delete", "Delete a Key Vault");
+var vaultDeleteNameArg = new Argument<string>("name", "Vault name");
+var vaultDeleteForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+vaultDeleteCmd.AddArgument(vaultDeleteNameArg);
+vaultDeleteCmd.AddOption(vaultDeleteForceOpt);
+vaultDeleteCmd.SetHandler(async (string name, bool force) =>
+{
+    await DeleteVaultCommand.ExecuteAsync(name, force, CancellationToken.None);
+}, vaultDeleteNameArg, vaultDeleteForceOpt);
+
 keyvaultCmd.AddCommand(vaultListCmd);
 keyvaultCmd.AddCommand(vaultGetCmd);
 keyvaultCmd.AddCommand(vaultCreateCmd);
 keyvaultCmd.AddCommand(vaultUpdateCmd);
+keyvaultCmd.AddCommand(vaultDeleteCmd);
 
 // ============================================================================
 // GATEWAY COMMANDS

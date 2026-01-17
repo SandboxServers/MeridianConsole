@@ -40,6 +40,10 @@ public static class MembershipEndpoints
             .WithName("AssignMemberRole")
             .WithDescription("Assign a role to a member");
 
+        group.MapGet("/{memberId:guid}/claims", ListClaims)
+            .WithName("ListMemberClaims")
+            .WithDescription("List custom claims for a member");
+
         group.MapPost("/{memberId:guid}/claims", AddClaim)
             .WithName("AddMemberClaim")
             .WithDescription("Add a custom claim to a member");
@@ -257,6 +261,42 @@ public static class MembershipEndpoints
         return result.Success ? Results.Ok(new { role = result.Value?.Role }) : Results.BadRequest(new { error = result.Error });
     }
 
+    private static async Task<IResult> ListClaims(
+        HttpContext context,
+        Guid organizationId,
+        Guid memberId,
+        MembershipService membershipService,
+        IPermissionService permissionService,
+        CancellationToken ct)
+    {
+        if (!EndpointHelpers.TryGetUserId(context, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var permissionResult = await EndpointHelpers.RequirePermissionAsync(
+            userId,
+            organizationId,
+            "members:read",
+            permissionService,
+            ct);
+
+        if (permissionResult is not null)
+        {
+            return permissionResult;
+        }
+
+        var result = await membershipService.ListClaimsAsync(organizationId, memberId, ct);
+        if (!result.Success)
+        {
+            return Results.NotFound(new { error = result.Error });
+        }
+
+        var claims = result.Value?.Select(c => new MemberClaimDto(c.Id, c.Type, c.Value, c.ExpiresAt, c.CreatedAt)).ToList()
+            ?? [];
+        return Results.Ok(new MemberClaimsResponse(memberId, claims));
+    }
+
     private static async Task<IResult> AddClaim(
         HttpContext context,
         Guid organizationId,
@@ -406,3 +446,5 @@ public static class MembershipEndpoints
 
 public sealed record BulkInviteRequest(IReadOnlyCollection<MemberInviteRequest> Invites);
 public sealed record BulkRemoveRequest(IReadOnlyCollection<Guid> MemberIds);
+public sealed record MemberClaimsResponse(Guid MemberId, IReadOnlyCollection<MemberClaimDto> Claims);
+public sealed record MemberClaimDto(Guid Id, string Type, string Value, DateTime? ExpiresAt, DateTime CreatedAt);
