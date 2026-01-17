@@ -80,23 +80,44 @@ steps:
       # Package the chart
       helm package meridian-console
 
-      # Get chart version (strip any Windows CRLF line endings)
-      CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}' | tr -d '\r')
+      # Get chart version - use xargs to strip ALL whitespace including embedded newlines
+      CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}' | xargs)
+
+      # Double-check: construct filename and verify it matches what helm created
       CHART_FILE="meridian-console-${CHART_VERSION}.tgz"
 
       echo "=== Publishing Chart ==="
       echo "Chart: meridian-console"
-      echo "Version: $CHART_VERSION"
-      echo "Registry: $ACR_LOGIN_SERVER"
+      echo "Version: [${CHART_VERSION}]"
+      echo "File: [${CHART_FILE}]"
+      echo "Registry: ${ACR_LOGIN_SERVER}"
       echo "========================"
 
+      # List what helm actually created
+      echo "Files created by helm package:"
+      ls -la *.tgz
+
+      # Verify the file exists before pushing
+      if [ ! -f "$CHART_FILE" ]; then
+        echo "❌ Error: Chart file not found: $CHART_FILE"
+        echo "Looking for actual tgz file..."
+        ACTUAL_FILE=$(ls -1 meridian-console-*.tgz 2>/dev/null | head -1)
+        if [ -n "$ACTUAL_FILE" ]; then
+          echo "Found: $ACTUAL_FILE - using it instead"
+          CHART_FILE="$ACTUAL_FILE"
+        else
+          echo "No meridian-console tgz files found"
+          exit 1
+        fi
+      fi
+
       # Push to ACR as OCI artifact
-      helm push "$CHART_FILE" oci://$ACR_LOGIN_SERVER/helm
+      helm push "$CHART_FILE" "oci://${ACR_LOGIN_SERVER}/helm"
 
       echo "✅ Successfully published meridian-console:${CHART_VERSION} to ACR"
 
       # Save version for summary
-      echo "##vso[task.setvariable variable=CHART_VERSION]$CHART_VERSION"
+      echo "##vso[task.setvariable variable=CHART_VERSION]${CHART_VERSION}"
     displayName: 'Package and Push Helm chart to ACR'
 
   - bash: |
