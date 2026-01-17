@@ -191,7 +191,7 @@ extends:
           apiTokenVar: Dhadgar_ShoppingCart_Swa_ApiToken
           appLocation: .
           outputLocation: _swa_publish/wwwroot
-          apiLocation: _swa_publish/api
+          # No apiLocation - Astro static site doesn't have Azure Functions
           appBuildCommand: dotnet publish src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj -c $(BuildConfiguration) -o _swa_publish
       - id: Dhadgar.Secrets
         projectPath: src/Dhadgar.Secrets/Dhadgar.Secrets.csproj
