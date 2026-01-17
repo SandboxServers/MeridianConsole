@@ -1,0 +1,78 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div class="min-h-screen flex flex-col">
+    <!-- Top navigation bar -->
+    <header class="sticky top-0 z-50 bg-panel-dark/80 backdrop-blur-lg border-b border-glow-line/50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <!-- Logo -->
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-cyber-cyan/20 border border-cyber-cyan/50 flex items-center justify-center">
+              <svg
+                class="w-5 h-5 text-cyber-cyan"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                <path d="M2 17l10 5 10-5"></path>
+                <path d="M2 12l10 5 10-5"></path>
+              </svg>
+            </div>
+            <span class="font-display text-lg text-text-primary tracking-wider">
+              MERIDIAN
+            </span>
+          </div>
+
+          <!-- Navigation -->
+          <nav class="hidden md:flex items-center gap-6">
+            <a href="/dashboard" class="text-text-secondary hover:text-cyber-cyan transition-colors">
+              Dashboard
+            </a>
+            <a href="/servers" class="text-text-secondary hover:text-cyber-cyan transition-colors">
+              Servers
+            </a>
+            <a href="/nodes" class="text-text-secondary hover:text-cyber-cyan transition-colors">
+              Nodes
+            </a>
+            <a href="/settings" class="text-text-secondary hover:text-cyber-cyan transition-colors">
+              Settings
+            </a>
+          </nav>
+
+          <!-- User menu placeholder -->
+          <div id="user-menu" class="flex items-center">
+            <!-- Hydrated by React component -->
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <slot />
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-glow-line/30 bg-panel-darker/50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="flex items-center justify-between text-text-muted text-xs font-mono">
+          <span>MERIDIAN CONSOLE v1.0.0</span>
+          <span>SECURE CONNECTION ESTABLISHED</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+</BaseLayout>

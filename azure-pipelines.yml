@@ -38,7 +38,7 @@ parameters:
     displayName: 'Deploy release targets (non-PR)'
   - name: publishContainers
     type: boolean
-    default: true
+    default: false
     displayName: 'Publish container images to ACR (costs money, non-PR only)'
   # Infrastructure and deployment parameters
   - name: environments
@@ -111,69 +111,69 @@ extends:
       - id: Dhadgar.Agent.Linux
         projectPath: src/Agents/Dhadgar.Agent.Linux/Dhadgar.Agent.Linux.csproj
         testProjectPath: tests/Dhadgar.Agent.Linux.Tests/Dhadgar.Agent.Linux.Tests.csproj
-        deploy: agent
-        agent:
-          runtimes: 'linux-x64'
-          storageAccount: meridianconsoleblob
-          containerName: agent-releases
+        deploy:  # Disabled: agent deployment not needed yet
+        # agent:
+        #   runtimes: 'linux-x64'
+        #   storageAccount: meridianconsoleblob
+        #   containerName: agent-releases
       - id: Dhadgar.Agent.Windows
         projectPath: src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj
         testProjectPath: tests/Dhadgar.Agent.Windows.Tests/Dhadgar.Agent.Windows.Tests.csproj
-        deploy: agent
-        agent:
-          runtimes: 'win-x64'
-          storageAccount: meridianconsoleblob
-          containerName: agent-releases
+        deploy:  # Disabled: agent deployment not needed yet
+        # agent:
+        #   runtimes: 'win-x64'
+        #   storageAccount: meridianconsoleblob
+        #   containerName: agent-releases
       # Microservices - deployed via Docker Compose to dev environment
       - id: Dhadgar.Billing
         projectPath: src/Dhadgar.Billing/Dhadgar.Billing.csproj
         testProjectPath: tests/Dhadgar.Billing.Tests/Dhadgar.Billing.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Cli
         projectPath: src/Dhadgar.Cli/Dhadgar.Cli.csproj
         testProjectPath: tests/Dhadgar.Cli.Tests/Dhadgar.Cli.Tests.csproj
-        deploy: cli
-        cli:
-          runtimes: 'win-x64;linux-x64;osx-x64'
-          publishToGitHub: true
-          storageAccount: meridianconsoleblob
-          containerName: cli-releases
+        deploy:  # Disabled: CLI deployment not needed yet
+        # cli:
+        #   runtimes: 'win-x64;linux-x64;osx-x64'
+        #   publishToGitHub: true
+        #   storageAccount: meridianconsoleblob
+        #   containerName: cli-releases
       - id: Dhadgar.Console
         projectPath: src/Dhadgar.Console/Dhadgar.Console.csproj
         testProjectPath: tests/Dhadgar.Console.Tests/Dhadgar.Console.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Discord
         projectPath: src/Dhadgar.Discord/Dhadgar.Discord.csproj
         testProjectPath: tests/Dhadgar.Discord.Tests/Dhadgar.Discord.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Files
         projectPath: src/Dhadgar.Files/Dhadgar.Files.csproj
         testProjectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Firewall
         projectPath: src/Dhadgar.Firewall/Dhadgar.Firewall.csproj
         testProjectPath: tests/Dhadgar.Firewall.Tests/Dhadgar.Firewall.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Gateway
         projectPath: src/Dhadgar.Gateway/Dhadgar.Gateway.csproj
         testProjectPath: tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Identity
         projectPath: src/Dhadgar.Identity/Dhadgar.Identity.csproj
         testProjectPath: tests/Dhadgar.Identity.Tests/Dhadgar.Identity.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Mods
         projectPath: src/Dhadgar.Mods/Dhadgar.Mods.csproj
         testProjectPath: tests/Dhadgar.Mods.Tests/Dhadgar.Mods.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Nodes
         projectPath: src/Dhadgar.Nodes/Dhadgar.Nodes.csproj
         testProjectPath: tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Notifications
         projectPath: src/Dhadgar.Notifications/Dhadgar.Notifications.csproj
         testProjectPath: tests/Dhadgar.Notifications.Tests/Dhadgar.Notifications.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Scope
         projectPath: src/Dhadgar.Scope/Dhadgar.Scope.csproj
         testProjectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
@@ -191,20 +191,20 @@ extends:
           apiTokenVar: Dhadgar_ShoppingCart_Swa_ApiToken
           appLocation: .
           outputLocation: _swa_publish/wwwroot
-          apiLocation: _swa_publish/api
+          # No apiLocation - Astro static site doesn't have Azure Functions
           appBuildCommand: dotnet publish src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj -c $(BuildConfiguration) -o _swa_publish
       - id: Dhadgar.Secrets
         projectPath: src/Dhadgar.Secrets/Dhadgar.Secrets.csproj
         testProjectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Servers
         projectPath: src/Dhadgar.Servers/Dhadgar.Servers.csproj
         testProjectPath: tests/Dhadgar.Servers.Tests/Dhadgar.Servers.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Tasks
         projectPath: src/Dhadgar.Tasks/Dhadgar.Tasks.csproj
         testProjectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
-        deploy: compose
+        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Panel
         projectPath: src/Dhadgar.Panel/Dhadgar.Panel.csproj
         testProjectPath: tests/Dhadgar.Panel.Tests/Dhadgar.Panel.Tests.csproj

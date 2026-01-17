@@ -3,6 +3,7 @@ using Dhadgar.Secrets;
 using Dhadgar.Secrets.Authorization;
 using Dhadgar.Secrets.Audit;
 using Dhadgar.Secrets.Endpoints;
+using Dhadgar.Secrets.Infrastructure;
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Readiness;
 using Dhadgar.Secrets.Services;
@@ -44,6 +45,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         var issuer = builder.Configuration["Auth:Issuer"];
         var metadataAddress = builder.Configuration["Auth:MetadataAddress"];
+        var internalBaseUrl = builder.Configuration["Auth:InternalBaseUrl"]; // e.g., http://identity:8080
 
         options.Authority = issuer;
         options.Audience = builder.Configuration["Auth:Audience"];
@@ -67,6 +69,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 builder.Configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60)
         };
         options.RefreshOnIssuerKeyNotFound = true;
+
+        // For local dev/Docker: use a document retriever that rewrites external URLs to internal
+        // This is needed because the OIDC metadata returns external URLs for jwks_uri
+        // which containers can't reach in local Docker environments
+        if (!string.IsNullOrWhiteSpace(internalBaseUrl) && !string.IsNullOrWhiteSpace(issuer))
+        {
+            var docRetriever = new UrlRewritingDocumentRetriever(issuer, internalBaseUrl)
+            {
+                RequireHttps = !builder.Environment.IsDevelopment()
+            };
+
+            options.ConfigurationManager = new Microsoft.IdentityModel.Protocols.ConfigurationManager<Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfiguration>(
+                metadataAddress ?? $"{issuer}.well-known/openid-configuration",
+                new Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfigurationRetriever(),
+                docRetriever);
+        }
     });
 
 builder.Services.AddAuthorization();

@@ -361,6 +361,7 @@ builder.Services.AddOpenIddict()
             "servers:write",
             "nodes:manage",
             "billing:read",
+            "secrets:read",
             "wif");
 
         var useDevelopmentCertificates = builder.Configuration.GetValue<bool>("Auth:UseDevelopmentCertificates");
@@ -499,6 +500,38 @@ builder.Services.AddOpenIddict()
                 var identity = new ClaimsIdentity(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
                 identity.AddClaim(OpenIddictConstants.Claims.Subject, context.ClientId);
                 identity.AddClaim(OpenIddictConstants.Claims.ClientId, context.ClientId);
+
+                // Add principal_type claim for service accounts
+                var principalTypeClaim = new Claim("principal_type", "service");
+                principalTypeClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken);
+                identity.AddClaim(principalTypeClaim);
+
+                // Add permission claims based on requested scopes
+                // This enables scope-to-permission mapping for service-to-service calls
+                foreach (var scope in requestedScopes)
+                {
+                    Claim? permissionClaim = null;
+
+                    // Map scopes to permission claims
+                    // e.g., "secrets:read" -> "permission: secrets:read:*"
+                    if (scope.StartsWith("secrets:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        permissionClaim = new Claim("permission", $"{scope}:*");
+                    }
+                    else if (scope.EndsWith(":read", StringComparison.OrdinalIgnoreCase) ||
+                             scope.EndsWith(":write", StringComparison.OrdinalIgnoreCase) ||
+                             scope.EndsWith(":manage", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Generic scope-to-permission mapping for service scopes
+                        permissionClaim = new Claim("permission", scope);
+                    }
+
+                    if (permissionClaim is not null)
+                    {
+                        permissionClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken);
+                        identity.AddClaim(permissionClaim);
+                    }
+                }
 
                 var principal = new ClaimsPrincipal(identity);
                 principal.SetScopes(requestedScopes);
@@ -814,6 +847,7 @@ static async Task SeedDevOpenIddictClientAsync(
             OpenIddictConstants.Permissions.Prefixes.Scope + "servers:write",
             OpenIddictConstants.Permissions.Prefixes.Scope + "nodes:manage",
             OpenIddictConstants.Permissions.Prefixes.Scope + "billing:read",
+            OpenIddictConstants.Permissions.Prefixes.Scope + "secrets:read",
             OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
         }
     };

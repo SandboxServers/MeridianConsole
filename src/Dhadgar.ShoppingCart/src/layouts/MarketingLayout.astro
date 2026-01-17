@@ -1,0 +1,105 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div class="min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 bg-space-dark/80 backdrop-blur-lg border-b border-glow-line/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <!-- Logo -->
+          <a href="/" class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-cyber-magenta/20 border border-cyber-magenta/50 flex items-center justify-center">
+              <svg
+                class="w-5 h-5 text-cyber-magenta"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                <path d="M2 17l10 5 10-5"></path>
+                <path d="M2 12l10 5 10-5"></path>
+              </svg>
+            </div>
+            <span class="font-display text-lg text-text-primary tracking-wider">
+              MERIDIAN
+            </span>
+          </a>
+
+          <!-- Navigation -->
+          <nav class="hidden md:flex items-center gap-6">
+            <a href="/#features" class="text-text-secondary hover:text-cyber-magenta transition-colors">
+              Features
+            </a>
+            <a href="/#pricing" class="text-text-secondary hover:text-cyber-magenta transition-colors">
+              Pricing
+            </a>
+            <a href="/docs" class="text-text-secondary hover:text-cyber-magenta transition-colors">
+              Docs
+            </a>
+          </nav>
+
+          <!-- CTA -->
+          <div class="flex items-center gap-4">
+            <a
+              href="/login"
+              class="text-text-secondary hover:text-text-primary transition-colors"
+            >
+              Sign In
+            </a>
+            <a
+              href="/login"
+              class="px-4 py-2 rounded-full bg-cyber-magenta/20 border border-cyber-magenta/50 text-cyber-magenta font-medium transition-all hover:bg-cyber-magenta/30 hover:shadow-glow-magenta"
+            >
+              Get Started
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content with top padding for fixed header -->
+    <main class="flex-1 pt-16">
+      <slot />
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-glow-line/30 bg-panel-darker/50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-6 h-6 rounded bg-cyber-magenta/20 border border-cyber-magenta/50 flex items-center justify-center">
+              <svg
+                class="w-4 h-4 text-cyber-magenta"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                <path d="M2 17l10 5 10-5"></path>
+                <path d="M2 12l10 5 10-5"></path>
+              </svg>
+            </div>
+            <span class="font-display text-sm text-text-secondary tracking-wider">
+              MERIDIAN CONSOLE
+            </span>
+          </div>
+          <div class="flex items-center gap-6 text-text-muted text-sm">
+            <a href="/privacy" class="hover:text-text-secondary transition-colors">Privacy</a>
+            <a href="/terms" class="hover:text-text-secondary transition-colors">Terms</a>
+            <a href="/support" class="hover:text-text-secondary transition-colors">Support</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+</BaseLayout>
