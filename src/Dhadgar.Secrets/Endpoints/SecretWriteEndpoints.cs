@@ -1,7 +1,8 @@
+using Dhadgar.Secrets.Authorization;
+using Dhadgar.Secrets.Audit;
 using Dhadgar.Secrets.Services;
+using Dhadgar.Secrets.Validation;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
-using System.Security.Claims;
 
 namespace Dhadgar.Secrets.Endpoints;
 
@@ -26,6 +27,7 @@ public static class SecretWriteEndpoints
             .WithName("RotateSecret")
             .WithDescription("Rotate a secret (generate new cryptographically secure value).")
             .Produces<RotateSecretResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
@@ -34,6 +36,7 @@ public static class SecretWriteEndpoints
             .WithName("DeleteSecret")
             .WithDescription("Delete a secret (soft delete if vault has soft delete enabled).")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
     }
@@ -42,29 +45,63 @@ public static class SecretWriteEndpoints
         string secretName,
         [FromBody] SetSecretRequest request,
         [FromServices] ISecretProvider provider,
-        [FromServices] IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
         HttpContext context,
         CancellationToken ct)
     {
+        // Validate input
+        var validation = SecretNameValidator.Validate(secretName);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new { error = validation.ErrorMessage });
+        }
+
         if (string.IsNullOrWhiteSpace(request.Value))
         {
             return Results.BadRequest(new { error = "Value is required." });
         }
 
+        // Check if secret is in allowed list
         if (!provider.IsAllowed(secretName))
         {
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "write",
+                UserId: context.User.FindFirst("sub")?.Value,
+                Reason: "Secret not in allowed list",
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
-        // Check write permission
-        if (!HasWritePermission(context.User, secretName, options.Value))
+        // Authorize
+        var authResult = authService.Authorize(context.User, secretName, SecretAction.Write);
+        if (!authResult.IsAuthorized)
         {
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "write",
+                UserId: authResult.UserId,
+                Reason: authResult.DenialReason ?? "Authorization denied",
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
         try
         {
             var success = await provider.SetSecretAsync(secretName, request.Value, ct);
+
+            auditLogger.LogModification(new SecretModificationEvent(
+                SecretName: secretName,
+                Action: "write",
+                UserId: authResult.UserId,
+                PrincipalType: authResult.PrincipalType,
+                Success: success,
+                CorrelationId: context.TraceIdentifier,
+                ErrorMessage: success ? null : "SetSecretAsync returned false"));
+
             if (!success)
             {
                 return Results.Forbid();
@@ -74,6 +111,15 @@ public static class SecretWriteEndpoints
         }
         catch (InvalidOperationException ex)
         {
+            auditLogger.LogModification(new SecretModificationEvent(
+                SecretName: secretName,
+                Action: "write",
+                UserId: authResult.UserId,
+                PrincipalType: authResult.PrincipalType,
+                Success: false,
+                CorrelationId: context.TraceIdentifier,
+                ErrorMessage: ex.Message));
+
             return Results.BadRequest(new { error = ex.Message });
         }
     }
@@ -81,18 +127,42 @@ public static class SecretWriteEndpoints
     private static async Task<IResult> RotateSecret(
         string secretName,
         [FromServices] ISecretProvider provider,
-        [FromServices] IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
         HttpContext context,
         CancellationToken ct)
     {
+        // Validate input
+        var validation = SecretNameValidator.Validate(secretName);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new { error = validation.ErrorMessage });
+        }
+
+        // Check if secret is in allowed list
         if (!provider.IsAllowed(secretName))
         {
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "rotate",
+                UserId: context.User.FindFirst("sub")?.Value,
+                Reason: "Secret not in allowed list",
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
-        // Check rotate permission (stricter than write)
-        if (!HasRotatePermission(context.User, secretName))
+        // Authorize - rotation requires specific permission
+        var authResult = authService.Authorize(context.User, secretName, SecretAction.Rotate);
+        if (!authResult.IsAuthorized)
         {
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "rotate",
+                UserId: authResult.UserId,
+                Reason: authResult.DenialReason ?? "Authorization denied",
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
@@ -100,38 +170,104 @@ public static class SecretWriteEndpoints
         {
             var (version, createdAt) = await provider.RotateSecretAsync(secretName, ct);
 
+            auditLogger.LogRotation(new SecretRotationEvent(
+                SecretName: secretName,
+                UserId: authResult.UserId,
+                PrincipalType: authResult.PrincipalType,
+                NewVersion: version,
+                Success: true,
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Ok(new RotateSecretResponse(
                 Name: secretName,
                 Version: version,
                 RotatedAt: createdAt,
-                ExpiresAt: null // No expiration for rotated secrets
+                ExpiresAt: null
             ));
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            auditLogger.LogRotation(new SecretRotationEvent(
+                SecretName: secretName,
+                UserId: authResult.UserId,
+                PrincipalType: authResult.PrincipalType,
+                NewVersion: null,
+                Success: false,
+                CorrelationId: context.TraceIdentifier,
+                ErrorMessage: ex.Message));
+
             return Results.Forbid();
+        }
+        catch (Exception ex)
+        {
+            auditLogger.LogRotation(new SecretRotationEvent(
+                SecretName: secretName,
+                UserId: authResult.UserId,
+                PrincipalType: authResult.PrincipalType,
+                NewVersion: null,
+                Success: false,
+                CorrelationId: context.TraceIdentifier,
+                ErrorMessage: ex.Message));
+
+            return Results.Problem(
+                title: "Rotation failed",
+                detail: "An error occurred during secret rotation.",
+                statusCode: StatusCodes.Status500InternalServerError);
         }
     }
 
     private static async Task<IResult> DeleteSecret(
         string secretName,
         [FromServices] ISecretProvider provider,
-        [FromServices] IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
         HttpContext context,
         CancellationToken ct)
     {
+        // Validate input
+        var validation = SecretNameValidator.Validate(secretName);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new { error = validation.ErrorMessage });
+        }
+
+        // Check if secret is in allowed list
         if (!provider.IsAllowed(secretName))
         {
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "delete",
+                UserId: context.User.FindFirst("sub")?.Value,
+                Reason: "Secret not in allowed list",
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
-        // Check delete permission (requires write permission)
-        if (!HasWritePermission(context.User, secretName, options.Value))
+        // Authorize - delete requires write permission
+        var authResult = authService.Authorize(context.User, secretName, SecretAction.Delete);
+        if (!authResult.IsAuthorized)
         {
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "delete",
+                UserId: authResult.UserId,
+                Reason: authResult.DenialReason ?? "Authorization denied",
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
         var success = await provider.DeleteSecretAsync(secretName, ct);
+
+        auditLogger.LogModification(new SecretModificationEvent(
+            SecretName: secretName,
+            Action: "delete",
+            UserId: authResult.UserId,
+            PrincipalType: authResult.PrincipalType,
+            Success: success,
+            CorrelationId: context.TraceIdentifier,
+            ErrorMessage: success ? null : "Secret not found"));
 
         if (!success)
         {
@@ -139,52 +275,6 @@ public static class SecretWriteEndpoints
         }
 
         return Results.NoContent();
-    }
-
-    private static bool HasWritePermission(ClaimsPrincipal user, string secretName, Options.SecretsOptions options)
-    {
-        // Direct secret write permission
-        var directPermission = $"secrets:write:{secretName}";
-        if (HasPermission(user, directPermission))
-        {
-            return true;
-        }
-
-        // Category-based write permissions
-        if (ContainsSecret(options.AllowedSecrets.OAuth, secretName))
-        {
-            return HasPermission(user, "secrets:write:oauth");
-        }
-
-        if (ContainsSecret(options.AllowedSecrets.BetterAuth, secretName))
-        {
-            return HasPermission(user, "secrets:write:betterauth");
-        }
-
-        if (ContainsSecret(options.AllowedSecrets.Infrastructure, secretName))
-        {
-            return HasPermission(user, "secrets:write:infrastructure");
-        }
-
-        return false;
-    }
-
-    private static bool HasRotatePermission(ClaimsPrincipal user, string secretName)
-    {
-        var rotatePermission = $"secrets:rotate:{secretName}";
-        return HasPermission(user, rotatePermission);
-    }
-
-    private static bool ContainsSecret(IEnumerable<string> secrets, string secretName)
-    {
-        return secrets.Any(name => string.Equals(name, secretName, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool HasPermission(ClaimsPrincipal user, string permission)
-    {
-        return user.Claims.Any(claim =>
-            string.Equals(claim.Type, "permission", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(claim.Value, permission, StringComparison.OrdinalIgnoreCase));
     }
 }
 

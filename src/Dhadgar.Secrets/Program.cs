@@ -1,4 +1,7 @@
+using System.Threading.RateLimiting;
 using Dhadgar.Secrets;
+using Dhadgar.Secrets.Authorization;
+using Dhadgar.Secrets.Audit;
 using Dhadgar.Secrets.Endpoints;
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Readiness;
@@ -7,6 +10,7 @@ using SecretsHello = Dhadgar.Secrets.Hello;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using OpenTelemetry.Logs;
@@ -68,6 +72,61 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks()
     .AddCheck<SecretsReadinessCheck>("secrets_ready", tags: ["ready"]);
+
+// Register authorization and audit services
+builder.Services.AddSingleton<ISecretsAuthorizationService, SecretsAuthorizationService>();
+builder.Services.AddSingleton<ISecretsAuditLogger, SecretsAuditLogger>();
+
+// Rate limiting configuration
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Default policy for secrets read operations
+    options.AddFixedWindowLimiter("SecretsRead", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 100;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 10;
+    });
+
+    // Stricter limit for write operations
+    options.AddFixedWindowLimiter("SecretsWrite", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 20;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 5;
+    });
+
+    // Very strict limit for rotation operations
+    options.AddFixedWindowLimiter("SecretsRotate", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 5;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 2;
+    });
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retry)
+            ? (int)retry.TotalSeconds
+            : 60;
+
+        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = "Too many requests. Please try again later.",
+            retryAfterSeconds = retryAfter
+        }, token);
+    };
+});
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
@@ -147,6 +206,7 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // Standard service endpoints
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Secrets", message = SecretsHello.Message }));

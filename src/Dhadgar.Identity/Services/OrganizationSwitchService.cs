@@ -92,7 +92,8 @@ public sealed class OrganizationSwitchService
             new("sub", user.Id.ToString()),
             new("org_id", organizationId.ToString()),
             new("email", user.Email),
-            new("role", membership.Role)
+            new("role", membership.Role),
+            new("principal_type", "user")
         };
 
         foreach (var permission in permissions)

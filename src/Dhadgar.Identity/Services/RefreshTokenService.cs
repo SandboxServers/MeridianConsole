@@ -383,6 +383,9 @@ public static class RefreshTokenClaimsBuilder
         // Email verification status
         identity.AddClaim(new Claim("email_verified", result.EmailVerified.ToString().ToLowerInvariant()));
 
+        // Principal type (user vs service account)
+        identity.AddClaim(new Claim("principal_type", "user"));
+
         // Add all current permissions as claims
         foreach (var permission in result.Permissions)
         {
