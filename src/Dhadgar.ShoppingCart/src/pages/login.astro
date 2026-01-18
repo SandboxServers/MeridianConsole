@@ -1,11 +1,9 @@
 ---
 import AuthLayout from '../layouts/AuthLayout.astro';
 import ShopLoginPage from '../components/auth/ShopLoginPage';
-
-// Build absolute callback URL so BetterAuth redirects back to this site
-const callbackURL = new URL('/callback', Astro.url).toString();
+// Callback URL is computed at runtime in OAuthButtonGroup using window.location.origin
 ---
 
 <AuthLayout title="Sign In | Meridian Console">
-  <ShopLoginPage client:load callbackURL={callbackURL} />
+  <ShopLoginPage client:load />
 </AuthLayout>

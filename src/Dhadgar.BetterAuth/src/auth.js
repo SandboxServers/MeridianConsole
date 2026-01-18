@@ -94,13 +94,36 @@ export const authConfig = {
   session: {
     // 7 days matches refresh token lifetime
     expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24
+    updateAge: 60 * 60 * 24,
+    cookieCache: {
+      enabled: true,
+      maxAge: 60 * 5 // 5 minutes
+    }
   },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false
   },
-  socialProviders
+  socialProviders,
+  // Account configuration for OAuth state handling
+  account: {
+    // Store OAuth state in cookie for cross-origin flows
+    storeStateStrategy: "cookie"
+  },
+  advanced: {
+    // Cross-origin cookies require SameSite=None and Secure
+    // This allows cart.meridianconsole.com to authenticate with dev.meridianconsole.com
+    crossSubDomainCookies: {
+      enabled: true,
+      domain: "meridianconsole.com" // Share cookies across subdomains (no leading dot)
+    },
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      httpOnly: true,
+      partitioned: true // Required for third-party cookie support in modern browsers
+    }
+  }
 };
 
 export const auth = betterAuth(authConfig);

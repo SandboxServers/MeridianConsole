@@ -9,7 +9,7 @@ interface OAuthButtonGroupProps {
 }
 
 export default function OAuthButtonGroup({
-  callbackURL = '/callback',
+  callbackURL,
   compact = false,
 }: OAuthButtonGroupProps) {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
@@ -17,7 +17,9 @@ export default function OAuthButtonGroup({
   const handleOAuth = async (providerId: string) => {
     setLoadingProvider(providerId);
     try {
-      await authClient.signIn({ provider: providerId, callbackURL });
+      // Compute callback URL at runtime using current origin (not build-time URL)
+      const runtimeCallbackURL = callbackURL || `${window.location.origin}/callback`;
+      await authClient.signIn({ provider: providerId, callbackURL: runtimeCallbackURL });
     } catch (error) {
       console.error('OAuth error:', error);
       setLoadingProvider(null);
