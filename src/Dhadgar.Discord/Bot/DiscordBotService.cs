@@ -62,7 +62,7 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to start Discord bot - check Discord:WebhookUrl config or bot token in Secrets");
+            _logger.LogError(ex, "Failed to start Discord bot - check Discord:BotToken config or token from Secrets service");
             // Don't throw - allow service to start without Discord if not configured
         }
     }
@@ -151,12 +151,11 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
 
         try
         {
-            foreach (var command in commands)
-            {
-                await _client.CreateGlobalApplicationCommandAsync(command.Build());
-            }
+            // Use bulk registration for efficiency (single API call)
+            var builtCommands = commands.Select(c => c.Build()).ToArray();
+            await _client.BulkOverwriteGlobalApplicationCommandsAsync(builtCommands);
 
-            _logger.LogInformation("Registered {Count} admin slash commands", commands.Count);
+            _logger.LogInformation("Registered {Count} admin slash commands", builtCommands.Length);
         }
         catch (Exception ex)
         {

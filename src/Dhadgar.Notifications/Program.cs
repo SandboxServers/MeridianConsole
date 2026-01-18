@@ -118,7 +118,8 @@ app.MapGet("/hello", () => Results.Text(Dhadgar.Notifications.Hello.Message))
     .WithTags("Health").WithName("NotificationsHello");
 app.MapDhadgarDefaultEndpoints();
 
-// Admin endpoint to view notification logs
+// Admin endpoint - Internal only, not exposed through Gateway
+// TODO: Add authentication when exposed publicly (currently internal service-to-service only)
 app.MapGet("/api/v1/notifications/logs", async (
     int? limit,
     string? status,

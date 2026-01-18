@@ -75,8 +75,9 @@ public sealed class SlashCommandHandler
         {
             _logger.LogError(ex, "Error handling admin command /{Command}", command.Data.Name);
 
+            // Don't leak exception details to Discord - log internally only
             await command.RespondAsync(
-                embed: BuildErrorEmbed($"Error: {ex.Message}"),
+                embed: BuildErrorEmbed("An internal error occurred. Check logs for details."),
                 ephemeral: true);
         }
     }
@@ -190,15 +191,21 @@ public sealed class SlashCommandHandler
 
     private async Task HandlePingCommandAsync(SocketSlashCommand command)
     {
-        var latency = command.CreatedAt - DateTimeOffset.UtcNow;
-
+        // Measure round-trip time by responding and modifying
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         await command.RespondAsync(
-            embed: new EmbedBuilder()
-                .WithTitle("Pong!")
-                .WithDescription($"Latency: {Math.Abs(latency.TotalMilliseconds):F0}ms")
-                .WithColor(Color.Green)
-                .Build(),
+            embed: new EmbedBuilder().WithDescription("Pinging...").Build(),
             ephemeral: true);
+        stopwatch.Stop();
+
+        var rtt = stopwatch.ElapsedMilliseconds;
+
+        await command.ModifyOriginalResponseAsync(props =>
+            props.Embed = new EmbedBuilder()
+                .WithTitle("Pong!")
+                .WithDescription($"Round-trip: **{rtt}ms**")
+                .WithColor(Color.Green)
+                .Build());
     }
 
     private static string GetUptime()

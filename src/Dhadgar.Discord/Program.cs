@@ -137,7 +137,8 @@ app.MapGet("/healthz", () =>
     return Results.Ok(new { service = "Dhadgar.Discord", status = "ok", botStatus });
 }).WithTags("Health").WithName("DiscordHealthCheck");
 
-// Admin endpoints
+// Admin endpoints - Internal only, not exposed through Gateway
+// TODO: Add authentication when exposed publicly (currently internal service-to-service only)
 app.MapGet("/api/v1/discord/logs", async (
     int? limit,
     DiscordDbContext db,
