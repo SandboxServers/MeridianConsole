@@ -27,6 +27,9 @@ function resolveClientApp({ bodyClientApp, origin, allowedApps }) {
       if (url.hostname === "panel.meridianconsole.com") {
         return "panel";
       }
+      if (url.hostname === "cart.meridianconsole.com") {
+        return "shop";
+      }
       if (url.hostname === "meridianconsole.com" || url.hostname === "www.meridianconsole.com") {
         return "shop";
       }

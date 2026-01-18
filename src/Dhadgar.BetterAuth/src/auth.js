@@ -105,10 +105,25 @@ export const authConfig = {
     requireEmailVerification: false
   },
   socialProviders,
-  // Account configuration for OAuth state handling
+  // Account configuration for OAuth and account linking
   account: {
     // Store OAuth state in cookie for cross-origin flows
-    storeStateStrategy: "cookie"
+    storeStateStrategy: "cookie",
+    // Enable account linking: users can link multiple OAuth providers to one account
+    // if they share the same verified email address
+    accountLinking: {
+      enabled: true,
+      // Providers trusted for automatic account linking (email must match)
+      trustedProviders: [
+        "discord",
+        "google",
+        "github",
+        "twitch",
+        "facebook",
+        "apple",
+        "microsoft"
+      ]
+    }
   },
   advanced: {
     // Cross-origin cookies require SameSite=None and Secure

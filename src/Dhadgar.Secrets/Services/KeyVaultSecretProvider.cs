@@ -30,6 +30,7 @@ public sealed class KeyVaultSecretProvider : ISecretProvider
 
     public KeyVaultSecretProvider(
         IOptions<SecretsOptions> options,
+        IWifCredentialProvider credentialProvider,
         IMemoryCache cache,
         ILogger<KeyVaultSecretProvider> logger)
     {
@@ -42,13 +43,24 @@ public sealed class KeyVaultSecretProvider : ISecretProvider
             throw new InvalidOperationException("KeyVaultUri is required for Secrets service.");
         }
 
-        _client = new SecretClient(new Uri(_options.KeyVaultUri), new DefaultAzureCredential());
+        _logger.LogInformation("Initializing KeyVaultSecretProvider with vault: {KeyVaultUri}", _options.KeyVaultUri);
+
+        // Use WIF credential provider (falls back to DefaultAzureCredential if WIF not configured)
+        var credential = credentialProvider.GetCredential();
+        _client = new SecretClient(new Uri(_options.KeyVaultUri), credential);
 
         // Build the allowed secrets set from configuration
         _allowedSecrets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _allowedSecrets.UnionWith(_options.AllowedSecrets.OAuth);
         _allowedSecrets.UnionWith(_options.AllowedSecrets.BetterAuth);
         _allowedSecrets.UnionWith(_options.AllowedSecrets.Infrastructure);
+
+        _logger.LogInformation(
+            "KeyVaultSecretProvider initialized with {Count} allowed secrets (OAuth: {OAuthCount}, BetterAuth: {BetterAuthCount}, Infrastructure: {InfraCount})",
+            _allowedSecrets.Count,
+            _options.AllowedSecrets.OAuth.Count,
+            _options.AllowedSecrets.BetterAuth.Count,
+            _options.AllowedSecrets.Infrastructure.Count);
     }
 
     public bool IsAllowed(string secretName)

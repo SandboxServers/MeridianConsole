@@ -1,11 +1,18 @@
+using System.Text.Json;
 using Dhadgar.Identity.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Dhadgar.Identity.Data.Configuration;
 
 public sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     public void Configure(EntityTypeBuilder<Organization> builder)
     {
         builder.ToTable("organizations");
@@ -23,10 +30,17 @@ public sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organiz
         builder.Property(o => o.Version)
             .IsRowVersion();
 
-        builder.OwnsOne(o => o.Settings, settings =>
-        {
-            settings.ToJson();
-        });
+        // Use value converter instead of OwnsOne/ToJson to avoid EF Core 10 bugs
+        builder.Property(o => o.Settings)
+            .HasColumnName("Settings")
+            .HasColumnType("jsonb")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, JsonOptions),
+                v => JsonSerializer.Deserialize<OrganizationSettings>(v, JsonOptions) ?? new OrganizationSettings())
+            .Metadata.SetValueComparer(new ValueComparer<OrganizationSettings>(
+                (a, b) => JsonSerializer.Serialize(a, JsonOptions) == JsonSerializer.Serialize(b, JsonOptions),
+                v => JsonSerializer.Serialize(v, JsonOptions).GetHashCode(),
+                v => JsonSerializer.Deserialize<OrganizationSettings>(JsonSerializer.Serialize(v, JsonOptions), JsonOptions)!));
 
         builder.HasIndex(o => o.Slug)
             .IsUnique()

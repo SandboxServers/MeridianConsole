@@ -124,7 +124,15 @@ export const authClient = {
         return null;
       }
 
-      const tokens: AuthTokens = await identityResponse.json();
+      const data = await identityResponse.json();
+
+      // Identity returns expiresIn (seconds until expiry), convert to expiresAt (Unix timestamp in seconds)
+      const tokens: AuthTokens = {
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        expiresAt: Math.floor(Date.now() / 1000) + data.expiresIn,
+      };
+
       tokenStorage.setTokens(tokens);
       return tokens;
     } catch (error) {
@@ -152,7 +160,15 @@ export const authClient = {
         return null;
       }
 
-      const tokens: AuthTokens = await response.json();
+      const data = await response.json();
+
+      // Identity returns expiresIn (seconds until expiry), convert to expiresAt (Unix timestamp in seconds)
+      const tokens: AuthTokens = {
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        expiresAt: Math.floor(Date.now() / 1000) + data.expiresIn,
+      };
+
       tokenStorage.setTokens(tokens);
       return tokens;
     } catch (error) {

@@ -19,6 +19,7 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposabl
     private readonly ExchangeTokenOptions _options;
     private readonly AuthOptions _authOptions;
     private readonly IHostEnvironment _environment;
+    private readonly ILogger<ExchangeTokenValidator> _logger;
     private readonly JsonWebTokenHandler _tokenHandler = new();
     private ECDsaSecurityKey? _publicKey;
     private ECDsa? _ecdsa;
@@ -28,17 +29,20 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposabl
     public ExchangeTokenValidator(
         IOptions<ExchangeTokenOptions> options,
         IOptions<AuthOptions> authOptions,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        ILogger<ExchangeTokenValidator> logger)
     {
         _options = options.Value;
         _authOptions = authOptions.Value;
         _environment = environment;
+        _logger = logger;
     }
 
     public async Task<ClaimsPrincipal?> ValidateAsync(string exchangeToken, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(exchangeToken))
         {
+            _logger.LogWarning("Exchange token validation failed: token is empty");
             return null;
         }
 
@@ -46,8 +50,12 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposabl
 
         if (_publicKey is null)
         {
+            _logger.LogWarning("Exchange token validation failed: public key not loaded");
             return null;
         }
+
+        _logger.LogDebug("Validating exchange token with issuer={Issuer}, audience={Audience}",
+            _options.Issuer, _options.Audience);
 
         var result = await _tokenHandler.ValidateTokenAsync(exchangeToken, new TokenValidationParameters
         {
@@ -64,6 +72,11 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposabl
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = _publicKey
         });
+
+        if (!result.IsValid)
+        {
+            _logger.LogWarning("Exchange token validation failed: {Error}", result.Exception?.Message ?? "Unknown error");
+        }
 
         return result.IsValid ? result.ClaimsIdentity is null ? null : new ClaimsPrincipal(result.ClaimsIdentity) : null;
     }
@@ -121,8 +134,13 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposabl
         var publicKeyPemConfig = _options.PublicKeyPem;
         if (!string.IsNullOrWhiteSpace(publicKeyPemConfig))
         {
+            _logger.LogInformation("Loading exchange token public key from configuration");
+            // Handle escaped newlines from environment variables (e.g., "-----BEGIN...-----\n...\n-----END...-----")
+            var normalizedPem = publicKeyPemConfig.Replace("\\n", "\n");
+            _logger.LogDebug("Public key PEM (first 50 chars): {PemStart}...", normalizedPem[..Math.Min(50, normalizedPem.Length)]);
             var ecdsa = ECDsa.Create();
-            ecdsa.ImportFromPem(publicKeyPemConfig);
+            ecdsa.ImportFromPem(normalizedPem);
+            _logger.LogInformation("Exchange token public key loaded successfully from configuration");
             return (new ECDsaSecurityKey(ecdsa), ecdsa);
         }
 
@@ -144,6 +162,7 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposabl
         }
 
         // 5. Dev mode: generate ephemeral key (won't validate real tokens but allows startup)
+        _logger.LogWarning("No exchange token public key configured - using ephemeral key (token validation will fail)");
         var ephemeral = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         return (new ECDsaSecurityKey(ephemeral), ephemeral);
     }

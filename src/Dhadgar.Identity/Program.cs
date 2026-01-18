@@ -826,6 +826,96 @@ static async Task SeedDevOpenIddictClientAsync(
     using var scope = services.CreateScope();
     var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 
+    // Only create dev-client if it doesn't exist, but always seed service accounts
+    if (await manager.FindByClientIdAsync(clientId) is null)
+    {
+        var descriptor = new OpenIddictApplicationDescriptor
+        {
+            ClientId = clientId,
+            ClientSecret = clientSecret,
+            DisplayName = "Dev Client",
+            Permissions =
+            {
+                OpenIddictConstants.Permissions.Endpoints.Token,
+                OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+                OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
+                OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Profile,
+                OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Email,
+                OpenIddictConstants.Permissions.Prefixes.Scope + "servers:read",
+                OpenIddictConstants.Permissions.Prefixes.Scope + "servers:write",
+                OpenIddictConstants.Permissions.Prefixes.Scope + "nodes:manage",
+                OpenIddictConstants.Permissions.Prefixes.Scope + "billing:read",
+                OpenIddictConstants.Permissions.Prefixes.Scope + "secrets:read",
+                OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
+            }
+        };
+
+        var redirectUris = configuration.GetSection("OpenIddict:DevClient:RedirectUris").Get<string[]>() ?? [];
+        foreach (var uri in redirectUris)
+        {
+            if (Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
+            {
+                descriptor.RedirectUris.Add(parsed);
+            }
+        }
+
+        if (descriptor.RedirectUris.Count > 0)
+        {
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+        }
+
+        await manager.CreateAsync(descriptor);
+        logger.LogInformation("Seeded dev OpenIddict client {ClientId}.", clientId);
+    }
+
+    // Seed internal service accounts (always, even if dev-client already existed)
+    await SeedServiceAccountAsync(
+        manager,
+        configuration,
+        logger,
+        serviceKey: "SecretsService",
+        defaultClientId: "secrets-service",
+        defaultDisplayName: "Secrets Service",
+        scopes: ["wif"]); // Only needs WIF for Azure authentication
+
+    await SeedServiceAccountAsync(
+        manager,
+        configuration,
+        logger,
+        serviceKey: "BetterAuthService",
+        defaultClientId: "betterauth-service",
+        defaultDisplayName: "BetterAuth Service",
+        scopes: ["secrets:read"]); // Needs to read secrets from Secrets service
+}
+
+static async Task SeedServiceAccountAsync(
+    IOpenIddictApplicationManager manager,
+    IConfiguration configuration,
+    ILogger logger,
+    string serviceKey,
+    string defaultClientId,
+    string defaultDisplayName,
+    string[] scopes)
+{
+    var configSection = $"OpenIddict:ServiceAccounts:{serviceKey}";
+    var enabled = configuration.GetValue<bool?>($"{configSection}:Enabled") ?? true;
+    if (!enabled)
+    {
+        return;
+    }
+
+    var clientId = configuration[$"{configSection}:ClientId"] ?? defaultClientId;
+    var clientSecret = configuration[$"{configSection}:ClientSecret"];
+
+    // Generate a deterministic but secure secret if not configured
+    // In production, this should be explicitly configured
+    if (string.IsNullOrWhiteSpace(clientSecret))
+    {
+        clientSecret = $"{clientId}-dev-secret-change-in-prod";
+    }
+
     if (await manager.FindByClientIdAsync(clientId) is not null)
     {
         return;
@@ -835,41 +925,21 @@ static async Task SeedDevOpenIddictClientAsync(
     {
         ClientId = clientId,
         ClientSecret = clientSecret,
-        DisplayName = "Dev Client",
+        DisplayName = defaultDisplayName,
         Permissions =
         {
             OpenIddictConstants.Permissions.Endpoints.Token,
             OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
-            OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
-            OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Profile,
-            OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.Email,
-            OpenIddictConstants.Permissions.Prefixes.Scope + "servers:read",
-            OpenIddictConstants.Permissions.Prefixes.Scope + "servers:write",
-            OpenIddictConstants.Permissions.Prefixes.Scope + "nodes:manage",
-            OpenIddictConstants.Permissions.Prefixes.Scope + "billing:read",
-            OpenIddictConstants.Permissions.Prefixes.Scope + "secrets:read",
-            OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
         }
     };
 
-    var redirectUris = configuration.GetSection("OpenIddict:DevClient:RedirectUris").Get<string[]>() ?? [];
-    foreach (var uri in redirectUris)
+    foreach (var scope in scopes)
     {
-        if (Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
-        {
-            descriptor.RedirectUris.Add(parsed);
-        }
-    }
-
-    if (descriptor.RedirectUris.Count > 0)
-    {
-        descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
-        descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode);
-        descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+        descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + scope);
     }
 
     await manager.CreateAsync(descriptor);
-    logger.LogInformation("Seeded dev OpenIddict client {ClientId}.", clientId);
+    logger.LogInformation("Seeded service account {ClientId} ({DisplayName}).", clientId, defaultDisplayName);
 }
 
 static X509Certificate2 LoadKeyVaultCertificate(

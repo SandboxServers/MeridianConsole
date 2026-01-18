@@ -1,6 +1,6 @@
 x-service-env: &service-env
   ASPNETCORE_ENVIRONMENT: Development
-  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dhadgar_platform;Username=dhadgar;Password=dhadgar
+  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dhadgar_platform;Username=dhadgar;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
   ConnectionStrings__RabbitMqHost: rabbitmq
   RabbitMq__Username: dhadgar
   RabbitMq__Password: dhadgar
@@ -78,6 +78,10 @@ services:
       OpenIddict__Wif__Audience: ${OPENIDDICT_WIF_AUDIENCE:-api://AzureADTokenExchange}
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       Database__AutoMigrate: "true"
+      # Exchange token validation (for BetterAuth token exchange)
+      Auth__Exchange__Issuer: https://dev.meridianconsole.com/api/v1/betterauth
+      Auth__Exchange__Audience: https://dev.meridianconsole.com/api/v1/identity/exchange
+      Auth__Exchange__PublicKeyPem: ${BETTERAUTH_EXCHANGE_PUBLIC_KEY:-}
     ports:
       - "5010:8080"
     depends_on: *service-depends-redis
@@ -184,9 +188,23 @@ services:
       Auth__Audience: meridian-api
       Auth__MetadataAddress: http://identity:8080/.well-known/openid-configuration
       Auth__InternalBaseUrl: http://identity:8080
-      Secrets__UseDevelopmentProvider: "true"
-      # Development secrets for local testing
-      Secrets__Development__Secrets__betterauth-secret: dev-betterauth-secret-change-in-prod-32chars!
+      # Set to "false" to use Key Vault instead of development secrets
+      Secrets__UseDevelopmentProvider: ${SECRETS_USE_DEV_PROVIDER:-false}
+      Secrets__KeyVaultUri: ${SECRETS_KEYVAULT_URI:-https://mc-oauth.vault.azure.net/}
+      # WIF configuration for Key Vault access (no client secret needed!)
+      # The Secrets service app registration in Azure AD must have a federated credential
+      # configured to trust tokens from the Identity service issuer with:
+      #   - Issuer: https://dev.meridianconsole.com/api/v1/identity
+      #   - Subject: secrets-service (the client_id)
+      #   - Audience: The configured WIF audience
+      Secrets__Wif__TenantId: ${SECRETS_WIF_TENANT_ID:-57eb34d8-1e4d-43d5-8d05-7292e5212ac2}
+      Secrets__Wif__ClientId: ${SECRETS_WIF_CLIENT_ID:-af1cc0af-c6d0-4f1c-b4cd-cddbc24c8100}
+      Secrets__Wif__IdentityTokenEndpoint: http://identity:8080/connect/token
+      # Dedicated service account for Secrets service (seeded by Identity)
+      Secrets__Wif__ServiceClientId: secrets-service
+      Secrets__Wif__ServiceClientSecret: ${SECRETS_SERVICE_CLIENT_SECRET:-secrets-service-dev-secret-change-in-prod}
+      # Development secrets for local testing (only used when UseDevelopmentProvider=true)
+      Secrets__Development__Secrets__betterauth-secret: ${BETTERAUTH_SECRET:-dev-betterauth-secret-change-in-prod-32chars!}
       Secrets__Development__Secrets__betterauth-exchange-private-key: ${BETTERAUTH_EXCHANGE_PRIVATE_KEY:-}
       Secrets__Development__Secrets__postgres-password: dhadgar
       Secrets__Development__Secrets__oauth-discord-client-id: ${OAUTH_DISCORD_CLIENT_ID:-}
@@ -216,8 +234,9 @@ services:
       PORT: 8080
       SECRETS_SERVICE_URL: http://secrets:8080
       IDENTITY_SERVICE_URL: http://identity:8080
-      SERVICE_CLIENT_ID: dev-client
-      SERVICE_CLIENT_SECRET: dev-secret
+      # Dedicated service account for BetterAuth (seeded by Identity)
+      SERVICE_CLIENT_ID: betterauth-service
+      SERVICE_CLIENT_SECRET: ${BETTERAUTH_SERVICE_CLIENT_SECRET:-betterauth-service-dev-secret-change-in-prod}
       BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
       BETTER_AUTH_TRUSTED_ORIGINS: https://dev.meridianconsole.com,https://cart.meridianconsole.com,https://panel.meridianconsole.com,http://localhost:4321,http://localhost:4322
       BETTER_AUTH_CLIENT_APPS: panel,shop
@@ -225,7 +244,7 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_DATABASE: dhadgar_platform
       POSTGRES_USERNAME: dhadgar
-      POSTGRES_PASSWORD: dhadgar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       EXCHANGE_TOKEN_AUDIENCE: https://dev.meridianconsole.com/api/v1/identity/exchange
       EXCHANGE_TOKEN_ISSUER: https://dev.meridianconsole.com/api/v1/betterauth
       EXCHANGE_TOKEN_KID: betterauth-exchange-v1
