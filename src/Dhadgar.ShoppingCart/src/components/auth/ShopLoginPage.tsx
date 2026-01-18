@@ -5,7 +5,7 @@ interface ShopLoginPageProps {
   callbackURL?: string;
 }
 
-export default function ShopLoginPage({ callbackURL = '/callback' }: ShopLoginPageProps) {
+export default function ShopLoginPage({ callbackURL }: ShopLoginPageProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
