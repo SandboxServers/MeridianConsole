@@ -28,6 +28,12 @@ public class CorsPreflightMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Log all requests for debugging
+        _logger.LogInformation("CorsPreflightMiddleware: {Method} {Path} Origin={Origin}",
+            context.Request.Method,
+            context.Request.Path,
+            context.Request.Headers.Origin.ToString());
+
         // Only handle OPTIONS preflight requests
         if (!HttpMethods.IsOptions(context.Request.Method))
         {
@@ -38,20 +44,22 @@ public class CorsPreflightMiddleware
         var origin = context.Request.Headers.Origin.ToString();
         var requestMethod = context.Request.Headers["Access-Control-Request-Method"].ToString();
 
+        _logger.LogInformation("CORS preflight: Origin={Origin}, RequestMethod={RequestMethod}, AllowedOrigins={AllowedOrigins}",
+            origin, requestMethod, string.Join(", ", _allowedOrigins));
+
         // Check if this is a CORS preflight request
         if (string.IsNullOrEmpty(origin) || string.IsNullOrEmpty(requestMethod))
         {
+            _logger.LogWarning("CORS preflight missing headers, passing through");
             await _next(context);
             return;
         }
 
-        _logger.LogDebug("CORS preflight from {Origin} for {Method} {Path}",
-            origin, requestMethod, context.Request.Path);
-
         // Check if origin is allowed
         if (!_allowedOrigins.Contains(origin))
         {
-            _logger.LogWarning("CORS preflight rejected: origin {Origin} not in allowed list", origin);
+            _logger.LogWarning("CORS preflight rejected: origin {Origin} not in allowed list: [{AllowedOrigins}]",
+                origin, string.Join(", ", _allowedOrigins));
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
         }
