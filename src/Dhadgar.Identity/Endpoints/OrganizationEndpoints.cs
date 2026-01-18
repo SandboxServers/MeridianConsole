@@ -6,13 +6,37 @@ public static class OrganizationEndpoints
 {
     public static void Map(WebApplication app)
     {
-        app.MapGet("/organizations", ListOrganizations);
-        app.MapGet("/organizations/{organizationId:guid}", GetOrganization);
-        app.MapPost("/organizations", CreateOrganization);
-        app.MapPatch("/organizations/{organizationId:guid}", UpdateOrganization);
-        app.MapDelete("/organizations/{organizationId:guid}", DeleteOrganization);
-        app.MapPost("/organizations/{organizationId:guid}/switch", SwitchOrganization)
+        var group = app.MapGroup("/organizations")
+            .WithTags("Organizations");
+
+        group.MapGet("", ListOrganizations)
+            .WithName("ListOrganizations")
+            .WithDescription("List all organizations the current user belongs to");
+
+        group.MapGet("/{organizationId:guid}", GetOrganization)
+            .WithName("GetOrganization")
+            .WithDescription("Get organization details by ID");
+
+        group.MapPost("", CreateOrganization)
+            .WithName("CreateOrganization")
+            .WithDescription("Create a new organization");
+
+        group.MapPatch("/{organizationId:guid}", UpdateOrganization)
+            .WithName("UpdateOrganization")
+            .WithDescription("Update organization details");
+
+        group.MapDelete("/{organizationId:guid}", DeleteOrganization)
+            .WithName("DeleteOrganization")
+            .WithDescription("Soft-delete an organization");
+
+        group.MapPost("/{organizationId:guid}/switch", SwitchOrganization)
+            .WithName("SwitchOrganization")
+            .WithDescription("Switch to a different organization and get new tokens")
             .RequireRateLimiting("auth");
+
+        group.MapPost("/{organizationId:guid}/transfer-ownership", TransferOwnership)
+            .WithName("TransferOwnership")
+            .WithDescription("Transfer organization ownership to another member");
     }
 
     private static async Task<IResult> ListOrganizations(
@@ -157,4 +181,37 @@ public static class OrganizationEndpoints
             permissions = outcome.Permissions
         });
     }
+
+    private static async Task<IResult> TransferOwnership(
+        HttpContext context,
+        Guid organizationId,
+        TransferOwnershipRequest request,
+        OrganizationService organizationService,
+        CancellationToken ct)
+    {
+        if (!EndpointHelpers.TryGetUserId(context, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await organizationService.TransferOwnershipAsync(
+            organizationId,
+            userId,
+            request.NewOwnerId,
+            ct);
+
+        if (!result.Success)
+        {
+            return result.Error switch
+            {
+                "not_owner" => Results.Forbid(),
+                "org_not_found" => Results.NotFound(new { error = result.Error }),
+                _ => Results.BadRequest(new { error = result.Error })
+            };
+        }
+
+        return Results.Ok(new { message = "Ownership transferred successfully" });
+    }
 }
+
+public sealed record TransferOwnershipRequest(Guid NewOwnerId);

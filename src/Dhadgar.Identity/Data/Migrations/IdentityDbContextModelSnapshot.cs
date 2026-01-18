@@ -24,6 +24,74 @@ namespace Dhadgar.Identity.Data.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "hstore");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Dhadgar.Identity.Data.Entities.AuditEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventType")
+                        .HasDatabaseName("ix_audit_events_event_type");
+
+                    b.HasIndex("OccurredAtUtc")
+                        .HasDatabaseName("ix_audit_events_occurred_at");
+
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("ix_audit_events_organization_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_audit_events_user_id");
+
+                    b.HasIndex("OrganizationId", "OccurredAtUtc")
+                        .HasDatabaseName("ix_audit_events_org_time");
+
+                    b.HasIndex("UserId", "OccurredAtUtc")
+                        .HasDatabaseName("ix_audit_events_user_time");
+
+                    b.ToTable("audit_events", (string)null);
+                });
+
             modelBuilder.Entity("Dhadgar.Identity.Data.Entities.ClaimDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -47,8 +115,8 @@ namespace Dhadgar.Identity.Data.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 
@@ -364,8 +432,8 @@ namespace Dhadgar.Identity.Data.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
@@ -565,6 +633,9 @@ namespace Dhadgar.Identity.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("InvitationAcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("InvitationExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("InvitedByUserId")

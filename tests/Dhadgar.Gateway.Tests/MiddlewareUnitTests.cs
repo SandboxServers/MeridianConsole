@@ -63,7 +63,8 @@ public class MiddlewareUnitTests
         context.Request.Headers["X-Tenant-Id"] = "spoofed";
         context.Request.Headers["X-User-Id"] = "spoofed";
         context.Request.Headers["X-Client-Type"] = "spoofed";
-        context.Request.Headers["X-Forwarded-For"] = "203.0.113.5, 10.0.0.1";
+        // Set actual RemoteIpAddress - in production this is set by ForwardedHeaders middleware
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.5");
 
         var identity = new ClaimsIdentity(new[]
         {
@@ -81,25 +82,32 @@ public class MiddlewareUnitTests
         Assert.Equal("tenant-1", context.Request.Headers["X-Tenant-Id"].ToString());
         Assert.Equal("user-1", context.Request.Headers["X-User-Id"].ToString());
         Assert.Equal("agent", context.Request.Headers["X-Client-Type"].ToString());
+        // X-Real-IP now comes from RemoteIpAddress, not from header parsing
         Assert.Equal("203.0.113.5", context.Request.Headers["X-Real-IP"].ToString());
         Assert.Equal("request-123", context.Request.Headers["X-Request-Id"].ToString());
         Assert.Equal("request-123", context.Response.Headers["X-Request-Id"].ToString());
     }
 
     [Fact]
-    public async Task RequestEnrichmentPrefersCloudflareIp()
+    public async Task RequestEnrichmentUsesRemoteIpAddress_NotHeaders()
     {
+        // This test verifies that X-Real-IP comes from RemoteIpAddress (set by ForwardedHeaders)
+        // and NOT from directly parsing CF-Connecting-IP or X-Forwarded-For headers
+        // This is a security measure to prevent IP spoofing
         var context = CreateContext();
         context.Items["RequestId"] = "request-456";
         context.Request.Headers["CF-Connecting-IP"] = "198.51.100.7";
-        context.Request.Headers["X-Forwarded-For"] = "203.0.113.5";
+        context.Request.Headers["X-Forwarded-For"] = "10.0.0.1";
+        // RemoteIpAddress would be set by ForwardedHeaders middleware after validating trusted proxies
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.1.100");
 
         var middleware = new RequestEnrichmentMiddleware(WriteResponseAsync);
 
         await middleware.InvokeAsync(context);
         await context.Response.CompleteAsync();
 
-        Assert.Equal("198.51.100.7", context.Request.Headers["X-Real-IP"].ToString());
+        // Should use RemoteIpAddress, NOT the headers (which could be spoofed)
+        Assert.Equal("192.168.1.100", context.Request.Headers["X-Real-IP"].ToString());
     }
 
     [Fact]
@@ -209,12 +217,13 @@ public class MiddlewareUnitTests
     }
 
     [Fact]
-    public void CorsConfigurationAllowsAnyOriginWhenUnset()
+    public void CorsConfigurationAllowsAnyOriginWhenUnset_InDevelopment()
     {
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder().Build();
+        var environment = new TestHostEnvironment { EnvironmentName = Environments.Development };
 
-        services.AddMeridianConsoleCors(configuration);
+        services.AddMeridianConsoleCors(configuration, environment);
 
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<CorsOptions>>();
@@ -223,6 +232,17 @@ public class MiddlewareUnitTests
         Assert.NotNull(policy);
         Assert.True(policy!.AllowAnyOrigin);
         Assert.False(policy.SupportsCredentials);
+    }
+
+    [Fact]
+    public void CorsConfigurationThrows_WhenNoOriginsConfigured_InProduction()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder().Build();
+        var environment = new TestHostEnvironment { EnvironmentName = Environments.Production };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            services.AddMeridianConsoleCors(configuration, environment));
     }
 
     [Fact]
@@ -236,9 +256,10 @@ public class MiddlewareUnitTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(settings)
             .Build();
+        var environment = new TestHostEnvironment { EnvironmentName = Environments.Production };
 
         var services = new ServiceCollection();
-        services.AddMeridianConsoleCors(configuration);
+        services.AddMeridianConsoleCors(configuration, environment);
 
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<CorsOptions>>();

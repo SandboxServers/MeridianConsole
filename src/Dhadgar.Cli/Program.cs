@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using Dhadgar.Cli.Commands.Auth;
 using Dhadgar.Cli.Commands.Help;
 using Dhadgar.Cli.Commands.Gateway;
@@ -23,9 +24,16 @@ using IdentitySearchUsersCommand = Dhadgar.Cli.Commands.Identity.SearchUsersComm
 using IdentityListRolesCommand = Dhadgar.Cli.Commands.Identity.ListRolesCommand;
 using IdentityGetRoleCommand = Dhadgar.Cli.Commands.Identity.GetRoleCommand;
 using IdentityCreateRoleCommand = Dhadgar.Cli.Commands.Identity.CreateRoleCommand;
+using IdentityUpdateRoleCommand = Dhadgar.Cli.Commands.Identity.UpdateRoleCommand;
+using IdentityDeleteRoleCommand = Dhadgar.Cli.Commands.Identity.DeleteRoleCommand;
+using IdentityListRoleMembersCommand = Dhadgar.Cli.Commands.Identity.ListRoleMembersCommand;
 using IdentityAssignRoleCommand = Dhadgar.Cli.Commands.Identity.AssignRoleCommand;
 using IdentityRevokeRoleCommand = Dhadgar.Cli.Commands.Identity.RevokeRoleCommand;
 using IdentitySearchRolesCommand = Dhadgar.Cli.Commands.Identity.SearchRolesCommand;
+using GrantClaimCommand = Dhadgar.Cli.Commands.Identity.GrantClaimCommand;
+using RevokeClaimCommand = Dhadgar.Cli.Commands.Identity.RevokeClaimCommand;
+using ListClaimsCommand = Dhadgar.Cli.Commands.Identity.ListClaimsCommand;
+using Dhadgar.Cli.Commands.Me;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
 
@@ -45,7 +53,8 @@ root.SetHandler(() =>
         .AddColumn("");
 
     table.AddRow("[cyan]dhadgar auth[/]", "[dim]Authentication commands (login, status, logout)[/]");
-table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs/users/roles)[/]");
+    table.AddRow("[cyan]dhadgar me[/]", "[dim]Self-service (profile, sessions, permissions)[/]");
+    table.AddRow("[cyan]dhadgar identity[/]", "[dim]Identity service commands (orgs/users/roles)[/]");
     table.AddRow("[cyan]dhadgar member[/]", "[dim]Member management (list, invite, remove)[/]");
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
@@ -290,6 +299,42 @@ identityRolesCreateCmd.SetHandler(async (string name, string orgId, string? desc
     await IdentityCreateRoleCommand.ExecuteAsync(name, orgId, description, permissions, CancellationToken.None);
 }, identityRoleNameOpt, identityRoleOrgOpt, identityRoleDescriptionOpt, identityRolePermissionsOpt);
 
+var identityRolesUpdateCmd = new Command("update", "Update a role");
+var identityRolesUpdateIdArg = new Argument<string>("role-id", "Role ID");
+var identityRolesUpdateNameOpt = new Option<string?>("--name", "Role name");
+var identityRolesUpdateDescriptionOpt = new Option<string?>("--description", "Role description");
+var identityRolesUpdatePermissionsOpt = new Option<string?>("--permissions", "Comma-separated permissions");
+var identityRolesUpdateOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesUpdateCmd.AddArgument(identityRolesUpdateIdArg);
+identityRolesUpdateCmd.AddOption(identityRolesUpdateNameOpt);
+identityRolesUpdateCmd.AddOption(identityRolesUpdateDescriptionOpt);
+identityRolesUpdateCmd.AddOption(identityRolesUpdatePermissionsOpt);
+identityRolesUpdateCmd.AddOption(identityRolesUpdateOrgOpt);
+identityRolesUpdateCmd.SetHandler(async (string roleId, string? name, string? description, string? permissions, string? orgId) =>
+{
+    await IdentityUpdateRoleCommand.ExecuteAsync(roleId, orgId, name, description, permissions, CancellationToken.None);
+}, identityRolesUpdateIdArg, identityRolesUpdateNameOpt, identityRolesUpdateDescriptionOpt, identityRolesUpdatePermissionsOpt, identityRolesUpdateOrgOpt);
+
+var identityRolesDeleteCmd = new Command("delete", "Delete a role");
+var identityRolesDeleteIdArg = new Argument<string>("role-id", "Role ID");
+var identityRolesDeleteOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesDeleteCmd.AddArgument(identityRolesDeleteIdArg);
+identityRolesDeleteCmd.AddOption(identityRolesDeleteOrgOpt);
+identityRolesDeleteCmd.SetHandler(async (string roleId, string? orgId) =>
+{
+    await IdentityDeleteRoleCommand.ExecuteAsync(roleId, orgId, CancellationToken.None);
+}, identityRolesDeleteIdArg, identityRolesDeleteOrgOpt);
+
+var identityRolesMembersCmd = new Command("members", "List members with a role");
+var identityRolesMembersIdArg = new Argument<string>("role-id", "Role ID");
+var identityRolesMembersOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityRolesMembersCmd.AddArgument(identityRolesMembersIdArg);
+identityRolesMembersCmd.AddOption(identityRolesMembersOrgOpt);
+identityRolesMembersCmd.SetHandler(async (string roleId, string? orgId) =>
+{
+    await IdentityListRoleMembersCommand.ExecuteAsync(roleId, orgId, CancellationToken.None);
+}, identityRolesMembersIdArg, identityRolesMembersOrgOpt);
+
 var identityRolesAssignCmd = new Command("assign", "Assign a role to a user");
 var identityRolesAssignRoleArg = new Argument<string>("role-id", "Role ID");
 var identityRolesAssignUserOpt = new Option<string>("--user", "User ID") { IsRequired = true };
@@ -327,11 +372,137 @@ identityRolesSearchCmd.SetHandler(async (string query, string? orgId) =>
 identityRolesCmd.AddCommand(identityRolesListCmd);
 identityRolesCmd.AddCommand(identityRolesGetCmd);
 identityRolesCmd.AddCommand(identityRolesCreateCmd);
+identityRolesCmd.AddCommand(identityRolesUpdateCmd);
+identityRolesCmd.AddCommand(identityRolesDeleteCmd);
+identityRolesCmd.AddCommand(identityRolesMembersCmd);
 identityRolesCmd.AddCommand(identityRolesAssignCmd);
 identityRolesCmd.AddCommand(identityRolesRevokeCmd);
 identityRolesCmd.AddCommand(identityRolesSearchCmd);
 
 identityCmd.AddCommand(identityRolesCmd);
+
+// ============================================================================
+// IDENTITY MEMBERS COMMANDS (Claim management)
+// ============================================================================
+
+var identityMembersCmd = new Command("members", "Member claim management");
+
+var identityMembersGrantCmd = new Command("grant", "Grant a permission to a member");
+var grantMemberIdArg = new Argument<string>("member-id", "Member ID (user ID)");
+var grantPermissionArg = new Argument<string>("permission", "Permission to grant (e.g., secrets:read:oauth)");
+var grantOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+var grantExpiresOpt = new Option<string?>("--expires", "Expiration (e.g., 1h, 7d, 30d, or ISO 8601 date)");
+identityMembersGrantCmd.AddArgument(grantMemberIdArg);
+identityMembersGrantCmd.AddArgument(grantPermissionArg);
+identityMembersGrantCmd.AddOption(grantOrgOpt);
+identityMembersGrantCmd.AddOption(grantExpiresOpt);
+identityMembersGrantCmd.SetHandler(async (string memberId, string permission, string? orgId, string? expires) =>
+{
+    await GrantClaimCommand.ExecuteAsync(memberId, permission, orgId, expires, CancellationToken.None);
+}, grantMemberIdArg, grantPermissionArg, grantOrgOpt, grantExpiresOpt);
+
+var identityMembersRevokeCmd = new Command("revoke", "Revoke a claim from a member");
+var revokeMemberIdArg = new Argument<string>("member-id", "Member ID (user ID)");
+var revokeClaimIdArg = new Argument<string>("claim-id", "Claim ID to revoke");
+var revokeOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+var revokeForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+identityMembersRevokeCmd.AddArgument(revokeMemberIdArg);
+identityMembersRevokeCmd.AddArgument(revokeClaimIdArg);
+identityMembersRevokeCmd.AddOption(revokeOrgOpt);
+identityMembersRevokeCmd.AddOption(revokeForceOpt);
+identityMembersRevokeCmd.SetHandler(async (string memberId, string claimId, string? orgId, bool force) =>
+{
+    await RevokeClaimCommand.ExecuteAsync(memberId, claimId, orgId, force, CancellationToken.None);
+}, revokeMemberIdArg, revokeClaimIdArg, revokeOrgOpt, revokeForceOpt);
+
+var identityMembersClaimsCmd = new Command("claims", "List custom claims for a member");
+var claimsMemberIdArg = new Argument<string>("member-id", "Member ID (user ID)");
+var claimsOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+identityMembersClaimsCmd.AddArgument(claimsMemberIdArg);
+identityMembersClaimsCmd.AddOption(claimsOrgOpt);
+identityMembersClaimsCmd.SetHandler(async (string memberId, string? orgId) =>
+{
+    await ListClaimsCommand.ExecuteAsync(memberId, orgId, CancellationToken.None);
+}, claimsMemberIdArg, claimsOrgOpt);
+
+identityMembersCmd.AddCommand(identityMembersGrantCmd);
+identityMembersCmd.AddCommand(identityMembersRevokeCmd);
+identityMembersCmd.AddCommand(identityMembersClaimsCmd);
+
+identityCmd.AddCommand(identityMembersCmd);
+
+// ============================================================================
+// ME COMMANDS (Self-service)
+// ============================================================================
+
+var meCmd = new Command("me", "Self-service commands for current user");
+
+var meProfileCmd = new Command("profile", "Get your profile information");
+meProfileCmd.SetHandler(async () =>
+{
+    await GetProfileCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meUpdateProfileCmd = new Command("update", "Update your profile");
+var meDisplayNameOpt = new Option<string?>("--name", "Display name");
+var mePreferredOrgOpt = new Option<string?>("--preferred-org", "Preferred organization ID");
+meUpdateProfileCmd.AddOption(meDisplayNameOpt);
+meUpdateProfileCmd.AddOption(mePreferredOrgOpt);
+meUpdateProfileCmd.SetHandler(async (string? displayName, string? preferredOrgId) =>
+{
+    await UpdateProfileCommand.ExecuteAsync(displayName, preferredOrgId, CancellationToken.None);
+}, meDisplayNameOpt, mePreferredOrgOpt);
+
+var meOrgsCmd = new Command("orgs", "List your organizations");
+meOrgsCmd.SetHandler(async () =>
+{
+    await ListOrganizationsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meLinkedAccountsCmd = new Command("linked-accounts", "List your linked accounts");
+meLinkedAccountsCmd.SetHandler(async () =>
+{
+    await ListLinkedAccountsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var mePermissionsCmd = new Command("permissions", "List your permissions");
+mePermissionsCmd.SetHandler(async () =>
+{
+    await ListPermissionsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meSessionsCmd = new Command("sessions", "Session management");
+
+var meSessionsListCmd = new Command("list", "List your active sessions");
+meSessionsListCmd.SetHandler(async () =>
+{
+    await ListSessionsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+var meSessionsRevokeCmd = new Command("revoke", "Revoke a session");
+var meSessionIdArg = new Argument<string>("session-id", "Session ID to revoke");
+meSessionsRevokeCmd.AddArgument(meSessionIdArg);
+meSessionsRevokeCmd.SetHandler(async (string sessionId) =>
+{
+    await RevokeSessionCommand.ExecuteAsync(sessionId, CancellationToken.None);
+}, meSessionIdArg);
+
+var meSessionsRevokeAllCmd = new Command("revoke-all", "Revoke all sessions (logout everywhere)");
+meSessionsRevokeAllCmd.SetHandler(async () =>
+{
+    await RevokeAllSessionsCommand.ExecuteAsync(CancellationToken.None);
+});
+
+meSessionsCmd.AddCommand(meSessionsListCmd);
+meSessionsCmd.AddCommand(meSessionsRevokeCmd);
+meSessionsCmd.AddCommand(meSessionsRevokeAllCmd);
+
+meCmd.AddCommand(meProfileCmd);
+meCmd.AddCommand(meUpdateProfileCmd);
+meCmd.AddCommand(meOrgsCmd);
+meCmd.AddCommand(meLinkedAccountsCmd);
+meCmd.AddCommand(mePermissionsCmd);
+meCmd.AddCommand(meSessionsCmd);
 
 // ============================================================================
 // MEMBER COMMANDS
@@ -399,6 +570,16 @@ secretRotateCmd.SetHandler(async (string name, bool force) =>
     await RotateSecretCommand.ExecuteAsync(name, force, CancellationToken.None);
 }, rotateSecretNameArg, forceOpt);
 
+var secretDeleteCmd = new Command("delete", "Delete a secret");
+var deleteSecretNameArg = new Argument<string>("name", "Secret name");
+var deleteSecretForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+secretDeleteCmd.AddArgument(deleteSecretNameArg);
+secretDeleteCmd.AddOption(deleteSecretForceOpt);
+secretDeleteCmd.SetHandler(async (string name, bool force) =>
+{
+    await DeleteSecretCommand.ExecuteAsync(name, force, CancellationToken.None);
+}, deleteSecretNameArg, deleteSecretForceOpt);
+
 var certListCmd = new Command("list-certs", "List certificates");
 var certVaultNameOpt = new Option<string?>("--vault", "Key Vault name (optional)");
 certListCmd.AddOption(certVaultNameOpt);
@@ -425,6 +606,7 @@ secretCmd.AddCommand(secretGetCmd);
 secretCmd.AddCommand(secretListCmd);
 secretCmd.AddCommand(secretSetCmd);
 secretCmd.AddCommand(secretRotateCmd);
+secretCmd.AddCommand(secretDeleteCmd);
 secretCmd.AddCommand(certListCmd);
 secretCmd.AddCommand(certImportCmd);
 
@@ -491,10 +673,21 @@ vaultUpdateCmd.SetHandler(async (
     await UpdateVaultCommand.ExecuteAsync(name, softDelete, purgeProtection, retention, sku, CancellationToken.None);
 }, vaultUpdateNameArg, enableSoftDeleteOpt, disableSoftDeleteOpt, enablePurgeProtectionOpt, disablePurgeProtectionOpt, retentionDaysOpt, skuOpt);
 
+var vaultDeleteCmd = new Command("delete", "Delete a Key Vault");
+var vaultDeleteNameArg = new Argument<string>("name", "Vault name");
+var vaultDeleteForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+vaultDeleteCmd.AddArgument(vaultDeleteNameArg);
+vaultDeleteCmd.AddOption(vaultDeleteForceOpt);
+vaultDeleteCmd.SetHandler(async (string name, bool force) =>
+{
+    await DeleteVaultCommand.ExecuteAsync(name, force, CancellationToken.None);
+}, vaultDeleteNameArg, vaultDeleteForceOpt);
+
 keyvaultCmd.AddCommand(vaultListCmd);
 keyvaultCmd.AddCommand(vaultGetCmd);
 keyvaultCmd.AddCommand(vaultCreateCmd);
 keyvaultCmd.AddCommand(vaultUpdateCmd);
+keyvaultCmd.AddCommand(vaultDeleteCmd);
 
 // ============================================================================
 // GATEWAY COMMANDS
@@ -503,12 +696,33 @@ keyvaultCmd.AddCommand(vaultUpdateCmd);
 var gatewayCmd = new Command("gateway", "Gateway and infrastructure diagnostics");
 
 var gatewayHealthCmd = new Command("health", "Check health of all services");
-gatewayHealthCmd.SetHandler(async () =>
+gatewayHealthCmd.SetHandler(async (InvocationContext ctx) =>
 {
-    await HealthCommand.ExecuteAsync(CancellationToken.None);
+    ctx.ExitCode = await HealthCommand.ExecuteAsync(ctx.GetCancellationToken());
+});
+
+var gatewayServicesCmd = new Command("services", "List all backend services health (Development only)");
+gatewayServicesCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    ctx.ExitCode = await ServicesCommand.ExecuteAsync(ctx.GetCancellationToken());
+});
+
+var gatewayRoutesCmd = new Command("routes", "List all gateway routes (Development only)");
+gatewayRoutesCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    ctx.ExitCode = await RoutesCommand.ExecuteAsync(ctx.GetCancellationToken());
+});
+
+var gatewayClustersCmd = new Command("clusters", "List all YARP clusters (Development only)");
+gatewayClustersCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    ctx.ExitCode = await ClustersCommand.ExecuteAsync(ctx.GetCancellationToken());
 });
 
 gatewayCmd.AddCommand(gatewayHealthCmd);
+gatewayCmd.AddCommand(gatewayServicesCmd);
+gatewayCmd.AddCommand(gatewayRoutesCmd);
+gatewayCmd.AddCommand(gatewayClustersCmd);
 
 // ============================================================================
 // COMMANDS LIST
@@ -558,6 +772,7 @@ ping.SetHandler(async (string url) =>
 // ============================================================================
 
 root.AddCommand(authCmd);
+root.AddCommand(meCmd);
 root.AddCommand(identityCmd);
 root.AddCommand(memberCmd);
 root.AddCommand(secretCmd);

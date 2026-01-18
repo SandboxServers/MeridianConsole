@@ -1,7 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Step-down from root to azp user if running as root
 if [ "$(id -u)" -eq 0 ]; then
+  # Fix Docker socket permissions if mounted
+  # The host's docker group GID may differ from the container's
+  if [ -S /var/run/docker.sock ]; then
+    DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+    echo "Docker socket detected with GID: ${DOCKER_GID}"
+
+    # Special case: GID 0 (root group) - just add azp to root group
+    if [ "${DOCKER_GID}" = "0" ]; then
+      usermod -aG root azp 2>/dev/null || true
+      echo "Docker socket owned by root group (GID 0), added azp to root group"
+    else
+      # Normal case: create or modify docker group to match host GID
+      if ! getent group docker >/dev/null 2>&1; then
+        groupadd -g "${DOCKER_GID}" docker
+        echo "Created docker group with GID: ${DOCKER_GID}"
+      elif [ "$(getent group docker | cut -d: -f3)" != "${DOCKER_GID}" ]; then
+        groupmod -g "${DOCKER_GID}" docker
+        echo "Modified docker group to GID: ${DOCKER_GID}"
+      fi
+      usermod -aG docker azp 2>/dev/null || true
+      echo "Added azp user to docker group"
+    fi
+  fi
+
   if [ -z "${AZP_AGENT_NAME:-}" ] && [ -S /var/run/docker.sock ] && [ -n "${HOSTNAME:-}" ]; then
     container_name="$(
       curl -fsS --unix-socket /var/run/docker.sock \
@@ -32,9 +57,16 @@ if [ "$(id -u)" -eq 0 ]; then
 
   mkdir -p "${work_dir}" /azp/_diag
   chown -R azp:azp "${work_dir}" /azp/_diag
-  exec gosu azp "$0" "$@"
+  if command -v gosu >/dev/null 2>&1; then
+    exec gosu azp "$0" "$@"
+  elif command -v su-exec >/dev/null 2>&1; then
+    exec su-exec azp "$0" "$@"
+  else
+    exec su -s /bin/bash azp -c "$0 $*"
+  fi
 fi
 
+# Map legacy VSTS environment variables to AZP
 if [ -z "${AZP_URL:-}" ] && [ -n "${VSTS_ACCOUNT:-}" ]; then
   if [[ "${VSTS_ACCOUNT}" =~ ^https?:// ]]; then
     AZP_URL="${VSTS_ACCOUNT}"
@@ -55,6 +87,7 @@ if [ -z "${AZP_WORK:-}" ] && [ -n "${VSTS_WORK:-}" ]; then
   AZP_WORK="${VSTS_WORK}"
 fi
 
+# Validate required configuration
 if [ -z "${AZP_URL:-}" ]; then
   echo "AZP_URL (or VSTS_ACCOUNT) is required." >&2
   exit 1
@@ -65,6 +98,7 @@ if [ -z "${AZP_TOKEN:-}" ]; then
   exit 1
 fi
 
+# Set defaults
 AZP_POOL="${AZP_POOL:-Default}"
 AZP_WORK="${AZP_WORK:-_work}"
 if [ -z "${AZP_AGENT_NAME:-}" ]; then
@@ -84,24 +118,68 @@ if [ -z "${AZP_AGENT_NAME:-}" ]; then
   fi
 fi
 
+# State tracking
 agent_pid=""
 cleaned_up=0
+shutdown_requested=0
 
+# Cleanup function - deregister agent from Azure DevOps
 cleanup() {
   if [ "${cleaned_up}" -eq 1 ]; then
     return
   fi
   cleaned_up=1
+
+  echo "Cleaning up agent ${AZP_AGENT_NAME}..."
+
+  # Stop error propagation during cleanup
   set +e
+
+  # Signal agent to shutdown gracefully if running
   if [ -n "${agent_pid}" ] && kill -0 "${agent_pid}" 2>/dev/null; then
+    echo "Sending SIGTERM to agent process (PID: ${agent_pid})..."
     kill -TERM "${agent_pid}" 2>/dev/null || true
-    wait "${agent_pid}" 2>/dev/null || true
+
+    # Wait up to 30 seconds for graceful shutdown
+    for i in {1..30}; do
+      if ! kill -0 "${agent_pid}" 2>/dev/null; then
+        echo "Agent process exited gracefully."
+        break
+      fi
+      sleep 1
+    done
+
+    # Force kill if still running
+    if kill -0 "${agent_pid}" 2>/dev/null; then
+      echo "Agent process did not exit gracefully, force killing..."
+      kill -KILL "${agent_pid}" 2>/dev/null || true
+      wait "${agent_pid}" 2>/dev/null || true
+    fi
   fi
-  ./config.sh remove --unattended --auth pat --token "${AZP_TOKEN}" >/dev/null 2>&1 || true
+
+  # Deregister agent from Azure DevOps
+  echo "Deregistering agent from Azure DevOps..."
+  if ./config.sh remove --unattended --auth pat --token "${AZP_TOKEN}" 2>&1 | tee /tmp/cleanup.log; then
+    echo "Agent ${AZP_AGENT_NAME} successfully deregistered."
+  else
+    echo "Warning: Agent deregistration may have failed. Check /tmp/cleanup.log for details."
+    cat /tmp/cleanup.log >&2
+  fi
 }
 
-trap cleanup EXIT SIGINT SIGTERM
+# Signal handlers
+handle_signal() {
+  echo "Received shutdown signal, initiating cleanup..."
+  shutdown_requested=1
+  cleanup
+  exit 0
+}
 
+trap handle_signal SIGTERM SIGINT
+trap cleanup EXIT
+
+# Configure agent
+echo "Configuring agent ${AZP_AGENT_NAME}..."
 ./config.sh --unattended \
   --agent "${AZP_AGENT_NAME}" \
   --url "${AZP_URL}" \
@@ -111,6 +189,26 @@ trap cleanup EXIT SIGINT SIGTERM
   --work "${AZP_WORK}" \
   --replace
 
+# Start agent in background
+echo "Starting agent ${AZP_AGENT_NAME}..."
 ./run.sh "$@" &
 agent_pid=$!
-wait "${agent_pid}"
+
+# Wait for agent process with proper signal handling
+# Use a loop instead of bare `wait` to handle signals correctly
+while kill -0 "${agent_pid}" 2>/dev/null; do
+  # Check every second if the process is still alive
+  sleep 1 &
+  wait $! 2>/dev/null || true
+
+  # If shutdown was requested, break out of loop
+  if [ "${shutdown_requested}" -eq 1 ]; then
+    break
+  fi
+done
+
+# If we exited the loop naturally (agent died), run cleanup
+if [ "${shutdown_requested}" -eq 0 ]; then
+  echo "Agent process exited unexpectedly."
+  cleanup
+fi

@@ -19,10 +19,14 @@ public sealed record TokenExchangeOutcome(
     int ExpiresIn,
     Guid? UserId,
     Guid? OrganizationId,
+    string? Email,
     IReadOnlyCollection<string>? Permissions)
 {
     public static TokenExchangeOutcome Fail(string error)
-        => new(false, error, null, null, 0, null, null, null);
+        => new(false, error, null, null, 0, null, null, null, null);
+
+    public static TokenExchangeOutcome FailWithEmail(string error, string? email)
+        => new(false, error, null, null, 0, null, null, email, null);
 }
 
 public sealed class TokenExchangeService
@@ -285,12 +289,24 @@ public sealed class TokenExchangeService
 
         var permissions = await _permissionService.CalculatePermissionsAsync(user.Id, activeOrg.Id, ct);
 
+        // Check email verification requirement
+        var emailVerified = user.EmailVerified;
+        if (_authOptions.EmailVerification.RequireVerifiedEmail && !emailVerified)
+        {
+            _logger.LogWarning(
+                "Token exchange rejected for user {UserId}: email not verified (enforcement enabled)",
+                user.Id);
+            return TokenExchangeOutcome.Fail("email_not_verified");
+        }
+
         var claims = new List<Claim>
         {
             new("sub", user.Id.ToString()),
             new("org_id", activeOrg.Id.ToString()),
             new("email", user.Email!),
-            new("role", membership.Role)
+            new("role", membership.Role),
+            new("email_verified", emailVerified.ToString().ToLowerInvariant()),
+            new("principal_type", "user")
         };
 
         if (!string.IsNullOrWhiteSpace(clientApp))
@@ -343,6 +359,7 @@ public sealed class TokenExchangeService
             expiresIn,
             user.Id,
             activeOrg.Id,
+            user.Email,
             permissions);
     }
 

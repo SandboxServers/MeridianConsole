@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(10, 14, 23, 0.8);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(30, 58, 95, 0.8);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 212, 255, 0.5);
+  }
+
+  /* Selection colors */
+  ::selection {
+    background-color: rgba(0, 212, 255, 0.3);
+    color: #e8f0ff;
+  }
+
+  /* Focus styles */
+  :focus-visible {
+    outline: 2px solid rgba(0, 212, 255, 0.5);
+    outline-offset: 2px;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Body base styles */
+  body {
+    min-height: 100vh;
+    background-color: #0a0e17;
+    color: #e8f0ff;
+  }
+}
+
+@layer components {
+  /* Glow text effect */
+  .text-glow {
+    text-shadow: 0 0 10px currentColor;
+  }
+
+  /* Glass effect */
+  .glass {
+    background: rgba(17, 24, 39, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(30, 58, 95, 0.5);
+  }
+
+  /* Angular clip paths for sci-fi panels */
+  .clip-corner-tl {
+    clip-path: polygon(20px 0, 100% 0, 100% 100%, 0 100%, 0 20px);
+  }
+
+  .clip-corner-tr {
+    clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
+  }
+
+  .clip-corner-bl {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+  }
+
+  .clip-corner-br {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%);
+  }
+
+  /* Status indicators */
+  .status-online {
+    @apply w-2 h-2 rounded-full bg-cyber-green shadow-glow-green;
+  }
+
+  .status-offline {
+    @apply w-2 h-2 rounded-full bg-cyber-magenta shadow-glow-magenta;
+  }
+
+  .status-warning {
+    @apply w-2 h-2 rounded-full bg-cyber-amber shadow-glow-amber;
+  }
+
+  /* Data display styles */
+  .data-label {
+    @apply text-text-muted text-xs font-mono uppercase tracking-wider;
+  }
+
+  .data-value {
+    @apply text-text-primary font-mono;
+  }
+
+  /* Scanline animation overlay */
+  .scanline {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .scanline::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 212, 255, 0.2),
+      transparent
+    );
+    animation: scan-line 8s linear infinite;
+  }
+}
+
+@layer utilities {
+  /* Animation delays */
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+  .animation-delay-500 {
+    animation-delay: 500ms;
+  }
+  .animation-delay-700 {
+    animation-delay: 700ms;
+  }
+  .animation-delay-1000 {
+    animation-delay: 1000ms;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-cyber-cyan to-cyber-magenta bg-clip-text text-transparent;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

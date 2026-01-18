@@ -4,10 +4,12 @@
  * This client calls the Dhadgar.Secrets service to retrieve secrets.
  * The Secrets service is the "dispersing officer" that controls access to Key Vault.
  *
- * This replaces direct Key Vault access for BetterAuth.
+ * For authentication, uses client credentials flow via Identity service.
  */
 
 const secretCache = new Map();
+let cachedAccessToken = null;
+let tokenExpiresAt = null;
 
 /**
  * Gets the Secrets service base URL from environment.
@@ -25,6 +27,85 @@ function getSecretsServiceUrl() {
 }
 
 /**
+ * Gets the Identity service token endpoint from environment.
+ * @returns {string} The token endpoint URL
+ */
+function getIdentityTokenUrl() {
+  // In Docker, use internal URL; the public issuer is different from internal endpoint
+  const internalUrl = process.env.IDENTITY_SERVICE_URL ?? process.env.SECRETS_SERVICE_URL;
+  if (!internalUrl) {
+    throw new Error("IDENTITY_SERVICE_URL or SECRETS_SERVICE_URL is required");
+  }
+  // Token endpoint is at /connect/token (OpenIddict standard endpoint)
+  return `${internalUrl.replace(/\/$/, "")}/connect/token`;
+}
+
+/**
+ * Gets an access token using client credentials flow.
+ * @returns {Promise<string>} The access token
+ */
+async function getAccessToken() {
+  // Return cached token if still valid (with 60s buffer)
+  if (cachedAccessToken && tokenExpiresAt && Date.now() < tokenExpiresAt - 60000) {
+    return cachedAccessToken;
+  }
+
+  const clientId = process.env.SERVICE_CLIENT_ID ?? "dev-client";
+  const clientSecret = process.env.SERVICE_CLIENT_SECRET ?? "dev-secret";
+  const tokenUrl = getIdentityTokenUrl();
+
+  console.log(`  Requesting access token from ${tokenUrl}...`);
+
+  try {
+    const response = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: "secrets:read",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Token request failed: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    cachedAccessToken = data.access_token;
+    tokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000;
+
+    console.log("  Access token obtained successfully");
+    return cachedAccessToken;
+  } catch (error) {
+    throw new Error(`Failed to get access token from Identity service: ${error.message}`);
+  }
+}
+
+/**
+ * Makes an authenticated request to the Secrets service.
+ * @param {string} path - The API path
+ * @param {Object} options - Fetch options
+ * @returns {Promise<Response>} The fetch response
+ */
+async function authenticatedFetch(path, options = {}) {
+  const token = await getAccessToken();
+  const baseUrl = getSecretsServiceUrl();
+
+  return fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+/**
  * Fetches a single secret from the Secrets service.
  * @param {string} secretName - The name of the secret to retrieve
  * @returns {Promise<string|null>} The secret value, or null if not found
@@ -34,10 +115,8 @@ export async function getSecret(secretName) {
     return secretCache.get(secretName);
   }
 
-  const baseUrl = getSecretsServiceUrl();
-
   try {
-    const response = await fetch(`${baseUrl}/api/v1/secrets/${secretName}`);
+    const response = await authenticatedFetch(`/api/v1/secrets/${secretName}`);
 
     if (response.status === 404) {
       return null;
@@ -72,10 +151,8 @@ export async function getSecret(secretName) {
  * @returns {Promise<Object>} Object mapping secret names to values
  */
 export async function getSecretsBatch(secretNames) {
-  const baseUrl = getSecretsServiceUrl();
-
   try {
-    const response = await fetch(`${baseUrl}/api/v1/secrets/batch`, {
+    const response = await authenticatedFetch("/api/v1/secrets/batch", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -107,10 +184,8 @@ export async function getSecretsBatch(secretNames) {
  * @returns {Promise<Object>} Object mapping secret names to values
  */
 export async function getBetterAuthSecrets() {
-  const baseUrl = getSecretsServiceUrl();
-
   try {
-    const response = await fetch(`${baseUrl}/api/v1/secrets/betterauth`);
+    const response = await authenticatedFetch("/api/v1/secrets/betterauth");
 
     if (!response.ok) {
       throw new Error(`Secrets service returned ${response.status}`);
@@ -136,10 +211,8 @@ export async function getBetterAuthSecrets() {
  * @returns {Promise<Object>} Object mapping secret names to values
  */
 export async function getOAuthSecrets() {
-  const baseUrl = getSecretsServiceUrl();
-
   try {
-    const response = await fetch(`${baseUrl}/api/v1/secrets/oauth`);
+    const response = await authenticatedFetch("/api/v1/secrets/oauth");
 
     if (!response.ok) {
       throw new Error(`Secrets service returned ${response.status}`);
@@ -165,10 +238,8 @@ export async function getOAuthSecrets() {
  * @returns {Promise<Object>} Object mapping secret names to values
  */
 export async function getInfrastructureSecrets() {
-  const baseUrl = getSecretsServiceUrl();
-
   try {
-    const response = await fetch(`${baseUrl}/api/v1/secrets/infrastructure`);
+    const response = await authenticatedFetch("/api/v1/secrets/infrastructure");
 
     if (!response.ok) {
       throw new Error(`Secrets service returned ${response.status}`);
@@ -218,15 +289,28 @@ export async function loadSecrets() {
     }
   }
 
-  // Load infrastructure secrets
-  const infraSecrets = await getInfrastructureSecrets();
+  // Load infrastructure secrets (optional - fallback to env vars)
+  try {
+    const infraSecrets = await getInfrastructureSecrets();
+    if (infraSecrets["postgres-password"]) {
+      const host = process.env.POSTGRES_HOST ?? "localhost";
+      const port = process.env.POSTGRES_PORT ?? "5432";
+      const database = process.env.POSTGRES_DATABASE ?? "dhadgar_platform";
+      const username = process.env.POSTGRES_USERNAME ?? "dhadgar";
+      process.env.DATABASE_URL = `postgresql://${username}:${infraSecrets["postgres-password"]}@${host}:${port}/${database}`;
+    }
+  } catch (error) {
+    console.log("  Infrastructure secrets not available, using env vars...");
+  }
 
-  if (infraSecrets["postgres-password"]) {
+  // Build DATABASE_URL from env vars if not already set from secrets
+  if (!process.env.DATABASE_URL) {
     const host = process.env.POSTGRES_HOST ?? "localhost";
     const port = process.env.POSTGRES_PORT ?? "5432";
     const database = process.env.POSTGRES_DATABASE ?? "dhadgar_platform";
     const username = process.env.POSTGRES_USERNAME ?? "dhadgar";
-    process.env.DATABASE_URL = `postgresql://${username}:${infraSecrets["postgres-password"]}@${host}:${port}/${database}`;
+    const password = process.env.POSTGRES_PASSWORD ?? "dhadgar";
+    process.env.DATABASE_URL = `postgresql://${username}:${password}@${host}:${port}/${database}`;
   }
 
   // Load OAuth secrets

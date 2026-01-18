@@ -1,7 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Placeholder test project for Dhadgar.Panel.
+    The actual Panel is a Node.js/Astro project - this test project exists
+    for solution structure consistency. Real tests should use Vitest/Jest.
+  -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
     <AssemblyName>Dhadgar.Panel.Tests</AssemblyName>
     <RootNamespace>Dhadgar.Panel.Tests</RootNamespace>
   </PropertyGroup>
@@ -12,7 +18,5 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Dhadgar.Panel\Dhadgar.Panel.csproj" />
-  </ItemGroup>
+  <!-- No ProjectReference - Panel is a Node.js project that doesn't produce a .NET assembly -->
 </Project>

@@ -1,14 +1,20 @@
 using System.Collections.Concurrent;
+using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using OpenIddict.Validation.AspNetCore;
 using StackExchange.Redis;
 
 namespace Dhadgar.Identity.Tests;
@@ -75,7 +81,52 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
 
             services.RemoveAll<IWebhookSecretProvider>();
             services.AddSingleton<IWebhookSecretProvider>(new TestWebhookSecretProvider());
+
+            // Configure test authentication that satisfies authorization policies
+            // Remove the OpenIddict validation handler registration and replace with test handler
+            services.RemoveAll<IAuthenticationSchemeProvider>();
+            services.AddSingleton<IAuthenticationSchemeProvider, TestAuthenticationSchemeProvider>();
+
+            services.PostConfigure<AuthenticationOptions>(options =>
+            {
+                options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+            });
         });
+    }
+
+    /// <summary>
+    /// Creates an HTTP client with test authentication configured for the specified user.
+    /// </summary>
+    public HttpClient CreateAuthenticatedClient(Guid userId, Guid? organizationId = null, string? role = null)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.UserIdHeader, userId.ToString());
+        if (organizationId.HasValue)
+        {
+            client.DefaultRequestHeaders.Add(TestAuthHandler.OrgIdHeader, organizationId.Value.ToString());
+        }
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            client.DefaultRequestHeaders.Add(TestAuthHandler.RoleHeader, role);
+        }
+        return client;
+    }
+
+    /// <summary>
+    /// Creates an HTTP request message with test authentication for the specified user.
+    /// </summary>
+    public static void AddTestAuth(HttpRequestMessage request, Guid userId, Guid? organizationId = null, string? role = null)
+    {
+        request.Headers.Add(TestAuthHandler.UserIdHeader, userId.ToString());
+        if (organizationId.HasValue)
+        {
+            request.Headers.Add(TestAuthHandler.OrgIdHeader, organizationId.Value.ToString());
+        }
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            request.Headers.Add(TestAuthHandler.RoleHeader, role);
+        }
     }
 
     public async Task<Guid> SeedUserAsync(string email = "user@example.com")
@@ -128,5 +179,106 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
         var publicPem = new string(PemEncoding.Write("PUBLIC KEY", publicKey));
         return new ExchangeTokenKeyMaterial(privatePem, publicPem);
     }
+}
 
+/// <summary>
+/// Custom authentication scheme provider for tests.
+/// Maps the OpenIddict validation scheme to the test handler while preserving other schemes.
+/// </summary>
+public sealed class TestAuthenticationSchemeProvider : AuthenticationSchemeProvider
+{
+    private readonly AuthenticationScheme _testScheme;
+
+    public TestAuthenticationSchemeProvider(IOptions<AuthenticationOptions> options)
+        : base(options)
+    {
+        _testScheme = new AuthenticationScheme(
+            TestAuthHandler.SchemeName,
+            TestAuthHandler.SchemeName,
+            typeof(TestAuthHandler));
+    }
+
+    public override Task<AuthenticationScheme?> GetSchemeAsync(string name)
+    {
+        // Only override the Bearer/OpenIddict validation scheme
+        // Let other schemes (like OpenIddict Server) work normally
+        if (name == TestAuthHandler.SchemeName)
+        {
+            return Task.FromResult<AuthenticationScheme?>(_testScheme);
+        }
+
+        return base.GetSchemeAsync(name);
+    }
+
+    public override Task<AuthenticationScheme?> GetDefaultAuthenticateSchemeAsync()
+    {
+        return Task.FromResult<AuthenticationScheme?>(_testScheme);
+    }
+
+    public override Task<AuthenticationScheme?> GetDefaultChallengeSchemeAsync()
+    {
+        return Task.FromResult<AuthenticationScheme?>(_testScheme);
+    }
+}
+
+/// <summary>
+/// Test authentication handler for integration tests.
+/// Reads user identity from test headers instead of JWT validation.
+/// Uses the OpenIddict scheme name to satisfy authorization policies.
+/// SECURITY: This is ONLY for testing - never use in production.
+/// </summary>
+public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+{
+    /// <summary>
+    /// Use the OpenIddict scheme name so authorization policies that require Bearer scheme are satisfied.
+    /// </summary>
+    public static readonly string SchemeName = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+    public const string UserIdHeader = "X-Test-User-Id";
+    public const string OrgIdHeader = "X-Test-Org-Id";
+    public const string RoleHeader = "X-Test-Role";
+
+    public TestAuthHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder)
+        : base(options, logger, encoder)
+    {
+    }
+
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    {
+        // Check for test user ID header
+        if (!Request.Headers.TryGetValue(UserIdHeader, out var userIdValues) ||
+            !Guid.TryParse(userIdValues.FirstOrDefault(), out var userId))
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new("sub", userId.ToString())
+        };
+
+        // Add organization if provided
+        if (Request.Headers.TryGetValue(OrgIdHeader, out var orgIdValues) &&
+            Guid.TryParse(orgIdValues.FirstOrDefault(), out var orgId))
+        {
+            claims.Add(new Claim("org_id", orgId.ToString()));
+        }
+
+        // Add role if provided
+        if (Request.Headers.TryGetValue(RoleHeader, out var roleValues) &&
+            !string.IsNullOrWhiteSpace(roleValues.FirstOrDefault()))
+        {
+            claims.Add(new Claim(ClaimTypes.Role, roleValues.First()!));
+            claims.Add(new Claim("role", roleValues.First()!));
+        }
+
+        var identity = new ClaimsIdentity(claims, SchemeName);
+        var principal = new ClaimsPrincipal(identity);
+        var ticket = new AuthenticationTicket(principal, SchemeName);
+
+        return Task.FromResult(AuthenticateResult.Success(ticket));
+    }
 }

@@ -1,0 +1,36 @@
+# Dockerfile for Dhadgar.Discord (Artifact-based build)
+# Uses pre-built artifacts from Azure Pipelines Build stage
+# Build context: Solution root (MeridianConsole/)
+#
+# Pipeline usage:
+# - Build stage publishes artifacts to: src-Dhadgar_Discord
+# - BuildContainer job passes: --build-arg BUILD_ARTIFACT_PATH=$(Pipeline.Workspace)/artifacts/src-Dhadgar_Discord
+
+ARG BUILD_ARTIFACT_PATH=/fallback/artifacts
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+WORKDIR /app
+
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
+# Create non-root user
+RUN addgroup -S appuser && adduser -S appuser -G appuser
+
+# Copy pre-built artifacts from pipeline
+ARG BUILD_ARTIFACT_PATH
+COPY ${BUILD_ARTIFACT_PATH}/ .
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Runtime configuration
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3     CMD curl -f http://localhost:8080/healthz || exit 1
+
+ENTRYPOINT ["dotnet", "Dhadgar.Discord.dll"]

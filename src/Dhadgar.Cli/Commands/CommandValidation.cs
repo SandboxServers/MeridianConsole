@@ -3,19 +3,34 @@ using Spectre.Console;
 
 namespace Dhadgar.Cli.Commands;
 
-internal static class CommandValidation
+internal static partial class CommandValidation
 {
-    private static readonly Regex VaultNameRegex = new("^[a-zA-Z0-9-]{3,24}$", RegexOptions.Compiled);
+    [GeneratedRegex("^[a-zA-Z0-9-]{3,24}$")]
+    private static partial Regex VaultNamePattern();
 
+    /// <summary>
+    /// Validates and outputs error message to console if invalid.
+    /// </summary>
     public static bool TryValidateVaultName(string vaultName)
     {
-        if (string.IsNullOrWhiteSpace(vaultName) || !VaultNameRegex.IsMatch(vaultName))
+        var (isValid, errorMessage) = ValidateVaultName(vaultName);
+        if (!isValid && errorMessage is not null)
         {
-            AnsiConsole.MarkupLine("[red]Invalid vault name.[/]");
-            AnsiConsole.MarkupLine("[dim]Use 3-24 characters with letters, numbers, and hyphens.[/]");
-            return false;
+            AnsiConsole.MarkupLine(errorMessage);
         }
+        return isValid;
+    }
 
-        return true;
+    /// <summary>
+    /// Validates vault name without console output.
+    /// Returns (isValid, errorMessage) tuple.
+    /// </summary>
+    internal static (bool IsValid, string? ErrorMessage) ValidateVaultName(string? vaultName)
+    {
+        if (string.IsNullOrWhiteSpace(vaultName) || !VaultNamePattern().IsMatch(vaultName))
+        {
+            return (false, "[red]Invalid vault name.[/]\n[dim]Use 3-24 characters with letters, numbers, and hyphens.[/]");
+        }
+        return (true, null);
     }
 }

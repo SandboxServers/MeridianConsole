@@ -1,38 +1,61 @@
-<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+<Project Sdk="Microsoft.Build.NoTargets/3.7.56">
+  <!--
+    This is a "shim" project that integrates the Astro/Node.js build into the .NET solution.
+    It doesn't compile any .NET code - instead it invokes npm commands during build.
+    This allows `dotnet build` to build the entire solution including this Node.js project.
+
+    ShoppingCart is a static site (Azure Static Web Apps) for marketing and checkout.
+
+    Using Microsoft.Build.NoTargets SDK to prevent any .NET output (no dll, pdb, deps.json).
+  -->
+
   <PropertyGroup>
-    <AssemblyName>Dhadgar.ShoppingCart</AssemblyName>
-    <RootNamespace>Dhadgar.ShoppingCart</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+
+    <!-- Node.js build configuration -->
+    <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
+    <NpmCommand Condition="'$(OS)' != 'Windows_NT'">npm</NpmCommand>
+    <ShoppingCartProjectDir>$(MSBuildProjectDirectory)</ShoppingCartProjectDir>
+    <NodeModulesDir>$(ShoppingCartProjectDir)\node_modules</NodeModulesDir>
+    <BuildOutputDir>$(ShoppingCartProjectDir)\_swa_publish\wwwroot</BuildOutputDir>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
-  </ItemGroup>
-
-  <!-- Azure Static Web Apps friendly publish output
-       Copies the generated static site from $(PublishDir)/wwwroot to:
-       $(ProjectDir)/_swa_publish/wwwroot
-       Copies the api folder to:
-       $(ProjectDir)/_swa_publish/api -->
-  <PropertyGroup>
-    <SwaPublishOutputDir>$(ProjectDir)_swa_publish\wwwroot\</SwaPublishOutputDir>
-    <SwaPublishApiOutputDir>$(ProjectDir)_swa_publish\api\</SwaPublishApiOutputDir>
-  </PropertyGroup>
-
-  <Target Name="CreateSwaPublishOutput" AfterTargets="Publish">
-    <RemoveDir Directories="$(SwaPublishOutputDir)" />
-    <RemoveDir Directories="$(SwaPublishApiOutputDir)" />
-    <MakeDir Directories="$(SwaPublishOutputDir)" />
-    <MakeDir Directories="$(SwaPublishApiOutputDir)" />
-    <ItemGroup>
-      <_SwaFiles Include="$(PublishDir)wwwroot\**\*" />
-      <_SwaApiFiles Include="$(ProjectDir)api\**\*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_SwaFiles)"
-          DestinationFiles="@(_SwaFiles->'$(SwaPublishOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_SwaApiFiles)"
-          DestinationFiles="@(_SwaApiFiles->'$(SwaPublishApiOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+  <!-- Skip restore for this project - npm handles dependencies -->
+  <Target Name="DisableDotNetRestore" BeforeTargets="Restore">
+    <Message Importance="high" Text="Skipping .NET restore for Dhadgar.ShoppingCart (Node.js project)" />
   </Target>
+
+  <!-- Run npm install if node_modules doesn't exist or package.json changed -->
+  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(ShoppingCartProjectDir)\package.json;$(ShoppingCartProjectDir)\package-lock.json" Outputs="$(NodeModulesDir)\.package-lock.json">
+    <Message Importance="high" Text="Running npm install for Dhadgar.ShoppingCart..." />
+    <Exec Command="$(NpmCommand) install" WorkingDirectory="$(ShoppingCartProjectDir)" />
+  </Target>
+
+  <!-- Run npm build -->
+  <Target Name="NpmBuild" AfterTargets="NpmInstall" Inputs="$(ShoppingCartProjectDir)\src\**\*;$(ShoppingCartProjectDir)\public\**\*;$(ShoppingCartProjectDir)\package.json;$(ShoppingCartProjectDir)\astro.config.mjs;$(ShoppingCartProjectDir)\tailwind.config.mjs" Outputs="$(BuildOutputDir)\index.html">
+    <Message Importance="high" Text="Building Astro site for Dhadgar.ShoppingCart..." />
+    <Exec Command="$(NpmCommand) run build" WorkingDirectory="$(ShoppingCartProjectDir)" />
+  </Target>
+
+  <!-- Override default Build to prevent compile errors -->
+  <Target Name="Build" DependsOnTargets="NpmInstall;NpmBuild">
+    <Message Importance="high" Text="Dhadgar.ShoppingCart build complete. Output: $(BuildOutputDir)" />
+  </Target>
+
+  <!-- Clean target to remove build output -->
+  <Target Name="Clean">
+    <Message Importance="high" Text="Cleaning Dhadgar.ShoppingCart build output..." />
+    <RemoveDir Directories="$(BuildOutputDir)" Condition="Exists('$(BuildOutputDir)')" />
+    <RemoveDir Directories="$(ShoppingCartProjectDir)\.astro" Condition="Exists('$(ShoppingCartProjectDir)\.astro')" />
+  </Target>
+
+  <!-- Rebuild = Clean + Build -->
+  <Target Name="Rebuild" DependsOnTargets="Clean;Build" />
+
+  <!-- Publish just runs the build (output is in _swa_publish/wwwroot) -->
+  <Target Name="Publish" DependsOnTargets="Build">
+    <Message Importance="high" Text="Dhadgar.ShoppingCart published to $(BuildOutputDir)" />
+  </Target>
+
 </Project>

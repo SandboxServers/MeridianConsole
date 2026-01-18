@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(gh:*)",
       "Bash(dotnet restore:*)",
@@ -15,7 +16,12 @@
       "mcp__azure-devops__search_workitem",
       "mcp__azure-devops__wit_get_work_items_batch_by_ids",
       "mcp__azure-devops__wit_get_work_item",
-      "mcp__azure-devops__wit_update_work_items_batch"
+      "mcp__azure-devops__wit_update_work_items_batch",
+      "Bash(tree:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "mslearn"
+  ]
 }

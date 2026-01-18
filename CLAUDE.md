@@ -61,6 +61,21 @@ npm run dev
 
 **Note**: Both `dotnet watch` and Astro's `npm run dev` support hot reload for rapid development cycles. Scope dev server runs on port 4321 by default (configurable in astro.config.mjs).
 
+### CLI Tool (dhadgar)
+
+The CLI tool auto-installs as a global .NET tool during local development:
+
+```bash
+# Build the CLI (auto-installs as 'dhadgar' global tool)
+dotnet build src/Dhadgar.Cli -c Release
+
+# Use the CLI
+dhadgar --help
+dhadgar servers list
+```
+
+**CI/CD Note**: The pipeline automatically skips global tool installation during builds by passing `/p:SkipGlobalToolInstall=true`.
+
 ### EF Core Migrations
 
 Services with databases: Identity, Billing, Servers, Nodes, Tasks, Files, Mods, Notifications
@@ -94,7 +109,7 @@ Note: Some services auto-apply migrations in Development mode (see `Program.cs`)
 dotnet user-secrets init --project src/Dhadgar.Identity
 
 # Set secrets
-dotnet user-secrets set "Auth:SigningKey" "dev-only-key" --project src/Dhadgar.Identity
+dotnet user-secrets set "Auth:SigningKey" "dev-only-key-at-least-32-bytes-long" --project src/Dhadgar.Identity
 dotnet user-secrets set "Discord:BotToken" "your-token" --project src/Dhadgar.Discord
 
 # List secrets
@@ -272,7 +287,7 @@ The Gateway is the single public entry point:
 | Billing | SaaS subscriptions (excluded in KiP edition) |
 | Notifications | Email/Discord/webhook notifications |
 | Firewall | Port/policy management |
-| Secrets | Secret storage and rotation |
+| Secrets | Secret storage and rotation (✅ Production-ready with authorization) |
 | Discord | Discord integration |
 
 ### Agents
@@ -372,6 +387,148 @@ Standard ASP.NET Core configuration hierarchy:
 - Collect minimum required: node health, resource utilization, job status
 - Avoid customer content unless explicitly requested (user-requested logs, uploaded files)
 
+## Secrets Service (Production-Ready)
+
+The Secrets service provides secure access to platform secrets stored in Azure Key Vault. It's now fully hardened with authorization, audit logging, and rate limiting.
+
+### Architecture
+
+**Key Design Decisions**:
+- **Platform Secrets Only**: Secrets are platform-wide (not tenant-scoped) for OAuth credentials, infrastructure passwords, and API keys
+- **Key Vault Compatible Naming**: Secret names follow Azure Key Vault rules (alphanumeric + dashes, 1-127 chars)
+- **Claims-Based Authorization**: Uses JWT permission claims with hierarchical wildcards
+
+### Permission System
+
+Permission format: `secrets:{action}:{category-or-name}`
+
+**Hierarchy** (checked in order):
+1. `secrets:*` - Full admin (all actions on all secrets)
+2. `secrets:{action}:*` - Action wildcard (e.g., `secrets:read:*` for read-all)
+3. `secrets:{action}:{category}` - Category (e.g., `secrets:read:oauth`)
+4. `secrets:{action}:{secretName}` - Specific secret (e.g., `secrets:read:oauth-steam-api-key`)
+
+**Actions**: `read`, `write`, `rotate`, `delete`, `list`
+
+**Categories** (configured in `appsettings.json`):
+- `oauth` - OAuth provider secrets (Steam, Discord, etc.)
+- `betterauth` - Authentication service secrets
+- `infrastructure` - Database, Redis, messaging credentials
+- `custom` - Uncategorized secrets (default)
+
+### Role Permissions
+
+Defined in `src/Dhadgar.Identity/Authorization/RoleDefinitions.cs`:
+
+| Role | Secrets Permissions |
+|------|-------------------|
+| `owner` | `secrets:read:oauth`, `secrets:read:infrastructure` |
+| `admin` | `secrets:read:oauth` |
+| `platform-admin` | `secrets:*` (full access, break-glass approval) |
+| `secrets-admin` | `secrets:*` (full secrets control) |
+| `secrets-reader` | `secrets:read:*` (read-only all categories) |
+
+### Break-Glass Access
+
+Emergency access that bypasses normal authorization:
+- Requires `break_glass: "true"` claim in JWT
+- Should include `break_glass_reason` claim for audit trail
+- All break-glass access is logged at WARNING level
+- Only `platform-admin` role can approve break-glass tokens
+
+### Audit Logging
+
+All secret access is logged with structured events:
+
+```
+AUDIT:SECRETS:ACCESS    - Successful read operations
+AUDIT:SECRETS:DENIED    - Access denied (missing permission or not in allowed list)
+AUDIT:SECRETS:MODIFY    - Write/delete operations
+AUDIT:SECRETS:ROTATED   - Secret rotation events
+AUDIT:SECRETS:BREAKGLASS - Break-glass access (logged at WARNING)
+```
+
+Logs include: `SecretName`, `Action`, `UserId`, `PrincipalType`, `Success`, `CorrelationId`, `IsBreakGlass`, `IsServiceAccount`
+
+**Retention**: 90 days recommended for security compliance.
+
+### Rate Limiting
+
+Configured in `Program.cs`:
+
+| Policy | Limit | Window | Queue |
+|--------|-------|--------|-------|
+| `SecretsRead` | 100 requests | 1 minute | 10 |
+| `SecretsWrite` | 20 requests | 1 minute | 5 |
+| `SecretsRotate` | 5 requests | 1 minute | 2 |
+
+Rate limit exceeded returns HTTP 429 with `Retry-After` header.
+
+### API Endpoints
+
+**Read Operations** (`/api/v1/secrets`):
+- `GET /{secretName}` - Get single secret (requires `secrets:read:{category}`)
+- `POST /batch` - Get multiple secrets (returns only authorized ones)
+- `GET /oauth` - Get all OAuth secrets (requires `secrets:read:oauth`)
+- `GET /betterauth` - Get BetterAuth secrets (requires `secrets:read:betterauth`)
+- `GET /infrastructure` - Get infrastructure secrets (requires `secrets:read:infrastructure`)
+
+**Write Operations** (`/api/v1/secrets`):
+- `PUT /{secretName}` - Set/update secret (requires `secrets:write:{category}`)
+- `POST /{secretName}/rotate` - Rotate secret (requires `secrets:rotate:{category}`)
+- `DELETE /{secretName}` - Delete secret (requires `secrets:delete:{category}`)
+
+### Configuration
+
+```json
+{
+  "Secrets": {
+    "KeyVaultUri": "https://your-vault.vault.azure.net/",
+    "UseDevelopmentProvider": false,
+    "AllowedSecrets": {
+      "OAuth": ["oauth-steam-api-key", "oauth-discord-client-secret"],
+      "BetterAuth": ["betterauth-jwt-secret"],
+      "Infrastructure": ["infra-db-password", "infra-redis-password"]
+    }
+  }
+}
+```
+
+**Important**: Only secrets listed in `AllowedSecrets` can be accessed through the API. This prevents unauthorized enumeration.
+
+### Service Account Access
+
+Service accounts use `principal_type: "service"` claim (vs `"user"` for humans). This is tracked in audit logs for distinguishing automated vs human access.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `Authorization/SecretsAuthorizationService.cs` | Permission checking with hierarchy |
+| `Authorization/ISecretsAuthorizationService.cs` | Interface and `AuthorizationResult` record |
+| `Audit/SecretsAuditLogger.cs` | Structured audit logging |
+| `Validation/SecretNameValidator.cs` | Input validation (Key Vault compatible) |
+| `Endpoints/SecretsEndpoints.cs` | Read API endpoints |
+| `Endpoints/SecretWriteEndpoints.cs` | Write/rotate/delete endpoints |
+
+### Testing
+
+Comprehensive test coverage in `tests/Dhadgar.Secrets.Tests/`:
+
+- `Authorization/SecretsAuthorizationServiceTests.cs` - Permission hierarchy, break-glass, service accounts
+- `Validation/SecretNameValidatorTests.cs` - Input validation, injection prevention
+- `Security/SecretsSecurityIntegrationTests.cs` - Full endpoint security (auth, authz, rate limits)
+
+Run all tests: `dotnet test tests/Dhadgar.Secrets.Tests`
+
+### Security Considerations
+
+1. **Allowed List**: Secrets must be explicitly listed in configuration to be accessible
+2. **Input Validation**: Secret names are validated against Key Vault rules + injection patterns
+3. **Audit Trail**: All access (success and denial) is logged for compliance
+4. **Rate Limiting**: Prevents brute-force and enumeration attacks
+5. **Break-Glass Auditing**: Emergency access is logged at WARNING level for SIEM alerts
+
 ## Package Management
 
 Uses **Central Package Management**:
@@ -465,10 +622,17 @@ Treat these as code names vs product name ("Meridian Console").
 - OpenTelemetry instrumentation (tracing, metrics, logging with correlation IDs)
 - One test project per service
 - Dhadgar.Scope site migrated to Astro/React/Tailwind
+- **Secrets service** - Production-ready with:
+  - Claims-based authorization with permission hierarchy
+  - Comprehensive audit logging (SIEM-compatible)
+  - Rate limiting (read/write/rotate tiers)
+  - Input validation (Key Vault compatible naming)
+  - Break-glass emergency access
+  - Service account vs user account distinction
+  - 134 unit and integration tests
 
 ### 🚧 Planned (Not Yet Implemented)
-- Real authentication, RBAC, user/org lifecycle
-- Billing integration, usage metering
+- Complete authentication flows (partial RBAC in Identity)
 - Actual provisioning workflows and scheduling
 - Agent enrollment with mTLS
 - MassTransit message consumers, retries, DLQs

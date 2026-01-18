@@ -9,6 +9,17 @@ namespace Dhadgar.Gateway.Endpoints;
 /// </summary>
 public static class DiagnosticsEndpoints
 {
+    /// <summary>
+    /// Masks a token for safe display in diagnostics output.
+    /// Shows first 10 and last 5 characters only.
+    /// </summary>
+    private static string MaskToken(string? token)
+    {
+        if (string.IsNullOrEmpty(token) || token.Length < 20)
+            return "[invalid]";
+        return $"{token[..10]}...{token[^5..]}";
+    }
+
     public static void MapDiagnosticsEndpoints(this WebApplication app)
     {
         if (!app.Environment.IsDevelopment())
@@ -27,6 +38,14 @@ public static class DiagnosticsEndpoints
         group.MapGet("/services", CheckServiceHealth)
             .WithName("ServiceHealth")
             .WithDescription("Checks health of all configured backend services");
+
+        group.MapGet("/routes", GetRouteInfo)
+            .WithName("RouteInfo")
+            .WithDescription("Returns configured YARP routes");
+
+        group.MapGet("/clusters", GetClusterInfo)
+            .WithName("ClusterInfo")
+            .WithDescription("Returns YARP cluster status");
 
         group.MapGet("/wif", TestWifToken)
             .WithName("TestWif")
@@ -491,7 +510,7 @@ public static class DiagnosticsEndpoints
                 return Results.Ok(result);
             }
 
-            result.Token = tokenStep.Token;
+            result.Token = MaskToken(tokenStep.Token);
 
             // Step 3: Decode and inspect token claims
             var claimsStep = InspectWifToken(tokenStep.Token!, logger);
@@ -771,6 +790,49 @@ public static class DiagnosticsEndpoints
                 DurationMs = sw.ElapsedMilliseconds
             };
         }
+    }
+
+    private static IResult GetRouteInfo(IConfiguration configuration)
+    {
+        var routesSection = configuration.GetSection("ReverseProxy:Routes").GetChildren();
+        var routes = new List<object>();
+
+        foreach (var route in routesSection)
+        {
+            routes.Add(new
+            {
+                routeId = route.Key,
+                clusterId = route.GetSection("ClusterId").Value,
+                path = route.GetSection("Match:Path").Value,
+                authorizationPolicy = route.GetSection("AuthorizationPolicy").Value,
+                rateLimiterPolicy = route.GetSection("RateLimiterPolicy").Value,
+                order = int.TryParse(route.GetSection("Order").Value, out var order) ? order : (int?)null
+            });
+        }
+
+        return Results.Ok(new { routes });
+    }
+
+    private static IResult GetClusterInfo(IConfiguration configuration)
+    {
+        var clustersSection = configuration.GetSection("ReverseProxy:Clusters").GetChildren();
+        var clusters = new List<object>();
+
+        foreach (var cluster in clustersSection)
+        {
+            var destinations = cluster.GetSection("Destinations").GetChildren().ToList();
+            var healthCheckEnabled = cluster.GetSection("HealthCheck:Active:Enabled").Value?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+
+            clusters.Add(new
+            {
+                clusterId = cluster.Key,
+                availableDestinations = destinations.Count, // In config, we can't know actual health
+                totalDestinations = destinations.Count,
+                healthStatus = healthCheckEnabled ? "HealthCheckEnabled" : "NoHealthCheck"
+            });
+        }
+
+        return Results.Ok(new { clusters });
     }
 }
 

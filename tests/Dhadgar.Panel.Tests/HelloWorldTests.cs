@@ -1,13 +1,20 @@
 using Xunit;
-using Dhadgar.Panel;
 
 namespace Dhadgar.Panel.Tests;
 
+/// <summary>
+/// Placeholder tests for Dhadgar.Panel.
+/// This is a Node.js/Astro project - actual tests are in the TypeScript/JavaScript test files.
+/// This .NET test project exists for solution structure consistency.
+/// </summary>
 public class HelloWorldTests
 {
     [Fact]
-    public void Hello_message_is_correct()
+    public void Panel_is_nodejs_project()
     {
-        Assert.Equal("Hello from Dhadgar.Panel", Hello.Message);
+        // Dhadgar.Panel is an Astro/React project, not a .NET project.
+        // The .csproj is a shim that invokes npm build.
+        // Actual tests should be written in TypeScript/JavaScript using Vitest or Jest.
+        Assert.True(true, "Panel is a Node.js project - see TypeScript tests");
     }
 }

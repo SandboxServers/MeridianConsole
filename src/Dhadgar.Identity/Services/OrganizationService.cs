@@ -243,6 +243,78 @@ public sealed class OrganizationService
         return ServiceResult.Ok(true);
     }
 
+    /// <summary>
+    /// Transfers ownership of an organization to another active member.
+    /// The new owner must be an active member of the organization.
+    /// The previous owner is demoted to admin role.
+    /// </summary>
+    public async Task<ServiceResult<bool>> TransferOwnershipAsync(
+        Guid organizationId,
+        Guid currentOwnerId,
+        Guid newOwnerId,
+        CancellationToken ct = default)
+    {
+        if (currentOwnerId == newOwnerId)
+        {
+            return ServiceResult.Fail<bool>("cannot_transfer_to_self");
+        }
+
+        var org = await _dbContext.Organizations
+            .FirstOrDefaultAsync(o => o.Id == organizationId && o.DeletedAt == null, ct);
+
+        if (org is null)
+        {
+            return ServiceResult.Fail<bool>("org_not_found");
+        }
+
+        if (org.OwnerId != currentOwnerId)
+        {
+            return ServiceResult.Fail<bool>("not_owner");
+        }
+
+        // Verify new owner is an active member
+        var newOwnerMembership = await _dbContext.UserOrganizations
+            .FirstOrDefaultAsync(uo =>
+                uo.OrganizationId == organizationId &&
+                uo.UserId == newOwnerId &&
+                uo.IsActive &&
+                uo.LeftAt == null,
+                ct);
+
+        if (newOwnerMembership is null)
+        {
+            return ServiceResult.Fail<bool>("new_owner_not_member");
+        }
+
+        // Get current owner's membership to demote
+        var currentOwnerMembership = await _dbContext.UserOrganizations
+            .FirstOrDefaultAsync(uo =>
+                uo.OrganizationId == organizationId &&
+                uo.UserId == currentOwnerId &&
+                uo.IsActive &&
+                uo.LeftAt == null,
+                ct);
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        // Transfer ownership
+        org.OwnerId = newOwnerId;
+        org.UpdatedAt = now;
+
+        // Promote new owner to owner role
+        newOwnerMembership.Role = "owner";
+
+        // Demote previous owner to admin
+        if (currentOwnerMembership is not null)
+        {
+            currentOwnerMembership.Role = "admin";
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        return ServiceResult.Ok(true);
+    }
+
     private async Task<string> EnsureUniqueSlugAsync(string slug, CancellationToken ct)
     {
         var normalized = slug;

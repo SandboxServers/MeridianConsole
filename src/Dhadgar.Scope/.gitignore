@@ -6,10 +6,13 @@ _swa_publish/
 dist/
 .astro/
 
-# Environment files
+# Environment files (local secrets)
 .env
-.env.*
+.env.local
+.env.*.local
+# Keep .env.production for build-time public config
 !.env.example
+!.env.production
 
 # IDE
 .vscode/

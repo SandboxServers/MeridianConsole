@@ -26,6 +26,9 @@ public static class RoleDefinitions
                     "nodes:read", "nodes:manage",
                     "files:read", "files:write", "files:delete",
                     "mods:read", "mods:write", "mods:delete",
+                    // Secrets permissions (platform secrets)
+                    "secrets:read:oauth",
+                    "secrets:read:infrastructure",
                 },
                 CanAssignRoles = new[] { "admin", "operator", "viewer" }
             },
@@ -42,6 +45,8 @@ public static class RoleDefinitions
                     "nodes:read",
                     "files:read", "files:write", "files:delete",
                     "mods:read", "mods:write", "mods:delete",
+                    // Secrets permissions (platform secrets - read only)
+                    "secrets:read:oauth",
                 },
                 CanAssignRoles = new[] { "operator", "viewer" }
             },
@@ -73,6 +78,49 @@ public static class RoleDefinitions
                     "nodes:read",
                     "files:read",
                     "mods:read",
+                    // No secrets access for viewers
+                },
+                CanAssignRoles = Array.Empty<string>()
+            },
+
+            // Platform-level roles (assigned by platform admins, not org owners)
+            ["platform-admin"] = new RoleDefinition
+            {
+                Name = "Platform Administrator",
+                Description = "Full platform administration including secrets management",
+                ImpliedClaims = new[]
+                {
+                    // Full secrets access
+                    "secrets:*",
+                    "secrets:read:*",
+                    "secrets:write:*",
+                    "secrets:rotate:*",
+                    // Can approve break-glass requests
+                    "break-glass:approve",
+                },
+                CanAssignRoles = new[] { "secrets-admin", "secrets-reader" }
+            },
+            ["secrets-admin"] = new RoleDefinition
+            {
+                Name = "Secrets Administrator",
+                Description = "Full control over platform secrets",
+                ImpliedClaims = new[]
+                {
+                    "secrets:read:*",
+                    "secrets:write:*",
+                    "secrets:rotate:*",
+                },
+                CanAssignRoles = new[] { "secrets-reader" }
+            },
+            ["secrets-reader"] = new RoleDefinition
+            {
+                Name = "Secrets Reader",
+                Description = "Read-only access to platform secrets",
+                ImpliedClaims = new[]
+                {
+                    "secrets:read:oauth",
+                    "secrets:read:betterauth",
+                    "secrets:read:infrastructure",
                 },
                 CanAssignRoles = Array.Empty<string>()
             }

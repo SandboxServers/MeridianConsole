@@ -1,4 +1,7 @@
+using Dhadgar.Secrets.Authorization;
+using Dhadgar.Secrets.Audit;
 using Dhadgar.Secrets.Services;
+using Dhadgar.Secrets.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -9,13 +12,15 @@ public static class SecretsEndpoints
     public static void MapSecretsEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/v1/secrets")
-            .WithTags("Secrets");
+            .WithTags("Secrets")
+            .RequireAuthorization();
 
         // Get a single secret by name
         group.MapGet("/{secretName}", GetSecret)
             .WithName("GetSecret")
             .WithDescription("Retrieves a single secret by name. Only allowed secrets can be retrieved.")
             .Produces<SecretResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -23,55 +28,101 @@ public static class SecretsEndpoints
         group.MapPost("/batch", GetSecretsBatch)
             .WithName("GetSecretsBatch")
             .WithDescription("Retrieves multiple secrets by name. Only allowed secrets will be returned.")
-            .Produces<SecretsResponse>(StatusCodes.Status200OK);
+            .Produces<SecretsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
 
         // Get all OAuth secrets
         group.MapGet("/oauth", GetOAuthSecrets)
             .WithName("GetOAuthSecrets")
             .WithDescription("Retrieves all configured OAuth provider secrets.")
-            .Produces<SecretsResponse>(StatusCodes.Status200OK);
+            .Produces<SecretsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // Get BetterAuth secrets
         group.MapGet("/betterauth", GetBetterAuthSecrets)
             .WithName("GetBetterAuthSecrets")
             .WithDescription("Retrieves secrets required by the BetterAuth service.")
-            .Produces<SecretsResponse>(StatusCodes.Status200OK);
+            .Produces<SecretsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // Get infrastructure secrets
         group.MapGet("/infrastructure", GetInfrastructureSecrets)
             .WithName("GetInfrastructureSecrets")
             .WithDescription("Retrieves infrastructure secrets (database, messaging).")
-            .Produces<SecretsResponse>(StatusCodes.Status200OK);
+            .Produces<SecretsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden);
     }
 
     private static async Task<IResult> GetSecret(
         string secretName,
         [FromServices] ISecretProvider provider,
-        [FromServices] IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
         HttpContext context,
         CancellationToken ct)
     {
+        // Validate input
+        var validation = SecretNameValidator.Validate(secretName);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new { error = validation.ErrorMessage });
+        }
+
+        // Check if secret is in allowed list
         if (!provider.IsAllowed(secretName))
         {
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "read",
+                UserId: context.User.FindFirst("sub")?.Value,
+                Reason: "Secret not in allowed list",
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
-        if (context.User.Identity?.IsAuthenticated != true)
+        // Authorize
+        var authResult = authService.Authorize(context.User, secretName, SecretAction.Read);
+        if (!authResult.IsAuthorized)
         {
-            return Results.Unauthorized();
-        }
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: secretName,
+                Action: "read",
+                UserId: authResult.UserId,
+                Reason: authResult.DenialReason ?? "Authorization denied",
+                CorrelationId: context.TraceIdentifier));
 
-        if (!HasSecretPermission(context.User, secretName, options.Value))
-        {
             return Results.Forbid();
         }
 
+        // Fetch secret
         var value = await provider.GetSecretAsync(secretName, ct);
 
         if (value is null)
         {
+            auditLogger.LogAccess(new SecretAuditEvent(
+                SecretName: secretName,
+                Action: "read",
+                UserId: authResult.UserId,
+                PrincipalType: authResult.PrincipalType,
+                Success: false,
+                CorrelationId: context.TraceIdentifier,
+                IsBreakGlass: authResult.IsBreakGlass,
+                IsServiceAccount: authResult.IsServiceAccount));
+
             return Results.NotFound(new { error = $"Secret '{secretName}' not found or not configured." });
         }
+
+        // Log successful access
+        auditLogger.LogAccess(new SecretAuditEvent(
+            SecretName: secretName,
+            Action: "read",
+            UserId: authResult.UserId,
+            PrincipalType: authResult.PrincipalType,
+            Success: true,
+            CorrelationId: context.TraceIdentifier,
+            IsBreakGlass: authResult.IsBreakGlass,
+            IsServiceAccount: authResult.IsServiceAccount));
 
         return Results.Ok(new SecretResponse(secretName, value));
     }
@@ -79,7 +130,8 @@ public static class SecretsEndpoints
     private static async Task<IResult> GetSecretsBatch(
         [FromBody] BatchSecretsRequest request,
         [FromServices] ISecretProvider provider,
-        [FromServices] IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
         HttpContext context,
         CancellationToken ct)
     {
@@ -88,136 +140,172 @@ public static class SecretsEndpoints
             return Results.BadRequest(new { error = "SecretNames is required." });
         }
 
-        if (context.User.Identity?.IsAuthenticated != true)
+        // Validate all secret names
+        foreach (var name in request.SecretNames)
         {
-            return Results.Unauthorized();
+            var validation = SecretNameValidator.Validate(name);
+            if (!validation.IsValid)
+            {
+                return Results.BadRequest(new { error = $"Invalid secret name '{name}': {validation.ErrorMessage}" });
+            }
         }
 
-        var authorized = request.SecretNames
-            .Where(name => provider.IsAllowed(name))
-            .Where(name => HasSecretPermission(context.User, name, options.Value))
-            .ToArray();
+        var userId = context.User.FindFirst("sub")?.Value;
+        var authorizedSecrets = new List<string>();
+        var deniedCount = 0;
 
-        if (authorized.Length == 0)
+        foreach (var secretName in request.SecretNames)
         {
+            if (!provider.IsAllowed(secretName))
+            {
+                deniedCount++;
+                continue;
+            }
+
+            var authResult = authService.Authorize(context.User, secretName, SecretAction.Read);
+            if (authResult.IsAuthorized)
+            {
+                authorizedSecrets.Add(secretName);
+            }
+            else
+            {
+                deniedCount++;
+            }
+        }
+
+        if (authorizedSecrets.Count == 0)
+        {
+            auditLogger.LogBatchAccess(new SecretBatchAccessEvent(
+                RequestedSecrets: request.SecretNames.ToList(),
+                AccessedCount: 0,
+                DeniedCount: request.SecretNames.Count,
+                UserId: userId,
+                CorrelationId: context.TraceIdentifier));
+
             return Results.Forbid();
         }
 
-        var secrets = await provider.GetSecretsAsync(authorized, ct);
+        var secrets = await provider.GetSecretsAsync(authorizedSecrets, ct);
+
+        auditLogger.LogBatchAccess(new SecretBatchAccessEvent(
+            RequestedSecrets: request.SecretNames.ToList(),
+            AccessedCount: secrets.Count,
+            DeniedCount: deniedCount,
+            UserId: userId,
+            CorrelationId: context.TraceIdentifier));
 
         return Results.Ok(new SecretsResponse(secrets));
     }
 
     private static async Task<IResult> GetOAuthSecrets(
         [FromServices] ISecretProvider provider,
-        [FromServices] Microsoft.Extensions.Options.IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
+        [FromServices] IOptions<Options.SecretsOptions> options,
         HttpContext context,
         CancellationToken ct)
     {
-        if (context.User.Identity?.IsAuthenticated != true)
+        var authResult = authService.AuthorizeCategory(context.User, "oauth", SecretAction.Read);
+        if (!authResult.IsAuthorized)
         {
-            return Results.Unauthorized();
-        }
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: "[oauth-category]",
+                Action: "read",
+                UserId: authResult.UserId,
+                Reason: authResult.DenialReason ?? "Authorization denied",
+                CorrelationId: context.TraceIdentifier));
 
-        if (!HasPermission(context.User, options.Value.Permissions.OAuthRead))
-        {
             return Results.Forbid();
         }
 
         var oauthSecretNames = options.Value.AllowedSecrets.OAuth;
         var secrets = await provider.GetSecretsAsync(oauthSecretNames, ct);
 
+        auditLogger.LogAccess(new SecretAuditEvent(
+            SecretName: "[oauth-category]",
+            Action: "read",
+            UserId: authResult.UserId,
+            PrincipalType: authResult.PrincipalType,
+            Success: true,
+            CorrelationId: context.TraceIdentifier,
+            IsBreakGlass: authResult.IsBreakGlass,
+            IsServiceAccount: authResult.IsServiceAccount));
+
         return Results.Ok(new SecretsResponse(secrets));
     }
 
     private static async Task<IResult> GetBetterAuthSecrets(
         [FromServices] ISecretProvider provider,
-        [FromServices] Microsoft.Extensions.Options.IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
+        [FromServices] IOptions<Options.SecretsOptions> options,
         HttpContext context,
         CancellationToken ct)
     {
-        if (context.User.Identity?.IsAuthenticated != true)
+        var authResult = authService.AuthorizeCategory(context.User, "betterauth", SecretAction.Read);
+        if (!authResult.IsAuthorized)
         {
-            return Results.Unauthorized();
-        }
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: "[betterauth-category]",
+                Action: "read",
+                UserId: authResult.UserId,
+                Reason: authResult.DenialReason ?? "Authorization denied",
+                CorrelationId: context.TraceIdentifier));
 
-        if (!HasPermission(context.User, options.Value.Permissions.BetterAuthRead))
-        {
             return Results.Forbid();
         }
 
         var betterAuthSecretNames = options.Value.AllowedSecrets.BetterAuth;
         var secrets = await provider.GetSecretsAsync(betterAuthSecretNames, ct);
 
+        auditLogger.LogAccess(new SecretAuditEvent(
+            SecretName: "[betterauth-category]",
+            Action: "read",
+            UserId: authResult.UserId,
+            PrincipalType: authResult.PrincipalType,
+            Success: true,
+            CorrelationId: context.TraceIdentifier,
+            IsBreakGlass: authResult.IsBreakGlass,
+            IsServiceAccount: authResult.IsServiceAccount));
+
         return Results.Ok(new SecretsResponse(secrets));
     }
 
     private static async Task<IResult> GetInfrastructureSecrets(
         [FromServices] ISecretProvider provider,
-        [FromServices] Microsoft.Extensions.Options.IOptions<Options.SecretsOptions> options,
+        [FromServices] ISecretsAuthorizationService authService,
+        [FromServices] ISecretsAuditLogger auditLogger,
+        [FromServices] IOptions<Options.SecretsOptions> options,
         HttpContext context,
         CancellationToken ct)
     {
-        if (context.User.Identity?.IsAuthenticated != true)
+        var authResult = authService.AuthorizeCategory(context.User, "infrastructure", SecretAction.Read);
+        if (!authResult.IsAuthorized)
         {
-            return Results.Unauthorized();
-        }
+            auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
+                SecretName: "[infrastructure-category]",
+                Action: "read",
+                UserId: authResult.UserId,
+                Reason: authResult.DenialReason ?? "Authorization denied",
+                CorrelationId: context.TraceIdentifier));
 
-        if (!HasPermission(context.User, options.Value.Permissions.InfrastructureRead))
-        {
             return Results.Forbid();
         }
 
         var infraSecretNames = options.Value.AllowedSecrets.Infrastructure;
         var secrets = await provider.GetSecretsAsync(infraSecretNames, ct);
 
+        auditLogger.LogAccess(new SecretAuditEvent(
+            SecretName: "[infrastructure-category]",
+            Action: "read",
+            UserId: authResult.UserId,
+            PrincipalType: authResult.PrincipalType,
+            Success: true,
+            CorrelationId: context.TraceIdentifier,
+            IsBreakGlass: authResult.IsBreakGlass,
+            IsServiceAccount: authResult.IsServiceAccount));
+
         return Results.Ok(new SecretsResponse(secrets));
-    }
-
-    private static bool HasSecretPermission(
-        System.Security.Claims.ClaimsPrincipal user,
-        string secretName,
-        Options.SecretsOptions options)
-    {
-        if (user.Identity?.IsAuthenticated != true)
-        {
-            return false;
-        }
-
-        var directPermission = $"secrets:read:{secretName}";
-        if (HasPermission(user, directPermission))
-        {
-            return true;
-        }
-
-        if (ContainsSecret(options.AllowedSecrets.OAuth, secretName))
-        {
-            return HasPermission(user, options.Permissions.OAuthRead);
-        }
-
-        if (ContainsSecret(options.AllowedSecrets.BetterAuth, secretName))
-        {
-            return HasPermission(user, options.Permissions.BetterAuthRead);
-        }
-
-        if (ContainsSecret(options.AllowedSecrets.Infrastructure, secretName))
-        {
-            return HasPermission(user, options.Permissions.InfrastructureRead);
-        }
-
-        return false;
-    }
-
-    private static bool ContainsSecret(IEnumerable<string> secrets, string secretName)
-    {
-        return secrets.Any(name => string.Equals(name, secretName, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool HasPermission(System.Security.Claims.ClaimsPrincipal user, string permission)
-    {
-        return user.Claims.Any(claim =>
-            string.Equals(claim.Type, "permission", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(claim.Value, permission, StringComparison.OrdinalIgnoreCase));
     }
 }
 

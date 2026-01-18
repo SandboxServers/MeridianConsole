@@ -1,4 +1,5 @@
 using Dhadgar.Identity.OAuth;
+using Dhadgar.ServiceDefaults.Security;
 using Microsoft.AspNetCore.Authentication;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -8,49 +9,59 @@ public static class OAuthEndpoints
     public static void Map(WebApplication app)
     {
         app.MapGet("/oauth/{provider}/link", BeginLink)
+            .WithTags("OAuth")
+            .WithName("BeginOAuthLink")
+            .WithDescription("Begin OAuth provider account linking flow")
             .RequireRateLimiting("auth");
     }
 
-    private static IResult BeginLink(HttpContext context, string provider, string? returnUrl, IConfiguration configuration)
+    private static IResult BeginLink(
+        HttpContext context,
+        string provider,
+        string? returnUrl,
+        IConfiguration configuration,
+        ISecurityEventLogger securityLogger)
     {
+        var clientIp = context.Connection.RemoteIpAddress?.ToString();
+
         if (!OAuthProviderRegistry.IsSupported(provider))
         {
+            securityLogger.LogAuthorizationDenied(null, $"oauth/{provider}/link", "unsupported_provider", clientIp);
             return Results.NotFound();
         }
 
-        if (!TryGetUserId(context, out var userId))
+        // SECURITY FIX: Use centralized helper that only trusts JWT claims
+        if (!EndpointHelpers.TryGetUserId(context, out var userId))
         {
+            securityLogger.LogAuthenticationFailure(null, "oauth_link_unauthorized", clientIp, context.Request.Headers.UserAgent);
             return Results.Unauthorized();
         }
 
         var redirectTarget = "/";
-        if (!string.IsNullOrWhiteSpace(returnUrl) && IsAllowedRedirect(returnUrl, configuration))
+        if (!string.IsNullOrWhiteSpace(returnUrl))
         {
-            redirectTarget = returnUrl;
+            if (IsAllowedRedirect(returnUrl, configuration))
+            {
+                redirectTarget = returnUrl;
+            }
+            else
+            {
+                // Log potential open redirect attempt
+                securityLogger.LogSuspiciousActivity($"Invalid OAuth redirect attempt: {returnUrl}", userId.ToString(), clientIp);
+            }
         }
 
         var properties = new AuthenticationProperties
         {
-            RedirectUri = redirectTarget
+            RedirectUri = redirectTarget,
+            // SECURITY: Set state expiration to prevent replay attacks
+            ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10)
         };
 
         properties.Items[OAuthLinkingHandler.LinkUserIdItem] = userId.ToString("D");
 
         return Results.Challenge(properties, new[] { provider });
     }
-
-    private static bool TryGetUserId(HttpContext context, out Guid userId)
-    {
-        if (context.Request.Headers.TryGetValue("X-User-Id", out var header)
-            && Guid.TryParse(header.ToString(), out userId))
-        {
-            return true;
-        }
-
-        var claim = context.User.FindFirst("sub")?.Value;
-        return Guid.TryParse(claim, out userId);
-    }
-
 
     private static bool IsAllowedRedirect(string returnUrl, IConfiguration configuration)
     {

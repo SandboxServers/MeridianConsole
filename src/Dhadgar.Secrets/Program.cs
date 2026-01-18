@@ -1,5 +1,9 @@
+using System.Threading.RateLimiting;
 using Dhadgar.Secrets;
+using Dhadgar.Secrets.Authorization;
+using Dhadgar.Secrets.Audit;
 using Dhadgar.Secrets.Endpoints;
+using Dhadgar.Secrets.Infrastructure;
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Readiness;
 using Dhadgar.Secrets.Services;
@@ -7,7 +11,9 @@ using SecretsHello = Dhadgar.Secrets.Hello;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -16,7 +22,15 @@ using OpenTelemetry.Trace;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Dhadgar Secrets API",
+        Version = "v1",
+        Description = "Secret storage and rotation for Meridian Console"
+    });
+});
 
 // Configure options
 builder.Services.Configure<SecretsOptions>(builder.Configuration.GetSection("Secrets"));
@@ -31,6 +45,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         var issuer = builder.Configuration["Auth:Issuer"];
         var metadataAddress = builder.Configuration["Auth:MetadataAddress"];
+        var internalBaseUrl = builder.Configuration["Auth:InternalBaseUrl"]; // e.g., http://identity:8080
 
         options.Authority = issuer;
         options.Audience = builder.Configuration["Auth:Audience"];
@@ -54,11 +69,82 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 builder.Configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60)
         };
         options.RefreshOnIssuerKeyNotFound = true;
+
+        // For local dev/Docker: use a document retriever that rewrites external URLs to internal
+        // This is needed because the OIDC metadata returns external URLs for jwks_uri
+        // which containers can't reach in local Docker environments
+        if (!string.IsNullOrWhiteSpace(internalBaseUrl) && !string.IsNullOrWhiteSpace(issuer))
+        {
+            var docRetriever = new UrlRewritingDocumentRetriever(issuer, internalBaseUrl)
+            {
+                RequireHttps = !builder.Environment.IsDevelopment()
+            };
+
+            options.ConfigurationManager = new Microsoft.IdentityModel.Protocols.ConfigurationManager<Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfiguration>(
+                metadataAddress ?? $"{issuer}.well-known/openid-configuration",
+                new Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfigurationRetriever(),
+                docRetriever);
+        }
     });
 
 builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks()
     .AddCheck<SecretsReadinessCheck>("secrets_ready", tags: ["ready"]);
+
+// Register authorization and audit services
+builder.Services.AddSingleton<ISecretsAuthorizationService, SecretsAuthorizationService>();
+builder.Services.AddSingleton<ISecretsAuditLogger, SecretsAuditLogger>();
+
+// Rate limiting configuration
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Default policy for secrets read operations
+    options.AddFixedWindowLimiter("SecretsRead", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 100;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 10;
+    });
+
+    // Stricter limit for write operations
+    options.AddFixedWindowLimiter("SecretsWrite", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 20;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 5;
+    });
+
+    // Very strict limit for rotation operations
+    options.AddFixedWindowLimiter("SecretsRotate", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 5;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 2;
+    });
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retry)
+            ? (int)retry.TotalSeconds
+            : 60;
+
+        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = "Too many requests. Please try again later.",
+            retryAfterSeconds = retryAfter
+        }, token);
+    };
+});
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
@@ -138,6 +224,7 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // Standard service endpoints
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Secrets", message = SecretsHello.Message }));

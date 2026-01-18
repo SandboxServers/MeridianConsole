@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
+using Microsoft.OpenApi;
 using Dhadgar.Identity;
 using Dhadgar.Identity.Authentication;
 using Dhadgar.Identity.Data;
@@ -11,9 +12,11 @@ using Dhadgar.Identity.Options;
 using Dhadgar.Identity.Services;
 using Dhadgar.Identity.Readiness;
 using Dhadgar.Messaging;
+using Dhadgar.ServiceDefaults.Security;
 using MassTransit;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
@@ -38,7 +41,32 @@ using Dhadgar.Identity.Data.Entities;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Dhadgar Identity API",
+        Version = "v1",
+        Description = "Identity and access management API for Meridian Console"
+    });
+
+    // Add JWT Bearer authentication to Swagger UI
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Enter your JWT token"
+    });
+});
+
+// SECURITY: Configure request body size limits to prevent DoS attacks
+builder.ConfigureRequestLimits(options =>
+{
+    options.MaxRequestBodySize = 1_048_576;    // 1 MB default for API requests
+    options.MaxRequestHeadersTotalSize = 32_768; // 32 KB for headers
+    options.MaxRequestLineSize = 8_192;         // 8 KB for request line
+});
 
 builder.Services.AddDbContext<IdentityDbContext>(options =>
 {
@@ -96,6 +124,10 @@ builder.Services.AddScoped<MembershipService>();
 builder.Services.AddScoped<OrganizationSwitchService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<RoleService>();
+builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddTokenCleanupService();
+builder.Services.AddInvitationCleanupService();
 builder.Services.AddHealthChecks()
     .AddCheck<IdentityReadinessCheck>("identity_ready", tags: ["ready"]);
 
@@ -208,6 +240,23 @@ builder.Services.AddRateLimiter(options =>
             });
         }
 
+        // Rate limit invitations: 10/hour per user globally across all orgs
+        // This prevents abuse where a user could spam invites to multiple organizations
+        if (path.Contains("/members/invite", StringComparison.OrdinalIgnoreCase) && context.User?.Identity?.IsAuthenticated == true)
+        {
+            var userId = context.User.FindFirst("sub")?.Value;
+
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                return RateLimitPartition.GetFixedWindowLimiter($"invite:user:{userId}", _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromHours(1),
+                    QueueLimit = 0
+                });
+            }
+        }
+
         if (context.User?.Identity?.IsAuthenticated == true)
         {
             var orgId = context.User.FindFirst("org_id")?.Value;
@@ -260,6 +309,7 @@ else
 }
 
 builder.Services.AddScoped<IIdentityEventPublisher, IdentityEventPublisher>();
+builder.Services.AddSecurityEventLogger();
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -311,6 +361,7 @@ builder.Services.AddOpenIddict()
             "servers:write",
             "nodes:manage",
             "billing:read",
+            "secrets:read",
             "wif");
 
         var useDevelopmentCertificates = builder.Configuration.GetValue<bool>("Auth:UseDevelopmentCertificates");
@@ -450,6 +501,38 @@ builder.Services.AddOpenIddict()
                 identity.AddClaim(OpenIddictConstants.Claims.Subject, context.ClientId);
                 identity.AddClaim(OpenIddictConstants.Claims.ClientId, context.ClientId);
 
+                // Add principal_type claim for service accounts
+                var principalTypeClaim = new Claim("principal_type", "service");
+                principalTypeClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken);
+                identity.AddClaim(principalTypeClaim);
+
+                // Add permission claims based on requested scopes
+                // This enables scope-to-permission mapping for service-to-service calls
+                foreach (var scope in requestedScopes)
+                {
+                    Claim? permissionClaim = null;
+
+                    // Map scopes to permission claims
+                    // e.g., "secrets:read" -> "permission: secrets:read:*"
+                    if (scope.StartsWith("secrets:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        permissionClaim = new Claim("permission", $"{scope}:*");
+                    }
+                    else if (scope.EndsWith(":read", StringComparison.OrdinalIgnoreCase) ||
+                             scope.EndsWith(":write", StringComparison.OrdinalIgnoreCase) ||
+                             scope.EndsWith(":manage", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Generic scope-to-permission mapping for service scopes
+                        permissionClaim = new Claim("permission", scope);
+                    }
+
+                    if (permissionClaim is not null)
+                    {
+                        permissionClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken);
+                        identity.AddClaim(permissionClaim);
+                    }
+                }
+
                 var principal = new ClaimsPrincipal(identity);
                 principal.SetScopes(requestedScopes);
 
@@ -465,6 +548,84 @@ builder.Services.AddOpenIddict()
                 context.SignIn(principal);
             }));
 
+        // Handle refresh token grant - reload permissions from database
+        options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(eventBuilder =>
+            eventBuilder.UseInlineHandler(async context =>
+            {
+                if (context.Request is null || !context.Request.IsRefreshTokenGrantType())
+                {
+                    return;
+                }
+
+                // The refresh token has already been validated by OpenIddict at this point.
+                // We need to reload user permissions from the database to ensure they're current.
+                var httpRequest = OpenIddictServerAspNetCoreHelpers.GetHttpRequest(context.Transaction);
+                var httpContext = httpRequest?.HttpContext;
+                if (httpContext is null)
+                {
+                    context.Reject(OpenIddictConstants.Errors.ServerError, "HTTP context unavailable.");
+                    return;
+                }
+
+                // Prefer the validated principal provided by OpenIddict for refresh token requests
+                // Fall back to transaction properties or HTTP authentication if not available
+                var existingPrincipal = context.Principal
+                    ?? (context.Transaction.Properties.TryGetValue(
+                        OpenIddictServerAspNetCoreConstants.Properties.RefreshTokenPrincipal,
+                        out var principal) ? principal as ClaimsPrincipal : null)
+                    ?? (await httpContext.AuthenticateAsync(
+                        OpenIddictServerAspNetCoreDefaults.AuthenticationScheme) is { Principal: { } p } ? p : null);
+
+                var userIdClaim = existingPrincipal?.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
+                if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    context.Reject(OpenIddictConstants.Errors.InvalidGrant, "Invalid user identity in refresh token.");
+                    return;
+                }
+
+                // Get org_id from existing token if available
+                Guid? orgId = null;
+                var orgIdClaim = existingPrincipal?.FindFirst("org_id")?.Value;
+                if (!string.IsNullOrWhiteSpace(orgIdClaim) && Guid.TryParse(orgIdClaim, out var parsedOrgId))
+                {
+                    orgId = parsedOrgId;
+                }
+
+                // Reload user permissions from database
+                var refreshTokenService = httpContext.RequestServices.GetRequiredService<IRefreshTokenService>();
+                var result = await refreshTokenService.ReloadUserForRefreshAsync(userId, orgId);
+
+                if (result is null)
+                {
+                    context.Reject(
+                        OpenIddictConstants.Errors.InvalidGrant,
+                        "User is no longer active or valid for token refresh.");
+                    return;
+                }
+
+                // Build new claims identity with fresh permissions
+                var identity = result.BuildClaimsIdentity(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+                var newPrincipal = new ClaimsPrincipal(identity);
+
+                // Preserve the scopes from the original token
+                var originalScopes = existingPrincipal?.GetScopes() ?? Enumerable.Empty<string>();
+                newPrincipal.SetScopes(originalScopes);
+
+                // Preserve audiences
+                var originalAudiences = existingPrincipal?.GetAudiences() ?? Enumerable.Empty<string>();
+                if (originalAudiences.Any())
+                {
+                    newPrincipal.SetAudiences(originalAudiences);
+                }
+                else if (!string.IsNullOrWhiteSpace(defaultAudience))
+                {
+                    newPrincipal.SetAudiences(defaultAudience);
+                }
+
+                context.SignIn(newPrincipal);
+            })
+            .SetOrder(100)); // Run after built-in refresh token validation
+
         // Azure WIF compatibility: Replace at+jwt with JWT typ header for WIF access tokens before signing.
         options.AddEventHandler<OpenIddictServerEvents.GenerateTokenContext>(eventBuilder =>
             eventBuilder.UseInlineHandler(AzureWifTokenHandler.ApplyAccessTokenType)
@@ -475,7 +636,40 @@ builder.Services.AddOpenIddict()
         options.UseLocalServer();
         options.UseAspNetCore();
     });
-builder.Services.AddAuthorization();
+// Configure authorization with default policy requiring authenticated users
+// NOTE: FallbackPolicy is NOT used because it blocks OpenIddict's internal endpoints
+// Each endpoint group must explicitly call .RequireAuthorization() as needed
+// The default authentication scheme (OpenIddict validation) handles bearer tokens automatically
+builder.Services.AddAuthorizationBuilder()
+    .SetDefaultPolicy(new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build())
+    .AddPolicy("OrgMember", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim("org_id"))
+    .AddPolicy("OrgAdmin", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim("org_id")
+        .RequireAssertion(ctx =>
+        {
+            var role = ctx.User.FindFirst("role")?.Value;
+            return role is "owner" or "admin";
+        }))
+    .AddPolicy("OrgOwner", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim("org_id")
+        .RequireAssertion(ctx =>
+        {
+            var role = ctx.User.FindFirst("role")?.Value;
+            return role is "owner";
+        }))
+    .AddPolicy("EmailVerified", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(ctx =>
+        {
+            var verified = ctx.User.FindFirst("email_verified")?.Value;
+            return string.Equals(verified, "true", StringComparison.OrdinalIgnoreCase);
+        }));
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
@@ -526,11 +720,15 @@ builder.Services.AddOpenTelemetry()
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// Enable Swagger in Development and Testing environments
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// SECURITY: Handle request size limit exceptions with proper JSON responses
+app.UseRequestLimitsMiddleware();
 
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
@@ -560,17 +758,47 @@ if (autoMigrate)
     await SeedDevOpenIddictClientAsync(app.Services, app.Configuration, app.Logger);
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }));
-app.MapGet("/hello", () => Results.Text(IdentityHello.Message));
-app.MapDhadgarDefaultEndpoints();
-app.MapPost("/exchange", TokenExchangeEndpoint.Handle);
+// Anonymous endpoints (no authentication required)
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }))
+    .WithTags("Health")
+    .WithName("ServiceInfo")
+    .WithDescription("Get service information")
+    .AllowAnonymous();
+app.MapGet("/hello", () => Results.Text(IdentityHello.Message))
+    .WithTags("Health")
+    .WithName("Hello")
+    .WithDescription("Simple hello endpoint")
+    .AllowAnonymous();
+app.MapDhadgarDefaultEndpoints(); // Health checks - already configured as anonymous in ServiceDefaults
 
+// Token exchange endpoint - uses its own validation (Better Auth exchange tokens)
+// This must be anonymous as it's the entry point for authentication
+app.MapPost("/exchange", TokenExchangeEndpoint.Handle)
+    .WithTags("Authentication")
+    .WithName("TokenExchange")
+    .WithDescription("Exchange a Better Auth token for a JWT access token and refresh token")
+    .AllowAnonymous();
+
+// OAuth provider endpoints
 OAuthEndpoints.Map(app);
+
+// Protected API endpoints - explicitly require authenticated user
+// Note: Individual endpoints within each group handle specific authorization via EndpointHelpers
 OrganizationEndpoints.Map(app);
 MembershipEndpoints.Map(app);
 UserEndpoints.Map(app);
 RoleEndpoints.Map(app);
+MfaPolicyEndpoints.Map(app);
+ActivityEndpoints.Map(app);
 SearchEndpoints.Map(app);
+SessionEndpoints.Map(app);
+MeEndpoints.Map(app);
+
+// Internal endpoints for service-to-service communication
+// Note: These should be protected by service auth (client credentials) in production
+InternalEndpoints.Map(app);
+
+// Webhook endpoint - uses signature validation, not JWT auth
 WebhookEndpoint.Map(app);
 
 await app.RunAsync();
@@ -619,6 +847,7 @@ static async Task SeedDevOpenIddictClientAsync(
             OpenIddictConstants.Permissions.Prefixes.Scope + "servers:write",
             OpenIddictConstants.Permissions.Prefixes.Scope + "nodes:manage",
             OpenIddictConstants.Permissions.Prefixes.Scope + "billing:read",
+            OpenIddictConstants.Permissions.Prefixes.Scope + "secrets:read",
             OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
         }
     };

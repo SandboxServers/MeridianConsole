@@ -2166,6 +2166,177 @@ spec:
 
 ---
 
+## Additional Implemented Features
+
+The following features have been implemented and are documented here for completeness.
+
+### Audit Event Logging
+
+The Identity service maintains an audit trail for security-relevant events.
+
+**Entity: `AuditEvent`**
+
+```csharp
+public sealed class AuditEvent
+{
+    public Guid Id { get; set; }
+    public Guid? UserId { get; set; }
+    public Guid? OrganizationId { get; set; }
+    public string EventType { get; set; }  // e.g., "login", "logout", "role_changed"
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+    public string? Details { get; set; }   // JSON for event-specific data
+    public DateTime OccurredAt { get; set; }
+}
+```
+
+**Tracked Events:**
+- `login` - User authentication (token exchange)
+- `logout` - Session revocation
+- `organization_created` - New organization created
+- `membership_invited` - User invited to organization
+- `membership_accepted` - Invitation accepted
+- `membership_removed` - User removed from organization
+- `role_changed` - User's role changed
+- `claim_added` - Custom claim granted
+- `claim_removed` - Custom claim revoked
+- `user_deleted` - User account deleted (via webhook)
+
+**API Endpoint:**
+- `GET /me/activity` - View current user's activity log (paginated)
+
+---
+
+### Session Management
+
+Users can view and revoke active sessions across devices.
+
+**Endpoints:**
+- `GET /me/sessions` - List active sessions
+- `DELETE /me/sessions/{sessionId}` - Revoke a specific session
+
+**Session Data:**
+```json
+{
+  "id": "session-id",
+  "userAgent": "Mozilla/5.0...",
+  "ipAddress": "192.168.1.1",
+  "createdAt": "2026-01-16T12:00:00Z",
+  "lastActiveAt": "2026-01-16T14:30:00Z",
+  "isCurrent": true
+}
+```
+
+**Implementation Notes:**
+- Sessions are tracked via refresh tokens
+- Revoking a session invalidates the associated refresh token
+- Users can revoke all sessions except the current one
+- Session activity is updated on each token refresh
+
+---
+
+### MFA Policy Management
+
+Organizations can configure MFA requirements for their members.
+
+**Endpoints:**
+- `GET /organizations/{id}/mfa-policy` - Get current MFA policy
+- `PATCH /organizations/{id}/mfa-policy` - Update MFA policy
+
+**MFA Policy Options:**
+```json
+{
+  "requireMfa": false,
+  "allowedMethods": ["totp", "passkey", "sms"],
+  "gracePeriodDays": 7,
+  "exemptRoles": []
+}
+```
+
+**Implementation Notes:**
+- MFA policy is stored in `Organization.Settings`
+- Enforcement is handled at the Better Auth layer
+- The `.NET Identity service reads the policy for token claims
+- Users with passkeys registered satisfy MFA requirements
+
+---
+
+### Invitation Management
+
+Comprehensive invitation system with expiration and cleanup.
+
+**Features:**
+- Invitations expire after 7 days by default
+- Users can view pending invitations via `GET /me/invitations`
+- Inviters can withdraw invitations
+- Invitees can reject invitations
+- Background cleanup service marks expired invitations
+
+**Invitation States:**
+- `pending` - Invitation sent, awaiting response
+- `accepted` - User joined the organization
+- `rejected` - User declined the invitation
+- `withdrawn` - Inviter revoked the invitation
+- `expired` - Invitation expired (cleaned up by background service)
+
+**Background Service: `InvitationCleanupService`**
+- Runs periodically (configurable interval)
+- Marks expired invitations as `LeftAt`
+- Logs cleanup statistics
+
+---
+
+### Permission Caching
+
+The `CachedPermissionService` provides in-memory caching of permission calculations to improve performance.
+
+**Cache Behavior:**
+- Permissions cached per user+organization combination
+- Cache duration: 5 minutes (configurable)
+- Cache invalidated on:
+  - Role assignment changes
+  - Custom claim additions/removals
+  - Organization switch
+
+**Implementation:**
+```csharp
+public interface ICachedPermissionService
+{
+    Task<IReadOnlySet<string>> GetPermissionsAsync(Guid userId, Guid organizationId, CancellationToken ct);
+    void InvalidateCache(Guid userId, Guid organizationId);
+}
+```
+
+---
+
+### Search Functionality
+
+Search endpoints for finding organizations, users, and roles.
+
+**Endpoints:**
+- `GET /organizations/search?query=` - Search user's organizations
+- `GET /organizations/{id}/users/search?query=` - Search users in organization
+- `GET /organizations/{id}/roles/search?query=` - Search roles
+
+**Search Behavior:**
+- Case-insensitive matching
+- Searches name, slug, email, and display name fields
+- Uses PostgreSQL `LIKE` with proper escaping
+- Results limited to user's accessible resources
+
+---
+
+### Related Documentation
+
+For detailed API specifications, see:
+- [Identity API Reference](../identity-api-reference.md)
+- [Identity Claims Reference](../identity-claims-reference.md)
+- [Identity Webhooks](../identity-webhooks.md)
+- [OAuth Provider Setup](../identity-oauth-providers.md)
+- [Deployment Runbook](../runbooks/identity-service-deployment.md)
+
+---
+
 ## Summary
 
 This comprehensive implementation plan provides:

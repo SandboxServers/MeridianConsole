@@ -1,0 +1,9 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import ShopLoginPage from '../components/auth/ShopLoginPage';
+// Callback URL is computed at runtime in OAuthButtonGroup using window.location.origin
+---
+
+<AuthLayout title="Sign In | Meridian Console">
+  <ShopLoginPage client:load />
+</AuthLayout>

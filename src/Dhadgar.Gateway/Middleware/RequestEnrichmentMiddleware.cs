@@ -19,7 +19,8 @@ public class RequestEnrichmentMiddleware
         "X-User-Id",
         "X-Client-Type",
         "X-Agent-Id",
-        "X-Roles"
+        "X-Roles",
+        "X-Real-IP"
     };
 
     public RequestEnrichmentMiddleware(RequestDelegate next)
@@ -70,9 +71,25 @@ public class RequestEnrichmentMiddleware
             context.Request.Headers["X-Client-Type"] = clientType;
         }
 
-        // Add client IP for backend services
+        // Extract agent ID (for agent requests)
+        var agentId = context.User.FindFirst("agent_id")?.Value;
+        if (!string.IsNullOrEmpty(agentId))
+        {
+            context.Request.Headers["X-Agent-Id"] = agentId;
+        }
+
+        // Extract roles
+        var roles = context.User.FindAll(System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToArray();
+        if (roles.Length > 0)
+        {
+            context.Request.Headers["X-Roles"] = string.Join(",", roles);
+        }
+
+        // Add client IP for backend services (only if we have a real IP)
         var clientIp = GetClientIpAddress(context);
-        if (!string.IsNullOrEmpty(clientIp))
+        if (clientIp is not null)
         {
             context.Request.Headers["X-Real-IP"] = clientIp;
         }
@@ -83,18 +100,13 @@ public class RequestEnrichmentMiddleware
         await _next(context);
     }
 
-    private static string GetClientIpAddress(HttpContext context)
+    private static string? GetClientIpAddress(HttpContext context)
     {
-        // Check for forwarded header (behind Cloudflare/proxy)
-        var forwardedFor = context.Request.Headers["CF-Connecting-IP"].FirstOrDefault()
-            ?? context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-
-        if (!string.IsNullOrEmpty(forwardedFor))
-        {
-            // Take the first IP (original client)
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        // SECURITY: RemoteIpAddress is already set correctly by ForwardedHeaders middleware
+        // which validates X-Forwarded-For headers against known Cloudflare IP ranges.
+        // Do NOT manually parse CF-Connecting-IP or X-Forwarded-For headers here as that
+        // bypasses the trusted proxy validation and allows IP spoofing attacks.
+        // Returns null if no IP available - don't emit misleading "unknown" header.
+        return context.Connection.RemoteIpAddress?.ToString();
     }
 }
