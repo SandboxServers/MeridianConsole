@@ -3,11 +3,14 @@ using System.Net.Http.Json;
 namespace Dhadgar.Discord.Services;
 
 /// <summary>
-/// Provides Discord credentials from the Secrets service.
+/// Provides Discord credentials from configuration or the Secrets service.
+/// For local dev, use user-secrets: dotnet user-secrets set "Discord:BotToken" "your-token"
+/// In production, credentials are retrieved from the Secrets service.
 /// </summary>
 public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
 {
     private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<DiscordCredentialProvider> _logger;
 
     // Cache credentials in memory after first fetch
@@ -17,9 +20,11 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
 
     public DiscordCredentialProvider(
         HttpClient httpClient,
+        IConfiguration configuration,
         ILogger<DiscordCredentialProvider> logger)
     {
         _httpClient = httpClient;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -28,6 +33,16 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
         if (_botToken is not null)
             return _botToken;
 
+        // Try config first (user-secrets for local dev)
+        var configToken = _configuration["Discord:BotToken"];
+        if (!string.IsNullOrEmpty(configToken))
+        {
+            _logger.LogDebug("Using Discord bot token from configuration");
+            _botToken = configToken;
+            return _botToken;
+        }
+
+        // Fall back to Secrets service
         _botToken = await GetSecretAsync("discord-bot-token", ct);
         return _botToken;
     }
@@ -37,6 +52,14 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
         if (_clientId is not null)
             return _clientId;
 
+        var configId = _configuration["Discord:ClientId"];
+        if (!string.IsNullOrEmpty(configId))
+        {
+            _logger.LogDebug("Using Discord client ID from configuration");
+            _clientId = configId;
+            return _clientId;
+        }
+
         _clientId = await GetSecretAsync("oauth-discord-client-id", ct);
         return _clientId;
     }
@@ -45,6 +68,14 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
     {
         if (_clientSecret is not null)
             return _clientSecret;
+
+        var configSecret = _configuration["Discord:ClientSecret"];
+        if (!string.IsNullOrEmpty(configSecret))
+        {
+            _logger.LogDebug("Using Discord client secret from configuration");
+            _clientSecret = configSecret;
+            return _clientSecret;
+        }
 
         _clientSecret = await GetSecretAsync("oauth-discord-client-secret", ct);
         return _clientSecret;
@@ -75,5 +106,7 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
         }
     }
 
+#pragma warning disable CA1812 // Internal class is instantiated via JSON deserialization
     private sealed record SecretResponse(string Name, string Value);
+#pragma warning restore CA1812
 }

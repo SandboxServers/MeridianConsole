@@ -39,6 +39,8 @@ public sealed class AllowedSecretsOptions
     /// </summary>
     public List<string> OAuth { get; set; } =
     [
+        // Discord bot token for internal admin notifications
+        "discord-bot-token",
         // Better Auth supported providers
         "oauth-facebook-app-id",
         "oauth-facebook-app-secret",

@@ -131,9 +131,9 @@ var commandHandler = app.Services.GetRequiredService<SlashCommandHandler>();
 commandHandler.Register(botService.Client);
 
 // Basic endpoints
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Discord", message = Hello.Message }))
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Discord", message = Dhadgar.Discord.Hello.Message }))
     .WithTags("Health").WithName("DiscordServiceInfo");
-app.MapGet("/hello", () => Results.Text(Hello.Message))
+app.MapGet("/hello", () => Results.Text(Dhadgar.Discord.Hello.Message))
     .WithTags("Health").WithName("DiscordHello");
 app.MapGet("/healthz", () =>
 {

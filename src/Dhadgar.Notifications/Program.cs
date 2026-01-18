@@ -112,9 +112,9 @@ if (app.Environment.IsDevelopment())
 }
 
 // Basic endpoints
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Notifications", message = Hello.Message }))
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Notifications", message = Dhadgar.Notifications.Hello.Message }))
     .WithTags("Health").WithName("NotificationsServiceInfo");
-app.MapGet("/hello", () => Results.Text(Hello.Message))
+app.MapGet("/hello", () => Results.Text(Dhadgar.Notifications.Hello.Message))
     .WithTags("Health").WithName("NotificationsHello");
 app.MapDhadgarDefaultEndpoints();
 
