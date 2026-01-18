@@ -1,25 +1,17 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.Build.NoTargets/3.7.56">
   <!--
     This is a "shim" project that integrates the Astro/Node.js build into the .NET solution.
     It doesn't compile any .NET code - instead it invokes npm commands during build.
     This allows `dotnet build` to build the entire solution including this Node.js project.
+
+    Scope is a static site (Azure Static Web Apps) for documentation.
+
+    Using Microsoft.Build.NoTargets SDK to prevent any .NET output (no dll, pdb, deps.json).
   -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <AssemblyName>Dhadgar.Scope</AssemblyName>
-    <RootNamespace>Dhadgar.Scope</RootNamespace>
-
-    <!-- Don't try to compile any code - this is a Node.js project -->
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
-    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
-
-    <!-- Prevent warning about no compile items -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-    <NoWarn>$(NoWarn);CA1016</NoWarn>
 
     <!-- Node.js build configuration -->
     <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
