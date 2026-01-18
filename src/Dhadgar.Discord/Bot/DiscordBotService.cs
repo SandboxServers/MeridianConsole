@@ -14,6 +14,7 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<DiscordBotService> _logger;
     private readonly DiscordSocketClient _client;
+    private volatile bool _commandsRegistered;
 
     public DiscordBotService(
         IDiscordCredentialProvider credentialProvider,
@@ -132,6 +133,13 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
 
     private async Task RegisterSlashCommandsAsync()
     {
+        // Guard against repeated registration on reconnects
+        if (_commandsRegistered)
+        {
+            _logger.LogDebug("Slash commands already registered, skipping");
+            return;
+        }
+
         _logger.LogInformation("Registering admin slash commands...");
 
         var commands = new List<SlashCommandBuilder>
@@ -154,6 +162,7 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
             // Use bulk registration for efficiency (single API call)
             var builtCommands = commands.Select(c => c.Build()).ToArray();
             await _client.BulkOverwriteGlobalApplicationCommandsAsync(builtCommands);
+            _commandsRegistered = true;
 
             _logger.LogInformation("Registered {Count} admin slash commands", builtCommands.Length);
         }

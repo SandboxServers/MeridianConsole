@@ -130,9 +130,8 @@ app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Discord", message = Dh
     .WithTags("Health").WithName("DiscordServiceInfo");
 app.MapGet("/hello", () => Results.Text(Dhadgar.Discord.Hello.Message))
     .WithTags("Health").WithName("DiscordHello");
-app.MapGet("/healthz", () =>
+app.MapGet("/healthz", (DiscordBotService bot) =>
 {
-    var bot = app.Services.GetRequiredService<DiscordBotService>();
     var botStatus = bot.Client.ConnectionState.ToString();
     return Results.Ok(new { service = "Dhadgar.Discord", status = "ok", botStatus });
 }).WithTags("Health").WithName("DiscordHealthCheck");
@@ -144,9 +143,12 @@ app.MapGet("/api/v1/discord/logs", async (
     DiscordDbContext db,
     CancellationToken ct) =>
 {
+    // Clamp limit to prevent oversized queries (max 100)
+    var safeLimit = Math.Clamp(limit ?? 50, 1, 100);
+
     var logs = await db.NotificationLogs
         .OrderByDescending(l => l.CreatedAtUtc)
-        .Take(limit ?? 50)
+        .Take(safeLimit)
         .ToListAsync(ct);
 
     return Results.Ok(logs);

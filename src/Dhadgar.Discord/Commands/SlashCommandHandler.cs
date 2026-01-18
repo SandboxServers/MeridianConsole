@@ -76,9 +76,17 @@ public sealed class SlashCommandHandler
             _logger.LogError(ex, "Error handling admin command /{Command}", command.Data.Name);
 
             // Don't leak exception details to Discord - log internally only
-            await command.RespondAsync(
-                embed: BuildErrorEmbed("An internal error occurred. Check logs for details."),
-                ephemeral: true);
+            var errorEmbed = BuildErrorEmbed("An internal error occurred. Check logs for details.");
+
+            // Use FollowupAsync if interaction was deferred, RespondAsync otherwise
+            if (command.HasResponded)
+            {
+                await command.FollowupAsync(embed: errorEmbed, ephemeral: true);
+            }
+            else
+            {
+                await command.RespondAsync(embed: errorEmbed, ephemeral: true);
+            }
         }
     }
 

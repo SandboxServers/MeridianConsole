@@ -133,9 +133,12 @@ app.MapGet("/api/v1/notifications/logs", async (
         query = query.Where(l => l.Status == status);
     }
 
+    // Clamp limit to prevent oversized queries (max 100)
+    var safeLimit = Math.Clamp(limit ?? 50, 1, 100);
+
     var logs = await query
         .OrderByDescending(l => l.CreatedAtUtc)
-        .Take(limit ?? 50)
+        .Take(safeLimit)
         .ToListAsync(ct);
 
     return Results.Ok(logs);
