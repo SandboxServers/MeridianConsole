@@ -321,19 +321,23 @@ var app = builder.Build();
 // 0. ForwardedHeaders MUST run first to set correct RemoteIpAddress before any other middleware
 app.UseForwardedHeaders();
 
-// 1. Security headers (earliest to apply to all responses)
+// 1. CORS preflight handler - short-circuit OPTIONS requests immediately
+// This handles preflight before any other middleware can interfere
+app.UseMiddleware<CorsPreflightMiddleware>();
+
+// 2. Security headers (earliest to apply to all responses)
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-// 2. Correlation ID tracking (needed by all downstream middleware)
+// 3. Correlation ID tracking (needed by all downstream middleware)
 app.UseMiddleware<CorrelationMiddleware>();
 
-// 3. Problem Details exception handler (catch exceptions early)
+// 4. Problem Details exception handler (catch exceptions early)
 app.UseMiddleware<ProblemDetailsMiddleware>();
 
-// 4. Request logging (wraps downstream pipeline)
+// 5. Request logging (wraps downstream pipeline)
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-// 5. CORS (before authentication/authorization)
+// 6. CORS (for non-preflight requests)
 app.UseCors(CorsConfiguration.PolicyName);
 
 // 6. Authentication/authorization
