@@ -125,11 +125,6 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-// Register slash command handler
-var botService = app.Services.GetRequiredService<DiscordBotService>();
-var commandHandler = app.Services.GetRequiredService<SlashCommandHandler>();
-commandHandler.Register(botService.Client);
-
 // Basic endpoints
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Discord", message = Dhadgar.Discord.Hello.Message }))
     .WithTags("Health").WithName("DiscordServiceInfo");

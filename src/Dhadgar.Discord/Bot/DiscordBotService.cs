@@ -11,14 +11,17 @@ namespace Dhadgar.Discord.Bot;
 public sealed class DiscordBotService : IHostedService, IAsyncDisposable
 {
     private readonly IDiscordCredentialProvider _credentialProvider;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<DiscordBotService> _logger;
     private readonly DiscordSocketClient _client;
 
     public DiscordBotService(
         IDiscordCredentialProvider credentialProvider,
+        IServiceProvider serviceProvider,
         ILogger<DiscordBotService> logger)
     {
         _credentialProvider = credentialProvider;
+        _serviceProvider = serviceProvider;
         _logger = logger;
 
         var config = new DiscordSocketConfig
@@ -43,6 +46,10 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
         _client.Log += OnLogAsync;
         _client.Ready += OnReadyAsync;
         _client.Disconnected += OnDisconnectedAsync;
+
+        // Register slash command handler
+        var commandHandler = _serviceProvider.GetRequiredService<Commands.SlashCommandHandler>();
+        commandHandler.Register(_client);
 
         try
         {
