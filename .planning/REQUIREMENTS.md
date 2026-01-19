@@ -1,6 +1,6 @@
 # Requirements: PR #39 Feedback Resolution
 
-**Defined:** 2026-01-19
+**Defined:** 2025-01-19
 **Core Value:** All CodeRabbit review feedback addressed with no regressions
 
 ## v1 Requirements
@@ -33,7 +33,7 @@ Requirements for this work. Each maps to roadmap phases.
 
 ### Documentation & Cleanup
 
-- [ ] **DOC-01**: Fix capitalization in sections.json (Rabbitmq → RabbitMQ, Mvp → MVP)
+- [ ] **DOC-01**: Fix capitalization in sections.json (Rabbitmq -> RabbitMQ, Mvp -> MVP)
 
 ### API Improvements
 
@@ -57,6 +57,8 @@ None — this is a focused PR feedback resolution.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PKG-01 | Phase 1 | Pending |
+| FE-01 | Phase 1 | Pending |
+| DOC-01 | Phase 1 | Pending |
 | DB-01 | Phase 2 | Pending |
 | DB-02 | Phase 2 | Pending |
 | DB-03 | Phase 2 | Pending |
@@ -64,15 +66,13 @@ None — this is a focused PR feedback resolution.
 | HTTP-01 | Phase 3 | Pending |
 | HTTP-02 | Phase 3 | Pending |
 | MSG-01 | Phase 3 | Pending |
-| FE-01 | Phase 4 | Pending |
-| DOC-01 | Phase 4 | Pending |
 | API-01 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 11 total
 - Mapped to phases: 11
-- Unmapped: 0 ✓
+- Unmapped: 0
 
 ---
-*Requirements defined: 2026-01-19*
-*Last updated: 2026-01-19 after initialization*
+*Requirements defined: 2025-01-19*
+*Last updated: 2025-01-19 after roadmap creation*
