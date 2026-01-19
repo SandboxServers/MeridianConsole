@@ -2,19 +2,37 @@ using Dhadgar.Contracts.Identity;
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Services;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Dhadgar.Identity.Tests;
 
-public sealed class InvitationWorkflowTests
+public sealed class InvitationWorkflowTests : IDisposable
 {
+    // Use SQLite in-memory for ExecuteUpdateAsync support
+    private readonly SqliteConnection _connection;
+
+    public InvitationWorkflowTests()
+    {
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+
+        // Create schema once for all tests using this connection
+        using var context = CreateContext();
+        context.Database.EnsureCreated();
+    }
+
+    public void Dispose()
+    {
+        _connection.Dispose();
+    }
+
     [Fact]
     public async Task InviteAsync_sets_expiration_date()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -40,7 +58,6 @@ public sealed class InvitationWorkflowTests
     public async Task AcceptInviteAsync_fails_for_expired_invitation()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -75,7 +92,6 @@ public sealed class InvitationWorkflowTests
     public async Task AcceptInviteAsync_clears_expiration_on_success()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -110,7 +126,6 @@ public sealed class InvitationWorkflowTests
     public async Task RejectInviteAsync_marks_invitation_as_left()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -149,7 +164,6 @@ public sealed class InvitationWorkflowTests
     public async Task RejectInviteAsync_publishes_rejected_event()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -184,7 +198,6 @@ public sealed class InvitationWorkflowTests
     public async Task RejectInviteAsync_fails_for_expired_invitation()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -219,7 +232,6 @@ public sealed class InvitationWorkflowTests
     public async Task WithdrawInviteAsync_marks_invitation_as_left()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -256,7 +268,6 @@ public sealed class InvitationWorkflowTests
     public async Task WithdrawInviteAsync_publishes_withdrawn_event()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -291,7 +302,6 @@ public sealed class InvitationWorkflowTests
     public async Task WithdrawInviteAsync_fails_for_nonexistent_invitation()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var org = await SeedOrganizationAsync(context, owner);
 
@@ -312,7 +322,6 @@ public sealed class InvitationWorkflowTests
     public async Task GetPendingInvitationsForUserAsync_returns_only_pending_invitations()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org1 = await SeedOrganizationAsync(context, owner);
@@ -358,7 +367,6 @@ public sealed class InvitationWorkflowTests
     public async Task GetPendingInvitationsForUserAsync_excludes_expired_invitations()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee = await SeedUserAsync(context, "invitee@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -387,11 +395,10 @@ public sealed class InvitationWorkflowTests
         Assert.Empty(invitations);
     }
 
-    [Fact(Skip = "ExecuteUpdateAsync not supported by in-memory provider")]
+    [Fact]
     public async Task MarkExpiredInvitationsAsync_marks_expired_invitations()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var invitee1 = await SeedUserAsync(context, "invitee1@example.com");
         var invitee2 = await SeedUserAsync(context, "invitee2@example.com");
@@ -432,19 +439,22 @@ public sealed class InvitationWorkflowTests
 
         Assert.Equal(1, expiredCount);
 
+        // Use AsNoTracking to get fresh data from database after ExecuteUpdateAsync
         var expired = await context.UserOrganizations
+            .AsNoTracking()
             .SingleAsync(uo => uo.UserId == invitee1.Id);
         Assert.NotNull(expired.LeftAt);
 
         var valid = await context.UserOrganizations
+            .AsNoTracking()
             .SingleAsync(uo => uo.UserId == invitee2.Id);
         Assert.Null(valid.LeftAt);
     }
 
-    private static IdentityDbContext CreateContext()
+    private IdentityDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseSqlite(_connection)
             .Options;
 
         return new IdentityDbContext(options);

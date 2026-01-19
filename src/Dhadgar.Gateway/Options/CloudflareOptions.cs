@@ -32,12 +32,19 @@ public class CloudflareOptions
     /// Used when dynamic fetch is disabled or fails on startup.
     /// See https://www.cloudflare.com/ips-v4
     /// </summary>
+    // CA1819: Array property is required for IConfiguration binding compatibility.
+    // Options pattern requires mutable arrays for section binding to work correctly.
+#pragma warning disable CA1819
     public string[] FallbackIPv4Ranges { get; set; } = [];
+#pragma warning restore CA1819
 
     /// <summary>
     /// Fallback IPv6 ranges for offline/air-gapped scenarios.
     /// Used when dynamic fetch is disabled or fails on startup.
     /// See https://www.cloudflare.com/ips-v6
     /// </summary>
+    // CA1819: Array property is required for IConfiguration binding compatibility.
+#pragma warning disable CA1819
     public string[] FallbackIPv6Ranges { get; set; } = [];
+#pragma warning restore CA1819
 }

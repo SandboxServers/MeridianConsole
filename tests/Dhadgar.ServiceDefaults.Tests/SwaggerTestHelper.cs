@@ -34,7 +34,7 @@ public static class SwaggerTestHelper
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         // Assert - Content type is JSON
-        Assert.Contains("application/json", response.Content.Headers.ContentType?.MediaType ?? "");
+        Assert.Contains("application/json", response.Content.Headers.ContentType?.MediaType ?? "", StringComparison.Ordinal);
 
         // Assert - Response is valid JSON
         var content = await response.Content.ReadAsStringAsync();
@@ -78,7 +78,7 @@ public static class SwaggerTestHelper
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("text/html", response.Content.Headers.ContentType?.MediaType ?? "");
+        Assert.Contains("text/html", response.Content.Headers.ContentType?.MediaType ?? "", StringComparison.Ordinal);
 
         var content = await response.Content.ReadAsStringAsync();
         Assert.Contains("swagger", content, StringComparison.OrdinalIgnoreCase);

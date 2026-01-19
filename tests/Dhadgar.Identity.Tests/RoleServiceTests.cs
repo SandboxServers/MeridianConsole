@@ -10,9 +10,10 @@ namespace Dhadgar.Identity.Tests;
 /// <summary>
 /// Tests for RoleService, particularly privilege escalation prevention.
 /// </summary>
-public sealed class RoleServiceTests
+public sealed class RoleServiceTests : IDisposable
 {
     private readonly IdentityDbContext _dbContext;
+    private bool _disposed;
     private readonly TimeProvider _timeProvider;
     private readonly RoleService _roleService;
     private readonly PermissionService _permissionService;
@@ -326,5 +327,14 @@ public sealed class RoleServiceTests
         // Assert: Should succeed (system roles don't check permission subset for owners)
         Assert.True(result.Success);
         Assert.Equal("admin", result.Value?.Role);
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _dbContext.Dispose();
+            _disposed = true;
+        }
     }
 }

@@ -42,7 +42,10 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
         builder.Entity<User>().HasQueryFilter(u => u.DeletedAt == null);
         builder.Entity<Organization>().HasQueryFilter(o => o.DeletedAt == null);
 
-        if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
+        // InMemory and SQLite providers can't handle Dictionary<string, string> as JSON
+        // Only PostgreSQL supports this via its JSONB type
+        if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true ||
+            Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
         {
             builder.Entity<LinkedAccount>().OwnsOne(la => la.ProviderMetadata, metadata =>
             {
@@ -50,6 +53,15 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
             });
 
             // Note: Organization.Settings uses a value converter (not OwnsOne) configured in OrganizationConfiguration
+
+            // SQLite doesn't support PostgreSQL's xmin row version column, so use a regular column with default value
+            builder.Entity<User>().Property(u => u.Version)
+                .HasDefaultValue(0u)
+                .ValueGeneratedOnAddOrUpdate();
+
+            builder.Entity<Organization>().Property(o => o.Version)
+                .HasDefaultValue(0u)
+                .ValueGeneratedOnAddOrUpdate();
         }
 
         SeedClaimDefinitions(builder);

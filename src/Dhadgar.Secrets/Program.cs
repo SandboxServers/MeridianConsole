@@ -136,7 +136,7 @@ builder.Services.AddRateLimiter(options =>
             ? (int)retry.TotalSeconds
             : 60;
 
-        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         await context.HttpContext.Response.WriteAsJsonAsync(new
         {

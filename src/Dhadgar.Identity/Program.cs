@@ -88,7 +88,11 @@ builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection("Web
 // Create signing key provider early so it can be used by both JwtService and OpenIddict
 var authOptions = builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
 using var tempLoggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
+// CA2000: SigningKeyProvider implements IDisposable and is registered as singleton.
+// The DI container will dispose it when the application shuts down.
+#pragma warning disable CA2000
 var signingKeyProvider = new SigningKeyProvider(authOptions, builder.Environment, tempLoggerFactory.CreateLogger<SigningKeyProvider>());
+#pragma warning restore CA2000
 builder.Services.AddSingleton<ISigningKeyProvider>(signingKeyProvider);
 
 builder.Services.AddSingleton(TimeProvider.System);

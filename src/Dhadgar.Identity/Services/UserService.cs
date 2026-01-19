@@ -492,8 +492,10 @@ public sealed class UserService
             .Where(t => t.UserId == userId && t.OrganizationId == organizationId && t.RevokedAt == null)
             .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAt, now), ct);
 
+        // Check for other active memberships, excluding the one we just deactivated
+        // Need to exclude by organizationId since the database hasn't been updated yet
         var otherMembershipsExist = await _dbContext.UserOrganizations
-            .AnyAsync(uo => uo.UserId == userId && uo.LeftAt == null, ct);
+            .AnyAsync(uo => uo.UserId == userId && uo.OrganizationId != organizationId && uo.LeftAt == null, ct);
 
         if (!otherMembershipsExist)
         {
@@ -562,7 +564,9 @@ public sealed class UserService
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
+        // Need to bypass the global query filter (DeletedAt == null) to find users pending deletion
         var user = await _dbContext.Users
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt != null && u.DeletedAt > now, ct);
 
         if (user is null)

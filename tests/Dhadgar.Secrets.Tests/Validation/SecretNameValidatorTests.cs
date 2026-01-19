@@ -95,7 +95,7 @@ public class SecretNameValidatorTests
         var result = SecretNameValidator.Validate(name);
 
         Assert.False(result.IsValid);
-        Assert.Contains("127", result.ErrorMessage);
+        Assert.Contains("127", result.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]
