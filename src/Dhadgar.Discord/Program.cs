@@ -7,6 +7,7 @@ using Dhadgar.Discord.Services;
 using Dhadgar.Messaging;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Logs;
@@ -92,8 +93,12 @@ builder.Services.AddHttpClient<IPlatformHealthService, PlatformHealthService>();
 
 // Discord bot
 builder.Services.AddSingleton<DiscordBotService>();
+builder.Services.AddSingleton<IDiscordBotService>(sp => sp.GetRequiredService<DiscordBotService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscordBotService>());
 builder.Services.AddSingleton<SlashCommandHandler>();
+
+// Admin API key authentication for internal endpoints
+builder.Services.AddAdminApiKeyAuthentication(builder.Configuration);
 
 // MassTransit
 builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
@@ -109,6 +114,10 @@ app.UseMeridianSwagger();
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
+
+// Authentication and authorization
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Auto-migrate in dev
 if (app.Environment.IsDevelopment())
@@ -130,15 +139,18 @@ app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Discord", message = Dh
     .WithTags("Health").WithName("DiscordServiceInfo");
 app.MapGet("/hello", () => Results.Text(Dhadgar.Discord.Hello.Message))
     .WithTags("Health").WithName("DiscordHello");
-app.MapGet("/healthz", (DiscordBotService bot) =>
+app.MapGet("/healthz", (IDiscordBotService bot) =>
 {
-    var botStatus = bot.Client.ConnectionState.ToString();
+    var botStatus = bot.ConnectionState.ToString();
     return Results.Ok(new { service = "Dhadgar.Discord", status = "ok", botStatus });
 }).WithTags("Health").WithName("DiscordHealthCheck");
 
-// Admin endpoints - Internal only, not exposed through Gateway
-// TODO: Add authentication when exposed publicly (currently internal service-to-service only)
-app.MapGet("/api/v1/discord/logs", async (
+// Admin endpoints - Protected by API key authentication
+var adminGroup = app.MapGroup("/api/v1")
+    .WithTags("Admin")
+    .RequireAuthorization("AdminApi");
+
+adminGroup.MapGet("/discord/logs", async (
     int? limit,
     DiscordDbContext db,
     CancellationToken ct) =>
@@ -152,16 +164,15 @@ app.MapGet("/api/v1/discord/logs", async (
         .ToListAsync(ct);
 
     return Results.Ok(logs);
-}).WithTags("Admin").WithName("GetDiscordLogs");
+}).WithName("GetDiscordLogs");
 
-// Platform health check endpoint
-app.MapGet("/api/v1/platform/health", async (
+adminGroup.MapGet("/platform/health", async (
     IPlatformHealthService healthService,
     CancellationToken ct) =>
 {
     var status = await healthService.CheckAllServicesAsync(ct);
     return Results.Ok(status);
-}).WithTags("Admin").WithName("GetPlatformHealth");
+}).WithName("GetPlatformHealth");
 
 app.Run();
 

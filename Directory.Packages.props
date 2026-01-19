@@ -32,6 +32,7 @@
 
     <!-- Email -->
     <PackageVersion Include="SendGrid" Version="9.29.3" />
+    <PackageVersion Include="Microsoft.Graph" Version="5.78.0" />
 
     <!-- Observability -->
     <PackageVersion Include="OpenTelemetry" Version="1.14.0" />

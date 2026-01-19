@@ -8,7 +8,7 @@ namespace Dhadgar.Discord.Bot;
 /// Hosted service that manages the Discord bot lifecycle.
 /// This is for internal admin use - team notifications and commands.
 /// </summary>
-public sealed class DiscordBotService : IHostedService, IAsyncDisposable
+public sealed class DiscordBotService : IHostedService, IAsyncDisposable, IDiscordBotService
 {
     private readonly IDiscordCredentialProvider _credentialProvider;
     private readonly IServiceProvider _serviceProvider;
@@ -39,6 +39,11 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
     /// Gets the Discord client for use by other services.
     /// </summary>
     public DiscordSocketClient Client => _client;
+
+    /// <summary>
+    /// Gets the current connection state of the bot.
+    /// </summary>
+    public ConnectionState ConnectionState => _client.ConnectionState;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {

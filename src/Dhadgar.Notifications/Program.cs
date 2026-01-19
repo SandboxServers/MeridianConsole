@@ -5,6 +5,7 @@ using Dhadgar.Notifications.Data;
 using Dhadgar.Notifications.Services;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Logs;
@@ -78,6 +79,10 @@ builder.Services.AddOpenTelemetry()
 
 // Services
 builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+builder.Services.AddSingleton<IEmailProvider, Office365EmailProvider>();
+
+// Admin API key authentication for internal endpoints
+builder.Services.AddAdminApiKeyAuthentication(builder.Configuration);
 
 // MassTransit with consumers
 builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
@@ -85,6 +90,7 @@ builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
     x.AddConsumer<ServerStartedConsumer>();
     x.AddConsumer<ServerStoppedConsumer>();
     x.AddConsumer<ServerCrashedConsumer>();
+    x.AddConsumer<SendEmailNotificationConsumer>();
 });
 
 var app = builder.Build();
@@ -95,6 +101,10 @@ app.UseMeridianSwagger();
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
+
+// Authentication and authorization
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Auto-migrate in dev
 if (app.Environment.IsDevelopment())
@@ -118,9 +128,12 @@ app.MapGet("/hello", () => Results.Text(Dhadgar.Notifications.Hello.Message))
     .WithTags("Health").WithName("NotificationsHello");
 app.MapDhadgarDefaultEndpoints();
 
-// Admin endpoint - Internal only, not exposed through Gateway
-// TODO: Add authentication when exposed publicly (currently internal service-to-service only)
-app.MapGet("/api/v1/notifications/logs", async (
+// Admin endpoints - Protected by API key authentication
+var adminGroup = app.MapGroup("/api/v1")
+    .WithTags("Admin")
+    .RequireAuthorization("AdminApi");
+
+adminGroup.MapGet("/notifications/logs", async (
     int? limit,
     string? status,
     NotificationsDbContext db,
@@ -142,7 +155,7 @@ app.MapGet("/api/v1/notifications/logs", async (
         .ToListAsync(ct);
 
     return Results.Ok(logs);
-}).WithTags("Admin").WithName("GetNotificationLogs");
+}).WithName("GetNotificationLogs");
 
 app.Run();
 
