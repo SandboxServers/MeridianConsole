@@ -27,8 +27,8 @@ export default function CallbackHandler() {
 
         if (tokens) {
           setState('success');
-          // Redirect to dashboard
-          window.location.href = '/dashboard';
+          // Redirect to profile page after successful login
+          window.location.href = '/profile';
         } else {
           // Check if there's a session without tokens (provider might not be fully configured)
           const session = await authClient.getSession();
@@ -112,7 +112,7 @@ export default function CallbackHandler() {
           ACCESS GRANTED
         </h1>
         <p className="text-text-secondary font-mono text-sm">
-          Redirecting to dashboard...
+          Redirecting...
         </p>
       </div>
     </div>

@@ -91,6 +91,35 @@ async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
   }
 }
 
+// Identity API types
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string | null;
+  emailVerified: boolean;
+  preferredOrganizationId: string | null;
+  hasPasskeysRegistered: boolean;
+  createdAt: string;
+  lastAuthenticatedAt: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+  joinedAt: string;
+  isPreferred: boolean;
+}
+
+export interface LinkedAccount {
+  id: string;
+  provider: string;
+  providerDisplayName: string | null;
+  linkedAt: string;
+  lastUsedAt: string | null;
+}
+
 // Convenience methods
 export const api = {
   get<T>(path: string, options?: ApiRequestOptions) {
@@ -123,5 +152,28 @@ export const api = {
 
   delete<T>(path: string, options?: ApiRequestOptions) {
     return apiClient<T>(path, { ...options, method: 'DELETE' });
+  },
+};
+
+// Identity API helpers
+export const identityApi = {
+  async getProfile(): Promise<UserProfile | null> {
+    const result = await api.get<UserProfile>('/api/v1/identity/me');
+    return result.data || null;
+  },
+
+  async getOrganizations(): Promise<Organization[]> {
+    const result = await api.get<{ organizations: Organization[] }>('/api/v1/identity/me/organizations');
+    return result.data?.organizations || [];
+  },
+
+  async getLinkedAccounts(): Promise<LinkedAccount[]> {
+    const result = await api.get<{ linkedAccounts: LinkedAccount[] }>('/api/v1/identity/me/linked-accounts');
+    return result.data?.linkedAccounts || [];
+  },
+
+  async getPermissions(): Promise<string[]> {
+    const result = await api.get<{ permissions: string[] }>('/api/v1/identity/me/permissions');
+    return result.data?.permissions || [];
   },
 };
