@@ -450,6 +450,12 @@ builder.Services.AddOpenIddict()
             var signingKey = CreateSigningKey(signingCert);
             options.AddSigningKey(signingKey)
                 .AddEncryptionCertificate(encryptionCert);
+
+            // Disable access token encryption so:
+            // 1. Services can validate tokens without decryption keys (using JWKS)
+            // 2. WIF tokens work with Azure AD (which rejects encrypted assertions)
+            // The encryption cert is still available for ID tokens or future use.
+            options.DisableAccessTokenEncryption();
         }
         catch (Exception ex)
         {

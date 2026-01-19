@@ -83,6 +83,8 @@ public sealed class TokenExchangeService
 
         var externalAuthId = principal.FindFirstValue("sub");
         var email = principal.FindFirstValue("email");
+        var name = principal.FindFirstValue("name");
+        var picture = principal.FindFirstValue("picture");
         var jti = principal.FindFirstValue("jti");
         var clientApp = principal.FindFirstValue("client_app");
 
@@ -132,6 +134,8 @@ public sealed class TokenExchangeService
                     NormalizedEmail = normalizedEmail,
                     UserName = email,
                     NormalizedUserName = _lookupNormalizer.NormalizeName(email),
+                    DisplayName = name,
+                    AvatarUrl = picture,
                     EmailConfirmed = false,
                     SecurityStamp = Guid.NewGuid().ToString(),
                     ConcurrencyStamp = Guid.NewGuid().ToString(),
@@ -161,6 +165,16 @@ public sealed class TokenExchangeService
                 user.NormalizedUserName = _lookupNormalizer.NormalizeName(email);
                 user.LastAuthenticatedAt = nowUtc;
                 user.UpdatedAt = nowUtc;
+
+                // Update display name and avatar if provided (allows OAuth provider updates)
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    user.DisplayName = name;
+                }
+                if (!string.IsNullOrWhiteSpace(picture))
+                {
+                    user.AvatarUrl = picture;
+                }
             }
 
             // Check for existing login link - use DbContext directly

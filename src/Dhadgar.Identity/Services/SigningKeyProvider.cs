@@ -46,7 +46,8 @@ public sealed class SigningKeyProvider : ISigningKeyProvider
                 var credential = new DefaultAzureCredential();
                 var secretClient = new SecretClient(new Uri(options.KeyVault!.VaultUri), credential);
                 var secret = secretClient.GetSecret(options.KeyVault.JwtSigningKeyName);
-                var pem = secret.Value.Value;
+                // Handle PEM stored with literal \n instead of actual newlines
+                var pem = secret.Value.Value.Replace("\\n", "\n");
                 var ecdsa = ECDsa.Create();
                 ecdsa.ImportFromPem(pem);
                 logger.LogInformation("Loaded JWT signing key from Key Vault");

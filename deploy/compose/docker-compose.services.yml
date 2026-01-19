@@ -188,6 +188,10 @@ services:
       Auth__Audience: meridian-api
       Auth__MetadataAddress: http://identity:8080/.well-known/openid-configuration
       Auth__InternalBaseUrl: http://identity:8080
+      # Azure credentials for Key Vault access
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
       # Set to "false" to use Key Vault instead of development secrets
       Secrets__UseDevelopmentProvider: ${SECRETS_USE_DEV_PROVIDER:-false}
       Secrets__KeyVaultUri: ${SECRETS_KEYVAULT_URI:-https://mc-oauth.vault.azure.net/}

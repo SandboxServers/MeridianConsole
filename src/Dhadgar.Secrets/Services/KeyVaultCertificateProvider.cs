@@ -1,4 +1,3 @@
-using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using Dhadgar.Secrets.Options;
 using Microsoft.Extensions.Options;
@@ -12,6 +11,7 @@ public sealed class KeyVaultCertificateProvider : ICertificateProvider
 
     public KeyVaultCertificateProvider(
         IOptions<SecretsOptions> options,
+        IWifCredentialProvider credentialProvider,
         ILogger<KeyVaultCertificateProvider> logger)
     {
         _logger = logger;
@@ -22,7 +22,11 @@ public sealed class KeyVaultCertificateProvider : ICertificateProvider
             throw new InvalidOperationException("KeyVaultUri is required for certificate operations.");
         }
 
-        _client = new CertificateClient(new Uri(keyVaultUri), new DefaultAzureCredential());
+        _logger.LogInformation("Initializing KeyVaultCertificateProvider with vault: {KeyVaultUri}", keyVaultUri);
+
+        // Use WIF credential provider (falls back to DefaultAzureCredential if WIF not configured)
+        var credential = credentialProvider.GetCredential();
+        _client = new CertificateClient(new Uri(keyVaultUri), credential);
     }
 
     public async Task<List<CertificateInfo>> ListCertificatesAsync(string? vaultName = null, CancellationToken ct = default)

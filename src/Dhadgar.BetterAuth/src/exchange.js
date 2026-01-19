@@ -68,6 +68,8 @@ export async function createExchangeToken({ user, origin, clientApp }) {
   return await new SignJWT({
     sub: user.id,
     email: user.email,
+    name: user.name || null,
+    picture: user.image || null,
     purpose: "token_exchange",
     client_app: resolvedClientApp
   })
