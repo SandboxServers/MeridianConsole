@@ -1,5 +1,6 @@
 ---
 import BaseLayout from './BaseLayout.astro';
+import { AuthHeader } from '../components/layout';
 
 interface Props {
   title: string;
@@ -47,21 +48,8 @@ const { title } = Astro.props;
             </a>
           </nav>
 
-          <!-- CTA -->
-          <div class="flex items-center gap-4">
-            <a
-              href="/login"
-              class="text-text-secondary hover:text-text-primary transition-colors"
-            >
-              Sign In
-            </a>
-            <a
-              href="/login"
-              class="px-4 py-2 rounded-full bg-cyber-magenta/20 border border-cyber-magenta/50 text-cyber-magenta font-medium transition-all hover:bg-cyber-magenta/30 hover:shadow-glow-magenta"
-            >
-              Get Started
-            </a>
-          </div>
+          <!-- CTA - Auth-aware header -->
+          <AuthHeader client:load />
         </div>
       </div>
     </header>

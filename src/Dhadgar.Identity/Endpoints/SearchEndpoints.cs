@@ -9,17 +9,20 @@ public static class SearchEndpoints
         app.MapGet("/organizations/search", SearchOrganizations)
             .WithTags("Search")
             .WithName("SearchOrganizations")
-            .WithDescription("Search organizations the current user belongs to");
+            .WithDescription("Search organizations the current user belongs to")
+            .RequireAuthorization();
 
         app.MapGet("/organizations/{organizationId:guid}/users/search", SearchUsers)
             .WithTags("Search")
             .WithName("SearchUsers")
-            .WithDescription("Search users within an organization");
+            .WithDescription("Search users within an organization")
+            .RequireAuthorization();
 
         app.MapGet("/organizations/{organizationId:guid}/roles/search", SearchRoles)
             .WithTags("Search")
             .WithName("SearchRoles")
-            .WithDescription("Search roles within an organization");
+            .WithDescription("Search roles within an organization")
+            .RequireAuthorization();
     }
 
     private static async Task<IResult> SearchOrganizations(

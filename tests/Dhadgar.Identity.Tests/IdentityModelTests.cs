@@ -57,17 +57,18 @@ public class IdentityModelTests
     }
 
     [Fact]
-    public void Organization_has_owned_settings()
+    public void Organization_has_settings_with_value_converter()
     {
         using var context = CreateContext();
         var entity = context.Model.FindEntityType(typeof(Organization));
 
         Assert.NotNull(entity);
 
-        var settingsNavigation = entity!.FindNavigation(nameof(Organization.Settings));
+        // Settings is now a property with a JSON value converter (not an owned navigation)
+        var settingsProperty = entity!.FindProperty(nameof(Organization.Settings));
 
-        Assert.NotNull(settingsNavigation);
-        Assert.True(settingsNavigation!.TargetEntityType.IsOwned());
+        Assert.NotNull(settingsProperty);
+        Assert.NotNull(settingsProperty!.GetValueConverter());
     }
 
     [Fact]

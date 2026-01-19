@@ -83,6 +83,8 @@ public sealed class TokenExchangeService
 
         var externalAuthId = principal.FindFirstValue("sub");
         var email = principal.FindFirstValue("email");
+        var name = principal.FindFirstValue("name");
+        var picture = principal.FindFirstValue("picture");
         var jti = principal.FindFirstValue("jti");
         var clientApp = principal.FindFirstValue("client_app");
 
@@ -132,6 +134,8 @@ public sealed class TokenExchangeService
                     NormalizedEmail = normalizedEmail,
                     UserName = email,
                     NormalizedUserName = _lookupNormalizer.NormalizeName(email),
+                    DisplayName = name,
+                    AvatarUrl = picture,
                     EmailConfirmed = false,
                     SecurityStamp = Guid.NewGuid().ToString(),
                     ConcurrencyStamp = Guid.NewGuid().ToString(),
@@ -161,6 +165,16 @@ public sealed class TokenExchangeService
                 user.NormalizedUserName = _lookupNormalizer.NormalizeName(email);
                 user.LastAuthenticatedAt = nowUtc;
                 user.UpdatedAt = nowUtc;
+
+                // Update display name and avatar if provided (allows OAuth provider updates)
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    user.DisplayName = name;
+                }
+                if (!string.IsNullOrWhiteSpace(picture))
+                {
+                    user.AvatarUrl = picture;
+                }
             }
 
             // Check for existing login link - use DbContext directly
@@ -188,18 +202,23 @@ public sealed class TokenExchangeService
 
             if (memberships.Count == 0)
             {
+                // Create org with a pre-generated ID so we can reference it
+                var orgId = Guid.NewGuid();
+
                 activeOrg = new Organization
                 {
+                    Id = orgId,
                     Name = "Default Organization",
                     Slug = $"user-{user.Id:N}",
                     OwnerId = user.Id,
-                    CreatedAt = nowUtc
+                    CreatedAt = nowUtc,
+                    Settings = new OrganizationSettings()  // Explicitly initialize for EF Core JSON mapping
                 };
 
                 membership = new UserOrganization
                 {
                     UserId = user.Id,
-                    Organization = activeOrg,
+                    OrganizationId = orgId,  // Use ID directly to avoid navigation property issues
                     Role = "owner",
                     JoinedAt = nowUtc,
                     IsActive = true
@@ -208,7 +227,7 @@ public sealed class TokenExchangeService
                 _dbContext.Organizations.Add(activeOrg);
                 _dbContext.UserOrganizations.Add(membership);
 
-                user.PreferredOrganizationId = activeOrg.Id;
+                // Don't set PreferredOrganizationId here - will be set after save to avoid circular dependency
             }
             else
             {
@@ -226,10 +245,7 @@ public sealed class TokenExchangeService
                 activeOrg = await _dbContext.Organizations
                     .FirstAsync(o => o.Id == membership.OrganizationId, ct);
 
-                if (user.PreferredOrganizationId != activeOrg.Id)
-                {
-                    user.PreferredOrganizationId = activeOrg.Id;
-                }
+                // Don't set PreferredOrganizationId here - will be set after transaction to keep this save simple
             }
 
             // Single SaveChangesAsync for all changes - ensures atomicity
@@ -276,16 +292,27 @@ public sealed class TokenExchangeService
         }
 
         // Re-fetch user after transaction (strategy.ExecuteAsync doesn't return values cleanly)
-        var normalizedEmailFinal = _lookupNormalizer.NormalizeEmail(email);
         user = await _dbContext.Users.FirstOrDefaultAsync(u => u.ExternalAuthId == externalAuthId, ct);
         if (user is null)
         {
             _logger.LogError("Failed to find user with external auth ID {ExternalAuthId} after transaction.", externalAuthId);
             return TokenExchangeOutcome.Fail("user_not_found_post_transaction");
         }
-        activeOrg = await _dbContext.Organizations.FirstAsync(o => o.Id == user.PreferredOrganizationId, ct);
+
+        // Get the user's first organization membership
         membership = await _dbContext.UserOrganizations
-            .FirstAsync(uo => uo.UserId == user.Id && uo.OrganizationId == activeOrg.Id, ct);
+            .Where(uo => uo.UserId == user.Id && uo.LeftAt == null && uo.IsActive)
+            .OrderBy(uo => uo.JoinedAt)
+            .FirstAsync(ct);
+
+        activeOrg = await _dbContext.Organizations.FirstAsync(o => o.Id == membership.OrganizationId, ct);
+
+        // Set PreferredOrganizationId if not already set (avoids circular dependency during creation)
+        if (!user.PreferredOrganizationId.HasValue || user.PreferredOrganizationId != activeOrg.Id)
+        {
+            user.PreferredOrganizationId = activeOrg.Id;
+            await _dbContext.SaveChangesAsync(ct);
+        }
 
         var permissions = await _permissionService.CalculatePermissionsAsync(user.Id, activeOrg.Id, ct);
 

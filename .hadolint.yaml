@@ -5,12 +5,15 @@
 trustedRegistries:
   - mcr.microsoft.com
   - meridianconsoleacr-etdvg4cthscffqdf.azurecr.io
+  - docker.io
 
 # Rule severity overrides
 # DL3008: Pin versions in apt-get install (warning instead of error for dev)
+# DL3018: Pin versions in apk add (warning - base images are pinned)
 override:
   warning:
     - DL3008
+    - DL3018
 
 # Ignore rules (use sparingly)
 ignored: []

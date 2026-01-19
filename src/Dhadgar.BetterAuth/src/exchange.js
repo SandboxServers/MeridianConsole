@@ -27,6 +27,9 @@ function resolveClientApp({ bodyClientApp, origin, allowedApps }) {
       if (url.hostname === "panel.meridianconsole.com") {
         return "panel";
       }
+      if (url.hostname === "cart.meridianconsole.com") {
+        return "shop";
+      }
       if (url.hostname === "meridianconsole.com" || url.hostname === "www.meridianconsole.com") {
         return "shop";
       }
@@ -65,6 +68,8 @@ export async function createExchangeToken({ user, origin, clientApp }) {
   return await new SignJWT({
     sub: user.id,
     email: user.email,
+    name: user.name || null,
+    picture: user.image || null,
     purpose: "token_exchange",
     client_app: resolvedClientApp
   })

@@ -66,15 +66,20 @@ public static partial class SecretNameValidator
         // but these checks provide defense in depth.
 
         // Path traversal (shouldn't pass regex, but belt-and-suspenders)
-        if (name.Contains("..") || name.Contains('/') || name.Contains('\\'))
+        if (name.Contains("..", StringComparison.Ordinal) ||
+            name.Contains('/', StringComparison.Ordinal) ||
+            name.Contains('\\', StringComparison.Ordinal))
             return true;
 
         // Null bytes
-        if (name.Contains('\0'))
+        if (name.Contains('\0', StringComparison.Ordinal))
             return true;
 
         // While regex blocks these, explicitly check for common injection chars
-        if (name.Contains('\'') || name.Contains(';') || name.Contains('<') || name.Contains('>'))
+        if (name.Contains('\'', StringComparison.Ordinal) ||
+            name.Contains(';', StringComparison.Ordinal) ||
+            name.Contains('<', StringComparison.Ordinal) ||
+            name.Contains('>', StringComparison.Ordinal))
             return true;
 
         return false;
@@ -84,7 +89,7 @@ public static partial class SecretNameValidator
 /// <summary>
 /// Result of secret name validation.
 /// </summary>
-public readonly struct ValidationResult
+public readonly struct ValidationResult : IEquatable<ValidationResult>
 {
     public bool IsValid { get; }
     public string? ErrorMessage { get; }
@@ -97,4 +102,19 @@ public readonly struct ValidationResult
 
     public static ValidationResult Success() => new(true, null);
     public static ValidationResult Failure(string message) => new(false, message);
+
+    public bool Equals(ValidationResult other) =>
+        IsValid == other.IsValid && ErrorMessage == other.ErrorMessage;
+
+    public override bool Equals(object? obj) =>
+        obj is ValidationResult other && Equals(other);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(IsValid, ErrorMessage);
+
+    public static bool operator ==(ValidationResult left, ValidationResult right) =>
+        left.Equals(right);
+
+    public static bool operator !=(ValidationResult left, ValidationResult right) =>
+        !left.Equals(right);
 }

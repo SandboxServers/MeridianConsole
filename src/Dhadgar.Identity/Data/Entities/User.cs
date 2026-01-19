@@ -18,6 +18,9 @@ public sealed class User : IdentityUser<Guid>
     [MaxLength(200)]
     public string? DisplayName { get; set; }
 
+    [MaxLength(500)]
+    public string? AvatarUrl { get; set; }
+
     public bool EmailVerified { get; set; }
 
     /// <summary>

@@ -7,7 +7,8 @@ public static class RoleEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/organizations/{organizationId:guid}/roles")
-            .WithTags("Roles");
+            .WithTags("Roles")
+            .RequireAuthorization();
 
         group.MapGet("", ListRoles)
             .WithName("ListRoles")

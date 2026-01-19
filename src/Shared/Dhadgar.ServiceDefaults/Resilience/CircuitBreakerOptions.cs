@@ -33,11 +33,15 @@ public class CircuitBreakerOptions
     /// <summary>
     /// HTTP status codes that count as failures.
     /// </summary>
+    // CA1819: Array property is required for IConfiguration binding compatibility.
+    // Options pattern requires mutable arrays for section binding to work correctly.
+#pragma warning disable CA1819
     public int[] FailureStatusCodes { get; set; } = [500, 502, 503, 504];
+#pragma warning restore CA1819
 
     /// <summary>
     /// Whether to include the service/cluster name in error responses.
     /// Set to false in production to prevent information disclosure.
     /// </summary>
-    public bool IncludeServiceNameInErrors { get; set; } = false;
+    public bool IncludeServiceNameInErrors { get; set; }
 }

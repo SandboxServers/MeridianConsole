@@ -9,7 +9,8 @@ public static class UserEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/organizations/{organizationId:guid}/users")
-            .WithTags("Users");
+            .WithTags("Users")
+            .RequireAuthorization();
 
         group.MapGet("", ListUsers)
             .WithName("ListUsers")

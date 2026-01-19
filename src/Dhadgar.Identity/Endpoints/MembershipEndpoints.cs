@@ -8,7 +8,8 @@ public static class MembershipEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/organizations/{organizationId:guid}/members")
-            .WithTags("Memberships");
+            .WithTags("Memberships")
+            .RequireAuthorization();
 
         group.MapGet("", ListMembers)
             .WithName("ListMembers")
@@ -30,7 +31,8 @@ public static class MembershipEndpoints
         app.MapDelete("/organizations/{organizationId:guid}/invitations/{targetUserId:guid}", WithdrawInvitation)
             .WithTags("Memberships")
             .WithName("WithdrawInvitation")
-            .WithDescription("Withdraw a pending invitation (inviter revokes)");
+            .WithDescription("Withdraw a pending invitation (inviter revokes)")
+            .RequireAuthorization();
 
         group.MapDelete("/{memberId:guid}", RemoveMember)
             .WithName("RemoveMember")

@@ -13,6 +13,12 @@ public sealed class SecretsOptions
     public string? AzureSubscriptionId { get; set; }
 
     /// <summary>
+    /// Workload Identity Federation configuration for authenticating to Azure.
+    /// When configured, uses WIF instead of client secrets for Key Vault access.
+    /// </summary>
+    public WifOptions? Wif { get; set; }
+
+    /// <summary>
     /// Permission names required to access secrets.
     /// </summary>
     public SecretsPermissionsOptions Permissions { get; set; } = new();
@@ -23,6 +29,37 @@ public sealed class SecretsOptions
     /// This service dispenses OAuth and other application secrets.
     /// </summary>
     public AllowedSecretsOptions AllowedSecrets { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for Workload Identity Federation (WIF) authentication to Azure.
+/// </summary>
+public sealed class WifOptions
+{
+    /// <summary>
+    /// Azure AD tenant ID for the Secrets service app registration.
+    /// </summary>
+    public string TenantId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Azure AD client ID for the Secrets service app registration.
+    /// </summary>
+    public string ClientId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Token endpoint of the Identity service (e.g., http://identity:8080/connect/token).
+    /// </summary>
+    public string IdentityTokenEndpoint { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Client ID for authenticating to the Identity service.
+    /// </summary>
+    public string? ServiceClientId { get; set; }
+
+    /// <summary>
+    /// Client secret for authenticating to the Identity service.
+    /// </summary>
+    public string? ServiceClientSecret { get; set; }
 }
 
 public sealed class SecretsPermissionsOptions

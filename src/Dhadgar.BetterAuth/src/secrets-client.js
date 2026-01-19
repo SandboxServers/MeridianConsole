@@ -263,6 +263,8 @@ export async function getInfrastructureSecrets() {
 /**
  * Loads all required secrets for BetterAuth and sets them as environment variables.
  * This is the main entry point for secret loading at startup.
+ *
+ * @throws {Error} If any required BetterAuth secrets cannot be retrieved
  */
 export async function loadSecrets() {
   console.log("Loading secrets from Secrets Service...");
@@ -278,39 +280,66 @@ export async function loadSecrets() {
   const betterAuthSecrets = await getBetterAuthSecrets();
 
   // Map Key Vault secret names to environment variables
-  const secretMapping = {
+  // All secrets in this mapping are REQUIRED for BetterAuth to function
+  const requiredSecrets = {
     "betterauth-secret": "BETTER_AUTH_SECRET",
     "betterauth-exchange-private-key": "EXCHANGE_TOKEN_PRIVATE_KEY",
   };
 
-  for (const [secretName, envVar] of Object.entries(secretMapping)) {
+  const missingSecrets = [];
+
+  for (const [secretName, envVar] of Object.entries(requiredSecrets)) {
     if (betterAuthSecrets[secretName]) {
       process.env[envVar] = betterAuthSecrets[secretName];
+      console.log(`  ✓ Loaded ${secretName}`);
+    } else {
+      missingSecrets.push(secretName);
+      console.error(`  ✗ Missing required secret: ${secretName}`);
     }
   }
 
-  // Load infrastructure secrets (optional - fallback to env vars)
-  try {
-    const infraSecrets = await getInfrastructureSecrets();
-    if (infraSecrets["postgres-password"]) {
-      const host = process.env.POSTGRES_HOST ?? "localhost";
-      const port = process.env.POSTGRES_PORT ?? "5432";
-      const database = process.env.POSTGRES_DATABASE ?? "dhadgar_platform";
-      const username = process.env.POSTGRES_USERNAME ?? "dhadgar";
-      process.env.DATABASE_URL = `postgresql://${username}:${infraSecrets["postgres-password"]}@${host}:${port}/${database}`;
-    }
-  } catch (error) {
-    console.log("  Infrastructure secrets not available, using env vars...");
+  // Fail fast if any required secrets are missing
+  if (missingSecrets.length > 0) {
+    throw new Error(
+      `BetterAuth cannot start: missing required secrets from Secrets Service: ${missingSecrets.join(", ")}. ` +
+      `Ensure these secrets exist in Key Vault and the Secrets Service is authorized to access them.`
+    );
   }
 
-  // Build DATABASE_URL from env vars if not already set from secrets
-  if (!process.env.DATABASE_URL) {
-    const host = process.env.POSTGRES_HOST ?? "localhost";
-    const port = process.env.POSTGRES_PORT ?? "5432";
-    const database = process.env.POSTGRES_DATABASE ?? "dhadgar_platform";
-    const username = process.env.POSTGRES_USERNAME ?? "dhadgar";
-    const password = process.env.POSTGRES_PASSWORD ?? "dhadgar";
-    process.env.DATABASE_URL = `postgresql://${username}:${password}@${host}:${port}/${database}`;
+  // Build DATABASE_URL from env vars (always used for development, fallback for production)
+  const host = process.env.POSTGRES_HOST ?? "localhost";
+  const port = process.env.POSTGRES_PORT ?? "5432";
+  const database = process.env.POSTGRES_DATABASE ?? "dhadgar_platform";
+  const username = process.env.POSTGRES_USERNAME ?? "dhadgar";
+  const envPassword = process.env.POSTGRES_PASSWORD ?? "dhadgar";
+
+  // Start with env var based URL
+  process.env.DATABASE_URL = `postgresql://${username}:${envPassword}@${host}:${port}/${database}`;
+  console.log(`  Database URL built from env vars: postgresql://${username}:***@${host}:${port}/${database}`);
+
+  // In development, use env vars for infrastructure (docker-compose handles this)
+  // In production, load from Key Vault
+  const isProduction = process.env.NODE_ENV === "production" && !process.env.USE_ENV_DB_PASSWORD;
+  if (!isProduction) {
+    console.log(`  Using env var database password (NODE_ENV=${process.env.NODE_ENV ?? "unset"}, USE_ENV_DB_PASSWORD=${process.env.USE_ENV_DB_PASSWORD ?? "unset"})`);
+  } else {
+    // Try to load infrastructure secrets from Key Vault (production only)
+    try {
+      const infraSecrets = await getInfrastructureSecrets();
+      console.log(`  Infrastructure secrets received: ${Object.keys(infraSecrets).join(", ") || "(none)"}`);
+
+      const kvPassword = infraSecrets["postgres-password"];
+      if (kvPassword && kvPassword !== "PLACEHOLDER-UPDATE-ME" && kvPassword.length > 0) {
+        process.env.DATABASE_URL = `postgresql://${username}:${kvPassword}@${host}:${port}/${database}`;
+        console.log(`  ✓ DATABASE_URL overridden with postgres-password from Key Vault`);
+      } else if (kvPassword) {
+        console.log(`  ⚠ postgres-password from Key Vault is a placeholder or empty, using env var`);
+      } else {
+        console.log(`  postgres-password not in Key Vault, using env var`);
+      }
+    } catch (error) {
+      console.log(`  Infrastructure secrets not available (${error.message}), using env vars...`);
+    }
   }
 
   // Load OAuth secrets

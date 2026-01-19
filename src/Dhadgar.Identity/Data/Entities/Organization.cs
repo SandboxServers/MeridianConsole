@@ -43,5 +43,5 @@ public sealed class OrganizationSettings
     public bool AllowMemberInvites { get; set; } = true;
     public bool RequireEmailVerification { get; set; } = true;
     public int MaxMembers { get; set; } = 10;
-    public Dictionary<string, string> CustomSettings { get; set; } = new();
+    public Dictionary<string, string>? CustomSettings { get; set; }
 }

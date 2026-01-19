@@ -323,6 +323,10 @@ public sealed class ActivityEndpointTests : IClassFixture<IdentityWebApplication
         Assert.Equal(2, content.Events.Count);
     }
 
+    // CA1812: These records are instantiated via JSON deserialization (DeserializeAsync).
+    // The analyzer cannot detect this runtime instantiation pattern.
+#pragma warning disable CA1812
     private sealed record ActivityResponse(IReadOnlyCollection<AuditEvent>? Events, PaginationInfo? Pagination);
     private sealed record PaginationInfo(int Take, int Skip, int Count);
+#pragma warning restore CA1812
 }

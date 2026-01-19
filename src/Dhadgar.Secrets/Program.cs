@@ -136,7 +136,7 @@ builder.Services.AddRateLimiter(options =>
             ? (int)retry.TotalSeconds
             : 60;
 
-        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         await context.HttpContext.Response.WriteAsJsonAsync(new
         {
@@ -193,6 +193,15 @@ builder.Services.AddOpenTelemetry()
         // OTLP export requires explicit endpoint configuration; skipped when not set
     });
 
+// HttpClient for WIF token requests
+builder.Services.AddHttpClient("IdentityWif", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// WIF credential provider (used by KeyVaultSecretProvider)
+builder.Services.AddSingleton<IWifCredentialProvider, WifCredentialProvider>();
+
 var useDevelopmentProvider = builder.Configuration.GetValue<bool>("Secrets:UseDevelopmentProvider");
 
 if (useDevelopmentProvider && builder.Environment.IsDevelopment())
@@ -202,6 +211,7 @@ if (useDevelopmentProvider && builder.Environment.IsDevelopment())
 else
 {
     // Default to Key Vault for non-dev environments or when explicitly configured.
+    // Uses WIF for authentication if configured, otherwise DefaultAzureCredential.
     builder.Services.AddSingleton<ISecretProvider, KeyVaultSecretProvider>();
 }
 
