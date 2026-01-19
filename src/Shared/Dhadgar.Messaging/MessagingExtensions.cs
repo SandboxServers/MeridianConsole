@@ -24,8 +24,25 @@ public static class MessagingExtensions
                     h.Password(pass);
                 });
 
-                // Stable, explicit exchange names (aligns with the scope doc’s meridian.* conventions)
+                // Stable, explicit exchange names (aligns with the scope doc's meridian.* conventions)
                 cfg.MessageTopology.SetEntityNameFormatter(new StaticEntityNameFormatter());
+
+                // Configure retry policies for all endpoints
+                cfg.UseMessageRetry(r =>
+                {
+                    // Exponential backoff: 200ms, 400ms, 800ms, 1.6s, 3.2s (5 retries)
+                    r.Exponential(5,
+                        TimeSpan.FromMilliseconds(200),
+                        TimeSpan.FromSeconds(5),
+                        TimeSpan.FromMilliseconds(200));
+
+                    // Don't retry on validation errors
+                    r.Ignore<ArgumentNullException>();
+                    r.Ignore<ArgumentException>();
+                });
+
+                // In-memory outbox prevents duplicate sends on retry
+                cfg.UseInMemoryOutbox(ctx);
 
                 cfg.ConfigureEndpoints(ctx);
             });

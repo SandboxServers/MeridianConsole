@@ -13,10 +13,13 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
     private readonly IConfiguration _configuration;
     private readonly ILogger<DiscordCredentialProvider> _logger;
 
-    // Cache credentials in memory after first fetch
-    private string? _botToken;
-    private string? _clientId;
-    private string? _clientSecret;
+    // Cache credentials with TTL (30 minutes for secrets, longer for config)
+    private static readonly TimeSpan SecretsCacheDuration = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan ConfigCacheDuration = TimeSpan.FromHours(24);
+
+    private CachedCredential? _botToken;
+    private CachedCredential? _clientId;
+    private CachedCredential? _clientSecret;
 
     public DiscordCredentialProvider(
         HttpClient httpClient,
@@ -30,55 +33,58 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
 
     public async Task<string> GetBotTokenAsync(CancellationToken ct = default)
     {
-        if (_botToken is not null)
-            return _botToken;
+        if (_botToken is not null && !_botToken.IsExpired)
+            return _botToken.Value;
 
         // Try config first (user-secrets for local dev)
         var configToken = _configuration["Discord:BotToken"];
         if (!string.IsNullOrEmpty(configToken))
         {
             _logger.LogDebug("Using Discord bot token from configuration");
-            _botToken = configToken;
-            return _botToken;
+            _botToken = new CachedCredential(configToken, ConfigCacheDuration);
+            return _botToken.Value;
         }
 
         // Fall back to Secrets service
-        _botToken = await GetSecretAsync("discord-bot-token", ct);
-        return _botToken;
+        var token = await GetSecretAsync("discord-bot-token", ct);
+        _botToken = new CachedCredential(token, SecretsCacheDuration);
+        return _botToken.Value;
     }
 
     public async Task<string> GetClientIdAsync(CancellationToken ct = default)
     {
-        if (_clientId is not null)
-            return _clientId;
+        if (_clientId is not null && !_clientId.IsExpired)
+            return _clientId.Value;
 
         var configId = _configuration["Discord:ClientId"];
         if (!string.IsNullOrEmpty(configId))
         {
             _logger.LogDebug("Using Discord client ID from configuration");
-            _clientId = configId;
-            return _clientId;
+            _clientId = new CachedCredential(configId, ConfigCacheDuration);
+            return _clientId.Value;
         }
 
-        _clientId = await GetSecretAsync("oauth-discord-client-id", ct);
-        return _clientId;
+        var id = await GetSecretAsync("oauth-discord-client-id", ct);
+        _clientId = new CachedCredential(id, SecretsCacheDuration);
+        return _clientId.Value;
     }
 
     public async Task<string> GetClientSecretAsync(CancellationToken ct = default)
     {
-        if (_clientSecret is not null)
-            return _clientSecret;
+        if (_clientSecret is not null && !_clientSecret.IsExpired)
+            return _clientSecret.Value;
 
         var configSecret = _configuration["Discord:ClientSecret"];
         if (!string.IsNullOrEmpty(configSecret))
         {
             _logger.LogDebug("Using Discord client secret from configuration");
-            _clientSecret = configSecret;
-            return _clientSecret;
+            _clientSecret = new CachedCredential(configSecret, ConfigCacheDuration);
+            return _clientSecret.Value;
         }
 
-        _clientSecret = await GetSecretAsync("oauth-discord-client-secret", ct);
-        return _clientSecret;
+        var secret = await GetSecretAsync("oauth-discord-client-secret", ct);
+        _clientSecret = new CachedCredential(secret, SecretsCacheDuration);
+        return _clientSecret.Value;
     }
 
     private async Task<string> GetSecretAsync(string secretName, CancellationToken ct)
@@ -103,6 +109,19 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
         {
             _logger.LogError(ex, "Failed to retrieve secret {SecretName} from Secrets service", secretName);
             throw new InvalidOperationException($"Failed to retrieve secret '{secretName}' from Secrets service", ex);
+        }
+    }
+
+    private sealed class CachedCredential
+    {
+        public string Value { get; }
+        public DateTimeOffset ExpiresAt { get; }
+        public bool IsExpired => DateTimeOffset.UtcNow >= ExpiresAt;
+
+        public CachedCredential(string value, TimeSpan ttl)
+        {
+            Value = value;
+            ExpiresAt = DateTimeOffset.UtcNow.Add(ttl);
         }
     }
 
