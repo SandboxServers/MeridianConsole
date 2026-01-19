@@ -136,6 +136,7 @@ jobs:
           dockerfile: '**/Dockerfile*'
           config: .hadolint.yaml
           recursive: true
+          failure-threshold: error
 
   # Summary job (all linters must pass)
   code-quality-summary:
