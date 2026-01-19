@@ -62,11 +62,11 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
             var logEntry = new DiscordNotificationLog
             {
                 Id = Guid.NewGuid(),
-                EventType = message.EventType,
-                Channel = channel,
-                Title = message.Title,
+                EventType = Truncate(message.EventType, 100),
+                Channel = Truncate(channel, 100),
+                Title = Truncate(message.Title, 500),
                 Status = response.IsSuccessStatusCode ? "sent" : "failed",
-                ErrorMessage = response.IsSuccessStatusCode ? null : $"HTTP {response.StatusCode}",
+                ErrorMessage = response.IsSuccessStatusCode ? null : Truncate($"HTTP {response.StatusCode}", 1000),
                 CreatedAtUtc = DateTimeOffset.UtcNow
             };
 
@@ -92,15 +92,23 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
             _db.NotificationLogs.Add(new DiscordNotificationLog
             {
                 Id = Guid.NewGuid(),
-                EventType = message.EventType,
-                Channel = channel,
-                Title = message.Title,
+                EventType = Truncate(message.EventType, 100),
+                Channel = Truncate(channel, 100),
+                Title = Truncate(message.Title, 500),
                 Status = "failed",
-                ErrorMessage = ex.Message,
+                ErrorMessage = Truncate(ex.Message, 1000),
                 CreatedAtUtc = DateTimeOffset.UtcNow
             });
             await _db.SaveChangesAsync(context.CancellationToken);
         }
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+
+        return value.Length <= maxLength ? value : value[..maxLength];
     }
 
     private static string GetChannelForEvent(string eventType, string severity)

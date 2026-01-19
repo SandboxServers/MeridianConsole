@@ -1,7 +1,7 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
-#nullable disable
+#nullable enable
 
 namespace Dhadgar.Discord.Data.Migrations
 {
