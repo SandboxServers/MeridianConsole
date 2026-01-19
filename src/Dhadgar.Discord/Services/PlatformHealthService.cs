@@ -114,7 +114,7 @@ public sealed class PlatformHealthService : IPlatformHealthService
 
         try
         {
-            var response = await _httpClient.GetAsync(healthUrl, ct);
+            using var response = await _httpClient.GetAsync(healthUrl, ct);
             stopwatch.Stop();
 
             if (response.IsSuccessStatusCode)
@@ -134,8 +134,14 @@ public sealed class PlatformHealthService : IPlatformHealthService
                 ResponseTimeMs: (int)stopwatch.ElapsedMilliseconds,
                 Error: $"HTTP {(int)response.StatusCode}");
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            // Caller requested cancellation - rethrow to propagate
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // HttpClient timeout (not caller cancellation)
             return new ServiceHealthStatus(
                 ServiceName: serviceName,
                 Url: baseUrl,

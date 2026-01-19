@@ -84,13 +84,20 @@ builder.Services.AddSingleton<IEmailProvider, Office365EmailProvider>();
 // Admin API key authentication for internal endpoints
 builder.Services.AddAdminApiKeyAuthentication(builder.Configuration);
 
-// MassTransit with consumers
+// MassTransit with consumers and EF Outbox for atomic operations
 builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
 {
     x.AddConsumer<ServerStartedConsumer>();
     x.AddConsumer<ServerStoppedConsumer>();
     x.AddConsumer<ServerCrashedConsumer>();
     x.AddConsumer<SendEmailNotificationConsumer>();
+
+    // Enable EF Outbox for atomic log persistence + message publishing
+    x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
+    {
+        o.UsePostgres();
+        o.UseBusOutbox();
+    });
 });
 
 var app = builder.Build();
