@@ -49,10 +49,7 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
                 metadata.Ignore(m => m.ExtraData);
             });
 
-            builder.Entity<Organization>().OwnsOne(o => o.Settings, settings =>
-            {
-                settings.Ignore(s => s.CustomSettings);
-            });
+            // Note: Organization.Settings uses a value converter (not OwnsOne) configured in OrganizationConfiguration
         }
 
         SeedClaimDefinitions(builder);
