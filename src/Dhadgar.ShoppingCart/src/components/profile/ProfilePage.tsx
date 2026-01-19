@@ -11,7 +11,23 @@ const PROVIDER_COLORS: Record<string, string> = {
   twitch: 'bg-[#9146FF]/20 border-[#9146FF]/50 text-[#9146FF]',
   steam: 'bg-[#1B2838]/20 border-[#66c0f4]/50 text-[#66c0f4]',
   battlenet: 'bg-[#00AEFF]/20 border-[#00AEFF]/50 text-[#00AEFF]',
+  betterauth: 'bg-[#5865F2]/20 border-[#5865F2]/50 text-[#5865F2]', // BetterAuth uses Discord
 };
+
+// Map BetterAuth provider to friendly display name
+function getProviderDisplayName(provider: string): string {
+  const providerMap: Record<string, string> = {
+    betterauth: 'Discord',
+    discord: 'Discord',
+    google: 'Google',
+    github: 'GitHub',
+    microsoft: 'Microsoft',
+    twitch: 'Twitch',
+    steam: 'Steam',
+    battlenet: 'Battle.net',
+  };
+  return providerMap[provider.toLowerCase()] || provider;
+}
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -231,11 +247,44 @@ export default function ProfilePage() {
           )}
         </section>
 
-        {/* Linked Accounts */}
+        {/* Sign-In Methods */}
         <section className="mb-8">
-          <h2 className="font-display text-lg text-text-primary tracking-wider mb-4">LINKED ACCOUNTS</h2>
+          <h2 className="font-display text-lg text-text-primary tracking-wider mb-4">SIGN-IN METHODS</h2>
+          {profile.authProviders.length === 0 ? (
+            <p className="text-text-muted text-sm">No sign-in methods found.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {profile.authProviders.map((authProvider, index) => {
+                const displayName = getProviderDisplayName(authProvider.provider);
+                const colorClass = PROVIDER_COLORS[authProvider.provider.toLowerCase()] || 'bg-panel-darker border-glow-line text-text-secondary';
+                return (
+                  <div
+                    key={`${authProvider.provider}-${index}`}
+                    className={`p-4 rounded-lg border ${colorClass}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-black/20 flex items-center justify-center">
+                        <span className="font-display text-sm uppercase">
+                          {displayName.slice(0, 2)}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium">{displayName}</h3>
+                        <p className="text-xs opacity-70">Primary sign-in method</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Linked Accounts (Gaming Platforms) */}
+        <section className="mb-8">
+          <h2 className="font-display text-lg text-text-primary tracking-wider mb-4">LINKED GAMING ACCOUNTS</h2>
           {linkedAccounts.length === 0 ? (
-            <p className="text-text-muted text-sm">No linked accounts found.</p>
+            <p className="text-text-muted text-sm">No gaming accounts linked. Link your Steam, Xbox, or other gaming accounts to enhance your experience.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {linkedAccounts.map((account) => {

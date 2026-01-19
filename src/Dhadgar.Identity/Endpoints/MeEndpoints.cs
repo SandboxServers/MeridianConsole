@@ -13,7 +13,8 @@ public static class MeEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/me")
-            .WithTags("Me (Self-Service)");
+            .WithTags("Me (Self-Service)")
+            .RequireAuthorization();
 
         group.MapGet("", GetProfile)
             .WithName("GetMyProfile")
@@ -79,7 +80,29 @@ public static class MeEndpoints
             return Results.NotFound(new { error = "user_not_found" });
         }
 
-        return Results.Ok(user);
+        // Get auth providers (login methods) for this user
+        var authProviders = await dbContext.UserLogins
+            .AsNoTracking()
+            .Where(ul => ul.UserId == userId)
+            .Select(ul => new
+            {
+                Provider = ul.LoginProvider,
+                DisplayName = ul.ProviderDisplayName
+            })
+            .ToListAsync(ct);
+
+        return Results.Ok(new
+        {
+            user.Id,
+            user.Email,
+            user.DisplayName,
+            user.EmailVerified,
+            user.PreferredOrganizationId,
+            user.HasPasskeysRegistered,
+            user.CreatedAt,
+            user.LastAuthenticatedAt,
+            AuthProviders = authProviders
+        });
     }
 
     private static async Task<IResult> UpdateProfile(

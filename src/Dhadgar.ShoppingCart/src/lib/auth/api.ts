@@ -92,6 +92,11 @@ async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
 }
 
 // Identity API types
+export interface AuthProvider {
+  provider: string;
+  displayName: string | null;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -101,6 +106,7 @@ export interface UserProfile {
   hasPasskeysRegistered: boolean;
   createdAt: string;
   lastAuthenticatedAt: string;
+  authProviders: AuthProvider[];
 }
 
 export interface Organization {

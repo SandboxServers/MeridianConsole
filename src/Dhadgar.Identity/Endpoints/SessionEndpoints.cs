@@ -12,7 +12,8 @@ public static class SessionEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/me/sessions")
-            .WithTags("Sessions");
+            .WithTags("Sessions")
+            .RequireAuthorization();
 
         group.MapGet("", GetSessions)
             .WithName("GetSessions")
@@ -30,7 +31,8 @@ public static class SessionEndpoints
         app.MapPost("/logout", Logout)
             .WithTags("Authentication")
             .WithName("Logout")
-            .WithDescription("Logout from current session");
+            .WithDescription("Logout from current session")
+            .RequireAuthorization();
     }
 
     private static async Task<IResult> GetSessions(

@@ -11,7 +11,8 @@ public static class MfaPolicyEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/organizations/{organizationId:guid}/security/mfa")
-            .WithTags("MFA Policy");
+            .WithTags("MFA Policy")
+            .RequireAuthorization();
 
         group.MapGet("", GetMfaPolicy)
             .WithName("GetMfaPolicy")

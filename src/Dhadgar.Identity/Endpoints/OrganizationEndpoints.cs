@@ -7,7 +7,8 @@ public static class OrganizationEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/organizations")
-            .WithTags("Organizations");
+            .WithTags("Organizations")
+            .RequireAuthorization();
 
         group.MapGet("", ListOrganizations)
             .WithName("ListOrganizations")

@@ -13,13 +13,15 @@ public static class ActivityEndpoints
         app.MapGet("/me/activity", GetMyActivity)
             .WithName("GetMyActivity")
             .WithTags("Activity")
-            .WithDescription("Get activity log for the current user");
+            .WithDescription("Get activity log for the current user")
+            .RequireAuthorization();
 
         // Organization activity log (requires permission)
         app.MapGet("/organizations/{organizationId:guid}/activity", GetOrgActivity)
             .WithName("GetOrgActivity")
             .WithTags("Activity")
-            .WithDescription("Get activity log for an organization");
+            .WithDescription("Get activity log for an organization")
+            .RequireAuthorization();
     }
 
     private static async Task<IResult> GetMyActivity(
