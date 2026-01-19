@@ -81,7 +81,7 @@ public record SendPushNotification(
     Guid UserId,
     string Title,
     string Body,
-    string? ActionUrl,
+    Uri? ActionUrl,
     string EventType,
     string Severity,
     DateTimeOffset OccurredAtUtc);
