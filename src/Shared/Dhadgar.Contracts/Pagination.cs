@@ -47,6 +47,9 @@ public sealed record PagedResponse<T>
     /// <summary>
     /// Creates a paged response from items and total count.
     /// </summary>
+    // CA1000: Static factory method on generic type is intentional for fluent API usage pattern.
+    // Alternative would require a separate non-generic factory class, which is more awkward.
+#pragma warning disable CA1000
     public static PagedResponse<T> Create(
         IReadOnlyCollection<T> items,
         int total,
@@ -60,4 +63,5 @@ public sealed record PagedResponse<T>
             Total = total
         };
     }
+#pragma warning restore CA1000
 }

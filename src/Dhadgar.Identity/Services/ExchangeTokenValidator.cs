@@ -136,7 +136,7 @@ public sealed class ExchangeTokenValidator : IExchangeTokenValidator, IDisposabl
         {
             _logger.LogInformation("Loading exchange token public key from configuration");
             // Handle escaped newlines from environment variables (e.g., "-----BEGIN...-----\n...\n-----END...-----")
-            var normalizedPem = publicKeyPemConfig.Replace("\\n", "\n");
+            var normalizedPem = publicKeyPemConfig.Replace("\\n", "\n", StringComparison.Ordinal);
             _logger.LogDebug("Public key PEM (first 50 chars): {PemStart}...", normalizedPem[..Math.Min(50, normalizedPem.Length)]);
             var ecdsa = ECDsa.Create();
             ecdsa.ImportFromPem(normalizedPem);

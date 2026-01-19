@@ -111,8 +111,12 @@ public class ServiceHealthResult
 
 public class RoutesInfoResponse
 {
+    // CA1002: List<T> is required for Refit JSON deserialization. Refit needs concrete
+    // collection types with setters for automatic JSON binding to work correctly.
+#pragma warning disable CA1002
     [JsonPropertyName("routes")]
     public List<RouteInfo> Routes { get; set; } = new();
+#pragma warning restore CA1002
 }
 
 public class RouteInfo
@@ -138,8 +142,12 @@ public class RouteInfo
 
 public class ClustersInfoResponse
 {
+    // CA1002: List<T> is required for Refit JSON deserialization. Refit needs concrete
+    // collection types with setters for automatic JSON binding to work correctly.
+#pragma warning disable CA1002
     [JsonPropertyName("clusters")]
     public List<ClusterInfo> Clusters { get; set; } = new();
+#pragma warning restore CA1002
 }
 
 public class ClusterInfo

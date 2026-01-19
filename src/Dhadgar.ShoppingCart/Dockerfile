@@ -26,18 +26,20 @@ FROM nginx:alpine AS runner
 COPY --from=builder /app/_swa_publish/wwwroot /usr/share/nginx/html
 
 # Copy nginx config for SPA routing
-RUN echo 'server { \
-    listen 8080; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ { \
-        expires 1y; \
-        add_header Cache-Control "public, immutable"; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'
+server {
+    listen 8080;
+    root /usr/share/nginx/html;
+    index index.html;
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+EOF
 
 EXPOSE 8080
 

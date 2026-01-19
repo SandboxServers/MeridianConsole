@@ -100,7 +100,7 @@ public class CircuitBreakerTests
         await middleware.InvokeAsync(context);
 
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
-        Assert.StartsWith("application/", context.Response.ContentType);
+        Assert.StartsWith("application/", context.Response.ContentType, StringComparison.Ordinal);
 
         var body = await ReadResponseBodyAsync(context.Response);
         using var doc = JsonDocument.Parse(body);
@@ -109,7 +109,7 @@ public class CircuitBreakerTests
         Assert.Equal("Service Temporarily Unavailable", root.GetProperty("title").GetString());
         Assert.Equal(503, root.GetProperty("status").GetInt32());
         // With IncludeServiceNameInErrors = false (default), service name is NOT in detail
-        Assert.Contains("temporarily unavailable", root.GetProperty("detail").GetString());
+        Assert.Contains("temporarily unavailable", root.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
         // Verify Retry-After header is set
         Assert.True(context.Response.Headers.ContainsKey("Retry-After"));
     }

@@ -7,7 +7,7 @@ namespace Dhadgar.Secrets.Infrastructure;
 /// This allows the JWT Bearer middleware to fetch JWKS from internal service URLs while still
 /// validating tokens that have external issuer URLs.
 /// </summary>
-public class UrlRewritingDocumentRetriever : IDocumentRetriever
+public sealed class UrlRewritingDocumentRetriever : IDocumentRetriever, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly string _externalBaseUrl;
@@ -23,7 +23,11 @@ public class UrlRewritingDocumentRetriever : IDocumentRetriever
     /// </summary>
     /// <param name="externalBaseUrl">The external base URL (e.g., https://dev.meridianconsole.com/api/v1/identity/)</param>
     /// <param name="internalBaseUrl">The internal base URL (e.g., http://identity:8080)</param>
+    // CA1054: URL string parameters are standard for configuration-driven scenarios.
+    // Callers typically receive these from IConfiguration which provides strings.
+#pragma warning disable CA1054
     public UrlRewritingDocumentRetriever(string externalBaseUrl, string internalBaseUrl)
+#pragma warning restore CA1054
     {
         _httpClient = new HttpClient();
         _externalBaseUrl = externalBaseUrl.TrimEnd('/');
@@ -61,5 +65,10 @@ public class UrlRewritingDocumentRetriever : IDocumentRetriever
 
         // Return as-is if it's already an internal URL or a different URL
         return url;
+    }
+
+    public void Dispose()
+    {
+        _httpClient.Dispose();
     }
 }

@@ -58,7 +58,7 @@ public sealed class SecretsSecurityIntegrationTests : IClassFixture<SecureSecret
     {
         using var client = _factory.CreateClient();
 
-        var content = JsonContent.Create(new { secretNames = new[] { "oauth-steam-api-key" } });
+        using var content = JsonContent.Create(new { secretNames = new[] { "oauth-steam-api-key" } });
         var response = await client.PostAsync("/api/v1/secrets/batch", content);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -69,7 +69,7 @@ public sealed class SecretsSecurityIntegrationTests : IClassFixture<SecureSecret
     {
         using var client = _factory.CreateClient();
 
-        var content = JsonContent.Create(new { value = "new-secret-value" });
+        using var content = JsonContent.Create(new { value = "new-secret-value" });
         var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -168,7 +168,7 @@ public sealed class SecretsSecurityIntegrationTests : IClassFixture<SecureSecret
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:write:oauth");
 
-        var content = JsonContent.Create(new { value = "new-secret-value" });
+        using var content = JsonContent.Create(new { value = "new-secret-value" });
         var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -179,7 +179,7 @@ public sealed class SecretsSecurityIntegrationTests : IClassFixture<SecureSecret
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:read:oauth");
 
-        var content = JsonContent.Create(new { value = "new-secret-value" });
+        using var content = JsonContent.Create(new { value = "new-secret-value" });
         var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -266,7 +266,7 @@ public sealed class SecretsSecurityIntegrationTests : IClassFixture<SecureSecret
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:write:oauth");
 
-        var content = JsonContent.Create(new { value = "" });
+        using var content = JsonContent.Create(new { value = "" });
         var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -277,7 +277,7 @@ public sealed class SecretsSecurityIntegrationTests : IClassFixture<SecureSecret
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:write:oauth");
 
-        var content = JsonContent.Create(new { value = (string?)null });
+        using var content = JsonContent.Create(new { value = (string?)null });
         var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -303,7 +303,7 @@ public sealed class SecretsSecurityIntegrationTests : IClassFixture<SecureSecret
     {
         using var client = _factory.CreateBreakGlassClient("emergency-user", "Critical incident");
 
-        var content = JsonContent.Create(new { value = "emergency-value" });
+        using var content = JsonContent.Create(new { value = "emergency-value" });
         var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -454,7 +454,7 @@ public sealed class SecureSecretsWebApplicationFactory : WebApplicationFactory<P
         return client;
     }
 
-    private string GenerateJwtToken(List<Claim> claims)
+    private static string GenerateJwtToken(List<Claim> claims)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestSigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

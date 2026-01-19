@@ -17,10 +17,8 @@ ARG PUBLIC_BETTER_AUTH_URL=http://localhost:5000/api/v1/betterauth
 ENV PUBLIC_GATEWAY_URL=${PUBLIC_GATEWAY_URL}
 ENV PUBLIC_BETTER_AUTH_URL=${PUBLIC_BETTER_AUTH_URL}
 
-RUN npm run build
-
-# Prune dev dependencies after build
-RUN npm prune --omit=dev
+# Build and prune dev dependencies
+RUN npm run build && npm prune --omit=dev
 
 # Production image
 FROM base AS runner

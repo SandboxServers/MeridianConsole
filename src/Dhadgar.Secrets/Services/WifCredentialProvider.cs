@@ -126,6 +126,9 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
         return tokenResponse.AccessToken;
     }
 
+    // CA1812: This class is instantiated via JSON deserialization (ReadFromJsonAsync).
+    // The analyzer cannot detect this runtime instantiation pattern.
+#pragma warning disable CA1812
     private sealed class TokenResponse
     {
         [System.Text.Json.Serialization.JsonPropertyName("access_token")]
@@ -134,4 +137,5 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
         [System.Text.Json.Serialization.JsonPropertyName("expires_in")]
         public int ExpiresIn { get; init; }
     }
+#pragma warning restore CA1812
 }

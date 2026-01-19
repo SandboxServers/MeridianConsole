@@ -92,8 +92,8 @@ public class SecurityTests
         await context.Response.CompleteAsync();
 
         Assert.Equal("User,Operator", context.Request.Headers["X-Roles"].ToString());
-        Assert.DoesNotContain("Admin", context.Request.Headers["X-Roles"].ToString());
-        Assert.DoesNotContain("SuperUser", context.Request.Headers["X-Roles"].ToString());
+        Assert.DoesNotContain("Admin", context.Request.Headers["X-Roles"].ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("SuperUser", context.Request.Headers["X-Roles"].ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

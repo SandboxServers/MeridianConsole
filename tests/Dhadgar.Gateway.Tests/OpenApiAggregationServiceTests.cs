@@ -15,7 +15,7 @@ public class OpenApiAggregationServiceTests
     public async Task GetAggregatedSpecAsync_ReturnsValidOpenApiDocument()
     {
         // Arrange
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -23,7 +23,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert
         Assert.Equal("3.0.1", result["openapi"]?.GetValue<string>());
@@ -39,7 +39,7 @@ public class OpenApiAggregationServiceTests
     {
         // Arrange
         var swaggerJson = CreateSwaggerJsonWithPath("/users", "get", "ListUsers");
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -47,7 +47,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert
         var paths = result["paths"]!.AsObject();
@@ -60,7 +60,7 @@ public class OpenApiAggregationServiceTests
     {
         // Arrange
         var swaggerJson = CreateSwaggerJsonWithPath("/users", "get", "ListUsers");
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -68,7 +68,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert
         var operation = result["paths"]?["/api/v1/identity/users"]?["get"];
@@ -91,7 +91,7 @@ public class OpenApiAggregationServiceTests
                 ["email"] = new JsonObject { ["type"] = "string" }
             }
         });
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -99,7 +99,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert
         var schemas = result["components"]?["schemas"]?.AsObject();
@@ -113,7 +113,7 @@ public class OpenApiAggregationServiceTests
     {
         // Arrange
         var swaggerJson = CreateSwaggerJsonWithSchemaRef("/users", "UserDto");
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -121,7 +121,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert
         var responseSchema = result["paths"]?["/api/v1/identity/users"]?["get"]?["responses"]?["200"]?["content"]?["application/json"]?["schema"];
@@ -133,7 +133,7 @@ public class OpenApiAggregationServiceTests
     public async Task GetAggregatedSpecAsync_MergesMultipleServices()
     {
         // Arrange
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010"), ("servers", "http://localhost:5030")],
             responses: new Dictionary<string, string>
             {
@@ -142,7 +142,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert
         var paths = result["paths"]!.AsObject();
@@ -172,12 +172,12 @@ public class OpenApiAggregationServiceTests
             return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
         });
 
-        var service = CreateServiceWithHandler(
+        using var fixture = CreateServiceWithHandler(
             clusters: [("identity", "http://localhost:5010"), ("servers", "http://localhost:5030")],
             handler: handler);
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert - Should still have Identity paths even though Servers failed
         var paths = result["paths"]!.AsObject();
@@ -192,12 +192,12 @@ public class OpenApiAggregationServiceTests
         var handler = new TestHttpMessageHandler(_ =>
             throw new TaskCanceledException("Request timed out"));
 
-        var service = CreateServiceWithHandler(
+        using var fixture = CreateServiceWithHandler(
             clusters: [("identity", "http://localhost:5010")],
             handler: handler);
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert - Should return valid empty spec
         Assert.Equal("3.0.1", result["openapi"]?.GetValue<string>());
@@ -219,14 +219,14 @@ public class OpenApiAggregationServiceTests
             };
         });
 
-        var service = CreateServiceWithHandler(
+        using var fixture = CreateServiceWithHandler(
             clusters: [("identity", "http://localhost:5010")],
             handler: handler);
 
         // Act
-        await service.GetAggregatedSpecAsync();
-        await service.GetAggregatedSpecAsync();
-        await service.GetAggregatedSpecAsync();
+        await fixture.Service.GetAggregatedSpecAsync();
+        await fixture.Service.GetAggregatedSpecAsync();
+        await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert - Should only call HTTP once due to caching
         Assert.Equal(1, callCount);
@@ -236,7 +236,7 @@ public class OpenApiAggregationServiceTests
     public async Task GetAggregatedSpecAsync_IncludesSecurityScheme()
     {
         // Arrange
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -244,7 +244,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert
         var securitySchemes = result["components"]?["securitySchemes"]?.AsObject();
@@ -258,7 +258,7 @@ public class OpenApiAggregationServiceTests
     public async Task GetAggregatedSpecAsync_SkipsUnknownClusters()
     {
         // Arrange - betterauth cluster is not in ServiceMappings
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010"), ("betterauth", "http://localhost:5130")],
             responses: new Dictionary<string, string>
             {
@@ -267,7 +267,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert - Should only have identity, not betterauth
         var paths = result["paths"]!.AsObject();
@@ -297,7 +297,7 @@ public class OpenApiAggregationServiceTests
             }
         }.ToJsonString();
 
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -305,7 +305,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert - Should have Identity tag plus existing tags
         var tags = result["paths"]?["/api/v1/identity/users"]?["get"]?["tags"]?.AsArray();
@@ -359,7 +359,7 @@ public class OpenApiAggregationServiceTests
             }
         }.ToJsonString();
 
-        var service = CreateService(
+        using var fixture = CreateService(
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
@@ -367,7 +367,7 @@ public class OpenApiAggregationServiceTests
             });
 
         // Act
-        var result = await service.GetAggregatedSpecAsync();
+        var result = await fixture.Service.GetAggregatedSpecAsync();
 
         // Assert - Nested refs should be updated
         var orgSchema = result["components"]?["schemas"]?["Identity_Organization"];
@@ -382,7 +382,34 @@ public class OpenApiAggregationServiceTests
 
     #region Factory Methods
 
-    private static OpenApiAggregationService CreateService(
+    /// <summary>
+    /// Disposable wrapper that holds the service and its dependencies for proper cleanup.
+    /// </summary>
+    private sealed class ServiceFixture : IDisposable
+    {
+        private readonly MemoryCache _cache;
+
+        public OpenApiAggregationService Service { get; }
+
+        public ServiceFixture(
+            IHttpClientFactory httpClientFactory,
+            IProxyConfigProvider proxyConfigProvider)
+        {
+            _cache = new MemoryCache(new MemoryCacheOptions());
+            Service = new OpenApiAggregationService(
+                httpClientFactory,
+                _cache,
+                NullLogger<OpenApiAggregationService>.Instance,
+                proxyConfigProvider);
+        }
+
+        public void Dispose()
+        {
+            _cache.Dispose();
+        }
+    }
+
+    private static ServiceFixture CreateService(
         (string ClusterId, string Address)[] clusters,
         Dictionary<string, string> responses)
     {
@@ -402,19 +429,14 @@ public class OpenApiAggregationServiceTests
         return CreateServiceWithHandler(clusters, handler);
     }
 
-    private static OpenApiAggregationService CreateServiceWithHandler(
+    private static ServiceFixture CreateServiceWithHandler(
         (string ClusterId, string Address)[] clusters,
         TestHttpMessageHandler handler)
     {
         var httpClientFactory = new TestHttpClientFactory(handler);
-        var cache = new MemoryCache(new MemoryCacheOptions());
         var proxyConfigProvider = new TestProxyConfigProvider(clusters);
 
-        return new OpenApiAggregationService(
-            httpClientFactory,
-            cache,
-            NullLogger<OpenApiAggregationService>.Instance,
-            proxyConfigProvider);
+        return new ServiceFixture(httpClientFactory, proxyConfigProvider);
     }
 
     #endregion

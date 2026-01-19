@@ -1,18 +1,36 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Services;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Dhadgar.Identity.Tests;
 
-public sealed class AuditServiceTests
+public sealed class AuditServiceTests : IDisposable
 {
+    // Use SQLite in-memory for ExecuteDeleteAsync support
+    private readonly SqliteConnection _connection;
+
+    public AuditServiceTests()
+    {
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+
+        // Create schema once for all tests using this connection
+        using var context = CreateContext();
+        context.Database.EnsureCreated();
+    }
+
+    public void Dispose()
+    {
+        _connection.Dispose();
+    }
+
     [Fact]
     public async Task RecordAsync_persists_audit_event()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var service = new AuditService(context, TimeProvider.System);
 
         await service.RecordAsync(
@@ -30,7 +48,6 @@ public sealed class AuditServiceTests
     public async Task RecordAsync_sets_default_timestamp_when_not_provided()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var service = new AuditService(context, TimeProvider.System);
 
         var auditEvent = new AuditEvent
@@ -49,7 +66,6 @@ public sealed class AuditServiceTests
     public async Task RecordAsync_preserves_provided_timestamp()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var service = new AuditService(context, TimeProvider.System);
         var specificTime = new DateTime(2025, 1, 15, 10, 30, 0, DateTimeKind.Utc);
 
@@ -70,7 +86,6 @@ public sealed class AuditServiceTests
     public async Task RecordAsync_with_parameters_serializes_details_as_json()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var service = new AuditService(context, TimeProvider.System);
 
         await service.RecordAsync(
@@ -79,15 +94,14 @@ public sealed class AuditServiceTests
             details: new { role = "admin", previousRole = "viewer" });
 
         var saved = await context.AuditEvents.SingleAsync();
-        Assert.Contains("admin", saved.Details);
-        Assert.Contains("viewer", saved.Details);
+        Assert.Contains("admin", saved.Details, StringComparison.Ordinal);
+        Assert.Contains("viewer", saved.Details, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task GetUserActivityAsync_returns_events_for_user()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var userId = Guid.NewGuid();
         var otherUserId = Guid.NewGuid();
 
@@ -106,7 +120,6 @@ public sealed class AuditServiceTests
     public async Task GetUserActivityAsync_includes_events_where_user_is_actor()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var actorUserId = Guid.NewGuid();
         var targetUserId = Guid.NewGuid();
 
@@ -123,7 +136,6 @@ public sealed class AuditServiceTests
     public async Task GetUserActivityAsync_filters_by_date_range()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var userId = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
@@ -160,7 +172,6 @@ public sealed class AuditServiceTests
     public async Task GetUserActivityAsync_respects_pagination()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var userId = Guid.NewGuid();
 
         for (var i = 0; i < 10; i++)
@@ -187,7 +198,6 @@ public sealed class AuditServiceTests
     public async Task GetOrganizationActivityAsync_returns_events_for_organization()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var orgId = Guid.NewGuid();
         var otherOrgId = Guid.NewGuid();
 
@@ -206,7 +216,6 @@ public sealed class AuditServiceTests
     public async Task GetOrganizationActivityAsync_filters_by_event_type()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var orgId = Guid.NewGuid();
 
         await SeedOrgAuditEventAsync(context, AuditEventTypes.MembershipInvited, orgId);
@@ -226,7 +235,6 @@ public sealed class AuditServiceTests
     public async Task GetEventCountAsync_returns_total_count()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
 
         for (var i = 0; i < 15; i++)
         {
@@ -243,7 +251,6 @@ public sealed class AuditServiceTests
     public async Task GetEventCountAsync_filters_by_date()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var now = DateTime.UtcNow;
 
         context.AuditEvents.Add(new AuditEvent
@@ -264,11 +271,10 @@ public sealed class AuditServiceTests
         Assert.Equal(1, oldCount);
     }
 
-    [Fact(Skip = "ExecuteDeleteAsync not supported by in-memory provider")]
+    [Fact]
     public async Task DeleteEventsBeforeAsync_removes_old_events()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var now = DateTime.UtcNow;
 
         context.AuditEvents.Add(new AuditEvent
@@ -296,10 +302,10 @@ public sealed class AuditServiceTests
         Assert.Equal(1, remaining);
     }
 
-    private static IdentityDbContext CreateContext()
+    private IdentityDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseSqlite(_connection)
             .Options;
 
         return new IdentityDbContext(options);

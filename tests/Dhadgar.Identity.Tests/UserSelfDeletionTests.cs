@@ -2,18 +2,37 @@ using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Data.Entities;
 using Dhadgar.Identity.Services;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Dhadgar.Identity.Tests;
 
-public sealed class UserSelfDeletionTests
+public sealed class UserSelfDeletionTests : IDisposable
 {
-    [Fact(Skip = "ExecuteUpdateAsync not supported by in-memory provider")]
+    // Use SQLite in-memory with a shared connection for the test class
+    // This enables ExecuteUpdateAsync/ExecuteDeleteAsync which in-memory provider doesn't support
+    private readonly SqliteConnection _connection;
+
+    public UserSelfDeletionTests()
+    {
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+
+        // Create schema once for all tests using this connection
+        using var context = CreateContext();
+        context.Database.EnsureCreated();
+    }
+
+    public void Dispose()
+    {
+        _connection.Dispose();
+    }
+
+    [Fact]
     public async Task RequestDeletionAsync_sets_scheduled_deletion_date()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var user = await SeedUserAsync(context, "user@example.com");
         var service = CreateUserService(context);
 
@@ -24,25 +43,26 @@ public sealed class UserSelfDeletionTests
         Assert.True(result.Value < DateTime.UtcNow.AddDays(31));
     }
 
-    [Fact(Skip = "ExecuteUpdateAsync not supported by in-memory provider")]
+    [Fact]
     public async Task RequestDeletionAsync_revokes_all_refresh_tokens()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var user = await SeedUserAsync(context, "user@example.com");
+        var org1 = await SeedOrganizationAsync(context, user);
+        var org2 = await SeedOrganizationAsync(context, user, "org2");
 
-        // Add some refresh tokens
+        // Add some refresh tokens (using real organization IDs for SQLite foreign key compliance)
         context.RefreshTokens.Add(new RefreshToken
         {
             UserId = user.Id,
-            OrganizationId = Guid.NewGuid(),
+            OrganizationId = org1.Id,
             TokenHash = "hash1",
             ExpiresAt = DateTime.UtcNow.AddDays(30)
         });
         context.RefreshTokens.Add(new RefreshToken
         {
             UserId = user.Id,
-            OrganizationId = Guid.NewGuid(),
+            OrganizationId = org2.Id,
             TokenHash = "hash2",
             ExpiresAt = DateTime.UtcNow.AddDays(30)
         });
@@ -51,18 +71,19 @@ public sealed class UserSelfDeletionTests
         var service = CreateUserService(context);
         await service.RequestDeletionAsync(user.Id);
 
+        // Use AsNoTracking to get fresh data from database after ExecuteUpdateAsync
         var tokens = await context.RefreshTokens
+            .AsNoTracking()
             .Where(t => t.UserId == user.Id)
             .ToListAsync();
 
         Assert.All(tokens, t => Assert.NotNull(t.RevokedAt));
     }
 
-    [Fact(Skip = "ExecuteUpdateAsync not supported by in-memory provider")]
+    [Fact]
     public async Task RequestDeletionAsync_deactivates_all_memberships()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var user = await SeedUserAsync(context, "user@example.com");
         var org1 = await SeedOrganizationAsync(context, user);
         var org2 = await SeedOrganizationAsync(context, user, "org2");
@@ -70,7 +91,9 @@ public sealed class UserSelfDeletionTests
         var service = CreateUserService(context);
         await service.RequestDeletionAsync(user.Id);
 
+        // Use AsNoTracking to get fresh data from database after ExecuteUpdateAsync
         var memberships = await context.UserOrganizations
+            .AsNoTracking()
             .Where(uo => uo.UserId == user.Id)
             .ToListAsync();
 
@@ -85,7 +108,6 @@ public sealed class UserSelfDeletionTests
     public async Task RequestDeletionAsync_fails_for_already_deleted_user()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var user = await SeedUserAsync(context, "user@example.com");
         user.DeletedAt = DateTime.UtcNow.AddDays(-1); // Already deleted
         await context.SaveChangesAsync();
@@ -97,11 +119,10 @@ public sealed class UserSelfDeletionTests
         Assert.Equal("user_not_found", result.Error);
     }
 
-    [Fact(Skip = "ExecuteUpdateAsync not supported by in-memory provider")]
+    [Fact]
     public async Task CancelDeletionAsync_clears_scheduled_deletion()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var user = await SeedUserAsync(context, "user@example.com");
         user.DeletedAt = DateTime.UtcNow.AddDays(30); // Scheduled for deletion
         await context.SaveChangesAsync();
@@ -111,7 +132,10 @@ public sealed class UserSelfDeletionTests
 
         Assert.True(result.Success);
 
-        var updated = await context.Users.SingleAsync(u => u.Id == user.Id);
+        // Use IgnoreQueryFilters to verify the update (though it should now have DeletedAt = null)
+        var updated = await context.Users
+            .IgnoreQueryFilters()
+            .SingleAsync(u => u.Id == user.Id);
         Assert.Null(updated.DeletedAt);
     }
 
@@ -119,7 +143,6 @@ public sealed class UserSelfDeletionTests
     public async Task CancelDeletionAsync_fails_if_deletion_already_processed()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var user = await SeedUserAsync(context, "user@example.com");
         user.DeletedAt = DateTime.UtcNow.AddDays(-1); // Already deleted in the past
         await context.SaveChangesAsync();
@@ -135,7 +158,6 @@ public sealed class UserSelfDeletionTests
     public async Task CancelDeletionAsync_fails_for_user_without_pending_deletion()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var user = await SeedUserAsync(context, "user@example.com");
 
         var service = CreateUserService(context);
@@ -145,11 +167,10 @@ public sealed class UserSelfDeletionTests
         Assert.Equal("user_not_found_or_already_deleted", result.Error);
     }
 
-    [Fact(Skip = "ExecuteUpdateAsync not supported by in-memory provider")]
+    [Fact]
     public async Task SoftDeleteAsync_revokes_organization_specific_tokens()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var member = await SeedUserAsync(context, "member@example.com");
         var org = await SeedOrganizationAsync(context, owner);
@@ -193,25 +214,28 @@ public sealed class UserSelfDeletionTests
         var service = CreateUserService(context);
         await service.SoftDeleteAsync(org.Id, member.Id);
 
+        // Use AsNoTracking to get fresh data from database after ExecuteUpdateAsync
         var orgToken = await context.RefreshTokens
+            .AsNoTracking()
             .SingleAsync(t => t.OrganizationId == org.Id && t.UserId == member.Id);
         var otherOrgToken = await context.RefreshTokens
+            .AsNoTracking()
             .SingleAsync(t => t.OrganizationId == otherOrg.Id && t.UserId == member.Id);
 
         Assert.NotNull(orgToken.RevokedAt); // Revoked
         Assert.Null(otherOrgToken.RevokedAt); // Not revoked
     }
 
-    [Fact(Skip = "ExecuteUpdateAsync not supported by in-memory provider")]
+    [Fact]
     public async Task SoftDeleteAsync_revokes_all_tokens_when_last_membership_removed()
     {
         using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
         var owner = await SeedUserAsync(context, "owner@example.com");
         var member = await SeedUserAsync(context, "member@example.com");
         var org = await SeedOrganizationAsync(context, owner);
+        var anotherOrg = await SeedOrganizationAsync(context, owner, "another-org");
 
-        // Add member to single org
+        // Add member to single org (not a member of anotherOrg)
         context.UserOrganizations.Add(new UserOrganization
         {
             UserId = member.Id,
@@ -220,12 +244,12 @@ public sealed class UserSelfDeletionTests
             IsActive = true
         });
 
-        // Add token (could be for different org)
-        var anotherOrgId = Guid.NewGuid();
+        // Add token for another org that member doesn't belong to
+        // (orphan token scenario - token exists but no membership)
         context.RefreshTokens.Add(new RefreshToken
         {
             UserId = member.Id,
-            OrganizationId = anotherOrgId,
+            OrganizationId = anotherOrg.Id,
             TokenHash = "orphan-token",
             ExpiresAt = DateTime.UtcNow.AddDays(30)
         });
@@ -234,16 +258,18 @@ public sealed class UserSelfDeletionTests
         var service = CreateUserService(context);
         await service.SoftDeleteAsync(org.Id, member.Id);
 
+        // Use AsNoTracking to get fresh data from database after ExecuteUpdateAsync
         var orphanToken = await context.RefreshTokens
-            .SingleAsync(t => t.OrganizationId == anotherOrgId && t.UserId == member.Id);
+            .AsNoTracking()
+            .SingleAsync(t => t.OrganizationId == anotherOrg.Id && t.UserId == member.Id);
 
         Assert.NotNull(orphanToken.RevokedAt);
     }
 
-    private static IdentityDbContext CreateContext()
+    private IdentityDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseSqlite(_connection)
             .Options;
 
         return new IdentityDbContext(options);

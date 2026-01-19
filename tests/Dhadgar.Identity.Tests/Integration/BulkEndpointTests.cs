@@ -394,10 +394,14 @@ public sealed class BulkEndpointTests : IClassFixture<IdentityWebApplicationFact
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // CA1812: This record is instantiated via JSON deserialization (ReadFromJsonAsync/DeserializeAsync).
+    // The analyzer cannot detect this runtime instantiation pattern.
+#pragma warning disable CA1812
     private sealed record BulkOperationResponse(
         IReadOnlyCollection<Guid> Succeeded,
         IReadOnlyCollection<object> Failed,
         int TotalRequested,
         int SuccessCount,
         int FailCount);
+#pragma warning restore CA1812
 }

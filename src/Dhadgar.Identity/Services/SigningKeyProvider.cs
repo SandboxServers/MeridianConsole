@@ -47,7 +47,7 @@ public sealed class SigningKeyProvider : ISigningKeyProvider
                 var secretClient = new SecretClient(new Uri(options.KeyVault!.VaultUri), credential);
                 var secret = secretClient.GetSecret(options.KeyVault.JwtSigningKeyName);
                 // Handle PEM stored with literal \n instead of actual newlines
-                var pem = secret.Value.Value.Replace("\\n", "\n");
+                var pem = secret.Value.Value.Replace("\\n", "\n", StringComparison.Ordinal);
                 var ecdsa = ECDsa.Create();
                 ecdsa.ImportFromPem(pem);
                 logger.LogInformation("Loaded JWT signing key from Key Vault");
