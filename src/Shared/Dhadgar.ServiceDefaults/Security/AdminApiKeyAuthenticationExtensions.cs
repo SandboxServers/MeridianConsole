@@ -28,6 +28,17 @@ public sealed class AdminApiKeyAuthenticationOptions : AuthenticationSchemeOptio
 /// <summary>
 /// Authentication handler that validates admin API keys.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>SECURITY WARNING:</b> When <see cref="AdminApiKeyAuthenticationOptions.ApiKey"/> is not configured,
+/// this handler grants admin access to all requests without authentication. This behavior is intended
+/// ONLY for local development scenarios and MUST be disabled in production by setting a strong API key.
+/// </para>
+/// <para>
+/// In production environments, always configure the <c>AdminApiKey</c> setting via user-secrets,
+/// environment variables, or a secure configuration provider (e.g., Azure Key Vault).
+/// </para>
+/// </remarks>
 public sealed class AdminApiKeyAuthenticationHandler : AuthenticationHandler<AdminApiKeyAuthenticationOptions>
 {
     public const string SchemeName = "AdminApiKey";
@@ -42,10 +53,13 @@ public sealed class AdminApiKeyAuthenticationHandler : AuthenticationHandler<Adm
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        // If no API key is configured, allow all requests (dev mode)
+        // If no API key is configured, allow all requests (dev mode only)
+        // SECURITY: This is a development convenience only. In production, always configure AdminApiKey.
         if (string.IsNullOrEmpty(Options.ApiKey))
         {
-            Logger.LogWarning("AdminApiKey not configured - allowing unauthenticated access to admin endpoints");
+            Logger.LogWarning(
+                "SECURITY WARNING: AdminApiKey not configured - allowing unauthenticated admin access. " +
+                "This is acceptable for local development but MUST be configured in production environments.");
             var claims = new[]
             {
                 new Claim(ClaimTypes.Name, "anonymous-admin"),

@@ -6,24 +6,24 @@
   <h2 class="mb-4 text-2xl font-bold">Section 7: Security Architecture</h2>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Trust Boundaries</h3>
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>Boundary</th>
-        <th>Protection</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Boundary</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Protection</th>
       </tr>
     </thead>
     <tbody>
-      <tr><td>Edge (Internet)</td><td>Cloudflare WAF, DDoS protection</td></tr>
-      <tr><td>Gateway</td><td>Authentication, rate limiting, input validation</td></tr>
-      <tr><td>Service-to-Service</td><td>mTLS (planned), internal network only</td></tr>
-      <tr><td>Agent-to-Control Plane</td><td>mTLS certificates, outbound-only</td></tr>
-      <tr><td>Database</td><td>TLS, per-service credentials, network isolation</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Edge (Internet)</td><td class="border border-white/10 px-2.5 py-2 align-top">Cloudflare WAF, DDoS protection</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Gateway</td><td class="border border-white/10 px-2.5 py-2 align-top">Authentication, rate limiting, input validation</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Service-to-Service</td><td class="border border-white/10 px-2.5 py-2 align-top">mTLS (planned), internal network only</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Agent-to-Control Plane</td><td class="border border-white/10 px-2.5 py-2 align-top">mTLS certificates, outbound-only</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Database</td><td class="border border-white/10 px-2.5 py-2 align-top">TLS, per-service credentials, network isolation</td></tr>
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Authentication</h3>
-  <div class="scope-panel mb-6">
+  <div class="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
     <ul class="space-y-2 text-white/70">
       <li>- JWT-based authentication</li>
       <li>- Support for passwordless login (planned)</li>
@@ -33,24 +33,24 @@
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Authorization (RBAC)</h3>
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>Role</th>
-        <th>Scope</th>
-        <th>Permissions</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Role</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Scope</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Permissions</th>
       </tr>
     </thead>
     <tbody>
-      <tr><td>Owner</td><td>Organization</td><td>Full control, billing</td></tr>
-      <tr><td>Admin</td><td>Organization</td><td>Manage users, servers</td></tr>
-      <tr><td>Operator</td><td>Server</td><td>Start/stop, configure</td></tr>
-      <tr><td>Viewer</td><td>Server</td><td>View status, logs</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Owner</td><td class="border border-white/10 px-2.5 py-2 align-top">Organization</td><td class="border border-white/10 px-2.5 py-2 align-top">Full control, billing</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Admin</td><td class="border border-white/10 px-2.5 py-2 align-top">Organization</td><td class="border border-white/10 px-2.5 py-2 align-top">Manage users, servers</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Operator</td><td class="border border-white/10 px-2.5 py-2 align-top">Server</td><td class="border border-white/10 px-2.5 py-2 align-top">Start/stop, configure</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Viewer</td><td class="border border-white/10 px-2.5 py-2 align-top">Server</td><td class="border border-white/10 px-2.5 py-2 align-top">View status, logs</td></tr>
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Secrets Management</h3>
-  <div class="scope-callout">
+  <div class="rounded-2xl border border-indigo-500/35 bg-indigo-500/[0.12] p-4">
     <strong>Approach:</strong> Kubernetes secrets for infrastructure, dedicated Secrets Service for user
     credentials. No secrets in code or environment variables.
   </div>

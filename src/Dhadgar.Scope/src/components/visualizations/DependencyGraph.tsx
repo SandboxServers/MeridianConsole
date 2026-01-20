@@ -299,7 +299,13 @@ export function DependencyGraph() {
               clearable
               onClear={() => setQuery("")}
               icon={
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -405,9 +411,10 @@ export function DependencyGraph() {
       {/* Tablet drawer */}
       {drawerOpen && (
         <>
-          <div
-            role="presentation"
-            className="fixed inset-0 z-50 hidden bg-black/60 md:block lg:hidden"
+          <button
+            type="button"
+            aria-label="Close details panel"
+            className="fixed inset-0 z-50 hidden cursor-default bg-black/60 md:block lg:hidden"
             onClick={() => setDrawerOpen(false)}
             onKeyDown={(e) => e.key === "Escape" && setDrawerOpen(false)}
           />
@@ -417,9 +424,16 @@ export function DependencyGraph() {
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
+                aria-label="Close details drawer"
                 className="rounded-lg border border-white/10 bg-white/5 p-1.5 transition-colors hover:bg-white/10"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"

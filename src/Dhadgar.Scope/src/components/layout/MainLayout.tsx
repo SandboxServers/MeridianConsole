@@ -22,9 +22,16 @@ export function MainLayout({ children }: MainLayoutProps) {
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
+          aria-label="Open navigation menu"
           className="rounded-lg border border-white/10 bg-white/5 p-2 transition-colors hover:bg-white/10"
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

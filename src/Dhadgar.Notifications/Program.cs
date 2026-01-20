@@ -1,3 +1,4 @@
+using Dhadgar.Contracts.Notifications;
 using Dhadgar.Messaging;
 using Dhadgar.Notifications;
 using Dhadgar.Notifications.Consumers;
@@ -228,15 +229,6 @@ adminGroup.MapPost("/notifications/test", async (
 }).WithName("SendTestNotification");
 
 app.Run();
-
-/// <summary>
-/// Request payload for sending a test notification.
-/// </summary>
-public record TestNotificationRequest(
-    Guid? OrgId,
-    string? Title,
-    string? Message,
-    string? Severity);
 
 // Required for WebApplicationFactory<Program> integration tests.
 public partial class Program { }

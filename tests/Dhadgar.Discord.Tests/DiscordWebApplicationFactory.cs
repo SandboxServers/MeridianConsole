@@ -17,6 +17,41 @@ using NSubstitute;
 namespace Dhadgar.Discord.Tests;
 
 /// <summary>
+/// Wrapper that owns both a service instance and its scope, ensuring proper disposal.
+/// Implements IAsyncDisposable for async test cleanup.
+/// </summary>
+/// <typeparam name="T">The type of service being wrapped.</typeparam>
+public sealed class ScopedServiceWrapper<T> : IAsyncDisposable, IDisposable where T : notnull
+{
+    private readonly IServiceScope _scope;
+    private bool _disposed;
+
+    public ScopedServiceWrapper(T service, IServiceScope scope)
+    {
+        Service = service;
+        _scope = scope;
+    }
+
+    /// <summary>
+    /// The scoped service instance.
+    /// </summary>
+    public T Service { get; }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _scope.Dispose();
+        _disposed = true;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>
 /// WebApplicationFactory for Discord service tests.
 /// Configures in-memory database and mocks external dependencies.
 /// </summary>
@@ -111,13 +146,21 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    /// Gets a scoped service for testing.
-    /// Note: Caller is responsible for disposing the returned scope if needed.
+    /// Gets a scoped service for testing wrapped in a disposable container.
+    /// The returned wrapper automatically disposes the underlying scope when disposed.
     /// </summary>
-    public (T Service, IServiceScope Scope) GetScopedService<T>() where T : notnull
+    /// <example>
+    /// <code>
+    /// await using var wrapper = factory.GetScopedService&lt;DiscordDbContext&gt;();
+    /// var db = wrapper.Service;
+    /// // Use db...
+    /// </code>
+    /// </example>
+    public ScopedServiceWrapper<T> GetScopedService<T>() where T : notnull
     {
         var scope = Services.CreateScope();
-        return (scope.ServiceProvider.GetRequiredService<T>(), scope);
+        var service = scope.ServiceProvider.GetRequiredService<T>();
+        return new ScopedServiceWrapper<T>(service, scope);
     }
 
     /// <summary>

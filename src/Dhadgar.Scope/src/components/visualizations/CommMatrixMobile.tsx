@@ -14,7 +14,8 @@ export function CommMatrixMobile() {
         if (d.rows.length > 0) {
           setSelectedSource(d.rows[0].from);
         }
-      });
+      })
+      .catch((err) => console.error("Failed to load communication matrix:", err));
   }, []);
 
   if (!data) {
@@ -46,6 +47,7 @@ export function CommMatrixMobile() {
       <select
         value={selectedSource}
         onChange={(e) => setSelectedSource(e.target.value)}
+        aria-label="Select source service"
         className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
       >
         {data.rows.map((r) => (

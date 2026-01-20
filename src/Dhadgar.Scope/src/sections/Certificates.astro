@@ -10,28 +10,28 @@
     All communications encrypted with TLS. Different certificate sources for different tiers.
   </p>
 
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>Tier</th>
-        <th>Certificate Source</th>
-        <th>Rotation</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Tier</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Certificate Source</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Rotation</th>
       </tr>
     </thead>
     <tbody>
-      <tr><td>Public endpoints</td><td>Cloudflare (edge)</td><td>Automatic</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Public endpoints</td><td class="border border-white/10 px-2.5 py-2 align-top">Cloudflare (edge)</td><td class="border border-white/10 px-2.5 py-2 align-top">Automatic</td></tr>
       <tr
-        ><td>Control plane internal</td><td>cert-manager + Let's Encrypt</td><td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Control plane internal</td><td class="border border-white/10 px-2.5 py-2 align-top">cert-manager + Let's Encrypt</td><td class="border border-white/10 px-2.5 py-2 align-top"
           >90 days auto-renew</td
         ></tr
       >
-      <tr><td>Agent mTLS</td><td>Internal CA (planned)</td><td>24-48 hours</td></tr>
-      <tr><td>Database connections</td><td>Self-signed (internal only)</td><td>Annual</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Agent mTLS</td><td class="border border-white/10 px-2.5 py-2 align-top">Internal CA (planned)</td><td class="border border-white/10 px-2.5 py-2 align-top">24-48 hours</td></tr>
+      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Database connections</td><td class="border border-white/10 px-2.5 py-2 align-top">Self-signed (internal only)</td><td class="border border-white/10 px-2.5 py-2 align-top">Annual</td></tr>
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Agent Certificate Lifecycle</h3>
-  <div class="scope-panel mb-6">
+  <div class="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
     <ol class="space-y-2 text-white/70">
       <li>1. Agent enrolls with one-time bootstrap token</li>
       <li>2. Control plane issues short-lived certificate (24-48h)</li>
@@ -41,7 +41,7 @@
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Key Storage</h3>
-  <div class="scope-callout">
+  <div class="rounded-2xl border border-indigo-500/35 bg-indigo-500/[0.12] p-4">
     Private keys never leave their origin. Agent keys generated on-device, control plane keys in
     Kubernetes secrets.
   </div>

@@ -10,7 +10,8 @@ export function ArchitectureTreeView() {
   useEffect(() => {
     fetch("/content/architecture-park.v1.json")
       .then((res) => res.json())
-      .then(setData);
+      .then(setData)
+      .catch((err) => console.error("Failed to load architecture data:", err));
   }, []);
 
   if (!data) {
@@ -51,6 +52,7 @@ export function ArchitectureTreeView() {
       <input
         type="text"
         placeholder="Filter nodes..."
+        aria-label="Filter architecture nodes"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white placeholder-white/50 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
@@ -152,6 +154,7 @@ export function ArchitectureTreeView() {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"

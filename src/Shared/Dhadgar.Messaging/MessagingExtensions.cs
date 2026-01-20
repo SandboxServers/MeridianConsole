@@ -38,7 +38,8 @@ public static class MessagingExtensions
                 // Configure retry policies for all endpoints
                 cfg.UseMessageRetry(r =>
                 {
-                    // Exponential backoff: 200ms, 400ms, 800ms, 1.6s, 3.2s (5 retries)
+                    // Exponential backoff with bounds: min=200ms, max=5s, delta=200ms (5 retries)
+                    // Actual intervals depend on MassTransit's exponential algorithm with jitter
                     r.Exponential(5,
                         TimeSpan.FromMilliseconds(200),
                         TimeSpan.FromSeconds(5),

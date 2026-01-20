@@ -94,61 +94,6 @@ a {
   border-radius: 0.55rem;
 }
 
-.scope-code {
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
-  padding: 1rem;
-  overflow-x: auto;
-  margin: 0.9rem 0;
-}
-
-.scope-code code {
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-
-.scope-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.9rem 0;
-  font-size: 0.92rem;
-}
-
-.scope-table th,
-.scope-table td {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 0.55rem 0.6rem;
-  vertical-align: top;
-}
-
-.scope-table th {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.92);
-  text-align: left;
-}
-
-.scope-panel {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 1rem;
-  padding: 1rem;
-  margin: 0.9rem 0;
-}
-
-.scope-panel-alt {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.scope-callout {
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  background: rgba(99, 102, 241, 0.12);
-  border-radius: 1rem;
-  padding: 1rem;
-  margin: 0.9rem 0 1.1rem;
-}
-
 /* --- Mobile ergonomics + overflow handling --- */
 
 /* Make long URLs and identifiers behave on narrow screens */
@@ -168,8 +113,7 @@ a {
 
 /* Tables: allow horizontal scroll on small screens */
 @media (max-width: 768px) {
-  .scope-content table,
-  .scope-table {
+  .scope-content table {
     display: block;
     max-width: 100%;
     overflow-x: auto;
@@ -177,9 +121,7 @@ a {
   }
 
   .scope-content th,
-  .scope-content td,
-  .scope-table th,
-  .scope-table td {
+  .scope-content td {
     white-space: nowrap;
   }
 }
