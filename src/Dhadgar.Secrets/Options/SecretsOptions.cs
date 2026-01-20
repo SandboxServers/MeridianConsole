@@ -111,6 +111,9 @@ public sealed class AllowedSecretsOptions
         // Reddit
         "oauth-reddit-client-id",
         "oauth-reddit-client-secret",
+        // Roblox
+        "oauth-roblox-client-id",
+        "oauth-roblox-client-secret",
         // Slack
         "oauth-slack-client-id",
         "oauth-slack-client-secret",
