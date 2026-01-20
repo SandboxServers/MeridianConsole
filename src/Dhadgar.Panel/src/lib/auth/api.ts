@@ -1,5 +1,5 @@
 import { authClient } from './client';
-import { tokenStorage } from './storage';
+import { tokenStorage } from '@dhadgar/shared-auth';
 
 const GATEWAY_URL = import.meta.env.PUBLIC_GATEWAY_URL || 'http://localhost:5000';
 

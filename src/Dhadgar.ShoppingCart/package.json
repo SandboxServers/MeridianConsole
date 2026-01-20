@@ -8,6 +8,7 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@dhadgar/shared-auth": "file:../Dhadgar.SharedAuth",
     "@astrojs/react": "^4.1.1",
     "@astrojs/tailwind": "^6.0.1",
     "astro": "^5.1.1",
