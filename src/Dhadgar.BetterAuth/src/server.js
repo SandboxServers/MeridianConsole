@@ -13,7 +13,15 @@ await loadSecrets();
 const { auth, authConfig, trustedOrigins } = await import("./auth.js");
 
 // Create a database pool for direct queries (shared connection with Better Auth)
-const dbPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const dbPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  statement_timeout: 5000, // 5 second timeout for queries
+});
+
+// Handle idle client errors to prevent unhandled exceptions
+dbPool.on('error', (err) => {
+  console.error('Unexpected error on idle database client:', err.message);
+});
 
 // Run database migrations on startup
 async function runMigrations() {
@@ -135,4 +143,59 @@ const server = app.listen(port, () => {
 server.on('error', (err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
+});
+
+// Graceful shutdown handling
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    console.log('Shutdown already in progress...');
+    return;
+  }
+  isShuttingDown = true;
+
+  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+
+  try {
+    // Stop accepting new connections
+    await new Promise((resolve, reject) => {
+      server.close((err) => {
+        if (err) {
+          console.error('Error closing HTTP server:', err.message);
+          reject(err);
+        } else {
+          console.log('HTTP server closed');
+          resolve();
+        }
+      });
+    });
+  } catch (err) {
+    console.error('Failed to close HTTP server:', err.message);
+  }
+
+  try {
+    // Close database pool
+    await dbPool.end();
+    console.log('Database pool closed');
+  } catch (err) {
+    console.error('Error closing database pool:', err.message);
+  }
+
+  console.log('Graceful shutdown completed');
+  process.exit(0);
+}
+
+// Register shutdown handlers
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  gracefulShutdown('uncaughtException').finally(() => process.exit(1));
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('unhandledRejection').finally(() => process.exit(1));
 });

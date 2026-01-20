@@ -214,13 +214,14 @@ public sealed class TokenExchangeService
                     !currentLogins.Contains((l.LoginProvider, l.ProviderKey)));
                 _dbContext.UserLogins.RemoveRange(loginsToRemove);
 
-                // Add new logins
+                // Add new logins (using Add() to implicitly deduplicate linkedProviders)
                 var existingLoginSet = new HashSet<(string ProviderId, string AccountId)>(
                     existingLogins.Select(l => (l.LoginProvider, l.ProviderKey)));
 
                 foreach (var linked in linkedProviders)
                 {
-                    if (!existingLoginSet.Contains((linked.ProviderId, linked.AccountId)))
+                    // Add returns true only if item was not already present, preventing duplicates
+                    if (existingLoginSet.Add((linked.ProviderId, linked.AccountId)))
                     {
                         _dbContext.UserLogins.Add(new IdentityUserLogin<Guid>
                         {
@@ -471,15 +472,25 @@ public sealed class TokenExchangeService
 
         return provider.ToLowerInvariant() switch
         {
-            "microsoft" => "Microsoft",
-            "discord" => "Discord",
-            "google" => "Google",
-            "github" => "GitHub",
-            "twitch" => "Twitch",
-            "facebook" => "Facebook",
+            "amazon" => "Amazon",
             "apple" => "Apple",
+            "battlenet" => "Battle.net",
             "credential" => "Email/Password",
+            "discord" => "Discord",
+            "facebook" => "Facebook",
+            "github" => "GitHub",
+            "google" => "Google",
+            "lego" => "LEGO",
+            "microsoft" => "Microsoft",
+            "paypal" => "PayPal",
+            "reddit" => "Reddit",
+            "slack" => "Slack",
+            "spotify" => "Spotify",
+            "steam" => "Steam",
+            "twitch" => "Twitch",
             "unknown" => "BetterAuth",
+            "xbox" => "Xbox",
+            "yahoo" => "Yahoo",
             _ => char.ToUpperInvariant(provider[0]) + provider[1..] // Title case fallback
         };
     }
