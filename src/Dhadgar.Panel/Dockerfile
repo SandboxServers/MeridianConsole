@@ -3,12 +3,17 @@ WORKDIR /app
 
 # Install dependencies
 FROM base AS deps
+WORKDIR /app/src/Dhadgar.Panel
+# Copy shared auth package first (needed for file: reference)
+COPY src/Dhadgar.SharedAuth/ /app/src/Dhadgar.SharedAuth/
 COPY src/Dhadgar.Panel/package*.json ./
 RUN npm ci
 
 # Build the application
 FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
+WORKDIR /app/src/Dhadgar.Panel
+COPY --from=deps /app/src/Dhadgar.SharedAuth /app/src/Dhadgar.SharedAuth
+COPY --from=deps /app/src/Dhadgar.Panel/node_modules ./node_modules
 COPY src/Dhadgar.Panel/ .
 
 # Build arguments for environment variables at build time
@@ -27,9 +32,9 @@ ENV HOST=0.0.0.0
 ENV PORT=8080
 
 # Copy built application and production dependencies
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+COPY --from=builder /app/src/Dhadgar.Panel/dist ./dist
+COPY --from=builder /app/src/Dhadgar.Panel/node_modules ./node_modules
+COPY --from=builder /app/src/Dhadgar.Panel/package.json ./
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
