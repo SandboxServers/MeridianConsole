@@ -152,13 +152,30 @@ var adminGroup = app.MapGroup("/api/v1")
 
 adminGroup.MapGet("/discord/logs", async (
     int? limit,
+    Guid? orgId,
+    HttpContext context,
     DiscordDbContext db,
     CancellationToken ct) =>
 {
+    var query = db.NotificationLogs.AsQueryable();
+
+    // Tenant isolation: filter by organization
+    // Check X-Tenant-Id header first, then orgId query param
+    var tenantHeader = context.Request.Headers["X-Tenant-Id"].FirstOrDefault();
+    if (!string.IsNullOrEmpty(tenantHeader) && Guid.TryParse(tenantHeader, out var headerOrgId))
+    {
+        query = query.Where(l => l.OrganizationId == headerOrgId);
+    }
+    else if (orgId.HasValue)
+    {
+        query = query.Where(l => l.OrganizationId == orgId.Value);
+    }
+    // If neither specified, admins can see all logs (admin API key required)
+
     // Clamp limit to prevent oversized queries (max 100)
     var safeLimit = Math.Clamp(limit ?? 50, 1, 100);
 
-    var logs = await db.NotificationLogs
+    var logs = await query
         .OrderByDescending(l => l.CreatedAtUtc)
         .Take(safeLimit)
         .ToListAsync(ct);
@@ -173,6 +190,48 @@ adminGroup.MapGet("/platform/health", async (
     var status = await healthService.CheckAllServicesAsync(ct);
     return Results.Ok(status);
 }).WithName("GetPlatformHealth");
+
+adminGroup.MapGet("/discord/channels", (
+    IDiscordBotService bot,
+    ulong? guildId) =>
+{
+    if (bot.ConnectionState != Discord.ConnectionState.Connected)
+    {
+        return Results.Ok(new
+        {
+            connected = false,
+            message = "Bot is not connected to Discord",
+            guilds = Array.Empty<object>()
+        });
+    }
+
+    var client = bot.Client;
+    var guilds = client.Guilds
+        .Where(g => !guildId.HasValue || g.Id == guildId.Value)
+        .Select(g => new
+        {
+            guildId = g.Id,
+            guildName = g.Name,
+            channels = g.TextChannels
+                .OrderBy(c => c.Position)
+                .Select(c => new
+                {
+                    channelId = c.Id,
+                    name = c.Name,
+                    category = c.Category?.Name,
+                    position = c.Position
+                })
+                .ToList()
+        })
+        .ToList();
+
+    return Results.Ok(new
+    {
+        connected = true,
+        guildCount = guilds.Count,
+        guilds
+    });
+}).WithName("GetDiscordChannels");
 
 app.Run();
 

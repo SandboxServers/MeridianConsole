@@ -12,6 +12,11 @@ public static class MessagingExtensions
         {
             configure?.Invoke(x);
 
+            // Enable delayed message scheduler using RabbitMQ delayed message plugin
+            // This allows scheduling message redelivery when transient failures occur
+            // Requires rabbitmq_delayed_message_exchange plugin on the server
+            x.AddDelayedMessageScheduler();
+
             x.UsingRabbitMq((ctx, cfg) =>
             {
                 var host = config.GetConnectionString("RabbitMqHost") ?? "localhost";
@@ -23,6 +28,9 @@ public static class MessagingExtensions
                     h.Username(user);
                     h.Password(pass);
                 });
+
+                // Enable delayed message scheduler
+                cfg.UseDelayedMessageScheduler();
 
                 // Stable, explicit exchange names (aligns with the scope doc's meridian.* conventions)
                 cfg.MessageTopology.SetEntityNameFormatter(new StaticEntityNameFormatter());
@@ -41,8 +49,29 @@ public static class MessagingExtensions
                     r.Ignore<ArgumentException>();
                 });
 
+                // Schedule message redelivery after immediate retries are exhausted
+                // Messages that fail all retries will be redelivered after delay before hitting error queue
+                cfg.UseDelayedRedelivery(r =>
+                {
+                    // Redelivery intervals: 5min, 15min, 1hr (3 attempts)
+                    r.Intervals(
+                        TimeSpan.FromMinutes(5),
+                        TimeSpan.FromMinutes(15),
+                        TimeSpan.FromHours(1));
+                });
+
                 // In-memory outbox prevents duplicate sends on retry
                 cfg.UseInMemoryOutbox(ctx);
+
+                // Configure dead letter queue settings
+                // Messages that fail all retries and redelivery attempts go to _error queue
+                cfg.ReceiveEndpoint("meridian.dead-letter", e =>
+                {
+                    // This endpoint receives messages moved from _error queues
+                    // for centralized monitoring/alerting
+                    e.ConfigureConsumeTopology = false;
+                    e.Bind("meridian.dead-letter");
+                });
 
                 cfg.ConfigureEndpoints(ctx);
             });

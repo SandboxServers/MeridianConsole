@@ -29,6 +29,7 @@ public sealed class DiscordDbContext : DbContext
             b.Property(x => x.ErrorMessage).HasMaxLength(1000);
 
             b.HasIndex(x => x.CreatedAtUtc);
+            b.HasIndex(x => x.OrganizationId);
             b.HasIndex(x => new { x.EventType, x.Status });
         });
     }
@@ -40,6 +41,12 @@ public sealed class DiscordDbContext : DbContext
 public sealed class DiscordNotificationLog
 {
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// The organization this notification was sent for (for tenant isolation).
+    /// </summary>
+    public Guid OrganizationId { get; set; }
+
     public string EventType { get; set; } = null!;
     public string Channel { get; set; } = null!;
     public string Title { get; set; } = null!;

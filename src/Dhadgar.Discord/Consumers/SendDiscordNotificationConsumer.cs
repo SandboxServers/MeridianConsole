@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Dhadgar.Contracts.Notifications;
 using Dhadgar.Discord.Data;
@@ -11,6 +12,10 @@ namespace Dhadgar.Discord.Consumers;
 /// </summary>
 public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotification>
 {
+    private const int MaxRetryAttempts = 3;
+    private const int BaseDelayMs = 1000;
+    private const int MaxDelayMs = 30000;
+
     private readonly DiscordDbContext _db;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
@@ -56,17 +61,22 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
 
         try
         {
-            var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
-            var response = await httpClient.PostAsync(webhookUrl, content, context.CancellationToken);
+            // Send with rate limit handling
+            var (response, attempt) = await SendWithRateLimitRetryAsync(
+                httpClient,
+                webhookUrl,
+                jsonPayload,
+                context.CancellationToken);
 
             var logEntry = new DiscordNotificationLog
             {
                 Id = Guid.NewGuid(),
+                OrganizationId = message.OrgId,
                 EventType = Truncate(message.EventType, 100),
                 Channel = Truncate(channel, 100),
                 Title = Truncate(message.Title, 500),
                 Status = response.IsSuccessStatusCode ? "sent" : "failed",
-                ErrorMessage = response.IsSuccessStatusCode ? null : Truncate($"HTTP {response.StatusCode}", 1000),
+                ErrorMessage = response.IsSuccessStatusCode ? null : Truncate($"HTTP {response.StatusCode} (attempt {attempt})", 1000),
                 CreatedAtUtc = DateTimeOffset.UtcNow
             };
 
@@ -75,14 +85,16 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogDebug("Successfully sent notification to Discord");
+                _logger.LogDebug(
+                    "Successfully sent notification to Discord (attempt {Attempt})",
+                    attempt);
             }
             else
             {
                 var errorBody = await response.Content.ReadAsStringAsync(context.CancellationToken);
                 _logger.LogWarning(
-                    "Failed to send notification to Discord: {StatusCode} - {Error}",
-                    response.StatusCode, errorBody);
+                    "Failed to send notification to Discord after {Attempts} attempts: {StatusCode} - {Error}",
+                    attempt, response.StatusCode, errorBody);
             }
         }
         catch (Exception ex)
@@ -92,6 +104,7 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
             _db.NotificationLogs.Add(new DiscordNotificationLog
             {
                 Id = Guid.NewGuid(),
+                OrganizationId = message.OrgId,
                 EventType = Truncate(message.EventType, 100),
                 Channel = Truncate(channel, 100),
                 Title = Truncate(message.Title, 500),
@@ -101,6 +114,80 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
             });
             await _db.SaveChangesAsync(context.CancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Sends a request with automatic retry on rate limits (HTTP 429).
+    /// Respects Discord's Retry-After header and uses exponential backoff.
+    /// </summary>
+    private async Task<(HttpResponseMessage Response, int Attempt)> SendWithRateLimitRetryAsync(
+        HttpClient httpClient,
+        string webhookUrl,
+        string jsonPayload,
+        CancellationToken ct)
+    {
+        HttpResponseMessage? response = null;
+
+        for (var attempt = 1; attempt <= MaxRetryAttempts; attempt++)
+        {
+            using var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+            response = await httpClient.PostAsync(webhookUrl, content, ct);
+
+            // Success or non-retryable error
+            if (response.StatusCode != HttpStatusCode.TooManyRequests)
+            {
+                return (response, attempt);
+            }
+
+            // Rate limited - determine wait time
+            var delayMs = GetRetryDelayMs(response, attempt);
+
+            _logger.LogWarning(
+                "Discord rate limit hit (attempt {Attempt}/{MaxAttempts}). Waiting {DelayMs}ms before retry",
+                attempt, MaxRetryAttempts, delayMs);
+
+            // Don't retry if this is the last attempt
+            if (attempt >= MaxRetryAttempts)
+            {
+                break;
+            }
+
+            await Task.Delay(delayMs, ct);
+        }
+
+        return (response!, MaxRetryAttempts);
+    }
+
+    /// <summary>
+    /// Gets the delay before retrying, respecting Discord's Retry-After header.
+    /// Falls back to exponential backoff if header is not present.
+    /// </summary>
+    private static int GetRetryDelayMs(HttpResponseMessage response, int attempt)
+    {
+        // Check for Retry-After header (seconds or date)
+        if (response.Headers.TryGetValues("Retry-After", out var retryAfterValues))
+        {
+            var retryAfter = retryAfterValues.FirstOrDefault();
+            if (!string.IsNullOrEmpty(retryAfter))
+            {
+                // Try to parse as seconds
+                if (int.TryParse(retryAfter, out var seconds))
+                {
+                    return Math.Min(seconds * 1000, MaxDelayMs);
+                }
+
+                // Try to parse as HTTP date
+                if (DateTimeOffset.TryParse(retryAfter, out var retryDate))
+                {
+                    var delay = (int)(retryDate - DateTimeOffset.UtcNow).TotalMilliseconds;
+                    return Math.Clamp(delay, BaseDelayMs, MaxDelayMs);
+                }
+            }
+        }
+
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        var exponentialDelay = BaseDelayMs * (1 << (attempt - 1));
+        return Math.Min(exponentialDelay, MaxDelayMs);
     }
 
     private static string Truncate(string value, int maxLength)

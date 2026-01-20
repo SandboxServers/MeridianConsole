@@ -144,10 +144,25 @@ var adminGroup = app.MapGroup("/api/v1")
 adminGroup.MapGet("/notifications/logs", async (
     int? limit,
     string? status,
+    Guid? orgId,
+    HttpContext context,
     NotificationsDbContext db,
     CancellationToken ct) =>
 {
     var query = db.Logs.AsQueryable();
+
+    // Tenant isolation: filter by organization
+    // Check X-Tenant-Id header first, then orgId query param
+    var tenantHeader = context.Request.Headers["X-Tenant-Id"].FirstOrDefault();
+    if (!string.IsNullOrEmpty(tenantHeader) && Guid.TryParse(tenantHeader, out var headerOrgId))
+    {
+        query = query.Where(l => l.OrganizationId == headerOrgId);
+    }
+    else if (orgId.HasValue)
+    {
+        query = query.Where(l => l.OrganizationId == orgId.Value);
+    }
+    // If neither specified, admins can see all logs (admin API key required)
 
     if (!string.IsNullOrEmpty(status))
     {
@@ -165,7 +180,63 @@ adminGroup.MapGet("/notifications/logs", async (
     return Results.Ok(logs);
 }).WithName("GetNotificationLogs");
 
+adminGroup.MapPost("/notifications/test", async (
+    TestNotificationRequest request,
+    IPublishEndpoint publishEndpoint,
+    NotificationsDbContext db,
+    ILogger<Program> logger,
+    CancellationToken ct) =>
+{
+    var notificationId = Guid.NewGuid();
+    var orgId = request.OrgId ?? Guid.Empty;
+
+    logger.LogInformation(
+        "Sending test notification {NotificationId} for org {OrgId}",
+        notificationId, orgId);
+
+    // Send to Discord
+    await publishEndpoint.Publish(new Dhadgar.Contracts.Notifications.SendDiscordNotification(
+        NotificationId: notificationId,
+        OrgId: orgId,
+        ServerId: null,
+        Title: request.Title ?? "Test Notification",
+        Message: request.Message ?? "This is a test notification from Meridian Console.",
+        Severity: request.Severity ?? Dhadgar.Contracts.Notifications.NotificationSeverity.Info,
+        EventType: "test.notification",
+        Fields: new Dictionary<string, string>
+        {
+            ["Source"] = "CLI Test",
+            ["Timestamp"] = DateTimeOffset.UtcNow.ToString("o")
+        },
+        OccurredAtUtc: DateTimeOffset.UtcNow), ct);
+
+    // Log to database
+    db.Logs.Add(new Dhadgar.Notifications.Data.Entities.NotificationLog
+    {
+        Id = notificationId,
+        OrganizationId = orgId,
+        EventType = "test.notification",
+        Channel = "discord",
+        Title = request.Title ?? "Test Notification",
+        Message = request.Message ?? "This is a test notification from Meridian Console.",
+        Status = "pending",
+        CreatedAtUtc = DateTimeOffset.UtcNow
+    });
+    await db.SaveChangesAsync(ct);
+
+    return Results.Ok(new { notificationId, message = "Test notification sent" });
+}).WithName("SendTestNotification");
+
 app.Run();
+
+/// <summary>
+/// Request payload for sending a test notification.
+/// </summary>
+public record TestNotificationRequest(
+    Guid? OrgId,
+    string? Title,
+    string? Message,
+    string? Severity);
 
 // Required for WebApplicationFactory<Program> integration tests.
 public partial class Program { }

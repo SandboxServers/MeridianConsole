@@ -6,6 +6,7 @@ using Discord;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -23,25 +24,37 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
 
+        // Configure test admin API key
+        builder.ConfigureAppConfiguration((context, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AdminApiKey"] = "test-admin-key"
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
-            // Remove the real DbContext registration
-            var dbContextDescriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(DbContextOptions<DiscordDbContext>));
-            if (dbContextDescriptor != null)
+            // Remove all database-related registrations completely
+            // This includes the DbContext itself, options, and any factory registrations
+            var dbDescriptors = services
+                .Where(d =>
+                    d.ServiceType == typeof(DiscordDbContext) ||
+                    d.ServiceType == typeof(DbContextOptions<DiscordDbContext>) ||
+                    d.ServiceType == typeof(DbContextOptions) ||
+                    d.ImplementationType == typeof(DiscordDbContext))
+                .ToList();
+            foreach (var descriptor in dbDescriptors)
             {
-                services.Remove(dbContextDescriptor);
+                services.Remove(descriptor);
             }
 
-            // Remove any DbContext registration
-            services.RemoveAll<DiscordDbContext>();
-            services.RemoveAll<DbContextOptions<DiscordDbContext>>();
-
-            // Add in-memory database
-            services.AddDbContext<DiscordDbContext>(options =>
+            // Add in-memory database with unique name per test instance
+            var databaseName = $"DiscordTestDb_{Guid.NewGuid()}";
+            services.AddDbContext<DiscordDbContext>((sp, options) =>
             {
-                options.UseInMemoryDatabase($"DiscordTestDb_{Guid.NewGuid()}");
-            });
+                options.UseInMemoryDatabase(databaseName);
+            }, ServiceLifetime.Scoped, ServiceLifetime.Scoped);
 
             // Remove ALL hosted services to prevent bot from starting
             // This is needed because the registration uses a factory that depends on DiscordBotService
@@ -57,9 +70,9 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<DiscordBotService>();
             services.RemoveAll<IDiscordBotService>();
 
-            // Add mock bot service
+            // Add mock bot service - return Disconnected since we can't properly mock DiscordSocketClient
             var mockBotService = Substitute.For<IDiscordBotService>();
-            mockBotService.ConnectionState.Returns(ConnectionState.Connected);
+            mockBotService.ConnectionState.Returns(ConnectionState.Disconnected);
             services.AddSingleton(mockBotService);
 
             // Remove SlashCommandHandler (depends on bot)
