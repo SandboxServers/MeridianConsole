@@ -33,9 +33,12 @@ public sealed class ListLogsCommand
 
         try
         {
+            // Clamp limit to maximum of 100 as documented in the API
+            int? effectiveLimit = limit.HasValue ? Math.Min(limit.Value, 100) : null;
+
             var logs = await api.GetLogsAsync(
                 config.AdminApiKey,
-                limit,
+                effectiveLimit,
                 status,
                 orgId,
                 orgId?.ToString(),

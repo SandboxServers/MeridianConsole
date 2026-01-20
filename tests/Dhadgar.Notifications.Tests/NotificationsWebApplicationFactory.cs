@@ -45,7 +45,8 @@ public class NotificationsWebApplicationFactory : WebApplicationFactory<Program>
             var massTransitHostedServices = services
                 .Where(d => d.ServiceType == typeof(IHostedService) &&
                     (d.ImplementationType?.FullName?.Contains("MassTransit") == true ||
-                     d.ImplementationFactory?.Method.DeclaringType?.FullName?.Contains("MassTransit") == true))
+                     d.ImplementationFactory?.Method.DeclaringType?.FullName?.Contains("MassTransit") == true ||
+                     d.ImplementationInstance?.GetType().FullName?.Contains("MassTransit") == true))
                 .ToList();
             foreach (var descriptor in massTransitHostedServices)
             {
@@ -85,11 +86,18 @@ public class NotificationsWebApplicationFactory : WebApplicationFactory<Program>
 
     /// <summary>
     /// Seeds the test database with initial data.
+    /// Automatically calls SaveChangesAsync after the seed action if there are pending changes.
     /// </summary>
     public async Task SeedDatabaseAsync(Func<NotificationsDbContext, Task> seedAction)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NotificationsDbContext>();
         await seedAction(db);
+
+        // Ensure seeded data is persisted if seedAction didn't call SaveChangesAsync
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync();
+        }
     }
 }

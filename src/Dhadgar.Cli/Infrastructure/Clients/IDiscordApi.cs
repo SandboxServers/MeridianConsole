@@ -47,51 +47,51 @@ public record DiscordLogDto(
 /// DTO for Discord service health check.
 /// </summary>
 public record DiscordHealthDto(
-    string Service,
-    string Status,
-    string BotStatus);
+    string service,
+    string status,
+    string botStatus);
 
 /// <summary>
 /// DTO for platform-wide health check.
 /// </summary>
 public record PlatformHealthDto(
-    IReadOnlyList<ServiceHealthDto> Services,
-    int HealthyCount,
-    int UnhealthyCount,
-    DateTimeOffset CheckedAtUtc);
+    IReadOnlyList<ServiceHealthDto> services,
+    int healthyCount,
+    int unhealthyCount,
+    DateTimeOffset checkedAtUtc);
 
 /// <summary>
 /// DTO for individual service health.
 /// </summary>
 public record ServiceHealthDto(
-    string Name,
-    string Url,
-    bool IsHealthy,
-    long? ResponseTimeMs,
-    string? Error);
+    string name,
+    Uri url,
+    bool isHealthy,
+    long? responseTimeMs,
+    string? error);
 
 /// <summary>
 /// DTO for Discord channels response.
 /// </summary>
 public record DiscordChannelsDto(
-    bool Connected,
-    int GuildCount,
-    IReadOnlyList<DiscordGuildDto> Guilds,
-    string? Message = null);
+    bool connected,
+    int guildCount,
+    IReadOnlyList<DiscordGuildDto> guilds,
+    string? message = null);
 
 /// <summary>
 /// DTO for a Discord guild (server).
 /// </summary>
 public record DiscordGuildDto(
-    ulong GuildId,
-    string GuildName,
-    IReadOnlyList<DiscordChannelDto> Channels);
+    ulong guildId,
+    string guildName,
+    IReadOnlyList<DiscordChannelDto> channels);
 
 /// <summary>
 /// DTO for a Discord text channel.
 /// </summary>
 public record DiscordChannelDto(
-    ulong ChannelId,
-    string Name,
-    string? Category,
-    int Position);
+    ulong channelId,
+    string name,
+    string? category,
+    int position);

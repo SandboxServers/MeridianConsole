@@ -26,7 +26,7 @@ public sealed class StatusCommand
 
             var health = await api.GetHealthAsync(ct);
 
-            var statusColor = health.BotStatus switch
+            var statusColor = health.botStatus switch
             {
                 "Connected" => "green",
                 "Connecting" => "yellow",
@@ -41,9 +41,9 @@ public sealed class StatusCommand
                 .AddColumn("")
                 .AddColumn("");
 
-            table.AddRow("[cyan]Service[/]", Markup.Escape(health.Service));
-            table.AddRow("[cyan]Status[/]", $"[{(health.Status == "ok" ? "green" : "red")}]{Markup.Escape(health.Status)}[/]");
-            table.AddRow("[cyan]Bot Connection[/]", $"[{statusColor}]{Markup.Escape(health.BotStatus)}[/]");
+            table.AddRow("[cyan]Service[/]", Markup.Escape(health.service));
+            table.AddRow("[cyan]Status[/]", $"[{(health.status == "ok" ? "green" : "red")}]{Markup.Escape(health.status)}[/]");
+            table.AddRow("[cyan]Bot Connection[/]", $"[{statusColor}]{Markup.Escape(health.botStatus)}[/]");
 
             AnsiConsole.Write(table);
 
@@ -63,13 +63,13 @@ public sealed class StatusCommand
                         .AddColumn("[bold]Status[/]")
                         .AddColumn("[bold]Response Time[/]");
 
-                    foreach (var service in platformHealth.Services)
+                    foreach (var service in platformHealth.services)
                     {
-                        var serviceStatusColor = service.IsHealthy ? "green" : "red";
+                        var serviceStatusColor = service.isHealthy ? "green" : "red";
                         string responseTime;
-                        if (service.ResponseTimeMs.HasValue)
+                        if (service.responseTimeMs.HasValue)
                         {
-                            var ms = service.ResponseTimeMs.Value;
+                            var ms = service.responseTimeMs.Value;
                             responseTime = ms < 100
                                 ? $"[green]{ms}ms[/]"
                                 : ms < 500
@@ -82,14 +82,14 @@ public sealed class StatusCommand
                         }
 
                         platformTable.AddRow(
-                            $"[cyan]{Markup.Escape(service.Name)}[/]",
-                            $"[{serviceStatusColor}]{(service.IsHealthy ? "Healthy" : "Unhealthy")}[/]",
+                            $"[cyan]{Markup.Escape(service.name)}[/]",
+                            $"[{serviceStatusColor}]{(service.isHealthy ? "Healthy" : "Unhealthy")}[/]",
                             responseTime);
                     }
 
                     AnsiConsole.Write(platformTable);
-                    AnsiConsole.MarkupLine($"\n[dim]Healthy: {platformHealth.HealthyCount}, Unhealthy: {platformHealth.UnhealthyCount}[/]");
-                    AnsiConsole.MarkupLine($"[dim]Checked at: {platformHealth.CheckedAtUtc:yyyy-MM-dd HH:mm:ss} UTC[/]");
+                    AnsiConsole.MarkupLine($"\n[dim]Healthy: {platformHealth.healthyCount}, Unhealthy: {platformHealth.unhealthyCount}[/]");
+                    AnsiConsole.MarkupLine($"[dim]Checked at: {platformHealth.checkedAtUtc:yyyy-MM-dd HH:mm:ss} UTC[/]");
                 }
                 catch (ApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {

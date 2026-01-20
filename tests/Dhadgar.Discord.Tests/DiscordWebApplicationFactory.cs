@@ -59,7 +59,8 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
             }, ServiceLifetime.Scoped, ServiceLifetime.Scoped);
 
             // Remove ALL hosted services to prevent bot from starting
-            // This is needed because the registration uses a factory that depends on DiscordBotService
+            // This is needed because hosted services may have transitive dependencies on DiscordBotService
+            // which we mock, and factory-registered services can't be filtered by type name alone
             var hostedServicesToRemove = services
                 .Where(d => d.ServiceType == typeof(IHostedService))
                 .ToList();
@@ -96,8 +97,8 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
             var mockHealthService = Substitute.For<IPlatformHealthService>();
             var mockServices = new List<ServiceHealthStatus>
             {
-                new(serviceName: "Gateway", url: "http://localhost:5000", isHealthy: true, responseTimeMs: 100, error: null),
-                new(serviceName: "Identity", url: "http://localhost:5010", isHealthy: true, responseTimeMs: 50, error: null)
+                new(serviceName: "Gateway", url: new Uri("http://localhost:5000"), isHealthy: true, responseTimeMs: 100, error: null),
+                new(serviceName: "Identity", url: new Uri("http://localhost:5010"), isHealthy: true, responseTimeMs: 50, error: null)
             };
             mockHealthService.CheckAllServicesAsync(Arg.Any<CancellationToken>())
                 .Returns(new PlatformHealthStatus(
@@ -121,11 +122,18 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
 
     /// <summary>
     /// Seeds the test database with initial data.
+    /// Automatically calls SaveChangesAsync after the seed action if there are pending changes.
     /// </summary>
     public async Task SeedDatabaseAsync(Func<DiscordDbContext, Task> seedAction)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DiscordDbContext>();
         await seedAction(db);
+
+        // Ensure seeded data is persisted if seedAction didn't call SaveChangesAsync
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync();
+        }
     }
 }

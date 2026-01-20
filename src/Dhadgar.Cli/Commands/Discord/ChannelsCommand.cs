@@ -30,40 +30,40 @@ public sealed class ChannelsCommand
         {
             var response = await api.GetChannelsAsync(config.AdminApiKey, guildId, ct);
 
-            if (!response.Connected)
+            if (!response.connected)
             {
                 AnsiConsole.MarkupLine("[yellow]Bot is not connected to Discord[/]");
-                if (!string.IsNullOrEmpty(response.Message))
+                if (!string.IsNullOrEmpty(response.message))
                 {
-                    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(response.Message)}[/]");
+                    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(response.message)}[/]");
                 }
                 return 0;
             }
 
-            if (response.Guilds.Count == 0)
+            if (response.guilds.Count == 0)
             {
                 AnsiConsole.MarkupLine("[yellow]Bot is not a member of any guilds[/]");
                 return 0;
             }
 
-            AnsiConsole.MarkupLine($"[bold]Discord Channels[/] [dim]({response.GuildCount} guild(s))[/]\n");
+            AnsiConsole.MarkupLine($"[bold]Discord Channels[/] [dim]({response.guildCount} guild(s))[/]\n");
 
-            foreach (var guild in response.Guilds)
+            foreach (var guild in response.guilds)
             {
                 var table = new Table()
                     .Border(TableBorder.Rounded)
                     .BorderColor(Color.Blue)
-                    .Title($"[cyan]{Markup.Escape(guild.GuildName)}[/] [dim](ID: {guild.GuildId})[/]")
+                    .Title($"[cyan]{Markup.Escape(guild.guildName)}[/] [dim](ID: {guild.guildId})[/]")
                     .AddColumn("[bold]Channel[/]")
                     .AddColumn("[bold]Category[/]")
                     .AddColumn("[bold]ID[/]");
 
-                foreach (var channel in guild.Channels)
+                foreach (var channel in guild.channels)
                 {
                     table.AddRow(
-                        $"[white]#{Markup.Escape(channel.Name)}[/]",
-                        channel.Category is not null ? $"[dim]{Markup.Escape(channel.Category)}[/]" : "[dim]-[/]",
-                        $"[dim]{channel.ChannelId}[/]");
+                        $"[white]#{Markup.Escape(channel.name)}[/]",
+                        channel.category is not null ? $"[dim]{Markup.Escape(channel.category)}[/]" : "[dim]-[/]",
+                        $"[dim]{channel.channelId}[/]");
                 }
 
                 AnsiConsole.Write(table);

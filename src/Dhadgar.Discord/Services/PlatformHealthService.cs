@@ -5,7 +5,7 @@ namespace Dhadgar.Discord.Services;
 /// </summary>
 public record ServiceHealthStatus(
     string serviceName,
-    string url,
+    Uri? url,
     bool isHealthy,
     int? responseTimeMs,
     string? error);
@@ -112,6 +112,9 @@ public sealed class PlatformHealthService : IPlatformHealthService
         var healthUrl = $"{baseUrl.TrimEnd('/')}/healthz";
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        // Parse URL to Uri for type safety
+        Uri.TryCreate(baseUrl, UriKind.Absolute, out var serviceUri);
+
         try
         {
             using var response = await _httpClient.GetAsync(healthUrl, ct);
@@ -121,7 +124,7 @@ public sealed class PlatformHealthService : IPlatformHealthService
             {
                 return new ServiceHealthStatus(
                     serviceName: serviceName,
-                    url: baseUrl,
+                    url: serviceUri,
                     isHealthy: true,
                     responseTimeMs: (int)stopwatch.ElapsedMilliseconds,
                     error: null);
@@ -129,7 +132,7 @@ public sealed class PlatformHealthService : IPlatformHealthService
 
             return new ServiceHealthStatus(
                 serviceName: serviceName,
-                url: baseUrl,
+                url: serviceUri,
                 isHealthy: false,
                 responseTimeMs: (int)stopwatch.ElapsedMilliseconds,
                 error: $"HTTP {(int)response.StatusCode}");
@@ -144,7 +147,7 @@ public sealed class PlatformHealthService : IPlatformHealthService
             // HttpClient timeout (not caller cancellation)
             return new ServiceHealthStatus(
                 serviceName: serviceName,
-                url: baseUrl,
+                url: serviceUri,
                 isHealthy: false,
                 responseTimeMs: null,
                 error: "Timeout");
@@ -153,7 +156,7 @@ public sealed class PlatformHealthService : IPlatformHealthService
         {
             return new ServiceHealthStatus(
                 serviceName: serviceName,
-                url: baseUrl,
+                url: serviceUri,
                 isHealthy: false,
                 responseTimeMs: null,
                 error: ex.InnerException?.Message ?? ex.Message);
@@ -164,7 +167,7 @@ public sealed class PlatformHealthService : IPlatformHealthService
 
             return new ServiceHealthStatus(
                 serviceName: serviceName,
-                url: baseUrl,
+                url: serviceUri,
                 isHealthy: false,
                 responseTimeMs: null,
                 error: ex.Message);

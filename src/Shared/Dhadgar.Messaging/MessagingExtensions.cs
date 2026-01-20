@@ -20,8 +20,8 @@ public static class MessagingExtensions
             x.UsingRabbitMq((ctx, cfg) =>
             {
                 var host = config["RabbitMq:Host"] ?? config.GetConnectionString("RabbitMqHost") ?? "localhost";
-                var user = config["RabbitMq:Username"] ?? "guest";
-                var pass = config["RabbitMq:Password"] ?? "guest";
+                var user = config["RabbitMq:Username"] ?? "dhadgar";
+                var pass = config["RabbitMq:Password"] ?? "dhadgar";
 
                 cfg.Host(host, h =>
                 {

@@ -185,7 +185,10 @@ public sealed class SlashCommandHandler
         }
 
         var logText = string.Join("\n", recentLogs.Select(l =>
-            $"`{l.CreatedAtUtc:HH:mm:ss}` [{l.Status}] {l.EventType}: {l.Title[..Math.Min(50, l.Title.Length)]}"));
+        {
+            var title = l.Title ?? "(no title)";
+            return $"`{l.CreatedAtUtc:HH:mm:ss}` [{l.Status}] {l.EventType}: {title[..Math.Min(50, title.Length)]}";
+        }));
 
         var embed = new EmbedBuilder()
             .WithTitle("Recent Notification Logs")
