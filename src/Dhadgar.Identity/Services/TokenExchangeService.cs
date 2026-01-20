@@ -34,6 +34,7 @@ public sealed record TokenExchangeOutcome(
 public sealed class TokenExchangeService
 {
     private static readonly TimeSpan ReplayWindow = TimeSpan.FromMinutes(2);
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IdentityDbContext _dbContext;
     private readonly IExchangeTokenValidator _validator;
@@ -100,7 +101,7 @@ public sealed class TokenExchangeService
             {
                 linkedProviders = System.Text.Json.JsonSerializer.Deserialize<List<LinkedProvider>>(
                     providersJson,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    JsonOptions)
                     ?? [];
             }
             catch (System.Text.Json.JsonException ex)
