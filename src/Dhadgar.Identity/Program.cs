@@ -126,6 +126,7 @@ builder.Services.AddIdentityCore<User>(options =>
 builder.Services.AddSingleton<IExchangeTokenValidator, ExchangeTokenValidator>();
 builder.Services.AddSingleton<IExchangeTokenReplayStore, RedisExchangeTokenReplayStore>();
 builder.Services.AddSingleton<IJwtService, JwtService>();
+builder.Services.AddSingleton<IClientAssertionService, ClientAssertionService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<TokenExchangeService>();
 builder.Services.AddScoped<ILinkedAccountService, LinkedAccountService>();
@@ -939,6 +940,18 @@ static async Task SeedDevOpenIddictClientAsync(
         defaultClientId: "betterauth-service",
         defaultDisplayName: "BetterAuth Service",
         scopes: ["secrets:read"]); // Needs to read secrets from Secrets service
+
+    // BetterAuth WIF client for Microsoft federated credentials
+    // This client is used to get tokens for authenticating to Microsoft OAuth
+    // The client_id matches the "subject" in the Azure federated credential
+    await SeedServiceAccountAsync(
+        manager,
+        configuration,
+        logger,
+        serviceKey: "BetterAuthWif",
+        defaultClientId: "betterauth-client",
+        defaultDisplayName: "BetterAuth WIF Client",
+        scopes: ["wif"]); // Needs WIF for Microsoft federated credential
 }
 
 static async Task SeedServiceAccountAsync(
