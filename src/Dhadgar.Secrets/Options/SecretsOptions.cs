@@ -73,39 +73,61 @@ public sealed class AllowedSecretsOptions
 {
     /// <summary>
     /// OAuth provider secrets that can be dispensed.
+    /// Alphabetized by provider name for easier maintenance.
     /// </summary>
     public List<string> OAuth { get; set; } =
     [
-        // Better Auth supported providers
-        "oauth-facebook-app-id",
-        "oauth-facebook-app-secret",
-        "oauth-google-client-id",
-        "oauth-google-client-secret",
-        "oauth-discord-client-id",
-        "oauth-discord-client-secret",
-        "oauth-twitch-client-id",
-        "oauth-twitch-client-secret",
-        "oauth-github-client-id",
-        "oauth-github-client-secret",
-        "oauth-apple-client-id",
-        "oauth-apple-client-secret",
+        // Amazon (Login with Amazon)
         "oauth-amazon-client-id",
         "oauth-amazon-client-secret",
-        // Microsoft OAuth (unified for genericOAuth plugin - no client secret needed with federated credentials)
+        // Battle.net (Blizzard)
+        "oauth-battlenet-client-id",
+        "oauth-battlenet-client-secret",
+        // Discord
+        "oauth-discord-client-id",
+        "oauth-discord-client-secret",
+        // Facebook
+        "oauth-facebook-app-id",
+        "oauth-facebook-app-secret",
+        // GitHub
+        "oauth-github-client-id",
+        "oauth-github-client-secret",
+        // Google
+        "oauth-google-client-id",
+        "oauth-google-client-secret",
+        // LEGO ID
+        "oauth-lego-client-id",
+        "oauth-lego-client-secret",
+        // Microsoft (unified for genericOAuth plugin - no client secret needed with federated credentials)
         "oauth-microsoft-client-id",
-        // Microsoft OAuth (legacy personal + work separate apps)
+        // Microsoft (legacy personal + work separate apps)
         "oauth-microsoft-personal-client-id",
         "oauth-microsoft-personal-client-secret",
         "oauth-microsoft-work-client-id",
         "oauth-microsoft-work-client-secret",
-        // Gaming platforms (ASP.NET Identity)
+        // PayPal
+        "oauth-paypal-client-id",
+        "oauth-paypal-client-secret",
+        // Reddit
+        "oauth-reddit-client-id",
+        "oauth-reddit-client-secret",
+        // Slack
+        "oauth-slack-client-id",
+        "oauth-slack-client-secret",
+        // Spotify
+        "oauth-spotify-client-id",
+        "oauth-spotify-client-secret",
+        // Steam (uses OpenID 2.0, only needs API key)
         "oauth-steam-api-key",
-        "oauth-battlenet-client-id",
-        "oauth-battlenet-client-secret",
-        "oauth-epic-client-id",
-        "oauth-epic-client-secret",
+        // Twitch
+        "oauth-twitch-client-id",
+        "oauth-twitch-client-secret",
+        // Xbox (uses Microsoft OAuth, but may have separate credentials)
         "oauth-xbox-client-id",
-        "oauth-xbox-client-secret"
+        "oauth-xbox-client-secret",
+        // Yahoo
+        "oauth-yahoo-client-id",
+        "oauth-yahoo-client-secret"
     ];
 
     /// <summary>
