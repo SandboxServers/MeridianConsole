@@ -51,6 +51,26 @@ public static class InternalEndpoints
         group.MapGet("/users/{userId:guid}/organizations/{organizationId:guid}/membership", GetMembership)
             .WithName("InternalGetMembership")
             .WithDescription("Get user's membership in organization");
+
+        // Client assertions for federated identity
+        group.MapPost("/assertions/microsoft", GenerateMicrosoftAssertion)
+            .WithName("InternalGenerateMicrosoftAssertion")
+            .WithDescription("Generate a client assertion JWT for Microsoft federated credential authentication");
+    }
+
+    private static IResult GenerateMicrosoftAssertion(
+        ClientAssertionRequest request,
+        Services.IClientAssertionService assertionService)
+    {
+        if (string.IsNullOrWhiteSpace(request.Subject))
+        {
+            return Results.BadRequest(new { error = "subject_required" });
+        }
+
+        var audience = request.Audience ?? "api://AzureADTokenExchange";
+        var assertion = assertionService.GenerateMicrosoftAssertion(request.Subject, audience);
+
+        return Results.Ok(new ClientAssertionResponse(assertion, 600)); // 10 minute expiry
     }
 
     private static async Task<IResult> GetUser(
@@ -231,3 +251,5 @@ public sealed record OrganizationInfo(Guid Id, string Name, string Slug, Guid Ow
 public sealed record OrganizationMemberInfo(Guid UserId, string Role, bool IsActive);
 public sealed record PermissionCheckRequest(Guid UserId, Guid OrganizationId, string Permission);
 public sealed record PermissionCheckResponse(bool HasPermission);
+public sealed record ClientAssertionRequest(string Subject, string? Audience = null);
+public sealed record ClientAssertionResponse(string Assertion, int ExpiresIn);

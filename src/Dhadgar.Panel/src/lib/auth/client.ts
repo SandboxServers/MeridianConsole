@@ -10,6 +10,9 @@ export interface SignInOptions {
   callbackURL?: string;
 }
 
+// genericOAuth providers use different routes than built-in social providers
+const GENERIC_OAUTH_PROVIDERS = ['microsoft'];
+
 export interface AuthSession {
   user: User;
   session: {
@@ -32,12 +35,21 @@ async function fetchWithCredentials(url: string, options: RequestInit = {}): Pro
 export const authClient = {
   /**
    * Initiate OAuth sign-in flow
-   * Better Auth requires POST to /sign-in/social which returns a redirect URL
+   * Built-in social providers use POST to /sign-in/social
+   * genericOAuth providers (Microsoft) use redirect to /sign-in/{providerId}
    */
   async signIn(options: SignInOptions): Promise<void> {
     const { provider, callbackURL = '/callback' } = options;
 
     try {
+      // genericOAuth providers use a direct redirect flow
+      if (GENERIC_OAUTH_PROVIDERS.includes(provider)) {
+        const params = new URLSearchParams({ callbackURL });
+        window.location.href = `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/${provider}?${params}`;
+        return;
+      }
+
+      // Built-in social providers use POST which returns a redirect URL
       const response = await fetchWithCredentials(
         `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/social`,
         {
