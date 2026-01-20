@@ -3,12 +3,17 @@ WORKDIR /app
 
 # Install dependencies
 FROM base AS deps
+WORKDIR /app/src/Dhadgar.ShoppingCart
+# Copy shared auth package first (needed for file: reference)
+COPY src/Dhadgar.SharedAuth/ /app/src/Dhadgar.SharedAuth/
 COPY src/Dhadgar.ShoppingCart/package*.json ./
 RUN npm ci
 
 # Build the application
 FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
+WORKDIR /app/src/Dhadgar.ShoppingCart
+COPY --from=deps /app/src/Dhadgar.SharedAuth /app/src/Dhadgar.SharedAuth
+COPY --from=deps /app/src/Dhadgar.ShoppingCart/node_modules ./node_modules
 COPY src/Dhadgar.ShoppingCart/ .
 
 # Build arguments for environment variables at build time
@@ -23,7 +28,7 @@ RUN npm run build
 FROM nginx:alpine AS runner
 
 # Copy built static files
-COPY --from=builder /app/_swa_publish/wwwroot /usr/share/nginx/html
+COPY --from=builder /app/src/Dhadgar.ShoppingCart/_swa_publish/wwwroot /usr/share/nginx/html
 
 # Copy nginx config for SPA routing
 RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'

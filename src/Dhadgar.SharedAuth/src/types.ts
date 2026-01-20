@@ -38,6 +38,25 @@ export interface OAuthProvider {
   glowColor: string;
 }
 
+export interface AuthClientConfig {
+  gatewayUrl: string;
+  betterAuthPath?: string;
+  identityPath?: string;
+}
+
+export interface SignInOptions {
+  provider: string;
+  callbackURL?: string;
+}
+
+export interface AuthSession {
+  user: User;
+  session: {
+    id: string;
+    expiresAt: Date;
+  };
+}
+
 export const OAUTH_PROVIDERS: OAuthProvider[] = [
   {
     id: 'discord',
