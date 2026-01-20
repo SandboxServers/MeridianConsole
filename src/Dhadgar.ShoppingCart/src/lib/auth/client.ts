@@ -35,17 +35,35 @@ async function fetchWithCredentials(url: string, options: RequestInit = {}): Pro
 export const authClient = {
   /**
    * Initiate OAuth sign-in flow
-   * Built-in social providers use POST to /sign-in/social
-   * genericOAuth providers (Microsoft) use redirect to /sign-in/{providerId}
+   * Built-in social providers use POST to /sign-in/social with { provider }
+   * genericOAuth providers (Microsoft) use POST to /sign-in/oauth2 with { providerId }
    */
   async signIn(options: SignInOptions): Promise<void> {
     const { provider, callbackURL = '/callback' } = options;
 
     try {
-      // genericOAuth providers use a direct redirect flow
+      // genericOAuth providers use /sign-in/oauth2 with providerId in body
       if (GENERIC_OAUTH_PROVIDERS.includes(provider)) {
-        const params = new URLSearchParams({ callbackURL });
-        window.location.href = `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/${provider}?${params}`;
+        const response = await fetchWithCredentials(
+          `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/oauth2`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ providerId: provider, callbackURL }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.text();
+          console.error('Sign in error:', error);
+          throw new Error(`Sign in failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error('No redirect URL received from auth server');
+        }
         return;
       }
 
