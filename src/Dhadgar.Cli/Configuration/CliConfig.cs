@@ -25,6 +25,15 @@ public sealed class CliConfig
     [JsonPropertyName("secrets_url")]
     public string? SecretsUrl { get; set; }
 
+    [JsonPropertyName("notifications_url")]
+    public string? NotificationsUrl { get; set; }
+
+    [JsonPropertyName("discord_url")]
+    public string? DiscordUrl { get; set; }
+
+    [JsonPropertyName("admin_api_key")]
+    public string? AdminApiKey { get; set; }
+
     [JsonPropertyName("access_token")]
     public string? AccessToken { get; set; }
 
@@ -46,6 +55,12 @@ public sealed class CliConfig
 
     [JsonIgnore]
     public string EffectiveGatewayUrl => (GatewayUrl ?? "http://localhost:5000").TrimEnd('/');
+
+    [JsonIgnore]
+    public string EffectiveNotificationsUrl => NotificationsUrl ?? "http://localhost:5008";
+
+    [JsonIgnore]
+    public string EffectiveDiscordUrl => DiscordUrl ?? "http://localhost:5009";
 
     public static CliConfig Load()
     {
