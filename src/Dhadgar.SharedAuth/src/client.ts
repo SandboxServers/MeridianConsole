@@ -47,8 +47,9 @@ function validateAndRedirect(url: string): void {
   }
 
   // Validate against trusted OAuth provider origins
+  // Use hostname for subdomain check since origin includes protocol
   const isTrusted = TRUSTED_OAUTH_ORIGINS.some(origin =>
-    parsedUrl.origin === origin || parsedUrl.origin.endsWith('.microsoftonline.com')
+    parsedUrl.origin === origin || parsedUrl.hostname.endsWith('.microsoftonline.com')
   );
 
   if (!isTrusted) {
