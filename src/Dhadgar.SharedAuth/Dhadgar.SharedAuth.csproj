@@ -13,11 +13,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
 
-    <!-- Node.js build configuration -->
+    <!-- Node.js build configuration (use forward slashes for cross-platform compatibility) -->
     <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
     <NpmCommand Condition="'$(OS)' != 'Windows_NT'">npm</NpmCommand>
     <SharedAuthProjectDir>$(MSBuildProjectDirectory)</SharedAuthProjectDir>
-    <NodeModulesDir>$(SharedAuthProjectDir)\node_modules</NodeModulesDir>
+    <NodeModulesDir>$(SharedAuthProjectDir)/node_modules</NodeModulesDir>
+    <PackageJsonPath>$(SharedAuthProjectDir)/package.json</PackageJsonPath>
   </PropertyGroup>
 
   <!-- Skip restore for this project - npm handles dependencies -->
@@ -26,7 +27,7 @@
   </Target>
 
   <!-- Run npm install if node_modules doesn't exist or package.json changed -->
-  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(SharedAuthProjectDir)\package.json" Outputs="$(NodeModulesDir)\.package-lock.json">
+  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(PackageJsonPath)" Outputs="$(NodeModulesDir)/.package-lock.json">
     <Message Importance="high" Text="Running npm install for Dhadgar.SharedAuth..." />
     <Exec Command="$(NpmCommand) install" WorkingDirectory="$(SharedAuthProjectDir)" />
   </Target>

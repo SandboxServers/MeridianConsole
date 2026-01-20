@@ -4,16 +4,44 @@ import type { AuthTokens, AuthClientConfig, SignInOptions, AuthSession } from '.
 // genericOAuth providers use different routes than built-in social providers
 const GENERIC_OAUTH_PROVIDERS = ['microsoft'];
 
-// Trusted OAuth provider origins for redirect validation (defense in depth)
-const TRUSTED_OAUTH_ORIGINS = [
-  'https://login.microsoftonline.com',
-  'https://accounts.google.com',
-  'https://discord.com',
-  'https://github.com',
-  'https://appleid.apple.com',
-  'https://www.facebook.com',
-  'https://id.twitch.tv',
+// Trusted OAuth provider hostnames for redirect validation (defense in depth)
+const TRUSTED_OAUTH_HOSTNAMES = [
+  'login.microsoftonline.com',
+  'accounts.google.com',
+  'discord.com',
+  'github.com',
+  'appleid.apple.com',
+  'www.facebook.com',
+  'id.twitch.tv',
 ];
+
+/**
+ * Validates that a token response contains valid data
+ * @throws Error if validation fails
+ */
+function validateTokenResponse(data: unknown): asserts data is {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+} {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid token response: expected object');
+  }
+
+  const response = data as Record<string, unknown>;
+
+  if (typeof response.accessToken !== 'string' || response.accessToken.length === 0) {
+    throw new Error('Invalid token response: missing or invalid accessToken');
+  }
+
+  if (typeof response.refreshToken !== 'string' || response.refreshToken.length === 0) {
+    throw new Error('Invalid token response: missing or invalid refreshToken');
+  }
+
+  if (typeof response.expiresIn !== 'number' || !Number.isFinite(response.expiresIn) || response.expiresIn <= 0) {
+    throw new Error('Invalid token response: missing or invalid expiresIn');
+  }
+}
 
 function createFetchWithCredentials() {
   return async function fetchWithCredentials(url: string, options: RequestInit = {}): Promise<Response> {
@@ -46,11 +74,10 @@ function validateAndRedirect(url: string): void {
     throw new Error('Redirect URL must use HTTPS');
   }
 
-  // Validate against trusted OAuth provider origins
-  // Use hostname for subdomain check since origin includes protocol
-  const isTrusted = TRUSTED_OAUTH_ORIGINS.some(origin =>
-    parsedUrl.origin === origin || parsedUrl.hostname.endsWith('.microsoftonline.com')
-  );
+  // Validate against trusted OAuth provider hostnames
+  const isTrusted = TRUSTED_OAUTH_HOSTNAMES.some(hostname =>
+    parsedUrl.hostname === hostname
+  ) || parsedUrl.hostname.endsWith('.microsoftonline.com');
 
   if (!isTrusted) {
     console.warn('Redirect to untrusted origin:', parsedUrl.origin);
@@ -172,7 +199,14 @@ export function createAuthClient(config: AuthClientConfig) {
           return null;
         }
 
-        const { exchangeToken } = await exchangeResponse.json();
+        const exchangeData = await exchangeResponse.json();
+        const exchangeToken = exchangeData?.exchangeToken;
+
+        // Validate exchangeToken is a non-empty string
+        if (typeof exchangeToken !== 'string' || exchangeToken.length === 0) {
+          console.error('Invalid exchange token received from BetterAuth');
+          return null;
+        }
 
         // Exchange for Identity tokens
         const identityResponse = await fetch(`${gatewayUrl}${identityPath}/exchange`, {
@@ -187,6 +221,9 @@ export function createAuthClient(config: AuthClientConfig) {
         }
 
         const data = await identityResponse.json();
+
+        // Validate response contains required fields with correct types
+        validateTokenResponse(data);
 
         // Identity returns expiresIn (seconds until expiry), convert to expiresAt (Unix timestamp in seconds)
         const tokens: AuthTokens = {
@@ -223,6 +260,9 @@ export function createAuthClient(config: AuthClientConfig) {
         }
 
         const data = await response.json();
+
+        // Validate response contains required fields with correct types
+        validateTokenResponse(data);
 
         // Identity returns expiresIn (seconds until expiry), convert to expiresAt (Unix timestamp in seconds)
         const tokens: AuthTokens = {
