@@ -45,7 +45,7 @@ function resolveClientApp({ bodyClientApp, origin, allowedApps }) {
   return "unknown";
 }
 
-export async function createExchangeToken({ user, origin, clientApp }) {
+export async function createExchangeToken({ user, origin, clientApp, provider, providers }) {
   const key = await getPrivateKey();
   const issuer =
     process.env.EXCHANGE_TOKEN_ISSUER ??
@@ -71,7 +71,9 @@ export async function createExchangeToken({ user, origin, clientApp }) {
     name: user.name || null,
     picture: user.image || null,
     purpose: "token_exchange",
-    client_app: resolvedClientApp
+    client_app: resolvedClientApp,
+    provider: provider ?? "unknown",
+    providers: providers ?? []
   })
     .setProtectedHeader({
       alg: "ES256",

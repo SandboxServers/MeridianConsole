@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import pg from "pg";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import { getMigrations } from "better-auth/db";
 import { loadSecrets } from "./secrets-client.js";
@@ -10,6 +11,9 @@ await loadSecrets();
 
 // Import auth after secrets are loaded (it depends on env vars)
 const { auth, authConfig, trustedOrigins } = await import("./auth.js");
+
+// Create a database pool for direct queries (shared connection with Better Auth)
+const dbPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
 // Run database migrations on startup
 async function runMigrations() {
@@ -79,10 +83,39 @@ app.post("/api/v1/betterauth/exchange", async (req, res) => {
       return res.status(401).json({ error: "unauthorized" });
     }
 
+    // Get ALL user's linked accounts to pass to Identity
+    // Query the BetterAuth 'account' table directly
+    let providers = [];
+    let currentProvider = "unknown";
+    try {
+      const result = await dbPool.query(
+        `SELECT "providerId", "accountId", "updatedAt", "createdAt"
+         FROM "account"
+         WHERE "userId" = $1
+         ORDER BY COALESCE("updatedAt", "createdAt") DESC`,
+        [session.user.id]
+      );
+
+      if (result.rows.length > 0) {
+        // Current provider is the most recently used
+        currentProvider = result.rows[0].providerId ?? "unknown";
+        // All providers the user has linked
+        providers = result.rows.map(row => ({
+          providerId: row.providerId,
+          accountId: row.accountId
+        }));
+      }
+    } catch (accountError) {
+      // Log but continue - we can still issue token with unknown provider
+      console.warn("Failed to fetch user accounts:", accountError.message);
+    }
+
     const exchangeToken = await createExchangeToken({
       user: session.user,
       origin: req.headers.origin,
-      clientApp: req.body?.clientApp
+      clientApp: req.body?.clientApp,
+      provider: currentProvider,
+      providers
     });
 
     return res.json({ exchangeToken });

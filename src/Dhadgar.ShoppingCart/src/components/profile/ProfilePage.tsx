@@ -4,27 +4,45 @@ import { authClient } from '../../lib/auth';
 import { LoadingSpinner } from '../ui';
 
 const PROVIDER_COLORS: Record<string, string> = {
-  discord: 'bg-[#5865F2]/20 border-[#5865F2]/50 text-[#5865F2]',
-  google: 'bg-[#4285F4]/20 border-[#4285F4]/50 text-[#4285F4]',
-  github: 'bg-[#24292F]/20 border-[#24292F]/50 text-white',
-  microsoft: 'bg-[#00A4EF]/20 border-[#00A4EF]/50 text-[#00A4EF]',
-  twitch: 'bg-[#9146FF]/20 border-[#9146FF]/50 text-[#9146FF]',
-  steam: 'bg-[#1B2838]/20 border-[#66c0f4]/50 text-[#66c0f4]',
+  amazon: 'bg-[#FF9900]/20 border-[#FF9900]/50 text-[#FF9900]',
   battlenet: 'bg-[#00AEFF]/20 border-[#00AEFF]/50 text-[#00AEFF]',
-  betterauth: 'bg-[#5865F2]/20 border-[#5865F2]/50 text-[#5865F2]', // BetterAuth uses Discord
+  discord: 'bg-[#5865F2]/20 border-[#5865F2]/50 text-[#5865F2]',
+  facebook: 'bg-[#1877F2]/20 border-[#1877F2]/50 text-[#1877F2]',
+  github: 'bg-[#24292F]/20 border-[#24292F]/50 text-white',
+  google: 'bg-[#4285F4]/20 border-[#4285F4]/50 text-[#4285F4]',
+  lego: 'bg-[#FFED00]/20 border-[#FFED00]/50 text-[#E3000B]',
+  microsoft: 'bg-[#00A4EF]/20 border-[#00A4EF]/50 text-[#00A4EF]',
+  paypal: 'bg-[#003087]/20 border-[#003087]/50 text-[#003087]',
+  reddit: 'bg-[#FF4500]/20 border-[#FF4500]/50 text-[#FF4500]',
+  slack: 'bg-[#4A154B]/20 border-[#4A154B]/50 text-[#4A154B]',
+  spotify: 'bg-[#1DB954]/20 border-[#1DB954]/50 text-[#1DB954]',
+  steam: 'bg-[#1B2838]/20 border-[#66c0f4]/50 text-[#66c0f4]',
+  twitch: 'bg-[#9146FF]/20 border-[#9146FF]/50 text-[#9146FF]',
+  xbox: 'bg-[#107C10]/20 border-[#107C10]/50 text-[#107C10]',
+  yahoo: 'bg-[#6001D2]/20 border-[#6001D2]/50 text-[#6001D2]',
+  betterauth: 'bg-[#5865F2]/20 border-[#5865F2]/50 text-[#5865F2]', // Legacy fallback
 };
 
-// Map BetterAuth provider to friendly display name
+// Map provider ID to friendly display name
 function getProviderDisplayName(provider: string): string {
   const providerMap: Record<string, string> = {
-    betterauth: 'Discord',
-    discord: 'Discord',
-    google: 'Google',
-    github: 'GitHub',
-    microsoft: 'Microsoft',
-    twitch: 'Twitch',
-    steam: 'Steam',
+    amazon: 'Amazon',
     battlenet: 'Battle.net',
+    betterauth: 'Unknown', // Legacy fallback
+    discord: 'Discord',
+    facebook: 'Facebook',
+    github: 'GitHub',
+    google: 'Google',
+    lego: 'LEGO',
+    microsoft: 'Microsoft',
+    paypal: 'PayPal',
+    reddit: 'Reddit',
+    slack: 'Slack',
+    spotify: 'Spotify',
+    steam: 'Steam',
+    twitch: 'Twitch',
+    xbox: 'Xbox',
+    yahoo: 'Yahoo',
   };
   return providerMap[provider.toLowerCase()] || provider;
 }
@@ -270,7 +288,7 @@ export default function ProfilePage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium">{displayName}</h3>
-                        <p className="text-xs opacity-70">Primary sign-in method</p>
+                        <p className="text-xs opacity-70">Linked account</p>
                       </div>
                     </div>
                   </div>
