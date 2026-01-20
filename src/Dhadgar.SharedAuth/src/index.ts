@@ -6,8 +6,17 @@ export type {
   AuthTokens,
   AuthState,
   OAuthProvider,
+  OAuthCategory,
+  SignInCategory,
   AuthClientConfig,
   SignInOptions,
   AuthSession,
 } from './types';
-export { OAUTH_PROVIDERS } from './types';
+export {
+  OAUTH_PROVIDERS,
+  OAUTH_CATEGORIES,
+  SIGN_IN_CATEGORIES,
+  getProvider,
+  getProvidersByCategory,
+  getSignInCategory,
+} from './types';
