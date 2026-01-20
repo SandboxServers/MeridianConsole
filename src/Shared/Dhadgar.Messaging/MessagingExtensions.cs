@@ -19,9 +19,9 @@ public static class MessagingExtensions
 
             x.UsingRabbitMq((ctx, cfg) =>
             {
-                var host = config.GetConnectionString("RabbitMqHost") ?? "localhost";
-                var user = config["RabbitMq:Username"] ?? "dhadgar";
-                var pass = config["RabbitMq:Password"] ?? "dhadgar";
+                var host = config["RabbitMq:Host"] ?? config.GetConnectionString("RabbitMqHost") ?? "localhost";
+                var user = config["RabbitMq:Username"] ?? "guest";
+                var pass = config["RabbitMq:Password"] ?? "guest";
 
                 cfg.Host(host, h =>
                 {
@@ -63,15 +63,13 @@ public static class MessagingExtensions
                 // In-memory outbox prevents duplicate sends on retry
                 cfg.UseInMemoryOutbox(ctx);
 
-                // Configure dead letter queue settings
-                // Messages that fail all retries and redelivery attempts go to _error queue
-                cfg.ReceiveEndpoint("meridian.dead-letter", e =>
-                {
-                    // This endpoint receives messages moved from _error queues
-                    // for centralized monitoring/alerting
-                    e.ConfigureConsumeTopology = false;
-                    e.Bind("meridian.dead-letter");
-                });
+                // Dead letter queue endpoint is intentionally not configured here.
+                // MassTransit automatically routes failed messages to {queue}_error queues.
+                // To implement centralized dead letter handling:
+                // 1. Create a DeadLetterConsumer that implements IConsumer<Fault<T>> for each message type
+                // 2. Register the consumer(s) in the service's MassTransit configuration
+                // 3. Configure error queue forwarding or use MassTransit's fault handling
+                // See: https://masstransit.io/documentation/concepts/exceptions
 
                 cfg.ConfigureEndpoints(ctx);
             });

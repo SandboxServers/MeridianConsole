@@ -121,12 +121,12 @@ public sealed class SlashCommandHandler
             .WithFooter("Meridian Console");
 
         // Overall status color
-        if (healthStatus.UnhealthyCount == 0)
+        if (healthStatus.unhealthyCount == 0)
         {
             embedBuilder.WithColor(Color.Green);
-            embedBuilder.WithDescription($"All {healthStatus.HealthyCount} services operational");
+            embedBuilder.WithDescription($"All {healthStatus.healthyCount} services operational");
         }
-        else if (healthStatus.HealthyCount == 0)
+        else if (healthStatus.healthyCount == 0)
         {
             embedBuilder.WithColor(Color.Red);
             embedBuilder.WithDescription("All services are down!");
@@ -134,18 +134,18 @@ public sealed class SlashCommandHandler
         else
         {
             embedBuilder.WithColor(Color.Orange);
-            embedBuilder.WithDescription($"{healthStatus.HealthyCount}/{healthStatus.Services.Count} services operational");
+            embedBuilder.WithDescription($"{healthStatus.healthyCount}/{healthStatus.services.Count} services operational");
         }
 
         // Group services by status for cleaner display
-        var healthyServices = healthStatus.Services.Where(s => s.IsHealthy).ToList();
-        var unhealthyServices = healthStatus.Services.Where(s => !s.IsHealthy).ToList();
+        var healthyServices = healthStatus.services.Where(s => s.isHealthy).ToList();
+        var unhealthyServices = healthStatus.services.Where(s => !s.isHealthy).ToList();
 
         // Show healthy services
         if (healthyServices.Count > 0)
         {
             var healthyText = string.Join("\n", healthyServices.Select(s =>
-                $":green_circle: **{s.ServiceName}** ({s.ResponseTimeMs}ms)"));
+                $":green_circle: **{s.serviceName}** ({s.responseTimeMs}ms)"));
             embedBuilder.AddField("Healthy", healthyText, inline: false);
         }
 
@@ -153,7 +153,7 @@ public sealed class SlashCommandHandler
         if (unhealthyServices.Count > 0)
         {
             var unhealthyText = string.Join("\n", unhealthyServices.Select(s =>
-                $":red_circle: **{s.ServiceName}** - {s.Error ?? "Unknown error"}"));
+                $":red_circle: **{s.serviceName}** - {s.error ?? "Unknown error"}"));
             embedBuilder.AddField("Unhealthy", unhealthyText, inline: false);
         }
 

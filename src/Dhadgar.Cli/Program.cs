@@ -63,8 +63,8 @@ root.SetHandler(() =>
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
     table.AddRow("[cyan]dhadgar gateway[/]", "[dim]Gateway diagnostics (health check)[/]");
-    table.AddRow("[cyan]dhadgar notifications[/]", "[dim]Notification service commands (logs)[/]");
-    table.AddRow("[cyan]dhadgar discord[/]", "[dim]Discord service commands (status, logs)[/]");
+    table.AddRow("[cyan]dhadgar notifications[/]", "[dim]Notification service commands (logs, test)[/]");
+    table.AddRow("[cyan]dhadgar discord[/]", "[dim]Discord service commands (status, channels)[/]");
     table.AddRow("[cyan]dhadgar commands[/]", "[dim]List available commands and usage[/]");
     table.AddRow("[cyan]dhadgar version[/]", "[dim]Show CLI build and breaking change info[/]");
 

@@ -1,3 +1,4 @@
+using Dhadgar.Contracts.Notifications;
 using Refit;
 
 namespace Dhadgar.Cli.Infrastructure.Clients;
@@ -27,28 +28,19 @@ public interface INotificationsApi
 /// DTO for notification log entries.
 /// </summary>
 public record NotificationLogDto(
-    Guid Id,
-    Guid OrganizationId,
-    string EventType,
-    string Channel,
-    string Recipient,
-    string Subject,
-    string Status,
-    string? ErrorMessage,
-    DateTimeOffset CreatedAtUtc);
-
-/// <summary>
-/// Request payload for sending a test notification.
-/// </summary>
-public record TestNotificationRequest(
-    Guid? OrgId,
-    string? Title,
-    string? Message,
-    string? Severity);
+    Guid id,
+    Guid organizationId,
+    string eventType,
+    string channel,
+    string recipient,
+    string subject,
+    string status,
+    string? errorMessage,
+    DateTimeOffset createdAtUtc);
 
 /// <summary>
 /// Response from sending a test notification.
 /// </summary>
 public record TestNotificationResponse(
-    Guid NotificationId,
-    string Message);
+    Guid notificationId,
+    string message);

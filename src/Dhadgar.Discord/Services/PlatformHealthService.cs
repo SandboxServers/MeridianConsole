@@ -4,20 +4,20 @@ namespace Dhadgar.Discord.Services;
 /// Health status for a single microservice.
 /// </summary>
 public record ServiceHealthStatus(
-    string ServiceName,
-    string Url,
-    bool IsHealthy,
-    int? ResponseTimeMs,
-    string? Error);
+    string serviceName,
+    string url,
+    bool isHealthy,
+    int? responseTimeMs,
+    string? error);
 
 /// <summary>
 /// Aggregated health status for the entire platform.
 /// </summary>
 public record PlatformHealthStatus(
-    IReadOnlyList<ServiceHealthStatus> Services,
-    int HealthyCount,
-    int UnhealthyCount,
-    DateTimeOffset CheckedAtUtc);
+    IReadOnlyList<ServiceHealthStatus> services,
+    int healthyCount,
+    int unhealthyCount,
+    DateTimeOffset checkedAtUtc);
 
 /// <summary>
 /// Service that checks health of all platform microservices.
@@ -71,18 +71,18 @@ public sealed class PlatformHealthService : IPlatformHealthService
         var checkTasks = serviceUrls.Select(kvp => CheckServiceAsync(kvp.Key, kvp.Value, ct));
         var results = await Task.WhenAll(checkTasks);
 
-        var healthyCount = results.Count(r => r.IsHealthy);
-        var unhealthyCount = results.Count(r => !r.IsHealthy);
+        var healthyCount = results.Count(r => r.isHealthy);
+        var unhealthyCount = results.Count(r => !r.isHealthy);
 
         _logger.LogInformation(
             "Platform health check complete: {Healthy}/{Total} services healthy",
             healthyCount, results.Length);
 
         return new PlatformHealthStatus(
-            Services: results.OrderBy(s => s.ServiceName).ToList(),
-            HealthyCount: healthyCount,
-            UnhealthyCount: unhealthyCount,
-            CheckedAtUtc: DateTimeOffset.UtcNow);
+            services: results.OrderBy(s => s.serviceName).ToList(),
+            healthyCount: healthyCount,
+            unhealthyCount: unhealthyCount,
+            checkedAtUtc: DateTimeOffset.UtcNow);
     }
 
     private Dictionary<string, string> GetServiceUrls()
@@ -120,19 +120,19 @@ public sealed class PlatformHealthService : IPlatformHealthService
             if (response.IsSuccessStatusCode)
             {
                 return new ServiceHealthStatus(
-                    ServiceName: serviceName,
-                    Url: baseUrl,
-                    IsHealthy: true,
-                    ResponseTimeMs: (int)stopwatch.ElapsedMilliseconds,
-                    Error: null);
+                    serviceName: serviceName,
+                    url: baseUrl,
+                    isHealthy: true,
+                    responseTimeMs: (int)stopwatch.ElapsedMilliseconds,
+                    error: null);
             }
 
             return new ServiceHealthStatus(
-                ServiceName: serviceName,
-                Url: baseUrl,
-                IsHealthy: false,
-                ResponseTimeMs: (int)stopwatch.ElapsedMilliseconds,
-                Error: $"HTTP {(int)response.StatusCode}");
+                serviceName: serviceName,
+                url: baseUrl,
+                isHealthy: false,
+                responseTimeMs: (int)stopwatch.ElapsedMilliseconds,
+                error: $"HTTP {(int)response.StatusCode}");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -143,31 +143,31 @@ public sealed class PlatformHealthService : IPlatformHealthService
         {
             // HttpClient timeout (not caller cancellation)
             return new ServiceHealthStatus(
-                ServiceName: serviceName,
-                Url: baseUrl,
-                IsHealthy: false,
-                ResponseTimeMs: null,
-                Error: "Timeout");
+                serviceName: serviceName,
+                url: baseUrl,
+                isHealthy: false,
+                responseTimeMs: null,
+                error: "Timeout");
         }
         catch (HttpRequestException ex)
         {
             return new ServiceHealthStatus(
-                ServiceName: serviceName,
-                Url: baseUrl,
-                IsHealthy: false,
-                ResponseTimeMs: null,
-                Error: ex.InnerException?.Message ?? ex.Message);
+                serviceName: serviceName,
+                url: baseUrl,
+                isHealthy: false,
+                responseTimeMs: null,
+                error: ex.InnerException?.Message ?? ex.Message);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Unexpected error checking health of {Service}", serviceName);
 
             return new ServiceHealthStatus(
-                ServiceName: serviceName,
-                Url: baseUrl,
-                IsHealthy: false,
-                ResponseTimeMs: null,
-                Error: ex.Message);
+                serviceName: serviceName,
+                url: baseUrl,
+                isHealthy: false,
+                responseTimeMs: null,
+                error: ex.Message);
         }
     }
 }

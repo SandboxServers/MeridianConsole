@@ -34,14 +34,14 @@ public interface IDiscordApi
 /// DTO for Discord notification log entries.
 /// </summary>
 public record DiscordLogDto(
-    Guid Id,
-    Guid OrganizationId,
-    string EventType,
-    string Channel,
-    string Title,
-    string Status,
-    string? ErrorMessage,
-    DateTimeOffset CreatedAtUtc);
+    Guid id,
+    Guid organizationId,
+    string eventType,
+    string channel,
+    string title,
+    string status,
+    string? errorMessage,
+    DateTimeOffset createdAtUtc);
 
 /// <summary>
 /// DTO for Discord service health check.
@@ -67,7 +67,7 @@ public record ServiceHealthDto(
     string Name,
     string Url,
     bool IsHealthy,
-    long ResponseTimeMs,
+    long? ResponseTimeMs,
     string? Error);
 
 /// <summary>

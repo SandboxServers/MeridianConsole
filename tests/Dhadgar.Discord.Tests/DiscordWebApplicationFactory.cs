@@ -1,3 +1,5 @@
+#nullable enable
+
 using Dhadgar.Discord.Bot;
 using Dhadgar.Discord.Commands;
 using Dhadgar.Discord.Data;
@@ -94,15 +96,15 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
             var mockHealthService = Substitute.For<IPlatformHealthService>();
             var mockServices = new List<ServiceHealthStatus>
             {
-                new("Gateway", "http://localhost:5000", true, 100, null),
-                new("Identity", "http://localhost:5010", true, 50, null)
+                new(serviceName: "Gateway", url: "http://localhost:5000", isHealthy: true, responseTimeMs: 100, error: null),
+                new(serviceName: "Identity", url: "http://localhost:5010", isHealthy: true, responseTimeMs: 50, error: null)
             };
             mockHealthService.CheckAllServicesAsync(Arg.Any<CancellationToken>())
                 .Returns(new PlatformHealthStatus(
-                    Services: mockServices,
-                    HealthyCount: 2,
-                    UnhealthyCount: 0,
-                    CheckedAtUtc: DateTimeOffset.UtcNow));
+                    services: mockServices,
+                    healthyCount: 2,
+                    unhealthyCount: 0,
+                    checkedAtUtc: DateTimeOffset.UtcNow));
             services.AddSingleton(mockHealthService);
         });
     }

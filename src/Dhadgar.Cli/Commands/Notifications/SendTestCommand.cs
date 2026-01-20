@@ -1,5 +1,6 @@
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
+using Dhadgar.Contracts.Notifications;
 using Refit;
 using Spectre.Console;
 
@@ -42,7 +43,7 @@ public sealed class SendTestCommand
             var response = await api.SendTestNotificationAsync(config.AdminApiKey, request, ct);
 
             AnsiConsole.MarkupLine("[green]Test notification sent successfully![/]");
-            AnsiConsole.MarkupLine($"[dim]Notification ID: {response.NotificationId}[/]");
+            AnsiConsole.MarkupLine($"[dim]Notification ID: {response.notificationId}[/]");
 
             return 0;
         }

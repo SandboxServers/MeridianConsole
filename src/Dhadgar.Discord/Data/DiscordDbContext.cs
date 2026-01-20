@@ -3,6 +3,16 @@ using Microsoft.EntityFrameworkCore;
 namespace Dhadgar.Discord.Data;
 
 /// <summary>
+/// Status values for notification logs.
+/// </summary>
+public static class NotificationStatus
+{
+    public const string Sent = "sent";
+    public const string Failed = "failed";
+    public const string Pending = "pending";
+}
+
+/// <summary>
 /// Database context for Discord service.
 /// Minimal schema for internal admin use - just tracks notification history.
 /// </summary>
@@ -50,7 +60,10 @@ public sealed class DiscordNotificationLog
     public string EventType { get; set; } = null!;
     public string Channel { get; set; } = null!;
     public string Title { get; set; } = null!;
-    public string Status { get; set; } = null!; // sent, failed
+    /// <summary>
+    /// Status of the notification. Use <see cref="NotificationStatus"/> constants.
+    /// </summary>
+    public string Status { get; set; } = null!;
     public string? ErrorMessage { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
 }

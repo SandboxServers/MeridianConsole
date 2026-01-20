@@ -66,11 +66,20 @@ public sealed class StatusCommand
                     foreach (var service in platformHealth.Services)
                     {
                         var serviceStatusColor = service.IsHealthy ? "green" : "red";
-                        var responseTime = service.ResponseTimeMs < 100
-                            ? $"[green]{service.ResponseTimeMs}ms[/]"
-                            : service.ResponseTimeMs < 500
-                                ? $"[yellow]{service.ResponseTimeMs}ms[/]"
-                                : $"[red]{service.ResponseTimeMs}ms[/]";
+                        string responseTime;
+                        if (service.ResponseTimeMs.HasValue)
+                        {
+                            var ms = service.ResponseTimeMs.Value;
+                            responseTime = ms < 100
+                                ? $"[green]{ms}ms[/]"
+                                : ms < 500
+                                    ? $"[yellow]{ms}ms[/]"
+                                    : $"[red]{ms}ms[/]";
+                        }
+                        else
+                        {
+                            responseTime = "[dim]n/a[/]";
+                        }
 
                         platformTable.AddRow(
                             $"[cyan]{Markup.Escape(service.Name)}[/]",

@@ -68,34 +68,46 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
                 jsonPayload,
                 context.CancellationToken);
 
-            var logEntry = new DiscordNotificationLog
+            try
             {
-                Id = Guid.NewGuid(),
-                OrganizationId = message.OrgId,
-                EventType = Truncate(message.EventType, 100),
-                Channel = Truncate(channel, 100),
-                Title = Truncate(message.Title, 500),
-                Status = response.IsSuccessStatusCode ? "sent" : "failed",
-                ErrorMessage = response.IsSuccessStatusCode ? null : Truncate($"HTTP {response.StatusCode} (attempt {attempt})", 1000),
-                CreatedAtUtc = DateTimeOffset.UtcNow
-            };
+                var logEntry = new DiscordNotificationLog
+                {
+                    Id = Guid.NewGuid(),
+                    OrganizationId = message.OrgId,
+                    EventType = Truncate(message.EventType, 100),
+                    Channel = Truncate(channel, 100),
+                    Title = Truncate(message.Title, 500),
+                    Status = response.IsSuccessStatusCode ? NotificationStatus.Sent : NotificationStatus.Failed,
+                    ErrorMessage = response.IsSuccessStatusCode ? null : Truncate($"HTTP {response.StatusCode} (attempt {attempt})", 1000),
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                };
 
-            _db.NotificationLogs.Add(logEntry);
-            await _db.SaveChangesAsync(context.CancellationToken);
+                _db.NotificationLogs.Add(logEntry);
+                await _db.SaveChangesAsync(context.CancellationToken);
 
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogDebug(
-                    "Successfully sent notification to Discord (attempt {Attempt})",
-                    attempt);
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogDebug(
+                        "Successfully sent notification to Discord (attempt {Attempt})",
+                        attempt);
+                }
+                else
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync(context.CancellationToken);
+                    _logger.LogWarning(
+                        "Failed to send notification to Discord after {Attempts} attempts: {StatusCode} - {Error}",
+                        attempt, response.StatusCode, errorBody);
+                }
             }
-            else
+            finally
             {
-                var errorBody = await response.Content.ReadAsStringAsync(context.CancellationToken);
-                _logger.LogWarning(
-                    "Failed to send notification to Discord after {Attempts} attempts: {StatusCode} - {Error}",
-                    attempt, response.StatusCode, errorBody);
+                response.Dispose();
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Rethrow cancellation to allow MassTransit to handle it properly
+            throw;
         }
         catch (Exception ex)
         {
@@ -108,7 +120,7 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
                 EventType = Truncate(message.EventType, 100),
                 Channel = Truncate(channel, 100),
                 Title = Truncate(message.Title, 500),
-                Status = "failed",
+                Status = NotificationStatus.Failed,
                 ErrorMessage = Truncate(ex.Message, 1000),
                 CreatedAtUtc = DateTimeOffset.UtcNow
             });
@@ -151,6 +163,9 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
             {
                 break;
             }
+
+            // Dispose the 429 response before retrying
+            response.Dispose();
 
             await Task.Delay(delayMs, ct);
         }

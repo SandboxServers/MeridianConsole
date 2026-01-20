@@ -59,7 +59,7 @@ public sealed class ListLogsCommand
 
             foreach (var log in logs)
             {
-                var statusColor = log.Status switch
+                var statusColor = log.status switch
                 {
                     "sent" => "green",
                     "failed" => "red",
@@ -68,12 +68,12 @@ public sealed class ListLogsCommand
                 };
 
                 table.AddRow(
-                    $"[dim]{log.Id.ToString()[..8]}...[/]",
-                    $"[cyan]{Markup.Escape(log.EventType)}[/]",
-                    $"[blue]{Markup.Escape(log.Channel)}[/]",
-                    Markup.Escape(TruncateString(log.Recipient, 30)),
-                    $"[{statusColor}]{Markup.Escape(log.Status)}[/]",
-                    $"[dim]{log.CreatedAtUtc:yyyy-MM-dd HH:mm:ss}[/]");
+                    $"[dim]{log.id.ToString()[..8]}...[/]",
+                    $"[cyan]{Markup.Escape(log.eventType)}[/]",
+                    $"[blue]{Markup.Escape(log.channel)}[/]",
+                    Markup.Escape(TruncateString(log.recipient, 30)),
+                    $"[{statusColor}]{Markup.Escape(log.status)}[/]",
+                    $"[dim]{log.createdAtUtc:yyyy-MM-dd HH:mm:ss}[/]");
             }
 
             AnsiConsole.Write(table);

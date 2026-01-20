@@ -45,7 +45,16 @@ public static class NotificationSeverity
 // ============================================================================
 
 /// <summary>
-/// Command to send an email notification via SendGrid.
+/// Request payload for sending a test notification.
+/// </summary>
+public record TestNotificationRequest(
+    Guid? OrgId,
+    string? Title,
+    string? Message,
+    string? Severity);
+
+/// <summary>
+/// Command to send an email notification.
 /// </summary>
 public record SendEmailNotification(
     Guid NotificationId,
@@ -78,6 +87,7 @@ public record SendDiscordNotification(
 /// </summary>
 public record SendPushNotification(
     Guid NotificationId,
+    Guid OrgId,
     Guid UserId,
     string Title,
     string Body,

@@ -40,11 +40,14 @@ public class NotificationsWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseInMemoryDatabase($"NotificationsTestDb_{Guid.NewGuid()}");
             });
 
-            // Remove ALL hosted services to prevent MassTransit consumers from starting
-            var hostedServicesToRemove = services
-                .Where(d => d.ServiceType == typeof(IHostedService))
+            // Remove only MassTransit-related hosted services to prevent consumers from starting
+            // Keep other hosted services (health checks, etc.) intact
+            var massTransitHostedServices = services
+                .Where(d => d.ServiceType == typeof(IHostedService) &&
+                    (d.ImplementationType?.FullName?.Contains("MassTransit") == true ||
+                     d.ImplementationFactory?.Method.DeclaringType?.FullName?.Contains("MassTransit") == true))
                 .ToList();
-            foreach (var descriptor in hostedServicesToRemove)
+            foreach (var descriptor in massTransitHostedServices)
             {
                 services.Remove(descriptor);
             }
