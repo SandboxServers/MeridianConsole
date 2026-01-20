@@ -1,6 +1,13 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { clsx } from 'clsx';
-import { authClient, OAUTH_PROVIDERS, OAUTH_CATEGORIES, getProvidersByCategory, type OAuthCategory, type OAuthProvider } from '../../lib/auth';
+import {
+  authClient,
+  OAUTH_PROVIDERS,
+  SIGN_IN_CATEGORIES,
+  getProvidersByCategory,
+  type OAuthProvider,
+  type SignInCategory,
+} from '../../lib/auth';
 import ProviderIcon from './ProviderIcon';
 
 interface OAuthButtonGroupProps {
@@ -15,37 +22,37 @@ function CategorySection({
   onOAuth,
   isFirst,
 }: {
-  category: OAuthCategory;
+  category: SignInCategory;
   providers: OAuthProvider[];
   loadingProvider: string | null;
   onOAuth: (providerId: string) => void;
   isFirst: boolean;
 }) {
-  const categoryInfo = OAUTH_CATEGORIES[category];
-  const isGaming = category === 'gaming';
+  const isCompact = category.compact === true;
 
   return (
     <div className={clsx(!isFirst && 'mt-6 pt-6 border-t border-glow-line/20')}>
       {/* Category Header */}
       <div className="mb-3">
         <h3 className="font-display text-xs tracking-wider text-text-secondary uppercase">
-          {categoryInfo.name}
+          {category.name}
         </h3>
       </div>
 
       {/* Provider Buttons */}
       <div className={clsx(
         'grid gap-2',
-        isGaming ? 'grid-cols-3' : 'grid-cols-1'
+        isCompact ? 'grid-cols-3' : 'grid-cols-1'
       )}>
         {providers.map((provider) => (
           <button
+            type="button"
             key={provider.id}
             onClick={() => onOAuth(provider.id)}
             disabled={loadingProvider !== null}
             className={clsx(
               'relative flex items-center gap-3',
-              isGaming ? 'justify-center px-3 py-3' : 'justify-start px-4 py-3',
+              isCompact ? 'justify-center px-3 py-3' : 'justify-start px-4 py-3',
               'rounded-lg border border-glow-line/50 bg-panel-dark',
               'font-body text-text-primary text-sm',
               'transition-all duration-200',
@@ -58,7 +65,7 @@ function CategorySection({
               '--provider-color': provider.color,
               '--provider-glow': provider.glowColor,
             } as React.CSSProperties}
-            title={isGaming ? provider.name : undefined}
+            title={isCompact ? provider.name : undefined}
           >
             {loadingProvider === provider.id ? (
               <svg
@@ -66,6 +73,7 @@ function CategorySection({
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <circle
                   className="opacity-25"
@@ -84,7 +92,7 @@ function CategorySection({
             ) : (
               <ProviderIcon provider={provider.id} className="w-5 h-5 flex-shrink-0" />
             )}
-            {!isGaming && (
+            {!isCompact && (
               <span className="flex-1 text-left">
                 {provider.name}
               </span>
@@ -102,7 +110,7 @@ export default function OAuthButtonGroup({
 }: OAuthButtonGroupProps) {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
 
-  const handleOAuth = async (providerId: string) => {
+  const handleOAuth = useCallback(async (providerId: string) => {
     setLoadingProvider(providerId);
     try {
       const runtimeCallbackURL = callbackURL || `${window.location.origin}/callback`;
@@ -111,7 +119,7 @@ export default function OAuthButtonGroup({
       console.error('OAuth error:', error);
       setLoadingProvider(null);
     }
-  };
+  }, [callbackURL]);
 
   // Compact mode: simple grid of all providers
   if (compact) {
@@ -119,6 +127,7 @@ export default function OAuthButtonGroup({
       <div className="grid grid-cols-4 gap-3">
         {OAUTH_PROVIDERS.map((provider) => (
           <button
+            type="button"
             key={provider.id}
             onClick={() => handleOAuth(provider.id)}
             disabled={loadingProvider !== null}
@@ -134,7 +143,12 @@ export default function OAuthButtonGroup({
             title={provider.name}
           >
             {loadingProvider === provider.id ? (
-              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <svg
+                className="animate-spin h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
@@ -147,18 +161,16 @@ export default function OAuthButtonGroup({
     );
   }
 
-  // Full mode: categorized sections
-  const categories: OAuthCategory[] = ['social', 'gaming', 'other'];
-
+  // Full mode: categorized sections using decoupled configuration
   return (
     <div>
-      {categories.map((category, index) => {
-        const providers = getProvidersByCategory(category);
+      {SIGN_IN_CATEGORIES.map((category, index) => {
+        const providers = getProvidersByCategory(category.id);
         if (providers.length === 0) return null;
 
         return (
           <CategorySection
-            key={category}
+            key={category.id}
             category={category}
             providers={providers}
             loadingProvider={loadingProvider}
