@@ -6,6 +6,7 @@ import { LoadingSpinner } from '../ui';
 const PROVIDER_COLORS: Record<string, string> = {
   amazon: 'bg-[#FF9900]/20 border-[#FF9900]/50 text-[#FF9900]',
   battlenet: 'bg-[#00AEFF]/20 border-[#00AEFF]/50 text-[#00AEFF]',
+  credential: 'bg-gray-500/20 border-gray-500/50 text-gray-300',
   discord: 'bg-[#5865F2]/20 border-[#5865F2]/50 text-[#5865F2]',
   facebook: 'bg-[#1877F2]/20 border-[#1877F2]/50 text-[#1877F2]',
   github: 'bg-[#24292F]/20 border-[#24292F]/50 text-white',
@@ -29,6 +30,7 @@ function getProviderDisplayName(provider: string): string {
     amazon: 'Amazon',
     battlenet: 'Battle.net',
     betterauth: 'Unknown', // Legacy fallback
+    credential: 'Email/Password',
     discord: 'Discord',
     facebook: 'Facebook',
     github: 'GitHub',

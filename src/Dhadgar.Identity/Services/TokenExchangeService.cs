@@ -200,31 +200,27 @@ public sealed class TokenExchangeService
             }
 
             // Sync all linked providers from BetterAuth to Identity UserLogins
-            // Get existing logins for this user
             var existingLogins = await _dbContext.UserLogins
                 .Where(l => l.UserId == user.Id)
                 .ToListAsync(ct);
 
-            // Remove legacy "betterauth" logins (will be replaced with actual providers)
-            var legacyLogins = existingLogins
-                .Where(l => l.LoginProvider == "betterauth")
-                .ToList();
-            foreach (var legacy in legacyLogins)
-            {
-                _dbContext.UserLogins.Remove(legacy);
-                existingLogins.Remove(legacy);
-            }
-
-            // Add/update login records for all linked providers
             if (linkedProviders.Count > 0)
             {
+                var currentLogins = new HashSet<(string ProviderId, string AccountId)>(
+                    linkedProviders.Select(p => (p.ProviderId, p.AccountId)));
+
+                // Remove logins that are no longer linked (including legacy "betterauth" logins)
+                var loginsToRemove = existingLogins.Where(l =>
+                    !currentLogins.Contains((l.LoginProvider, l.ProviderKey)));
+                _dbContext.UserLogins.RemoveRange(loginsToRemove);
+
+                // Add new logins
+                var existingLoginSet = new HashSet<(string ProviderId, string AccountId)>(
+                    existingLogins.Select(l => (l.LoginProvider, l.ProviderKey)));
+
                 foreach (var linked in linkedProviders)
                 {
-                    var exists = existingLogins.Any(l =>
-                        l.LoginProvider == linked.ProviderId &&
-                        l.ProviderKey == linked.AccountId);
-
-                    if (!exists)
+                    if (!existingLoginSet.Contains((linked.ProviderId, linked.AccountId)))
                     {
                         _dbContext.UserLogins.Add(new IdentityUserLogin<Guid>
                         {
@@ -239,6 +235,16 @@ public sealed class TokenExchangeService
             else if (provider != "unknown")
             {
                 // Fallback: if no providers array, use the single provider claim
+                // Remove legacy "betterauth" logins only when we have a replacement
+                var legacyLogins = existingLogins
+                    .Where(l => l.LoginProvider == "betterauth")
+                    .ToList();
+                foreach (var legacy in legacyLogins)
+                {
+                    _dbContext.UserLogins.Remove(legacy);
+                    existingLogins.Remove(legacy);
+                }
+
                 var exists = existingLogins.Any(l =>
                     l.LoginProvider == provider &&
                     l.ProviderKey == externalAuthId);
@@ -458,6 +464,11 @@ public sealed class TokenExchangeService
 
     private static string GetProviderDisplayName(string provider)
     {
+        if (string.IsNullOrEmpty(provider))
+        {
+            return "Unknown";
+        }
+
         return provider.ToLowerInvariant() switch
         {
             "microsoft" => "Microsoft",
