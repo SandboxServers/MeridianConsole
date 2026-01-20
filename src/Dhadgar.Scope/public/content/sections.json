@@ -56,7 +56,7 @@
   },
   {
     "number": 12,
-    "title": "Rabbitmq Topology",
+    "title": "RabbitMQ Topology",
     "slug": "rabbitmq"
   },
   {
@@ -76,7 +76,7 @@
   },
   {
     "number": 16,
-    "title": "Mvp Scope & Phases - Detailed Roadmap",
+    "title": "MVP Scope & Phases - Detailed Roadmap",
     "slug": "mvp"
   },
   {

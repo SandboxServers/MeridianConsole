@@ -3,7 +3,10 @@
     "Dhadgar.Discord": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "applicationUrl": "http://localhost:5012"
+      "applicationUrl": "http://localhost:5012",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
     }
   }
 }
