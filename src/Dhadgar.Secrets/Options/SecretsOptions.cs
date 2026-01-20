@@ -91,7 +91,9 @@ public sealed class AllowedSecretsOptions
         "oauth-apple-client-secret",
         "oauth-amazon-client-id",
         "oauth-amazon-client-secret",
-        // Microsoft OAuth (personal + work)
+        // Microsoft OAuth (unified for genericOAuth plugin - no client secret needed with federated credentials)
+        "oauth-microsoft-client-id",
+        // Microsoft OAuth (legacy personal + work separate apps)
         "oauth-microsoft-personal-client-id",
         "oauth-microsoft-personal-client-secret",
         "oauth-microsoft-work-client-id",
