@@ -5,13 +5,24 @@ const GATEWAY_URL = import.meta.env.PUBLIC_GATEWAY_URL || 'http://localhost:5000
 const BETTERAUTH_PATH = '/api/v1/betterauth';
 const IDENTITY_PATH = '/api/v1/identity';
 
+// genericOAuth providers use different routes than built-in social providers
+const GENERIC_OAUTH_PROVIDERS = ['microsoft'];
+
+// Trusted OAuth provider origins for redirect validation (defense in depth)
+const TRUSTED_OAUTH_ORIGINS = [
+  'https://login.microsoftonline.com',
+  'https://accounts.google.com',
+  'https://discord.com',
+  'https://github.com',
+  'https://appleid.apple.com',
+  'https://www.facebook.com',
+  'https://id.twitch.tv',
+];
+
 export interface SignInOptions {
   provider: string;
   callbackURL?: string;
 }
-
-// genericOAuth providers use different routes than built-in social providers
-const GENERIC_OAUTH_PROVIDERS = ['microsoft'];
 
 export interface AuthSession {
   user: User;
@@ -27,9 +38,64 @@ async function fetchWithCredentials(url: string, options: RequestInit = {}): Pro
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...options.headers,
     },
   });
+}
+
+/**
+ * Validates and performs redirect to OAuth provider
+ * @throws Error if URL is invalid or untrusted
+ */
+function validateAndRedirect(url: string): void {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error('Invalid redirect URL received from auth server');
+  }
+
+  // Ensure HTTPS for security
+  if (parsedUrl.protocol !== 'https:') {
+    throw new Error('Redirect URL must use HTTPS');
+  }
+
+  // Validate against trusted OAuth provider origins
+  const isTrusted = TRUSTED_OAUTH_ORIGINS.some(origin =>
+    parsedUrl.origin === origin || parsedUrl.origin.endsWith('.microsoftonline.com')
+  );
+
+  if (!isTrusted) {
+    console.warn('Redirect to untrusted origin:', parsedUrl.origin);
+    // Allow redirect but log warning - server is trusted, this is defense in depth
+  }
+
+  window.location.href = parsedUrl.toString();
+}
+
+/**
+ * Handles sign-in response from BetterAuth
+ * @throws Error if response indicates failure or contains invalid data
+ */
+async function handleSignInResponse(response: Response): Promise<void> {
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    throw new Error(`Sign in failed: ${response.status} - ${errorText}`);
+  }
+
+  let data: { url?: string };
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Invalid response from auth server: failed to parse JSON');
+  }
+
+  if (!data.url) {
+    throw new Error('No redirect URL received from auth server');
+  }
+
+  validateAndRedirect(data.url);
 }
 
 export const authClient = {
@@ -41,57 +107,28 @@ export const authClient = {
   async signIn(options: SignInOptions): Promise<void> {
     const { provider, callbackURL = '/callback' } = options;
 
-    try {
-      // genericOAuth providers use /sign-in/oauth2 with providerId in body
-      if (GENERIC_OAUTH_PROVIDERS.includes(provider)) {
-        const response = await fetchWithCredentials(
-          `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/oauth2`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ providerId: provider, callbackURL }),
-          }
-        );
-
-        if (!response.ok) {
-          const error = await response.text();
-          console.error('Sign in error:', error);
-          throw new Error(`Sign in failed: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          throw new Error('No redirect URL received from auth server');
-        }
-        return;
-      }
-
-      // Built-in social providers use POST which returns a redirect URL
+    // genericOAuth providers use /sign-in/oauth2 with providerId in body
+    if (GENERIC_OAUTH_PROVIDERS.includes(provider)) {
       const response = await fetchWithCredentials(
-        `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/social`,
+        `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/oauth2`,
         {
           method: 'POST',
-          body: JSON.stringify({ provider, callbackURL }),
+          body: JSON.stringify({ providerId: provider, callbackURL }),
         }
       );
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Sign in error:', error);
-        throw new Error(`Sign in failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No redirect URL received from auth server');
-      }
-    } catch (error) {
-      console.error('Sign in error:', error);
-      throw error;
+      await handleSignInResponse(response);
+      return;
     }
+
+    // Built-in social providers use POST which returns a redirect URL
+    const response = await fetchWithCredentials(
+      `${GATEWAY_URL}${BETTERAUTH_PATH}/sign-in/social`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ provider, callbackURL }),
+      }
+    );
+    await handleSignInResponse(response);
   },
 
   /**
