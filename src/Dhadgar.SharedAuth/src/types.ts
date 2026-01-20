@@ -125,9 +125,20 @@ export const SIGN_IN_CATEGORIES: SignInCategory[] = [
 export const getProvidersByCategory = (categoryId: OAuthCategory): OAuthProvider[] => {
   const category = SIGN_IN_CATEGORIES.find(c => c.id === categoryId);
   if (!category) return [];
-  return category.providers
-    .map(id => providerMap.get(id))
-    .filter((p): p is OAuthProvider => p !== undefined);
+
+  const providers: OAuthProvider[] = [];
+  for (const id of category.providers) {
+    const provider = providerMap.get(id);
+    if (provider) {
+      providers.push(provider);
+    } else {
+      console.warn(
+        `[SharedAuth] Unknown provider "${id}" in category "${categoryId}". ` +
+        `Check SIGN_IN_CATEGORIES configuration for typos.`
+      );
+    }
+  }
+  return providers;
 };
 
 /** Get sign-in category by ID */

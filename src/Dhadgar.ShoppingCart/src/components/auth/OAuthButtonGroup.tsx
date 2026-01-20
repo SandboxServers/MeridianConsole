@@ -66,6 +66,7 @@ function CategorySection({
               '--provider-glow': provider.glowColor,
             } as React.CSSProperties}
             title={isCompact ? provider.name : undefined}
+            aria-label={isCompact ? `Sign in with ${provider.name}` : undefined}
           >
             {loadingProvider === provider.id ? (
               <svg
@@ -141,6 +142,7 @@ export default function OAuthButtonGroup({
               loadingProvider === provider.id && 'animate-pulse'
             )}
             title={provider.name}
+            aria-label={`Sign in with ${provider.name}`}
           >
             {loadingProvider === provider.id ? (
               <svg
