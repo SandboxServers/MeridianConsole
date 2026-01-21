@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -53,7 +54,12 @@ public sealed class ProblemDetailsMiddleware
             return;
         }
 
-        var traceId = context.Items["CorrelationId"]?.ToString() ?? "unknown";
+        // TRACE-04: Get TraceId from Activity.Current (set by OTEL AspNetCore instrumentation)
+        // Fall back to CorrelationId if no active trace, then to HttpContext.TraceIdentifier
+        var traceId = Activity.Current?.TraceId.ToString()
+            ?? context.Items["CorrelationId"]?.ToString()
+            ?? context.TraceIdentifier
+            ?? "unknown";
 
         _logger.LogError(exception,
             "Unhandled exception. TraceId: {TraceId}, Path: {Path}",
