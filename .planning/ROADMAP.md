@@ -32,12 +32,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Logs containing test PII (emails, tokens) show scrubbed values (e.g., "***@***.com")
   4. Every log entry includes tenant ID, correlation ID, service name, version, and hostname
   5. Logs from a single request across multiple services can be filtered by correlation ID
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Core logging infrastructure with PII redaction and data classifications
+- [ ] 01-02-PLAN.md — Middleware updates for source-generated logging and context enrichment
+- [ ] 01-03-PLAN.md — Service rollout to pilot services and verification tests
 
 ### Phase 2: Distributed Tracing
 **Goal**: Database queries, cache operations, and business operations appear as spans in distributed traces
@@ -110,7 +110,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 (parallel with 4) -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Logging Foundation | 0/3 | Not started | - |
+| 1. Logging Foundation | 0/3 | Planned | - |
 | 2. Distributed Tracing | 0/2 | Not started | - |
 | 3. Audit System | 0/2 | Not started | - |
 | 4. Health & Alerting | 0/3 | Not started | - |
