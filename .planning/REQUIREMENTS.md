@@ -9,12 +9,12 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Logging
 
-- [ ] **LOG-01**: All services use standardized log levels (Debug, Info, Warning, Error, Critical)
-- [ ] **LOG-02**: All services use source-generated `[LoggerMessage]` for high-performance logging
-- [ ] **LOG-03**: PII and sensitive data (tokens, passwords, connection strings) are scrubbed from logs
-- [ ] **LOG-04**: All log entries include tenant ID for multi-tenant isolation
-- [ ] **LOG-05**: All log entries include correlation ID for request tracing
-- [ ] **LOG-06**: All log entries include service context (name, version, environment, hostname)
+- [x] **LOG-01**: All services use standardized log levels (Debug, Info, Warning, Error, Critical)
+- [x] **LOG-02**: All services use source-generated `[LoggerMessage]` for high-performance logging
+- [x] **LOG-03**: PII and sensitive data (tokens, passwords, connection strings) are scrubbed from logs
+- [x] **LOG-04**: All log entries include tenant ID for multi-tenant isolation
+- [x] **LOG-05**: All log entries include correlation ID for request tracing
+- [x] **LOG-06**: All log entries include service context (name, version, environment, hostname)
 
 ### Tracing
 
@@ -86,12 +86,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LOG-01 | Phase 1 | Pending |
-| LOG-02 | Phase 1 | Pending |
-| LOG-03 | Phase 1 | Pending |
-| LOG-04 | Phase 1 | Pending |
-| LOG-05 | Phase 1 | Pending |
-| LOG-06 | Phase 1 | Pending |
+| LOG-01 | Phase 1 | ✓ Complete |
+| LOG-02 | Phase 1 | ✓ Complete |
+| LOG-03 | Phase 1 | ✓ Complete |
+| LOG-04 | Phase 1 | ✓ Complete |
+| LOG-05 | Phase 1 | ✓ Complete |
+| LOG-06 | Phase 1 | ✓ Complete |
 | TRACE-01 | Phase 2 | Pending |
 | TRACE-02 | Phase 2 | Pending |
 | TRACE-03 | Phase 2 | Pending |
@@ -119,4 +119,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-20*
-*Last updated: 2026-01-21 after roadmap creation*
+*Last updated: 2026-01-21 after Phase 1 completion*
