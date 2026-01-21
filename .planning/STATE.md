@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 1 of 5 (Logging Foundation)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-21 — Completed 01-01-PLAN.md (Core logging infrastructure)
+Last activity: 2026-01-21 — Completed 01-02-PLAN.md (Middleware updates for source-generated logging)
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 5 minutes
-- Total execution time: 5 minutes
+- Total plans completed: 2
+- Average duration: 6.5 minutes
+- Total execution time: 13 minutes
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Logging Foundation | 1/3 | 5 min | 5 min |
+| 1. Logging Foundation | 2/3 | 13 min | 6.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min)
-- Trend: First plan completed
+- Last 5 plans: 01-01 (5 min), 01-02 (8 min)
+- Trend: Slightly higher than average (test fixes added time)
 
 *Updated after each plan completion*
 
@@ -48,6 +48,9 @@ Recent decisions affecting current work:
 - [01-01]: Use "Events" suffix for LogCategories nested classes to avoid CA1724 warnings
 - [01-01]: Use constant-length email redaction ("***@***.***") to prevent inference attacks
 - [01-01]: Include token length hint in redaction for debugging truncated tokens
+- [01-02]: Use EventId range 9100-9199 for HTTP request logging (InfraEvents subset)
+- [01-02]: Cache ServiceInfo at process startup to avoid reflection overhead
+- [01-02]: Use "system" as default TenantId when no organization context available
 
 ### Pending Todos
 
@@ -59,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-21 16:49 UTC
-Stopped at: Completed 01-01-PLAN.md
-Resume file: .planning/phases/01-logging-foundation/01-02-PLAN.md (next plan)
+Last session: 2026-01-21
+Stopped at: Completed 01-02-PLAN.md
+Resume file: .planning/phases/01-logging-foundation/01-03-PLAN.md (next plan)

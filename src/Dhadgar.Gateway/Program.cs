@@ -9,6 +9,7 @@ using Dhadgar.Gateway.Options;
 using Dhadgar.Gateway.Readiness;
 using Dhadgar.Gateway.Services;
 using GatewayHello = Dhadgar.Gateway.Hello;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Resilience;
 using Dhadgar.ServiceDefaults;
@@ -111,6 +112,9 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient("OpenApiAggregation")
     .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<OpenApiAggregationService>();
+
+// Register source-generated request logging messages (required by RequestLoggingMiddleware)
+builder.Services.AddSingleton<RequestLoggingMessages>();
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 Uri? otlpUri = null;
