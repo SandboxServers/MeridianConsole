@@ -11,6 +11,7 @@ using Dhadgar.Gateway.Services;
 using GatewayHello = Dhadgar.Gateway.Hello;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Resilience;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -115,6 +116,11 @@ builder.Services.AddSingleton<OpenApiAggregationService>();
 
 // Register source-generated request logging messages (required by RequestLoggingMiddleware)
 builder.Services.AddSingleton<RequestLoggingMessages>();
+
+// Add Dhadgar logging infrastructure with PII redaction
+builder.Services.AddDhadgarLogging();
+builder.Services.AddOrganizationContext();
+builder.Logging.AddDhadgarLogging("Dhadgar.Gateway", builder.Configuration);
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 Uri? otlpUri = null;
@@ -335,10 +341,13 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 // 3. Correlation ID tracking (needed by all downstream middleware)
 app.UseMiddleware<CorrelationMiddleware>();
 
-// 4. Problem Details exception handler (catch exceptions early)
+// 4. Tenant enrichment (adds TenantId, ServiceName, etc. to logging scope)
+app.UseMiddleware<TenantEnrichmentMiddleware>();
+
+// 5. Problem Details exception handler (catch exceptions early)
 app.UseMiddleware<ProblemDetailsMiddleware>();
 
-// 5. Request logging (wraps downstream pipeline)
+// 6. Request logging (wraps downstream pipeline with full context)
 app.UseMiddleware<RequestLoggingMiddleware>();
 
 // 6. CORS (for non-preflight requests)

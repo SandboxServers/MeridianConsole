@@ -29,7 +29,9 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -352,6 +354,12 @@ else
 
 builder.Services.AddScoped<IIdentityEventPublisher, IdentityEventPublisher>();
 builder.Services.AddSecurityEventLogger();
+
+// Add Dhadgar logging infrastructure with PII redaction
+builder.Services.AddDhadgarLogging();
+builder.Services.AddOrganizationContext();
+builder.Services.AddSingleton<RequestLoggingMessages>();
+builder.Logging.AddDhadgarLogging("Dhadgar.Identity", builder.Configuration);
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -783,6 +791,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 app.UseRequestLimitsMiddleware();
 
 app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<TenantEnrichmentMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();

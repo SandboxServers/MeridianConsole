@@ -1,6 +1,7 @@
 using Dhadgar.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,10 @@ builder.Services.AddDhadgarServiceDefaults();
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Servers API",
     description: "Game server lifecycle management for Meridian Console");
+
+// Add Dhadgar logging infrastructure with PII redaction
+builder.Services.AddDhadgarLogging();
+builder.Logging.AddDhadgarLogging("Dhadgar.Servers", builder.Configuration);
 
 builder.Services.AddDbContext<ServersDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
@@ -76,10 +81,9 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
+// Standard middleware (includes Correlation, TenantEnrichment, and RequestLogging)
+app.UseDhadgarMiddleware();
 app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
