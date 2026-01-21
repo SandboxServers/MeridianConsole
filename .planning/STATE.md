@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 2 of 5 (Distributed Tracing)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-21 — Completed 02-01-PLAN.md (Core tracing infrastructure)
+Last activity: 2026-01-21 — Completed 02-02-PLAN.md (Pilot service integration)
 
-Progress: [████░░░░░░] 33%
+Progress: [█████░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 5.5 minutes
-- Total execution time: 22 minutes
+- Total plans completed: 5
+- Average duration: 5.6 minutes
+- Total execution time: 28 minutes
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Logging Foundation | 3/3 | 20 min | 6.7 min |
-| 2. Distributed Tracing | 1/3 | 2 min | 2.0 min |
+| 2. Distributed Tracing | 2/3 | 8 min | 4.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (8 min), 01-03 (7 min), 02-01 (2 min)
-- Trend: Consistent execution pace, 02-01 was straightforward package/config task
+- Last 5 plans: 01-02 (8 min), 01-03 (7 min), 02-01 (2 min), 02-02 (6 min)
+- Trend: Consistent execution pace
 
 *Updated after each plan completion*
 
@@ -56,6 +56,8 @@ Recent decisions affecting current work:
 - [01-03]: Servers uses UseDhadgarMiddleware extension (standard pipeline)
 - [02-01]: Use callback parameter for service-specific tracing (Redis, custom sources)
 - [02-01]: Set db.system tag via EnrichWithIDbCommand for PostgreSQL identification
+- [02-02]: Services using Redis need explicit OpenTelemetry.Instrumentation.StackExchangeRedis package reference
+- [02-02]: Redis instrumentation extension is in OpenTelemetry.Trace namespace
 
 ### Pending Todos
 
@@ -68,5 +70,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-21
-Stopped at: Completed 02-01-PLAN.md
-Resume file: .planning/phases/02-distributed-tracing/02-02-PLAN.md (next plan)
+Stopped at: Completed 02-02-PLAN.md
+Resume file: .planning/phases/02-distributed-tracing/02-03-PLAN.md (next plan)
