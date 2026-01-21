@@ -137,6 +137,9 @@ public static class TracingExtensions
                     };
                 });
 
+                // Add shared Dhadgar ActivitySource for custom business spans
+                tracing.AddSource(DhadgarActivitySource.Name);
+
                 // Allow service-specific configuration (Redis, custom sources, etc.)
                 configureTracing?.Invoke(tracing);
 
