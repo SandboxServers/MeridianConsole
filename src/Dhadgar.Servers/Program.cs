@@ -4,11 +4,11 @@ using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
+using Dhadgar.ServiceDefaults.Tracing;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,19 +49,11 @@ builder.Logging.AddOpenTelemetry(options =>
     }
 });
 
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+// Tracing (centralized with EF Core instrumentation)
+builder.Services.AddDhadgarTracing(builder.Configuration, "Dhadgar.Servers");
 
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    })
+// Metrics
+builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics
