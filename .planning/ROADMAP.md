@@ -64,11 +64,12 @@ Plans:
   2. Audit records contain: timestamp, user ID, tenant ID, action (HTTP method + path), resource ID, outcome (status code)
   3. SQL queries like "show all actions by user X in last 7 days" return correct results
   4. Records older than 90 days are automatically deleted by background job
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Core audit infrastructure (entity, queue, middleware, background services)
+- [ ] 03-02-PLAN.md — Service integration and database schema (Servers + Identity)
+- [ ] 03-03-PLAN.md — Integration tests and verification
 
 ### Phase 4: Health & Alerting
 **Goal**: Services expose health endpoints and critical errors trigger proactive notifications
@@ -113,10 +114,10 @@ Phases execute in numeric order: 1 -> 2 -> 3 (parallel with 4) -> 5
 |-------|----------------|--------|-----------|
 | 1. Logging Foundation | 3/3 | ✓ Complete | 2026-01-21 |
 | 2. Distributed Tracing | 3/3 | ✓ Complete | 2026-01-21 |
-| 3. Audit System | 0/2 | Not started | - |
+| 3. Audit System | 0/3 | Planned | - |
 | 4. Health & Alerting | 0/3 | Not started | - |
 | 5. Error Handling | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-21*
-*Last updated: 2026-01-21 after Phase 2 execution*
+*Last updated: 2026-01-21 after Phase 3 planning*
