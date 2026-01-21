@@ -86,37 +86,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LOG-01 | TBD | Pending |
-| LOG-02 | TBD | Pending |
-| LOG-03 | TBD | Pending |
-| LOG-04 | TBD | Pending |
-| LOG-05 | TBD | Pending |
-| LOG-06 | TBD | Pending |
-| TRACE-01 | TBD | Pending |
-| TRACE-02 | TBD | Pending |
-| TRACE-03 | TBD | Pending |
-| TRACE-04 | TBD | Pending |
-| AUDIT-01 | TBD | Pending |
-| AUDIT-02 | TBD | Pending |
-| AUDIT-03 | TBD | Pending |
-| AUDIT-04 | TBD | Pending |
-| HEALTH-01 | TBD | Pending |
-| HEALTH-02 | TBD | Pending |
-| HEALTH-03 | TBD | Pending |
-| HEALTH-04 | TBD | Pending |
-| ALERT-01 | TBD | Pending |
-| ALERT-02 | TBD | Pending |
-| ALERT-03 | TBD | Pending |
-| ERR-01 | TBD | Pending |
-| ERR-02 | TBD | Pending |
-| ERR-03 | TBD | Pending |
-| ERR-04 | TBD | Pending |
+| LOG-01 | Phase 1 | Pending |
+| LOG-02 | Phase 1 | Pending |
+| LOG-03 | Phase 1 | Pending |
+| LOG-04 | Phase 1 | Pending |
+| LOG-05 | Phase 1 | Pending |
+| LOG-06 | Phase 1 | Pending |
+| TRACE-01 | Phase 2 | Pending |
+| TRACE-02 | Phase 2 | Pending |
+| TRACE-03 | Phase 2 | Pending |
+| TRACE-04 | Phase 2 | Pending |
+| AUDIT-01 | Phase 3 | Pending |
+| AUDIT-02 | Phase 3 | Pending |
+| AUDIT-03 | Phase 3 | Pending |
+| AUDIT-04 | Phase 3 | Pending |
+| HEALTH-01 | Phase 4 | Pending |
+| HEALTH-02 | Phase 4 | Pending |
+| HEALTH-03 | Phase 4 | Pending |
+| HEALTH-04 | Phase 4 | Pending |
+| ALERT-01 | Phase 4 | Pending |
+| ALERT-02 | Phase 4 | Pending |
+| ALERT-03 | Phase 4 | Pending |
+| ERR-01 | Phase 5 | Pending |
+| ERR-02 | Phase 5 | Pending |
+| ERR-03 | Phase 5 | Pending |
+| ERR-04 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-20*
-*Last updated: 2026-01-20 after initial definition*
+*Last updated: 2026-01-21 after roadmap creation*
