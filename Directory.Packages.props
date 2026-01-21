@@ -28,6 +28,8 @@
     <PackageVersion Include="MassTransit.RabbitMQ" Version="8.3.6" />
 
     <!-- Observability -->
+    <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="10.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.Telemetry" Version="10.2.0" />
     <PackageVersion Include="OpenTelemetry" Version="1.14.0" />
     <PackageVersion Include="OpenTelemetry.Api" Version="1.14.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />
