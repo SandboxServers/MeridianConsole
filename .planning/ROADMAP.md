@@ -48,11 +48,12 @@ Plans:
   2. Redis operations appear as child spans with command name and duration
   3. Developers can wrap business logic in custom spans using a simple API
   4. Error responses include TraceId that links to the distributed trace
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Core tracing infrastructure with EF Core and Redis packages
+- [ ] 02-02-PLAN.md — Wire instrumentation to Servers and Identity services
+- [ ] 02-03-PLAN.md — Custom spans via ActivitySource and TraceId in Problem Details
 
 ### Phase 3: Audit System
 **Goal**: All authenticated API calls are recorded to a queryable database for compliance
@@ -111,11 +112,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 (parallel with 4) -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Logging Foundation | 3/3 | ✓ Complete | 2026-01-21 |
-| 2. Distributed Tracing | 0/2 | Not started | - |
+| 2. Distributed Tracing | 0/3 | Planned | - |
 | 3. Audit System | 0/2 | Not started | - |
 | 4. Health & Alerting | 0/3 | Not started | - |
 | 5. Error Handling | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-21*
-*Last updated: 2026-01-21 after Phase 1 completion*
+*Last updated: 2026-01-21 after Phase 2 planning*
