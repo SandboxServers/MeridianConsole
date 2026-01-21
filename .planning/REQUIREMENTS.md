@@ -18,10 +18,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Tracing
 
-- [ ] **TRACE-01**: Entity Framework Core queries appear as spans in distributed traces
-- [ ] **TRACE-02**: Redis operations appear as spans in distributed traces
-- [ ] **TRACE-03**: Custom business operation spans can be added for important operations
-- [ ] **TRACE-04**: TraceId is included in all Problem Details error responses
+- [x] **TRACE-01**: Entity Framework Core queries appear as spans in distributed traces
+- [x] **TRACE-02**: Redis operations appear as spans in distributed traces
+- [x] **TRACE-03**: Custom business operation spans can be added for important operations
+- [x] **TRACE-04**: TraceId is included in all Problem Details error responses
 
 ### Audit
 
@@ -92,10 +92,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOG-04 | Phase 1 | ✓ Complete |
 | LOG-05 | Phase 1 | ✓ Complete |
 | LOG-06 | Phase 1 | ✓ Complete |
-| TRACE-01 | Phase 2 | Pending |
-| TRACE-02 | Phase 2 | Pending |
-| TRACE-03 | Phase 2 | Pending |
-| TRACE-04 | Phase 2 | Pending |
+| TRACE-01 | Phase 2 | ✓ Complete |
+| TRACE-02 | Phase 2 | ✓ Complete |
+| TRACE-03 | Phase 2 | ✓ Complete |
+| TRACE-04 | Phase 2 | ✓ Complete |
 | AUDIT-01 | Phase 3 | Pending |
 | AUDIT-02 | Phase 3 | Pending |
 | AUDIT-03 | Phase 3 | Pending |
@@ -119,4 +119,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-20*
-*Last updated: 2026-01-21 after Phase 1 completion*
+*Last updated: 2026-01-21 after Phase 2 completion*

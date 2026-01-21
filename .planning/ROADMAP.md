@@ -13,7 +13,7 @@ This milestone establishes comprehensive observability infrastructure across all
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Logging Foundation** - Standardized logging with source generation and context enrichment
-- [ ] **Phase 2: Distributed Tracing** - EF Core, Redis, and custom operation spans
+- [x] **Phase 2: Distributed Tracing** - EF Core, Redis, and custom operation spans
 - [ ] **Phase 3: Audit System** - Database-backed audit trail for compliance queries
 - [ ] **Phase 4: Health & Alerting** - Health checks and proactive Discord/email alerts
 - [ ] **Phase 5: Error Handling** - RFC 9457 Problem Details with trace context
@@ -51,9 +51,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Core tracing infrastructure with EF Core and Redis packages
-- [ ] 02-02-PLAN.md — Wire instrumentation to Servers and Identity services
-- [ ] 02-03-PLAN.md — Custom spans via ActivitySource and TraceId in Problem Details
+- [x] 02-01-PLAN.md — Core tracing infrastructure with EF Core and Redis packages
+- [x] 02-02-PLAN.md — Wire instrumentation to Servers and Identity services
+- [x] 02-03-PLAN.md — Custom spans via ActivitySource and TraceId in Problem Details
 
 ### Phase 3: Audit System
 **Goal**: All authenticated API calls are recorded to a queryable database for compliance
@@ -112,11 +112,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 (parallel with 4) -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Logging Foundation | 3/3 | ✓ Complete | 2026-01-21 |
-| 2. Distributed Tracing | 0/3 | Planned | - |
+| 2. Distributed Tracing | 3/3 | ✓ Complete | 2026-01-21 |
 | 3. Audit System | 0/2 | Not started | - |
 | 4. Health & Alerting | 0/3 | Not started | - |
 | 5. Error Handling | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-21*
-*Last updated: 2026-01-21 after Phase 2 planning*
+*Last updated: 2026-01-21 after Phase 2 execution*
