@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-01-21)
 
 **Core value:** Complete observability—debug any request end-to-end, audit any action for compliance, get alerted proactively
-**Current focus:** Phase 2 - Distributed Tracing
+**Current focus:** Phase 3 - Audit Logging (or Phase 4 - Health & Alerting)
 
 ## Current Position
 
-Phase: 2 of 5 (Distributed Tracing)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-01-21 — Completed 02-02-PLAN.md (Pilot service integration)
+Phase: 2 of 5 (Distributed Tracing) - COMPLETE
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-01-21 - Completed 02-03-PLAN.md (Custom spans and error correlation)
 
-Progress: [█████░░░░░] 40%
+Progress: [██████░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 5.6 minutes
-- Total execution time: 28 minutes
+- Total plans completed: 6
+- Average duration: 5.2 minutes
+- Total execution time: 31 minutes
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Logging Foundation | 3/3 | 20 min | 6.7 min |
-| 2. Distributed Tracing | 2/3 | 8 min | 4.0 min |
+| 2. Distributed Tracing | 3/3 | 11 min | 3.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (8 min), 01-03 (7 min), 02-01 (2 min), 02-02 (6 min)
+- Last 5 plans: 01-03 (7 min), 02-01 (2 min), 02-02 (6 min), 02-03 (3 min)
 - Trend: Consistent execution pace
 
 *Updated after each plan completion*
@@ -58,6 +58,8 @@ Recent decisions affecting current work:
 - [02-01]: Set db.system tag via EnrichWithIDbCommand for PostgreSQL identification
 - [02-02]: Services using Redis need explicit OpenTelemetry.Instrumentation.StackExchangeRedis package reference
 - [02-02]: Redis instrumentation extension is in OpenTelemetry.Trace namespace
+- [02-03]: Use 'Dhadgar.Operations' as shared ActivitySource name for business spans
+- [02-03]: TraceId fallback chain: Activity.TraceId -> CorrelationId -> TraceIdentifier -> 'unknown'
 
 ### Pending Todos
 
@@ -70,5 +72,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-21
-Stopped at: Completed 02-02-PLAN.md
-Resume file: .planning/phases/02-distributed-tracing/02-03-PLAN.md (next plan)
+Stopped at: Completed 02-03-PLAN.md (Phase 2 complete)
+Resume file: Phase 3 (Audit Logging) or Phase 4 (Health & Alerting) - can proceed in parallel
