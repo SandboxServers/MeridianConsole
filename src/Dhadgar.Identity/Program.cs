@@ -32,6 +32,7 @@ using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
+using Dhadgar.ServiceDefaults.Tracing;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -748,20 +749,18 @@ builder.Logging.AddOpenTelemetry(options =>
     }
 });
 
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
+// Tracing (centralized with EF Core and Redis instrumentation)
+builder.Services.AddDhadgarTracing(
+    builder.Configuration,
+    "Dhadgar.Identity",
+    tracing =>
     {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+        // Add Redis instrumentation - resolves IConnectionMultiplexer from DI
+        tracing.AddRedisInstrumentation();
+    });
 
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
-    })
+// Metrics
+builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics
@@ -775,7 +774,6 @@ builder.Services.AddOpenTelemetry()
         {
             metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
         }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
     });
 
 var app = builder.Build();
