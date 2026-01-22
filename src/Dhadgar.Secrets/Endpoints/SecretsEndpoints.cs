@@ -65,7 +65,11 @@ public static class SecretsEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return Results.Problem(
+                detail: validation.ErrorMessage,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/validation");
         }
 
         // Check if secret is in allowed list
@@ -110,7 +114,11 @@ public static class SecretsEndpoints
                 IsBreakGlass: authResult.IsBreakGlass,
                 IsServiceAccount: authResult.IsServiceAccount));
 
-            return Results.NotFound(new { error = $"Secret '{secretName}' not found or not configured." });
+            return Results.Problem(
+                detail: $"Secret '{secretName}' not found or not configured.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         // Log successful access
@@ -137,7 +145,11 @@ public static class SecretsEndpoints
     {
         if (request.SecretNames is null || request.SecretNames.Count == 0)
         {
-            return Results.BadRequest(new { error = "SecretNames is required." });
+            return Results.Problem(
+                detail: "SecretNames is required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         // Validate all secret names
@@ -146,7 +158,11 @@ public static class SecretsEndpoints
             var validation = SecretNameValidator.Validate(name);
             if (!validation.IsValid)
             {
-                return Results.BadRequest(new { error = $"Invalid secret name '{name}': {validation.ErrorMessage}" });
+                return Results.Problem(
+                    detail: $"Invalid secret name '{name}': {validation.ErrorMessage}",
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Bad Request",
+                    type: "https://meridian.console/errors/validation");
             }
         }
 

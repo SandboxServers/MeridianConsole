@@ -110,7 +110,11 @@ public static class CertificateEndpoints
 
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.CertificateData))
         {
-            return Results.BadRequest(new { error = "Name and CertificateData are required." });
+            return Results.Problem(
+                detail: "Name and CertificateData are required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/validation");
         }
 
         try
@@ -128,15 +132,27 @@ public static class CertificateEndpoints
         }
         catch (FormatException)
         {
-            return Results.BadRequest(new { error = "Invalid base64 encoded certificate data." });
+            return Results.Problem(
+                detail: "Invalid base64 encoded certificate data.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Conflict(new { error = ex.Message });
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Conflict",
+                    type: "https://meridian.console/errors/conflict");
             }
-            return Results.BadRequest(new { error = ex.Message });
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
     }
 
@@ -154,7 +170,11 @@ public static class CertificateEndpoints
 
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.CertificateData))
         {
-            return Results.BadRequest(new { error = "Name and CertificateData are required." });
+            return Results.Problem(
+                detail: "Name and CertificateData are required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/validation");
         }
 
         try
@@ -172,15 +192,27 @@ public static class CertificateEndpoints
         }
         catch (FormatException)
         {
-            return Results.BadRequest(new { error = "Invalid base64 encoded certificate data." });
+            return Results.Problem(
+                detail: "Invalid base64 encoded certificate data.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Conflict(new { error = ex.Message });
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Conflict",
+                    type: "https://meridian.console/errors/conflict");
             }
-            return Results.BadRequest(new { error = ex.Message });
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
     }
 
@@ -199,7 +231,11 @@ public static class CertificateEndpoints
 
         if (!success)
         {
-            return Results.NotFound(new { error = $"Certificate '{name}' not found." });
+            return Results.Problem(
+                detail: $"Certificate '{name}' not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         return Results.NoContent();
