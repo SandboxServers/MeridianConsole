@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-21)
 
 **Core value:** Complete observability—debug any request end-to-end, audit any action for compliance, get alerted proactively
-**Current focus:** Phase 4 - Health & Alerting (COMPLETE)
+**Current focus:** Phase 5 - Error Handling (Wave 1)
 
 ## Current Position
 
-Phase: 4 of 5 (Health & Alerting) - COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-22 - Completed 04-03-PLAN.md (Grafana Alerting)
+Phase: 5 of 5 (Error Handling) - IN PROGRESS
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-22 - Completed 05-01-PLAN.md (Error Handling Infrastructure)
 
-Progress: [████████████] 100% (Phase 4)
+Progress: [█████████████] 93% (13/14 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
-- Average duration: 9.0 minutes
-- Total execution time: 110 minutes
+- Total plans completed: 13
+- Average duration: 9.4 minutes
+- Total execution time: 122 minutes
 
 **By Phase:**
 
@@ -31,10 +31,11 @@ Progress: [████████████] 100% (Phase 4)
 | 2. Distributed Tracing | 3/3 | 11 min | 3.7 min |
 | 3. Audit Logging | 3/3 | 56 min | 18.7 min |
 | 4. Health & Alerting | 3/3 | 23 min | 7.7 min |
+| 5. Error Handling | 1/2 | 12 min | 12.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03 (~45 min), 04-01 (6 min), 04-02 (12 min), 04-03 (5 min)
-- Trend: Infrastructure plans faster than testing/integration plans
+- Last 5 plans: 04-01 (6 min), 04-02 (12 min), 04-03 (5 min), 05-01 (12 min)
+- Trend: Consistent execution times across infrastructure plans
 
 *Updated after each plan completion*
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [04-03]: Use Loki log queries for Grafana alert rules (logs already available)
 - [04-03]: Critical alerts 0s delay, warnings 2m pending period
 - [04-03]: Severity-based routing: critical 1h repeat, warnings 4h repeat
+- [05-01]: Use TryAddSingleton for TimeProvider to allow test overrides
+- [05-01]: Use JsonSerializer.Serialize instead of WriteAsJsonAsync to preserve content type
+- [05-01]: EventId 9300 for exception logging (avoids conflict with audit 9200-9229)
 
 ### Pending Todos
 
@@ -93,5 +97,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 04-03-PLAN.md (Grafana Alerting) - Phase 4 Complete
-Resume file: .planning/phases/05-error-handling/05-01-PLAN.md (next phase)
+Stopped at: Completed 05-01-PLAN.md (Error Handling Infrastructure)
+Resume file: .planning/phases/05-error-handling/05-02-PLAN.md (next plan)
