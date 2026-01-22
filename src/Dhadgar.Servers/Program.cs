@@ -1,6 +1,7 @@
 using Dhadgar.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Audit;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
@@ -20,6 +21,9 @@ builder.Services.AddMeridianSwagger(
 // Add Dhadgar logging infrastructure with PII redaction
 builder.Services.AddDhadgarLogging();
 builder.Logging.AddDhadgarLogging("Dhadgar.Servers", builder.Configuration);
+
+// Audit infrastructure for compliance logging
+builder.Services.AddAuditInfrastructure<ServersDbContext>();
 
 builder.Services.AddDbContext<ServersDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
@@ -76,6 +80,10 @@ app.UseMeridianSwagger();
 // Standard middleware (includes Correlation, TenantEnrichment, and RequestLogging)
 app.UseDhadgarMiddleware();
 app.UseMiddleware<ProblemDetailsMiddleware>();
+
+// Audit middleware - MUST run after authentication
+// Currently skips all requests (no auth configured yet); will capture authenticated requests once auth is added
+app.UseAuditMiddleware();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
