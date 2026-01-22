@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 4 of 5 (Health & Alerting)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 04-01-PLAN.md (Health Check Infrastructure)
+Last activity: 2026-01-22 - Completed 04-02-PLAN.md (Alerting Infrastructure)
 
-Progress: [██████████] 80%
+Progress: [██████████] 85%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 9.4 minutes
-- Total execution time: 93 minutes
+- Total plans completed: 11
+- Average duration: 9.3 minutes
+- Total execution time: 105 minutes
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [██████████] 80%
 | 1. Logging Foundation | 3/3 | 20 min | 6.7 min |
 | 2. Distributed Tracing | 3/3 | 11 min | 3.7 min |
 | 3. Audit Logging | 3/3 | 56 min | 18.7 min |
-| 4. Health & Alerting | 1/3 | 6 min | 6 min |
+| 4. Health & Alerting | 2/3 | 18 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (7 min), 03-02 (4 min), 03-03 (~45 min), 04-01 (6 min)
+- Last 5 plans: 03-02 (4 min), 03-03 (~45 min), 04-01 (6 min), 04-02 (12 min)
 - Trend: Infrastructure plans faster than testing/integration plans
 
 *Updated after each plan completion*
@@ -74,6 +74,10 @@ Recent decisions affecting current work:
 - [04-01]: Gateway keeps existing YARP readiness check alongside Redis health check
 - [04-01]: Liveness probes include only self check (no external dependencies)
 - [04-01]: Readiness probes have 2-3 second timeouts to fail fast
+- [04-02]: Use StringBuilder for HTML email body (raw string literals with CSS braces problematic)
+- [04-02]: Alert throttle key: ServiceName + Title + ExceptionType (deduplication granularity)
+- [04-02]: Dispatch to Discord and email in parallel (no dependency between channels)
+- [04-02]: Graceful degradation when Discord/email not configured (log debug, no exception)
 
 ### Pending Todos
 
@@ -86,5 +90,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 04-01-PLAN.md (Health Check Infrastructure)
-Resume file: .planning/phases/04-health-alerting/04-02-PLAN.md (next plan)
+Stopped at: Completed 04-02-PLAN.md (Alerting Infrastructure)
+Resume file: .planning/phases/04-health-alerting/04-03-PLAN.md (next plan)
