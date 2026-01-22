@@ -79,7 +79,13 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.GetAsync(organizationId, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
     }
 
     private static async Task<IResult> CreateOrganization(
@@ -96,7 +102,11 @@ public static class OrganizationEndpoints
         var result = await organizationService.CreateAsync(userId, request, ct);
         return result.Success
             ? Results.Created($"/organizations/{result.Value?.Id}", new { id = result.Value?.Id })
-            : Results.BadRequest(new { error = result.Error });
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
     }
 
     private static async Task<IResult> UpdateOrganization(
@@ -125,7 +135,13 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.UpdateAsync(organizationId, request, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
     }
 
     private static async Task<IResult> DeleteOrganization(
@@ -153,7 +169,13 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.SoftDeleteAsync(organizationId, ct);
-        return result.Success ? Results.NoContent() : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.NoContent()
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
     }
 
     private static async Task<IResult> SwitchOrganization(
@@ -170,7 +192,11 @@ public static class OrganizationEndpoints
         var outcome = await switchService.SwitchAsync(userId, organizationId, ct);
         if (!outcome.Success)
         {
-            return Results.BadRequest(new { error = outcome.Error });
+            return Results.Problem(
+                detail: outcome.Error,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         return Results.Ok(new
@@ -205,9 +231,21 @@ public static class OrganizationEndpoints
         {
             return result.Error switch
             {
-                "not_owner" => Results.Forbid(),
-                "org_not_found" => Results.NotFound(new { error = result.Error }),
-                _ => Results.BadRequest(new { error = result.Error })
+                "not_owner" => Results.Problem(
+                    detail: "Only the organization owner can transfer ownership.",
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "Forbidden",
+                    type: "https://meridian.console/errors/forbidden"),
+                "org_not_found" => Results.Problem(
+                    detail: result.Error,
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Not Found",
+                    type: "https://meridian.console/errors/not-found"),
+                _ => Results.Problem(
+                    detail: result.Error,
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Bad Request",
+                    type: "https://meridian.console/errors/bad-request")
             };
         }
 

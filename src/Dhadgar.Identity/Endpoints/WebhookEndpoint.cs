@@ -68,7 +68,11 @@ public static class WebhookEndpoint
         using var document = JsonDocument.Parse(rawBody);
         if (!TryGetEventName(document.RootElement, out var eventName))
         {
-            return Results.BadRequest(new { error = "missing_event" });
+            return Results.Problem(
+                detail: "Webhook payload must include an event type.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         var data = document.RootElement.TryGetProperty("data", out var dataElement)

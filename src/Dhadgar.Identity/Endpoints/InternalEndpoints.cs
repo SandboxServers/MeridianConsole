@@ -64,7 +64,11 @@ public static class InternalEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.Subject))
         {
-            return Results.BadRequest(new { error = "subject_required" });
+            return Results.Problem(
+                detail: "Subject is required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         var audience = request.Audience ?? "api://AzureADTokenExchange";
@@ -90,7 +94,11 @@ public static class InternalEndpoints
 
         if (user is null)
         {
-            return Results.NotFound(new { error = "user_not_found" });
+            return Results.Problem(
+                detail: "User not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         return Results.Ok(user);
@@ -103,12 +111,20 @@ public static class InternalEndpoints
     {
         if (request.UserIds is null || request.UserIds.Count == 0)
         {
-            return Results.BadRequest(new { error = "no_user_ids_provided" });
+            return Results.Problem(
+                detail: "No user IDs provided.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         if (request.UserIds.Count > 100)
         {
-            return Results.BadRequest(new { error = "too_many_user_ids", maxAllowed = 100 });
+            return Results.Problem(
+                detail: "Too many user IDs provided. Maximum allowed is 100.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         var users = await dbContext.Users
@@ -143,7 +159,11 @@ public static class InternalEndpoints
 
         if (org is null)
         {
-            return Results.NotFound(new { error = "organization_not_found" });
+            return Results.Problem(
+                detail: "Organization not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         return Results.Ok(org);
@@ -236,7 +256,11 @@ public static class InternalEndpoints
 
         if (membership is null)
         {
-            return Results.NotFound(new { error = "membership_not_found" });
+            return Results.Problem(
+                detail: "Membership not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         return Results.Ok(membership);
