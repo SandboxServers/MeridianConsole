@@ -1,35 +1,38 @@
 using System.Diagnostics;
 using System.Net;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.ServiceDefaults.Middleware;
 
 /// <summary>
-/// Middleware that transforms exceptions into RFC 7807 Problem Details responses.
+/// Middleware that transforms exceptions into RFC 9457 Problem Details responses.
+/// Acts as a fallback safety net for any exceptions not caught by IExceptionHandler.
 /// </summary>
+/// <remarks>
+/// For new services, prefer using <see cref="Dhadgar.ServiceDefaults.Errors.ErrorHandlingExtensions.AddDhadgarErrorHandling"/>
+/// which registers <see cref="Dhadgar.ServiceDefaults.Errors.GlobalExceptionHandler"/> as the primary exception handler.
+/// This middleware exists for backwards compatibility and as an additional safety net.
+/// </remarks>
 public sealed class ProblemDetailsMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ProblemDetailsMiddleware> _logger;
     private readonly IHostEnvironment _environment;
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
+    private readonly TimeProvider _timeProvider;
 
     public ProblemDetailsMiddleware(
         RequestDelegate next,
         ILogger<ProblemDetailsMiddleware> logger,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        TimeProvider? timeProvider = null)
     {
         _next = next;
         _logger = logger;
         _environment = environment;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -61,32 +64,43 @@ public sealed class ProblemDetailsMiddleware
             ?? context.TraceIdentifier
             ?? "unknown";
 
+        // ERR-02: Also include correlationId as a separate field
+        var correlationId = context.Items["CorrelationId"]?.ToString()
+            ?? context.TraceIdentifier
+            ?? "unknown";
+
         _logger.LogError(exception,
-            "Unhandled exception. TraceId: {TraceId}, Path: {Path}",
-            traceId, context.Request.Path);
+            "Unhandled exception (fallback handler). TraceId: {TraceId}, CorrelationId: {CorrelationId}, Path: {Path}",
+            traceId, correlationId, context.Request.Path);
 
         var includeDetails = _environment.IsDevelopment() || _environment.IsEnvironment("Testing");
 
-        var problemDetails = new
+        // Use standard ProblemDetails class for RFC 9457 compliance
+        var problemDetails = new ProblemDetails
         {
-            type = "https://meridian.console/errors/internal-server-error",
-            title = "Internal Server Error",
-            status = (int)HttpStatusCode.InternalServerError,
-            detail = includeDetails
+            Type = "https://meridian.console/errors/internal-server-error",
+            Title = "Internal Server Error",
+            Status = (int)HttpStatusCode.InternalServerError,
+            Detail = includeDetails
                 ? exception.Message
                 : "An unexpected error occurred. Please contact support with the trace ID.",
-            instance = context.Request.Path.ToString(),
-            traceId = traceId,
-            extensions = includeDetails
-                ? new { stackTrace = exception.StackTrace }
-                : null
+            Instance = context.Request.Path.ToString()
         };
+
+        // Add trace context extensions
+        problemDetails.Extensions["traceId"] = traceId;
+        problemDetails.Extensions["correlationId"] = correlationId;
+        problemDetails.Extensions["timestamp"] = _timeProvider.GetUtcNow();
+
+        // In development, also include stack trace
+        if (includeDetails)
+        {
+            problemDetails.Extensions["stackTrace"] = exception.StackTrace;
+        }
 
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
         context.Response.ContentType = "application/problem+json";
 
-        var json = JsonSerializer.Serialize(problemDetails, SerializerOptions);
-
-        await context.Response.WriteAsync(json, context.RequestAborted);
+        await context.Response.WriteAsJsonAsync(problemDetails, context.RequestAborted);
     }
 }
