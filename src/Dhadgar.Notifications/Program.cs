@@ -1,6 +1,7 @@
 using Dhadgar.Notifications;
 using Dhadgar.Notifications.Data;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,9 @@ using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults();
+builder.Services.AddDhadgarServiceDefaults(
+    builder.Configuration,
+    HealthCheckDependencies.Postgres | HealthCheckDependencies.RabbitMq);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Notifications API",
     description: "Email, Discord, and webhook notifications for Meridian Console");

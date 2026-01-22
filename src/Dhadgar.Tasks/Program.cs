@@ -1,6 +1,7 @@
 using Dhadgar.Tasks;
 using Dhadgar.Tasks.Data;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,9 @@ using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults();
+builder.Services.AddDhadgarServiceDefaults(
+    builder.Configuration,
+    HealthCheckDependencies.Postgres | HealthCheckDependencies.RabbitMq);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Tasks API",
     description: "Orchestration and background job management for Meridian Console");

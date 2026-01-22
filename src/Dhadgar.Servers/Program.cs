@@ -2,6 +2,7 @@ using Dhadgar.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Audit;
+using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
@@ -13,7 +14,9 @@ using OpenTelemetry.Resources;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults();
+builder.Services.AddDhadgarServiceDefaults(
+    builder.Configuration,
+    HealthCheckDependencies.Postgres);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Servers API",
     description: "Game server lifecycle management for Meridian Console");

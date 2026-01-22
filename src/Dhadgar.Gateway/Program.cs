@@ -9,6 +9,7 @@ using Dhadgar.Gateway.Options;
 using Dhadgar.Gateway.Readiness;
 using Dhadgar.Gateway.Services;
 using GatewayHello = Dhadgar.Gateway.Hello;
+using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
@@ -60,8 +61,21 @@ builder.Services.AddCircuitBreaker(builder.Configuration);
 // Add Problem Details for standardized error responses
 builder.Services.AddProblemDetails();
 
-builder.Services.AddHealthChecks()
+// Health checks: liveness (self) + readiness (YARP + Redis)
+var healthChecksBuilder = builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<YarpReadinessCheck>("yarp_ready", tags: ["ready"]);
+
+// Add Redis health check for rate limiting cache
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+if (!string.IsNullOrEmpty(redisConnectionString))
+{
+    healthChecksBuilder.AddRedis(
+        redisConnectionString,
+        name: "redis",
+        timeout: TimeSpan.FromSeconds(2),
+        tags: ["ready"]);
+}
 
 // Authentication/authorization
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
