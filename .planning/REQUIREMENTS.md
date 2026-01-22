@@ -25,10 +25,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Audit
 
-- [ ] **AUDIT-01**: All authenticated API calls are recorded to audit database
-- [ ] **AUDIT-02**: Audit records include: timestamp, user ID, tenant ID, action, resource, outcome
-- [ ] **AUDIT-03**: Audit database supports SQL queries ("who did what when")
-- [ ] **AUDIT-04**: Audit records older than 90 days are automatically cleaned up
+- [x] **AUDIT-01**: All authenticated API calls are recorded to audit database
+- [x] **AUDIT-02**: Audit records include: timestamp, user ID, tenant ID, action, resource, outcome
+- [x] **AUDIT-03**: Audit database supports SQL queries ("who did what when")
+- [x] **AUDIT-04**: Audit records older than 90 days are automatically cleaned up
 
 ### Health Checks
 
@@ -96,10 +96,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TRACE-02 | Phase 2 | ✓ Complete |
 | TRACE-03 | Phase 2 | ✓ Complete |
 | TRACE-04 | Phase 2 | ✓ Complete |
-| AUDIT-01 | Phase 3 | Pending |
-| AUDIT-02 | Phase 3 | Pending |
-| AUDIT-03 | Phase 3 | Pending |
-| AUDIT-04 | Phase 3 | Pending |
+| AUDIT-01 | Phase 3 | ✓ Complete |
+| AUDIT-02 | Phase 3 | ✓ Complete |
+| AUDIT-03 | Phase 3 | ✓ Complete |
+| AUDIT-04 | Phase 3 | ✓ Complete |
 | HEALTH-01 | Phase 4 | Pending |
 | HEALTH-02 | Phase 4 | Pending |
 | HEALTH-03 | Phase 4 | Pending |
@@ -119,4 +119,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-20*
-*Last updated: 2026-01-21 after Phase 2 completion*
+*Last updated: 2026-01-22 after Phase 3 completion*
