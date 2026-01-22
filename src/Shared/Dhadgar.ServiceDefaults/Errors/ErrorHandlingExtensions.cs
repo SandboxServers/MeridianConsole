@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Dhadgar.ServiceDefaults.Errors;
 
@@ -18,6 +19,9 @@ public static class ErrorHandlingExtensions
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddDhadgarErrorHandling(this IServiceCollection services)
     {
+        // Register TimeProvider.System if not already registered (allows test overrides)
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddProblemDetails(options =>
         {
             options.CustomizeProblemDetails = context =>

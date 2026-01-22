@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +15,12 @@ namespace Dhadgar.ServiceDefaults.Errors;
 public sealed class GlobalExceptionHandler : IExceptionHandler
 {
     private static readonly EventId ExceptionEventId = new(9300, "UnhandledException");
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     private readonly ILogger<GlobalExceptionHandler> _logger;
     private readonly IHostEnvironment _environment;
@@ -75,11 +83,12 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             problemDetails.Extensions["errors"] = validationException.Errors;
         }
 
-        // Write response
+        // Write response with explicit content type
         httpContext.Response.StatusCode = statusCode;
         httpContext.Response.ContentType = "application/problem+json";
 
-        await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
+        var json = JsonSerializer.Serialize(problemDetails, JsonOptions);
+        await httpContext.Response.WriteAsync(json, cancellationToken);
 
         return true;
     }
