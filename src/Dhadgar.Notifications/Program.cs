@@ -1,5 +1,8 @@
 using Dhadgar.Notifications;
+using Dhadgar.Notifications.Alerting;
 using Dhadgar.Notifications.Data;
+using Dhadgar.Notifications.Discord;
+using Dhadgar.Notifications.Email;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
@@ -21,6 +24,26 @@ builder.Services.AddMeridianSwagger(
 
 builder.Services.AddDbContext<NotificationsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+
+// Configure alerting options
+builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection("Discord"));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+
+// Register HTTP client for Discord webhook
+builder.Services.AddHttpClient<IDiscordWebhook, DiscordWebhookClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
+// Register email sender
+builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+
+// Register throttler with configurable window
+var throttleMinutes = builder.Configuration.GetValue<int>("Alerting:ThrottleWindowMinutes", 5);
+builder.Services.AddSingleton(new AlertThrottler(TimeSpan.FromMinutes(throttleMinutes)));
+
+// Register alert dispatcher
+builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 
 // OpenTelemetry configuration
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
