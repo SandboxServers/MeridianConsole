@@ -29,6 +29,7 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Audit;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
@@ -361,6 +362,9 @@ builder.Services.AddDhadgarLogging();
 builder.Services.AddOrganizationContext();
 builder.Services.AddSingleton<RequestLoggingMessages>();
 builder.Logging.AddDhadgarLogging("Dhadgar.Identity", builder.Configuration);
+
+// API audit infrastructure for compliance logging (separate from domain AuditEvents)
+builder.Services.AddAuditInfrastructure<IdentityDbContext>();
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -794,6 +798,10 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Audit middleware - captures authenticated API requests for compliance
+app.UseAuditMiddleware();
+
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseRateLimiter();
