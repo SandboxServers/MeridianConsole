@@ -40,12 +40,11 @@ export default function ProviderIcon({ provider, className = 'w-5 h-5' }: Provid
         </svg>
       );
     case 'battlenet':
-      // Battle.net with blue circle background for visibility
+      // Official Battle.net logo from Simple Icons
       return (
         <svg className={className} viewBox="0 0 24 24" role="img" aria-label={label}>
           <title>{label}</title>
-          <circle fill="#148EFF" cx="12" cy="12" r="12"/>
-          <path fill="#FFFFFF" d="M17.5 8.5c0-1.5-1.2-2.5-2.7-2.5-1.8 0-3.3 1.2-4.3 2.8-.3-.1-.6-.1-.9-.1-2.5 0-4.6 2.1-4.6 4.6 0 2.5 2.1 4.6 4.6 4.6.3 0 .6 0 .9-.1 1 1.6 2.5 2.8 4.3 2.8 1.5 0 2.7-1 2.7-2.5 0-.8-.4-1.5-.9-2 .5-.5.9-1.2.9-2s-.4-1.5-.9-2c.5-.5.9-1.2.9-2zm-7.9 6.8c-1.5 0-2.8-1.2-2.8-2.8s1.2-2.8 2.8-2.8c.2 0 .3 0 .5.1-.3.7-.5 1.4-.5 2.2 0 1.2.5 2.3 1.2 3.1-.4.1-.8.2-1.2.2zm5.2 2c-.9 0-1.7-.5-2.3-1.2.8-.6 1.4-1.4 1.8-2.3.3.2.5.5.5.9 0 .5-.3 1-.7 1.3.4.3.7.8.7 1.3zm0-4c-.3-.2-.5-.5-.5-.9 0-.5.3-1 .7-1.3-.4-.3-.7-.8-.7-1.3 0-.5.3-1 .7-1.3-.4-.3-.7-.8-.7-1.3 0-.4.2-.7.5-.9.9 0 1.7.5 2.3 1.2-.8.6-1.4 1.4-1.8 2.3.3.2.7.5.7 1s-.3 1-.7 1.3c.4.8 1 1.6 1.8 2.2-.6.7-1.4 1-2.3 1z"/>
+          <path fill="#00AEFF" d="M18.94 8.296C15.9 6.892 11.534 6 7.426 6.332c.206-1.36.714-2.308 1.548-2.508 1.148-.275 2.4.48 3.594 1.854.782.102 1.71.28 2.355.429C12.747 2.013 9.828-.282 7.607.565c-1.688.644-2.553 2.97-2.448 6.094-2.2.468-3.915 1.3-5.013 2.495-.056.065-.181.227-.137.305.034.058.146-.008.194-.04 1.274-.89 2.904-1.373 5.027-1.676.303 3.333 1.713 7.56 4.055 10.952-1.28.502-2.356.536-2.946-.087-.812-.856-.784-2.318-.19-4.04a26.764 26.764 0 0 1-.807-2.254c-2.459 3.934-2.986 7.61-1.143 9.11 1.402 1.14 3.847.725 6.502-.926 1.505 1.672 3.083 2.74 4.667 3.094.084.015.287.043.332-.034.034-.06-.08-.124-.131-.149-1.408-.657-2.64-1.828-3.964-3.515 2.735-1.929 5.691-5.263 7.457-8.988 1.076.86 1.64 1.773 1.398 2.595-.336 1.131-1.615 1.84-3.403 2.185a27.697 27.697 0 0 1-1.548 1.826c4.634.16 8.08-1.22 8.458-3.565.286-1.786-1.295-3.696-4.053-5.17.696-2.139.832-4.04.346-5.588-.029-.08-.106-.27-.196-.27-.068 0-.067.13-.063.187.135 1.547-.263 3.2-1.062 5.19zm-8.533 9.869c-1.96-3.145-3.09-6.849-3.082-10.594 3.702-.124 7.474.748 10.714 2.627-1.743 3.269-4.385 6.1-7.633 7.966h.001z"/>
         </svg>
       );
     case 'discord':
@@ -81,21 +80,36 @@ export default function ProviderIcon({ provider, className = 'w-5 h-5' }: Provid
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
         </svg>
       );
-    // LEGO brick icon - more recognizable than wordmark
+    // LEGO wordmark - traced from official logo
     case 'lego':
       return (
-        <svg className={className} viewBox="0 0 24 24" role="img" aria-label={label}>
+        <svg className={className} viewBox="0 0 100 100" role="img" aria-label={label}>
           <title>{label}</title>
-          {/* Yellow background */}
-          <rect fill="#FFED00" width="24" height="24" rx="3"/>
-          {/* Red LEGO brick */}
-          <g fill="#E3000B">
-            {/* Brick body */}
-            <rect x="3" y="10" width="18" height="11" rx="1"/>
-            {/* Studs */}
-            <circle cx="7" cy="7" r="2.5"/>
-            <circle cx="12" cy="7" r="2.5"/>
-            <circle cx="17" cy="7" r="2.5"/>
+          {/* Yellow background with rounded corners */}
+          <rect fill="#FFED00" x="2" y="20" width="96" height="60" rx="10" ry="10"/>
+          {/* Red border */}
+          <rect fill="none" stroke="#D01012" strokeWidth="4" x="6" y="24" width="88" height="52" rx="6" ry="6"/>
+          {/* LEGO letters with outlined style */}
+          <g>
+            {/* L - outer */}
+            <path fill="#D01012" d="M16 34h10v22h8v8H16V34z"/>
+            {/* L - inner */}
+            <path fill="#FFED00" d="M19 37h4v22h8v2h-12V37z"/>
+            {/* E - outer */}
+            <path fill="#D01012" d="M36 34h16v8H46v6h6v8h-6v6h10v8H36V34z"/>
+            {/* E - inner */}
+            <path fill="#FFED00" d="M39 37h10v2H43v12h6v2h-6v12h10v2H39V37z"/>
+            {/* G - outer */}
+            <path fill="#D01012" d="M54 34h18v8H62v6h6v8h6v14H54V34z"/>
+            {/* G - inner */}
+            <path fill="#FFED00" d="M57 37h12v2H59v12h6v2h-6v10h12v-8h-4v-2h7v13H57V37z"/>
+            {/* O - outer */}
+            <path fill="#D01012" d="M76 34h18v36H76V34z"/>
+            {/* O - inner */}
+            <path fill="#FFED00" d="M79 37h12v30H79V37z"/>
+            {/* O - center hole */}
+            <path fill="#D01012" d="M82 40h6v24h-6V40z"/>
+            <path fill="#FFED00" d="M84 43h2v18h-2V43z"/>
           </g>
         </svg>
       );
@@ -135,12 +149,13 @@ export default function ProviderIcon({ provider, className = 'w-5 h-5' }: Provid
         </svg>
       );
     case 'roblox':
-      // Roblox tilted square with white background for visibility
+      // Official Roblox logo from Simple Icons with white background for visibility
       return (
         <svg className={className} viewBox="0 0 24 24" role="img" aria-label={label}>
           <title>{label}</title>
-          <rect fill="#FFFFFF" x="1" y="1" width="22" height="22" rx="4"/>
-          <path fill="#E2231A" d="M5.164 2L2 16.836 16.836 22 20 7.164 5.164 2zm6.746 11.674l-3.584-.96.96-3.584 3.584.96-.96 3.584z"/>
+          <rect fill="#FFFFFF" x="0" y="0" width="24" height="24" rx="4"/>
+          <path fill="#E2231A" d="M18.926 23.998 0 18.892 5.075.002 24 5.108Z"/>
+          <path fill="#FFFFFF" d="M15.348 10.09l-5.282-1.453-1.414 5.273 5.282 1.453z"/>
         </svg>
       );
     // Slack multicolor logo
@@ -184,13 +199,11 @@ export default function ProviderIcon({ provider, className = 'w-5 h-5' }: Provid
         </svg>
       );
     case 'yahoo':
-      // Yahoo Y! logo with purple circle background
+      // Official Yahoo logo from Font Awesome (CC BY 4.0)
       return (
-        <svg className={className} viewBox="0 0 24 24" role="img" aria-label={label}>
+        <svg className={className} viewBox="0 0 512 512" role="img" aria-label={label}>
           <title>{label}</title>
-          <circle fill="#6001D2" cx="12" cy="12" r="12"/>
-          <path fill="#FFFFFF" d="M7 6h3l2.5 5L15 6h3l-4.5 8v4h-2v-4L7 6z"/>
-          <circle fill="#FFFFFF" cx="17" cy="17" r="1.5"/>
+          <path fill="#6001D2" d="M223.69,141.06,167,284.23,111,141.06H14.93L120.76,390.19,82.19,480h94.17L317.27,141.06Zm105.4,135.79a58.22,58.22,0,1,0,58.22,58.22A58.22,58.22,0,0,0,329.09,276.85ZM394.65,32l-93,223.47H406.44L499.07,32Z"/>
         </svg>
       );
     default:
