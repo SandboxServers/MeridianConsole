@@ -1,11 +1,14 @@
+using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using RabbitMQ.Client;
 
 namespace Dhadgar.ServiceDefaults;
 
@@ -34,6 +37,97 @@ public static class ServiceDefaultsExtensions
     {
         services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
+
+        // Register organization context for multi-tenant logging
+        services.AddOrganizationContext();
+
+        // Register source-generated request logging messages as singleton
+        services.AddSingleton<RequestLoggingMessages>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Adds Dhadgar service defaults with configurable health check dependencies.
+    /// </summary>
+    /// <param name="services">The service collection to configure.</param>
+    /// <param name="configuration">Configuration to read connection strings from.</param>
+    /// <param name="dependencies">Flags indicating which dependencies to check for readiness.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This overload registers health checks based on the specified dependencies:
+    /// <list type="bullet">
+    ///   <item><see cref="HealthCheckDependencies.Postgres"/> - Adds PostgreSQL connection check</item>
+    ///   <item><see cref="HealthCheckDependencies.Redis"/> - Adds Redis connection check</item>
+    ///   <item><see cref="HealthCheckDependencies.RabbitMq"/> - Adds RabbitMQ connection check</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Health checks are tagged for Kubernetes probes:
+    /// <list type="bullet">
+    ///   <item>"live" tag - For liveness probes (/livez), includes only the self check</item>
+    ///   <item>"ready" tag - For readiness probes (/readyz), includes dependency checks</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddDhadgarServiceDefaults(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        HealthCheckDependencies dependencies)
+    {
+        var healthChecks = services.AddHealthChecks()
+            .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
+
+        if (dependencies.HasFlag(HealthCheckDependencies.Postgres))
+        {
+            var connectionString = configuration.GetConnectionString("Postgres");
+            if (!string.IsNullOrEmpty(connectionString))
+            {
+                healthChecks.AddNpgSql(
+                    connectionString,
+                    name: "postgres",
+                    timeout: TimeSpan.FromSeconds(3),
+                    tags: ["ready"]);
+            }
+        }
+
+        if (dependencies.HasFlag(HealthCheckDependencies.Redis))
+        {
+            var connectionString = configuration["Redis:ConnectionString"];
+            if (!string.IsNullOrEmpty(connectionString))
+            {
+                healthChecks.AddRedis(
+                    connectionString,
+                    name: "redis",
+                    timeout: TimeSpan.FromSeconds(2),
+                    tags: ["ready"]);
+            }
+        }
+
+        if (dependencies.HasFlag(HealthCheckDependencies.RabbitMq))
+        {
+            var rabbitHost = configuration["RabbitMq:Host"] ?? "localhost";
+            var rabbitUser = configuration["RabbitMq:Username"] ?? "dhadgar";
+            var rabbitPass = configuration["RabbitMq:Password"] ?? "dhadgar";
+
+            // RabbitMQ.Client 7.x uses async connection factory
+            // The health check library requires an async factory that returns IConnection
+            healthChecks.AddRabbitMQ(
+                factory: async _ =>
+                {
+                    var connectionFactory = new ConnectionFactory
+                    {
+                        HostName = rabbitHost,
+                        UserName = rabbitUser,
+                        Password = rabbitPass
+                    };
+                    return await connectionFactory.CreateConnectionAsync();
+                },
+                name: "rabbitmq",
+                timeout: TimeSpan.FromSeconds(3),
+                tags: ["ready"]);
+        }
 
         // Register organization context for multi-tenant logging
         services.AddOrganizationContext();
