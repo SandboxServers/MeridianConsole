@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-21)
 
 **Core value:** Complete observability—debug any request end-to-end, audit any action for compliance, get alerted proactively
-**Current focus:** Phase 3 - Audit Logging
+**Current focus:** Phase 4 - Health & Alerting
 
 ## Current Position
 
-Phase: 3 of 5 (Audit Logging) - COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-22 - Completed 03-03-PLAN.md (Integration Tests and Verification)
+Phase: 4 of 5 (Health & Alerting)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-22 - Completed 04-01-PLAN.md (Health Check Infrastructure)
 
-Progress: [█████████░] 75%
+Progress: [██████████] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 9.7 minutes
-- Total execution time: 87 minutes
+- Total plans completed: 10
+- Average duration: 9.4 minutes
+- Total execution time: 93 minutes
 
 **By Phase:**
 
@@ -30,10 +30,11 @@ Progress: [█████████░] 75%
 | 1. Logging Foundation | 3/3 | 20 min | 6.7 min |
 | 2. Distributed Tracing | 3/3 | 11 min | 3.7 min |
 | 3. Audit Logging | 3/3 | 56 min | 18.7 min |
+| 4. Health & Alerting | 1/3 | 6 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (3 min), 03-01 (7 min), 03-02 (4 min), 03-03 (~45 min)
-- Trend: Testing plans take longer due to debugging and provider compatibility
+- Last 5 plans: 03-01 (7 min), 03-02 (4 min), 03-03 (~45 min), 04-01 (6 min)
+- Trend: Infrastructure plans faster than testing/integration plans
 
 *Updated after each plan completion*
 
@@ -69,6 +70,10 @@ Recent decisions affecting current work:
 - [03-03]: SQLite for cleanup tests (InMemory doesn't support ExecuteDeleteAsync)
 - [03-03]: Direct algorithm testing for sealed AuditCleanupService (can't subclass)
 - [03-03]: Skip auth-dependent integration tests until UseAuthentication added to services
+- [04-01]: RabbitMQ health check uses async factory (RabbitMQ.Client 7.x API change)
+- [04-01]: Gateway keeps existing YARP readiness check alongside Redis health check
+- [04-01]: Liveness probes include only self check (no external dependencies)
+- [04-01]: Readiness probes have 2-3 second timeouts to fail fast
 
 ### Pending Todos
 
@@ -81,5 +86,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed Phase 3 (Audit Logging) - all 3 plans complete
-Resume file: .planning/phases/04-health-alerting/04-PHASE-PLAN.md (next phase)
+Stopped at: Completed 04-01-PLAN.md (Health Check Infrastructure)
+Resume file: .planning/phases/04-health-alerting/04-02-PLAN.md (next plan)
