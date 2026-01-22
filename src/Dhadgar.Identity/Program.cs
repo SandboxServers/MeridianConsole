@@ -30,6 +30,7 @@ using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Audit;
+using Dhadgar.ServiceDefaults.Errors;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
@@ -365,6 +366,9 @@ builder.Logging.AddDhadgarLogging("Dhadgar.Identity", builder.Configuration);
 
 // API audit infrastructure for compliance logging (separate from domain AuditEvents)
 builder.Services.AddAuditInfrastructure<IdentityDbContext>();
+
+// Error handling infrastructure (RFC 9457 Problem Details)
+builder.Services.AddDhadgarErrorHandling();
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -794,7 +798,7 @@ app.UseRequestLimitsMiddleware();
 
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<TenantEnrichmentMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseDhadgarErrorHandling();  // RFC 9457 Problem Details with trace context
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();

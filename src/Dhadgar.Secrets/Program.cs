@@ -9,6 +9,7 @@ using Dhadgar.Secrets.Readiness;
 using Dhadgar.Secrets.Services;
 using SecretsHello = Dhadgar.Secrets.Hello;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.Errors;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -94,6 +95,9 @@ builder.Services.AddHealthChecks()
 // Register authorization and audit services
 builder.Services.AddSingleton<ISecretsAuthorizationService, SecretsAuthorizationService>();
 builder.Services.AddSingleton<ISecretsAuditLogger, SecretsAuditLogger>();
+
+// Error handling infrastructure (RFC 9457 Problem Details)
+builder.Services.AddDhadgarErrorHandling();
 
 // Rate limiting configuration
 builder.Services.AddRateLimiter(options =>
@@ -230,7 +234,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseDhadgarErrorHandling();  // RFC 9457 Problem Details with trace context
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
