@@ -83,12 +83,12 @@ Plans:
   5. Critical errors (Error/Critical level) trigger Discord webhook within 60 seconds
   6. Critical errors trigger email notification within 60 seconds
   7. Grafana dashboard includes pre-configured alerting rules for error rate spikes
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
+- [ ] 04-01-PLAN.md — Health check infrastructure (packages, ServiceDefaults extensions, service integration)
+- [ ] 04-02-PLAN.md — Alerting infrastructure (Discord webhook, email sender, alert dispatcher)
+- [ ] 04-03-PLAN.md — Grafana provisioning and alerting tests
 
 ### Phase 5: Error Handling
 **Goal**: All API errors return consistent RFC 9457 Problem Details with debugging context
@@ -115,9 +115,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 (parallel with 4) -> 5
 | 1. Logging Foundation | 3/3 | ✓ Complete | 2026-01-21 |
 | 2. Distributed Tracing | 3/3 | ✓ Complete | 2026-01-21 |
 | 3. Audit System | 3/3 | ✓ Complete | 2026-01-22 |
-| 4. Health & Alerting | 0/3 | Not started | - |
+| 4. Health & Alerting | 0/3 | Planned | - |
 | 5. Error Handling | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-21*
-*Last updated: 2026-01-22 after Phase 5 planning*
+*Last updated: 2026-01-22 after Phase 4 planning*
