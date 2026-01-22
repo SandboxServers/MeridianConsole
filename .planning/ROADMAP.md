@@ -99,11 +99,11 @@ Plans:
   2. Exceptions map to appropriate HTTP status codes (ValidationException -> 400, NotFoundException -> 404, etc.)
   3. Error responses in production never contain stack traces, connection strings, or internal paths
   4. Error responses include correlationId and traceId fields for cross-referencing logs and traces
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Core error handling infrastructure (exception taxonomy, GlobalExceptionHandler, extensions)
+- [ ] 05-02-PLAN.md — Service migration (Identity/Secrets endpoints to Results.Problem(), integration tests)
 
 ## Progress
 
@@ -120,4 +120,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 (parallel with 4) -> 5
 
 ---
 *Roadmap created: 2026-01-21*
-*Last updated: 2026-01-22 after Phase 3 execution*
+*Last updated: 2026-01-22 after Phase 5 planning*
