@@ -1,0 +1,33 @@
+# Provisioned contact points for alert notifications
+# Configure DISCORD_WEBHOOK_URL and ALERT_EMAIL environment variables
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: dhadgar-alerts
+    receivers:
+      # Discord webhook for real-time alerts
+      - uid: provisioned-discord-alerts
+        type: discord
+        settings:
+          url: ${DISCORD_WEBHOOK_URL:-}
+          use_discord_username: false
+          avatar_url: ""
+          message: |
+            **{{ .Status | toUpper }}** - {{ .CommonLabels.alertname }}
+
+            {{ range .Alerts }}
+            **Summary:** {{ .Annotations.summary }}
+            **Description:** {{ .Annotations.description }}
+            **Severity:** {{ .Labels.severity }}
+            **Started:** {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+            {{ end }}
+        disableResolveMessage: false
+
+      # Email for audit trail (optional, requires SMTP config in Grafana)
+      - uid: provisioned-email-alerts
+        type: email
+        settings:
+          addresses: ${ALERT_EMAIL_ADDRESSES:-}
+          singleEmail: true
+        disableResolveMessage: false
