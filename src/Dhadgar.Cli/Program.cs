@@ -34,6 +34,15 @@ using GrantClaimCommand = Dhadgar.Cli.Commands.Identity.GrantClaimCommand;
 using RevokeClaimCommand = Dhadgar.Cli.Commands.Identity.RevokeClaimCommand;
 using ListClaimsCommand = Dhadgar.Cli.Commands.Identity.ListClaimsCommand;
 using Dhadgar.Cli.Commands.Me;
+using NodesListNodesCommand = Dhadgar.Cli.Commands.Nodes.ListNodesCommand;
+using NodesGetNodeCommand = Dhadgar.Cli.Commands.Nodes.GetNodeCommand;
+using NodesUpdateNodeCommand = Dhadgar.Cli.Commands.Nodes.UpdateNodeCommand;
+using NodesDecommissionNodeCommand = Dhadgar.Cli.Commands.Nodes.DecommissionNodeCommand;
+using NodesEnterMaintenanceCommand = Dhadgar.Cli.Commands.Nodes.EnterMaintenanceCommand;
+using NodesExitMaintenanceCommand = Dhadgar.Cli.Commands.Nodes.ExitMaintenanceCommand;
+using NodesCreateTokenCommand = Dhadgar.Cli.Commands.Nodes.CreateTokenCommand;
+using NodesListTokensCommand = Dhadgar.Cli.Commands.Nodes.ListTokensCommand;
+using NodesRevokeTokenCommand = Dhadgar.Cli.Commands.Nodes.RevokeTokenCommand;
 
 var root = new RootCommand("Dhadgar CLI — Beautiful command-line interface for Meridian Console");
 
@@ -59,6 +68,8 @@ root.SetHandler(() =>
     table.AddRow("[cyan]dhadgar secret[/]", "[dim]Secret management (get, set, rotate, certificates)[/]");
     table.AddRow("[cyan]dhadgar keyvault[/]", "[dim]Azure Key Vault management (list, create)[/]");
     table.AddRow("[cyan]dhadgar gateway[/]", "[dim]Gateway diagnostics (health check)[/]");
+    table.AddRow("[cyan]dhadgar nodes[/]", "[dim]Node management (list, get, maintenance)[/]");
+    table.AddRow("[cyan]dhadgar enrollment[/]", "[dim]Agent enrollment tokens (create, list, revoke)[/]");
     table.AddRow("[cyan]dhadgar commands[/]", "[dim]List available commands and usage[/]");
     table.AddRow("[cyan]dhadgar version[/]", "[dim]Show CLI build and breaking change info[/]");
 
@@ -725,6 +736,137 @@ gatewayCmd.AddCommand(gatewayRoutesCmd);
 gatewayCmd.AddCommand(gatewayClustersCmd);
 
 // ============================================================================
+// NODES COMMANDS
+// ============================================================================
+
+var nodesCmd = new Command("nodes", "Node management commands");
+
+var nodesListCmd = new Command("list", "List nodes");
+var nodesListOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+var nodesListStatusOpt = new Option<string?>("--status", "Filter by status (online, offline, degraded, maintenance)");
+var nodesListSkipOpt = new Option<int?>("--skip", "Number of items to skip (pagination)");
+var nodesListTakeOpt = new Option<int?>("--take", "Number of items to take (pagination)");
+nodesListCmd.AddOption(nodesListOrgOpt);
+nodesListCmd.AddOption(nodesListStatusOpt);
+nodesListCmd.AddOption(nodesListSkipOpt);
+nodesListCmd.AddOption(nodesListTakeOpt);
+nodesListCmd.SetHandler(async (string? orgId, string? status, int? skip, int? take) =>
+{
+    await NodesListNodesCommand.ExecuteAsync(orgId, status, skip, take, CancellationToken.None);
+}, nodesListOrgOpt, nodesListStatusOpt, nodesListSkipOpt, nodesListTakeOpt);
+
+var nodesGetCmd = new Command("get", "Get node details");
+var nodesGetNodeIdArg = new Argument<string>("node-id", "Node ID");
+var nodesGetOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+nodesGetCmd.AddArgument(nodesGetNodeIdArg);
+nodesGetCmd.AddOption(nodesGetOrgOpt);
+nodesGetCmd.SetHandler(async (string nodeId, string? orgId) =>
+{
+    await NodesGetNodeCommand.ExecuteAsync(nodeId, orgId, CancellationToken.None);
+}, nodesGetNodeIdArg, nodesGetOrgOpt);
+
+var nodesUpdateCmd = new Command("update", "Update node properties");
+var nodesUpdateNodeIdArg = new Argument<string>("node-id", "Node ID");
+var nodesUpdateDisplayNameOpt = new Option<string?>("--display-name", "Display name for the node");
+var nodesUpdateOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+nodesUpdateCmd.AddArgument(nodesUpdateNodeIdArg);
+nodesUpdateCmd.AddOption(nodesUpdateDisplayNameOpt);
+nodesUpdateCmd.AddOption(nodesUpdateOrgOpt);
+nodesUpdateCmd.SetHandler(async (string nodeId, string? displayName, string? orgId) =>
+{
+    await NodesUpdateNodeCommand.ExecuteAsync(nodeId, displayName, orgId, CancellationToken.None);
+}, nodesUpdateNodeIdArg, nodesUpdateDisplayNameOpt, nodesUpdateOrgOpt);
+
+var nodesDecommissionCmd = new Command("decommission", "Decommission a node (permanent)");
+var nodesDecommissionNodeIdArg = new Argument<string>("node-id", "Node ID");
+var nodesDecommissionOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+var nodesDecommissionForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+nodesDecommissionCmd.AddArgument(nodesDecommissionNodeIdArg);
+nodesDecommissionCmd.AddOption(nodesDecommissionOrgOpt);
+nodesDecommissionCmd.AddOption(nodesDecommissionForceOpt);
+nodesDecommissionCmd.SetHandler(async (string nodeId, string? orgId, bool force) =>
+{
+    await NodesDecommissionNodeCommand.ExecuteAsync(nodeId, orgId, force, CancellationToken.None);
+}, nodesDecommissionNodeIdArg, nodesDecommissionOrgOpt, nodesDecommissionForceOpt);
+
+var nodesMaintenanceCmd = new Command("maintenance", "Node maintenance mode commands");
+
+var nodesMaintenanceStartCmd = new Command("start", "Put node into maintenance mode");
+var nodesMaintenanceStartNodeIdArg = new Argument<string>("node-id", "Node ID");
+var nodesMaintenanceStartOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+nodesMaintenanceStartCmd.AddArgument(nodesMaintenanceStartNodeIdArg);
+nodesMaintenanceStartCmd.AddOption(nodesMaintenanceStartOrgOpt);
+nodesMaintenanceStartCmd.SetHandler(async (string nodeId, string? orgId) =>
+{
+    await NodesEnterMaintenanceCommand.ExecuteAsync(nodeId, orgId, CancellationToken.None);
+}, nodesMaintenanceStartNodeIdArg, nodesMaintenanceStartOrgOpt);
+
+var nodesMaintenanceStopCmd = new Command("stop", "Take node out of maintenance mode");
+var nodesMaintenanceStopNodeIdArg = new Argument<string>("node-id", "Node ID");
+var nodesMaintenanceStopOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+nodesMaintenanceStopCmd.AddArgument(nodesMaintenanceStopNodeIdArg);
+nodesMaintenanceStopCmd.AddOption(nodesMaintenanceStopOrgOpt);
+nodesMaintenanceStopCmd.SetHandler(async (string nodeId, string? orgId) =>
+{
+    await NodesExitMaintenanceCommand.ExecuteAsync(nodeId, orgId, CancellationToken.None);
+}, nodesMaintenanceStopNodeIdArg, nodesMaintenanceStopOrgOpt);
+
+nodesMaintenanceCmd.AddCommand(nodesMaintenanceStartCmd);
+nodesMaintenanceCmd.AddCommand(nodesMaintenanceStopCmd);
+
+nodesCmd.AddCommand(nodesListCmd);
+nodesCmd.AddCommand(nodesGetCmd);
+nodesCmd.AddCommand(nodesUpdateCmd);
+nodesCmd.AddCommand(nodesDecommissionCmd);
+nodesCmd.AddCommand(nodesMaintenanceCmd);
+
+// ============================================================================
+// ENROLLMENT COMMANDS
+// ============================================================================
+
+var enrollmentCmd = new Command("enrollment", "Agent enrollment token management");
+
+var enrollmentTokensCmd = new Command("tokens", "Enrollment token management");
+
+var enrollmentTokensCreateCmd = new Command("create", "Create a new enrollment token");
+var enrollmentTokensCreateLabelOpt = new Option<string?>("--label", "Label for the token");
+var enrollmentTokensCreateExpiresOpt = new Option<int?>("--expires", "Token expiration in minutes (default: 60)");
+var enrollmentTokensCreateOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+enrollmentTokensCreateCmd.AddOption(enrollmentTokensCreateLabelOpt);
+enrollmentTokensCreateCmd.AddOption(enrollmentTokensCreateExpiresOpt);
+enrollmentTokensCreateCmd.AddOption(enrollmentTokensCreateOrgOpt);
+enrollmentTokensCreateCmd.SetHandler(async (string? label, int? expires, string? orgId) =>
+{
+    await NodesCreateTokenCommand.ExecuteAsync(label, expires, orgId, CancellationToken.None);
+}, enrollmentTokensCreateLabelOpt, enrollmentTokensCreateExpiresOpt, enrollmentTokensCreateOrgOpt);
+
+var enrollmentTokensListCmd = new Command("list", "List active enrollment tokens");
+var enrollmentTokensListOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+enrollmentTokensListCmd.AddOption(enrollmentTokensListOrgOpt);
+enrollmentTokensListCmd.SetHandler(async (string? orgId) =>
+{
+    await NodesListTokensCommand.ExecuteAsync(orgId, CancellationToken.None);
+}, enrollmentTokensListOrgOpt);
+
+var enrollmentTokensRevokeCmd = new Command("revoke", "Revoke an enrollment token");
+var enrollmentTokensRevokeIdArg = new Argument<string>("token-id", "Token ID to revoke");
+var enrollmentTokensRevokeOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
+var enrollmentTokensRevokeForceOpt = new Option<bool>("--force", "Skip confirmation prompt");
+enrollmentTokensRevokeCmd.AddArgument(enrollmentTokensRevokeIdArg);
+enrollmentTokensRevokeCmd.AddOption(enrollmentTokensRevokeOrgOpt);
+enrollmentTokensRevokeCmd.AddOption(enrollmentTokensRevokeForceOpt);
+enrollmentTokensRevokeCmd.SetHandler(async (string tokenId, string? orgId, bool force) =>
+{
+    await NodesRevokeTokenCommand.ExecuteAsync(tokenId, orgId, force, CancellationToken.None);
+}, enrollmentTokensRevokeIdArg, enrollmentTokensRevokeOrgOpt, enrollmentTokensRevokeForceOpt);
+
+enrollmentTokensCmd.AddCommand(enrollmentTokensCreateCmd);
+enrollmentTokensCmd.AddCommand(enrollmentTokensListCmd);
+enrollmentTokensCmd.AddCommand(enrollmentTokensRevokeCmd);
+
+enrollmentCmd.AddCommand(enrollmentTokensCmd);
+
+// ============================================================================
 // COMMANDS LIST
 // ============================================================================
 
@@ -778,6 +920,8 @@ root.AddCommand(memberCmd);
 root.AddCommand(secretCmd);
 root.AddCommand(keyvaultCmd);
 root.AddCommand(gatewayCmd);
+root.AddCommand(nodesCmd);
+root.AddCommand(enrollmentCmd);
 root.AddCommand(commandsCmd);
 root.AddCommand(versionCmd);
 root.AddCommand(ping);

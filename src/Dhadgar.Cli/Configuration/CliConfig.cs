@@ -25,6 +25,9 @@ public sealed class CliConfig
     [JsonPropertyName("secrets_url")]
     public string? SecretsUrl { get; set; }
 
+    [JsonPropertyName("nodes_url")]
+    public string? NodesUrl { get; set; }
+
     [JsonPropertyName("access_token")]
     public string? AccessToken { get; set; }
 
@@ -43,6 +46,9 @@ public sealed class CliConfig
 
     [JsonIgnore]
     public string EffectiveSecretsUrl => SecretsUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/api/v1/secrets";
+
+    [JsonIgnore]
+    public string EffectiveNodesUrl => NodesUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/api/v1/nodes";
 
     [JsonIgnore]
     public string EffectiveGatewayUrl => (GatewayUrl ?? "http://localhost:5000").TrimEnd('/');

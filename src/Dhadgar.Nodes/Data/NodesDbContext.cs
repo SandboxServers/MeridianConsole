@@ -1,3 +1,5 @@
+using Dhadgar.Nodes.Data.Configurations;
+using Dhadgar.Nodes.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Nodes.Data;
@@ -6,22 +8,57 @@ public sealed class NodesDbContext : DbContext
 {
     public NodesDbContext(DbContextOptions<NodesDbContext> options) : base(options) { }
 
-    // TODO: Replace with real entities
-    public DbSet<SampleEntity> Sample => Set<SampleEntity>();
+    public DbSet<Node> Nodes => Set<Node>();
+    public DbSet<NodeHardwareInventory> HardwareInventories => Set<NodeHardwareInventory>();
+    public DbSet<NodeHealth> NodeHealths => Set<NodeHealth>();
+    public DbSet<NodeCapacity> NodeCapacities => Set<NodeCapacity>();
+    public DbSet<EnrollmentToken> EnrollmentTokens => Set<EnrollmentToken>();
+    public DbSet<AgentCertificate> AgentCertificates => Set<AgentCertificate>();
+    public DbSet<NodeAuditLog> AuditLogs => Set<NodeAuditLog>();
+    public DbSet<CapacityReservation> CapacityReservations => Set<CapacityReservation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.Entity<SampleEntity>(b =>
-        {
-            b.HasKey(x => x.Id);
-            b.Property(x => x.Name).HasMaxLength(200);
-        });
-    }
-}
 
-public sealed class SampleEntity
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = "hello";
+        // Apply all entity configurations
+        modelBuilder.ApplyConfiguration(new NodeConfiguration());
+        modelBuilder.ApplyConfiguration(new NodeHardwareInventoryConfiguration());
+        modelBuilder.ApplyConfiguration(new NodeHealthConfiguration());
+        modelBuilder.ApplyConfiguration(new NodeCapacityConfiguration());
+        modelBuilder.ApplyConfiguration(new EnrollmentTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new AgentCertificateConfiguration());
+        modelBuilder.ApplyConfiguration(new NodeAuditLogConfiguration());
+        modelBuilder.ApplyConfiguration(new CapacityReservationConfiguration());
+
+        // Handle InMemory and SQLite providers that can't handle PostgreSQL-specific features
+        if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true ||
+            Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            // Remove JSONB column types for non-PostgreSQL providers
+            modelBuilder.Entity<NodeHardwareInventory>()
+                .Property(h => h.NetworkInterfaces)
+                .HasColumnType(null);
+
+            modelBuilder.Entity<NodeHealth>()
+                .Property(h => h.HealthIssues)
+                .HasColumnType(null);
+
+            // SQLite doesn't support PostgreSQL's xmin row version column
+            modelBuilder.Entity<Node>().Property(n => n.RowVersion)
+                .HasDefaultValue(0u)
+                .ValueGeneratedOnAddOrUpdate();
+
+            // Remove JSONB column type for audit logs
+            modelBuilder.Entity<NodeAuditLog>()
+                .Property(a => a.Details)
+                .HasColumnType(null);
+
+            // Remove JSONB column type for node tags
+            modelBuilder.Entity<Node>()
+                .Property(n => n.Tags)
+                .HasColumnType(null)
+                .HasDefaultValue(new List<string>());
+        }
+    }
 }
