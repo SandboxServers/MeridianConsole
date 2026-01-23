@@ -67,7 +67,6 @@ oci://meridianconsoleacr-etdvg4cthscffqdf.azurecr.io/helm/meridian-console
 - Mods (Mod registry, versioning)
 - Console (Real-time console via SignalR)
 - Notifications (Email/Discord/webhooks)
-- Firewall (Port/policy management)
 - Secrets (Secret storage, rotation)
 - Discord (Discord integration)
 

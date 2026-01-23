@@ -32,7 +32,6 @@ This chart deploys the following microservices:
 | Mods | Mod registry and versioning | Yes | 1 |
 | Console | Real-time console streaming (SignalR) | Yes | 2 |
 | Notifications | Email, Discord, webhook notifications | Yes | 1 |
-| Firewall | Port and policy management | Yes | 1 |
 | Secrets | Secret storage and rotation | Yes | 2 |
 | Discord | Discord bot integration | Yes | 1 |
 
