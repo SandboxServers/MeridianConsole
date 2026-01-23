@@ -1,55 +1,44 @@
-# Dhadgar.ServiceDefaults
+# Dhadgar.ServiceDefaults Library
 
-**The foundational shared library for all Meridian Console microservices.**
+The foundational shared library for all Meridian Console microservices, providing standardized middleware, health checks, resilience patterns, security utilities, caching abstractions, multi-tenancy support, and Swagger/OpenAPI configuration.
 
-This library provides standardized middleware, health checks, resilience patterns, security utilities, caching abstractions, multi-tenancy support, and Swagger/OpenAPI configuration. Every microservice in the Meridian Console platform references this library to ensure consistent behavior across the entire system.
+**Location**: `src/Shared/Dhadgar.ServiceDefaults/`
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Purpose and Design Philosophy](#purpose-and-design-philosophy)
-3. [Installation and Dependencies](#installation-and-dependencies)
-4. [Quick Start](#quick-start)
-5. [Core Extension Methods](#core-extension-methods)
+1. [Purpose](#purpose)
+2. [Installation](#installation)
+3. [Quick Start](#quick-start)
+4. [Core Extension Methods](#core-extension-methods)
    - [AddDhadgarServiceDefaults](#adddhadgarservicedefaults)
    - [MapDhadgarDefaultEndpoints](#mapdhadgardefaultendpoints)
-6. [Middleware Components](#middleware-components)
+5. [Middleware Components](#middleware-components)
    - [CorrelationMiddleware](#correlationmiddleware)
    - [ProblemDetailsMiddleware](#problemdetailsmiddleware)
    - [RequestLoggingMiddleware](#requestloggingmiddleware)
    - [RequestLimitsMiddleware](#requestlimitsmiddleware)
-7. [Resilience: Circuit Breaker](#resilience-circuit-breaker)
-   - [CircuitBreakerMiddleware](#circuitbreakermiddleware)
-   - [CircuitBreakerOptions](#circuitbreakeroptions)
-   - [ICircuitBreakerStateStore](#icircuitbreakerstatestore)
-   - [Circuit Breaker Metrics](#circuit-breaker-metrics)
-8. [Service-to-Service Authentication](#service-to-service-authentication)
-   - [ServiceAuthenticationHandler](#serviceauthenticationhandler)
-   - [ServiceTokenProvider](#servicetokenprovider)
-9. [Swagger/OpenAPI Configuration](#swaggeropenapi-configuration)
-   - [AddMeridianSwagger](#addmeridianswagger)
-   - [UseMeridianSwagger](#usemeridianswagger)
-10. [Security Infrastructure](#security-infrastructure)
-    - [ISecurityEventLogger](#isecurityeventlogger)
-    - [Request Size Limits](#request-size-limits)
-11. [Multi-Tenancy Support](#multi-tenancy-support)
-    - [IOrganizationContext](#iorganizationcontext)
-12. [Permission Caching](#permission-caching)
-    - [IPermissionCache](#ipermissioncache)
-    - [DistributedPermissionCache](#distributedpermissioncache)
-13. [Health Checks](#health-checks)
+6. [Health Check Setup](#health-check-setup)
+7. [OpenTelemetry Configuration](#opentelemetry-configuration)
+8. [Resilience: Circuit Breaker](#resilience-circuit-breaker)
+9. [Service-to-Service Authentication](#service-to-service-authentication)
+10. [Swagger/OpenAPI Configuration](#swaggeropenapi-configuration)
+11. [Security Infrastructure](#security-infrastructure)
+12. [Multi-Tenancy Support](#multi-tenancy-support)
+13. [Permission Caching](#permission-caching)
 14. [Middleware Pipeline Order](#middleware-pipeline-order)
 15. [Configuration Reference](#configuration-reference)
-16. [Testing](#testing)
-17. [Related Documentation](#related-documentation)
+16. [Extension Points and Customization](#extension-points-and-customization)
+17. [Usage Examples](#usage-examples)
+18. [Testing](#testing)
+19. [File Structure](#file-structure)
 
 ---
 
-## Overview
+## Purpose
 
-`Dhadgar.ServiceDefaults` is a .NET class library that serves as the common infrastructure layer for all Meridian Console microservices. It encapsulates cross-cutting concerns that every service needs, ensuring:
+`Dhadgar.ServiceDefaults` serves as the common infrastructure layer for all Meridian Console microservices. It encapsulates cross-cutting concerns that every service needs:
 
 - **Consistent observability** through correlation tracking and structured logging
 - **Standardized error responses** using RFC 7807 Problem Details
@@ -59,24 +48,7 @@ This library provides standardized middleware, health checks, resilience pattern
 - **Health check endpoints** for Kubernetes liveness and readiness probes
 - **API documentation** with Swagger/OpenAPI integration
 
-The library is designed to be **referenced but not modified** by individual services. Services consume these defaults through well-defined extension methods, allowing the platform team to evolve common infrastructure without requiring changes to every service.
-
----
-
-## Purpose and Design Philosophy
-
-### Why This Library Exists
-
-In a microservices architecture, cross-cutting concerns can easily become inconsistent across services. Without a shared library:
-
-- Each service might implement correlation tracking differently
-- Error response formats would vary
-- Health check endpoints might have different paths or response schemas
-- Logging formats would be inconsistent, making observability difficult
-
-`Dhadgar.ServiceDefaults` solves these problems by providing a single source of truth for common infrastructure.
-
-### Design Principles
+### Design Philosophy
 
 1. **Convention over Configuration**: Sensible defaults that work out of the box
 2. **Extensibility**: Services can customize behavior when needed
@@ -86,16 +58,14 @@ In a microservices architecture, cross-cutting concerns can easily become incons
 
 ### What This Library Does NOT Do
 
-- **No business logic**: This is purely infrastructure code
+- **No business logic**: Purely infrastructure code
 - **No database access**: Services own their data; this library provides abstractions
 - **No inter-service communication**: Use `Dhadgar.Messaging` for MassTransit/RabbitMQ patterns
 - **No contract definitions**: Use `Dhadgar.Contracts` for DTOs and message contracts
 
 ---
 
-## Installation and Dependencies
-
-### Project Reference
+## Installation
 
 All Meridian Console services reference this library via a project reference:
 
@@ -105,25 +75,21 @@ All Meridian Console services reference this library via a project reference:
 </ItemGroup>
 ```
 
-### Framework Dependencies
+### Dependencies
 
-The library has a single framework reference:
+The library has minimal dependencies:
 
 ```xml
 <ItemGroup>
   <FrameworkReference Include="Microsoft.AspNetCore.App" />
 </ItemGroup>
+
+<ItemGroup>
+  <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  <PackageReference Include="Microsoft.OpenApi" />
+  <PackageReference Include="Swashbuckle.AspNetCore" />
+</ItemGroup>
 ```
-
-This provides access to all ASP.NET Core APIs (WebApplication, IServiceCollection, health checks, etc.) without requiring NuGet packages for core functionality.
-
-### Package Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `Microsoft.AspNetCore.OpenApi` | 10.0.0 | OpenAPI endpoint exploration |
-| `Microsoft.OpenApi` | 2.3.0 | OpenAPI document types |
-| `Swashbuckle.AspNetCore` | 10.1.0 | Swagger generation and UI |
 
 All package versions are managed centrally in `Directory.Packages.props` at the solution root.
 
@@ -131,7 +97,7 @@ All package versions are managed centrally in `Directory.Packages.props` at the 
 
 ## Quick Start
 
-The simplest way to use this library follows this pattern in your service's `Program.cs`:
+The simplest way to use this library in your service's `Program.cs`:
 
 ```csharp
 using Dhadgar.ServiceDefaults;
@@ -160,7 +126,6 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 
 // 5. Map your endpoints
 app.MapGet("/", () => Results.Ok(new { service = "My.Service" }));
-app.MapGet("/hello", () => Results.Text("Hello!"));
 
 // 6. Map default health check endpoints
 app.MapDhadgarDefaultEndpoints();
@@ -184,20 +149,12 @@ public partial class Program { }
 public static IServiceCollection AddDhadgarServiceDefaults(this IServiceCollection services)
 ```
 
-**What it does**:
-- Registers ASP.NET Core health checks
-- Adds a basic "self" health check that always returns `Healthy`
+**What it registers**:
+- ASP.NET Core health checks infrastructure
+- A basic "self" health check that always returns `Healthy`
 - Tags the self-check with `["live"]` for Kubernetes liveness probes
 
-**Usage**:
-```csharp
-builder.Services.AddDhadgarServiceDefaults();
-```
-
-**Implementation Details**:
-
-The method is intentionally minimal. It sets up the foundation that `MapDhadgarDefaultEndpoints` builds upon:
-
+**Implementation**:
 ```csharp
 public static IServiceCollection AddDhadgarServiceDefaults(this IServiceCollection services)
 {
@@ -208,10 +165,11 @@ public static IServiceCollection AddDhadgarServiceDefaults(this IServiceCollecti
 }
 ```
 
-Services can add additional health checks before or after calling this method:
-
+**Usage**:
 ```csharp
 builder.Services.AddDhadgarServiceDefaults();
+
+// Add additional health checks
 builder.Services.AddHealthChecks()
     .AddNpgSql(connectionString, name: "postgres", tags: ["ready"])
     .AddRedis(redisConnectionString, name: "redis", tags: ["ready"]);
@@ -228,23 +186,17 @@ builder.Services.AddHealthChecks()
 public static WebApplication MapDhadgarDefaultEndpoints(this WebApplication app)
 ```
 
-**What it does**:
-- Maps three health check endpoints: `/healthz`, `/livez`, `/readyz`
-- Configures a JSON response writer with detailed health information
-- Sets all endpoints to allow anonymous access
-- Tags endpoints with "Health" for Swagger grouping
+**What it creates**:
 
-**Endpoints Created**:
-
-| Endpoint | Purpose | Filter |
-|----------|---------|--------|
-| `/healthz` | Comprehensive health | All registered checks |
-| `/livez` | Kubernetes liveness | Only checks tagged `live` |
-| `/readyz` | Kubernetes readiness | Only checks tagged `ready` |
+| Endpoint | Purpose | Predicate |
+|----------|---------|-----------|
+| `/healthz` | Comprehensive health status | All registered checks |
+| `/livez` | Kubernetes liveness probe | Only checks tagged `live` |
+| `/readyz` | Kubernetes readiness probe | Only checks tagged `ready` |
 
 **Response Format**:
 
-All endpoints return JSON with this structure:
+All endpoints return JSON with a consistent structure:
 
 ```json
 {
@@ -267,11 +219,6 @@ All endpoints return JSON with this structure:
 }
 ```
 
-**Usage**:
-```csharp
-app.MapDhadgarDefaultEndpoints();
-```
-
 **Why Three Endpoints?**
 
 Kubernetes distinguishes between liveness and readiness:
@@ -281,7 +228,7 @@ Kubernetes distinguishes between liveness and readiness:
 - **Health (`/healthz`)**: Comprehensive check for diagnostics and monitoring
 
 Tag your health checks appropriately:
-- Database connections: `["ready"]` - service can't do useful work without them
+- Database connections: `["ready"]` - service cannot do useful work without them
 - Self-check: `["live"]` - always passes if the process is running
 - External services: `["ready"]` - optional dependencies
 
@@ -316,8 +263,6 @@ Tag your health checks appropriately:
 
 **OpenTelemetry Integration**:
 
-The middleware integrates with `System.Diagnostics.Activity`:
-
 ```csharp
 var activity = Activity.Current;
 if (activity is not null)
@@ -327,8 +272,6 @@ if (activity is not null)
     activity.SetBaggage("correlation.id", correlationId);
 }
 ```
-
-This ensures correlation IDs appear in distributed traces, making it easy to track requests across service boundaries.
 
 **Context Storage**:
 
@@ -344,15 +287,7 @@ context.Items["RequestId"] = requestId;
 app.UseMiddleware<CorrelationMiddleware>();
 ```
 
-**Security Considerations**:
-
-The middleware validates incoming header values using a regex pattern:
-
-```csharp
-private static readonly Regex CorrelationPattern = new("^[A-Za-z0-9-]+$", RegexOptions.Compiled);
-```
-
-Invalid or overly long values are rejected, and new IDs are generated instead. This prevents header injection attacks.
+**Security**: The middleware validates incoming header values using a regex pattern (`^[A-Za-z0-9-]+$`). Invalid or overly long values (>64 chars) are rejected and new IDs are generated instead.
 
 ---
 
@@ -369,7 +304,7 @@ Invalid or overly long values are rejected, and new IDs are generated instead. T
 3. **Returns Problem Details**: Formats the response according to RFC 7807
 4. **Environment-aware**: Includes stack traces only in Development/Testing environments
 
-**Response Format**:
+**Response Format** (Production):
 
 ```json
 {
@@ -383,7 +318,7 @@ Invalid or overly long values are rejected, and new IDs are generated instead. T
 }
 ```
 
-In Development/Testing mode, the response includes more detail:
+**Response Format** (Development/Testing):
 
 ```json
 {
@@ -399,9 +334,7 @@ In Development/Testing mode, the response includes more detail:
 }
 ```
 
-**Content Type**:
-
-Responses use `application/problem+json` as specified by RFC 7807.
+**Content Type**: `application/problem+json`
 
 **Usage**:
 ```csharp
@@ -409,20 +342,6 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 ```
 
 **Important**: This middleware should run early in the pipeline (after CorrelationMiddleware) to catch exceptions from all downstream middleware.
-
-**Headers Already Sent**:
-
-If the response has already started (e.g., during streaming), the middleware logs a warning but cannot write the problem details:
-
-```csharp
-if (context.Response.HasStarted)
-{
-    _logger.LogWarning(
-        "Cannot write problem details response after headers sent. Exception: {ExceptionType}",
-        exception.GetType().Name);
-    return;
-}
-```
 
 ---
 
@@ -443,16 +362,14 @@ if (context.Response.HasStarted)
 
 Every log message within the request automatically includes:
 
-```csharp
+```json
 {
-    "CorrelationId": "abc123",
-    "RequestId": "def456",
-    "RequestMethod": "POST",
-    "RequestPath": "/api/servers"
+  "CorrelationId": "abc123",
+  "RequestId": "def456",
+  "RequestMethod": "POST",
+  "RequestPath": "/api/servers"
 }
 ```
-
-This enables log aggregation tools like Grafana Loki to filter logs by correlation ID.
 
 **Log Message Format**:
 
@@ -467,23 +384,6 @@ HTTP POST /api/servers responded 201 in 45ms
 | 1xx-3xx | Information |
 | 4xx | Warning |
 | 5xx | Error |
-
-**Exception Handling**:
-
-When an exception occurs, the middleware logs it and rethrows:
-
-```csharp
-catch (Exception ex)
-{
-    stopwatch.Stop();
-    _logger.LogError(ex,
-        "HTTP {Method} {Path} failed after {ElapsedMs}ms",
-        context.Request.Method,
-        context.Request.Path,
-        stopwatch.ElapsedMilliseconds);
-    throw;
-}
-```
 
 **Usage**:
 ```csharp
@@ -500,12 +400,6 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 
 **Purpose**: Handles request body size limit exceptions with proper JSON error responses.
 
-**What it does**:
-
-1. **Catches size limit exceptions**: Intercepts `BadHttpRequestException` with status 413
-2. **Logs the attempt**: Records client IP and path
-3. **Returns JSON error**: Provides machine-readable error response
-
 **Response Format**:
 
 ```json
@@ -515,14 +409,12 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 }
 ```
 
-**Related: Request Size Configuration**:
-
-Configure Kestrel limits using the `ConfigureRequestLimits` extension:
+**Related Configuration** (`RequestLimitsOptions`):
 
 ```csharp
 builder.ConfigureRequestLimits(options =>
 {
-    options.MaxRequestBodySize = 1_048_576;     // 1 MB default
+    options.MaxRequestBodySize = 1_048_576;      // 1 MB default
     options.MaxRequestHeadersTotalSize = 32_768; // 32 KB
     options.MaxRequestLineSize = 8_192;          // 8 KB
     options.MaxFileUploadSize = 52_428_800;      // 50 MB
@@ -530,8 +422,6 @@ builder.ConfigureRequestLimits(options =>
 ```
 
 **Per-Endpoint Overrides**:
-
-For endpoints that need larger limits (e.g., file uploads):
 
 ```csharp
 // Disable limit entirely
@@ -543,126 +433,92 @@ app.MapPost("/files/upload", HandleUpload)
     .WithRequestSizeLimit(100 * 1024 * 1024); // 100 MB
 ```
 
----
-
-## Resilience: Circuit Breaker
-
-The circuit breaker pattern prevents cascading failures by temporarily blocking requests to unhealthy backend services.
-
-### CircuitBreakerMiddleware
-
-**Namespace**: `Dhadgar.ServiceDefaults.Resilience`
-
-**Purpose**: Implements the circuit breaker pattern for downstream service calls.
-
-**How it works**:
-
-1. **Closed State** (normal): Requests pass through. Failures are counted.
-2. **Open State** (tripped): After N failures, requests are immediately rejected with 503.
-3. **Half-Open State** (testing): After a timeout, limited requests are allowed to test recovery.
-
-**Service Identification**:
-
-The middleware reads the service ID from `HttpContext.Items`:
-
-```csharp
-var serviceId = context.Items["CircuitBreaker:ServiceId"] as string;
-```
-
-If no service ID is set, requests pass through without circuit breaking. This is typically set by:
-- YARP reverse proxy configuration
-- Custom middleware that identifies the target service
-
-**503 Response**:
-
-When the circuit is open:
-
-```json
-{
-  "type": "https://httpstatuses.com/503",
-  "title": "Service Temporarily Unavailable",
-  "status": 503,
-  "detail": "The identity service is temporarily unavailable due to circuit breaker activation. Please retry after the specified time.",
-  "instance": "/api/users/me"
-}
-```
-
-The response includes a `Retry-After` header with the number of seconds until the circuit may close.
-
 **Usage**:
-
 ```csharp
-// Register services
-builder.Services.AddCircuitBreaker(builder.Configuration);
-
-// Use middleware
-app.UseCircuitBreaker();
+app.UseRequestLimitsMiddleware();
 ```
 
 ---
 
-### CircuitBreakerOptions
+## Health Check Setup
 
-**Configuration section**: `CircuitBreaker`
+### Standard Endpoints
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `FailureThreshold` | int | 5 | Consecutive failures before circuit opens |
-| `SuccessThreshold` | int | 2 | Successful requests to close circuit from half-open |
-| `OpenDurationSeconds` | int | 30 | How long circuit stays open |
-| `FailureStatusCodes` | int[] | [500,502,503,504] | Status codes counted as failures |
-| `IncludeServiceNameInErrors` | bool | false | Include service name in 503 responses |
+| Endpoint | Purpose | Filter |
+|----------|---------|--------|
+| `/healthz` | Full health status | All checks |
+| `/livez` | Kubernetes liveness | Checks tagged `live` |
+| `/readyz` | Kubernetes readiness | Checks tagged `ready` |
 
-**Example configuration**:
+### Adding Custom Health Checks
+
+```csharp
+builder.Services.AddDhadgarServiceDefaults();
+
+// Add database check
+builder.Services.AddHealthChecks()
+    .AddNpgSql(connectionString, name: "postgres", tags: ["ready"])
+    .AddRedis(redisConnection, name: "redis", tags: ["ready"]);
+
+// Add custom check
+builder.Services.AddHealthChecks()
+    .AddCheck<ExternalServiceHealthCheck>("external-api", tags: ["ready"]);
+```
+
+### Response Schema
 
 ```json
 {
-  "CircuitBreaker": {
-    "FailureThreshold": 10,
-    "SuccessThreshold": 3,
-    "OpenDurationSeconds": 60,
-    "FailureStatusCodes": [500, 502, 503, 504, 408],
-    "IncludeServiceNameInErrors": true
+  "service": "Dhadgar.Identity",
+  "status": "ok",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "checks": {
+    "self": {
+      "status": "Healthy",
+      "duration_ms": 0.1
+    },
+    "postgres": {
+      "status": "Healthy",
+      "duration_ms": 5.2,
+      "description": "Connected successfully"
+    },
+    "redis": {
+      "status": "Degraded",
+      "duration_ms": 102.5,
+      "description": "High latency detected"
+    }
   }
 }
 ```
 
-**Security Note**: Set `IncludeServiceNameInErrors` to `false` in production to prevent information disclosure about internal service architecture.
-
 ---
 
-### ICircuitBreakerStateStore
+## OpenTelemetry Configuration
 
-**Purpose**: Abstraction for circuit breaker state storage, enabling distributed scenarios.
+The library integrates with OpenTelemetry through the `CorrelationMiddleware`:
 
-**Interface**:
+### Activity Integration
 
 ```csharp
-public interface ICircuitBreakerStateStore
+var activity = Activity.Current;
+if (activity is not null)
 {
-    CircuitState GetOrCreateState(string serviceId);
-    void RemoveState(string serviceId);
-    IEnumerable<(string ServiceId, CircuitState State)> GetAllStates();
+    activity.SetTag("correlation.id", correlationId);
+    activity.SetTag("request.id", requestId);
+    activity.SetBaggage("correlation.id", correlationId);
 }
 ```
 
-**Built-in Implementation**:
+### W3C Trace Context Headers
 
-`InMemoryCircuitBreakerStateStore` is registered by default. It uses a `ConcurrentDictionary` and is suitable for single-instance deployments.
-
-**Custom Implementation**:
-
-For distributed deployments, implement a Redis-backed store:
-
-```csharp
-builder.Services.AddCircuitBreaker<RedisCircuitBreakerStateStore>(builder.Configuration);
-```
-
----
+The middleware propagates W3C Trace Context headers automatically:
+- `traceparent` - Trace ID and span ID
+- `tracestate` - Vendor-specific trace state
+- `baggage` - Key-value pairs for context propagation
 
 ### Circuit Breaker Metrics
 
-The middleware exposes OpenTelemetry metrics for monitoring:
+The circuit breaker middleware exposes OpenTelemetry metrics:
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -670,8 +526,6 @@ The middleware exposes OpenTelemetry metrics for monitoring:
 | `circuit_breaker.closed` | Counter | Times circuits have closed |
 | `circuit_breaker.requests_blocked` | Counter | Requests blocked by open circuits |
 | `circuit_breaker.failures_recorded` | Counter | Failures recorded |
-
-All metrics include a `service_id` tag for filtering.
 
 **Meter Name**: `Dhadgar.ServiceDefaults.CircuitBreaker`
 
@@ -687,37 +541,101 @@ builder.Services.AddOpenTelemetry()
 
 ---
 
-## Service-to-Service Authentication
+## Resilience: Circuit Breaker
 
-### ServiceAuthenticationHandler
+The circuit breaker pattern prevents cascading failures by temporarily blocking requests to unhealthy backend services.
 
-**Namespace**: `Dhadgar.ServiceDefaults`
+### How It Works
 
-**Purpose**: A `DelegatingHandler` that automatically attaches bearer tokens to outgoing HTTP requests.
+1. **Closed State** (normal): Requests pass through. Failures are counted.
+2. **Open State** (tripped): After N failures, requests are immediately rejected with 503.
+3. **Half-Open State** (testing): After a timeout, limited requests are allowed to test recovery.
 
-**What it does**:
-
-1. Retrieves an access token from `IServiceTokenProvider`
-2. Sets the `Authorization` header to `Bearer {token}`
-3. Proceeds with the HTTP request
-
-**Usage**:
+### Registration
 
 ```csharp
-// Register authentication services
-builder.Services.AddServiceAuthentication(builder.Configuration);
+// Register services
+builder.Services.AddCircuitBreaker(builder.Configuration);
 
-// Configure an HttpClient to use the handler
-builder.Services.AddHttpClient("IdentityService")
-    .AddServiceAuthentication()
-    .ConfigureHttpClient(client => client.BaseAddress = new Uri("https://identity.local"));
+// Use middleware
+app.UseCircuitBreaker();
+```
+
+### CircuitBreakerOptions
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `FailureThreshold` | int | 5 | Consecutive failures before circuit opens |
+| `SuccessThreshold` | int | 2 | Successful requests to close circuit from half-open |
+| `OpenDurationSeconds` | int | 30 | How long circuit stays open |
+| `FailureStatusCodes` | int[] | [500,502,503,504] | Status codes counted as failures |
+| `IncludeServiceNameInErrors` | bool | false | Include service name in 503 responses |
+
+**Configuration**:
+
+```json
+{
+  "CircuitBreaker": {
+    "FailureThreshold": 10,
+    "SuccessThreshold": 3,
+    "OpenDurationSeconds": 60,
+    "FailureStatusCodes": [500, 502, 503, 504, 408],
+    "IncludeServiceNameInErrors": true
+  }
+}
+```
+
+### Service Identification
+
+The middleware reads the service ID from `HttpContext.Items`:
+
+```csharp
+var serviceId = context.Items["CircuitBreaker:ServiceId"] as string;
+```
+
+If no service ID is set, requests pass through without circuit breaking. Typically set by YARP reverse proxy configuration or custom middleware.
+
+### 503 Response Format
+
+```json
+{
+  "type": "https://httpstatuses.com/503",
+  "title": "Service Temporarily Unavailable",
+  "status": 503,
+  "detail": "The identity service is temporarily unavailable due to circuit breaker activation. Please retry after the specified time.",
+  "instance": "/api/users/me"
+}
+```
+
+The response includes a `Retry-After` header.
+
+### Custom State Store
+
+For distributed deployments, implement a custom state store:
+
+```csharp
+public interface ICircuitBreakerStateStore
+{
+    CircuitState GetOrCreateState(string serviceId);
+    void RemoveState(string serviceId);
+    IEnumerable<(string ServiceId, CircuitState State)> GetAllStates();
+}
+
+// Register with custom implementation
+builder.Services.AddCircuitBreaker<RedisCircuitBreakerStateStore>(builder.Configuration);
 ```
 
 ---
 
+## Service-to-Service Authentication
+
+### ServiceAuthenticationHandler
+
+A `DelegatingHandler` that automatically attaches bearer tokens to outgoing HTTP requests.
+
 ### ServiceTokenProvider
 
-**Purpose**: Obtains and caches OAuth2 client credentials tokens.
+Obtains and caches OAuth2 client credentials tokens with automatic refresh.
 
 **Token Flow**:
 
@@ -725,7 +643,7 @@ builder.Services.AddHttpClient("IdentityService")
 2. If expired/missing, requests a new token from the configured endpoint
 3. Caches the token based on `expires_in` from the response
 
-**Configuration**:
+### Configuration
 
 ```json
 {
@@ -739,19 +657,16 @@ builder.Services.AddHttpClient("IdentityService")
 }
 ```
 
-**Thread Safety**:
-
-Uses `SemaphoreSlim` to prevent concurrent token refreshes. Multiple threads waiting for a token will share the result of a single refresh operation.
-
-**Testability**:
-
-The provider accepts `TimeProvider` for time-based testing:
+### Usage
 
 ```csharp
-public ServiceTokenProvider(
-    HttpClient httpClient,
-    IOptions<ServiceAuthenticationOptions> options,
-    TimeProvider timeProvider)
+// Register authentication services
+builder.Services.AddServiceAuthentication(builder.Configuration);
+
+// Configure an HttpClient to use the handler
+builder.Services.AddHttpClient("IdentityService")
+    .AddServiceAuthentication()
+    .ConfigureHttpClient(client => client.BaseAddress = new Uri("https://identity.local"));
 ```
 
 ---
@@ -760,9 +675,6 @@ public ServiceTokenProvider(
 
 ### AddMeridianSwagger
 
-**Namespace**: `Dhadgar.ServiceDefaults.Swagger`
-
-**Signature**:
 ```csharp
 public static IServiceCollection AddMeridianSwagger(
     this IServiceCollection services,
@@ -770,13 +682,6 @@ public static IServiceCollection AddMeridianSwagger(
     string description,
     Action<SwaggerGenOptions>? configureOptions = null)
 ```
-
-**What it does**:
-
-1. Registers `EndpointsApiExplorer` for endpoint discovery
-2. Configures SwaggerGen with standard settings
-3. Creates a v1 OpenAPI document with the provided title/description
-4. Allows additional configuration via callback
 
 **Usage**:
 
@@ -796,27 +701,15 @@ builder.Services.AddMeridianSwagger(
     });
 ```
 
----
-
 ### UseMeridianSwagger
 
-**Signature**:
-```csharp
-public static WebApplication UseMeridianSwagger(this WebApplication app)
-```
+Enables Swagger UI in Development and Testing environments only.
 
-**What it does**:
-
-1. Checks if environment is Development or Testing
-2. Enables Swagger middleware
-3. Configures Swagger UI at `/swagger`
-
-**Usage**:
 ```csharp
 app.UseMeridianSwagger();
 ```
 
-**Important**: Swagger is only enabled in Development and Testing environments for security reasons.
+**Swagger is only enabled in Development and Testing environments for security reasons.**
 
 ---
 
@@ -824,9 +717,7 @@ app.UseMeridianSwagger();
 
 ### ISecurityEventLogger
 
-**Namespace**: `Dhadgar.ServiceDefaults.Security`
-
-**Purpose**: Provides structured logging for security-relevant events with consistent formatting for SIEM integration.
+Provides structured logging for security-relevant events with consistent formatting for SIEM integration.
 
 **Events Logged**:
 
@@ -885,19 +776,11 @@ public class AuthController(ISecurityEventLogger securityLogger)
 
 ---
 
-### Request Size Limits
-
-See [RequestLimitsMiddleware](#requestlimitsmiddleware) above for details.
-
----
-
 ## Multi-Tenancy Support
 
 ### IOrganizationContext
 
-**Namespace**: `Dhadgar.ServiceDefaults.MultiTenancy`
-
-**Purpose**: Provides the current organization context from the request for tenant isolation.
+Provides the current organization context from the request for tenant isolation.
 
 **Interface**:
 
@@ -910,11 +793,11 @@ public interface IOrganizationContext
 }
 ```
 
-**How it resolves organization**:
+**Resolution Order**:
 
-1. Checks JWT claim `org_id` (preferred)
-2. Checks JWT claim `organization_id` (alternative)
-3. Checks `X-Organization-Id` header (for service-to-service calls)
+1. JWT claim `org_id` (preferred)
+2. JWT claim `organization_id` (alternative)
+3. `X-Organization-Id` header (for service-to-service calls)
 4. Returns null if none found
 
 **Usage**:
@@ -937,24 +820,7 @@ app.MapGet("/servers", (IOrganizationContext org, ServersDbContext db) =>
 });
 ```
 
-**Caching**:
-
-The implementation caches the resolved organization ID per-request to avoid repeated claim parsing:
-
-```csharp
-public Guid? OrganizationId
-{
-    get
-    {
-        if (!_resolved)
-        {
-            _cachedOrgId = ResolveOrganizationId();
-            _resolved = true;
-        }
-        return _cachedOrgId;
-    }
-}
-```
+**Caching**: The implementation caches the resolved organization ID per-request to avoid repeated claim parsing.
 
 ---
 
@@ -962,9 +828,7 @@ public Guid? OrganizationId
 
 ### IPermissionCache
 
-**Namespace**: `Dhadgar.ServiceDefaults.Caching`
-
-**Purpose**: Cache user permissions within an organization to reduce database/Identity service calls.
+Cache user permissions within an organization to reduce database/Identity service calls.
 
 **Interface**:
 
@@ -979,11 +843,9 @@ public interface IPermissionCache
 }
 ```
 
----
-
 ### DistributedPermissionCache
 
-**Purpose**: Implementation using `IDistributedCache` (Redis or any compatible backend).
+Implementation using `IDistributedCache` (Redis or any compatible backend).
 
 **Configuration**:
 
@@ -997,11 +859,6 @@ public sealed class PermissionCacheOptions
 ```
 
 **Key Format**: `{KeyPrefix}:{userId}:{organizationId}`
-
-**Limitations**:
-
-- `InvalidateUserAsync` and `InvalidateOrganizationAsync` rely on TTL expiration
-- Pattern-based invalidation requires Redis-specific implementation (SCAN command)
 
 **Usage**:
 
@@ -1028,100 +885,46 @@ public class PermissionHandler(IPermissionCache cache)
 }
 ```
 
----
-
-## Health Checks
-
-### Standard Endpoints
-
-| Endpoint | Purpose | Predicate |
-|----------|---------|-----------|
-| `/healthz` | Full health status | All checks |
-| `/livez` | Kubernetes liveness | Checks tagged `live` |
-| `/readyz` | Kubernetes readiness | Checks tagged `ready` |
-
-### Adding Custom Health Checks
-
-```csharp
-builder.Services.AddDhadgarServiceDefaults();
-
-// Add database check
-builder.Services.AddHealthChecks()
-    .AddNpgSql(connectionString, name: "postgres", tags: ["ready"])
-    .AddRedis(redisConnection, name: "redis", tags: ["ready"]);
-
-// Add custom check
-builder.Services.AddHealthChecks()
-    .AddCheck<ExternalServiceHealthCheck>("external-api", tags: ["ready"]);
-```
-
-### Response Schema
-
-```json
-{
-  "service": "Dhadgar.Identity",
-  "status": "ok",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "checks": {
-    "self": {
-      "status": "Healthy",
-      "duration_ms": 0.1
-    },
-    "postgres": {
-      "status": "Healthy",
-      "duration_ms": 5.2,
-      "description": "Connected successfully"
-    },
-    "redis": {
-      "status": "Degraded",
-      "duration_ms": 102.5,
-      "description": "High latency detected"
-    }
-  }
-}
-```
+**Limitations**: `InvalidateUserAsync` and `InvalidateOrganizationAsync` rely on TTL expiration. Pattern-based invalidation requires Redis-specific implementation (SCAN command).
 
 ---
 
 ## Middleware Pipeline Order
 
-**ORDER MATTERS!** Middleware executes in the order it's added. The recommended order for Meridian Console services:
+**ORDER MATTERS!** The recommended order for Meridian Console services:
 
 ```csharp
 // 1. ForwardedHeaders - Must be first if behind a proxy
 app.UseForwardedHeaders();
 
-// 2. Security headers - Apply to all responses
-app.UseMiddleware<SecurityHeadersMiddleware>(); // If using
-
-// 3. Correlation - Needed by all downstream middleware for tracing
+// 2. Correlation - Needed by all downstream middleware for tracing
 app.UseMiddleware<CorrelationMiddleware>();
 
-// 4. Problem Details - Catch exceptions early
+// 3. Problem Details - Catch exceptions early
 app.UseMiddleware<ProblemDetailsMiddleware>();
 
-// 5. Request Logging - Wraps the rest of the pipeline
+// 4. Request Logging - Wraps the rest of the pipeline
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-// 6. Request Size Limits - Handle 413 errors gracefully
+// 5. Request Size Limits - Handle 413 errors gracefully
 app.UseRequestLimitsMiddleware();
 
-// 7. CORS - Handle cross-origin requests
+// 6. CORS - Handle cross-origin requests
 app.UseCors("PolicyName");
 
-// 8. Authentication - Identify the user
+// 7. Authentication - Identify the user
 app.UseAuthentication();
 
-// 9. Authorization - Check permissions
+// 8. Authorization - Check permissions
 app.UseAuthorization();
 
-// 10. Rate Limiting - After auth so tenant context is available
+// 9. Rate Limiting - After auth so tenant context is available
 app.UseRateLimiter();
 
-// 11. Circuit Breaker - Protect downstream services
+// 10. Circuit Breaker - Protect downstream services
 app.UseCircuitBreaker();
 
-// 12. Your endpoints
+// 11. Your endpoints
 app.MapGet("/", () => "Hello");
 app.MapDhadgarDefaultEndpoints();
 ```
@@ -1195,11 +998,147 @@ app.MapDhadgarDefaultEndpoints();
 
 ---
 
+## Extension Points and Customization
+
+### Custom Circuit Breaker State Store
+
+```csharp
+public class RedisCircuitBreakerStateStore : ICircuitBreakerStateStore
+{
+    private readonly IConnectionMultiplexer _redis;
+
+    public CircuitState GetOrCreateState(string serviceId)
+    {
+        // Implement Redis-backed state storage
+    }
+    // ... other methods
+}
+
+builder.Services.AddCircuitBreaker<RedisCircuitBreakerStateStore>(builder.Configuration);
+```
+
+### Custom Organization Context Resolution
+
+```csharp
+public class CustomOrganizationContext : IOrganizationContext
+{
+    public Guid? OrganizationId => // Custom resolution logic
+}
+
+builder.Services.AddScoped<IOrganizationContext, CustomOrganizationContext>();
+```
+
+### Additional Health Checks
+
+```csharp
+builder.Services.AddHealthChecks()
+    .AddCheck<CustomHealthCheck>("custom", tags: ["ready"]);
+```
+
+### Swagger Customization
+
+```csharp
+builder.Services.AddMeridianSwagger(
+    title: "My API",
+    description: "Description",
+    configureOptions: options =>
+    {
+        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme { /* ... */ });
+        options.OperationFilter<AuthorizationOperationFilter>();
+    });
+```
+
+---
+
+## Usage Examples
+
+### Minimal Service
+
+```csharp
+using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Middleware;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddDhadgarServiceDefaults();
+
+var app = builder.Build();
+
+app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+app.MapGet("/", () => "Hello");
+app.MapDhadgarDefaultEndpoints();
+
+app.Run();
+```
+
+### Service with Database and Security Logging
+
+```csharp
+using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
+using Dhadgar.ServiceDefaults.Security;
+using Dhadgar.ServiceDefaults.Swagger;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDhadgarServiceDefaults();
+builder.Services.AddOrganizationContext();
+builder.Services.AddSecurityEventLogger();
+builder.Services.AddMeridianSwagger("Servers API", "Game server management");
+
+builder.Services.AddHealthChecks()
+    .AddNpgSql(connectionString, name: "postgres", tags: ["ready"]);
+
+var app = builder.Build();
+
+app.UseMeridianSwagger();
+app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+app.MapGet("/servers", (IOrganizationContext org) =>
+{
+    if (!org.HasOrganization)
+        return Results.Unauthorized();
+    // ... fetch servers for org
+});
+
+app.MapDhadgarDefaultEndpoints();
+app.Run();
+```
+
+### Gateway with Circuit Breaker
+
+```csharp
+using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.Resilience;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDhadgarServiceDefaults();
+builder.Services.AddCircuitBreaker(builder.Configuration);
+
+var app = builder.Build();
+
+app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseCircuitBreaker();
+
+// YARP or other proxy middleware
+app.MapDhadgarDefaultEndpoints();
+app.Run();
+```
+
+---
+
 ## Testing
 
 ### Unit Testing Middleware
-
-Test middleware components in isolation using `DefaultHttpContext`:
 
 ```csharp
 [Fact]
@@ -1219,8 +1158,6 @@ public async Task CorrelationMiddleware_generates_correlation_id_when_missing()
 ```
 
 ### Integration Testing with WebApplicationFactory
-
-Use `WebApplicationFactory<Program>` to test services with all middleware:
 
 ```csharp
 public class HealthCheckTests : IClassFixture<WebApplicationFactory<Program>>
@@ -1249,8 +1186,6 @@ public class HealthCheckTests : IClassFixture<WebApplicationFactory<Program>>
 
 ### Testing Service Authentication
 
-The test project includes examples for testing `ServiceTokenProvider`:
-
 ```csharp
 [Fact]
 public async Task TokenProvider_caches_token_until_expiry()
@@ -1275,98 +1210,46 @@ public async Task TokenProvider_caches_token_until_expiry()
 }
 ```
 
-### SwaggerTestHelper
-
-A shared helper class for verifying Swagger configuration:
-
-```csharp
-[Fact]
-public async Task Swagger_endpoint_returns_valid_openapi()
-{
-    await SwaggerTestHelper.VerifySwaggerEndpointAsync(
-        _factory,
-        expectedTitle: "Dhadgar Servers API");
-}
-
-[Fact]
-public async Task Swagger_contains_expected_paths()
-{
-    await SwaggerTestHelper.VerifySwaggerContainsPathsAsync(
-        _factory,
-        ["/", "/hello"]);
-}
-```
-
----
-
-## Related Documentation
-
-### Other Shared Libraries
-
-- **Dhadgar.Contracts** - DTOs, message contracts, API models shared across services
-- **Dhadgar.Messaging** - MassTransit/RabbitMQ conventions for async messaging
-- **Dhadgar.Shared** - Utilities and primitives (helpers, constants, etc.)
-
-### Architecture Documentation
-
-- [`/docs/`](/docs/) - Architecture decision records and design documents
-- [`/CLAUDE.md`](/CLAUDE.md) - Repository-wide development guide
-- [`/deploy/compose/README.md`](/deploy/compose/README.md) - Local infrastructure setup
-
-### External References
-
-- [RFC 7807 - Problem Details for HTTP APIs](https://tools.ietf.org/html/rfc7807)
-- [OpenTelemetry .NET Documentation](https://opentelemetry.io/docs/instrumentation/net/)
-- [ASP.NET Core Health Checks](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks)
-- [W3C Trace Context](https://www.w3.org/TR/trace-context/)
-- [Circuit Breaker Pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker)
-
 ---
 
 ## File Structure
 
 ```
 src/Shared/Dhadgar.ServiceDefaults/
-├── Dhadgar.ServiceDefaults.csproj     # Project file
-├── Hello.cs                            # Smoke test surface
-├── ServiceDefaultsExtensions.cs        # Core extension methods
-├── ServiceAuthenticationHandler.cs     # Service-to-service auth
-├── Caching/
-│   ├── IPermissionCache.cs            # Permission cache interface
-│   └── DistributedPermissionCache.cs  # Redis-backed implementation
-├── Middleware/
-│   ├── CorrelationMiddleware.cs       # Request correlation
-│   ├── ProblemDetailsMiddleware.cs    # RFC 7807 errors
-│   └── RequestLoggingMiddleware.cs    # Request logging
-├── MultiTenancy/
-│   └── OrganizationContext.cs         # Tenant context resolution
-├── Resilience/
-│   ├── CircuitBreakerExtensions.cs    # DI registration
-│   ├── CircuitBreakerMiddleware.cs    # Circuit breaker implementation
-│   └── CircuitBreakerOptions.cs       # Configuration options
-├── Security/
-│   ├── RequestLimits.cs               # Request size limits
-│   ├── SecurityEventLogger.cs         # Security audit logging
-│   └── SecurityExtensions.cs          # DI registration
-└── Swagger/
-    └── SwaggerExtensions.cs           # OpenAPI configuration
+|-- Dhadgar.ServiceDefaults.csproj     # Project file
+|-- Hello.cs                            # Smoke test surface
+|-- ServiceDefaultsExtensions.cs        # Core extension methods
+|-- ServiceAuthenticationHandler.cs     # Service-to-service auth
+|-- Caching/
+|   |-- IPermissionCache.cs            # Permission cache interface
+|   |-- DistributedPermissionCache.cs  # Redis-backed implementation
+|-- Middleware/
+|   |-- CorrelationMiddleware.cs       # Request correlation
+|   |-- ProblemDetailsMiddleware.cs    # RFC 7807 errors
+|   |-- RequestLoggingMiddleware.cs    # Request logging
+|-- MultiTenancy/
+|   |-- OrganizationContext.cs         # Tenant context resolution
+|-- Resilience/
+|   |-- CircuitBreakerExtensions.cs    # DI registration
+|   |-- CircuitBreakerMiddleware.cs    # Circuit breaker implementation
+|   |-- CircuitBreakerOptions.cs       # Configuration options
+|-- Security/
+|   |-- RequestLimits.cs               # Request size limits
+|   |-- SecurityEventLogger.cs         # Security audit logging
+|   |-- SecurityExtensions.cs          # DI registration
+|-- Swagger/
+    |-- SwaggerExtensions.cs           # OpenAPI configuration
 ```
 
 ---
 
-## Changelog
+## Related Documentation
 
-This library follows the Meridian Console release cycle. See the repository's release notes for version-specific changes.
-
----
-
-## Contributing
-
-This is a **shared library** that affects all services. Changes should be:
-
-1. Backward compatible (or coordinated across all services)
-2. Well-tested with both unit and integration tests
-3. Documented in this README
-4. Reviewed by the platform team
-
-For questions or suggestions, open an issue in the repository.
+- [Dhadgar.Contracts](/docs/libraries/contracts.md) - DTOs, message contracts, API models
+- [Dhadgar.Messaging](/docs/libraries/messaging.md) - MassTransit/RabbitMQ conventions
+- [Dhadgar.Shared](/docs/libraries/shared.md) - Utilities and primitives
+- [RFC 7807 - Problem Details for HTTP APIs](https://tools.ietf.org/html/rfc7807)
+- [OpenTelemetry .NET Documentation](https://opentelemetry.io/docs/instrumentation/net/)
+- [ASP.NET Core Health Checks](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks)
+- [W3C Trace Context](https://www.w3.org/TR/trace-context/)
+- [Circuit Breaker Pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker)
