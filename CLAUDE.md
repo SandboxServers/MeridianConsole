@@ -34,12 +34,12 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 
 What goes where (services can only reference these, not each other):
 
-| Library | Purpose | Can Depend On |
-|---------|---------|---------------|
-| `Contracts` | DTOs, message contracts, API models | Nothing |
-| `Shared` | Utilities, primitives, helpers | Nothing |
-| `Messaging` | MassTransit consumers, publishers, saga base classes | Contracts |
-| `ServiceDefaults` | ASP.NET Core setup, middleware, observability | Contracts, Shared |
+| Library           | Purpose                                              | Can Depend On     |
+| ----------------- | ---------------------------------------------------- | ----------------- |
+| `Contracts`       | DTOs, message contracts, API models                  | Nothing           |
+| `Shared`          | Utilities, primitives, helpers                       | Nothing           |
+| `Messaging`       | MassTransit consumers, publishers, saga base classes | Contracts         |
+| `ServiceDefaults` | ASP.NET Core setup, middleware, observability        | Contracts, Shared |
 
 ## Service Categories
 
@@ -48,6 +48,7 @@ What goes where (services can only reference these, not each other):
 **Stateless**: Gateway, Console, Secrets, Discord, BetterAuth
 
 **Frontend Apps** (Astro/React/Tailwind):
+
 - `Scope` - Documentation site (functional)
 - `Panel` - Control plane UI (scaffolding)
 - `ShoppingCart` - Marketing/checkout (wireframe, OAuth flow only)
@@ -82,6 +83,7 @@ What goes where (services can only reference these, not each other):
 ## Parallel Claude Sessions
 
 When running multiple Claude sessions simultaneously, each MUST use a separate git worktree:
+
 ```bash
 git worktree add ../MeridianConsole-feature -b feature/name
 git worktree list
