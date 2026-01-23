@@ -1,6 +1,6 @@
 # Dhadgar.Agent.Core
 
-**The Shared Core Library for Customer-Hosted Agents**
+## The Shared Core Library for Customer-Hosted Agents
 
 ---
 
@@ -47,6 +47,7 @@ The Agent Core library serves as the foundation for agents that:
 The Agent Core library is currently in its foundational scaffolding phase. The existing code provides the basic project structure and "hello world" functionality used for build verification and smoke tests. The full implementation of agent functionality (command execution, process management, telemetry, etc.) is planned but not yet implemented.
 
 The current implementation includes:
+
 - Basic project structure with security analyzers enabled
 - `Hello.cs` - A simple static class for smoke testing
 - `Program.cs` - Entry point placeholder
@@ -99,13 +100,13 @@ The agent represents a potential attack vector for:
 
 The Agent Core library is designed with these security principles:
 
-| Principle | Description |
-|-----------|-------------|
-| **Least Privilege** | Agents request only the minimum permissions necessary |
-| **Defense in Depth** | Multiple layers of security controls protect against single-point failures |
-| **Fail Secure** | When in doubt, operations are denied rather than allowed |
-| **Minimal Attack Surface** | Every new capability increases risk and must be justified |
-| **Outbound-Only Connections** | Agents never accept inbound connections from the internet |
+| Principle                     | Description                                                                |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| **Least Privilege**           | Agents request only the minimum permissions necessary                      |
+| **Defense in Depth**          | Multiple layers of security controls protect against single-point failures |
+| **Fail Secure**               | When in doubt, operations are denied rather than allowed                   |
+| **Minimal Attack Surface**    | Every new capability increases risk and must be justified                  |
+| **Outbound-Only Connections** | Agents never accept inbound connections from the internet                  |
 
 ### Security Analyzers and Tooling
 
@@ -127,6 +128,7 @@ The Agent Core project has enhanced security analysis enabled:
 ```
 
 The **SecurityCodeScan** analyzer detects:
+
 - SQL injection vulnerabilities
 - Command injection vulnerabilities
 - Path traversal attacks
@@ -140,7 +142,7 @@ The **SecurityCodeScan** analyzer detects:
 
 ### System Context
 
-```
+```text
                                     ┌───────────────────────────────────────┐
                                     │        Meridian Console               │
                                     │         Control Plane                 │
@@ -256,6 +258,7 @@ public static class Hello
 ```
 
 This class serves as:
+
 - A build verification target
 - A smoke test entry point
 - A reference for the test project
@@ -271,6 +274,7 @@ Console.WriteLine(Hello.Message);
 ```
 
 The entry point is a placeholder indicating planned functionality:
+
 - Command-line options parsing
 - Command execution
 - Heartbeat/health reporting
@@ -284,6 +288,7 @@ The following components represent the intended architecture. They are not yet i
 Responsible for all communication with the Meridian Console control plane.
 
 **Planned responsibilities:**
+
 - Establish and maintain secure connections
 - Handle connection retry and backoff logic
 - Manage authentication tokens and certificate rotation
@@ -294,6 +299,7 @@ Responsible for all communication with the Meridian Console control plane.
 Interface for handling specific command types from the control plane.
 
 **Planned command types:**
+
 - `StartServerCommand`
 - `StopServerCommand`
 - `RestartServerCommand`
@@ -306,6 +312,7 @@ Interface for handling specific command types from the control plane.
 Manages game server processes on the host system.
 
 **Planned responsibilities:**
+
 - Start processes with proper isolation
 - Monitor process health and resource usage
 - Enforce resource limits (CPU, memory, etc.)
@@ -316,6 +323,7 @@ Manages game server processes on the host system.
 Reports metrics and health information to the control plane.
 
 **Planned metrics:**
+
 - System resource utilization (CPU, memory, disk, network)
 - Per-server metrics (process status, port bindings, player counts)
 - Agent health (uptime, version, last communication time)
@@ -326,6 +334,7 @@ Reports metrics and health information to the control plane.
 Handles mTLS certificates and secure key storage.
 
 **Planned responsibilities:**
+
 - Secure storage of private keys
 - Certificate rotation handling
 - Certificate validation for control plane connections
@@ -360,11 +369,11 @@ This design provides several security benefits:
 
 ### Communication Protocols (Planned)
 
-| Protocol | Use Case | Notes |
-|----------|----------|-------|
-| **HTTPS** | REST API calls | Commands, configuration, enrollment |
-| **WebSocket (WSS)** | Bidirectional streaming | Real-time console, continuous telemetry |
-| **gRPC over TLS** | High-frequency telemetry | Alternative for performance-critical paths |
+| Protocol            | Use Case                 | Notes                                      |
+| ------------------- | ------------------------ | ------------------------------------------ |
+| **HTTPS**           | REST API calls           | Commands, configuration, enrollment        |
+| **WebSocket (WSS)** | Bidirectional streaming  | Real-time console, continuous telemetry    |
+| **gRPC over TLS**   | High-frequency telemetry | Alternative for performance-critical paths |
 
 ### Message Flow (Design Intent)
 
@@ -473,14 +482,14 @@ In addition to mTLS, agents may use JWT tokens for:
 
 Commands are instructions from the control plane to the agent. Each command type has a dedicated handler:
 
-| Command | Description | Security Considerations |
-|---------|-------------|------------------------|
-| `StartServer` | Launch a game server process | Validate configuration, enforce resource limits |
-| `StopServer` | Gracefully stop a server | Verify ownership, prevent unauthorized stops |
-| `RestartServer` | Stop then start a server | Combine Start/Stop validations |
-| `UpdateServer` | Update server files | Validate file sources, check signatures |
-| `SyncFiles` | Synchronize files from control plane | Path traversal prevention, integrity checks |
-| `ExecuteScript` | Run a maintenance script | **DANGEROUS** - requires strict whitelisting |
+| Command         | Description                          | Security Considerations                         |
+| --------------- | ------------------------------------ | ----------------------------------------------- |
+| `StartServer`   | Launch a game server process         | Validate configuration, enforce resource limits |
+| `StopServer`    | Gracefully stop a server             | Verify ownership, prevent unauthorized stops    |
+| `RestartServer` | Stop then start a server             | Combine Start/Stop validations                  |
+| `UpdateServer`  | Update server files                  | Validate file sources, check signatures         |
+| `SyncFiles`     | Synchronize files from control plane | Path traversal prevention, integrity checks     |
+| `ExecuteScript` | Run a maintenance script             | **DANGEROUS** - requires strict whitelisting    |
 
 ### Command Execution Flow (Planned)
 
@@ -563,35 +572,35 @@ Agents collect and report telemetry to the control plane:
 
 #### System Metrics
 
-| Metric | Description | Frequency |
-|--------|-------------|-----------|
-| `cpu_usage_percent` | Overall CPU utilization | Every 10s |
-| `memory_used_bytes` | Total memory used | Every 10s |
-| `memory_available_bytes` | Available memory | Every 10s |
-| `disk_used_bytes` | Disk space used (per volume) | Every 60s |
-| `disk_available_bytes` | Available disk space | Every 60s |
-| `network_bytes_sent` | Network bytes transmitted | Every 10s |
-| `network_bytes_received` | Network bytes received | Every 10s |
+| Metric                   | Description                  | Frequency |
+| ------------------------ | ---------------------------- | --------- |
+| `cpu_usage_percent`      | Overall CPU utilization      | Every 10s |
+| `memory_used_bytes`      | Total memory used            | Every 10s |
+| `memory_available_bytes` | Available memory             | Every 10s |
+| `disk_used_bytes`        | Disk space used (per volume) | Every 60s |
+| `disk_available_bytes`   | Available disk space         | Every 60s |
+| `network_bytes_sent`     | Network bytes transmitted    | Every 10s |
+| `network_bytes_received` | Network bytes received       | Every 10s |
 
 #### Server Metrics
 
-| Metric | Description | Frequency |
-|--------|-------------|-----------|
-| `server_status` | Running, stopped, crashed, etc. | On change |
-| `server_cpu_percent` | Per-server CPU usage | Every 10s |
-| `server_memory_bytes` | Per-server memory usage | Every 10s |
-| `server_port` | Bound port number | On change |
-| `server_player_count` | Connected players (if available) | Every 30s |
-| `server_uptime_seconds` | Time since server started | Every 60s |
+| Metric                  | Description                      | Frequency |
+| ----------------------- | -------------------------------- | --------- |
+| `server_status`         | Running, stopped, crashed, etc.  | On change |
+| `server_cpu_percent`    | Per-server CPU usage             | Every 10s |
+| `server_memory_bytes`   | Per-server memory usage          | Every 10s |
+| `server_port`           | Bound port number                | On change |
+| `server_player_count`   | Connected players (if available) | Every 30s |
+| `server_uptime_seconds` | Time since server started        | Every 60s |
 
 #### Agent Metrics
 
-| Metric | Description | Frequency |
-|--------|-------------|-----------|
-| `agent_version` | Agent software version | On connect |
-| `agent_uptime_seconds` | Time since agent started | Every 60s |
+| Metric                    | Description               | Frequency  |
+| ------------------------- | ------------------------- | ---------- |
+| `agent_version`           | Agent software version    | On connect |
+| `agent_uptime_seconds`    | Time since agent started  | Every 60s  |
 | `agent_last_command_time` | Timestamp of last command | On command |
-| `agent_error_count` | Errors since last report | Every 60s |
+| `agent_error_count`       | Errors since last report  | Every 60s  |
 
 ### Privacy and Data Collection Principles
 
@@ -664,22 +673,22 @@ Game servers must be isolated from each other and from the host system:
 
 #### Linux Isolation Mechanisms
 
-| Mechanism | Purpose |
-|-----------|---------|
-| **namespaces** | Isolate process views (PID, network, mount, etc.) |
-| **cgroups** | Limit CPU, memory, I/O resources |
-| **seccomp** | Restrict system calls |
-| **capabilities** | Drop unnecessary privileges |
-| **user namespaces** | Run as unprivileged user inside container |
+| Mechanism           | Purpose                                           |
+| ------------------- | ------------------------------------------------- |
+| **namespaces**      | Isolate process views (PID, network, mount, etc.) |
+| **cgroups**         | Limit CPU, memory, I/O resources                  |
+| **seccomp**         | Restrict system calls                             |
+| **capabilities**    | Drop unnecessary privileges                       |
+| **user namespaces** | Run as unprivileged user inside container         |
 
 #### Windows Isolation Mechanisms
 
-| Mechanism | Purpose |
-|-----------|---------|
-| **Job objects** | Group and limit processes |
-| **Integrity levels** | Restrict process privileges |
-| **Token manipulation** | Create restricted tokens |
-| **AppContainer** | Sandbox process capabilities (optional) |
+| Mechanism              | Purpose                                 |
+| ---------------------- | --------------------------------------- |
+| **Job objects**        | Group and limit processes               |
+| **Integrity levels**   | Restrict process privileges             |
+| **Token manipulation** | Create restricted tokens                |
+| **AppContainer**       | Sandbox process capabilities (optional) |
 
 ### Resource Limits (Planned)
 
@@ -809,11 +818,11 @@ Higher numbers override lower numbers.
 
 Some configuration values require special handling:
 
-| Setting | Security Notes |
-|---------|---------------|
+| Setting                  | Security Notes                                              |
+| ------------------------ | ----------------------------------------------------------- |
 | `authentication.keyPath` | Private key must have restricted permissions (600 on Linux) |
-| `controlPlane.url` | Must be HTTPS; reject HTTP |
-| `servers.basePath` | Agent only operates within this directory tree |
+| `controlPlane.url`       | Must be HTTPS; reject HTTP                                  |
+| `servers.basePath`       | Agent only operates within this directory tree              |
 
 ---
 
@@ -837,6 +846,7 @@ Dhadgar.Agent.Linux/
 ```
 
 **Linux-specific features:**
+
 - systemd service integration
 - Linux namespaces and cgroups for isolation
 - Native signal handling (SIGTERM, SIGKILL)
@@ -856,6 +866,7 @@ Dhadgar.Agent.Windows/
 ```
 
 **Windows-specific features:**
+
 - Windows Service integration
 - Job objects for process isolation
 - Windows Event Log integration
@@ -938,13 +949,13 @@ dotnet test tests/Dhadgar.Agent.Core.Tests --filter "FullyQualifiedName~HelloWor
 
 ### Planned Test Categories
 
-| Category | Description |
-|----------|-------------|
-| **Unit Tests** | Test individual components in isolation |
-| **Integration Tests** | Test component interactions |
-| **Security Tests** | Validate security controls (path traversal, injection, etc.) |
-| **Performance Tests** | Ensure telemetry doesn't impact host performance |
-| **Fuzz Tests** | Test robustness against malformed inputs |
+| Category              | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| **Unit Tests**        | Test individual components in isolation                      |
+| **Integration Tests** | Test component interactions                                  |
+| **Security Tests**    | Validate security controls (path traversal, injection, etc.) |
+| **Performance Tests** | Ensure telemetry doesn't impact host performance             |
+| **Fuzz Tests**        | Test robustness against malformed inputs                     |
 
 ### Security Testing Guidelines
 
@@ -1101,47 +1112,47 @@ var key = ProtectedData.Protect(keyBytes, null, DataProtectionScope.LocalMachine
 
 ### Project Documentation
 
-| Document | Description |
-|----------|-------------|
-| [CLAUDE.md](/CLAUDE.md) | Main project instructions and architecture overview |
-| [README.md](/README.md) | Project overview and getting started guide |
-| [docs/architecture/](/docs/architecture/) | Architecture decisions and design docs |
-| [docs/LINTER_SAST_STRATEGY.md](/docs/LINTER_SAST_STRATEGY.md) | Security scanning implementation plan |
+| Document                                                      | Description                                         |
+| ------------------------------------------------------------- | --------------------------------------------------- |
+| [CLAUDE.md](/CLAUDE.md)                                       | Main project instructions and architecture overview |
+| [README.md](/README.md)                                       | Project overview and getting started guide          |
+| [docs/architecture/](/docs/architecture/)                     | Architecture decisions and design docs              |
+| [docs/LINTER_SAST_STRATEGY.md](/docs/LINTER_SAST_STRATEGY.md) | Security scanning implementation plan               |
 
 ### Agent-Specific Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Agent.Linux/CLAUDE.md](/src/Agents/Dhadgar.Agent.Linux/CLAUDE.md) | Linux agent specifics |
-| [Agent.Windows/CLAUDE.md](/src/Agents/Dhadgar.Agent.Windows/CLAUDE.md) | Windows agent specifics |
+| Document                                                                              | Description                        |
+| ------------------------------------------------------------------------------------- | ---------------------------------- |
+| [Agent.Linux/CLAUDE.md](/src/Agents/Dhadgar.Agent.Linux/CLAUDE.md)                    | Linux agent specifics              |
+| [Agent.Windows/CLAUDE.md](/src/Agents/Dhadgar.Agent.Windows/CLAUDE.md)                | Windows agent specifics            |
 | [.claude/agents/agent-service-guardian.md](/.claude/agents/agent-service-guardian.md) | Security review agent instructions |
 
 ### Related Services
 
-| Service | Description | Relevance to Agents |
-|---------|-------------|---------------------|
-| **Nodes** (`Dhadgar.Nodes`) | Node inventory and health tracking | Registers agents, receives telemetry |
-| **Servers** (`Dhadgar.Servers`) | Game server lifecycle management | Issues server commands to agents |
-| **Tasks** (`Dhadgar.Tasks`) | Orchestration and background jobs | Schedules operations on agents |
-| **Files** (`Dhadgar.Files`) | File metadata and transfers | Coordinates file sync with agents |
+| Service                         | Description                        | Relevance to Agents                  |
+| ------------------------------- | ---------------------------------- | ------------------------------------ |
+| **Nodes** (`Dhadgar.Nodes`)     | Node inventory and health tracking | Registers agents, receives telemetry |
+| **Servers** (`Dhadgar.Servers`) | Game server lifecycle management   | Issues server commands to agents     |
+| **Tasks** (`Dhadgar.Tasks`)     | Orchestration and background jobs  | Schedules operations on agents       |
+| **Files** (`Dhadgar.Files`)     | File metadata and transfers        | Coordinates file sync with agents    |
 
 ### External References
 
-| Resource | Description |
-|----------|-------------|
-| [SecurityCodeScan](https://security-code-scan.github.io/) | .NET security analyzer documentation |
-| [OWASP Command Injection](https://owasp.org/www-community/attacks/Command_Injection) | Command injection prevention guide |
-| [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal) | Path traversal prevention guide |
-| [Linux Namespaces](https://man7.org/linux/man-pages/man7/namespaces.7.html) | Linux namespace documentation |
+| Resource                                                                                     | Description                             |
+| -------------------------------------------------------------------------------------------- | --------------------------------------- |
+| [SecurityCodeScan](https://security-code-scan.github.io/)                                    | .NET security analyzer documentation    |
+| [OWASP Command Injection](https://owasp.org/www-community/attacks/Command_Injection)         | Command injection prevention guide      |
+| [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)               | Path traversal prevention guide         |
+| [Linux Namespaces](https://man7.org/linux/man-pages/man7/namespaces.7.html)                  | Linux namespace documentation           |
 | [Windows Job Objects](https://docs.microsoft.com/en-us/windows/win32/procthread/job-objects) | Windows process isolation documentation |
 
 ---
 
 ## Changelog
 
-| Date | Version | Description |
-|------|---------|-------------|
-| 2026-01-22 | 1.0.0 | Initial comprehensive documentation |
+| Date       | Version | Description                         |
+| ---------- | ------- | ----------------------------------- |
+| 2026-01-22 | 1.0.0   | Initial comprehensive documentation |
 
 ---
 
@@ -1159,4 +1170,4 @@ Remember: **This code runs on customer hardware. Security is not optional.**
 
 ---
 
-*This documentation was created to make contributors near subject-matter experts on the Dhadgar.Agent.Core library. If you have questions not covered here, please open an issue or discussion.*
+_This documentation was created to make contributors near subject-matter experts on the Dhadgar.Agent.Core library. If you have questions not covered here, please open an issue or discussion._

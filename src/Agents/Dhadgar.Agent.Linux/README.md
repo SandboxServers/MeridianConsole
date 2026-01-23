@@ -42,7 +42,7 @@ The Linux agent is responsible for:
 
 ### Architecture Context
 
-```
+```text
 +------------------+     HTTPS/mTLS      +-------------------+
 |  Control Plane   | <------------------ |  Dhadgar Agent    |
 |  (Cloud)         |     (Outbound Only) |  (Customer Linux) |
@@ -58,6 +58,7 @@ The Linux agent is responsible for:
 ```
 
 **Critical Design Principle**: The agent makes **outbound-only connections** to the control plane. This means:
+
 - No inbound firewall holes are required on customer networks
 - The agent initiates all communication
 - Long-lived connections (WebSocket/SignalR) are used for real-time bidirectional communication
@@ -68,12 +69,14 @@ The Linux agent is responsible for:
 > **Important**: This agent is currently in **early scaffolding stage**. The codebase provides the structural foundation for incremental development. Core functionality such as process management, file operations, and control plane communication are planned but not yet implemented.
 
 **Implemented:**
+
 - Basic project structure and build configuration
 - Hello world smoke test endpoint
 - Security analyzer integration
 - Project references to shared contracts
 
 **Planned:**
+
 - mTLS authentication with certificate rotation
 - WebSocket/SignalR connection to control plane
 - Game server process management
@@ -89,9 +92,10 @@ The Linux agent is responsible for:
 ### SECURITY CRITICAL WARNING
 
 This agent runs on **customer-owned hardware** with **elevated privileges**. It has the ability to:
+
 - Execute processes on the host system
 - Read and write files
-- Manage network configurations (through firewall service integration)
+- Manage network configurations (via local firewall tooling such as iptables or nftables)
 - Access system resources
 
 **Every code change to this agent MUST be reviewed for security vulnerabilities.**
@@ -99,12 +103,14 @@ This agent runs on **customer-owned hardware** with **elevated privileges**. It 
 ### Threat Model
 
 #### Assets to Protect
+
 1. **Customer Hardware**: The physical/virtual machine running the agent
 2. **Customer Data**: Game server configurations, player data, server logs
 3. **Customer Network**: The agent should not become a vector for lateral movement
 4. **Control Plane Credentials**: mTLS certificates and authentication tokens
 
 #### Threat Actors
+
 1. **Malicious Control Plane Impersonation**: Attackers attempting to send commands by impersonating the control plane
 2. **Man-in-the-Middle**: Network attackers intercepting agent-to-control-plane communication
 3. **Local Privilege Escalation**: Attackers with limited access attempting to use the agent for privilege escalation
@@ -114,6 +120,7 @@ This agent runs on **customer-owned hardware** with **elevated privileges**. It 
 ### Security Principles
 
 #### 1. Outbound-Only Connections
+
 ```
 Customer Network                    Internet                      Control Plane
 +---------------+              +----------------+              +---------------+
@@ -130,6 +137,7 @@ Customer Network                    Internet                      Control Plane
 #### 2. Mutual TLS (mTLS) Authentication
 
 **Planned Implementation:**
+
 ```csharp
 // Certificate-based authentication (planned)
 public class AgentCertificateAuthentication
@@ -142,6 +150,7 @@ public class AgentCertificateAuthentication
 ```
 
 **Certificate Lifecycle:**
+
 1. Agent generates a CSR (Certificate Signing Request)
 2. CSR is submitted to control plane during enrollment
 3. Control plane signs and returns the certificate
@@ -172,6 +181,7 @@ public class CommandValidator
 Game server processes are isolated from the agent and each other:
 
 **Linux-Specific Isolation Mechanisms:**
+
 - **Separate User Accounts**: Each game server runs under its own unprivileged user
 - **cgroups**: Resource limits (CPU, memory) enforced via cgroups v2
 - **Namespaces**: Process, network, and mount namespace isolation (optional, configurable)
@@ -207,6 +217,7 @@ public class PathValidator
 ```
 
 **Allowed Directories:**
+
 - `/var/lib/dhadgar/servers/` - Game server data
 - `/var/lib/dhadgar/mods/` - Mod files
 - `/var/lib/dhadgar/backups/` - Server backups
@@ -234,6 +245,7 @@ The project includes SecurityCodeScan.VS2019 for static analysis:
 ```
 
 This analyzer detects:
+
 - SQL injection vulnerabilities
 - Command injection
 - Path traversal
@@ -325,13 +337,13 @@ src/Agents/Dhadgar.Agent.Linux/
 
 #### NuGet Packages (Current and Planned)
 
-| Package | Purpose | Status |
-|---------|---------|--------|
-| SecurityCodeScan.VS2019 | Static security analysis | Included |
-| Microsoft.Extensions.Hosting | Generic host for background services | Planned |
-| Microsoft.AspNetCore.SignalR.Client | Real-time communication | Planned |
-| System.Diagnostics.Process | Process management | Built-in |
-| OpenTelemetry | Observability | Planned |
+| Package                             | Purpose                              | Status   |
+| ----------------------------------- | ------------------------------------ | -------- |
+| SecurityCodeScan.VS2019             | Static security analysis             | Included |
+| Microsoft.Extensions.Hosting        | Generic host for background services | Planned  |
+| Microsoft.AspNetCore.SignalR.Client | Real-time communication              | Planned  |
+| System.Diagnostics.Process          | Process management                   | Built-in |
+| OpenTelemetry                       | Observability                        | Planned  |
 
 ### Build Configuration
 
@@ -359,6 +371,7 @@ The `.csproj` file includes specific settings for agent security:
 ### System Requirements
 
 #### Minimum Requirements
+
 - **OS**: Linux kernel 4.15+ (Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+, or equivalent)
 - **Architecture**: x86_64 (amd64)
 - **Memory**: 256 MB RAM (agent only, plus game server requirements)
@@ -366,6 +379,7 @@ The `.csproj` file includes specific settings for agent security:
 - **Network**: Outbound HTTPS (443) connectivity to control plane
 
 #### Recommended Requirements
+
 - **OS**: Ubuntu 22.04 LTS or Debian 12 (for best systemd and cgroups v2 support)
 - **Memory**: 512 MB RAM minimum (agent + headroom for game servers)
 - **Disk**: SSD storage for game server files
@@ -530,11 +544,11 @@ sudo userdel dhadgar-agent
 
 ### Configuration File Locations
 
-| File | Purpose | Permissions |
-|------|---------|-------------|
-| `/etc/dhadgar/agent.json` | Main configuration file | 640 root:dhadgar-agent |
-| `/etc/dhadgar/agent.d/*.json` | Override files (merged in alphabetical order) | 640 root:dhadgar-agent |
-| `/var/lib/dhadgar/agent.state` | Runtime state (node ID, certificates) | 600 dhadgar-agent:dhadgar-agent |
+| File                           | Purpose                                       | Permissions                     |
+| ------------------------------ | --------------------------------------------- | ------------------------------- |
+| `/etc/dhadgar/agent.json`      | Main configuration file                       | 640 root:dhadgar-agent          |
+| `/etc/dhadgar/agent.d/*.json`  | Override files (merged in alphabetical order) | 640 root:dhadgar-agent          |
+| `/var/lib/dhadgar/agent.state` | Runtime state (node ID, certificates)         | 600 dhadgar-agent:dhadgar-agent |
 
 ### Configuration Hierarchy
 
@@ -580,9 +594,7 @@ Configuration is loaded in this order (later sources override earlier):
       "/var/lib/dhadgar/backups"
     ],
     "MaxFileSize": "10GB",
-    "AllowedExecutables": [
-      "/opt/dhadgar/runtimes/*"
-    ],
+    "AllowedExecutables": ["/opt/dhadgar/runtimes/*"],
     "EnableCgroups": true,
     "EnableNamespaces": false,
     "EnableSeccomp": true
@@ -622,48 +634,48 @@ Configuration is loaded in this order (later sources override earlier):
 
 ##### Agent Section
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `NodeId` | string | null | Unique identifier assigned by control plane during enrollment |
-| `NodeName` | string | hostname | Human-readable name for this node |
-| `DataDirectory` | string | /var/lib/dhadgar | Root directory for game server data |
-| `LogDirectory` | string | /var/log/dhadgar | Directory for agent logs |
-| `MaxConcurrentServers` | int | 10 | Maximum game servers on this node |
-| `HeartbeatIntervalSeconds` | int | 30 | Interval between health reports |
-| `CommandPollIntervalSeconds` | int | 5 | Fallback polling interval (when WebSocket unavailable) |
-| `ShutdownTimeoutSeconds` | int | 60 | Grace period for server shutdown |
+| Option                       | Type   | Default          | Description                                                   |
+| ---------------------------- | ------ | ---------------- | ------------------------------------------------------------- |
+| `NodeId`                     | string | null             | Unique identifier assigned by control plane during enrollment |
+| `NodeName`                   | string | hostname         | Human-readable name for this node                             |
+| `DataDirectory`              | string | /var/lib/dhadgar | Root directory for game server data                           |
+| `LogDirectory`               | string | /var/log/dhadgar | Directory for agent logs                                      |
+| `MaxConcurrentServers`       | int    | 10               | Maximum game servers on this node                             |
+| `HeartbeatIntervalSeconds`   | int    | 30               | Interval between health reports                               |
+| `CommandPollIntervalSeconds` | int    | 5                | Fallback polling interval (when WebSocket unavailable)        |
+| `ShutdownTimeoutSeconds`     | int    | 60               | Grace period for server shutdown                              |
 
 ##### ControlPlane Section
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `Endpoint` | string | required | Control plane API endpoint URL |
-| `EnrollmentToken` | string | null | One-time token for initial enrollment |
-| `ConnectionTimeoutSeconds` | int | 30 | Connection timeout |
-| `RetryAttempts` | int | 5 | Number of retry attempts on failure |
-| `RetryDelaySeconds` | int | 10 | Delay between retries (with exponential backoff) |
-| `UseWebSocket` | bool | true | Enable WebSocket/SignalR for real-time communication |
-| `CertificateRefreshHours` | int | 12 | Hours before certificate expiry to refresh |
+| Option                     | Type   | Default  | Description                                          |
+| -------------------------- | ------ | -------- | ---------------------------------------------------- |
+| `Endpoint`                 | string | required | Control plane API endpoint URL                       |
+| `EnrollmentToken`          | string | null     | One-time token for initial enrollment                |
+| `ConnectionTimeoutSeconds` | int    | 30       | Connection timeout                                   |
+| `RetryAttempts`            | int    | 5        | Number of retry attempts on failure                  |
+| `RetryDelaySeconds`        | int    | 10       | Delay between retries (with exponential backoff)     |
+| `UseWebSocket`             | bool   | true     | Enable WebSocket/SignalR for real-time communication |
+| `CertificateRefreshHours`  | int    | 12       | Hours before certificate expiry to refresh           |
 
 ##### Security Section
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `AllowedBasePaths` | string[] | [/var/lib/dhadgar/*] | Directories where file operations are permitted |
-| `MaxFileSize` | string | 10GB | Maximum file size for downloads |
-| `AllowedExecutables` | string[] | [] | Glob patterns for allowed executables |
-| `EnableCgroups` | bool | true | Use cgroups v2 for resource limits |
-| `EnableNamespaces` | bool | false | Use Linux namespaces for isolation |
-| `EnableSeccomp` | bool | true | Enable seccomp filtering for servers |
+| Option               | Type     | Default              | Description                                     |
+| -------------------- | -------- | -------------------- | ----------------------------------------------- |
+| `AllowedBasePaths`   | string[] | [/var/lib/dhadgar/*] | Directories where file operations are permitted |
+| `MaxFileSize`        | string   | 10GB                 | Maximum file size for downloads                 |
+| `AllowedExecutables` | string[] | []                   | Glob patterns for allowed executables           |
+| `EnableCgroups`      | bool     | true                 | Use cgroups v2 for resource limits              |
+| `EnableNamespaces`   | bool     | false                | Use Linux namespaces for isolation              |
+| `EnableSeccomp`      | bool     | true                 | Enable seccomp filtering for servers            |
 
 ##### Resources Section
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `DefaultCpuLimit` | string | 2.0 | Default CPU cores per server |
-| `DefaultMemoryLimit` | string | 4GB | Default memory per server |
-| `DefaultDiskQuota` | string | 50GB | Default disk quota per server |
-| `ReservedSystemMemory` | string | 512MB | Memory reserved for system/agent |
+| Option                 | Type   | Default | Description                      |
+| ---------------------- | ------ | ------- | -------------------------------- |
+| `DefaultCpuLimit`      | string | 2.0     | Default CPU cores per server     |
+| `DefaultMemoryLimit`   | string | 4GB     | Default memory per server        |
+| `DefaultDiskQuota`     | string | 50GB    | Default disk quota per server    |
+| `ReservedSystemMemory` | string | 512MB   | Memory reserved for system/agent |
 
 ### Environment Variable Overrides
 
@@ -872,6 +884,7 @@ cat /sys/fs/cgroup/system.slice/dhadgar-agent.service/cgroup.controllers
 ```
 
 The agent creates sub-cgroups for each game server:
+
 ```
 /sys/fs/cgroup/system.slice/dhadgar-agent.service/
 ├── cgroup.controllers
@@ -891,27 +904,27 @@ The agent creates sub-cgroups for each game server:
 
 ### Comparison with Windows Agent
 
-| Feature | Linux Agent | Windows Agent |
-|---------|-------------|---------------|
-| Service Management | systemd | Windows Service |
-| Process Isolation | cgroups v2, namespaces | Job Objects |
-| User Isolation | Unix users/groups | Windows users |
-| Signal Handling | SIGTERM, SIGHUP, etc. | Service control events |
-| File Permissions | POSIX permissions | Windows ACLs |
-| Log Output | systemd journal | Windows Event Log |
-| Resource Limits | cgroups v2 | Windows Job Object limits |
+| Feature            | Linux Agent            | Windows Agent             |
+| ------------------ | ---------------------- | ------------------------- |
+| Service Management | systemd                | Windows Service           |
+| Process Isolation  | cgroups v2, namespaces | Job Objects               |
+| User Isolation     | Unix users/groups      | Windows users             |
+| Signal Handling    | SIGTERM, SIGHUP, etc.  | Service control events    |
+| File Permissions   | POSIX permissions      | Windows ACLs              |
+| Log Output         | systemd journal        | Windows Event Log         |
+| Resource Limits    | cgroups v2             | Windows Job Object limits |
 
 ### Unix Signal Handling
 
 The Linux agent responds to standard Unix signals:
 
-| Signal | Action |
-|--------|--------|
+| Signal    | Action                                        |
+| --------- | --------------------------------------------- |
 | `SIGTERM` | Graceful shutdown (stop all servers, cleanup) |
-| `SIGINT` | Same as SIGTERM |
-| `SIGHUP` | Reload configuration |
-| `SIGUSR1` | Dump current state to logs |
-| `SIGUSR2` | Trigger immediate health report |
+| `SIGINT`  | Same as SIGTERM                               |
+| `SIGHUP`  | Reload configuration                          |
+| `SIGUSR1` | Dump current state to logs                    |
+| `SIGUSR2` | Trigger immediate health report               |
 
 ```csharp
 // Planned implementation
@@ -1004,6 +1017,7 @@ public class NamespaceIsolation
 The agent includes optional mandatory access control profiles:
 
 **AppArmor Profile** (`/etc/apparmor.d/dhadgar-agent`):
+
 ```
 #include <tunables/global>
 
@@ -1070,16 +1084,16 @@ profile dhadgar-agent /opt/dhadgar/agent/Dhadgar.Agent.Linux {
 
 ### Server States
 
-| State | Description |
-|-------|-------------|
-| `Provisioning` | Server resources being allocated |
-| `Installing` | Game files being downloaded/installed |
-| `Starting` | Process starting, awaiting health check |
-| `Running` | Process running and healthy |
-| `Stopping` | Graceful shutdown in progress |
-| `Stopped` | Process stopped cleanly |
-| `Failed` | Process crashed or failed health check |
-| `Updating` | Applying updates (files, mods, config) |
+| State          | Description                             |
+| -------------- | --------------------------------------- |
+| `Provisioning` | Server resources being allocated        |
+| `Installing`   | Game files being downloaded/installed   |
+| `Starting`     | Process starting, awaiting health check |
+| `Running`      | Process running and healthy             |
+| `Stopping`     | Graceful shutdown in progress           |
+| `Stopped`      | Process stopped cleanly                 |
+| `Failed`       | Process crashed or failed health check  |
+| `Updating`     | Applying updates (files, mods, config)  |
 
 ### Process Spawning
 
@@ -1273,17 +1287,17 @@ sudo usermod -aG dhadgar-gameservers dhadgar-agent
 
 ### Permission Model
 
-| Path | Owner | Group | Mode | Purpose |
-|------|-------|-------|------|---------|
-| `/opt/dhadgar/agent/` | root | root | 755 | Agent binaries (read-only) |
-| `/opt/dhadgar/agent/Dhadgar.Agent.Linux` | root | root | 755 | Main executable |
-| `/var/lib/dhadgar/` | dhadgar-agent | dhadgar-agent | 755 | Agent data root |
-| `/var/lib/dhadgar/agent.state` | dhadgar-agent | dhadgar-agent | 600 | Sensitive state |
-| `/var/lib/dhadgar/servers/` | dhadgar-agent | dhadgar-gameservers | 750 | Server data |
-| `/var/lib/dhadgar/servers/{id}/` | dhadgar-gs-{id} | dhadgar-gameservers | 750 | Individual server |
-| `/var/log/dhadgar/` | dhadgar-agent | dhadgar-agent | 755 | Log directory |
-| `/etc/dhadgar/` | root | dhadgar-agent | 750 | Configuration |
-| `/etc/dhadgar/agent.json` | root | dhadgar-agent | 640 | Main config (no secrets) |
+| Path                                     | Owner           | Group               | Mode | Purpose                    |
+| ---------------------------------------- | --------------- | ------------------- | ---- | -------------------------- |
+| `/opt/dhadgar/agent/`                    | root            | root                | 755  | Agent binaries (read-only) |
+| `/opt/dhadgar/agent/Dhadgar.Agent.Linux` | root            | root                | 755  | Main executable            |
+| `/var/lib/dhadgar/`                      | dhadgar-agent   | dhadgar-agent       | 755  | Agent data root            |
+| `/var/lib/dhadgar/agent.state`           | dhadgar-agent   | dhadgar-agent       | 600  | Sensitive state            |
+| `/var/lib/dhadgar/servers/`              | dhadgar-agent   | dhadgar-gameservers | 750  | Server data                |
+| `/var/lib/dhadgar/servers/{id}/`         | dhadgar-gs-{id} | dhadgar-gameservers | 750  | Individual server          |
+| `/var/log/dhadgar/`                      | dhadgar-agent   | dhadgar-agent       | 755  | Log directory              |
+| `/etc/dhadgar/`                          | root            | dhadgar-agent       | 750  | Configuration              |
+| `/etc/dhadgar/agent.json`                | root            | dhadgar-agent       | 640  | Main config (no secrets)   |
 
 ### File Operations Security
 
@@ -1330,15 +1344,16 @@ public class SecureFileOperations
 
 The agent requires outbound connectivity on port 443 (HTTPS/WSS) to:
 
-| Destination | Purpose | Protocol |
-|-------------|---------|----------|
-| `api.meridianconsole.com` | Control plane API | HTTPS |
-| `ws.meridianconsole.com` | Real-time communication | WSS (WebSocket) |
-| `files.meridianconsole.com` | File downloads | HTTPS |
+| Destination                 | Purpose                 | Protocol        |
+| --------------------------- | ----------------------- | --------------- |
+| `api.meridianconsole.com`   | Control plane API       | HTTPS           |
+| `ws.meridianconsole.com`    | Real-time communication | WSS (WebSocket) |
+| `files.meridianconsole.com` | File downloads          | HTTPS           |
 
 ### Firewall Configuration
 
 #### iptables
+
 ```bash
 # Allow outbound HTTPS (if using restrictive firewall)
 sudo iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
@@ -1348,6 +1363,7 @@ sudo iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 ```
 
 #### firewalld
+
 ```bash
 # Add rule to allow outbound HTTPS
 sudo firewall-cmd --permanent --add-service=https
@@ -1355,6 +1371,7 @@ sudo firewall-cmd --reload
 ```
 
 #### ufw
+
 ```bash
 # Allow outbound HTTPS
 sudo ufw allow out 443/tcp
@@ -1416,6 +1433,7 @@ For environments behind corporate proxies:
 ```
 
 Or via environment variables:
+
 ```bash
 export HTTP_PROXY=http://proxy.company.com:8080
 export HTTPS_PROXY=http://proxy.company.com:8080
@@ -1428,23 +1446,23 @@ export NO_PROXY=localhost,127.0.0.1
 
 ### Log Locations
 
-| Log Type | Location | Format |
-|----------|----------|--------|
-| Agent logs | systemd journal | Structured JSON |
-| Agent logs | `/var/log/dhadgar/agent.log` | Structured JSON (optional) |
-| Server stdout | `/var/log/dhadgar/servers/{id}/stdout.log` | Plain text |
-| Server stderr | `/var/log/dhadgar/servers/{id}/stderr.log` | Plain text |
+| Log Type      | Location                                   | Format                     |
+| ------------- | ------------------------------------------ | -------------------------- |
+| Agent logs    | systemd journal                            | Structured JSON            |
+| Agent logs    | `/var/log/dhadgar/agent.log`               | Structured JSON (optional) |
+| Server stdout | `/var/log/dhadgar/servers/{id}/stdout.log` | Plain text                 |
+| Server stderr | `/var/log/dhadgar/servers/{id}/stderr.log` | Plain text                 |
 
 ### Log Levels
 
-| Level | Description | Use Case |
-|-------|-------------|----------|
-| `Trace` | Most verbose, includes internal state | Development debugging |
-| `Debug` | Detailed diagnostic information | Troubleshooting |
-| `Information` | General operational events | Normal operation |
-| `Warning` | Potential issues | Investigation triggers |
-| `Error` | Failures that need attention | Alert triggers |
-| `Critical` | System-wide failures | Immediate action required |
+| Level         | Description                           | Use Case                  |
+| ------------- | ------------------------------------- | ------------------------- |
+| `Trace`       | Most verbose, includes internal state | Development debugging     |
+| `Debug`       | Detailed diagnostic information       | Troubleshooting           |
+| `Information` | General operational events            | Normal operation          |
+| `Warning`     | Potential issues                      | Investigation triggers    |
+| `Error`       | Failures that need attention          | Alert triggers            |
+| `Critical`    | System-wide failures                  | Immediate action required |
 
 ### Structured Logging
 
@@ -1483,6 +1501,7 @@ File logs are rotated automatically:
 ```
 
 This creates files like:
+
 - `agent.log` (current)
 - `agent.1.log` (previous)
 - `agent.2.log` (older)
@@ -1577,18 +1596,18 @@ cat /var/lib/dhadgar/health.json
 
 The agent collects and reports metrics to the control plane:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `dhadgar_agent_uptime_seconds` | Gauge | Agent uptime |
-| `dhadgar_servers_total` | Gauge | Total servers managed |
-| `dhadgar_servers_running` | Gauge | Currently running servers |
-| `dhadgar_cpu_usage_percent` | Gauge | Host CPU usage |
-| `dhadgar_memory_used_bytes` | Gauge | Host memory usage |
-| `dhadgar_disk_used_bytes` | Gauge | Disk usage |
-| `dhadgar_network_rx_bytes` | Counter | Network bytes received |
-| `dhadgar_network_tx_bytes` | Counter | Network bytes transmitted |
-| `dhadgar_server_cpu_seconds` | Counter | Per-server CPU time |
-| `dhadgar_server_memory_bytes` | Gauge | Per-server memory usage |
+| Metric                         | Type    | Description               |
+| ------------------------------ | ------- | ------------------------- |
+| `dhadgar_agent_uptime_seconds` | Gauge   | Agent uptime              |
+| `dhadgar_servers_total`        | Gauge   | Total servers managed     |
+| `dhadgar_servers_running`      | Gauge   | Currently running servers |
+| `dhadgar_cpu_usage_percent`    | Gauge   | Host CPU usage            |
+| `dhadgar_memory_used_bytes`    | Gauge   | Host memory usage         |
+| `dhadgar_disk_used_bytes`      | Gauge   | Disk usage                |
+| `dhadgar_network_rx_bytes`     | Counter | Network bytes received    |
+| `dhadgar_network_tx_bytes`     | Counter | Network bytes transmitted |
+| `dhadgar_server_cpu_seconds`   | Counter | Per-server CPU time       |
+| `dhadgar_server_memory_bytes`  | Gauge   | Per-server memory usage   |
 
 ### OpenTelemetry Integration (Planned)
 
@@ -1615,6 +1634,7 @@ For environments with observability infrastructure:
 **Symptoms**: `systemctl start dhadgar-agent` fails or times out
 
 **Diagnostic Steps**:
+
 ```bash
 # Check service status
 sudo systemctl status dhadgar-agent
@@ -1632,6 +1652,7 @@ sudo -u dhadgar-agent /opt/dhadgar/agent/Dhadgar.Agent.Linux
 ```
 
 **Common Causes**:
+
 1. Missing .NET runtime (for framework-dependent deployment)
 2. Incorrect file permissions
 3. Configuration file syntax error
@@ -1642,6 +1663,7 @@ sudo -u dhadgar-agent /opt/dhadgar/agent/Dhadgar.Agent.Linux
 **Symptoms**: Logs show connection timeouts or certificate errors
 
 **Diagnostic Steps**:
+
 ```bash
 # Test DNS resolution
 dig api.meridianconsole.com
@@ -1657,6 +1679,7 @@ openssl s_client -connect api.meridianconsole.com:443 </dev/null
 ```
 
 **Common Causes**:
+
 1. Firewall blocking outbound 443
 2. DNS resolution failure
 3. Corporate proxy not configured
@@ -1667,6 +1690,7 @@ openssl s_client -connect api.meridianconsole.com:443 </dev/null
 **Symptoms**: Server status shows "Failed" after starting
 
 **Diagnostic Steps**:
+
 ```bash
 # Check server logs
 cat /var/log/dhadgar/servers/{server-id}/stdout.log
@@ -1684,6 +1708,7 @@ ls -la /var/lib/dhadgar/servers/{server-id}/
 ```
 
 **Common Causes**:
+
 1. Missing game files
 2. Insufficient permissions
 3. Resource limits too restrictive
@@ -1694,6 +1719,7 @@ ls -la /var/lib/dhadgar/servers/{server-id}/
 **Symptoms**: Agent consuming excessive CPU or memory
 
 **Diagnostic Steps**:
+
 ```bash
 # Check agent resource usage
 top -p $(pgrep Dhadgar.Agent.Linux)
@@ -1709,6 +1735,7 @@ cat /proc/$(pgrep Dhadgar.Agent.Linux)/status | grep Threads
 ```
 
 **Common Causes**:
+
 1. Log file not rotating
 2. Memory leak (report as bug)
 3. Too many game servers
@@ -1808,12 +1835,12 @@ dotnet publish src/Agents/Dhadgar.Agent.Linux -c Release -r linux-x64 --self-con
 
 ### Build Outputs
 
-| File | Description | Size (approx) |
-|------|-------------|---------------|
-| `Dhadgar.Agent.Linux` | Executable (self-contained) | ~80 MB |
-| `Dhadgar.Agent.Linux.dll` | .NET assembly (FDD) | ~50 KB |
-| `Dhadgar.Contracts.dll` | Shared contracts | ~20 KB |
-| `Dhadgar.Shared.dll` | Shared utilities | ~15 KB |
+| File                      | Description                 | Size (approx) |
+| ------------------------- | --------------------------- | ------------- |
+| `Dhadgar.Agent.Linux`     | Executable (self-contained) | ~80 MB        |
+| `Dhadgar.Agent.Linux.dll` | .NET assembly (FDD)         | ~50 KB        |
+| `Dhadgar.Contracts.dll`   | Shared contracts            | ~20 KB        |
+| `Dhadgar.Shared.dll`      | Shared utilities            | ~15 KB        |
 
 ### CI/CD Pipeline
 
@@ -1823,7 +1850,7 @@ The agent is built via Azure Pipelines as defined in `azure-pipelines.yml`:
 - id: Dhadgar.Agent.Linux
   projectPath: src/Agents/Dhadgar.Agent.Linux/Dhadgar.Agent.Linux.csproj
   testProjectPath: tests/Dhadgar.Agent.Linux.Tests/Dhadgar.Agent.Linux.Tests.csproj
-  deploy:  # Disabled: agent deployment not needed yet
+  deploy: # Disabled: agent deployment not needed yet
   # agent:
   #   runtimes: 'linux-x64'
   #   storageAccount: meridianconsoleblob

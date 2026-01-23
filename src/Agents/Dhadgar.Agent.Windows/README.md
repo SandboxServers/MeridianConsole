@@ -40,12 +40,14 @@ The Dhadgar.Agent.Windows is a customer-hosted component of the Meridian Console
 **IMPORTANT**: This project is currently in early scaffolding stage. The codebase provides the architectural foundation and project structure, but core functionality is planned for future implementation.
 
 **What exists today:**
+
 - Project structure and build configuration
 - Hello world surface area for smoke tests
 - Security analyzer integration (SecurityCodeScan)
 - References to shared contracts and utilities
 
 **What will be implemented:**
+
 - Agent enrollment and authentication with mTLS
 - Heartbeat and health reporting
 - Process spawning with Windows Job Objects isolation
@@ -76,14 +78,14 @@ The Windows agent sits between the control plane and the actual game server proc
 
 ### Comparison with Linux Agent
 
-| Feature | Windows Agent | Linux Agent |
-|---------|---------------|-------------|
-| Service Manager | Windows Service (SCM) | systemd |
-| Process Isolation | Windows Job Objects | cgroups + namespaces |
-| Privilege Model | Windows tokens, integrity levels | capabilities, seccomp |
-| Logging | Windows Event Log | journald/syslog |
-| Firewall | Windows Firewall API | iptables/nftables |
-| File Permissions | NTFS ACLs | POSIX permissions |
+| Feature           | Windows Agent                    | Linux Agent           |
+| ----------------- | -------------------------------- | --------------------- |
+| Service Manager   | Windows Service (SCM)            | systemd               |
+| Process Isolation | Windows Job Objects              | cgroups + namespaces  |
+| Privilege Model   | Windows tokens, integrity levels | capabilities, seccomp |
+| Logging           | Windows Event Log                | journald/syslog       |
+| Firewall          | Windows Firewall API             | iptables/nftables     |
+| File Permissions  | NTFS ACLs                        | POSIX permissions     |
 
 ---
 
@@ -133,12 +135,14 @@ The Windows agent runs on customer-owned hardware with elevated privileges. This
 **Critical Design Principle**: The agent makes OUTBOUND-ONLY connections to the control plane. This is non-negotiable.
 
 **Why this matters:**
+
 - Customers do not need to open inbound firewall ports
 - Reduces attack surface dramatically
 - The control plane cannot initiate connections to customer hardware
 - Commands are polled or delivered via persistent WebSocket connections
 
 **Implementation:**
+
 ```csharp
 // Planned: Agent initiates connection
 var connection = new HubConnectionBuilder()
@@ -190,12 +194,14 @@ All input from the control plane MUST be validated before use:
 ### Data Protection
 
 **Minimum data collection principle:**
+
 - Collect only what is needed for operation
 - Health metrics: CPU, memory, disk, network (no content)
 - Process metrics: PID, status, resource usage
 - No game content unless explicitly requested
 
 **Sensitive data handling:**
+
 - No plaintext secrets in logs
 - No stack traces exposed to external systems
 - Credentials stored in Windows Credential Manager (planned)
@@ -233,20 +239,24 @@ Additional build settings enforce strict analysis:
 ### System Requirements
 
 **Operating System:**
+
 - Windows 10 version 1809 or later (build 17763+)
 - Windows 11 (all versions)
 - Windows Server 2019 or later
 
 **Runtime:**
+
 - .NET 10 Runtime (included with self-contained deployment)
 - OR .NET 10 Runtime installed separately (framework-dependent deployment)
 
 **Hardware:**
+
 - Minimum: 2 CPU cores, 2 GB RAM (for agent only)
 - Recommended: 4+ CPU cores, 8+ GB RAM (for agent + game servers)
 - Storage: Varies by game servers managed
 
 **Network:**
+
 - Outbound HTTPS (port 443) to control plane
 - Outbound WebSocket (WSS) to control plane
 - Inbound ports as required by game servers
@@ -269,6 +279,7 @@ msiexec /i dhadgar-agent-windows.msi
 ```
 
 The MSI installer will:
+
 1. Install the agent to `C:\Program Files\Meridian Console\Agent\`
 2. Create the Windows Service
 3. Configure the firewall (outbound rules)
@@ -320,6 +331,7 @@ After installation, the agent must be enrolled with the control plane:
    - Token expires in 24 hours
 
 2. **Run Enrollment**
+
    ```powershell
    # Via service configuration
    Set-ItemProperty -Path "HKLM:\SOFTWARE\Meridian Console\Agent" `
@@ -348,6 +360,7 @@ The agent supports automatic updates from the control plane (planned):
    - Rollback on failure
 
 2. **Manual Updates**
+
    ```powershell
    # Stop the service
    Stop-Service -Name "DhadgarAgent"
@@ -454,7 +467,16 @@ Configuration is loaded in this order (later overrides earlier):
       "TempDirectory": "C:\\ProgramData\\Meridian Console\\Agent\\Temp",
       "MaxUploadSizeMB": 1024,
       "MaxDownloadSizeMB": 10240,
-      "AllowedExtensions": [".zip", ".exe", ".dll", ".bat", ".cfg", ".json", ".xml", ".txt"]
+      "AllowedExtensions": [
+        ".zip",
+        ".exe",
+        ".dll",
+        ".bat",
+        ".cfg",
+        ".json",
+        ".xml",
+        ".txt"
+      ]
     },
 
     // Security
@@ -537,14 +559,14 @@ The Windows agent runs as a Windows Service managed by the Service Control Manag
 
 ### Service Properties
 
-| Property | Value |
-|----------|-------|
-| Service Name | `DhadgarAgent` |
-| Display Name | `Meridian Console Agent` |
-| Description | Customer-hosted agent for Meridian Console game server management |
-| Start Type | Automatic (Delayed Start recommended) |
-| Account | `Local System` (default) or dedicated service account |
-| Dependencies | None (or specific network services if required) |
+| Property     | Value                                                             |
+| ------------ | ----------------------------------------------------------------- |
+| Service Name | `DhadgarAgent`                                                    |
+| Display Name | `Meridian Console Agent`                                          |
+| Description  | Customer-hosted agent for Meridian Console game server management |
+| Start Type   | Automatic (Delayed Start recommended)                             |
+| Account      | `Local System` (default) or dedicated service account             |
+| Dependencies | None (or specific network services if required)                   |
 
 ### Service Implementation (Planned)
 
@@ -622,25 +644,30 @@ Get-CimInstance -ClassName Win32_Service -Filter "Name='DhadgarAgent'"
 ### Service Account Options
 
 **Option 1: Local System (Default)**
+
 - Full access to local system
 - Simplest to configure
 - Highest privileges
 
 **Option 2: Network Service**
+
 - Network access as machine account
 - Reduced local privileges
 - Good for joined-domain scenarios
 
 **Option 3: Dedicated Service Account (Recommended for Production)**
+
+> **Security Note**: Generate a strong, unique password using a password manager or generator. Never use example passwords in production.
+
 ```powershell
-# Create service account
-New-LocalUser -Name "svc_dhadgar" -Password (ConvertTo-SecureString "ComplexPassword123!" -AsPlainText -Force) -PasswordNeverExpires -UserMayNotChangePassword
+# Create service account (replace <StrongPasswordHere> with a generated password)
+New-LocalUser -Name "svc_dhadgar" -Password (ConvertTo-SecureString "<StrongPasswordHere>" -AsPlainText -Force) -PasswordNeverExpires -UserMayNotChangePassword
 
 # Grant "Log on as a service" right
 # (Use Local Security Policy or secedit)
 
-# Set service to run as this account
-sc.exe config DhadgarAgent obj= ".\svc_dhadgar" password= "ComplexPassword123!"
+# Set service to run as this account (replace <StrongPasswordHere> with the same password)
+sc.exe config DhadgarAgent obj= ".\svc_dhadgar" password= "<StrongPasswordHere>"
 ```
 
 ---
@@ -683,6 +710,7 @@ public class WindowsProcessManager : IProcessManager
 ```
 
 **Benefits of Job Objects:**
+
 - Memory limits enforced by OS
 - CPU time limits (optional)
 - Process tree management (kill children on exit)
@@ -693,11 +721,11 @@ public class WindowsProcessManager : IProcessManager
 
 Game server processes run at lower integrity levels than the agent:
 
-| Component | Integrity Level |
-|-----------|-----------------|
-| Agent Service | High (or System) |
-| Game Server Processes | Medium |
-| Untrusted Downloads | Low |
+| Component             | Integrity Level  |
+| --------------------- | ---------------- |
+| Agent Service         | High (or System) |
+| Game Server Processes | Medium           |
+| Untrusted Downloads   | Low              |
 
 ```csharp
 // Planned: Lower process integrity
@@ -857,13 +885,13 @@ public async Task<GameServerProcess> SpawnGameServerAsync(SpawnRequest request)
 
 Each game server process is isolated via Windows Job Objects:
 
-| Resource | Enforcement |
-|----------|-------------|
-| Memory | Hard limit via Job Object |
-| CPU Time | Soft limit with throttling |
-| Process Count | Limit child processes |
-| I/O Rate | Rate limiting (Win 8+) |
-| Network | Bandwidth limiting (Win 10+) |
+| Resource      | Enforcement                  |
+| ------------- | ---------------------------- |
+| Memory        | Hard limit via Job Object    |
+| CPU Time      | Soft limit with throttling   |
+| Process Count | Limit child processes        |
+| I/O Rate      | Rate limiting (Win 8+)       |
+| Network       | Bandwidth limiting (Win 10+) |
 
 ### Process Monitoring
 
@@ -945,29 +973,29 @@ process.OutputDataReceived += (sender, args) =>
 
 The agent service account requires these permissions:
 
-| Permission | Reason |
-|------------|--------|
-| Log on as a service | Run as Windows Service |
-| Create a token object | Process token manipulation |
+| Permission                   | Reason                      |
+| ---------------------------- | --------------------------- |
+| Log on as a service          | Run as Windows Service      |
+| Create a token object        | Process token manipulation  |
 | Increase scheduling priority | Process priority management |
-| Adjust memory quotas | Memory limit enforcement |
-| Replace process-level token | Process isolation |
+| Adjust memory quotas         | Memory limit enforcement    |
+| Replace process-level token  | Process isolation           |
 
 ### File System Permissions
 
-| Path | Permission | Reason |
-|------|------------|--------|
-| `C:\Program Files\Meridian Console\Agent\` | Read | Agent binaries |
-| `C:\ProgramData\Meridian Console\Agent\` | Full Control | Configuration, logs |
-| `C:\GameServers\` | Full Control | Game server files |
-| Temp directory | Full Control | File operations |
+| Path                                       | Permission   | Reason              |
+| ------------------------------------------ | ------------ | ------------------- |
+| `C:\Program Files\Meridian Console\Agent\` | Read         | Agent binaries      |
+| `C:\ProgramData\Meridian Console\Agent\`   | Full Control | Configuration, logs |
+| `C:\GameServers\`                          | Full Control | Game server files   |
+| Temp directory                             | Full Control | File operations     |
 
 ### Registry Permissions
 
-| Key | Permission | Reason |
-|-----|------------|--------|
-| `HKLM\SOFTWARE\Meridian Console` | Full Control | Agent configuration |
-| `HKLM\SYSTEM\CurrentControlSet\Services\DhadgarAgent` | Read | Service configuration |
+| Key                                                   | Permission   | Reason                |
+| ----------------------------------------------------- | ------------ | --------------------- |
+| `HKLM\SOFTWARE\Meridian Console`                      | Full Control | Agent configuration   |
+| `HKLM\SYSTEM\CurrentControlSet\Services\DhadgarAgent` | Read         | Service configuration |
 
 ### Certificate Store Permissions
 
@@ -991,14 +1019,17 @@ Set-Acl $keyFullPath $acl
 ### UAC Considerations
 
 **Installation**: Requires elevation (Administrator)
+
 - MSI installer requests elevation via manifest
 - Manual installation must be run elevated
 
 **Runtime**: Does not require elevation
+
 - Service runs with configured account
 - Game server processes run at lower integrity
 
 **Management**: Some operations require elevation
+
 - Service start/stop: Administrator
 - Configuration changes: Administrator
 - Log viewing: No elevation needed
@@ -1037,20 +1068,20 @@ The agent requires the following firewall rules:
 
 **Outbound Rules (Required):**
 
-| Rule Name | Direction | Port | Protocol | Purpose |
-|-----------|-----------|------|----------|---------|
-| Meridian Agent - Control Plane | Outbound | 443 | TCP | HTTPS to control plane |
-| Meridian Agent - Control Plane WSS | Outbound | 443 | TCP | WebSocket to control plane |
+| Rule Name                          | Direction | Port | Protocol | Purpose                    |
+| ---------------------------------- | --------- | ---- | -------- | -------------------------- |
+| Meridian Agent - Control Plane     | Outbound  | 443  | TCP      | HTTPS to control plane     |
+| Meridian Agent - Control Plane WSS | Outbound  | 443  | TCP      | WebSocket to control plane |
 
 **Inbound Rules (Optional, for game servers):**
 
 Game-specific inbound rules are dynamically managed based on game server configuration:
 
-| Example | Direction | Port | Protocol |
-|---------|-----------|------|----------|
-| Minecraft Server | Inbound | 25565 | TCP |
-| Valheim Server | Inbound | 2456-2458 | UDP |
-| ARK Server | Inbound | 7777, 27015 | UDP |
+| Example          | Direction | Port        | Protocol |
+| ---------------- | --------- | ----------- | -------- |
+| Minecraft Server | Inbound   | 25565       | TCP      |
+| Valheim Server   | Inbound   | 2456-2458   | UDP      |
+| ARK Server       | Inbound   | 7777, 27015 | UDP      |
 
 ### Automatic Firewall Management (Planned)
 
@@ -1154,14 +1185,14 @@ Get-EventLog -LogName Application -Source "Meridian Console Agent" -EntryType Er
 
 **Event IDs:**
 
-| ID Range | Category |
-|----------|----------|
-| 1000-1099 | Service lifecycle |
+| ID Range  | Category                    |
+| --------- | --------------------------- |
+| 1000-1099 | Service lifecycle           |
 | 2000-2099 | Control plane communication |
-| 3000-3099 | Process management |
-| 4000-4099 | File operations |
-| 5000-5099 | Security events |
-| 9000-9099 | Errors |
+| 3000-3099 | Process management          |
+| 4000-4099 | File operations             |
+| 5000-5099 | Security events             |
+| 9000-9099 | Errors                      |
 
 ### Log File Format
 
@@ -1210,14 +1241,14 @@ Get-Content "C:\ProgramData\Meridian Console\Agent\Logs\agent-*.log" |
 
 ### Log Levels
 
-| Level | When Used |
-|-------|-----------|
-| Trace | Detailed debugging (performance impact) |
-| Debug | Debugging information |
-| Information | Normal operations |
-| Warning | Recoverable issues |
-| Error | Failures requiring attention |
-| Critical | Service-affecting failures |
+| Level       | When Used                               |
+| ----------- | --------------------------------------- |
+| Trace       | Detailed debugging (performance impact) |
+| Debug       | Debugging information                   |
+| Information | Normal operations                       |
+| Warning     | Recoverable issues                      |
+| Error       | Failures requiring attention            |
+| Critical    | Service-affecting failures              |
 
 Configure log level in `appsettings.json`:
 
@@ -1240,10 +1271,12 @@ Configure log level in `appsettings.json`:
 #### Agent Service Won't Start
 
 **Symptoms:**
+
 - Service fails to start
 - Event log shows startup errors
 
 **Diagnostics:**
+
 ```powershell
 # Check service status
 Get-Service -Name "DhadgarAgent" | Select-Object *
@@ -1256,6 +1289,7 @@ Get-EventLog -LogName Application -Source "Meridian Console Agent" -Newest 20
 ```
 
 **Common Causes:**
+
 1. Missing configuration file
 2. Invalid configuration values
 3. Certificate not found or expired
@@ -1265,10 +1299,12 @@ Get-EventLog -LogName Application -Source "Meridian Console Agent" -Newest 20
 #### Cannot Connect to Control Plane
 
 **Symptoms:**
+
 - Agent starts but shows "disconnected" status
 - Heartbeat failures in logs
 
 **Diagnostics:**
+
 ```powershell
 # Test network connectivity
 Test-NetConnection -ComputerName api.meridianconsole.com -Port 443
@@ -1282,6 +1318,7 @@ netsh winhttp show proxy
 ```
 
 **Common Causes:**
+
 1. Firewall blocking outbound 443
 2. Proxy not configured
 3. Certificate validation failure
@@ -1291,10 +1328,12 @@ netsh winhttp show proxy
 #### Game Server Fails to Start
 
 **Symptoms:**
+
 - Process spawns but immediately exits
 - Error in agent logs about process failure
 
 **Diagnostics:**
+
 ```powershell
 # Check game server logs
 Get-Content "C:\GameServers\{org}\{server}\logs\*.log" -Tail 100
@@ -1308,6 +1347,7 @@ Set-Location "C:\GameServers\{org}\{server}"
 ```
 
 **Common Causes:**
+
 1. Missing game files
 2. Incorrect command arguments
 3. Port already in use
@@ -1317,10 +1357,12 @@ Set-Location "C:\GameServers\{org}\{server}"
 #### High Memory Usage
 
 **Symptoms:**
+
 - Agent process using excessive memory
 - System performance degradation
 
 **Diagnostics:**
+
 ```powershell
 # Check agent memory
 Get-Process -Name "Dhadgar.Agent.Windows" | Select-Object WorkingSet64, PrivateMemorySize64
@@ -1330,6 +1372,7 @@ Get-Process -Name "Dhadgar.Agent.Windows" | Select-Object WorkingSet64, PrivateM
 ```
 
 **Common Causes:**
+
 1. Console buffer not being flushed
 2. Large number of active game servers
 3. Memory leak (report as bug)
@@ -1338,11 +1381,13 @@ Get-Process -Name "Dhadgar.Agent.Windows" | Select-Object WorkingSet64, PrivateM
 #### Certificate Issues
 
 **Symptoms:**
+
 - Authentication failures
 - "Certificate not found" errors
 - "Certificate expired" errors
 
 **Diagnostics:**
+
 ```powershell
 # List agent certificates
 Get-ChildItem Cert:\LocalMachine\My |
@@ -1358,6 +1403,7 @@ $cert.HasPrivateKey
 ```
 
 **Common Causes:**
+
 1. Certificate expired
 2. Private key permissions incorrect
 3. Certificate revoked
@@ -1499,18 +1545,18 @@ The agent is built as part of the main Azure Pipelines CI:
 ```yaml
 # In azure-pipelines.yml
 - task: DotNetCoreCLI@2
-  displayName: 'Build Windows Agent'
+  displayName: "Build Windows Agent"
   inputs:
-    command: 'build'
-    projects: 'src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj'
-    arguments: '-c Release'
+    command: "build"
+    projects: "src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj"
+    arguments: "-c Release"
 
 - task: DotNetCoreCLI@2
-  displayName: 'Publish Windows Agent'
+  displayName: "Publish Windows Agent"
   inputs:
-    command: 'publish'
-    projects: 'src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj'
-    arguments: '-c Release -r win-x64 --self-contained true -o $(Build.ArtifactStagingDirectory)/windows-agent'
+    command: "publish"
+    projects: "src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj"
+    arguments: "-c Release -r win-x64 --self-contained true -o $(Build.ArtifactStagingDirectory)/windows-agent"
 ```
 
 ---
@@ -1638,9 +1684,9 @@ dotnet test tests/Dhadgar.Agent.Windows.Tests --filter "Category!=Integration"
 
 ## Version History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 0.1.0 | Scaffolding | Initial project structure, security analyzers |
+| Version | Date        | Changes                                       |
+| ------- | ----------- | --------------------------------------------- |
+| 0.1.0   | Scaffolding | Initial project structure, security analyzers |
 
 ---
 
@@ -1652,4 +1698,4 @@ This project is part of the Meridian Console (Dhadgar) platform developed by the
 
 ---
 
-*This documentation was generated with assistance from Claude Code. Last updated: January 2026*
+_This documentation was generated with assistance from Claude Code. Last updated: January 2026_

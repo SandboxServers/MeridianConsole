@@ -49,6 +49,7 @@ From the project's CLAUDE.md:
 > Services MUST NOT reference each other via `ProjectReference`. This prevents distributed monolith anti-patterns.
 
 **Allowed dependencies for any service:**
+
 - `Dhadgar.Contracts` - DTOs and message contracts (this library)
 - `Dhadgar.Shared` - Utilities and primitives
 - `Dhadgar.Messaging` - MassTransit/RabbitMQ conventions
@@ -58,7 +59,7 @@ From the project's CLAUDE.md:
 
 ## Directory Structure
 
-```
+```text
 Dhadgar.Contracts/
 ├── Dhadgar.Contracts.csproj    # Project file (minimal, no package refs)
 ├── CLAUDE.md                   # AI assistant context file
@@ -76,11 +77,11 @@ Dhadgar.Contracts/
 
 Contracts are organized into folders by **domain** (the service that owns them):
 
-| Folder | Owner Service | Contents |
-|--------|---------------|----------|
+| Folder       | Owner Service    | Contents                              |
+| ------------ | ---------------- | ------------------------------------- |
 | `/Identity/` | Identity Service | User, org, membership events and DTOs |
-| `/Servers/` | Servers Service | Server provisioning contracts |
-| Root level | Cross-cutting | Pagination, utilities |
+| `/Servers/`  | Servers Service  | Server provisioning contracts         |
+| Root level   | Cross-cutting    | Pagination, utilities                 |
 
 When adding contracts for a new domain (e.g., Billing), create a new folder: `/Billing/`.
 
@@ -90,14 +91,14 @@ When adding contracts for a new domain (e.g., Billing), create a new folder: `/B
 
 ### General Rules
 
-| Type | Naming Pattern | Examples |
-|------|----------------|----------|
-| **Data carriers** | Suffix with `Info` | `UserInfo`, `OrganizationInfo`, `MembershipInfo` |
-| **Request objects** | Suffix with `Request` | `PaginationRequest`, `MemberInviteRequest` |
-| **Response wrappers** | Suffix with `Response` | `PagedResponse<T>`, `MemberClaimsResponse` |
-| **Service interfaces** | Prefix with `I`, suffix with `Client` | `IIdentityServiceClient` |
-| **Constants classes** | Descriptive plural nouns | `MembershipChangeTypes` |
-| **Value types** | Use the entity name + `Id` | `ServerId` |
+| Type                   | Naming Pattern                        | Examples                                         |
+| ---------------------- | ------------------------------------- | ------------------------------------------------ |
+| **Data carriers**      | Suffix with `Info`                    | `UserInfo`, `OrganizationInfo`, `MembershipInfo` |
+| **Request objects**    | Suffix with `Request`                 | `PaginationRequest`, `MemberInviteRequest`       |
+| **Response wrappers**  | Suffix with `Response`                | `PagedResponse<T>`, `MemberClaimsResponse`       |
+| **Service interfaces** | Prefix with `I`, suffix with `Client` | `IIdentityServiceClient`                         |
+| **Constants classes**  | Descriptive plural nouns              | `MembershipChangeTypes`                          |
+| **Value types**        | Use the entity name + `Id`            | `ServerId`                                       |
 
 ### Record vs Class
 
@@ -116,6 +117,7 @@ public class UserInfo { ... }
 ```
 
 Records provide:
+
 - Immutability by default
 - Value-based equality
 - Concise syntax for DTOs
@@ -141,10 +143,10 @@ public sealed record UserInfo(
 
 The library distinguishes between two types of messages:
 
-| Type | Tense | Purpose | Naming Example |
-|------|-------|---------|----------------|
-| **Events** | Past tense | Describe what happened | `UserAuthenticated`, `OrganizationCreated` |
-| **Commands** | Imperative/Requested | Request an action | `ServerProvisionRequested` |
+| Type         | Tense                | Purpose                | Naming Example                             |
+| ------------ | -------------------- | ---------------------- | ------------------------------------------ |
+| **Events**   | Past tense           | Describe what happened | `UserAuthenticated`, `OrganizationCreated` |
+| **Commands** | Imperative/Requested | Request an action      | `ServerProvisionRequested`                 |
 
 ### Event Structure
 
@@ -185,10 +187,10 @@ public record ServerProvisionRequested(
 
 For collections in contracts, use:
 
-| Type | When to Use |
-|------|-------------|
-| `IReadOnlyCollection<T>` | Most cases - signals immutability |
-| `IReadOnlyDictionary<K,V>` | Key-value pairs |
+| Type                       | When to Use                       |
+| -------------------------- | --------------------------------- |
+| `IReadOnlyCollection<T>`   | Most cases - signals immutability |
+| `IReadOnlyDictionary<K,V>` | Key-value pairs                   |
 
 ```csharp
 public record UserAuthenticated(
@@ -216,6 +218,7 @@ public static class MembershipChangeTypes
 ```
 
 **Why constants over enums?**
+
 - Easier serialization/deserialization across services
 - More resilient to version mismatches
 - Human-readable in logs and message queues
@@ -291,15 +294,16 @@ Services implement these interfaces using HTTP clients to call internal endpoint
 
 ### Semantic Versioning Principles
 
-| Change Type | Version Bump | Example |
-|-------------|--------------|---------|
-| **Breaking** | MAJOR | Removing a field, changing a type |
-| **New feature** | MINOR | Adding a new contract or optional field |
-| **Bug fix** | PATCH | Documentation, computed property fixes |
+| Change Type     | Version Bump | Example                                 |
+| --------------- | ------------ | --------------------------------------- |
+| **Breaking**    | MAJOR        | Removing a field, changing a type       |
+| **New feature** | MINOR        | Adding a new contract or optional field |
+| **Bug fix**     | PATCH        | Documentation, computed property fixes  |
 
 ### Backward-Compatible Changes
 
 **Safe to add:**
+
 - New contracts (events, commands, DTOs)
 - New nullable fields to existing contracts
 - New computed properties
@@ -335,6 +339,7 @@ public record UserCreatedV2(...);  // New version
 ### Exchange Name Implications
 
 MassTransit generates exchange names from type names:
+
 - `UserAuthenticated` -> `meridian.userauthenticated`
 
 **Renaming a type changes the exchange name** and is a breaking change.
@@ -508,13 +513,13 @@ Before adding a new contract:
 
 2. **Choose the contract type**
 
-   | If you need... | Create a... |
-   |----------------|-------------|
-   | Notify services something happened | Event record |
-   | Request an async action | Command record |
-   | Transfer data in HTTP APIs | DTO record |
-   | Define service-to-service contract | Interface + DTOs |
-   | Share string constants | Static class with const strings |
+   | If you need...                     | Create a...                     |
+   | ---------------------------------- | ------------------------------- |
+   | Notify services something happened | Event record                    |
+   | Request an async action            | Command record                  |
+   | Transfer data in HTTP APIs         | DTO record                      |
+   | Define service-to-service contract | Interface + DTOs                |
+   | Share string constants             | Static class with const strings |
 
 3. **Define the contract**
 
@@ -538,21 +543,20 @@ Before adding a new contract:
    Every public type should have a `<summary>` explaining its purpose.
 
 5. **Consider consumers**
-
    - Who will consume this contract?
    - What data do they need?
    - Is all the data necessary, or is some redundant?
 
 ### Anti-Patterns to Avoid
 
-| Anti-Pattern | Why It's Bad | Do This Instead |
-|--------------|--------------|-----------------|
-| Adding business logic | Contracts are pure data | Put logic in services |
-| Referencing external packages | Creates transitive dependencies | Keep Contracts dependency-free |
-| Using `List<T>` | Mutable, implies ownership | Use `IReadOnlyCollection<T>` |
-| Using classes | Mutable, complex equality | Use `record` types |
-| Embedding database entities | Couples to storage | Create separate DTOs |
-| Skipping timestamps | Loses audit trail | Include `OccurredAtUtc` on events |
+| Anti-Pattern                  | Why It's Bad                    | Do This Instead                   |
+| ----------------------------- | ------------------------------- | --------------------------------- |
+| Adding business logic         | Contracts are pure data         | Put logic in services             |
+| Referencing external packages | Creates transitive dependencies | Keep Contracts dependency-free    |
+| Using `List<T>`               | Mutable, implies ownership      | Use `IReadOnlyCollection<T>`      |
+| Using classes                 | Mutable, complex equality       | Use `record` types                |
+| Embedding database entities   | Couples to storage              | Create separate DTOs              |
+| Skipping timestamps           | Loses audit trail               | Include `OccurredAtUtc` on events |
 
 ### Testing Contracts
 
@@ -583,15 +587,15 @@ public class PaginationTests
 
 ### Current Contract Inventory
 
-| Category | Count | Location |
-|----------|-------|----------|
-| Pagination types | 2 | `/Pagination.cs` |
-| Identity events | 16 | `/Identity/IdentityEvents.cs` |
-| Identity DTOs | 4 | `/Identity/IdentityServiceContracts.cs` |
-| Identity interfaces | 1 | `/Identity/IdentityServiceContracts.cs` |
-| Identity constants | 1 class | `/Identity/IdentityEvents.cs` |
-| Server contracts | 3 | `/Servers/Contracts.cs` |
-| Utility types | 1 | `/Hello.cs` |
+| Category            | Count   | Location                                |
+| ------------------- | ------- | --------------------------------------- |
+| Pagination types    | 2       | `/Pagination.cs`                        |
+| Identity events     | 16      | `/Identity/IdentityEvents.cs`           |
+| Identity DTOs       | 4       | `/Identity/IdentityServiceContracts.cs` |
+| Identity interfaces | 1       | `/Identity/IdentityServiceContracts.cs` |
+| Identity constants  | 1 class | `/Identity/IdentityEvents.cs`           |
+| Server contracts    | 3       | `/Servers/Contracts.cs`                 |
+| Utility types       | 1       | `/Hello.cs`                             |
 
 ### Consuming Services
 

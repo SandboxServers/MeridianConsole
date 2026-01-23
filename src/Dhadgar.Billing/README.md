@@ -18,7 +18,7 @@ Meridian Console is a multi-tenant SaaS platform that orchestrates game servers 
 
 ### Service Role in Architecture
 
-```
+```text
                                     +------------------+
                                     |     Gateway      |
                                     | (YARP @ :5000)   |
@@ -39,6 +39,7 @@ Meridian Console is a multi-tenant SaaS platform that orchestrates game servers 
 ```
 
 The Billing service sits as a cross-cutting concern, interfacing with:
+
 - **Identity Service**: To validate organization context and user permissions
 - **Servers Service**: To meter server instance counts and configurations
 - **Nodes Service**: To meter node registrations and capacity
@@ -55,27 +56,27 @@ The Billing service sits as a cross-cutting concern, interfacing with:
 
 ### What Exists Today
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| Project Structure | Complete | Standard .NET 10 Web API project with EF Core |
-| Database Context | Scaffolded | `BillingDbContext` with placeholder `SampleEntity` |
-| Health Endpoints | Complete | `/`, `/hello`, `/healthz` endpoints |
-| Swagger/OpenAPI | Complete | API documentation in Development mode |
-| Gateway Routing | Configured | Routes at `/api/v1/billing/*` with `TenantScoped` policy |
-| Integration Tests | Complete | Basic endpoint and Swagger verification tests |
+| Component         | Status     | Description                                              |
+| ----------------- | ---------- | -------------------------------------------------------- |
+| Project Structure | Complete   | Standard .NET 10 Web API project with EF Core            |
+| Database Context  | Scaffolded | `BillingDbContext` with placeholder `SampleEntity`       |
+| Health Endpoints  | Complete   | `/`, `/hello`, `/healthz` endpoints                      |
+| Swagger/OpenAPI   | Complete   | API documentation in Development mode                    |
+| Gateway Routing   | Configured | Routes at `/api/v1/billing/*` with `TenantScoped` policy |
+| Integration Tests | Complete   | Basic endpoint and Swagger verification tests            |
 
 ### What Needs Implementation
 
-| Component | Priority | Description |
-|-----------|----------|-------------|
-| Subscription Plans | High | Define plan tiers, features, and limits |
-| Stripe Integration | High | Payment processing and webhook handling |
-| Usage Metering | High | Track billable resources across services |
-| Invoice Generation | Medium | Create and deliver invoices |
-| Billing History | Medium | Query past invoices and payments |
-| Trial Periods | Medium | Time-limited free trials with conversion |
-| Proration | Low | Handle mid-cycle plan changes |
-| Tax Calculation | Low | Regional tax compliance |
+| Component          | Priority | Description                              |
+| ------------------ | -------- | ---------------------------------------- |
+| Subscription Plans | High     | Define plan tiers, features, and limits  |
+| Stripe Integration | High     | Payment processing and webhook handling  |
+| Usage Metering     | High     | Track billable resources across services |
+| Invoice Generation | Medium   | Create and deliver invoices              |
+| Billing History    | Medium   | Query past invoices and payments         |
+| Trial Periods      | Medium   | Time-limited free trials with conversion |
+| Proration          | Low      | Handle mid-cycle plan changes            |
+| Tax Calculation    | Low      | Regional tax compliance                  |
 
 ---
 
@@ -83,36 +84,36 @@ The Billing service sits as a cross-cutting concern, interfacing with:
 
 ### Core Technologies
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| .NET | 10.0 | Runtime platform |
-| ASP.NET Core | 10.0 | Web framework |
-| Entity Framework Core | 10.0 | ORM and database access |
-| PostgreSQL | 16 | Primary database |
-| Npgsql | 10.0 | PostgreSQL driver |
+| Technology            | Version | Purpose                 |
+| --------------------- | ------- | ----------------------- |
+| .NET                  | 10.0    | Runtime platform        |
+| ASP.NET Core          | 10.0    | Web framework           |
+| Entity Framework Core | 10.0    | ORM and database access |
+| PostgreSQL            | 16      | Primary database        |
+| Npgsql                | 10.0    | PostgreSQL driver       |
 
 ### Shared Libraries
 
-| Library | Purpose |
-|---------|---------|
-| `Dhadgar.Contracts` | Shared DTOs and message contracts |
-| `Dhadgar.Shared` | Common utilities and primitives |
-| `Dhadgar.Messaging` | MassTransit/RabbitMQ configuration |
+| Library                   | Purpose                                     |
+| ------------------------- | ------------------------------------------- |
+| `Dhadgar.Contracts`       | Shared DTOs and message contracts           |
+| `Dhadgar.Shared`          | Common utilities and primitives             |
+| `Dhadgar.Messaging`       | MassTransit/RabbitMQ configuration          |
 | `Dhadgar.ServiceDefaults` | Standard middleware, Swagger, observability |
 
 ### Messaging (Planned)
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| MassTransit | 8.3.6 | Message abstraction layer |
-| RabbitMQ | 3.x | Message broker |
+| Technology  | Version | Purpose                   |
+| ----------- | ------- | ------------------------- |
+| MassTransit | 8.3.6   | Message abstraction layer |
+| RabbitMQ    | 3.x     | Message broker            |
 
 ### External Integrations (Planned)
 
-| Integration | Purpose |
-|-------------|---------|
-| Stripe | Payment processing, subscription management |
-| Stripe Webhooks | Async payment event handling |
+| Integration     | Purpose                                     |
+| --------------- | ------------------------------------------- |
+| Stripe          | Payment processing, subscription management |
+| Stripe Webhooks | Async payment event handling                |
 
 ---
 
@@ -133,6 +134,7 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 ```
 
 This starts:
+
 - PostgreSQL on port `5432` (credentials: `dhadgar/dhadgar`)
 - RabbitMQ on ports `5672` (AMQP) and `15672` (Management UI)
 - Redis on port `6379`
@@ -151,7 +153,7 @@ dotnet run --project src/Dhadgar.Billing
 dotnet watch --project src/Dhadgar.Billing
 ```
 
-The service starts on **http://localhost:5020** (configured in `launchSettings.json`).
+The service starts on `http://localhost:5020` (configured in `launchSettings.json`).
 
 ### Verify Service Health
 
@@ -190,12 +192,12 @@ The Billing service will support a tiered subscription model:
 
 #### Planned Tier Structure
 
-| Tier | Target | Key Features |
-|------|--------|--------------|
-| **Free** | Hobbyists | 1 node, 3 servers, basic support |
-| **Starter** | Small communities | 3 nodes, 10 servers, email support |
-| **Professional** | Gaming communities | 10 nodes, 50 servers, priority support |
-| **Enterprise** | Large organizations | Unlimited nodes/servers, dedicated support, SLA |
+| Tier             | Target              | Key Features                                    |
+| ---------------- | ------------------- | ----------------------------------------------- |
+| **Free**         | Hobbyists           | 1 node, 3 servers, basic support                |
+| **Starter**      | Small communities   | 3 nodes, 10 servers, email support              |
+| **Professional** | Gaming communities  | 10 nodes, 50 servers, priority support          |
+| **Enterprise**   | Large organizations | Unlimited nodes/servers, dedicated support, SLA |
 
 #### Plan Configuration (Planned Schema)
 
@@ -229,14 +231,14 @@ The service will track billable resources across the platform:
 
 #### Metered Dimensions
 
-| Dimension | Source Service | Aggregation |
-|-----------|---------------|-------------|
-| Node count | Nodes | Daily high-water mark |
-| Server count | Servers | Daily high-water mark |
-| Storage used (GB) | Files | Daily average |
-| Bandwidth (GB) | Files, Console | Monthly total |
-| API calls | Gateway | Monthly total |
-| Console connections | Console | Peak concurrent |
+| Dimension           | Source Service | Aggregation           |
+| ------------------- | -------------- | --------------------- |
+| Node count          | Nodes          | Daily high-water mark |
+| Server count        | Servers        | Daily high-water mark |
+| Storage used (GB)   | Files          | Daily average         |
+| Bandwidth (GB)      | Files, Console | Monthly total         |
+| API calls           | Gateway        | Monthly total         |
+| Console connections | Console        | Peak concurrent       |
 
 #### Usage Recording (Planned)
 
@@ -281,24 +283,24 @@ Services publish usage events; Billing aggregates and stores them.
 
 #### Stripe Integration Points
 
-| Feature | Stripe API | Purpose |
-|---------|------------|---------|
-| Customers | `/v1/customers` | Link organizations to Stripe customers |
-| Subscriptions | `/v1/subscriptions` | Manage recurring billing |
-| Payment Methods | `/v1/payment_methods` | Store cards/payment sources |
-| Invoices | `/v1/invoices` | Generated invoices |
-| Webhooks | Webhook endpoints | Async event processing |
+| Feature         | Stripe API            | Purpose                                |
+| --------------- | --------------------- | -------------------------------------- |
+| Customers       | `/v1/customers`       | Link organizations to Stripe customers |
+| Subscriptions   | `/v1/subscriptions`   | Manage recurring billing               |
+| Payment Methods | `/v1/payment_methods` | Store cards/payment sources            |
+| Invoices        | `/v1/invoices`        | Generated invoices                     |
+| Webhooks        | Webhook endpoints     | Async event processing                 |
 
 #### Webhook Events to Handle
 
-| Event | Action |
-|-------|--------|
-| `customer.subscription.created` | Activate subscription, update plan |
-| `customer.subscription.updated` | Update limits, handle upgrades/downgrades |
-| `customer.subscription.deleted` | Trigger cancellation workflow |
-| `invoice.payment_succeeded` | Mark invoice paid, extend service |
-| `invoice.payment_failed` | Notify customer, initiate dunning |
-| `customer.subscription.trial_will_end` | Send trial ending notification |
+| Event                                  | Action                                    |
+| -------------------------------------- | ----------------------------------------- |
+| `customer.subscription.created`        | Activate subscription, update plan        |
+| `customer.subscription.updated`        | Update limits, handle upgrades/downgrades |
+| `customer.subscription.deleted`        | Trigger cancellation workflow             |
+| `invoice.payment_succeeded`            | Mark invoice paid, extend service         |
+| `invoice.payment_failed`               | Notify customer, initiate dunning         |
+| `customer.subscription.trial_will_end` | Send trial ending notification            |
 
 #### Payment Flow (Planned)
 
@@ -396,16 +398,17 @@ public class InvoiceLineItem
 
 #### Upgrade/Downgrade Handling
 
-| Scenario | Behavior |
-|----------|----------|
-| Upgrade mid-cycle | Immediate access, prorated charge |
-| Downgrade mid-cycle | Access until period end, then downgrade |
-| Cancel | Access until period end, then suspend |
-| Reactivate | If within grace period, restore; otherwise new subscription |
+| Scenario            | Behavior                                                    |
+| ------------------- | ----------------------------------------------------------- |
+| Upgrade mid-cycle   | Immediate access, prorated charge                           |
+| Downgrade mid-cycle | Access until period end, then downgrade                     |
+| Cancel              | Access until period end, then suspend                       |
+| Reactivate          | If within grace period, restore; otherwise new subscription |
 
 ### Organization Billing (Multi-Tenant)
 
 Each organization has its own:
+
 - Stripe Customer record
 - Subscription(s)
 - Payment methods
@@ -494,16 +497,16 @@ public sealed class SampleEntity
 
 #### Planned Entities Summary
 
-| Entity | Purpose |
-|--------|---------|
+| Entity                | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
 | `OrganizationBilling` | Links organization to Stripe customer, billing contact |
-| `SubscriptionPlan` | Defines available plans with limits and pricing |
-| `Subscription` | Active subscription linking org to plan |
-| `Invoice` | Generated invoices with status tracking |
-| `InvoiceLineItem` | Individual charges on an invoice |
-| `UsageRecord` | Time-series usage data for metering |
-| `PaymentMethod` | Stored payment methods (cards, etc.) |
-| `BillingEvent` | Audit trail of billing actions |
+| `SubscriptionPlan`    | Defines available plans with limits and pricing        |
+| `Subscription`        | Active subscription linking org to plan                |
+| `Invoice`             | Generated invoices with status tracking                |
+| `InvoiceLineItem`     | Individual charges on an invoice                       |
+| `UsageRecord`         | Time-series usage data for metering                    |
+| `PaymentMethod`       | Stored payment methods (cards, etc.)                   |
+| `BillingEvent`        | Audit trail of billing actions                         |
 
 ### Database Migrations
 
@@ -548,59 +551,59 @@ This is disabled in production - use explicit migration commands for production 
 
 ### Current Endpoints
 
-| Method | Path | Description | Response |
-|--------|------|-------------|----------|
-| GET | `/` | Service info | `{ service: "Dhadgar.Billing", message: "Hello from Dhadgar.Billing" }` |
-| GET | `/hello` | Hello world | `"Hello from Dhadgar.Billing"` |
-| GET | `/healthz` | Health check | `{ service: "Dhadgar.Billing", status: "ok" }` |
+| Method | Path       | Description  | Response                                                                |
+| ------ | ---------- | ------------ | ----------------------------------------------------------------------- |
+| GET    | `/`        | Service info | `{ service: "Dhadgar.Billing", message: "Hello from Dhadgar.Billing" }` |
+| GET    | `/hello`   | Hello world  | `"Hello from Dhadgar.Billing"`                                          |
+| GET    | `/healthz` | Health check | `{ service: "Dhadgar.Billing", status: "ok" }`                          |
 
 ### Planned Endpoints
 
 #### Subscription Management
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/plans` | List available subscription plans |
-| GET | `/plans/{id}` | Get plan details |
-| GET | `/subscription` | Get current organization subscription |
-| POST | `/subscription` | Create new subscription (checkout) |
-| PUT | `/subscription` | Update subscription (upgrade/downgrade) |
-| DELETE | `/subscription` | Cancel subscription |
-| POST | `/subscription/reactivate` | Reactivate cancelled subscription |
+| Method | Path                       | Description                             |
+| ------ | -------------------------- | --------------------------------------- |
+| GET    | `/plans`                   | List available subscription plans       |
+| GET    | `/plans/{id}`              | Get plan details                        |
+| GET    | `/subscription`            | Get current organization subscription   |
+| POST   | `/subscription`            | Create new subscription (checkout)      |
+| PUT    | `/subscription`            | Update subscription (upgrade/downgrade) |
+| DELETE | `/subscription`            | Cancel subscription                     |
+| POST   | `/subscription/reactivate` | Reactivate cancelled subscription       |
 
 #### Billing Information
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/billing` | Get organization billing info |
-| PUT | `/billing` | Update billing contact/address |
-| GET | `/billing/payment-methods` | List saved payment methods |
-| POST | `/billing/payment-methods` | Add payment method |
-| DELETE | `/billing/payment-methods/{id}` | Remove payment method |
-| PUT | `/billing/payment-methods/{id}/default` | Set default payment method |
+| Method | Path                                    | Description                    |
+| ------ | --------------------------------------- | ------------------------------ |
+| GET    | `/billing`                              | Get organization billing info  |
+| PUT    | `/billing`                              | Update billing contact/address |
+| GET    | `/billing/payment-methods`              | List saved payment methods     |
+| POST   | `/billing/payment-methods`              | Add payment method             |
+| DELETE | `/billing/payment-methods/{id}`         | Remove payment method          |
+| PUT    | `/billing/payment-methods/{id}/default` | Set default payment method     |
 
 #### Invoices
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/invoices` | List invoices with pagination |
-| GET | `/invoices/{id}` | Get invoice details |
-| GET | `/invoices/{id}/pdf` | Download invoice PDF |
-| GET | `/invoices/upcoming` | Preview next invoice |
+| Method | Path                 | Description                   |
+| ------ | -------------------- | ----------------------------- |
+| GET    | `/invoices`          | List invoices with pagination |
+| GET    | `/invoices/{id}`     | Get invoice details           |
+| GET    | `/invoices/{id}/pdf` | Download invoice PDF          |
+| GET    | `/invoices/upcoming` | Preview next invoice          |
 
 #### Usage
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/usage` | Get current period usage summary |
-| GET | `/usage/history` | Get historical usage data |
-| GET | `/usage/limits` | Get current plan limits vs. usage |
+| Method | Path             | Description                       |
+| ------ | ---------------- | --------------------------------- |
+| GET    | `/usage`         | Get current period usage summary  |
+| GET    | `/usage/history` | Get historical usage data         |
+| GET    | `/usage/limits`  | Get current plan limits vs. usage |
 
 #### Webhooks (Internal)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/webhooks/stripe` | Stripe webhook endpoint |
+| Method | Path               | Description             |
+| ------ | ------------------ | ----------------------- |
+| POST   | `/webhooks/stripe` | Stripe webhook endpoint |
 
 ### Gateway Routing
 
@@ -614,14 +617,13 @@ The Gateway routes billing requests with the following configuration:
     "Match": { "Path": "/api/v1/billing/{**catch-all}" },
     "AuthorizationPolicy": "TenantScoped",
     "RateLimiterPolicy": "PerTenant",
-    "Transforms": [
-      { "PathRemovePrefix": "/api/v1/billing" }
-    ]
+    "Transforms": [{ "PathRemovePrefix": "/api/v1/billing" }]
   }
 }
 ```
 
 **Key Points:**
+
 - Requires `TenantScoped` authorization (user must belong to an organization)
 - Rate limited per tenant
 - Path prefix `/api/v1/billing` is stripped before forwarding
@@ -635,6 +637,7 @@ The Gateway routes billing requests with the following configuration:
 The Billing service requires integration with Identity for:
 
 #### User Context
+
 - Validating the authenticated user
 - Extracting organization context from JWT claims
 - Checking `org:billing` permission for billing management operations
@@ -642,6 +645,7 @@ The Billing service requires integration with Identity for:
 #### Permission Required
 
 The `org:billing` claim (defined in Identity's claim definitions) is required to:
+
 - View billing information
 - Manage payment methods
 - Change subscription plans
@@ -663,11 +667,11 @@ app.MapGet("/billing", async (HttpContext context, BillingService billing) =>
 
 Subscribe to Identity events via MassTransit:
 
-| Event | Billing Action |
-|-------|----------------|
-| `OrganizationCreated` | Create billing record, apply free tier |
-| `OrganizationDeleted` | Cancel subscription, archive billing data |
-| `OwnershipTransferred` | Update billing contact notification |
+| Event                  | Billing Action                            |
+| ---------------------- | ----------------------------------------- |
+| `OrganizationCreated`  | Create billing record, apply free tier    |
+| `OrganizationDeleted`  | Cancel subscription, archive billing data |
+| `OwnershipTransferred` | Update billing contact notification       |
 
 ### Service-to-Service Communication
 
@@ -718,7 +722,7 @@ public record UsageLimitExceeded(
 // appsettings.json (planned)
 {
   "Stripe": {
-    "SecretKey": "sk_test_...",    // Use user-secrets in dev!
+    "SecretKey": "sk_test_...", // Use user-secrets in dev!
     "WebhookSecret": "whsec_...",
     "PublishableKey": "pk_test_..."
   }
@@ -831,14 +835,14 @@ dotnet user-secrets list --project src/Dhadgar.Billing
 
 In production, configure via environment variables:
 
-| Variable | Description |
-|----------|-------------|
-| `ConnectionStrings__Postgres` | PostgreSQL connection string |
-| `Stripe__SecretKey` | Stripe API secret key |
-| `Stripe__WebhookSecret` | Stripe webhook signing secret |
-| `RabbitMq__Host` | RabbitMQ hostname |
-| `RabbitMq__Username` | RabbitMQ username |
-| `RabbitMq__Password` | RabbitMQ password |
+| Variable                      | Description                   |
+| ----------------------------- | ----------------------------- |
+| `ConnectionStrings__Postgres` | PostgreSQL connection string  |
+| `Stripe__SecretKey`           | Stripe API secret key         |
+| `Stripe__WebhookSecret`       | Stripe webhook signing secret |
+| `RabbitMq__Host`              | RabbitMQ hostname             |
+| `RabbitMq__Username`          | RabbitMQ username             |
+| `RabbitMq__Password`          | RabbitMQ password             |
 
 ---
 
@@ -939,12 +943,12 @@ public async Task SwaggerEndpoint_DocumentsHealthEndpoints()
 
 ### Planned Test Categories
 
-| Category | Purpose |
-|----------|---------|
-| Unit Tests | Test individual services, validators |
-| Integration Tests | Test database operations, API endpoints |
+| Category          | Purpose                                       |
+| ----------------- | --------------------------------------------- |
+| Unit Tests        | Test individual services, validators          |
+| Integration Tests | Test database operations, API endpoints       |
 | Stripe Mock Tests | Test payment flows with mock Stripe responses |
-| Contract Tests | Verify message contract compatibility |
+| Contract Tests    | Verify message contract compatibility         |
 
 ### Testing Stripe Integration
 
@@ -1057,13 +1061,13 @@ The service uses structured logging with correlation IDs from `Dhadgar.ServiceDe
 
 Custom billing metrics to expose:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `billing_subscriptions_active` | Gauge | Current active subscriptions by plan |
-| `billing_invoices_generated` | Counter | Invoices generated |
-| `billing_payments_processed` | Counter | Successful payments |
-| `billing_payments_failed` | Counter | Failed payments |
-| `billing_mrr_cents` | Gauge | Monthly recurring revenue |
+| Metric                         | Type    | Description                          |
+| ------------------------------ | ------- | ------------------------------------ |
+| `billing_subscriptions_active` | Gauge   | Current active subscriptions by plan |
+| `billing_invoices_generated`   | Counter | Invoices generated                   |
+| `billing_payments_processed`   | Counter | Successful payments                  |
+| `billing_payments_failed`      | Counter | Failed payments                      |
+| `billing_mrr_cents`            | Gauge   | Monthly recurring revenue            |
 
 ### Health Checks (Planned)
 
@@ -1080,16 +1084,17 @@ builder.Services.AddHealthChecks()
 
 ### Sensitive Data Handling
 
-| Data Type | Handling |
-|-----------|----------|
-| Stripe API Keys | User secrets / environment variables, never in config files |
-| Payment Card Data | Never stored - Stripe handles PCI compliance |
-| Invoice PDFs | Generated by Stripe, linked by URL |
-| Customer Email | Stored encrypted at rest |
+| Data Type         | Handling                                                    |
+| ----------------- | ----------------------------------------------------------- |
+| Stripe API Keys   | User secrets / environment variables, never in config files |
+| Payment Card Data | Never stored - Stripe handles PCI compliance                |
+| Invoice PDFs      | Generated by Stripe, linked by URL                          |
+| Customer Email    | Stored encrypted at rest                                    |
 
 ### Authorization
 
 All billing endpoints require:
+
 1. Valid JWT token (authenticated user)
 2. Organization context (multi-tenant)
 3. `org:billing` permission for management operations
@@ -1119,37 +1124,37 @@ app.MapPost("/webhooks/stripe", async (HttpRequest request, IConfiguration confi
 
 ### Internal Documentation
 
-| Document | Path | Description |
-|----------|------|-------------|
-| Main README | `/CLAUDE.md` | Project overview and architecture |
-| Development Setup | `/docs/DEVELOPMENT_SETUP.md` | Environment setup guide |
-| Configuration Management | `/docs/CONFIGURATION-MANAGEMENT.md` | Config best practices |
-| Identity API Reference | `/docs/identity-api-reference.md` | Identity service API |
-| Identity Claims | `/docs/identity-claims-reference.md` | Permission claims |
+| Document                 | Path                                 | Description                       |
+| ------------------------ | ------------------------------------ | --------------------------------- |
+| Main README              | `/CLAUDE.md`                         | Project overview and architecture |
+| Development Setup        | `/docs/DEVELOPMENT_SETUP.md`         | Environment setup guide           |
+| Configuration Management | `/docs/CONFIGURATION-MANAGEMENT.md`  | Config best practices             |
+| Identity API Reference   | `/docs/identity-api-reference.md`    | Identity service API              |
+| Identity Claims          | `/docs/identity-claims-reference.md` | Permission claims                 |
 
 ### Infrastructure
 
-| Document | Path | Description |
-|----------|------|-------------|
-| Docker Compose | `/deploy/compose/docker-compose.dev.yml` | Local infrastructure |
-| Compose README | `/deploy/compose/README.md` | Infrastructure documentation |
+| Document       | Path                                     | Description                  |
+| -------------- | ---------------------------------------- | ---------------------------- |
+| Docker Compose | `/deploy/compose/docker-compose.dev.yml` | Local infrastructure         |
+| Compose README | `/deploy/compose/README.md`              | Infrastructure documentation |
 
 ### Shared Libraries
 
-| Library | Path | Description |
-|---------|------|-------------|
-| Contracts | `/src/Shared/Dhadgar.Contracts/` | Shared DTOs and messages |
-| ServiceDefaults | `/src/Shared/Dhadgar.ServiceDefaults/` | Common middleware |
-| Messaging | `/src/Shared/Dhadgar.Messaging/` | MassTransit configuration |
+| Library         | Path                                   | Description               |
+| --------------- | -------------------------------------- | ------------------------- |
+| Contracts       | `/src/Shared/Dhadgar.Contracts/`       | Shared DTOs and messages  |
+| ServiceDefaults | `/src/Shared/Dhadgar.ServiceDefaults/` | Common middleware         |
+| Messaging       | `/src/Shared/Dhadgar.Messaging/`       | MassTransit configuration |
 
 ### External Resources
 
-| Resource | URL | Description |
-|----------|-----|-------------|
-| Stripe API Docs | https://stripe.com/docs/api | Stripe API reference |
-| Stripe Testing | https://stripe.com/docs/testing | Test cards and scenarios |
-| Stripe Webhooks | https://stripe.com/docs/webhooks | Webhook integration |
-| MassTransit Docs | https://masstransit.io/ | Messaging framework |
+| Resource         | URL                                                          | Description              |
+| ---------------- | ------------------------------------------------------------ | ------------------------ |
+| Stripe API Docs  | [stripe.com/docs/api](https://stripe.com/docs/api)           | Stripe API reference     |
+| Stripe Testing   | [stripe.com/docs/testing](https://stripe.com/docs/testing)   | Test cards and scenarios |
+| Stripe Webhooks  | [stripe.com/docs/webhooks](https://stripe.com/docs/webhooks) | Webhook integration      |
+| MassTransit Docs | [masstransit.io](https://masstransit.io/)                    | Messaging framework      |
 
 ---
 
@@ -1164,6 +1169,7 @@ Error: Npgsql.NpgsqlException: Failed to connect to localhost:5432
 ```
 
 **Solution**: Ensure PostgreSQL is running:
+
 ```bash
 docker compose -f deploy/compose/docker-compose.dev.yml up -d postgres
 ```
@@ -1175,6 +1181,7 @@ Error: No migrations configuration found
 ```
 
 **Solution**: Ensure you're running from the correct directory with proper project references:
+
 ```bash
 dotnet ef migrations add InitialCreate \
   --project src/Dhadgar.Billing \
@@ -1185,12 +1192,14 @@ dotnet ef migrations add InitialCreate \
 #### Swagger Not Available
 
 Swagger is only enabled in Development and Testing environments. Check:
+
 1. `ASPNETCORE_ENVIRONMENT` is set to `Development`
 2. Service is running on correct port (5020)
 
 #### Gateway Routing Issues
 
 If requests to `/api/v1/billing/*` return 502 or 503:
+
 1. Verify Billing service is running on port 5020
 2. Check Gateway logs for health check failures
 3. Verify Gateway's `appsettings.json` has correct cluster configuration
@@ -1210,13 +1219,13 @@ If requests to `/api/v1/billing/*` return 502 or 503:
 
 ### Planned Releases
 
-| Version | Features |
-|---------|----------|
-| v0.1.0 | Subscription plans, basic CRUD |
-| v0.2.0 | Stripe integration, checkout flow |
-| v0.3.0 | Usage metering, limit enforcement |
-| v0.4.0 | Invoicing, billing history |
-| v1.0.0 | Production-ready with full feature set |
+| Version | Features                               |
+| ------- | -------------------------------------- |
+| v0.1.0  | Subscription plans, basic CRUD         |
+| v0.2.0  | Stripe integration, checkout flow      |
+| v0.3.0  | Usage metering, limit enforcement      |
+| v0.4.0  | Invoicing, billing history             |
+| v1.0.0  | Production-ready with full feature set |
 
 ---
 

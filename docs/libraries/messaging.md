@@ -31,20 +31,20 @@ The Dhadgar platform follows a strict microservices architecture where services 
 
 ### What This Library Provides
 
-| Feature | Description |
-|---------|-------------|
-| Centralized Bus Configuration | Single `AddDhadgarMessaging()` extension method for all services |
-| Stable Exchange Naming | Custom `IEntityNameFormatter` using `meridian.*` convention |
-| Configuration-Driven Setup | Reads connection details from standard ASP.NET Core configuration |
-| Environment Flexibility | Works with real RabbitMQ (production) and in-memory transport (testing) |
+| Feature                       | Description                                                             |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| Centralized Bus Configuration | Single `AddDhadgarMessaging()` extension method for all services        |
+| Stable Exchange Naming        | Custom `IEntityNameFormatter` using `meridian.*` convention             |
+| Configuration-Driven Setup    | Reads connection details from standard ASP.NET Core configuration       |
+| Environment Flexibility       | Works with real RabbitMQ (production) and in-memory transport (testing) |
 
 ### What Belongs Where
 
-| Location | Content |
-|----------|---------|
+| Location            | Content                                                            |
+| ------------------- | ------------------------------------------------------------------ |
 | `Dhadgar.Messaging` | MassTransit bus configuration, RabbitMQ helpers, entity formatters |
-| `Dhadgar.Contracts` | Message contracts (DTOs), events, commands |
-| Individual Services | Consumer implementations, service-specific configurations |
+| `Dhadgar.Contracts` | Message contracts (DTOs), events, commands                         |
+| Individual Services | Consumer implementations, service-specific configurations          |
 
 ---
 
@@ -54,7 +54,7 @@ The Dhadgar platform follows a strict microservices architecture where services 
 
 The library uses a custom `StaticEntityNameFormatter` that creates stable, predictable exchange names:
 
-```
+```text
 Message Type                                    Exchange Name
 -----------                                     -------------
 Dhadgar.Contracts.Identity.UserAuthenticated    meridian.userauthenticated
@@ -63,6 +63,7 @@ Dhadgar.Contracts.Identity.OrgMembershipChanged meridian.orgmembershipchanged
 ```
 
 This convention:
+
 - Prefixes all exchanges with `meridian.` for easy identification in RabbitMQ management
 - Uses lowercase for consistency
 - Strips namespaces so refactoring does not break message routing
@@ -91,10 +92,10 @@ This convention:
 
 MassTransit creates the following exchange types in RabbitMQ:
 
-| Exchange Type | Purpose |
-|---------------|---------|
-| Fanout | Message type exchanges (e.g., `meridian.userauthenticated`) |
-| Direct | Service endpoint exchanges for receive endpoints |
+| Exchange Type | Purpose                                                     |
+| ------------- | ----------------------------------------------------------- |
+| Fanout        | Message type exchanges (e.g., `meridian.userauthenticated`) |
+| Direct        | Service endpoint exchanges for receive endpoints            |
 
 ---
 
@@ -315,15 +316,16 @@ Add RabbitMQ settings to your service's `appsettings.json`:
 
 ### Configuration Keys
 
-| Key | Description | Default |
-|-----|-------------|---------|
+| Key                              | Description              | Default     |
+| -------------------------------- | ------------------------ | ----------- |
 | `ConnectionStrings:RabbitMqHost` | RabbitMQ server hostname | `localhost` |
-| `RabbitMq:Username` | Authentication username | `dhadgar` |
-| `RabbitMq:Password` | Authentication password | `dhadgar` |
+| `RabbitMq:Username`              | Authentication username  | `dhadgar`   |
+| `RabbitMq:Password`              | Authentication password  | `dhadgar`   |
 
 ### Environment-Specific Configuration
 
 **Development** (`appsettings.Development.json`):
+
 ```json
 {
   "ConnectionStrings": {
@@ -337,6 +339,7 @@ Add RabbitMQ settings to your service's `appsettings.json`:
 ```
 
 **Production** (via environment variables):
+
 ```bash
 ConnectionStrings__RabbitMqHost=rabbitmq.production.svc.cluster.local
 RabbitMq__Username=produser
@@ -352,10 +355,12 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 ```
 
 Access RabbitMQ Management UI:
+
 - **URL**: http://localhost:15672
 - **Credentials**: dhadgar / dhadgar
 
 RabbitMQ Ports:
+
 - **5672**: AMQP protocol (for services)
 - **15672**: Management UI (for debugging/monitoring)
 
@@ -367,14 +372,14 @@ RabbitMQ Ports:
 
 The current implementation provides basic MassTransit configuration. Advanced error handling is planned:
 
-| Feature | Status |
-|---------|--------|
-| Basic message delivery | Implemented |
-| Automatic error queues | MassTransit default |
-| Retry policies | Planned |
-| Circuit breaker | Planned |
-| Dead letter queue handling | Planned |
-| Outbox pattern | Planned |
+| Feature                    | Status              |
+| -------------------------- | ------------------- |
+| Basic message delivery     | Implemented         |
+| Automatic error queues     | MassTransit default |
+| Retry policies             | Planned             |
+| Circuit breaker            | Planned             |
+| Dead letter queue handling | Planned             |
+| Outbox pattern             | Planned             |
 
 ### Automatic Error Queues
 
@@ -721,10 +726,10 @@ public async Task Action_PublishesExpectedEvent()
 
 ### NuGet Packages
 
-| Package | Purpose |
-|---------|---------|
-| `MassTransit` | Message bus abstraction and consumer infrastructure |
-| `MassTransit.RabbitMQ` | RabbitMQ transport implementation |
+| Package                | Purpose                                             |
+| ---------------------- | --------------------------------------------------- |
+| `MassTransit`          | Message bus abstraction and consumer infrastructure |
+| `MassTransit.RabbitMQ` | RabbitMQ transport implementation                   |
 
 Package versions are managed centrally in `Directory.Packages.props`:
 
@@ -739,32 +744,32 @@ This library has **no project references** to maintain its position as a foundat
 
 ### Services Using This Library
 
-| Service | Usage |
-|---------|-------|
-| Identity | Publishes authentication and organization events |
-| Servers | Publishes/consumes server provisioning messages |
-| Nodes | Publishes node health events |
-| Tasks | Orchestrates background tasks via messaging |
-| Notifications | Consumes events to send notifications |
-| Billing | Consumes usage events for metering |
+| Service       | Usage                                            |
+| ------------- | ------------------------------------------------ |
+| Identity      | Publishes authentication and organization events |
+| Servers       | Publishes/consumes server provisioning messages  |
+| Nodes         | Publishes node health events                     |
+| Tasks         | Orchestrates background tasks via messaging      |
+| Notifications | Consumes events to send notifications            |
+| Billing       | Consumes usage events for metering               |
 
 ---
 
 ## Related Documentation
 
-| Document | Description |
-|----------|-------------|
+| Document                                  | Description                                              |
+| ----------------------------------------- | -------------------------------------------------------- |
 | `/src/Shared/Dhadgar.Messaging/README.md` | Library-specific README with full implementation details |
-| `/src/Shared/Dhadgar.Contracts/` | Message contracts and DTOs |
-| `/deploy/compose/README.md` | Local infrastructure setup including RabbitMQ |
-| `/.claude/agents/messaging-engineer.md` | AI agent for messaging guidance |
+| `/src/Shared/Dhadgar.Contracts/`          | Message contracts and DTOs                               |
+| `/deploy/compose/README.md`               | Local infrastructure setup including RabbitMQ            |
+| `/.claude/agents/messaging-engineer.md`   | AI agent for messaging guidance                          |
 
 ### External Resources
 
-| Resource | URL |
-|----------|-----|
-| MassTransit Documentation | https://masstransit.io/documentation |
-| MassTransit Consumers | https://masstransit.io/documentation/concepts/consumers |
-| MassTransit Producers | https://masstransit.io/documentation/concepts/producers |
-| MassTransit Testing | https://masstransit.io/documentation/concepts/testing |
-| RabbitMQ Documentation | https://www.rabbitmq.com/documentation.html |
+| Resource                  | URL                                                     |
+| ------------------------- | ------------------------------------------------------- |
+| MassTransit Documentation | https://masstransit.io/documentation                    |
+| MassTransit Consumers     | https://masstransit.io/documentation/concepts/consumers |
+| MassTransit Producers     | https://masstransit.io/documentation/concepts/producers |
+| MassTransit Testing       | https://masstransit.io/documentation/concepts/testing   |
+| RabbitMQ Documentation    | https://www.rabbitmq.com/documentation.html             |

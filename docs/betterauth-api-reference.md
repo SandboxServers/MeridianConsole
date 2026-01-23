@@ -39,7 +39,7 @@ BetterAuth provides user-facing authentication for Meridian Console. All endpoin
 
 Meridian Console is **100% passwordless**. All user authentication is via OAuth providers.
 
-```
+```text
 1. Redirect user to:    GET /api/v1/betterauth/sign-in/social?provider=discord&callbackURL=...
 2. User authenticates with provider
 3. Provider redirects to: GET /api/v1/betterauth/callback/discord?code=...
@@ -70,6 +70,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "user": {
@@ -97,6 +98,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "Jane Doe",
@@ -105,6 +107,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "user": {
@@ -133,6 +136,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "session": {
@@ -155,6 +159,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Response (401 Unauthorized):**
+
 ```json
 {
   "session": null,
@@ -174,6 +179,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "status": true
@@ -196,18 +202,20 @@ GET /api/v1/betterauth/sign-in/social?provider={provider}&callbackURL={callbackU
 
 **Query Parameters:**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `provider` | Yes | OAuth provider: `discord`, `google`, `github`, `twitch`, `facebook`, `apple`, `microsoft` |
-| `callbackURL` | No | URL to redirect after authentication (default: origin) |
+| Parameter     | Required | Description                                                                               |
+| ------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `provider`    | Yes      | OAuth provider: `discord`, `google`, `github`, `twitch`, `facebook`, `apple`, `microsoft` |
+| `callbackURL` | No       | URL to redirect after authentication (default: origin)                                    |
 
 **Example:**
-```
+
+```http
 GET /api/v1/betterauth/sign-in/social?provider=discord&callbackURL=https://panel.meridianconsole.com/dashboard
 ```
 
 **Response (302 Found):**
-```
+
+```http
 Location: https://discord.com/oauth2/authorize?client_id=...&redirect_uri=...&scope=identify%20email&state=...
 ```
 
@@ -223,18 +231,19 @@ GET /api/v1/betterauth/callback/{provider}?code={code}&state={state}
 
 **Path Parameters:**
 
-| Parameter | Description |
-|-----------|-------------|
+| Parameter  | Description         |
+| ---------- | ------------------- |
 | `provider` | OAuth provider name |
 
 **Query Parameters:**
 
-| Parameter | Description |
-|-----------|-------------|
-| `code` | Authorization code from OAuth provider |
-| `state` | State parameter for CSRF protection |
+| Parameter | Description                            |
+| --------- | -------------------------------------- |
+| `code`    | Authorization code from OAuth provider |
+| `state`   | State parameter for CSRF protection    |
 
 **Response (302 Found):**
+
 ```
 Location: {callbackURL}
 Set-Cookie: better-auth.session_token=...; HttpOnly; Secure; SameSite=None; Path=/
@@ -244,14 +253,14 @@ Set-Cookie: better-auth.session_token=...; HttpOnly; Secure; SameSite=None; Path
 
 ### Supported OAuth Providers
 
-| Provider | Provider ID | Scopes |
-|----------|-------------|--------|
-| Discord | `discord` | identify, email |
-| Google | `google` | openid, profile, email |
-| GitHub | `github` | read:user, user:email |
-| Twitch | `twitch` | user:read:email |
-| Facebook | `facebook` | email, public_profile |
-| Apple | `apple` | name, email |
+| Provider  | Provider ID | Scopes                            |
+| --------- | ----------- | --------------------------------- |
+| Discord   | `discord`   | identify, email                   |
+| Google    | `google`    | openid, profile, email            |
+| GitHub    | `github`    | read:user, user:email             |
+| Twitch    | `twitch`    | user:read:email                   |
+| Facebook  | `facebook`  | email, public_profile             |
+| Apple     | `apple`     | name, email                       |
 | Microsoft | `microsoft` | openid, profile, email, User.Read |
 
 ---
@@ -267,6 +276,7 @@ GET /healthz
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "service": "Dhadgar.BetterAuth",
@@ -287,6 +297,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Request Body (optional):**
+
 ```json
 {
   "clientApp": "panel"
@@ -294,6 +305,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "exchangeToken": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImJldHRlcmF1dGgtZXhjaGFuZ2UtdjEifQ.eyJzdWIiOiJ1c2VyLXV1aWQiLCJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJuYW1lIjoiSm9obiBEb2UiLCJwaWN0dXJlIjpudWxsLCJwdXJwb3NlIjoidG9rZW5fZXhjaGFuZ2UiLCJjbGllbnRfYXBwIjoicGFuZWwiLCJwcm92aWRlciI6ImRpc2NvcmQiLCJwcm92aWRlcnMiOlt7InByb3ZpZGVySWQiOiJkaXNjb3JkIiwiYWNjb3VudElkIjoiMTIzNDU2Nzg5In1dLCJpc3MiOiJodHRwczovL21lcmlkaWFuY29uc29sZS5jb20vYXBpL3YxL2JldHRlcmF1dGgiLCJhdWQiOiJodHRwczovL21lcmlkaWFuY29uc29sZS5jb20vYXBpL3YxL2lkZW50aXR5L2V4Y2hhbmdlIiwiaWF0IjoxNzA0MDY3MjAwLCJleHAiOjE3MDQwNjcyNjAsImp0aSI6InVuaXF1ZS10b2tlbi1pZCJ9.signature"
@@ -302,22 +314,23 @@ Cookie: better-auth.session_token=...
 
 **Exchange Token Claims:**
 
-| Claim | Description |
-|-------|-------------|
-| `sub` | User ID |
-| `email` | User email |
-| `name` | User display name |
-| `picture` | User profile image URL |
-| `purpose` | Always `"token_exchange"` |
+| Claim        | Description                                         |
+| ------------ | --------------------------------------------------- |
+| `sub`        | User ID                                             |
+| `email`      | User email                                          |
+| `name`       | User display name                                   |
+| `picture`    | User profile image URL                              |
+| `purpose`    | Always `"token_exchange"`                           |
 | `client_app` | Resolved client app (`panel`, `shop`, or `unknown`) |
-| `provider` | Most recently used OAuth provider |
-| `providers` | Array of all linked OAuth providers |
-| `iss` | Issuer (BetterAuth URL) |
-| `aud` | Audience (Identity exchange endpoint) |
-| `exp` | Expiration (60 seconds from issue) |
-| `jti` | Unique token ID (prevents replay) |
+| `provider`   | Most recently used OAuth provider                   |
+| `providers`  | Array of all linked OAuth providers                 |
+| `iss`        | Issuer (BetterAuth URL)                             |
+| `aud`        | Audience (Identity exchange endpoint)               |
+| `exp`        | Expiration (60 seconds from issue)                  |
+| `jti`        | Unique token ID (prevents replay)                   |
 
 **Response (401 Unauthorized):**
+
 ```json
 {
   "error": "unauthorized"
@@ -325,6 +338,7 @@ Cookie: better-auth.session_token=...
 ```
 
 **Response (500 Internal Server Error):**
+
 ```json
 {
   "error": "exchange_failed"
@@ -348,14 +362,14 @@ All errors follow a consistent format:
 
 ### Common Error Codes
 
-| Status | Error Code | Description |
-|--------|------------|-------------|
-| 400 | `invalid_request` | Missing or invalid request parameters |
-| 401 | `unauthorized` | No valid session cookie |
-| 403 | `forbidden` | User lacks permission |
-| 404 | `not_found` | Resource not found |
-| 429 | `rate_limited` | Too many requests |
-| 500 | `internal_error` | Server error |
+| Status | Error Code        | Description                           |
+| ------ | ----------------- | ------------------------------------- |
+| 400    | `invalid_request` | Missing or invalid request parameters |
+| 401    | `unauthorized`    | No valid session cookie               |
+| 403    | `forbidden`       | User lacks permission                 |
+| 404    | `not_found`       | Resource not found                    |
+| 429    | `rate_limited`    | Too many requests                     |
+| 500    | `internal_error`  | Server error                          |
 
 ### OAuth Error Responses
 
@@ -379,7 +393,7 @@ OAuth errors include additional context:
 import { createAuthClient } from "better-auth/client";
 
 const authClient = createAuthClient({
-  baseURL: "https://meridianconsole.com/api/v1/betterauth"
+  baseURL: "https://meridianconsole.com/api/v1/betterauth",
 });
 
 // Check session
@@ -391,7 +405,7 @@ if (session?.user) {
 // Sign in with OAuth (passwordless)
 await authClient.signIn.social({
   provider: "discord",
-  callbackURL: window.location.origin + "/dashboard"
+  callbackURL: window.location.origin + "/dashboard",
 });
 
 // Sign out
@@ -403,21 +417,27 @@ await authClient.signOut();
 ```javascript
 // Check session status
 async function checkSession() {
-  const response = await fetch("https://meridianconsole.com/api/v1/betterauth/session", {
-    credentials: "include"
-  });
+  const response = await fetch(
+    "https://meridianconsole.com/api/v1/betterauth/session",
+    {
+      credentials: "include",
+    },
+  );
   const data = await response.json();
   return data.session ? data.user : null;
 }
 
 // Get exchange token for JWT (after OAuth login)
 async function getExchangeToken() {
-  const response = await fetch("https://meridianconsole.com/api/v1/betterauth/exchange", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clientApp: "panel" }),
-    credentials: "include"
-  });
+  const response = await fetch(
+    "https://meridianconsole.com/api/v1/betterauth/exchange",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientApp: "panel" }),
+      credentials: "include",
+    },
+  );
   const data = await response.json();
   return data.exchangeToken;
 }
@@ -425,11 +445,14 @@ async function getExchangeToken() {
 // Exchange for JWT
 async function getJWT() {
   const exchangeToken = await getExchangeToken();
-  const response = await fetch("https://meridianconsole.com/api/v1/identity/exchange", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ exchangeToken })
-  });
+  const response = await fetch(
+    "https://meridianconsole.com/api/v1/identity/exchange",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exchangeToken }),
+    },
+  );
   return response.json(); // { accessToken, refreshToken, expiresIn, userId }
 }
 
@@ -448,7 +471,7 @@ import { createAuthClient } from "better-auth/client";
 import { createContext, useContext, useEffect, useState } from "react";
 
 const authClient = createAuthClient({
-  baseURL: import.meta.env.PUBLIC_BETTERAUTH_URL
+  baseURL: import.meta.env.PUBLIC_BETTERAUTH_URL,
 });
 
 const AuthContext = createContext<{
@@ -460,7 +483,7 @@ const AuthContext = createContext<{
   user: null,
   loading: true,
   signIn: () => {},
-  signOut: async () => {}
+  signOut: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -477,7 +500,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = (provider: string) => {
     authClient.signIn.social({
       provider,
-      callbackURL: window.location.href
+      callbackURL: window.location.href,
     });
   };
 
@@ -538,7 +561,7 @@ npm install better-auth
 import { createAuthClient } from "better-auth/client";
 
 const authClient = createAuthClient({
-  baseURL: "https://meridianconsole.com/api/v1/betterauth"
+  baseURL: "https://meridianconsole.com/api/v1/betterauth",
 });
 ```
 
@@ -571,11 +594,12 @@ function Component() {
 
 Authentication endpoints are rate-limited via the Gateway:
 
-| Endpoint Pattern | Limit | Window |
-|-----------------|-------|--------|
+| Endpoint Pattern       | Limit       | Window   |
+| ---------------------- | ----------- | -------- |
 | `/api/v1/betterauth/*` | 30 requests | 1 minute |
 
 Rate limit headers:
+
 ```
 X-RateLimit-Limit: 30
 X-RateLimit-Remaining: 29

@@ -81,42 +81,42 @@ The Console service is the real-time communication backbone for interactive game
 
 ### What Exists Today
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| `Program.cs` | Implemented | ASP.NET Core application with SignalR configured |
-| `ConsoleHub.cs` | Scaffolding | Basic SignalR hub with `Ping()`/`pong` for connectivity testing |
-| `Hello.cs` | Implemented | Static hello message for smoke tests |
-| Health Endpoints | Implemented | `/healthz`, `/livez`, `/readyz` via ServiceDefaults |
-| Swagger UI | Implemented | OpenAPI documentation at `/swagger` |
-| OpenTelemetry | Implemented | Tracing, metrics, and logging configured |
-| Docker Support | Implemented | Both development and pipeline Dockerfiles |
-| Test Project | Implemented | Basic hello and Swagger tests |
+| Component        | Status      | Description                                                     |
+| ---------------- | ----------- | --------------------------------------------------------------- |
+| `Program.cs`     | Implemented | ASP.NET Core application with SignalR configured                |
+| `ConsoleHub.cs`  | Scaffolding | Basic SignalR hub with `Ping()`/`pong` for connectivity testing |
+| `Hello.cs`       | Implemented | Static hello message for smoke tests                            |
+| Health Endpoints | Implemented | `/healthz`, `/livez`, `/readyz` via ServiceDefaults             |
+| Swagger UI       | Implemented | OpenAPI documentation at `/swagger`                             |
+| OpenTelemetry    | Implemented | Tracing, metrics, and logging configured                        |
+| Docker Support   | Implemented | Both development and pipeline Dockerfiles                       |
+| Test Project     | Implemented | Basic hello and Swagger tests                                   |
 
 ### What is Planned
 
-| Feature | Priority | Description |
-|---------|----------|-------------|
-| Output Streaming | High | Stream game server stdout/stderr to clients |
-| Command Execution | High | Execute commands on game servers |
-| Session Management | High | Track connected clients per server |
-| History Storage | Medium | Persist console output for retrieval |
-| Access Control | Medium | Role-based command permissions |
-| Rate Limiting | Medium | Prevent command flooding |
-| Recording/Playback | Low | Record and playback console sessions |
+| Feature            | Priority | Description                                 |
+| ------------------ | -------- | ------------------------------------------- |
+| Output Streaming   | High     | Stream game server stdout/stderr to clients |
+| Command Execution  | High     | Execute commands on game servers            |
+| Session Management | High     | Track connected clients per server          |
+| History Storage    | Medium   | Persist console output for retrieval        |
+| Access Control     | Medium   | Role-based command permissions              |
+| Rate Limiting      | Medium   | Prevent command flooding                    |
+| Recording/Playback | Low      | Record and playback console sessions        |
 
 ---
 
 ## Tech Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| .NET | 10.0 | Runtime framework |
-| ASP.NET Core | 10.0 | Web framework |
-| SignalR | Built-in | Real-time bidirectional communication |
-| OpenTelemetry | 1.14.0 | Distributed tracing and metrics |
-| MassTransit | 8.3.6 | Message bus (for agent communication, planned) |
-| RabbitMQ | - | Message transport (planned) |
-| Swashbuckle | Latest | Swagger/OpenAPI documentation |
+| Technology    | Version  | Purpose                                        |
+| ------------- | -------- | ---------------------------------------------- |
+| .NET          | 10.0     | Runtime framework                              |
+| ASP.NET Core  | 10.0     | Web framework                                  |
+| SignalR       | Built-in | Real-time bidirectional communication          |
+| OpenTelemetry | 1.14.0   | Distributed tracing and metrics                |
+| MassTransit   | 8.3.6    | Message bus (for agent communication, planned) |
+| RabbitMQ      | -        | Message transport (planned)                    |
+| Swashbuckle   | Latest   | Swagger/OpenAPI documentation                  |
 
 **Project Dependencies**:
 
@@ -180,11 +180,11 @@ You can test the SignalR hub using a simple JavaScript client:
 const signalR = require("@microsoft/signalr");
 
 const connection = new signalR.HubConnectionBuilder()
-    .withUrl("http://localhost:5007/hubs/console")
-    .build();
+  .withUrl("http://localhost:5007/hubs/console")
+  .build();
 
 connection.on("pong", () => {
-    console.log("Received pong!");
+  console.log("Received pong!");
 });
 
 await connection.start();
@@ -200,7 +200,7 @@ await connection.invoke("Ping");
 
 The Console service acts as a relay between three parties:
 
-```
+```text
 +------------------+      SignalR/WebSocket      +------------------+
 |   Panel UI       | <-------------------------> |  Console Service |
 | (Browser Client) |                             | (This Service)   |
@@ -217,12 +217,14 @@ The Console service acts as a relay between three parties:
 ```
 
 **Flow for Console Output**:
+
 1. Game server process writes to stdout/stderr
 2. Agent captures output and sends to Console service via message queue
 3. Console service broadcasts to all connected SignalR clients watching that server
 4. Panel UI displays output in real-time terminal component
 
 **Flow for Command Execution**:
+
 1. User types command in Panel UI terminal
 2. Panel sends command to Console service via SignalR
 3. Console service validates permissions and queues command via MassTransit
@@ -261,7 +263,7 @@ This ensures that once a client connects to a Console service instance, subseque
 
 ### ConsoleHub (Current Implementation)
 
-**Location**: `/mnt/c/Users/Steve/source/projects/MeridianConsole/src/Dhadgar.Console/Hubs/ConsoleHub.cs`
+**Location**: `src/Dhadgar.Console/Hubs/ConsoleHub.cs`
 
 **Endpoint**: `/hubs/console`
 
@@ -275,6 +277,7 @@ public sealed class ConsoleHub : Hub
 ```
 
 This provides:
+
 - Basic connectivity testing between clients and the hub
 - Foundation for adding real console functionality
 
@@ -284,13 +287,13 @@ The following hub methods are planned for implementation:
 
 #### Server Methods (Client-to-Server)
 
-| Method | Parameters | Description |
-|--------|------------|-------------|
-| `JoinServer` | `serverId: Guid` | Subscribe to console output for a specific server |
-| `LeaveServer` | `serverId: Guid` | Unsubscribe from server console output |
-| `SendCommand` | `serverId: Guid, command: string` | Execute a command on the game server |
-| `RequestHistory` | `serverId: Guid, lineCount: int` | Request recent console history |
-| `Ping` | - | Connection keepalive (implemented) |
+| Method           | Parameters                        | Description                                       |
+| ---------------- | --------------------------------- | ------------------------------------------------- |
+| `JoinServer`     | `serverId: Guid`                  | Subscribe to console output for a specific server |
+| `LeaveServer`    | `serverId: Guid`                  | Unsubscribe from server console output            |
+| `SendCommand`    | `serverId: Guid, command: string` | Execute a command on the game server              |
+| `RequestHistory` | `serverId: Guid, lineCount: int`  | Request recent console history                    |
+| `Ping`           | -                                 | Connection keepalive (implemented)                |
 
 #### Example Planned Implementation
 
@@ -356,29 +359,29 @@ public sealed class ConsoleHub : Hub
 
 Events sent from server to clients:
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `pong` | - | Response to Ping (implemented) |
-| `ConsoleOutput` | `string line` | Single line of console output |
-| `ConsoleBatch` | `string[] lines` | Batch of console lines (for efficiency) |
-| `ConsoleHistory` | `ConsoleHistoryDto` | Recent console history |
-| `JoinedServer` | `Guid serverId` | Confirmation of server join |
-| `LeftServer` | `Guid serverId` | Confirmation of server leave |
-| `ServerStatusChanged` | `ServerStatusDto` | Server status update (started/stopped/crashed) |
-| `CommandResult` | `CommandResultDto` | Result of command execution |
-| `Error` | `ErrorDto` | Error notification |
+| Event                 | Payload             | Description                                    |
+| --------------------- | ------------------- | ---------------------------------------------- |
+| `pong`                | -                   | Response to Ping (implemented)                 |
+| `ConsoleOutput`       | `string line`       | Single line of console output                  |
+| `ConsoleBatch`        | `string[] lines`    | Batch of console lines (for efficiency)        |
+| `ConsoleHistory`      | `ConsoleHistoryDto` | Recent console history                         |
+| `JoinedServer`        | `Guid serverId`     | Confirmation of server join                    |
+| `LeftServer`          | `Guid serverId`     | Confirmation of server leave                   |
+| `ServerStatusChanged` | `ServerStatusDto`   | Server status update (started/stopped/crashed) |
+| `CommandResult`       | `CommandResultDto`  | Result of command execution                    |
+| `Error`               | `ErrorDto`          | Error notification                             |
 
 ### Server Events
 
 Events received from clients:
 
-| Event | Handler | Description |
-|-------|---------|-------------|
-| Invoke `Ping` | `Ping()` | Keepalive ping |
-| Invoke `JoinServer` | `JoinServer(serverId)` | Join server console |
-| Invoke `LeaveServer` | `LeaveServer(serverId)` | Leave server console |
-| Invoke `SendCommand` | `SendCommand(serverId, command)` | Execute command |
-| Invoke `RequestHistory` | `RequestHistory(serverId, lineCount)` | Request history |
+| Event                   | Handler                               | Description          |
+| ----------------------- | ------------------------------------- | -------------------- |
+| Invoke `Ping`           | `Ping()`                              | Keepalive ping       |
+| Invoke `JoinServer`     | `JoinServer(serverId)`                | Join server console  |
+| Invoke `LeaveServer`    | `LeaveServer(serverId)`               | Leave server console |
+| Invoke `SendCommand`    | `SendCommand(serverId, command)`      | Execute command      |
+| Invoke `RequestHistory` | `RequestHistory(serverId, lineCount)` | Request history      |
 
 ---
 
@@ -386,28 +389,28 @@ Events received from clients:
 
 ### Current Endpoints
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/` | Anonymous | Service info |
-| GET | `/hello` | Anonymous | Returns "Hello from Dhadgar.Console" |
-| GET | `/healthz` | Anonymous | Overall health status |
-| GET | `/livez` | Anonymous | Liveness probe |
-| GET | `/readyz` | Anonymous | Readiness probe |
-| WebSocket | `/hubs/console` | TenantScoped | SignalR hub endpoint |
+| Method    | Path            | Auth         | Description                          |
+| --------- | --------------- | ------------ | ------------------------------------ |
+| GET       | `/`             | Anonymous    | Service info                         |
+| GET       | `/hello`        | Anonymous    | Returns "Hello from Dhadgar.Console" |
+| GET       | `/healthz`      | Anonymous    | Overall health status                |
+| GET       | `/livez`        | Anonymous    | Liveness probe                       |
+| GET       | `/readyz`       | Anonymous    | Readiness probe                      |
+| WebSocket | `/hubs/console` | TenantScoped | SignalR hub endpoint                 |
 
 ### Planned REST Endpoints
 
 REST endpoints for operations that don't require real-time communication:
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/servers/{serverId}/history` | TenantScoped | Get paginated console history |
-| GET | `/servers/{serverId}/history/search` | TenantScoped | Search console history |
-| GET | `/servers/{serverId}/sessions` | TenantScoped | List active console sessions |
-| POST | `/servers/{serverId}/command` | TenantScoped | Execute command (non-realtime) |
-| GET | `/servers/{serverId}/recordings` | TenantScoped | List console recordings |
-| GET | `/recordings/{recordingId}` | TenantScoped | Download recording |
-| DELETE | `/recordings/{recordingId}` | TenantScoped | Delete recording |
+| Method | Path                                 | Auth         | Description                    |
+| ------ | ------------------------------------ | ------------ | ------------------------------ |
+| GET    | `/servers/{serverId}/history`        | TenantScoped | Get paginated console history  |
+| GET    | `/servers/{serverId}/history/search` | TenantScoped | Search console history         |
+| GET    | `/servers/{serverId}/sessions`       | TenantScoped | List active console sessions   |
+| POST   | `/servers/{serverId}/command`        | TenantScoped | Execute command (non-realtime) |
+| GET    | `/servers/{serverId}/recordings`     | TenantScoped | List console recordings        |
+| GET    | `/recordings/{recordingId}`          | TenantScoped | Download recording             |
+| DELETE | `/recordings/{recordingId}`          | TenantScoped | Delete recording               |
 
 ---
 
@@ -425,6 +428,7 @@ The primary feature of this service is streaming game server console output to c
 4. **Client Rendering**: Panel UI renders output in a terminal-like component
 
 **Performance Considerations**:
+
 - Batch output lines to reduce network overhead
 - Implement backpressure when clients can't keep up
 - Configurable output buffer size per server
@@ -448,6 +452,7 @@ public record ConsoleOutputReceived
 Allow users to execute commands on game servers through the console interface.
 
 **Security Measures**:
+
 - Permission check before every command
 - Command sanitization to prevent injection
 - Audit logging of all commands
@@ -456,7 +461,7 @@ Allow users to execute commands on game servers through the console interface.
 
 **Command Flow**:
 
-```
+```text
 User Input -> Hub.SendCommand() -> Permission Check -> MassTransit Publish
                                                               |
                                                               v
@@ -471,6 +476,7 @@ User Input -> Hub.SendCommand() -> Permission Check -> MassTransit Publish
 Persist console output for later retrieval.
 
 **Storage Strategy**:
+
 - Recent history in Redis (last N lines per server, configurable)
 - Long-term history in PostgreSQL (with retention policy)
 - Optional export to blob storage for very large histories
@@ -493,12 +499,14 @@ CREATE TABLE console_history (
 Support multiple users viewing the same server's console simultaneously.
 
 **Session Tracking**:
+
 - Track connected clients per server
 - Show "X users watching" indicator
 - Notify when users join/leave (optional)
 - Graceful handling of connection drops
 
 **SignalR Groups**:
+
 - One group per server: `server:{serverId}`
 - Clients join/leave groups via hub methods
 - Broadcasts go to entire group
@@ -509,15 +517,16 @@ Integrate with Identity service for permission checks.
 
 **Permission Model** (planned):
 
-| Permission | Description |
-|------------|-------------|
-| `console:view` | View console output |
-| `console:execute` | Execute commands |
+| Permission                  | Description                                |
+| --------------------------- | ------------------------------------------ |
+| `console:view`              | View console output                        |
+| `console:execute`           | Execute commands                           |
 | `console:execute:dangerous` | Execute dangerous commands (stop, restart) |
-| `console:history:view` | View console history |
-| `console:history:search` | Search console history |
+| `console:history:view`      | View console history                       |
+| `console:history:search`    | Search console history                     |
 
 **Role Defaults**:
+
 - `viewer`: `console:view`, `console:history:view`
 - `operator`: All viewer permissions + `console:execute`
 - `admin`: All permissions
@@ -528,6 +537,7 @@ Integrate with Identity service for permission checks.
 Record console sessions for training, debugging, or compliance.
 
 **Features** (planned):
+
 - Start/stop recording manually or on schedule
 - Playback with speed control
 - Export to text or video format
@@ -543,6 +553,7 @@ Record console sessions for training, debugging, or compliance.
 Agents running on customer nodes communicate with the Console service to relay game server I/O.
 
 **Communication Pattern**:
+
 - **Outbound-only** from agents (agents don't accept inbound connections)
 - **MassTransit/RabbitMQ** for reliable message delivery
 - **Bidirectional messages**: Output flows from agent to service; commands flow from service to agent
@@ -574,6 +585,7 @@ public record ExecuteCommand
 The Console service works closely with the Servers service.
 
 **Coordination Points**:
+
 - Server status changes (started/stopped) should update console UI
 - When server stops, notify console clients
 - Command execution may trigger status polling
@@ -607,12 +619,14 @@ public class ServerStatusChangedConsumer : IConsumer<ServerStatusChanged>
 Authentication and authorization flow through the Identity service.
 
 **JWT Claims Used**:
+
 - `sub` - User ID
 - `org_id` - Current organization context
 - `role` - User roles
 - Custom claims for fine-grained permissions
 
 **Permission Checking**:
+
 - Hub methods validate permissions before executing
 - REST endpoints use `[Authorize]` attributes with policies
 
@@ -621,11 +635,13 @@ Authentication and authorization flow through the Identity service.
 The Console service is accessible through the Gateway at two routes:
 
 **API Route**: `/api/v1/console/{**catch-all}`
+
 - Path prefix removed before forwarding
 - TenantScoped authorization policy
 - PerTenant rate limiting
 
 **Hub Route**: `/hubs/console/{**catch-all}`
+
 - No path transformation (SignalR needs exact path)
 - TenantScoped authorization policy
 - PerTenant rate limiting
@@ -743,12 +759,12 @@ dotnet test tests/Dhadgar.Console.Tests -v n
 
 ### Current Test Coverage
 
-**File**: `/mnt/c/Users/Steve/source/projects/MeridianConsole/tests/Dhadgar.Console.Tests/`
+**File**: `tests/Dhadgar.Console.Tests/`
 
-| Test Class | Description |
-|------------|-------------|
-| `HelloWorldTests` | Verifies the static hello message |
-| `SwaggerTests` | Verifies OpenAPI spec and Swagger UI |
+| Test Class        | Description                          |
+| ----------------- | ------------------------------------ |
+| `HelloWorldTests` | Verifies the static hello message    |
+| `SwaggerTests`    | Verifies OpenAPI spec and Swagger UI |
 
 ### Testing SignalR Connections
 
@@ -810,15 +826,15 @@ public class ConsoleIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
 ### Planned Test Coverage
 
-| Test Area | Description |
-|-----------|-------------|
-| `ConsoleHubTests` | Test all hub methods (join, leave, command, history) |
-| `ConsoleOutputTests` | Test output streaming and batching |
-| `CommandExecutionTests` | Test command validation and dispatch |
-| `PermissionTests` | Test access control for all operations |
-| `SessionManagementTests` | Test session tracking and cleanup |
-| `HistoryTests` | Test history storage and retrieval |
-| `IntegrationTests` | End-to-end tests with mock agent |
+| Test Area                | Description                                          |
+| ------------------------ | ---------------------------------------------------- |
+| `ConsoleHubTests`        | Test all hub methods (join, leave, command, history) |
+| `ConsoleOutputTests`     | Test output streaming and batching                   |
+| `CommandExecutionTests`  | Test command validation and dispatch                 |
+| `PermissionTests`        | Test access control for all operations               |
+| `SessionManagementTests` | Test session tracking and cleanup                    |
+| `HistoryTests`           | Test history storage and retrieval                   |
+| `IntegrationTests`       | End-to-end tests with mock agent                     |
 
 ---
 
@@ -851,19 +867,19 @@ docker build \
 
 ### Runtime Configuration
 
-| Setting | Value |
-|---------|-------|
-| Base Image | `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` |
-| Port | 8080 |
-| User | appuser (non-root) |
-| Health Check | `curl -f http://localhost:8080/healthz` |
+| Setting      | Value                                         |
+| ------------ | --------------------------------------------- |
+| Base Image   | `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` |
+| Port         | 8080                                          |
+| User         | appuser (non-root)                            |
+| Health Check | `curl -f http://localhost:8080/healthz`       |
 
 **Environment Variables**:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ASPNETCORE_URLS` | `http://+:8080` | Listen address |
-| `ASPNETCORE_ENVIRONMENT` | `Production` | Environment name |
+| Variable                 | Default         | Description      |
+| ------------------------ | --------------- | ---------------- |
+| `ASPNETCORE_URLS`        | `http://+:8080` | Listen address   |
+| `ASPNETCORE_ENVIRONMENT` | `Production`    | Environment name |
 
 ---
 
@@ -916,12 +932,12 @@ The Console service is instrumented with OpenTelemetry for full observability:
 
 ### Metrics
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `console_connections_active` | Gauge | Active SignalR connections |
-| `console_commands_total` | Counter | Total commands executed |
-| `console_output_lines_total` | Counter | Total output lines processed |
-| `console_history_queries_total` | Counter | Total history queries |
+| Metric                          | Type    | Description                  |
+| ------------------------------- | ------- | ---------------------------- |
+| `console_connections_active`    | Gauge   | Active SignalR connections   |
+| `console_commands_total`        | Counter | Total commands executed      |
+| `console_output_lines_total`    | Counter | Total output lines processed |
+| `console_history_queries_total` | Counter | Total history queries        |
 
 ### Logging
 
@@ -938,6 +954,7 @@ The Console service is instrumented with OpenTelemetry for full observability:
 **Symptom**: Client fails to connect to `/hubs/console`.
 
 **Solutions**:
+
 1. Verify the service is running: `curl http://localhost:5007/healthz`
 2. Check CORS configuration allows your client origin
 3. Ensure WebSocket upgrade is not blocked by proxy
@@ -948,6 +965,7 @@ The Console service is instrumented with OpenTelemetry for full observability:
 **Symptom**: Connected to console but no output appears.
 
 **Solutions**:
+
 1. Verify server is running and producing output
 2. Check agent is connected and forwarding output
 3. Verify you called `JoinServer` for the correct server ID
@@ -958,6 +976,7 @@ The Console service is instrumented with OpenTelemetry for full observability:
 **Symptom**: Commands sent but no response received.
 
 **Solutions**:
+
 1. Verify user has `console:execute` permission
 2. Check command is not on blocklist
 3. Verify agent is connected and healthy
@@ -968,6 +987,7 @@ The Console service is instrumented with OpenTelemetry for full observability:
 **Symptom**: Service memory usage growing over time.
 
 **Solutions**:
+
 1. Check for disconnected clients not cleaned up
 2. Verify history retention is configured correctly
 3. Check output buffer sizes

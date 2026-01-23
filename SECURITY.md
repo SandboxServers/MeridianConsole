@@ -11,6 +11,7 @@ If you discover a security vulnerability in Meridian Console, please report it r
 Email security concerns to: **security@meridianconsole.com**
 
 Include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -81,16 +82,20 @@ Meridian Console is a **control plane** that orchestrates game servers on **cust
 ### Key Security Properties
 
 #### 1. Outbound-Only Agent Connections
+
 Agents connect **outbound** to the control plane. Customers don't need to open inbound firewall ports, reducing their attack surface.
 
 #### 2. Multi-Tenant Isolation
+
 - Each organization is isolated at the database level
 - JWT tokens contain tenant claims
 - All API requests are scoped to the authenticated tenant
 - Cross-tenant access is architecturally prevented
 
 #### 3. Agent Security (Critical)
+
 Agents run on customer hardware with elevated privileges. Agent code is treated as **security-critical**:
+
 - All agent changes require security review
 - Command injection prevention
 - Path traversal prevention
@@ -98,6 +103,7 @@ Agents run on customer hardware with elevated privileges. Agent code is treated 
 - Minimum data collection
 
 #### 4. Secrets Management
+
 - Production secrets stored in Azure Key Vault
 - Development uses .NET User Secrets (never committed)
 - Automatic secret rotation (planned)
@@ -148,6 +154,8 @@ var psi = new ProcessStartInfo {
     Arguments = string.Join(" ", validatedArgs.Select(EscapeArgument))
 };
 ```
+
+> **Security Review Required**: After making any changes to agent code in `src/Agents/`, request a security review from the `agent-service-guardian` specialist team. This applies to all patterns shown above (Process.Start usage, PathValidator.IsPathSafe, ProcessStartInfo, EscapeArgument, etc.). Open a review ticket or notify `agent-service-guardian` before merging.
 
 ### Dependencies
 
