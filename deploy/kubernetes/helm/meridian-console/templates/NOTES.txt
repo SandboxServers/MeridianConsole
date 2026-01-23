@@ -167,7 +167,6 @@ The following services are deployed:
   ✓ Notifications - Email/Discord/webhooks
 {{- end }}
 {{- if .Values.firewall.enabled }}
-  ✓ Firewall - Port & policy management
 {{- end }}
 {{- if .Values.secrets.enabled }}
   ✓ Secrets - Secret storage & rotation

@@ -1,9 +1,0 @@
-{
-  "profiles": {
-    "Dhadgar.Firewall": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "applicationUrl": "http://localhost:5010"
-    }
-  }
-}

@@ -27,7 +27,6 @@ helm/
 │       ├── mods/             # Mods service templates
 │       ├── console/          # Console service templates
 │       ├── notifications/    # Notifications service templates
-│       ├── firewall/         # Firewall service templates
 │       ├── secrets/          # Secrets service templates
 │       └── discord/          # Discord service templates
 ├── install.sh                # Installation helper script
@@ -66,7 +65,6 @@ See [QUICKSTART.md](QUICKSTART.md) for a step-by-step guide to get running quick
 - **Mods** - Mod registry and versioning
 - **Console** - Real-time console streaming (SignalR)
 - **Notifications** - Email/Discord/webhook notifications
-- **Firewall** - Port and policy management
 - **Secrets** - Secret storage and rotation
 - **Discord** - Discord bot integration
 

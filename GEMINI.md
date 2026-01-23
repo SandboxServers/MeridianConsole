@@ -192,7 +192,6 @@ The Gateway is the single public entry point:
 | Console | Real-time console streaming (SignalR) |
 | Billing | SaaS subscriptions (excluded in KiP edition) |
 | Notifications | Email/Discord/webhook notifications |
-| Firewall | Port/policy management |
 | Secrets | Secret storage and rotation |
 | Discord | Discord integration |
 
