@@ -75,6 +75,7 @@ export const OAUTH_PROVIDERS: OAuthProvider[] = [
   { id: 'google', name: 'Google', icon: 'google', color: '#4285F4', glowColor: 'rgba(66, 133, 244, 0.4)' },
   { id: 'microsoft', name: 'Microsoft', icon: 'microsoft', color: '#00A4EF', glowColor: 'rgba(0, 164, 239, 0.4)' },
   { id: 'facebook', name: 'Facebook', icon: 'facebook', color: '#1877F2', glowColor: 'rgba(24, 119, 242, 0.4)' },
+  { id: 'linkedin', name: 'LinkedIn', icon: 'linkedin', color: '#0A66C2', glowColor: 'rgba(10, 102, 194, 0.4)' },
   { id: 'amazon', name: 'Amazon', icon: 'amazon', color: '#FF9900', glowColor: 'rgba(255, 153, 0, 0.4)' },
   { id: 'yahoo', name: 'Yahoo', icon: 'yahoo', color: '#6001D2', glowColor: 'rgba(96, 1, 210, 0.4)' },
   { id: 'discord', name: 'Discord', icon: 'discord', color: '#5865F2', glowColor: 'rgba(88, 101, 242, 0.4)' },
@@ -104,14 +105,13 @@ export const SIGN_IN_CATEGORIES: SignInCategory[] = [
     id: 'social',
     name: 'Social & Identity',
     description: 'Sign in with your social account',
-    providers: ['google', 'microsoft', 'facebook', 'amazon', 'yahoo'],
+    providers: ['google', 'microsoft', 'facebook', 'linkedin', 'amazon', 'yahoo'],
   },
   {
     id: 'gaming',
     name: 'Gaming',
     description: 'Connect your gaming identity',
     providers: ['discord', 'steam', 'xbox', 'twitch', 'battlenet', 'roblox'],
-    compact: true,
   },
   {
     id: 'other',
