@@ -749,8 +749,8 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 
 # Allow necessary capabilities for process management
-AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_KILL CAP_SYS_RESOURCE
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_KILL CAP_SYS_RESOURCE
+AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_KILL CAP_SYS_RESOURCE CAP_DAC_OVERRIDE
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_KILL CAP_SYS_RESOURCE CAP_DAC_OVERRIDE
 
 # cgroups delegation for resource management
 Delegate=yes
@@ -1153,17 +1153,17 @@ public async Task StopServerAsync(string serverId, CancellationToken ct)
     await _controlPlane.ReportStateAsync(serverId, ServerState.Stopping);
 
     // Send SIGTERM
-    Process.Kill(server.ProcessId, Signum.SIGTERM);
+    Mono.Unix.Native.Syscall.kill(server.ProcessId, Mono.Unix.Native.Signum.SIGTERM);
 
     // Wait for exit with timeout
-    var exitTask = Task.Run(() => server.Process.WaitForExit());
-    var completedTask = await Task.WhenAny(exitTask, Task.Delay(_options.ShutdownTimeoutSeconds * 1000, ct));
+    var exitTask = server.Process.WaitForExitAsync(ct);
+    var completedTask = await Task.WhenAny(exitTask, Task.Delay(TimeSpan.FromSeconds(_options.ShutdownTimeoutSeconds), ct));
 
     if (completedTask != exitTask)
     {
         // Timeout - force kill
         _logger.LogWarning("Server {ServerId} did not stop gracefully, sending SIGKILL", serverId);
-        Process.Kill(server.ProcessId, Signum.SIGKILL);
+        Mono.Unix.Native.Syscall.kill(server.ProcessId, Mono.Unix.Native.Signum.SIGKILL);
         await exitTask;
     }
 

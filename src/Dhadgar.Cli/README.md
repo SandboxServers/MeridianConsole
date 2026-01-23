@@ -1019,6 +1019,8 @@ dhadgar identity members grant user-123 secrets:read:oauth --expires "2026-12-31
 
 Revoke a claim from a member.
 
+> **Note:** The `claim-id` can be found by running `dhadgar identity members claims <member-id>`.
+
 ```bash
 dhadgar identity members revoke user-123 claim-456
 dhadgar identity members revoke user-123 claim-456 --force
@@ -1327,10 +1329,10 @@ dhadgar keyvault update my-vault --sku premium
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `--enable-soft-delete` | bool | Enable soft delete |
-| `--disable-soft-delete` | bool | Disable soft delete |
-| `--enable-purge-protection` | bool | Enable purge protection |
-| `--disable-purge-protection` | bool | Disable purge protection |
+| `--enable-soft-delete` | bool | Enable soft delete. Cannot be used with `--disable-soft-delete`. |
+| `--disable-soft-delete` | bool | Disable soft delete. Cannot be used with `--enable-soft-delete`. |
+| `--enable-purge-protection` | bool | Enable purge protection. Cannot be used with `--disable-purge-protection`. |
+| `--disable-purge-protection` | bool | Disable purge protection. Cannot be used with `--enable-purge-protection`. |
 | `--retention-days` | int | Soft delete retention (7-90 days) |
 | `--sku` | string | Vault SKU (`standard` or `premium`) |
 
