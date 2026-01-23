@@ -25,23 +25,23 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave16Routes()
+    public void ReverseProxyShouldHave15Routes()
     {
-        // 12 backend services + Better Auth + console hub route + agents route + internal-block = 16 total
+        // 11 backend services + Better Auth + console hub route + agents route + internal-block = 15 total
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(16, routes.Count);
+        Assert.Equal(15, routes.Count);
     }
 
     [Fact]
-    public void ReverseProxyShouldHave13Clusters()
+    public void ReverseProxyShouldHave12Clusters()
     {
-        // 12 backend services + Better Auth (agents uses nodes cluster)
+        // 11 backend services + Better Auth (agents uses nodes cluster)
         var clustersSection = _configuration.GetSection("ReverseProxy:Clusters");
         var clusters = clustersSection.GetChildren().ToList();
 
-        Assert.Equal(13, clusters.Count);
+        Assert.Equal(12, clusters.Count);
     }
 
     [Theory]
@@ -54,7 +54,6 @@ public class RouteConfigurationTests
     [InlineData("console", "5070")]
     [InlineData("mods", "5080")]
     [InlineData("notifications", "5090")]
-    [InlineData("firewall", "5100")]
     [InlineData("secrets", "5110")]
     [InlineData("discord", "5120")]
     [InlineData("betterauth", "5130")]

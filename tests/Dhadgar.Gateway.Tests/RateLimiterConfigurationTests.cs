@@ -26,7 +26,6 @@ public class RateLimiterConfigurationTests
     [InlineData("console-hub-route", "PerTenant")]
     [InlineData("mods-route", "PerTenant")]
     [InlineData("notifications-route", "PerTenant")]
-    [InlineData("firewall-route", "PerTenant")]
     [InlineData("secrets-route", "PerTenant")]
     [InlineData("discord-route", "PerTenant")]
     [InlineData("agents-route", "PerAgent")]
