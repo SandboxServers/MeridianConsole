@@ -2,6 +2,7 @@ using Dhadgar.Nodes;
 using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.BackgroundServices;
+using Dhadgar.Nodes.Consumers;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Observability;
@@ -49,6 +50,9 @@ builder.Services.AddScoped<ICapacityReservationService, CapacityReservationServi
 builder.Services.AddSingleton<ICaStorageProvider, LocalFileCaStorageProvider>();
 builder.Services.AddSingleton<ICertificateAuthorityService, CertificateAuthorityService>();
 
+// Register mTLS authentication services
+builder.Services.AddMtlsAuthentication(builder.Configuration);
+
 // Register audit services
 builder.Services.AddScoped<IAuditContextAccessor, AuditContextAccessor>();
 builder.Services.AddScoped<IAuditService, AuditService>();
@@ -69,6 +73,13 @@ var rabbitPassword = builder.Configuration["RabbitMq:Password"] ?? "dhadgar";
 builder.Services.AddMassTransit(x =>
 {
     x.SetKebabCaseEndpointNameFormatter();
+
+    // Register consumers for node and capacity events
+    x.AddConsumer<CapacityReservedConsumer>();
+    x.AddConsumer<CapacityReleasedConsumer>();
+    x.AddConsumer<CapacityReservationExpiredConsumer>();
+    x.AddConsumer<NodeDegradedConsumer>();
+    x.AddConsumer<NodeOfflineConsumer>();
 
     // Configure MassTransit health checks with "ready" tag for /readyz endpoint
     x.ConfigureHealthCheckOptions(options =>
@@ -169,6 +180,10 @@ app.UseMeridianSwagger();
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
+
+// mTLS authentication middleware for agent endpoints
+// This must come before UseAuthorization() and after UseRouting()
+app.UseMtlsAuthentication();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())

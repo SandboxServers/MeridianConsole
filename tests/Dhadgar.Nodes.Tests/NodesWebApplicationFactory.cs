@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Dhadgar.Nodes;
+using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
@@ -68,6 +69,12 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ICaStorageProvider>();
             services.RemoveAll<ICertificateAuthorityService>();
             services.AddSingleton<ICertificateAuthorityService>(CaService);
+
+            // Disable mTLS for testing (tests use TestNodesAuthHandler instead)
+            services.Configure<MtlsOptions>(options =>
+            {
+                options.Enabled = false;
+            });
 
             // Remove background services during testing
             services.RemoveAll<IHostedService>();

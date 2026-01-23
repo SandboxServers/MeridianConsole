@@ -195,4 +195,51 @@ public static class NodesMetrics
             new KeyValuePair<string, object?>("from_status", fromStatus),
             new KeyValuePair<string, object?>("to_status", toStatus));
     }
+
+    // Consumer event metrics - recorded when processing MassTransit events
+
+    /// <summary>
+    /// Records a capacity reservation event from the message bus.
+    /// </summary>
+    public static void RecordCapacityReservation(Guid nodeId)
+    {
+        ReservationsCreated.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+    }
+
+    /// <summary>
+    /// Records a capacity release event from the message bus.
+    /// </summary>
+    public static void RecordCapacityRelease(Guid nodeId)
+    {
+        ReservationsReleased.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+    }
+
+    /// <summary>
+    /// Records a capacity reservation expiration event from the message bus.
+    /// </summary>
+    public static void RecordCapacityExpiration(Guid nodeId)
+    {
+        ReservationsExpired.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+    }
+
+    /// <summary>
+    /// Records a node degraded event from the message bus.
+    /// </summary>
+    public static void RecordNodeDegraded(Guid nodeId)
+    {
+        StatusTransitions.Add(1,
+            new KeyValuePair<string, object?>("node_id", nodeId.ToString()),
+            new KeyValuePair<string, object?>("to_status", "Degraded"));
+    }
+
+    /// <summary>
+    /// Records a node offline event from the message bus.
+    /// </summary>
+    public static void RecordNodeOffline(Guid nodeId)
+    {
+        StatusTransitions.Add(1,
+            new KeyValuePair<string, object?>("node_id", nodeId.ToString()),
+            new KeyValuePair<string, object?>("to_status", "Offline"));
+        StaleNodesDetected.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+    }
 }
