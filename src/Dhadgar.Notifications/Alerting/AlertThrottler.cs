@@ -14,8 +14,10 @@ public sealed class AlertThrottler
     /// Creates a new throttler with the specified throttle window.
     /// </summary>
     /// <param name="throttleWindow">Minimum time between duplicate alerts.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when throttleWindow is zero or negative.</exception>
     public AlertThrottler(TimeSpan throttleWindow)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(throttleWindow, TimeSpan.Zero, nameof(throttleWindow));
         _throttleWindow = throttleWindow;
     }
 
@@ -24,22 +26,41 @@ public sealed class AlertThrottler
     /// </summary>
     /// <param name="alert">The alert to check.</param>
     /// <returns>True if alert should be sent; false if throttled.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when alert is null.</exception>
     public bool ShouldSend(AlertMessage alert)
     {
+        ArgumentNullException.ThrowIfNull(alert);
+
         var key = GetAlertKey(alert);
         var now = DateTimeOffset.UtcNow;
+        var shouldSend = false;
 
-        if (_lastAlertTimes.TryGetValue(key, out var lastTime))
-        {
-            if (now - lastTime < _throttleWindow)
+        // Use atomic AddOrUpdate to prevent race conditions
+        _lastAlertTimes.AddOrUpdate(
+            key,
+            addValueFactory: _ =>
             {
-                return false; // Throttled
-            }
+                shouldSend = true;
+                return now;
+            },
+            updateValueFactory: (_, lastTime) =>
+            {
+                if (now - lastTime >= _throttleWindow)
+                {
+                    shouldSend = true;
+                    return now;
+                }
+                // Throttled - keep the existing time
+                shouldSend = false;
+                return lastTime;
+            });
+
+        if (shouldSend)
+        {
+            CleanupOldEntries(now);
         }
 
-        _lastAlertTimes[key] = now;
-        CleanupOldEntries(now);
-        return true;
+        return shouldSend;
     }
 
     private static string GetAlertKey(AlertMessage alert)

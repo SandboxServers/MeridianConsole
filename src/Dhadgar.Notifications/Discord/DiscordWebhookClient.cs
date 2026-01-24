@@ -27,9 +27,17 @@ public sealed class DiscordWebhookClient : IDiscordWebhook
 
     public async Task SendAlertAsync(AlertMessage alert, CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.WebhookUrl))
+        ArgumentNullException.ThrowIfNull(alert);
+
+        if (!_options.Enabled)
         {
-            _logger.LogDebug("Discord alerting disabled or webhook URL not configured");
+            _logger.LogDebug("Discord alerting is disabled");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.WebhookUrl))
+        {
+            _logger.LogDebug("Discord webhook URL is not configured");
             return;
         }
 
@@ -82,22 +90,15 @@ public sealed class DiscordWebhookClient : IDiscordWebhook
         var json = JsonSerializer.Serialize(payload);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        try
-        {
-            var response = await _httpClient.PostAsync(_options.WebhookUrl, content, cancellationToken);
+        using var response = await _httpClient.PostAsync(_options.WebhookUrl, content, cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning(
-                    "Discord webhook returned {StatusCode}: {Response}",
-                    response.StatusCode,
-                    responseBody);
-            }
-        }
-        catch (Exception ex)
+        if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError(ex, "Failed to send Discord webhook alert");
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "Discord webhook returned {StatusCode}: {Response}",
+                response.StatusCode,
+                responseBody);
         }
     }
 

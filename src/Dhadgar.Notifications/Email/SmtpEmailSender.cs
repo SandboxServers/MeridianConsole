@@ -25,9 +25,29 @@ public sealed class SmtpEmailSender : IEmailSender
 
     public async Task SendAlertEmailAsync(AlertMessage alert, CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.AlertRecipients))
+        ArgumentNullException.ThrowIfNull(alert);
+
+        if (!_options.Enabled)
         {
-            _logger.LogDebug("Email alerting disabled or no recipients configured");
+            _logger.LogDebug("Email alerting is disabled");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.AlertRecipients))
+        {
+            _logger.LogDebug("No email alert recipients configured");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.SmtpHost))
+        {
+            _logger.LogWarning("SMTP host is not configured");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.SenderEmail))
+        {
+            _logger.LogWarning("Sender email is not configured");
             return;
         }
 
@@ -35,7 +55,7 @@ public sealed class SmtpEmailSender : IEmailSender
         var subject = $"[{severityLabel}] {alert.ServiceName}: {alert.Title}";
 
         using var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(_options.SenderName, _options.SenderEmail));
+        message.From.Add(new MailboxAddress(_options.SenderName ?? "Meridian Console", _options.SenderEmail));
 
         foreach (var recipient in _options.AlertRecipients.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
@@ -47,37 +67,30 @@ public sealed class SmtpEmailSender : IEmailSender
         var htmlBody = BuildHtmlBody(alert);
         message.Body = new TextPart("html") { Text = htmlBody };
 
-        try
+        using var client = new SmtpClient();
+
+        var secureSocketOptions = _options.UseTls
+            ? SecureSocketOptions.StartTls
+            : SecureSocketOptions.None;
+
+        await client.ConnectAsync(
+            _options.SmtpHost,
+            _options.SmtpPort,
+            secureSocketOptions,
+            cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(_options.SmtpUsername))
         {
-            using var client = new SmtpClient();
-
-            var secureSocketOptions = _options.UseTls
-                ? SecureSocketOptions.StartTls
-                : SecureSocketOptions.None;
-
-            await client.ConnectAsync(
-                _options.SmtpHost,
-                _options.SmtpPort,
-                secureSocketOptions,
+            await client.AuthenticateAsync(
+                _options.SmtpUsername,
+                _options.SmtpPassword,
                 cancellationToken);
-
-            if (!string.IsNullOrWhiteSpace(_options.SmtpUsername))
-            {
-                await client.AuthenticateAsync(
-                    _options.SmtpUsername,
-                    _options.SmtpPassword,
-                    cancellationToken);
-            }
-
-            await client.SendAsync(message, cancellationToken);
-            await client.DisconnectAsync(true, cancellationToken);
-
-            _logger.LogInformation("Alert email sent: {Subject}", subject);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send alert email: {Subject}", subject);
-        }
+
+        await client.SendAsync(message, cancellationToken);
+        await client.DisconnectAsync(true, cancellationToken);
+
+        _logger.LogInformation("Alert email sent: {Subject}", subject);
     }
 
     private static string BuildHtmlBody(AlertMessage alert)

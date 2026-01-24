@@ -54,26 +54,13 @@ public static class TokenExchangeEndpoint
 
             return outcome.Error switch
             {
-                "invalid_exchange_token" => Results.Problem(
-                    detail: "Invalid or expired exchange token.",
-                    statusCode: StatusCodes.Status401Unauthorized,
-                    title: "Unauthorized",
-                    type: "https://meridian.console/errors/unauthorized"),
-                "invalid_purpose" => Results.Problem(
-                    detail: "Invalid or expired exchange token.",
-                    statusCode: StatusCodes.Status401Unauthorized,
-                    title: "Unauthorized",
-                    type: "https://meridian.console/errors/unauthorized"),
-                "missing_jti" => Results.Problem(
-                    detail: "Invalid or expired exchange token.",
-                    statusCode: StatusCodes.Status401Unauthorized,
-                    title: "Unauthorized",
-                    type: "https://meridian.console/errors/unauthorized"),
-                "missing_claims" => Results.Problem(
-                    detail: "Invalid or expired exchange token.",
-                    statusCode: StatusCodes.Status401Unauthorized,
-                    title: "Unauthorized",
-                    type: "https://meridian.console/errors/unauthorized"),
+                // Consolidated: all token validation failures return same generic message
+                "invalid_exchange_token" or "invalid_purpose" or "missing_jti" or "missing_claims" =>
+                    Results.Problem(
+                        detail: "Invalid or expired exchange token.",
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Unauthorized",
+                        type: "https://meridian.console/errors/unauthorized"),
                 "email_not_verified" => Results.Problem(
                     detail: "Email address must be verified before exchanging tokens.",
                     statusCode: StatusCodes.Status403Forbidden,

@@ -55,3 +55,6 @@ dist/tools/*
 tmpclaude-*
 
 .mcp.json
+
+# Planning docs (local development artifacts)
+.planning/

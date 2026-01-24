@@ -15,6 +15,10 @@ public abstract class DomainException : Exception
     /// </summary>
     public abstract string ErrorType { get; }
 
+    protected DomainException() : base()
+    {
+    }
+
     protected DomainException(string message) : base(message)
     {
     }
@@ -36,6 +40,10 @@ public class ValidationException : DomainException
 
     public override int StatusCode => 400;
     public override string ErrorType => "https://meridian.console/errors/validation";
+
+    public ValidationException() : base()
+    {
+    }
 
     public ValidationException(string message) : base(message)
     {
@@ -69,6 +77,10 @@ public class NotFoundException : DomainException
     public override int StatusCode => 404;
     public override string ErrorType => "https://meridian.console/errors/not-found";
 
+    public NotFoundException() : base()
+    {
+    }
+
     public NotFoundException(string message) : base(message)
     {
     }
@@ -93,6 +105,10 @@ public class ConflictException : DomainException
     public override int StatusCode => 409;
     public override string ErrorType => "https://meridian.console/errors/conflict";
 
+    public ConflictException() : base()
+    {
+    }
+
     public ConflictException(string message) : base(message)
     {
     }
@@ -110,6 +126,10 @@ public class UnauthorizedException : DomainException
     public override int StatusCode => 401;
     public override string ErrorType => "https://meridian.console/errors/unauthorized";
 
+    public UnauthorizedException() : base()
+    {
+    }
+
     public UnauthorizedException(string message) : base(message)
     {
     }
@@ -126,6 +146,10 @@ public class ForbiddenException : DomainException
 {
     public override int StatusCode => 403;
     public override string ErrorType => "https://meridian.console/errors/forbidden";
+
+    public ForbiddenException() : base()
+    {
+    }
 
     public ForbiddenException(string message) : base(message)
     {

@@ -28,6 +28,8 @@ public sealed class AlertDispatcher : IAlertDispatcher
 
     public async Task DispatchAsync(AlertMessage alert, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(alert);
+
         if (!_throttler.ShouldSend(alert))
         {
             _logger.LogDebug(
@@ -43,13 +45,41 @@ public sealed class AlertDispatcher : IAlertDispatcher
             alert.Title,
             alert.Severity);
 
-        // Dispatch to all channels in parallel
-        var tasks = new List<Task>
-        {
-            _discord.SendAlertAsync(alert, cancellationToken),
-            _email.SendAlertEmailAsync(alert, cancellationToken)
-        };
+        // Dispatch to all channels in parallel with error isolation
+        // Each channel should not affect the others
+        var discordTask = SendDiscordSafeAsync(alert, cancellationToken);
+        var emailTask = SendEmailSafeAsync(alert, cancellationToken);
 
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(discordTask, emailTask);
+    }
+
+    private async Task SendDiscordSafeAsync(AlertMessage alert, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _discord.SendAlertAsync(alert, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex,
+                "Failed to send Discord alert: {ServiceName} - {Title}",
+                alert.ServiceName,
+                alert.Title);
+        }
+    }
+
+    private async Task SendEmailSafeAsync(AlertMessage alert, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _email.SendAlertEmailAsync(alert, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex,
+                "Failed to send email alert: {ServiceName} - {Title}",
+                alert.ServiceName,
+                alert.Title);
+        }
     }
 }
