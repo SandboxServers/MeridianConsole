@@ -484,6 +484,7 @@ public sealed class TokenExchangeService
             "microsoft" => "Microsoft",
             "paypal" => "PayPal",
             "reddit" => "Reddit",
+            "roblox" => "Roblox",
             "slack" => "Slack",
             "spotify" => "Spotify",
             "steam" => "Steam",

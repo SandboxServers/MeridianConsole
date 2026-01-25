@@ -150,10 +150,6 @@ extends:
         projectPath: src/Dhadgar.Files/Dhadgar.Files.csproj
         testProjectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
         deploy:  # Disabled: runs locally on Docker Desktop
-      - id: Dhadgar.Firewall
-        projectPath: src/Dhadgar.Firewall/Dhadgar.Firewall.csproj
-        testProjectPath: tests/Dhadgar.Firewall.Tests/Dhadgar.Firewall.Tests.csproj
-        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Gateway
         projectPath: src/Dhadgar.Gateway/Dhadgar.Gateway.csproj
         testProjectPath: tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj
@@ -259,10 +255,6 @@ extends:
         deploy:
       - id: Dhadgar.Files.Tests
         projectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
-        testProjectPath: ''
-        deploy:
-      - id: Dhadgar.Firewall.Tests
-        projectPath: tests/Dhadgar.Firewall.Tests/Dhadgar.Firewall.Tests.csproj
         testProjectPath: ''
         deploy:
       - id: Dhadgar.Gateway.Tests

@@ -45,7 +45,6 @@ services:
       ReverseProxy__Clusters__console__Destinations__d1__Address: http://console:8080/
       ReverseProxy__Clusters__mods__Destinations__d1__Address: http://mods:8080/
       ReverseProxy__Clusters__notifications__Destinations__d1__Address: http://notifications:8080/
-      ReverseProxy__Clusters__firewall__Destinations__d1__Address: http://firewall:8080/
       ReverseProxy__Clusters__secrets__Destinations__d1__Address: http://secrets:8080/
       ReverseProxy__Clusters__discord__Destinations__d1__Address: http://discord:8080/
     ports:
@@ -164,16 +163,6 @@ services:
     environment: *service-env
     ports:
       - "5090:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
-  firewall:
-    build:
-      context: ../..
-      dockerfile: src/Dhadgar.Firewall/Dockerfile
-    environment: *service-env
-    ports:
-      - "5100:8080"
     depends_on: *service-depends
     restart: unless-stopped
 

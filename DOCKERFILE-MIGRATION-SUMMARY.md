@@ -19,7 +19,7 @@ All microservices now support **dual Dockerfile patterns**: local development an
 
 ## Services Migrated
 
-All 13 microservices now have both patterns:
+All 12 microservices now have both patterns:
 
 1. ✅ Dhadgar.Gateway - `Dockerfile` + `Dockerfile.pipeline`
 2. ✅ Dhadgar.Identity - `Dockerfile` + `Dockerfile.pipeline`
@@ -31,9 +31,8 @@ All 13 microservices now have both patterns:
 8. ✅ Dhadgar.Mods - `Dockerfile` + `Dockerfile.pipeline`
 9. ✅ Dhadgar.Console - `Dockerfile` + `Dockerfile.pipeline`
 10. ✅ Dhadgar.Notifications - `Dockerfile` + `Dockerfile.pipeline`
-11. ✅ Dhadgar.Firewall - `Dockerfile` + `Dockerfile.pipeline`
-12. ✅ Dhadgar.Secrets - `Dockerfile` + `Dockerfile.pipeline`
-13. ✅ Dhadgar.Discord - `Dockerfile` + `Dockerfile.pipeline`
+11. ✅ Dhadgar.Secrets - `Dockerfile` + `Dockerfile.pipeline`
+12. ✅ Dhadgar.Discord - `Dockerfile` + `Dockerfile.pipeline`
 
 ## File Layout
 

@@ -8,7 +8,7 @@ interface ShopLoginPageProps {
 export default function ShopLoginPage({ callbackURL }: ShopLoginPageProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md animate-fade-in">
+      <div className="w-full max-w-md md:max-w-2xl lg:max-w-3xl animate-fade-in">
         <Panel variant="bordered" className="relative overflow-hidden border-cyber-magenta/30 shadow-glow-magenta">
           {/* Header */}
           <div className="text-center mb-8">
