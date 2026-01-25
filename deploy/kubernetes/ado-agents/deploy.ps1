@@ -1,8 +1,10 @@
+#!/usr/bin/env pwsh
 #Requires -Version 7.0
 <#
 .SYNOPSIS
     Deploys 10 Azure DevOps agents to a dedicated Talos worker node.
     No container registry required - builds locally and imports directly to node.
+    Works on Windows, Linux, and WSL2.
 
 .PARAMETER WorkerNode
     The name of the Talos worker node to deploy agents to.
@@ -20,15 +22,15 @@
     Skip building the Docker image (use existing image on node).
 
 .EXAMPLE
-    .\deploy.ps1 -WorkerNodeIP 192.168.1.251 -AzpToken "your-pat-token"
+    ./deploy.ps1 -WorkerNodeIP 192.168.1.251 -AzpToken "your-pat-token"
 
 .EXAMPLE
     $env:AZP_TOKEN = "your-pat-token"
-    .\deploy.ps1 -WorkerNodeIP 192.168.1.251
+    ./deploy.ps1 -WorkerNodeIP 192.168.1.251
 
 .EXAMPLE
     # Skip build if image already imported
-    .\deploy.ps1 -WorkerNodeIP 192.168.1.251 -SkipBuild
+    ./deploy.ps1 -WorkerNodeIP 192.168.1.251 -SkipBuild
 #>
 param(
     [string]$WorkerNode = "talos-xmo-fex",
@@ -41,16 +43,33 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = (Get-Item "$ScriptDir/../../..").FullName
+# Cross-platform path handling
+$ScriptPath = $MyInvocation.MyCommand.Path
+if (-not $ScriptPath) {
+    $ScriptPath = $PSCommandPath
+}
+if (-not $ScriptPath) {
+    # Fallback: assume we're in the script directory
+    $ScriptDir = Get-Location
+} else {
+    $ScriptDir = Split-Path -Parent $ScriptPath
+}
+$RepoRoot = (Get-Item (Join-Path $ScriptDir "../../..")).FullName
 
 # Configuration
 $ImageName = "dhadgar-azdo-agent"
 $FullImageName = "localhost/${ImageName}:${ImageTag}"
 $Namespace = "ado-agents"
-$TarFile = Join-Path $env:TEMP "dhadgar-azdo-agent.tar"
+
+# Cross-platform temp file
+if ($IsLinux -or $IsMacOS) {
+    $TarFile = "/tmp/dhadgar-azdo-agent.tar"
+} else {
+    $TarFile = Join-Path $env:TEMP "dhadgar-azdo-agent.tar"
+}
 
 Write-Host "=== ADO Agent Kubernetes Deployment (No Registry) ===" -ForegroundColor Cyan
+Write-Host "Platform: $($IsLinux ? 'Linux' : ($IsMacOS ? 'macOS' : 'Windows'))"
 Write-Host "Image: $FullImageName"
 Write-Host "Worker Node: $WorkerNode ($WorkerNodeIP)"
 Write-Host "Tar File: $TarFile"
@@ -81,10 +100,21 @@ if (-not $SkipBuild) {
     $dockerExists = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $dockerExists) {
         Write-Host "ERROR: docker not found. Install it first." -ForegroundColor Red
-        Write-Host "  On Windows Server 2022: .\scripts\Install-DockerServer2022.ps1"
         exit 1
     }
     Write-Host "[OK] docker found"
+
+    # On Linux, check if docker daemon is running
+    if ($IsLinux) {
+        $dockerRunning = docker info 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Docker daemon not running. Start it with:" -ForegroundColor Red
+            Write-Host "  sudo service docker start"
+            Write-Host "Or if you just installed, log out and back in for group permissions."
+            exit 1
+        }
+        Write-Host "[OK] docker daemon running"
+    }
 }
 Write-Host ""
 
@@ -92,10 +122,10 @@ Write-Host ""
 if (-not $SkipBuild) {
     Write-Host "=== Step 1: Building Docker image locally ===" -ForegroundColor Cyan
 
-    docker build `
-        -t $FullImageName `
-        -f "$RepoRoot/deploy/azure-pipelines/agent.Dockerfile" `
-        $RepoRoot
+    # Cross-platform Dockerfile path
+    $DockerfilePath = Join-Path $RepoRoot "deploy/azure-pipelines/agent.Dockerfile"
+
+    docker build -t $FullImageName -f $DockerfilePath $RepoRoot
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Docker build failed" -ForegroundColor Red
@@ -126,18 +156,20 @@ if (-not $SkipBuild) {
     Write-Host "=== Step 3: Importing image to Talos node ===" -ForegroundColor Cyan
     Write-Host "Copying image to node $WorkerNodeIP (this may take a while)..."
 
-    # Use talosctl to copy and import the image
-    # First, we need to copy the tar to the node, then import it
-    # talosctl can pipe directly: cat file | talosctl -n node image import -
-
-    Get-Content $TarFile -Raw -AsByteStream | talosctl -n $WorkerNodeIP image import -
+    # Cross-platform: use cat on Linux, Get-Content on Windows
+    if ($IsLinux -or $IsMacOS) {
+        # On Linux, pipe with cat
+        bash -c "cat '$TarFile' | talosctl -n $WorkerNodeIP image import -"
+    } else {
+        # On Windows, use Get-Content with byte stream
+        Get-Content $TarFile -Raw -AsByteStream | talosctl -n $WorkerNodeIP image import -
+    }
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Failed to import image to Talos node" -ForegroundColor Red
         Write-Host ""
         Write-Host "Alternative: Copy manually and import" -ForegroundColor Yellow
-        Write-Host "  scp $TarFile root@${WorkerNodeIP}:/tmp/"
-        Write-Host "  talosctl -n $WorkerNodeIP image import /tmp/dhadgar-azdo-agent.tar"
+        Write-Host "  cat $TarFile | talosctl -n $WorkerNodeIP image import -"
         exit 1
     }
 
@@ -179,14 +211,16 @@ Write-Host ""
 
 # Step 5: Create namespace and secret
 Write-Host "=== Step 5: Creating namespace and secret ===" -ForegroundColor Cyan
-kubectl apply -f "$ScriptDir/namespace.yaml"
+
+$NamespaceYaml = Join-Path $ScriptDir "namespace.yaml"
+kubectl apply -f $NamespaceYaml
 
 # Check if secret exists
 $secretExists = kubectl get secret azdo-agent-credentials -n $Namespace 2>$null
 if (-not $secretExists) {
     if ([string]::IsNullOrEmpty($AzpToken)) {
         Write-Host "ERROR: AZP_TOKEN is required for initial deployment." -ForegroundColor Red
-        Write-Host "Set it via: `$env:AZP_TOKEN = 'your-pat-token'"
+        Write-Host 'Set it via: $env:AZP_TOKEN = "your-pat-token"'
         Write-Host "Or pass it as parameter: -AzpToken 'your-pat-token'"
         exit 1
     }
@@ -202,7 +236,8 @@ Write-Host ""
 
 # Step 6: Deploy agents
 Write-Host "=== Step 6: Deploying ADO agents ===" -ForegroundColor Cyan
-kubectl apply -f "$ScriptDir/deployment.yaml"
+$DeploymentYaml = Join-Path $ScriptDir "deployment.yaml"
+kubectl apply -f $DeploymentYaml
 Write-Host ""
 
 # Step 7: Wait for rollout
