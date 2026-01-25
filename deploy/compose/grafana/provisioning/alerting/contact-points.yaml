@@ -1,5 +1,5 @@
 # Provisioned contact points for alert notifications
-# Configure DISCORD_WEBHOOK_URL and ALERT_EMAIL environment variables
+# Configure DISCORD_WEBHOOK_URL and ALERT_EMAIL_ADDRESSES environment variables
 apiVersion: 1
 
 contactPoints:

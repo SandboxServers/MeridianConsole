@@ -11,9 +11,10 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Note: RabbitMq health check removed - MassTransit not yet configured
 builder.Services.AddDhadgarServiceDefaults(
     builder.Configuration,
-    HealthCheckDependencies.Postgres | HealthCheckDependencies.RabbitMq);
+    HealthCheckDependencies.Postgres);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Notifications API",
     description: "Email, Discord, and webhook notifications for Meridian Console");

@@ -2,12 +2,17 @@ using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
+using Dhadgar.ServiceDefaults.Tracing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using RabbitMQ.Client;
 
 namespace Dhadgar.ServiceDefaults;
@@ -48,19 +53,22 @@ public static class ServiceDefaultsExtensions
     }
 
     /// <summary>
-    /// Adds Dhadgar service defaults with configurable health check dependencies.
+    /// Adds Dhadgar service defaults with configurable health check dependencies and OpenTelemetry instrumentation.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
-    /// <param name="configuration">Configuration to read connection strings from.</param>
+    /// <param name="configuration">Configuration to read connection strings and OTLP endpoint from.</param>
     /// <param name="dependencies">Flags indicating which dependencies to check for readiness.</param>
+    /// <param name="configureTracing">Optional callback for additional tracing configuration (e.g., Redis instrumentation).</param>
     /// <returns>The service collection for chaining.</returns>
     /// <remarks>
     /// <para>
-    /// This overload registers health checks based on the specified dependencies:
+    /// This overload registers:
     /// <list type="bullet">
-    ///   <item><see cref="HealthCheckDependencies.Postgres"/> - Adds PostgreSQL connection check</item>
-    ///   <item><see cref="HealthCheckDependencies.Redis"/> - Adds Redis connection check</item>
-    ///   <item><see cref="HealthCheckDependencies.RabbitMq"/> - Adds RabbitMQ connection check</item>
+    ///   <item>Health checks based on specified dependencies</item>
+    ///   <item>OpenTelemetry tracing with ASP.NET Core, HTTP client, and EF Core instrumentation</item>
+    ///   <item>OpenTelemetry metrics with runtime and process instrumentation</item>
+    ///   <item>Logging infrastructure with PII redaction</item>
+    ///   <item>Organization context for multi-tenant scenarios</item>
     /// </list>
     /// </para>
     /// <para>
@@ -70,11 +78,18 @@ public static class ServiceDefaultsExtensions
     ///   <item>"ready" tag - For readiness probes (/readyz), includes dependency checks</item>
     /// </list>
     /// </para>
+    /// <para>
+    /// Configuration keys:
+    /// <list type="bullet">
+    ///   <item><c>OpenTelemetry:OtlpEndpoint</c> - OTLP collector endpoint (e.g., "http://localhost:4317")</item>
+    /// </list>
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddDhadgarServiceDefaults(
         this IServiceCollection services,
         IConfiguration configuration,
-        HealthCheckDependencies dependencies)
+        HealthCheckDependencies dependencies,
+        Action<TracerProviderBuilder>? configureTracing = null)
     {
         var healthChecks = services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
@@ -135,7 +150,95 @@ public static class ServiceDefaultsExtensions
         // Register source-generated request logging messages as singleton
         services.AddSingleton<RequestLoggingMessages>();
 
+        // Add logging infrastructure with PII redaction
+        services.AddDhadgarLogging();
+
+        // Configure OpenTelemetry (tracing + metrics)
+        ConfigureOpenTelemetry(services, configuration, configureTracing);
+
         return services;
+    }
+
+    /// <summary>
+    /// Configures OpenTelemetry tracing, metrics, and prepares logging integration.
+    /// </summary>
+    private static void ConfigureOpenTelemetry(
+        IServiceCollection services,
+        IConfiguration configuration,
+        Action<TracerProviderBuilder>? configureTracing)
+    {
+        // Get OTLP endpoint from configuration
+        var otlpEndpoint = configuration["OpenTelemetry:OtlpEndpoint"];
+        Uri? otlpUri = null;
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint) && Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out var parsed))
+        {
+            otlpUri = parsed;
+        }
+
+        // Get service name from entry assembly
+        var serviceName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "Unknown";
+        var serviceVersion = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "1.0.0";
+
+        // Build resource with service name and version
+        var resourceBuilder = ResourceBuilder.CreateDefault()
+            .AddService(serviceName: serviceName, serviceVersion: serviceVersion);
+
+        services.AddOpenTelemetry()
+            .WithTracing(tracing =>
+            {
+                tracing.SetResourceBuilder(resourceBuilder);
+
+                // Add ASP.NET Core instrumentation for HTTP request/response spans
+                tracing.AddAspNetCoreInstrumentation();
+
+                // Add HTTP client instrumentation for outbound calls
+                tracing.AddHttpClientInstrumentation();
+
+                // Add Entity Framework Core instrumentation with db.system enrichment
+                tracing.AddEntityFrameworkCoreInstrumentation(options =>
+                {
+                    options.SetDbStatementForText = true;
+                    options.SetDbStatementForStoredProcedure = true;
+                    options.EnrichWithIDbCommand = (activity, command) =>
+                    {
+                        activity.SetTag(TracingConstants.Attributes.DbSystem, TracingConstants.DatabaseSystem);
+                    };
+                });
+
+                // Add shared Dhadgar ActivitySource for custom business spans
+                tracing.AddSource(DhadgarActivitySource.Name);
+
+                // Allow service-specific configuration (Redis, custom sources, etc.)
+                configureTracing?.Invoke(tracing);
+
+                // Add OTLP exporter if endpoint is configured
+                if (otlpUri is not null)
+                {
+                    tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
+                }
+            })
+            .WithMetrics(metrics =>
+            {
+                metrics.SetResourceBuilder(resourceBuilder);
+
+                // Add ASP.NET Core metrics (request duration, active requests, etc.)
+                metrics.AddAspNetCoreInstrumentation();
+
+                // Add HTTP client metrics (outbound request duration, etc.)
+                metrics.AddHttpClientInstrumentation();
+
+                // Add runtime metrics (GC, thread pool, etc.)
+                metrics.AddRuntimeInstrumentation();
+
+                // Add process metrics (CPU, memory, etc.)
+                metrics.AddProcessInstrumentation();
+
+                // Add OTLP exporter if endpoint is configured
+                if (otlpUri is not null)
+                {
+                    metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
+                }
+            });
     }
 
     public static WebApplication MapDhadgarDefaultEndpoints(this WebApplication app)
