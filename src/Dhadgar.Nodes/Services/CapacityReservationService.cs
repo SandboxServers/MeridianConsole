@@ -40,6 +40,7 @@ public sealed class CapacityReservationService : ICapacityReservationService
         // Validate node exists and is in a valid state for reservations
         var node = await _dbContext.Nodes
             .Include(n => n.Capacity)
+            .Include(n => n.HardwareInventory)
             .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
 
         if (node is null)

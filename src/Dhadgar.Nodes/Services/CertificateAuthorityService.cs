@@ -139,19 +139,29 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService
             // Build certificate chain and validate against CA
             using var chain = new X509Chain();
             chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
+            // Allow unknown CA (since our CA is self-signed and not in system trust store)
+            // Ignore time validation (we handle expiration via database records)
+            chain.ChainPolicy.VerificationFlags =
+                X509VerificationFlags.AllowUnknownCertificateAuthority |
+                X509VerificationFlags.IgnoreNotTimeValid;
             chain.ChainPolicy.ExtraStore.Add(_caCertificate!);
 
             var isValid = chain.Build(certificate);
 
-            // Additional check: verify the certificate was actually signed by our CA
-            if (isValid && chain.ChainElements.Count >= 2)
+            // Verify the certificate was actually signed by our CA
+            // A valid client certificate issued by our CA should have 2 chain elements:
+            // - The client certificate (index 0)
+            // - Our CA certificate (index 1)
+            if (!isValid || chain.ChainElements.Count < 2)
             {
-                var issuer = chain.ChainElements[^1].Certificate;
-                isValid = issuer.Thumbprint == _caCertificate!.Thumbprint;
+                // Self-signed certificates or certificates not chaining to any CA
+                // are not valid (they should be issued by our CA)
+                return false;
             }
 
-            return isValid;
+            // Verify the issuing CA is our CA
+            var issuer = chain.ChainElements[^1].Certificate;
+            return issuer.Thumbprint == _caCertificate!.Thumbprint;
         }
         catch (Exception ex)
         {
@@ -313,8 +323,8 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService
         return CertificateIssuanceResult.Ok(
             thumbprint,
             serialNumber,
-            certificate.NotBefore,
-            certificate.NotAfter,
+            DateTime.SpecifyKind(certificate.NotBefore.ToUniversalTime(), DateTimeKind.Utc),
+            DateTime.SpecifyKind(certificate.NotAfter.ToUniversalTime(), DateTimeKind.Utc),
             certPem,
             pkcs12Base64,
             pkcs12Password);

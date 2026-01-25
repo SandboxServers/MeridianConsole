@@ -20,8 +20,6 @@ public sealed class NodeService : INodeService
     private readonly ILogger<NodeService> _logger;
     private readonly NodesOptions _options;
 
-    // Escape character for LIKE pattern matching
-    private const string LikeEscape = "\\";
 
     public NodeService(
         NodesDbContext dbContext,
@@ -383,8 +381,8 @@ public sealed class NodeService : INodeService
         // Filter by platform (case-insensitive)
         if (!string.IsNullOrWhiteSpace(filters.Platform))
         {
-            var platform = filters.Platform.Trim();
-            query = query.Where(n => EF.Functions.ILike(n.Platform, platform));
+            var platform = filters.Platform.Trim().ToLowerInvariant();
+            query = query.Where(n => n.Platform.ToLower() == platform);
         }
 
         // Filter by health score range (requires Health navigation)
@@ -422,24 +420,24 @@ public sealed class NodeService : INodeService
             }
         }
 
-        // Full-text search on name and displayName
+        // Full-text search on name and displayName (case-insensitive contains)
         if (!string.IsNullOrWhiteSpace(filters.Search))
         {
-            var searchTerm = filters.Search.Trim();
-            var pattern = $"%{EscapeLikePattern(searchTerm)}%";
+            var searchTerm = filters.Search.Trim().ToLowerInvariant();
 
             query = query.Where(n =>
-                EF.Functions.ILike(n.Name, pattern, LikeEscape) ||
-                (n.DisplayName != null && EF.Functions.ILike(n.DisplayName, pattern, LikeEscape)));
+                n.Name.ToLower().Contains(searchTerm) ||
+                (n.DisplayName != null && n.DisplayName.ToLower().Contains(searchTerm)));
         }
 
         // Filter by tags (any match)
         var requestedTags = filters.ParseTagsFilter();
         if (requestedTags.Count > 0)
         {
-            // PostgreSQL JSONB array contains any of the requested tags
-            // Using raw SQL for PostgreSQL's array intersection
-            query = query.Where(n => n.Tags.Any(t => requestedTags.Contains(t)));
+            // Build predicate: n.Tags.Contains("tag1") || n.Tags.Contains("tag2") || ...
+            // This works with both PostgreSQL and InMemory providers
+            var tagPredicate = BuildTagFilterPredicate(requestedTags);
+            query = query.Where(tagPredicate);
         }
 
         return query;
@@ -489,6 +487,39 @@ public sealed class NodeService : INodeService
     }
 
     /// <summary>
+    /// Builds a predicate expression for tag filtering that works with both
+    /// PostgreSQL and InMemory providers.
+    /// </summary>
+    /// <remarks>
+    /// The InMemory provider cannot translate `requestedTags.Contains(t)` when
+    /// iterating over a collection navigation property. This method builds
+    /// individual `Tags.Contains("tag")` calls combined with OR.
+    /// </remarks>
+    private static Expression<Func<Node, bool>> BuildTagFilterPredicate(IReadOnlyList<string> requestedTags)
+    {
+        var parameter = Expression.Parameter(typeof(Node), "n");
+        var tagsProperty = Expression.Property(parameter, nameof(Node.Tags));
+        var containsMethod = typeof(List<string>).GetMethod("Contains", [typeof(string)])!;
+
+        Expression? combinedCondition = null;
+
+        foreach (var tag in requestedTags)
+        {
+            var tagConstant = Expression.Constant(tag);
+            var containsCall = Expression.Call(tagsProperty, containsMethod, tagConstant);
+
+            combinedCondition = combinedCondition == null
+                ? containsCall
+                : Expression.OrElse(combinedCondition, containsCall);
+        }
+
+        // If no tags, return a predicate that always returns false (shouldn't happen due to count check)
+        combinedCondition ??= Expression.Constant(false);
+
+        return Expression.Lambda<Func<Node, bool>>(combinedCondition, parameter);
+    }
+
+    /// <summary>
     /// Calculates a health score (0-100) based on resource usage.
     /// Higher score = healthier node.
     /// </summary>
@@ -502,17 +533,6 @@ public sealed class NodeService : INodeService
         // Average of (100 - each usage percentage)
         var avgUsage = (health.CpuUsagePercent + health.MemoryUsagePercent + health.DiskUsagePercent) / 3;
         return (int)Math.Round(100 - avgUsage);
-    }
-
-    /// <summary>
-    /// Escapes special characters for LIKE pattern matching.
-    /// </summary>
-    private static string EscapeLikePattern(string value)
-    {
-        return value
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("%", "\\%", StringComparison.Ordinal)
-            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -419,7 +419,10 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         // Assert - Build chain
         using var chain = new X509Chain();
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
+        // Ignore time validity since tests use FakeTimeProvider (dates may be in the past)
+        chain.ChainPolicy.VerificationFlags =
+            X509VerificationFlags.AllowUnknownCertificateAuthority |
+            X509VerificationFlags.IgnoreNotTimeValid;
         chain.ChainPolicy.ExtraStore.Add(caCert);
 
         var chainBuilds = chain.Build(clientCert);

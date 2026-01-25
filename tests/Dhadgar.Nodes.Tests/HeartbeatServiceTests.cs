@@ -69,9 +69,9 @@ public sealed class HeartbeatServiceTests
     }
 
     private static HeartbeatRequest CreateHealthyHeartbeat(string? agentVersion = null) => new(
-        CpuUsagePercent: 30.0,
-        MemoryUsagePercent: 50.0,
-        DiskUsagePercent: 40.0,
+        CpuUsagePercent: 20.0,  // Low usage values to produce a healthy score (>=80)
+        MemoryUsagePercent: 20.0,
+        DiskUsagePercent: 20.0,
         ActiveGameServers: 2,
         AgentVersion: agentVersion,
         HealthIssues: null);

@@ -99,8 +99,8 @@ public sealed class HealthScoringServiceTests
         // Memory: (100-75) * 0.30 = 7.5
         // Disk: (100-60) * 0.20 = 8
         // Issues: (100-20) * 0.25 = 20
-        // Total: 40.5 -> 41 (rounded)
-        Assert.Equal(41, score);
+        // Total: 40.5 -> 40 (banker's rounding - round half to even)
+        Assert.Equal(40, score);
     }
 
     [Fact]

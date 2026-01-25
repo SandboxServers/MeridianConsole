@@ -181,8 +181,11 @@ app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 
+// Authentication and authorization
+app.UseAuthentication();
+app.UseAuthorization();
+
 // mTLS authentication middleware for agent endpoints
-// This must come before UseAuthorization() and after UseRouting()
 app.UseMtlsAuthentication();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.

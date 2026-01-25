@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Dhadgar.Nodes;
+using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Data;
@@ -8,8 +9,10 @@ using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -104,7 +107,40 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             })
             .AddScheme<AuthenticationSchemeOptions, TestNodesAuthHandler>(
                 TestNodesAuthHandler.SchemeName, _ => { });
+
+            // Configure NodesOptions with defaults for testing
+            services.Configure<NodesOptions>(options =>
+            {
+                options.HeartbeatThresholdMinutes = 5;
+            });
+
+            // Replace audit context accessor with test-friendly version
+            // The real one depends on HttpContext which may not be fully available in tests
+            services.RemoveAll<IAuditContextAccessor>();
+            services.AddScoped<IAuditContextAccessor, TestNodesAuditContextAccessor>();
+
+            // Add a startup filter to initialize the database
+            services.AddSingleton<IStartupFilter>(new DbInitStartupFilter());
+
+            // Add problem details and endpoint exploration for better error reporting
+            // This ensures minimal API binding infrastructure is properly configured
+            services.AddProblemDetails();
+            services.AddEndpointsApiExplorer();
         });
+    }
+
+    private sealed class DbInitStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+        {
+            return app =>
+            {
+                using var scope = app.ApplicationServices.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+                db.Database.EnsureCreated();
+                next(app);
+            };
+        }
     }
 
     /// <summary>
@@ -160,6 +196,16 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
         db.Nodes.Add(node);
         await db.SaveChangesAsync();
         return node;
+    }
+
+    /// <summary>
+    /// Ensures the test database is created (for tests that don't seed data).
+    /// </summary>
+    public async Task EnsureDatabaseCreatedAsync()
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        await db.Database.EnsureCreatedAsync();
     }
 
     /// <summary>
@@ -231,4 +277,18 @@ public sealed class TestNodesAuthHandler : AuthenticationHandler<AuthenticationS
 
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
+}
+
+/// <summary>
+/// Test implementation of IAuditContextAccessor for integration tests.
+/// Returns sensible defaults without depending on HTTP context.
+/// </summary>
+public sealed class TestNodesAuditContextAccessor : IAuditContextAccessor
+{
+    public string GetActorId() => "test-user";
+    public ActorType GetActorType() => ActorType.User;
+    public string? GetCorrelationId() => Guid.NewGuid().ToString();
+    public string? GetRequestId() => Guid.NewGuid().ToString();
+    public string? GetIpAddress() => "127.0.0.1";
+    public string? GetUserAgent() => "Test/1.0";
 }

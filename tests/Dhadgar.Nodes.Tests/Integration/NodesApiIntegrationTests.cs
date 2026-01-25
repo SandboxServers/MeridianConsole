@@ -74,9 +74,18 @@ public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplication
     [Fact]
     public async Task ListNodes_WithAuth_ReturnsOk()
     {
+        // Ensure database is created (no need to seed, just initialize)
+        await _factory.EnsureDatabaseCreatedAsync();
+
         using var client = _factory.CreateAuthenticatedClient(TestUserId, TestOrgId);
 
         var response = await client.GetAsync($"/api/v1/organizations/{TestOrgId}/nodes");
+
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            throw new Exception($"Expected OK but got {response.StatusCode}. Body: '{body}'");
+        }
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -90,7 +99,7 @@ public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplication
         var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<NodeSummary>>();
+        var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
         Assert.NotNull(result);
         Assert.Empty(result.Items);
         Assert.Equal(0, result.Total);
@@ -106,7 +115,7 @@ public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplication
         var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<NodeSummary>>();
+        var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
         Assert.NotNull(result);
         Assert.Equal(3, result.Items.Count);
         Assert.Equal(3, result.Total);
@@ -119,15 +128,15 @@ public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplication
         await _factory.SeedNodesAsync(orgId, 10);
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes?page=1&limit=3");
+        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes?page=1&pageSize=3");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<NodeSummary>>();
+        var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
         Assert.NotNull(result);
         Assert.Equal(3, result.Items.Count);
         Assert.Equal(10, result.Total);
         Assert.Equal(1, result.Page);
-        Assert.Equal(3, result.Limit);
+        Assert.Equal(3, result.PageSize);
     }
 
     [Fact]

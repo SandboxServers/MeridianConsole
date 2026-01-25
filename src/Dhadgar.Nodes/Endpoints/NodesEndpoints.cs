@@ -1,3 +1,4 @@
+using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -69,9 +70,35 @@ public static class NodesEndpoints
     private static async Task<IResult> ListNodes(
         Guid organizationId,
         INodeService nodeService,
-        [AsParameters] NodeListQuery query,
+        int page = 1,
+        int pageSize = 20,
+        NodeStatus? status = null,
+        string? platform = null,
+        int? minHealthScore = null,
+        int? maxHealthScore = null,
+        bool? hasActiveServers = null,
+        string? search = null,
+        string? tags = null,
+        string sortBy = "name",
+        string sortOrder = "asc",
+        bool includeDecommissioned = false,
         CancellationToken ct = default)
     {
+        var query = new NodeListQuery
+        {
+            Page = page,
+            PageSize = pageSize,
+            Status = status,
+            Platform = platform,
+            MinHealthScore = minHealthScore,
+            MaxHealthScore = maxHealthScore,
+            HasActiveServers = hasActiveServers,
+            Search = search,
+            Tags = tags,
+            SortBy = sortBy,
+            SortOrder = sortOrder,
+            IncludeDecommissioned = includeDecommissioned
+        };
         var result = await nodeService.GetNodesAsync(organizationId, query, ct);
         return Results.Ok(result);
     }
