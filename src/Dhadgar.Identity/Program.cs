@@ -29,7 +29,12 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Audit;
+using Dhadgar.ServiceDefaults.Errors;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
+using Dhadgar.ServiceDefaults.Tracing;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -352,6 +357,18 @@ else
 
 builder.Services.AddScoped<IIdentityEventPublisher, IdentityEventPublisher>();
 builder.Services.AddSecurityEventLogger();
+
+// Add Dhadgar logging infrastructure with PII redaction
+builder.Services.AddDhadgarLogging();
+builder.Services.AddOrganizationContext();
+builder.Services.AddSingleton<RequestLoggingMessages>();
+builder.Logging.AddDhadgarLogging("Dhadgar.Identity", builder.Configuration);
+
+// API audit infrastructure for compliance logging (separate from domain AuditEvents)
+builder.Services.AddAuditInfrastructure<IdentityDbContext>();
+
+// Error handling infrastructure (RFC 9457 Problem Details)
+builder.Services.AddDhadgarErrorHandling();
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -740,20 +757,18 @@ builder.Logging.AddOpenTelemetry(options =>
     }
 });
 
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
+// Tracing (centralized with EF Core and Redis instrumentation)
+builder.Services.AddDhadgarTracing(
+    builder.Configuration,
+    "Dhadgar.Identity",
+    tracing =>
     {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+        // Add Redis instrumentation - resolves IConnectionMultiplexer from DI
+        tracing.AddRedisInstrumentation();
+    });
 
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
-    })
+// Metrics
+builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics
@@ -767,7 +782,6 @@ builder.Services.AddOpenTelemetry()
         {
             metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
         }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
     });
 
 var app = builder.Build();
@@ -783,10 +797,15 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 app.UseRequestLimitsMiddleware();
 
 app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<TenantEnrichmentMiddleware>();
+app.UseDhadgarErrorHandling();  // RFC 9457 Problem Details with trace context
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Audit middleware - captures authenticated API requests for compliance
+app.UseAuditMiddleware();
+
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseRateLimiter();

@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data.Configuration;
 using Dhadgar.Identity.Data.Entities;
+using Dhadgar.ServiceDefaults.Audit;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,7 @@ using OpenIddict.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Data;
 
-public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
+public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>, IAuditDbContext
 {
     public IdentityDbContext(DbContextOptions<IdentityDbContext> options) : base(options) { }
 
@@ -19,6 +20,12 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
     public DbSet<ClaimDefinition> ClaimDefinitions => Set<ClaimDefinition>();
     public DbSet<OrganizationRole> OrganizationRoles => Set<OrganizationRole>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+
+    /// <summary>
+    /// API audit records for HTTP request tracking (compliance/analysis).
+    /// Distinct from <see cref="AuditEvents"/> which tracks domain events (user.created, role.assigned).
+    /// </summary>
+    public DbSet<ApiAuditRecord> ApiAuditRecords => Set<ApiAuditRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -33,6 +40,9 @@ public sealed class IdentityDbContext : IdentityDbContext<User, IdentityRole<Gui
         builder.ApplyConfiguration(new ClaimDefinitionConfiguration());
         builder.ApplyConfiguration(new OrganizationRoleConfiguration());
         builder.ApplyConfiguration(new AuditEventConfiguration());
+
+        // API audit record configuration (distinct from domain-level AuditEvent)
+        builder.ApplyConfiguration(new ApiAuditRecordConfiguration());
 
         builder.UseOpenIddict();
 

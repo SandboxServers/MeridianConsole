@@ -1,67 +1,75 @@
 using System.Diagnostics;
+using Dhadgar.ServiceDefaults.Logging;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.ServiceDefaults.Middleware;
 
 /// <summary>
-/// Middleware that logs HTTP requests and responses with correlation context.
-/// Uses logging scopes to automatically include correlation IDs in all log messages.
+/// Middleware that logs HTTP requests and responses using source-generated logging.
+/// Uses <see cref="RequestLoggingMessages"/> for high-performance, allocation-free logging.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This middleware relies on <see cref="TenantEnrichmentMiddleware"/> to establish the logging scope
+/// with correlation IDs and tenant context. The logging scope is NOT created here - all context
+/// is inherited from the upstream middleware.
+/// </para>
+/// <para>
+/// Recommended middleware order:
+/// <list type="number">
+///   <item><see cref="CorrelationMiddleware"/> - Sets CorrelationId and RequestId</item>
+///   <item><see cref="TenantEnrichmentMiddleware"/> - Adds all context to logging scope</item>
+///   <item><see cref="RequestLoggingMiddleware"/> - Logs requests with full context (this middleware)</item>
+/// </list>
+/// </para>
+/// </remarks>
 public sealed class RequestLoggingMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly ILogger<RequestLoggingMiddleware> _logger;
+    private readonly RequestLoggingMessages _requestLogger;
 
-    public RequestLoggingMiddleware(RequestDelegate next, ILogger<RequestLoggingMiddleware> logger)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RequestLoggingMiddleware"/> class.
+    /// </summary>
+    /// <param name="next">The next middleware in the pipeline.</param>
+    /// <param name="requestLogger">The source-generated request logging messages.</param>
+    public RequestLoggingMiddleware(RequestDelegate next, RequestLoggingMessages requestLogger)
     {
         _next = next;
-        _logger = logger;
+        _requestLogger = requestLogger;
     }
 
+    /// <summary>
+    /// Invokes the middleware, logging the request and response.
+    /// </summary>
+    /// <param name="context">The HTTP context.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task InvokeAsync(HttpContext context)
     {
-        var correlationId = context.Items["CorrelationId"]?.ToString() ?? "unknown";
-        var requestId = context.Items["RequestId"]?.ToString() ?? "unknown";
+        var method = context.Request.Method;
+        var path = context.Request.Path.Value ?? "/";
         var stopwatch = Stopwatch.StartNew();
 
-        // Use logging scopes to add correlation context to all log messages
-        using (_logger.BeginScope(new Dictionary<string, object>
+        try
         {
-            ["CorrelationId"] = correlationId,
-            ["RequestId"] = requestId,
-            ["RequestMethod"] = context.Request.Method,
-            ["RequestPath"] = context.Request.Path.Value ?? "/"
-        }))
+            await _next(context);
+            stopwatch.Stop();
+
+            _requestLogger.LogRequestCompleted(
+                method,
+                path,
+                context.Response.StatusCode,
+                stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
         {
-            try
-            {
-                await _next(context);
-                stopwatch.Stop();
-
-                var level = context.Response.StatusCode >= 500
-                    ? LogLevel.Error
-                    : context.Response.StatusCode >= 400
-                        ? LogLevel.Warning
-                        : LogLevel.Information;
-
-                _logger.Log(level,
-                    "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs}ms",
-                    context.Request.Method,
-                    context.Request.Path,
-                    context.Response.StatusCode,
-                    stopwatch.ElapsedMilliseconds);
-            }
-            catch (Exception ex)
-            {
-                stopwatch.Stop();
-                _logger.LogError(ex,
-                    "HTTP {Method} {Path} failed after {ElapsedMs}ms",
-                    context.Request.Method,
-                    context.Request.Path,
-                    stopwatch.ElapsedMilliseconds);
-                throw;
-            }
+            stopwatch.Stop();
+            _requestLogger.LogRequestFailed(
+                method,
+                path,
+                stopwatch.ElapsedMilliseconds,
+                ex);
+            throw;
         }
     }
 }

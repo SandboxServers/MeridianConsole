@@ -91,7 +91,13 @@ public static class UserEndpoints
         }
 
         var result = await userService.GetAsync(organizationId, userId, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
     }
 
     private static async Task<IResult> CreateUser(
@@ -122,7 +128,11 @@ public static class UserEndpoints
         var result = await userService.CreateAsync(organizationId, actorUserId, request, ct);
         return result.Success
             ? Results.Created($"/organizations/{organizationId}/users/{result.Value?.Id}", result.Value)
-            : Results.BadRequest(new { error = result.Error });
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
     }
 
     private static async Task<IResult> UpdateUser(
@@ -153,11 +163,21 @@ public static class UserEndpoints
 
         if (string.IsNullOrWhiteSpace(request.Email) && string.IsNullOrWhiteSpace(request.DisplayName))
         {
-            return Results.BadRequest(new { error = "no_updates" });
+            return Results.Problem(
+                detail: "No updates provided.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         var result = await userService.UpdateAsync(organizationId, userId, request, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
     }
 
     private static async Task<IResult> DeleteUser(
@@ -186,7 +206,13 @@ public static class UserEndpoints
         }
 
         var result = await userService.SoftDeleteAsync(organizationId, userId, ct);
-        return result.Success ? Results.NoContent() : Results.BadRequest(new { error = result.Error });
+        return result.Success
+            ? Results.NoContent()
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
     }
 
     private static async Task<IResult> UnlinkAccount(
@@ -229,10 +255,20 @@ public static class UserEndpoints
 
         if (!membershipExists)
         {
-            return Results.NotFound(new { error = "user_not_found" });
+            return Results.Problem(
+                detail: "User not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         var result = await linkedAccountService.UnlinkAsync(userId, linkedAccountId, ct);
-        return result.Success ? Results.NoContent() : Results.BadRequest(new { error = result.Error });
+        return result.Success
+            ? Results.NoContent()
+            : Results.Problem(
+                detail: result.Error,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
     }
 }

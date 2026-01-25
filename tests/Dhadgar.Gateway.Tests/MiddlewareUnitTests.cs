@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Dhadgar.Gateway.Middleware;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
@@ -116,9 +117,11 @@ public class MiddlewareUnitTests
         var context = CreateContext();
         context.Response.StatusCode = StatusCodes.Status204NoContent;
 
+        var requestLogger = new RequestLoggingMessages(
+            NullLogger<RequestLoggingMessages>.Instance);
         var middleware = new RequestLoggingMiddleware(
             _ => Task.CompletedTask,
-            NullLogger<RequestLoggingMiddleware>.Instance);
+            requestLogger);
 
         await middleware.InvokeAsync(context);
     }
@@ -127,9 +130,11 @@ public class MiddlewareUnitTests
     public async Task RequestLoggingMiddlewareRethrowsOnFailure()
     {
         var context = CreateContext();
+        var requestLogger = new RequestLoggingMessages(
+            NullLogger<RequestLoggingMessages>.Instance);
         var middleware = new RequestLoggingMiddleware(
             _ => throw new InvalidOperationException("boom"),
-            NullLogger<RequestLoggingMiddleware>.Instance);
+            requestLogger);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(context));
     }

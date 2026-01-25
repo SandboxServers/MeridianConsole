@@ -1,17 +1,20 @@
 using Dhadgar.Notifications;
+using Dhadgar.Notifications.Alerting;
 using Dhadgar.Notifications.Data;
+using Dhadgar.Notifications.Discord;
+using Dhadgar.Notifications.Email;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults();
+// Note: RabbitMq health check removed - MassTransit not yet configured
+builder.Services.AddDhadgarServiceDefaults(
+    builder.Configuration,
+    HealthCheckDependencies.Postgres);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Notifications API",
     description: "Email, Discord, and webhook notifications for Meridian Console");
@@ -19,58 +22,26 @@ builder.Services.AddMeridianSwagger(
 builder.Services.AddDbContext<NotificationsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-// OpenTelemetry configuration
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-Uri? otlpUri = null;
-if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-{
-    if (Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out var parsedUri))
-    {
-        otlpUri = parsedUri;
-    }
-}
-var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Notifications");
+// Configure alerting options
+builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection("Discord"));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 
-builder.Logging.AddOpenTelemetry(options =>
+// Register HTTP client for Discord webhook
+builder.Services.AddHttpClient<IDiscordWebhook, DiscordWebhookClient>(client =>
 {
-    options.SetResourceBuilder(resourceBuilder);
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
-    options.ParseStateValues = true;
-
-    if (otlpUri is not null)
-    {
-        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
-    }
+    client.Timeout = TimeSpan.FromSeconds(10);
 });
 
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+// Register email sender (scoped - creates new SmtpClient per call)
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation();
+// Register throttler with configurable window (minimum 1 minute to prevent misconfiguration)
+var throttleMinutes = builder.Configuration.GetValue<int>("Alerting:ThrottleWindowMinutes", 5);
+var validatedThrottleMinutes = Math.Max(1, throttleMinutes);
+builder.Services.AddSingleton(new AlertThrottler(TimeSpan.FromMinutes(validatedThrottleMinutes)));
 
-        if (otlpUri is not null)
-        {
-            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    });
+// Register alert dispatcher (scoped to match transient Discord and scoped Email dependencies)
+builder.Services.AddScoped<IAlertDispatcher, AlertDispatcher>();
 
 var app = builder.Build();
 

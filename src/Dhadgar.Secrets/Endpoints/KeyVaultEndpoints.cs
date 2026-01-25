@@ -91,7 +91,11 @@ public static class KeyVaultEndpoints
 
         if (vault == null)
         {
-            return Results.NotFound(new { error = $"Vault '{vaultName}' not found." });
+            return Results.Problem(
+                detail: $"Vault '{vaultName}' not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         return Results.Ok(new VaultDetailResponse(
@@ -127,7 +131,11 @@ public static class KeyVaultEndpoints
 
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Location))
         {
-            return Results.BadRequest(new { error = "Name and Location are required." });
+            return Results.Problem(
+                detail: "Name and Location are required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/validation");
         }
 
         try
@@ -156,15 +164,27 @@ public static class KeyVaultEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("exists", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Conflict(new { error = ex.Message });
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Conflict",
+                    type: "https://meridian.console/errors/conflict");
             }
-            return Results.BadRequest(new { error = ex.Message });
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
     }
 
@@ -212,15 +232,27 @@ public static class KeyVaultEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.NotFound(new { error = ex.Message });
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "Not Found",
+                    type: "https://meridian.console/errors/not-found");
             }
-            return Results.BadRequest(new { error = ex.Message });
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
     }
 
@@ -239,7 +271,11 @@ public static class KeyVaultEndpoints
 
         if (!success)
         {
-            return Results.NotFound(new { error = $"Vault '{vaultName}' not found." });
+            return Results.Problem(
+                detail: $"Vault '{vaultName}' not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         return Results.NoContent();

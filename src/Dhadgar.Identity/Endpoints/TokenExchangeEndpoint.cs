@@ -28,7 +28,11 @@ public static class TokenExchangeEndpoint
 
         if (string.IsNullOrWhiteSpace(request.ExchangeToken))
         {
-            return Results.BadRequest(new { error = "missing_exchange_token" });
+            return Results.Problem(
+                detail: "Exchange token is required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         var outcome = await service.ExchangeAsync(request.ExchangeToken, ct);
@@ -50,14 +54,23 @@ public static class TokenExchangeEndpoint
 
             return outcome.Error switch
             {
-                "invalid_exchange_token" => Results.Unauthorized(),
-                "invalid_purpose" => Results.Unauthorized(),
-                "missing_jti" => Results.Unauthorized(),
-                "missing_claims" => Results.Unauthorized(),
-                "email_not_verified" => Results.Json(
-                    new { error = "email_not_verified" },
-                    statusCode: 403),
-                _ => Results.BadRequest(new { error = safeError })
+                // Consolidated: all token validation failures return same generic message
+                "invalid_exchange_token" or "invalid_purpose" or "missing_jti" or "missing_claims" =>
+                    Results.Problem(
+                        detail: "Invalid or expired exchange token.",
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Unauthorized",
+                        type: "https://meridian.console/errors/unauthorized"),
+                "email_not_verified" => Results.Problem(
+                    detail: "Email address must be verified before exchanging tokens.",
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "Forbidden",
+                    type: "https://meridian.console/errors/forbidden"),
+                _ => Results.Problem(
+                    detail: safeError == "exchange_failed" ? "Token exchange failed." : safeError,
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Bad Request",
+                    type: "https://meridian.console/errors/bad-request")
             };
         }
 

@@ -99,7 +99,11 @@ public static class EndpointHelpers
 
         if (org is null)
         {
-            return Results.NotFound(new { error = "org_not_found" });
+            return Results.Problem(
+                detail: "Organization not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         if (!org.RequireEmailVerification)
@@ -113,9 +117,11 @@ public static class EndpointHelpers
             return null; // Email is verified
         }
 
-        return Results.Json(
-            new { error = "email_verification_required", message = "This organization requires email verification" },
-            statusCode: StatusCodes.Status403Forbidden);
+        return Results.Problem(
+            detail: "This organization requires email verification.",
+            statusCode: StatusCodes.Status403Forbidden,
+            title: "Forbidden",
+            type: "https://meridian.console/errors/forbidden");
     }
 
     /// <summary>

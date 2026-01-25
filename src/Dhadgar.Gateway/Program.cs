@@ -9,7 +9,10 @@ using Dhadgar.Gateway.Options;
 using Dhadgar.Gateway.Readiness;
 using Dhadgar.Gateway.Services;
 using GatewayHello = Dhadgar.Gateway.Hello;
+using Dhadgar.ServiceDefaults.Health;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Resilience;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -58,8 +61,21 @@ builder.Services.AddCircuitBreaker(builder.Configuration);
 // Add Problem Details for standardized error responses
 builder.Services.AddProblemDetails();
 
-builder.Services.AddHealthChecks()
+// Health checks: liveness (self) + readiness (YARP + Redis)
+var healthChecksBuilder = builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<YarpReadinessCheck>("yarp_ready", tags: ["ready"]);
+
+// Add Redis health check for rate limiting cache
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+if (!string.IsNullOrEmpty(redisConnectionString))
+{
+    healthChecksBuilder.AddRedis(
+        redisConnectionString,
+        name: "redis",
+        timeout: TimeSpan.FromSeconds(2),
+        tags: ["ready"]);
+}
 
 // Authentication/authorization
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -111,6 +127,14 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient("OpenApiAggregation")
     .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<OpenApiAggregationService>();
+
+// Register source-generated request logging messages (required by RequestLoggingMiddleware)
+builder.Services.AddSingleton<RequestLoggingMessages>();
+
+// Add Dhadgar logging infrastructure with PII redaction
+builder.Services.AddDhadgarLogging();
+builder.Services.AddOrganizationContext();
+builder.Logging.AddDhadgarLogging("Dhadgar.Gateway", builder.Configuration);
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 Uri? otlpUri = null;
@@ -331,10 +355,13 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 // 3. Correlation ID tracking (needed by all downstream middleware)
 app.UseMiddleware<CorrelationMiddleware>();
 
-// 4. Problem Details exception handler (catch exceptions early)
+// 4. Tenant enrichment (adds TenantId, ServiceName, etc. to logging scope)
+app.UseMiddleware<TenantEnrichmentMiddleware>();
+
+// 5. Problem Details exception handler (catch exceptions early)
 app.UseMiddleware<ProblemDetailsMiddleware>();
 
-// 5. Request logging (wraps downstream pipeline)
+// 6. Request logging (wraps downstream pipeline with full context)
 app.UseMiddleware<RequestLoggingMiddleware>();
 
 // 6. CORS (for non-preflight requests)

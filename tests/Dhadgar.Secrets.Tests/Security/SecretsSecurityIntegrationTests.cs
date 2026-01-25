@@ -10,6 +10,7 @@ using Dhadgar.Secrets.Audit;
 using Dhadgar.Secrets.Endpoints;
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Services;
+using Dhadgar.ServiceDefaults.Logging;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -377,6 +378,9 @@ public sealed class SecureSecretsWebApplicationFactory : WebApplicationFactory<P
 
             services.RemoveAll<ICertificateProvider>();
             services.AddSingleton<ICertificateProvider>(new FakeCertificateProvider());
+
+            // Add RequestLoggingMessages for middleware (required by RequestLoggingMiddleware)
+            services.AddSingleton<RequestLoggingMessages>();
 
             // Configure test JWT authentication
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>

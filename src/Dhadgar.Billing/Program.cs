@@ -1,10 +1,16 @@
 using Dhadgar.Billing;
 using Dhadgar.Billing.Data;
+using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Health;
+using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddDhadgarServiceDefaults(
+    builder.Configuration,
+    HealthCheckDependencies.Postgres);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Billing API",
     description: "Billing, subscriptions, and usage metering for Meridian Console");
@@ -15,6 +21,11 @@ builder.Services.AddDbContext<BillingDbContext>(options =>
 var app = builder.Build();
 
 app.UseMeridianSwagger();
+
+// Standard middleware
+app.UseMiddleware<CorrelationMiddleware>();
+app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
@@ -32,12 +43,11 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Billing", message = Hello.Message }))
+app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Billing", message = Dhadgar.Billing.Hello.Message }))
     .WithTags("Health").WithName("BillingServiceInfo");
-app.MapGet("/hello", () => Results.Text(Hello.Message))
+app.MapGet("/hello", () => Results.Text(Dhadgar.Billing.Hello.Message))
     .WithTags("Health").WithName("BillingHello");
-app.MapGet("/healthz", () => Results.Ok(new { service = "Dhadgar.Billing", status = "ok" }))
-    .WithTags("Health").WithName("BillingHealth");
+app.MapDhadgarDefaultEndpoints();
 
 app.Run();
 

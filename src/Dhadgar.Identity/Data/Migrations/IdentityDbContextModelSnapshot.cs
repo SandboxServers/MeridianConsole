@@ -387,6 +387,11 @@ namespace Dhadgar.Identity.Data.Migrations
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Settings")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("Settings");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -515,6 +520,10 @@ namespace Dhadgar.Identity.Data.Migrations
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -722,6 +731,84 @@ namespace Dhadgar.Identity.Data.Migrations
                         .HasDatabaseName("ix_user_org_claims_lookup");
 
                     b.ToTable("user_organization_claims", (string)null);
+                });
+
+            modelBuilder.Entity("Dhadgar.ServiceDefaults.Audit.ApiAuditRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResourceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ServiceName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TimestampUtc")
+                        .HasDatabaseName("ix_audit_timestamp");
+
+                    b.HasIndex("TenantId", "TimestampUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_audit_tenant_time");
+
+                    b.HasIndex("UserId", "TimestampUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_audit_user_time");
+
+                    b.HasIndex("ResourceType", "ResourceId", "TimestampUtc")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_audit_resource_time");
+
+                    b.ToTable("api_audit_records", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
@@ -1106,33 +1193,7 @@ namespace Dhadgar.Identity.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.OwnsOne("Dhadgar.Identity.Data.Entities.OrganizationSettings", "Settings", b1 =>
-                        {
-                            b1.Property<Guid>("OrganizationId");
-
-                            b1.Property<bool>("AllowMemberInvites");
-
-                            b1.Property<Dictionary<string, string>>("CustomSettings")
-                                .IsRequired();
-
-                            b1.Property<int>("MaxMembers");
-
-                            b1.Property<bool>("RequireEmailVerification");
-
-                            b1.HasKey("OrganizationId");
-
-                            b1.ToTable("organizations");
-
-                            b1.ToJson("Settings");
-
-                            b1.WithOwner()
-                                .HasForeignKey("OrganizationId");
-                        });
-
                     b.Navigation("Owner");
-
-                    b.Navigation("Settings")
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Dhadgar.Identity.Data.Entities.OrganizationRole", b =>

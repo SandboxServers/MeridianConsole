@@ -1,0 +1,138 @@
+# Provisioned alert rules for Dhadgar services
+# These rules query Loki for error patterns and trigger alerts
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: dhadgar-error-alerts
+    folder: Dhadgar Alerts
+    interval: 1m
+    rules:
+      # Alert when error rate exceeds threshold across any service
+      - uid: provisioned-error-rate-spike
+        title: High Error Rate Detected
+        condition: C
+        data:
+          # Query Loki for error count in last 5 minutes
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service_name=~"Dhadgar.*"} |~ "(?i)level.*error|level.*critical" [5m]))'
+              queryType: range
+          # Reduce to single value
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: reduce
+              reducer: last
+          # Threshold check: alert if > 10 errors in 5 minutes
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              type: threshold
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: gt
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: 'High error rate detected across Dhadgar services'
+          description: 'More than 10 errors in the last 5 minutes. Check Loki logs for details.'
+        labels:
+          severity: warning
+          team: platform
+
+      # Alert on critical errors (immediate, no wait)
+      - uid: provisioned-critical-error
+        title: Critical Error Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service_name=~"Dhadgar.*"} |~ "(?i)level.*critical" [1m]))'
+              queryType: range
+          - refId: B
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: reduce
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              type: threshold
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: 'Critical error in Dhadgar service'
+          description: 'A critical-level error was logged. Immediate attention required.'
+        labels:
+          severity: critical
+          team: platform
+
+      # Alert on service health check failures
+      - uid: provisioned-health-check-failure
+        title: Service Health Check Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({service_name=~"Dhadgar.*"} |~ "health.*check.*fail|readiness.*unhealthy" [5m]))'
+              queryType: range
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: reduce
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              type: threshold
+              conditions:
+                - evaluator:
+                    params:
+                      - 3
+                    type: gt
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: 'Service health check failures detected'
+          description: 'Multiple health check failures in the last 5 minutes. Service may be degraded.'
+        labels:
+          severity: warning
+          team: platform

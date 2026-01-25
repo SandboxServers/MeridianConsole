@@ -54,12 +54,20 @@ public static class SecretWriteEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return Results.Problem(
+                detail: validation.ErrorMessage,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/validation");
         }
 
         if (string.IsNullOrWhiteSpace(request.Value))
         {
-            return Results.BadRequest(new { error = "Value is required." });
+            return Results.Problem(
+                detail: "Value is required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
 
         // Check if secret is in allowed list
@@ -120,7 +128,11 @@ public static class SecretWriteEndpoints
                 CorrelationId: context.TraceIdentifier,
                 ErrorMessage: ex.Message));
 
-            return Results.BadRequest(new { error = ex.Message });
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/bad-request");
         }
     }
 
@@ -136,7 +148,11 @@ public static class SecretWriteEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return Results.Problem(
+                detail: validation.ErrorMessage,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/validation");
         }
 
         // Check if secret is in allowed list
@@ -228,7 +244,11 @@ public static class SecretWriteEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return Results.Problem(
+                detail: validation.ErrorMessage,
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request",
+                type: "https://meridian.console/errors/validation");
         }
 
         // Check if secret is in allowed list
@@ -271,7 +291,11 @@ public static class SecretWriteEndpoints
 
         if (!success)
         {
-            return Results.NotFound(new { error = $"Secret '{secretName}' not found." });
+            return Results.Problem(
+                detail: $"Secret '{secretName}' not found.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found",
+                type: "https://meridian.console/errors/not-found");
         }
 
         return Results.NoContent();
