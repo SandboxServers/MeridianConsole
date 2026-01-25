@@ -35,9 +35,10 @@ builder.Services.AddHttpClient<IDiscordWebhook, DiscordWebhookClient>(client =>
 // Register email sender (scoped - creates new SmtpClient per call)
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
-// Register throttler with configurable window
+// Register throttler with configurable window (minimum 1 minute to prevent misconfiguration)
 var throttleMinutes = builder.Configuration.GetValue<int>("Alerting:ThrottleWindowMinutes", 5);
-builder.Services.AddSingleton(new AlertThrottler(TimeSpan.FromMinutes(throttleMinutes)));
+var validatedThrottleMinutes = Math.Max(1, throttleMinutes);
+builder.Services.AddSingleton(new AlertThrottler(TimeSpan.FromMinutes(validatedThrottleMinutes)));
 
 // Register alert dispatcher (scoped to match transient Discord and scoped Email dependencies)
 builder.Services.AddScoped<IAlertDispatcher, AlertDispatcher>();
