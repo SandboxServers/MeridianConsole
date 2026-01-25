@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ado-agents
+
+resources:
+  - namespace.yaml
+  - secret.yaml
+  - deployment.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: meridianconsoleacr.azurecr.io/dhadgar-azdo-agent
+    newTag: latest

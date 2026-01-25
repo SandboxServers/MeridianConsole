@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: azdo-agent
+  namespace: ado-agents
+  labels:
+    app.kubernetes.io/name: azdo-agent
+    app.kubernetes.io/part-of: dhadgar
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: azdo-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: azdo-agent
+    spec:
+      # Target the dedicated ADO agent node
+      nodeSelector:
+        workload: ado-agents
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "ado-agents"
+          effect: "NoSchedule"
+
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: azdo-agent
+          image: localhost/dhadgar-azdo-agent:latest
+          imagePullPolicy: Never  # Image is imported directly to node, not pulled from registry
+
+          env:
+            - name: AZP_URL
+              value: "https://dev.azure.com/SandboxServers"
+            - name: AZP_POOL
+              value: "Sandbox Servers Agents"
+            - name: AZP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: azdo-agent-credentials
+                  key: AZP_TOKEN
+            - name: AZP_WORK
+              value: "/azp/_work"
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+
+          volumeMounts:
+            - name: work
+              mountPath: /azp/_work
+
+      volumes:
+        - name: work
+          emptyDir: {}
