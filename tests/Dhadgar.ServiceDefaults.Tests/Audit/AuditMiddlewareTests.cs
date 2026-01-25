@@ -6,6 +6,10 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
 
+// NSubstitute mock setup pattern: mockQueue.QueueAsync(...).Returns(...) is valid
+// but CA2012 doesn't recognize NSubstitute's fluent API for ValueTask-returning methods
+#pragma warning disable CA2012
+
 namespace Dhadgar.ServiceDefaults.Tests.Audit;
 
 /// <summary>
@@ -43,7 +47,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -108,7 +112,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -146,7 +150,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -177,7 +181,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -208,7 +212,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -242,7 +246,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -278,7 +282,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -317,7 +321,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -355,7 +359,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -387,7 +391,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -417,7 +421,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);
@@ -449,7 +453,7 @@ public class AuditMiddlewareTests
         ApiAuditRecord? capturedRecord = null;
 
         var mockQueue = Substitute.For<IAuditQueue>();
-        mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
+        _ = mockQueue.QueueAsync(Arg.Any<ApiAuditRecord>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedRecord = callInfo.ArgAt<ApiAuditRecord>(0);

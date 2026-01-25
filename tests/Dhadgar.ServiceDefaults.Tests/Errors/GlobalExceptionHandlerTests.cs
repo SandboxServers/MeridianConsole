@@ -118,7 +118,7 @@ public class GlobalExceptionHandlerTests
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapGet("/error", context =>
-                    throw new Exception("Unexpected error"));
+                    throw new InvalidOperationException("Unexpected error"));
             });
         });
 
@@ -234,7 +234,7 @@ public class GlobalExceptionHandlerTests
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapGet("/error", context =>
-                    throw new Exception("Secret internal error message"));
+                    throw new InvalidOperationException("Secret internal error message"));
             });
         }, environmentName: Environments.Production);
 
@@ -263,7 +263,7 @@ public class GlobalExceptionHandlerTests
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapGet("/error", context =>
-                    throw new Exception("Detailed error message for debugging"));
+                    throw new InvalidOperationException("Detailed error message for debugging"));
             });
         }, environmentName: Environments.Development);
 

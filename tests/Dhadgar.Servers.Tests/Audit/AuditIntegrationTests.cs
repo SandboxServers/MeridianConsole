@@ -285,8 +285,8 @@ public class AuditTestFactory : WebApplicationFactory<Program>
             // Remove ALL EF Core related registrations to avoid provider conflicts
             var efCoreDescriptors = services
                 .Where(d =>
-                    d.ServiceType.FullName?.Contains("EntityFramework") == true
-                    || d.ServiceType.FullName?.Contains("DbContext") == true
+                    d.ServiceType.FullName?.Contains("EntityFramework", StringComparison.Ordinal) == true
+                    || d.ServiceType.FullName?.Contains("DbContext", StringComparison.Ordinal) == true
                     || d.ServiceType == typeof(DbContextOptions<ServersDbContext>)
                     || d.ServiceType == typeof(DbContextOptions))
                 .ToList();
