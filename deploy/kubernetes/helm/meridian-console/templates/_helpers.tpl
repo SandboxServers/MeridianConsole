@@ -128,7 +128,8 @@ Usage: {{ include "meridian.image" (dict "context" . "service" "gateway") }}
 {{- $context := .context }}
 {{- $service := .service }}
 {{- $serviceConfig := index $context.Values $service }}
-{{- $registry := $context.Values.global.imageRegistry | default "" }}
+{{- /* Use root-level imageRegistry to avoid conflict with Bitnami's global.imageRegistry */ -}}
+{{- $registry := $context.Values.imageRegistry | default "" }}
 {{- $repository := $serviceConfig.image.repository }}
 {{- $tag := $serviceConfig.image.tag | default $context.Chart.AppVersion }}
 {{- if $registry }}

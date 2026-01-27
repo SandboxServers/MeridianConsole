@@ -1,0 +1,306 @@
+# Values override for Talos cluster deployment
+# Usage: helm install meridian-console . -f values.yaml -f values-talos.yaml
+
+# Global settings
+global:
+  # IMPORTANT: Set to empty string to override base values.yaml
+  # This allows Bitnami subcharts to use their default docker.io registry
+  imageRegistry: ""
+  imagePullSecrets:
+    - name: acr-secret
+  storageClass: "local-path"
+
+# ACR registry for our app images (separate from global to not affect Bitnami charts)
+imageRegistry: "meridianconsoleacr-etdvg4cthscffqdf.azurecr.io"
+
+# ============================================
+# APP SERVICES - run on app nodes
+# ============================================
+
+# Common nodeSelector and tolerations for app services
+# (Applied via templates - we'll set these per-service)
+
+gateway:
+  enabled: true
+  replicaCount: 1  # Scale up when more app nodes added
+  service:
+    type: NodePort
+    port: 80
+    targetPort: 8080
+    nodePort: 30080
+  ingress:
+    enabled: false
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+identity:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+billing:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+servers:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+nodes:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+tasks:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+files:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+mods:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+console:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+notifications:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+firewall:
+  enabled: false  # Not implemented yet
+
+secret:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+discord:
+  enabled: true
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "app"
+      effect: "NoSchedule"
+
+# ============================================
+# INFRASTRUCTURE - run on infra nodes
+# ============================================
+
+# PostgreSQL
+postgresql:
+  enabled: true
+  image:
+    registry: docker.io  # Override global.imageRegistry - use public Bitnami images
+  volumePermissions:
+    image:
+      registry: docker.io
+  auth:
+    username: dhadgar
+    password: "dhadgar-talos-dev"
+    database: dhadgar_platform
+    postgresPassword: "postgres-talos-dev"
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: "local-path"
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    nodeSelector:
+      workload: infra
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "infra"
+        effect: "NoSchedule"
+
+# RabbitMQ
+rabbitmq:
+  enabled: true
+  image:
+    registry: docker.io  # Override global.imageRegistry - use public Bitnami images
+  volumePermissions:
+    image:
+      registry: docker.io
+  auth:
+    username: dhadgar
+    password: "dhadgar-talos-dev"
+    erlangCookie: "talos-dev-erlang-cookie-secret"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: "local-path"
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  nodeSelector:
+    workload: infra
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "infra"
+      effect: "NoSchedule"
+
+# Redis
+redis:
+  enabled: true
+  image:
+    registry: docker.io  # Override global.imageRegistry - use public Bitnami images
+  volumePermissions:
+    image:
+      registry: docker.io
+  auth:
+    enabled: true
+    password: "redis-talos-dev"
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: "local-path"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    nodeSelector:
+      workload: infra
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "infra"
+        effect: "NoSchedule"
+  replica:
+    replicaCount: 0  # No Redis replicas with single infra node
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: "local-path"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    nodeSelector:
+      workload: infra
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "infra"
+        effect: "NoSchedule"
+
+# ============================================
+# CONNECTION STRINGS
+# ============================================
+
+secrets:
+  postgresHost: "meridian-console-postgresql"
+  postgresPort: "5432"
+  postgresUser: "dhadgar"
+  postgresPassword: "dhadgar-talos-dev"
+  rabbitmqHost: "meridian-console-rabbitmq"
+  rabbitmqPort: "5672"
+  rabbitmqUser: "dhadgar"
+  rabbitmqPassword: "dhadgar-talos-dev"
+  redisHost: "meridian-console-redis-master"
+  redisPort: "6379"
+  redisPassword: "redis-talos-dev"
+  jwtSigningKey: "talos-dev-jwt-signing-key-change-in-prod"
+  jwtIssuer: "https://meridian.local"
+  jwtAudience: "meridian-api"
+
+# Environment
+config:
+  aspNetCoreEnvironment: Development
