@@ -67,6 +67,20 @@ builder.Services.AddMassTransit(x =>
         options.Tags.Add("messaging");
     });
 
+    // Configure Entity Framework Core outbox for transactional messaging
+    // This ensures DB commits and event publication are atomic
+    x.AddEntityFrameworkOutbox<NodesDbContext>(o =>
+    {
+        // Use PostgreSQL for the outbox
+        o.UsePostgres();
+
+        // Disable inbox for now (no consumers in core)
+        o.DisableInboxCleanupService();
+
+        // Query delay and delivery delay settings
+        o.QueryDelay = TimeSpan.FromSeconds(1);
+    });
+
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.Host(rabbitHost, "/", h =>

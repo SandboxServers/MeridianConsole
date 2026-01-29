@@ -39,6 +39,16 @@ public interface IAuditService
 /// </summary>
 public sealed record AuditEntry
 {
+    /// <summary>
+    /// Unique identifier for the audit entry. Assigned by the audit service when stored.
+    /// </summary>
+    public Guid Id { get; init; } = Guid.NewGuid();
+
+    /// <summary>
+    /// UTC timestamp when the entry was created. Assigned by the audit service when stored.
+    /// </summary>
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+
     /// <summary>Action performed (e.g., "node.created", "certificate.issued").</summary>
     public required string Action { get; init; }
 

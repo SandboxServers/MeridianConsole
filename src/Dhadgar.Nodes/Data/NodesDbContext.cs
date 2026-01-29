@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Dhadgar.Nodes.Data.Configurations;
 using Dhadgar.Nodes.Data.Entities;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -32,6 +33,11 @@ public sealed class NodesDbContext : DbContext
         modelBuilder.ApplyConfiguration(new AgentCertificateConfiguration());
         modelBuilder.ApplyConfiguration(new NodeAuditLogConfiguration());
         modelBuilder.ApplyConfiguration(new CapacityReservationConfiguration());
+
+        // Add MassTransit outbox entities for transactional messaging
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
 
         // Handle InMemory and SQLite providers that can't handle PostgreSQL-specific features
         if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true ||

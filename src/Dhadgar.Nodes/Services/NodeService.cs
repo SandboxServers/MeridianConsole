@@ -258,10 +258,11 @@ public sealed class NodeService : INodeService
             cert.RevocationReason = "Node decommissioned";
         }
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Publish event
+        // Publish event BEFORE SaveChangesAsync so it's part of the same transaction
+        // (MassTransit outbox intercepts and stores in outbox table atomically)
         await _publishEndpoint.Publish(new NodeDecommissioned(nodeId, now), ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         NodesMetrics.NodesDecommissioned.Add(1);
 
@@ -311,9 +312,11 @@ public sealed class NodeService : INodeService
         node.Status = NodeStatus.Maintenance;
         node.UpdatedAt = now;
 
-        await _dbContext.SaveChangesAsync(ct);
-
+        // Publish event BEFORE SaveChangesAsync so it's part of the same transaction
+        // (MassTransit outbox intercepts and stores in outbox table atomically)
         await _publishEndpoint.Publish(new NodeMaintenanceStarted(nodeId, now), ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         NodesMetrics.MaintenanceEntered.Add(1);
 
@@ -361,9 +364,11 @@ public sealed class NodeService : INodeService
 
         node.UpdatedAt = now;
 
-        await _dbContext.SaveChangesAsync(ct);
-
+        // Publish event BEFORE SaveChangesAsync so it's part of the same transaction
+        // (MassTransit outbox intercepts and stores in outbox table atomically)
         await _publishEndpoint.Publish(new NodeMaintenanceEnded(nodeId, now), ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         NodesMetrics.MaintenanceExited.Add(1);
 
@@ -386,6 +391,11 @@ public sealed class NodeService : INodeService
 
     #region Private Helper Methods
 
+    // IMPORTANT: Health score formula must be consistent across all query expressions.
+    // Formula: (int)Math.Round(100.0 - (CpuUsagePercent + MemoryUsagePercent + DiskUsagePercent) / 3.0)
+    // This formula is inlined in EF Core LINQ expressions because it must translate to SQL.
+    // Changes here must be reflected in: ApplyFilters, ApplySorting, GetNodesAsync Select, and CalculateHealthScore.
+
     private static IQueryable<Node> ApplyFilters(IQueryable<Node> query, NodeListQuery filters)
     {
         // Filter by status
@@ -406,7 +416,7 @@ public sealed class NodeService : INodeService
         }
 
         // Filter by health score range (requires Health navigation)
-        // Health score = 100 - avg(cpu, memory, disk) with rounding
+        // Uses same formula as CalculateHealthScore for consistency
         if (filters.MinHealthScore.HasValue || filters.MaxHealthScore.HasValue)
         {
             if (filters.MinHealthScore.HasValue)
@@ -414,7 +424,7 @@ public sealed class NodeService : INodeService
                 var min = filters.MinHealthScore.Value;
                 query = query.Where(n =>
                     n.Health != null &&
-                    Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0) >= min);
+                    (int)Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0) >= min);
             }
 
             if (filters.MaxHealthScore.HasValue)
@@ -423,7 +433,7 @@ public sealed class NodeService : INodeService
                 // Nodes with no health data should pass MaxHealthScore filter (unknown health)
                 query = query.Where(n =>
                     n.Health == null ||
-                    Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0) <= max);
+                    (int)Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0) <= max);
             }
         }
 

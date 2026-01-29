@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="AspNetCore.HealthChecks.Npgsql" />
     <PackageReference Include="MassTransit" />
+    <PackageReference Include="MassTransit.EntityFrameworkCore" />
     <PackageReference Include="MassTransit.RabbitMQ" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

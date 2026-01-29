@@ -106,16 +106,14 @@ public sealed class TestAuditService : IAuditService
         var limit = query.EffectiveLimit;
         var skip = (page - 1) * limit;
 
-        // Track entry index for deterministic IDs in tests
-        var startIndex = skip;
         var items = filteredList
             .Skip(skip)
             .Take(limit)
-            .Select((e, index) => new AuditLogDto
+            .Select(e => new AuditLogDto
             {
-                // Use deterministic GUID based on entry position for test reproducibility
-                Id = new Guid(0, 0, 0, [(byte)(startIndex + index), 0, 0, 0, 0, 0, 0, 0]),
-                Timestamp = DateTime.UtcNow,
+                // Preserve fidelity: use actual entry fields, not synthetic values
+                Id = e.Id,
+                Timestamp = e.Timestamp,
                 ActorId = e.ActorIdOverride ?? "test-actor",
                 ActorType = (e.ActorTypeOverride ?? ActorType.User).ToString(),
                 Action = e.Action,
