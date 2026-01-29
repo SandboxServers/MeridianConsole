@@ -181,17 +181,42 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    /// Seeds multiple test nodes in the database.
+    /// Seeds multiple test nodes in the database using a single batch insert.
     /// </summary>
     public async Task<List<Node>> SeedNodesAsync(Guid organizationId, int count)
     {
-        var nodes = new List<Node>();
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var nodes = new List<Node>(count);
         for (int i = 0; i < count; i++)
         {
-            var node = await SeedNodeAsync(organizationId, $"test-node-{i + 1}");
-            nodes.Add(node);
+            nodes.Add(CreateNodeEntity(organizationId, $"test-node-{i + 1}"));
         }
+
+        db.Nodes.AddRange(nodes);
+        await db.SaveChangesAsync();
         return nodes;
+    }
+
+    /// <summary>
+    /// Creates an unsaved Node entity for batch operations.
+    /// </summary>
+    private Node CreateNodeEntity(Guid organizationId, string name, NodeStatus status = NodeStatus.Online)
+    {
+        return new Node
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            Name = name,
+            DisplayName = name,
+            Status = status,
+            Platform = "linux",
+            AgentVersion = "1.0.0",
+            LastHeartbeat = TimeProvider.GetUtcNow().UtcDateTime,
+            CreatedAt = TimeProvider.GetUtcNow().UtcDateTime
+        };
     }
 }
 

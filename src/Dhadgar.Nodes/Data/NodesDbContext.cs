@@ -71,7 +71,7 @@ public sealed class NodesDbContext : DbContext
                 .Property(n => n.Tags)
                 .HasColumnType(null)
                 .HasConversion(tagsConverter)
-                .HasDefaultValueSql("'[]'");
+                .HasDefaultValue(new List<string>());
         }
     }
 }

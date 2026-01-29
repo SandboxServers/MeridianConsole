@@ -172,5 +172,46 @@ public sealed class NodeListQueryTests
         Assert.DoesNotContain("", tags);
     }
 
+    [Fact]
+    public void ParseTagsFilter_TruncatesLongTags_ToMaxLength()
+    {
+        // Create a tag that is longer than 50 characters
+        var longTag = new string('a', 60);
+        var anotherLongTag = new string('b', 100);
+        var normalTag = "production";
+
+        var query = new NodeListQuery { Tags = $"{longTag},{anotherLongTag},{normalTag}" };
+        var tags = query.ParseTagsFilter();
+
+        // All returned tags should have length <= 50
+        Assert.All(tags, t => Assert.True(t.Length <= 50, $"Tag '{t}' exceeds max length of 50 (actual: {t.Length})"));
+
+        // Verify the normal tag is still present
+        Assert.Contains("production", tags);
+    }
+
+    [Fact]
+    public void ParseTagsFilter_LimitsTagCount_ToMaxTags()
+    {
+        // Create more than 20 tags
+        var tagList = Enumerable.Range(1, 30).Select(i => $"tag{i:D2}");
+        var tagsString = string.Join(",", tagList);
+
+        var query = new NodeListQuery { Tags = tagsString };
+        var tags = query.ParseTagsFilter();
+
+        // Should be limited to 20 tags
+        Assert.Equal(20, tags.Count);
+
+        // Verify normalization still applies (lowercase)
+        Assert.All(tags, t => Assert.Equal(t.ToLowerInvariant(), t));
+
+        // Verify order is preserved (first 20 tags should be returned)
+        for (int i = 0; i < 20; i++)
+        {
+            Assert.Equal($"tag{i + 1:D2}", tags[i]);
+        }
+    }
+
     #endregion
 }

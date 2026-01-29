@@ -25,7 +25,7 @@ public sealed class NodeServiceTests
     }
 
     private static IOptions<NodesOptions> CreateOptions() =>
-        Options.Create(new NodesOptions());
+        Options.Create(new NodesOptions { HeartbeatThresholdMinutes = 5 });
 
     private static (NodeService Service, TestNodesEventPublisher Publisher, TestAuditService Audit) CreateService(
         NodesDbContext context,

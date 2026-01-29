@@ -2,6 +2,7 @@
   <PropertyGroup>
     <AssemblyName>Dhadgar.Nodes</AssemblyName>
     <RootNamespace>Dhadgar.Nodes</RootNamespace>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />

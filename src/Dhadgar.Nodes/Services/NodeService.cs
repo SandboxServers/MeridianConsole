@@ -157,7 +157,14 @@ public sealed class NodeService : INodeService
 
         node.UpdatedAt = now;
 
-        await _dbContext.SaveChangesAsync(ct);
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return ServiceResult.Fail<NodeDetail>("name_already_exists");
+        }
 
         // Audit log
         await _auditService.LogAsync(
@@ -390,6 +397,24 @@ public sealed class NodeService : INodeService
     }
 
     #region Private Helper Methods
+
+    /// <summary>
+    /// Checks if a DbUpdateException is caused by a unique constraint violation.
+    /// This handles race conditions where a duplicate name is inserted between
+    /// the pre-check and the SaveChangesAsync call.
+    /// </summary>
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        // Check the inner exception message for common unique constraint violation patterns
+        // PostgreSQL: "duplicate key value violates unique constraint"
+        // SQL Server: "Cannot insert duplicate key" or "Violation of UNIQUE KEY constraint"
+        // SQLite: "UNIQUE constraint failed"
+        var innerMessage = ex.InnerException?.Message ?? string.Empty;
+
+        return innerMessage.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
+            || innerMessage.Contains("unique constraint", StringComparison.OrdinalIgnoreCase)
+            || innerMessage.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase);
+    }
 
     // IMPORTANT: Health score formula must be consistent across all query expressions.
     // Formula: (int)Math.Round(100.0 - (CpuUsagePercent + MemoryUsagePercent + DiskUsagePercent) / 3.0)

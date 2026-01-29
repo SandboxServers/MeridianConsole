@@ -192,6 +192,13 @@ public sealed class NodesOptions : IValidateOptions<NodesOptions>
             failures.Add("DefaultReservationTtlMinutes must be <= MaxReservationTtlMinutes");
         }
 
+        // Validate CaStorageType is a known value
+        var validCaStorageTypes = new[] { "local", "azurekeyvault" };
+        if (!validCaStorageTypes.Contains(options.CaStorageType, StringComparer.OrdinalIgnoreCase))
+        {
+            failures.Add($"CaStorageType must be one of: {string.Join(", ", validCaStorageTypes)} (got: '{options.CaStorageType}')");
+        }
+
         // Validate nested HealthScoring options
         var healthScoringResult = options.HealthScoring.Validate();
         if (healthScoringResult.Failed)

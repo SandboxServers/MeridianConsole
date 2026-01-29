@@ -128,11 +128,19 @@ public sealed class AuditService : IAuditService
         if (query.EndDate.HasValue)
         {
             // If EndDate has a non-midnight time component, use it verbatim.
-            // If it's midnight (00:00:00), normalize to end of that day.
+            // If it's midnight (00:00:00), normalize to end of that day while preserving the offset.
             var endDate = query.EndDate.Value;
-            var effectiveEnd = endDate.TimeOfDay == TimeSpan.Zero
-                ? endDate.Date.AddDays(1).AddTicks(-1)
-                : endDate.UtcDateTime;
+            DateTime effectiveEnd;
+            if (endDate.TimeOfDay == TimeSpan.Zero)
+            {
+                // Build end-of-day DateTimeOffset preserving the original offset
+                var endOfDay = new DateTimeOffset(endDate.Date.AddDays(1).AddTicks(-1), endDate.Offset);
+                effectiveEnd = endOfDay.UtcDateTime;
+            }
+            else
+            {
+                effectiveEnd = endDate.UtcDateTime;
+            }
             dbQuery = dbQuery.Where(a => a.Timestamp <= effectiveEnd);
         }
 

@@ -50,11 +50,13 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 // Register TimeProvider for testability
 builder.Services.AddSingleton(TimeProvider.System);
 
-// Configure MassTransit (no consumers in core - just publisher capability)
-var rabbitHost = builder.Configuration.GetConnectionString("RabbitMqHost") ?? "localhost";
-var rabbitUsername = builder.Configuration["RabbitMq:Username"] ?? "dhadgar";
-var rabbitPassword = builder.Configuration["RabbitMq:Password"] ?? "dhadgar";
+// Configure RabbitMQ options with validation
+builder.Services.AddOptions<RabbitMqOptions>()
+    .Bind(builder.Configuration.GetSection(RabbitMqOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
+// Configure MassTransit (no consumers in core - just publisher capability)
 builder.Services.AddMassTransit(x =>
 {
     x.SetKebabCaseEndpointNameFormatter();
@@ -83,10 +85,11 @@ builder.Services.AddMassTransit(x =>
 
     x.UsingRabbitMq((context, cfg) =>
     {
-        cfg.Host(rabbitHost, "/", h =>
+        var rabbitOptions = context.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
+        cfg.Host(rabbitOptions.Host, rabbitOptions.VirtualHost, h =>
         {
-            h.Username(rabbitUsername);
-            h.Password(rabbitPassword);
+            h.Username(rabbitOptions.Username);
+            h.Password(rabbitOptions.Password);
         });
 
         cfg.ConfigureEndpoints(context);

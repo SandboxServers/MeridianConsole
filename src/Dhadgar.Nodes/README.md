@@ -156,7 +156,7 @@ dotnet test tests/Dhadgar.Nodes.Tests --filter "FullyQualifiedName~EnrollmentTes
 
 ### Project Structure
 
-```
+```text
 src/Dhadgar.Nodes/
 ├── Auth/                           # mTLS and authorization
 │   ├── MtlsMiddleware.cs
@@ -552,7 +552,7 @@ Security-relevant events are logged to `node_audit_logs`:
 
 ### Test Structure
 
-```
+```text
 tests/Dhadgar.Nodes.Tests/
 ├── Endpoints/
 │   ├── NodesEndpointsTests.cs
