@@ -1243,4 +1243,4 @@ When contributing to the Billing service:
 
 5. **Use Migrations**: Never modify the database schema directly. Always use EF Core migrations.
 
-For questions about billing architecture, consult with the team lead or review the architecture documents in `/docs/architecture/`.
+For questions about billing architecture, consult the team lead or review the architecture documents in `/docs/architecture/`.

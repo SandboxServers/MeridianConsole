@@ -758,31 +758,34 @@ This library has **no project references** to maintain its position as a foundat
 The Nodes service publishes 15 events across three categories:
 
 **Node Lifecycle Events:**
-| Event | Exchange Name | When Published |
-|-------|---------------|----------------|
-| `NodeEnrolled` | `meridian.nodeenrolled` | New agent completes enrollment |
-| `NodeOnline` | `meridian.nodeonline` | Node transitions to online state |
-| `NodeOffline` | `meridian.nodeoffline` | Node misses heartbeat threshold (5 min) |
-| `NodeDegraded` | `meridian.nodedegraded` | Node reports health issues (CPU/memory/disk > 90%) |
-| `NodeRecovered` | `meridian.noderecovered` | Node recovers from degraded state |
-| `NodeDecommissioned` | `meridian.nodedecommissioned` | Node is permanently removed |
-| `NodeMaintenanceStarted` | `meridian.nodemaintenancestarted` | Node enters maintenance mode |
-| `NodeMaintenanceEnded` | `meridian.nodemaintenanceended` | Node exits maintenance mode |
+
+|Event|Exchange Name|When Published|
+|---|---|---|
+|`NodeEnrolled`|`meridian.nodeenrolled`|New agent completes enrollment|
+|`NodeOnline`|`meridian.nodeonline`|Node transitions to online state|
+|`NodeOffline`|`meridian.nodeoffline`|Node misses heartbeat threshold (5 min)|
+|`NodeDegraded`|`meridian.nodedegraded`|Node reports health issues (CPU/memory/disk > 90%)|
+|`NodeRecovered`|`meridian.noderecovered`|Node recovers from degraded state|
+|`NodeDecommissioned`|`meridian.nodedecommissioned`|Node is permanently removed|
+|`NodeMaintenanceStarted`|`meridian.nodemaintenancestarted`|Node enters maintenance mode|
+|`NodeMaintenanceEnded`|`meridian.nodemaintenanceended`|Node exits maintenance mode|
 
 **Certificate Events:**
-| Event | Exchange Name | When Published |
-|-------|---------------|----------------|
-| `AgentCertificateIssued` | `meridian.agentcertificateissued` | mTLS cert issued during enrollment |
-| `AgentCertificateRevoked` | `meridian.agentcertificaterevoked` | Certificate manually revoked |
-| `AgentCertificateRenewed` | `meridian.agentcertificaterenewed` | Certificate renewed before expiry |
+
+|Event|Exchange Name|When Published|
+|---|---|---|
+|`AgentCertificateIssued`|`meridian.agentcertificateissued`|mTLS cert issued during enrollment|
+|`AgentCertificateRevoked`|`meridian.agentcertificaterevoked`|Certificate manually revoked|
+|`AgentCertificateRenewed`|`meridian.agentcertificaterenewed`|Certificate renewed before expiry|
 
 **Capacity Events:**
-| Event | Exchange Name | When Published |
-|-------|---------------|----------------|
-| `CapacityReserved` | `meridian.capacityreserved` | Resource reservation created |
-| `CapacityClaimed` | `meridian.capacityclaimed` | Reservation bound to server |
-| `CapacityReleased` | `meridian.capacityreleased` | Reservation explicitly released |
-| `CapacityReservationExpired` | `meridian.capacityreservationexpired` | Reservation timeout |
+
+|Event|Exchange Name|When Published|
+|---|---|---|
+|`CapacityReserved`|`meridian.capacityreserved`|Resource reservation created|
+|`CapacityClaimed`|`meridian.capacityclaimed`|Reservation bound to server|
+|`CapacityReleased`|`meridian.capacityreleased`|Reservation explicitly released|
+|`CapacityReservationExpired`|`meridian.capacityreservationexpired`|Reservation timeout|
 
 **Example Consumer:**
 ```csharp

@@ -156,7 +156,7 @@ public class NodeHardwareResponse
     public long DiskBytes { get; set; }
 
     [JsonPropertyName("collectedAt")]
-    public DateTime CollectedAt { get; set; }
+    public DateTimeOffset CollectedAt { get; set; }
 }
 
 public class NodeHealthResponse
@@ -177,7 +177,7 @@ public class NodeHealthResponse
     public Collection<string>? HealthIssues { get; set; }
 
     [JsonPropertyName("reportedAt")]
-    public DateTime ReportedAt { get; set; }
+    public DateTimeOffset ReportedAt { get; set; }
 }
 
 public class NodeCapacityResponse
@@ -195,7 +195,7 @@ public class NodeCapacityResponse
     public long AvailableDiskBytes { get; set; }
 
     [JsonPropertyName("updatedAt")]
-    public DateTime UpdatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 // ============================================================================
@@ -226,7 +226,7 @@ public class CreateEnrollmentTokenResponse
     public string Token { get; set; } = string.Empty;
 
     [JsonPropertyName("expiresAt")]
-    public DateTime ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 }
 
 public class EnrollmentTokenResponse
@@ -238,10 +238,10 @@ public class EnrollmentTokenResponse
     public string? Label { get; set; }
 
     [JsonPropertyName("expiresAt")]
-    public DateTime ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     [JsonPropertyName("usedAt")]
-    public DateTime? UsedAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
 
     [JsonPropertyName("usedByNodeId")]
     public string? UsedByNodeId { get; set; }
@@ -250,7 +250,7 @@ public class EnrollmentTokenResponse
     public string CreatedByUserId { get; set; } = string.Empty;
 
     [JsonPropertyName("createdAt")]
-    public DateTime CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 
     [JsonPropertyName("isRevoked")]
     public bool IsRevoked { get; set; }

@@ -42,7 +42,7 @@ The Agent Core library serves as the foundation for agents that:
 
 ### Current Status
 
-**Status: Early-Stage Scaffolding**
+#### Status: Early-Stage Scaffolding
 
 The Agent Core library is currently in its foundational scaffolding phase. The existing code provides the basic project structure and "hello world" functionality used for build verification and smoke tests. The full implementation of agent functionality (command execution, process management, telemetry, etc.) is planned but not yet implemented.
 
