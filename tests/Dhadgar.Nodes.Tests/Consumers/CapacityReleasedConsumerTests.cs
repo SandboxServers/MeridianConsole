@@ -34,11 +34,24 @@ public sealed class CapacityReleasedConsumerTests
         // Act
         await _consumer.Consume(context);
 
-        // Assert - verify logging occurred
+        // Assert - verify logging occurred with nodeId
         _logger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
             Arg.Is<object>(o => o.ToString()!.Contains(nodeId.ToString())),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
+
+        // Assert - verify reservation token is redacted (shows only last 4 chars with *** prefix)
+        var tokenString = reservationToken.ToString();
+        var expectedRedactedToken = $"***{tokenString[^4..]}";
+
+        _logger.Received().Log(
+            LogLevel.Information,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o =>
+                !o.ToString()!.Contains(tokenString) && // Full GUID must NOT appear
+                o.ToString()!.Contains(expectedRedactedToken)), // Redacted format MUST appear
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
     }

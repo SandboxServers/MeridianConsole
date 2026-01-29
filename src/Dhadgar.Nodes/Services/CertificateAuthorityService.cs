@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Dhadgar.Nodes.Services;
@@ -16,6 +17,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
     private readonly NodesOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CertificateAuthorityService> _logger;
+    private readonly Data.NodesDbContext _dbContext;
 
     // SPIFFE ID format for agent certificates - cached for performance (CA1863)
     private static readonly CompositeFormat SpiffeIdFormat = CompositeFormat.Parse("spiffe://meridianconsole.com/nodes/{0}");
@@ -33,12 +35,14 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         ICaStorageProvider storageProvider,
         IOptions<NodesOptions> options,
         TimeProvider timeProvider,
-        ILogger<CertificateAuthorityService> logger)
+        ILogger<CertificateAuthorityService> logger,
+        Data.NodesDbContext dbContext)
     {
         _storageProvider = storageProvider;
         _options = options.Value;
         _timeProvider = timeProvider;
         _logger = logger;
+        _dbContext = dbContext;
     }
 
     public async Task InitializeAsync(CancellationToken ct = default)
@@ -171,6 +175,24 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
             using var certificate = X509Certificate2.CreateFromPem(certificatePem);
 
+            // Calculate SHA-256 thumbprint to look up the certificate in the database
+            var thumbprint = CalculateSha256Thumbprint(certificate);
+
+            // Check if the certificate is revoked in our database before performing chain validation
+            var agentCert = await _dbContext.AgentCertificates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint, ct);
+
+            if (agentCert is not null && agentCert.IsRevoked)
+            {
+                _logger.LogWarning(
+                    "Certificate validation failed: certificate {Thumbprint} is revoked (revoked at: {RevokedAt}, reason: {Reason})",
+                    thumbprint,
+                    agentCert.RevokedAt,
+                    agentCert.RevocationReason);
+                return false;
+            }
+
             // Build certificate chain and validate against CA
             using var chain = new X509Chain();
             chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
@@ -272,68 +294,78 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         // Generate RSA key pair for client
         var clientKey = RSA.Create(_options.ClientKeySize);
 
-        // Build the client certificate request
-        var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
-        var request = new CertificateRequest(subject, clientKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        try
+        {
+            // Build the client certificate request
+            var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
+            var request = new CertificateRequest(subject, clientKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
-        // Client certificate extensions
+            // Client certificate extensions
 
-        // Basic constraints - not a CA
-        request.CertificateExtensions.Add(
-            new X509BasicConstraintsExtension(
-                certificateAuthority: false,
-                hasPathLengthConstraint: false,
-                pathLengthConstraint: 0,
-                critical: true));
+            // Basic constraints - not a CA
+            request.CertificateExtensions.Add(
+                new X509BasicConstraintsExtension(
+                    certificateAuthority: false,
+                    hasPathLengthConstraint: false,
+                    pathLengthConstraint: 0,
+                    critical: true));
 
-        // Key usage for client authentication
-        request.CertificateExtensions.Add(
-            new X509KeyUsageExtension(
-                X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
-                critical: true));
+            // Key usage for client authentication
+            request.CertificateExtensions.Add(
+                new X509KeyUsageExtension(
+                    X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
+                    critical: true));
 
-        // Extended key usage - client authentication
-        request.CertificateExtensions.Add(
-            new X509EnhancedKeyUsageExtension(
-                [new Oid("1.3.6.1.5.5.7.3.2")], // id-kp-clientAuth
-                critical: true));
+            // Extended key usage - client authentication
+            request.CertificateExtensions.Add(
+                new X509EnhancedKeyUsageExtension(
+                    [new Oid("1.3.6.1.5.5.7.3.2")], // id-kp-clientAuth
+                    critical: true));
 
-        // Subject Key Identifier
-        request.CertificateExtensions.Add(
-            new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
+            // Subject Key Identifier
+            request.CertificateExtensions.Add(
+                new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
 
-        // Authority Key Identifier - link to CA
-        request.CertificateExtensions.Add(
-            CreateAuthorityKeyIdentifierExtension(_caCertificate!));
+            // Authority Key Identifier - link to CA
+            request.CertificateExtensions.Add(
+                CreateAuthorityKeyIdentifierExtension(_caCertificate!));
 
-        // Subject Alternative Name with SPIFFE ID
-        var sanBuilder = new SubjectAlternativeNameBuilder();
-        var spiffeId = string.Format(CultureInfo.InvariantCulture, SpiffeIdFormat, nodeId);
-        sanBuilder.AddUri(new Uri(spiffeId));
-        request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
+            // Subject Alternative Name with SPIFFE ID
+            var sanBuilder = new SubjectAlternativeNameBuilder();
+            var spiffeId = string.Format(CultureInfo.InvariantCulture, SpiffeIdFormat, nodeId);
+            sanBuilder.AddUri(new Uri(spiffeId));
+            request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
 
-        // Generate serial number
-        var serialBytes = RandomNumberGenerator.GetBytes(16);
-        // Ensure the serial number is positive (MSB must be 0)
-        serialBytes[0] &= 0x7F;
+            // Generate serial number
+            var serialBytes = RandomNumberGenerator.GetBytes(16);
+            // Ensure the serial number is positive (MSB must be 0)
+            serialBytes[0] &= 0x7F;
 
-        // Sign with CA certificate - use fixed 90-day validity (security policy)
-        var notBefore = now;
-        var notAfter = now.AddDays(AgentCertificateValidityDays);
+            // Sign with CA certificate - use fixed 90-day validity (security policy)
+            var notBefore = now;
+            var notAfter = now.AddDays(AgentCertificateValidityDays);
 
-        using var caPrivateKey = _caCertificate!.GetRSAPrivateKey()
-            ?? throw new InvalidOperationException("CA certificate does not have a private key");
+            using var caPrivateKey = _caCertificate!.GetRSAPrivateKey()
+                ?? throw new InvalidOperationException("CA certificate does not have a private key");
 
-        using var clientCert = request.Create(
-            _caCertificate,
-            notBefore,
-            notAfter,
-            serialBytes);
+            using var clientCert = request.Create(
+                _caCertificate,
+                notBefore,
+                notAfter,
+                serialBytes);
 
-        // Combine the signed certificate with the client's private key
-        var certWithKey = clientCert.CopyWithPrivateKey(clientKey);
+            // Combine the signed certificate with the client's private key
+            var certWithKey = clientCert.CopyWithPrivateKey(clientKey);
 
-        return (certWithKey, clientKey);
+            // Success - return both the certificate and the key (caller owns both)
+            return (certWithKey, clientKey);
+        }
+        catch
+        {
+            // On any exception, dispose the client key to prevent resource leak
+            clientKey.Dispose();
+            throw;
+        }
     }
 
     private CertificateIssuanceResult CreateIssuanceResult(

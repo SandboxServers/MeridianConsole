@@ -1,6 +1,10 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Dhadgar.Nodes.Data;
+using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -14,6 +18,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     private readonly FakeTimeProvider _timeProvider;
     private readonly NodesOptions _options;
     private readonly IOptions<NodesOptions> _optionsWrapper;
+    private readonly List<NodesDbContext> _contexts = [];
 
     public CertificateAuthorityServiceTests()
     {
@@ -34,6 +39,11 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var context in _contexts)
+        {
+            context.Dispose();
+        }
+
         try
         {
             if (Directory.Exists(_tempDirectory))
@@ -47,17 +57,31 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         }
     }
 
-    private CertificateAuthorityService CreateService(ICaStorageProvider? storageProvider = null)
+    private NodesDbContext CreateDbContext()
+    {
+        var dbOptions = new DbContextOptionsBuilder<NodesDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        var context = new NodesDbContext(dbOptions);
+        _contexts.Add(context);
+        return context;
+    }
+
+    private CertificateAuthorityService CreateService(ICaStorageProvider? storageProvider = null, NodesDbContext? dbContext = null)
     {
         storageProvider ??= new LocalFileCaStorageProvider(
             _optionsWrapper,
             NullLogger<LocalFileCaStorageProvider>.Instance);
 
+        dbContext ??= CreateDbContext();
+
         return new CertificateAuthorityService(
             storageProvider,
             _optionsWrapper,
             _timeProvider,
-            NullLogger<CertificateAuthorityService>.Instance);
+            NullLogger<CertificateAuthorityService>.Instance,
+            dbContext);
     }
 
     [Fact]
@@ -427,5 +451,77 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         var chainBuilds = chain.Build(clientCert);
         Assert.True(chainBuilds);
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ReturnsFalseForRevokedCertificate()
+    {
+        // Arrange
+        var dbContext = CreateDbContext();
+        using var service = CreateService(dbContext: dbContext);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+
+        // Issue a certificate
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+
+        // Mark the certificate as revoked in the database
+        var agentCert = new AgentCertificate
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            Thumbprint = result.Thumbprint!,
+            SerialNumber = result.SerialNumber!,
+            NotBefore = result.NotBefore!.Value,
+            NotAfter = result.NotAfter!.Value,
+            IssuedAt = DateTime.UtcNow,
+            IsRevoked = true,
+            RevokedAt = DateTime.UtcNow,
+            RevocationReason = "Test revocation"
+        };
+        dbContext.AgentCertificates.Add(agentCert);
+        await dbContext.SaveChangesAsync();
+
+        // Act
+        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        // Assert
+        Assert.False(isValid);
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ReturnsTrueForNonRevokedCertificateInDatabase()
+    {
+        // Arrange
+        var dbContext = CreateDbContext();
+        using var service = CreateService(dbContext: dbContext);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+
+        // Issue a certificate
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+
+        // Add the certificate to the database but not revoked
+        var agentCert = new AgentCertificate
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            Thumbprint = result.Thumbprint!,
+            SerialNumber = result.SerialNumber!,
+            NotBefore = result.NotBefore!.Value,
+            NotAfter = result.NotAfter!.Value,
+            IssuedAt = DateTime.UtcNow,
+            IsRevoked = false
+        };
+        dbContext.AgentCertificates.Add(agentCert);
+        await dbContext.SaveChangesAsync();
+
+        // Act
+        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        // Assert
+        Assert.True(isValid);
     }
 }

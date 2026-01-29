@@ -1,3 +1,4 @@
+using System.Data;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
@@ -5,6 +6,7 @@ using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Observability;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Dhadgar.Nodes.Services;
 
@@ -37,96 +39,114 @@ public sealed class CapacityReservationService : ICapacityReservationService
         string? correlationId = null,
         CancellationToken ct = default)
     {
-        // Validate node exists and is in a valid state for reservations
-        var node = await _dbContext.Nodes
-            .Include(n => n.Capacity)
-            .Include(n => n.HardwareInventory)
-            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+        // Use serializable transaction to prevent concurrent overbooking
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
-        if (node is null)
+        try
         {
-            return ServiceResult.Fail<ReservationResponse>("node_not_found");
+            // Validate node exists and is in a valid state for reservations
+            var node = await _dbContext.Nodes
+                .Include(n => n.Capacity)
+                .Include(n => n.HardwareInventory)
+                .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+
+            if (node is null)
+            {
+                await transaction.RollbackAsync(ct);
+                return ServiceResult.Fail<ReservationResponse>("node_not_found");
+            }
+
+            if (node.Status is NodeStatus.Offline or NodeStatus.Decommissioned or NodeStatus.Maintenance)
+            {
+                await transaction.RollbackAsync(ct);
+                return ServiceResult.Fail<ReservationResponse>("node_unavailable");
+            }
+
+            // Check if sufficient capacity is available (within the serializable transaction)
+            var availableCapacity = await GetAvailableCapacityInternalAsync(node, ct);
+            if (availableCapacity is null)
+            {
+                await transaction.RollbackAsync(ct);
+                return ServiceResult.Fail<ReservationResponse>("capacity_data_missing");
+            }
+
+            var requestedMemoryBytes = (long)memoryMb * 1024 * 1024;
+            var requestedDiskBytes = (long)diskMb * 1024 * 1024;
+
+            if (requestedMemoryBytes > availableCapacity.EffectiveAvailableMemoryBytes)
+            {
+                _logger.LogWarning(
+                    "Insufficient memory for reservation on node {NodeId}. Requested: {RequestedMb}MB, Available: {AvailableMb}MB",
+                    nodeId, memoryMb, availableCapacity.EffectiveAvailableMemoryBytes / (1024 * 1024));
+                await transaction.RollbackAsync(ct);
+                return ServiceResult.Fail<ReservationResponse>("insufficient_memory");
+            }
+
+            if (requestedDiskBytes > availableCapacity.EffectiveAvailableDiskBytes)
+            {
+                _logger.LogWarning(
+                    "Insufficient disk for reservation on node {NodeId}. Requested: {RequestedMb}MB, Available: {AvailableMb}MB",
+                    nodeId, diskMb, availableCapacity.EffectiveAvailableDiskBytes / (1024 * 1024));
+                await transaction.RollbackAsync(ct);
+                return ServiceResult.Fail<ReservationResponse>("insufficient_disk");
+            }
+
+            if (cpuMillicores > availableCapacity.EffectiveAvailableCpuMillicores)
+            {
+                _logger.LogWarning(
+                    "Insufficient CPU for reservation on node {NodeId}. Requested: {RequestedMillicores}m, Available: {AvailableMillicores}m",
+                    nodeId, cpuMillicores, availableCapacity.EffectiveAvailableCpuMillicores);
+                await transaction.RollbackAsync(ct);
+                return ServiceResult.Fail<ReservationResponse>("insufficient_cpu");
+            }
+
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
+            var reservation = new CapacityReservation
+            {
+                Id = Guid.NewGuid(),
+                NodeId = nodeId,
+                ReservationToken = Guid.NewGuid(),
+                MemoryMb = memoryMb,
+                DiskMb = diskMb,
+                CpuMillicores = cpuMillicores,
+                RequestedBy = requestedBy,
+                CorrelationId = correlationId,
+                Status = ReservationStatus.Pending,
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(ttlMinutes)
+            };
+
+            _dbContext.CapacityReservations.Add(reservation);
+
+            // Transactional Outbox Pattern: Publish BEFORE SaveChangesAsync.
+            // MassTransit's outbox stores the message in the same transaction as entity changes.
+            // If SaveChanges fails, both the entity and message are rolled back together,
+            // ensuring exactly-once delivery semantics.
+            await _publishEndpoint.Publish(new CapacityReserved(
+                nodeId,
+                reservation.ReservationToken,
+                memoryMb,
+                diskMb,
+                cpuMillicores,
+                reservation.ExpiresAt,
+                requestedBy), ct);
+
+            await _dbContext.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            NodesMetrics.ReservationsCreated.Add(1);
+
+            _logger.LogInformation(
+                "Created capacity reservation {ReservationToken} on node {NodeId} for {MemoryMb}MB memory, {DiskMb}MB disk",
+                reservation.ReservationToken, nodeId, memoryMb, diskMb);
+
+            return ServiceResult.Ok(MapToResponse(reservation));
         }
-
-        if (node.Status is NodeStatus.Offline or NodeStatus.Decommissioned or NodeStatus.Maintenance)
+        catch (Exception)
         {
-            return ServiceResult.Fail<ReservationResponse>("node_unavailable");
+            await transaction.RollbackAsync(ct);
+            throw;
         }
-
-        // Check if sufficient capacity is available
-        var availableCapacity = await GetAvailableCapacityInternalAsync(node, ct);
-        if (availableCapacity is null)
-        {
-            return ServiceResult.Fail<ReservationResponse>("capacity_data_missing");
-        }
-
-        var requestedMemoryBytes = (long)memoryMb * 1024 * 1024;
-        var requestedDiskBytes = (long)diskMb * 1024 * 1024;
-
-        if (requestedMemoryBytes > availableCapacity.EffectiveAvailableMemoryBytes)
-        {
-            _logger.LogWarning(
-                "Insufficient memory for reservation on node {NodeId}. Requested: {RequestedMb}MB, Available: {AvailableMb}MB",
-                nodeId, memoryMb, availableCapacity.EffectiveAvailableMemoryBytes / (1024 * 1024));
-            return ServiceResult.Fail<ReservationResponse>("insufficient_memory");
-        }
-
-        if (requestedDiskBytes > availableCapacity.EffectiveAvailableDiskBytes)
-        {
-            _logger.LogWarning(
-                "Insufficient disk for reservation on node {NodeId}. Requested: {RequestedMb}MB, Available: {AvailableMb}MB",
-                nodeId, diskMb, availableCapacity.EffectiveAvailableDiskBytes / (1024 * 1024));
-            return ServiceResult.Fail<ReservationResponse>("insufficient_disk");
-        }
-
-        if (cpuMillicores > availableCapacity.EffectiveAvailableCpuMillicores)
-        {
-            _logger.LogWarning(
-                "Insufficient CPU for reservation on node {NodeId}. Requested: {RequestedMillicores}m, Available: {AvailableMillicores}m",
-                nodeId, cpuMillicores, availableCapacity.EffectiveAvailableCpuMillicores);
-            return ServiceResult.Fail<ReservationResponse>("insufficient_cpu");
-        }
-
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var reservation = new CapacityReservation
-        {
-            Id = Guid.NewGuid(),
-            NodeId = nodeId,
-            ReservationToken = Guid.NewGuid(),
-            MemoryMb = memoryMb,
-            DiskMb = diskMb,
-            CpuMillicores = cpuMillicores,
-            RequestedBy = requestedBy,
-            CorrelationId = correlationId,
-            Status = ReservationStatus.Pending,
-            CreatedAt = now,
-            ExpiresAt = now.AddMinutes(ttlMinutes)
-        };
-
-        _dbContext.CapacityReservations.Add(reservation);
-
-        // Transactional Outbox Pattern: Publish BEFORE SaveChangesAsync.
-        // MassTransit's outbox stores the message in the same transaction as entity changes.
-        // If SaveChanges fails, both the entity and message are rolled back together,
-        // ensuring exactly-once delivery semantics.
-        await _publishEndpoint.Publish(new CapacityReserved(
-            nodeId,
-            reservation.ReservationToken,
-            memoryMb,
-            diskMb,
-            cpuMillicores,
-            reservation.ExpiresAt,
-            requestedBy), ct);
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        NodesMetrics.ReservationsCreated.Add(1);
-
-        _logger.LogInformation(
-            "Created capacity reservation {ReservationToken} on node {NodeId} for {MemoryMb}MB memory, {DiskMb}MB disk",
-            reservation.ReservationToken, nodeId, memoryMb, diskMb);
-
-        return ServiceResult.Ok(MapToResponse(reservation));
     }
 
     public async Task<ServiceResult<ReservationResponse>> ClaimAsync(
@@ -151,6 +171,14 @@ public sealed class CapacityReservationService : ICapacityReservationService
         if (now > reservation.ExpiresAt)
         {
             reservation.Status = ReservationStatus.Expired;
+            reservation.ReleasedAt = now;
+
+            // Publish BEFORE SaveChangesAsync for transactional outbox
+            await _publishEndpoint.Publish(new CapacityReservationExpired(
+                reservation.NodeId,
+                reservationToken,
+                now), ct);
+
             await _dbContext.SaveChangesAsync(ct);
             return ServiceResult.Fail<ReservationResponse>("reservation_expired");
         }
@@ -355,17 +383,24 @@ public sealed class CapacityReservationService : ICapacityReservationService
             return null;
         }
 
-        // Calculate reserved resources from active reservations (Pending and Claimed)
-        var activeReservations = await _dbContext.CapacityReservations
-            .AsNoTracking()
+        // Calculate reserved resources from active reservations using a single aggregate query
+        var reservedResources = await _dbContext.CapacityReservations
             .Where(r => r.NodeId == node.Id &&
                         (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Claimed))
-            .ToListAsync(ct);
+            .GroupBy(r => 1)
+            .Select(g => new
+            {
+                Memory = g.Sum(r => (long)r.MemoryMb * 1024 * 1024),
+                Disk = g.Sum(r => (long)r.DiskMb * 1024 * 1024),
+                Cpu = g.Sum(r => r.CpuMillicores),
+                Count = g.Count()
+            })
+            .FirstOrDefaultAsync(ct);
 
-        var reservedMemoryBytes = activeReservations.Sum(r => (long)r.MemoryMb * 1024 * 1024);
-        var reservedDiskBytes = activeReservations.Sum(r => (long)r.DiskMb * 1024 * 1024);
-        var reservedCpuMillicores = activeReservations.Sum(r => r.CpuMillicores);
-        var reservedSlots = activeReservations.Count;
+        var reservedMemoryBytes = reservedResources?.Memory ?? 0;
+        var reservedDiskBytes = reservedResources?.Disk ?? 0;
+        var reservedCpuMillicores = reservedResources?.Cpu ?? 0;
+        var reservedSlots = reservedResources?.Count ?? 0;
 
         var effectiveAvailableMemory = Math.Max(0, node.Capacity.AvailableMemoryBytes - reservedMemoryBytes);
         var effectiveAvailableDisk = Math.Max(0, node.Capacity.AvailableDiskBytes - reservedDiskBytes);
@@ -396,7 +431,7 @@ public sealed class CapacityReservationService : ICapacityReservationService
             node.Capacity.CurrentGameServers,
             reservedSlots,
             effectiveAvailableSlots,
-            activeReservations.Count);
+            reservedSlots);
     }
 
     private static ReservationResponse MapToResponse(CapacityReservation reservation)

@@ -39,7 +39,7 @@ public sealed class StaleNodeDetectionServiceTests
         using var cts = new CancellationTokenSource();
 
         // Act - start the service and let it run one iteration
-        var executeTask = service.StartAsync(cts.Token);
+        _ = service.StartAsync(cts.Token);
         await Task.Delay(100); // Give it time to execute once
         await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
@@ -73,7 +73,7 @@ public sealed class StaleNodeDetectionServiceTests
         using var cts = new CancellationTokenSource();
 
         // Act - start the service, it should handle the exception
-        var executeTask = service.StartAsync(cts.Token);
+        _ = service.StartAsync(cts.Token);
         await Task.Delay(100);
         await cts.CancelAsync();
 
@@ -150,9 +150,6 @@ public sealed class StaleNodeDetectionServiceTests
 
         // Assert - should have been called at least once on startup
         await heartbeatService.Received().CheckStaleNodesAsync(Arg.Any<CancellationToken>());
-        var callCount = heartbeatService.ReceivedCalls()
-            .Count(c => c.GetMethodInfo().Name == "CheckStaleNodesAsync");
-        Assert.True(callCount >= 1, $"Expected at least 1 call, but got {callCount}");
     }
 
     [Fact]

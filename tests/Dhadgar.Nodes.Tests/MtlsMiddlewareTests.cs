@@ -365,6 +365,7 @@ public class CertificateValidationServiceTests
         // CA validation is mocked to succeed, so this test verifies that
         // the expired certificate is not rejected due to expiration when allowExpired is true
         Assert.NotEqual("certificate_expired", result.ErrorCode);
+        Assert.True(result.IsValid);
     }
 
     [Fact]

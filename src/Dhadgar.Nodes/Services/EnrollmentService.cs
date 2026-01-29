@@ -271,16 +271,24 @@ public sealed class EnrollmentService : IEnrollmentService
         string hostname,
         CancellationToken ct)
     {
-        var baseName = SanitizeNodeName(hostname);
+        const int maxLength = 50;
+        const int suffixReserve = 4; // Reserve space for "-999" suffix
 
-        // Check if base name is available
+        var sanitizedName = SanitizeNodeName(hostname);
+
+        // Check if the full sanitized name is available (no truncation needed for base case)
         var nameExists = await _dbContext.Nodes
-            .AnyAsync(n => n.OrganizationId == organizationId && n.Name == baseName, ct);
+            .AnyAsync(n => n.OrganizationId == organizationId && n.Name == sanitizedName, ct);
 
         if (!nameExists)
         {
-            return baseName;
+            return sanitizedName;
         }
+
+        // Truncate base name to leave room for numeric suffix
+        var baseName = sanitizedName.Length > maxLength - suffixReserve
+            ? sanitizedName[..(maxLength - suffixReserve)]
+            : sanitizedName;
 
         // Find next available number
         var existingNames = await _dbContext.Nodes

@@ -2,7 +2,9 @@ using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -16,6 +18,7 @@ public sealed class CapacityReservationServiceTests
     {
         var options = new DbContextOptionsBuilder<NodesDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return new NodesDbContext(options);
     }
@@ -433,7 +436,7 @@ public sealed class CapacityReservationServiceTests
     }
 
     [Fact]
-    public async Task ReleaseAsync_AlreadyReleased_ReturnsFail()
+    public async Task ReleaseAsync_AlreadyReleased_IsIdempotent()
     {
         // Arrange
         using var context = CreateContext();
@@ -602,17 +605,20 @@ public sealed class CapacityReservationServiceTests
     [Fact]
     public async Task ConcurrentReservations_PreventOverProvisioning()
     {
-        // Arrange - use a shared database name for all contexts
-        var dbName = Guid.NewGuid().ToString();
+        // Arrange - use SQLite in-memory with a shared connection for real DB concurrency behavior
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
         var options = new DbContextOptionsBuilder<NodesDbContext>()
-            .UseInMemoryDatabase(dbName)
+            .UseSqlite(connection)
             .Options;
 
-        // Seed the node in a separate context
+        // Create the schema and seed the node
         var seedTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
         Guid nodeId;
         using (var setupContext = new NodesDbContext(options))
         {
+            await setupContext.Database.EnsureCreatedAsync();
             var node = await SeedNodeWithCapacityAsync(setupContext, seedTimeProvider,
                 availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB
             nodeId = node.Id;

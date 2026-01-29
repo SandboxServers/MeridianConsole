@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Options;
@@ -77,11 +78,24 @@ public sealed class LocalFileCaStorageProvider : ICaStorageProvider
 
             await File.WriteAllTextAsync(_keyPath, keyPem, ct);
 
+            // Tighten permissions on the private key file for Unix systems
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                File.SetUnixFileMode(_keyPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
             // Store the password in a separate file if it was auto-generated
             if (_options.CaKeyPassword is null)
             {
                 var passwordPath = Path.Combine(_caDirectory, "ca.pwd");
                 await File.WriteAllTextAsync(passwordPath, password, ct);
+
+                // Tighten permissions on the password file for Unix systems
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    File.SetUnixFileMode(passwordPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+
                 _logger.LogWarning(
                     "CA key password auto-generated and stored at {PasswordPath}. " +
                     "Set CaKeyPassword in configuration for production use.",
