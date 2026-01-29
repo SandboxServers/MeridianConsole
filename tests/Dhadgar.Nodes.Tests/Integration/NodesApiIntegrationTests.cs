@@ -305,7 +305,7 @@ public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplication
         Assert.True(response.Headers.Contains("X-Request-Id"));
     }
 
-    [Fact(Skip = "Requires TenantScopedHandler from features PR")]
+    [Fact]
     public async Task ListNodes_CrossTenantAccess_ReturnsForbidden()
     {
         var userOrgId = Guid.NewGuid();
@@ -319,7 +319,7 @@ public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplication
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact(Skip = "Requires TenantScopedHandler from features PR")]
+    [Fact]
     public async Task GetNode_CrossTenantAccess_ReturnsForbidden()
     {
         var userOrgId = Guid.NewGuid();
