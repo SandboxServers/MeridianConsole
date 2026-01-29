@@ -304,7 +304,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         var notBefore = now;
         var notAfter = now.AddDays(_options.CertificateValidityDays);
 
-        using var caPrivateKey = _caCertificate!.GetRSAPrivateKey()
+        var caPrivateKey = _caCertificate!.GetRSAPrivateKey()
             ?? throw new InvalidOperationException("CA certificate does not have a private key");
 
         var clientCert = request.Create(

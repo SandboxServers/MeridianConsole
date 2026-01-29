@@ -359,7 +359,7 @@ public sealed class AuditServiceTests
         Assert.Equal(5, page1.Items.Count);
         Assert.Equal(5, page2.Items.Count);
         Assert.Equal(5, page3.Items.Count);
-        Assert.False(page1.HasNext && page1.Page == 3); // Page 3 should not have next
+        Assert.False(page3.HasNext); // Page 3 should not have next
     }
 
     [Fact]

@@ -599,8 +599,10 @@ public sealed class HeartbeatServiceTests
     public async Task ProcessHeartbeatAsync_UpdatesHealthTrend_Improving()
     {
         // Arrange
+        var now = new DateTimeOffset(2024, 1, 15, 10, 0, 0, TimeSpan.Zero);
+        var timeProvider = new FakeTimeProvider(now);
         using var context = CreateContext();
-        var (service, _) = CreateService(context);
+        var (service, _) = CreateService(context, timeProvider);
         var node = await SeedNodeAsync(context);
 
         // First heartbeat with worse metrics
@@ -612,6 +614,9 @@ public sealed class HeartbeatServiceTests
             AgentVersion: null,
             HealthIssues: null);
         await service.ProcessHeartbeatAsync(node.Id, degradedRequest);
+
+        // Advance time before second heartbeat to ensure distinct timestamps
+        timeProvider.Advance(TimeSpan.FromMinutes(1));
 
         // Second heartbeat with better metrics
         var improvedRequest = new HeartbeatRequest(
@@ -635,8 +640,10 @@ public sealed class HeartbeatServiceTests
     public async Task ProcessHeartbeatAsync_UpdatesHealthTrend_Declining()
     {
         // Arrange
+        var now = new DateTimeOffset(2024, 1, 15, 10, 0, 0, TimeSpan.Zero);
+        var timeProvider = new FakeTimeProvider(now);
         using var context = CreateContext();
-        var (service, _) = CreateService(context);
+        var (service, _) = CreateService(context, timeProvider);
         var node = await SeedNodeAsync(context);
 
         // First heartbeat with good metrics
@@ -648,6 +655,9 @@ public sealed class HeartbeatServiceTests
             AgentVersion: null,
             HealthIssues: null);
         await service.ProcessHeartbeatAsync(node.Id, goodRequest);
+
+        // Advance time before second heartbeat to ensure distinct timestamps
+        timeProvider.Advance(TimeSpan.FromMinutes(1));
 
         // Second heartbeat with worse metrics
         var worseRequest = new HeartbeatRequest(

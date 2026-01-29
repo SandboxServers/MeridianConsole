@@ -600,21 +600,34 @@ public sealed class CapacityReservationServiceTests
     [Fact]
     public async Task ConcurrentReservations_PreventOverProvisioning()
     {
-        // Arrange
-        using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context,
-            availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB
+        // Arrange - use a shared database name for all contexts
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<NodesDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
 
-        // Create multiple reservations concurrently that together exceed capacity
-        var tasks = Enumerable.Range(0, 5).Select(i =>
-            service.ReserveAsync(
-                node.Id,
+        // Seed the node in a separate context
+        Guid nodeId;
+        using (var setupContext = new NodesDbContext(options))
+        {
+            var node = await SeedNodeWithCapacityAsync(setupContext,
+                availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB
+            nodeId = node.Id;
+        }
+
+        // Create multiple reservations concurrently, each with its own context and service
+        var tasks = Enumerable.Range(0, 5).Select(async i =>
+        {
+            using var context = new NodesDbContext(options);
+            var (service, _, _) = CreateService(context);
+            return await service.ReserveAsync(
+                nodeId,
                 memoryMb: 512, // 0.5GB each = 2.5GB total would exceed
                 diskMb: 1024,
                 cpuMillicores: 0,
                 requestedBy: $"test-{i}",
-                ttlMinutes: 15));
+                ttlMinutes: 15);
+        });
 
         var results = await Task.WhenAll(tasks);
 

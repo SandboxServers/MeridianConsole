@@ -208,10 +208,9 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 
 // Authentication and authorization
 app.UseAuthentication();
-app.UseAuthorization();
-
 // mTLS authentication middleware for agent endpoints
 app.UseMtlsAuthentication();
+app.UseAuthorization();
 
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())

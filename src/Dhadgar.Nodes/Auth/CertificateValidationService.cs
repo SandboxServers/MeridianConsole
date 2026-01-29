@@ -1,5 +1,7 @@
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.RegularExpressions;
 using Dhadgar.Nodes.Services;
 using Microsoft.Extensions.Options;
@@ -121,9 +123,6 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
     // SPIFFE ID pattern: spiffe://meridianconsole.com/nodes/{nodeId}
     [GeneratedRegex(@"^spiffe://(?<domain>[^/]+)/nodes/(?<nodeId>[a-fA-F0-9\-]{36})$")]
     private static partial Regex SpiffeIdPattern();
-
-    // OID for Subject Alternative Name extension
-    private const string SubjectAlternativeNameOid = "2.5.29.17";
 
     // OID for Client Authentication
     private const string ClientAuthenticationOid = "1.3.6.1.5.5.7.3.2";
@@ -274,63 +273,76 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
 
     public string? ExtractSpiffeId(X509Certificate2 certificate)
     {
-        // Find the Subject Alternative Name extension
-        var sanExtension = certificate.Extensions
-            .OfType<X509Extension>()
-            .FirstOrDefault(e => e.Oid?.Value == SubjectAlternativeNameOid);
-
+        var sanExtension = certificate.Extensions.OfType<X509SubjectAlternativeNameExtension>().FirstOrDefault();
         if (sanExtension is null)
         {
             return null;
         }
 
-        // Try to parse using the built-in SAN extension class
-        // The SAN extension contains URIs as uniformResourceIdentifier (OID 6)
         try
         {
-            var formattedString = sanExtension.Format(multiLine: true);
-
-            // Look for URI entries in the formatted output
-            // Format is typically "URL=spiffe://..." or "URI:spiffe://..."
-            var lines = formattedString.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var line in lines)
+            // Parse the SAN extension using ASN.1 reader for reliable cross-platform extraction
+            // SAN extension is a SEQUENCE OF GeneralName, where GeneralName tag [6] is uniformResourceIdentifier (IA5String)
+            foreach (var uri in EnumerateSanUris(sanExtension.RawData))
             {
-                var trimmedLine = line.Trim();
-
-                // Handle different format strings from .NET
-                if (trimmedLine.StartsWith("URL=", StringComparison.OrdinalIgnoreCase))
+                if (uri.Scheme.Equals("spiffe", StringComparison.OrdinalIgnoreCase))
                 {
-                    var uri = trimmedLine["URL=".Length..];
-                    if (uri.StartsWith("spiffe://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return uri;
-                    }
-                }
-                else if (trimmedLine.StartsWith("URI:", StringComparison.OrdinalIgnoreCase))
-                {
-                    var uri = trimmedLine["URI:".Length..];
-                    if (uri.StartsWith("spiffe://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return uri;
-                    }
-                }
-                else if (trimmedLine.StartsWith("Uniform Resource Identifier=", StringComparison.OrdinalIgnoreCase))
-                {
-                    var uri = trimmedLine["Uniform Resource Identifier=".Length..];
-                    if (uri.StartsWith("spiffe://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return uri;
-                    }
+                    return uri.AbsoluteUri;
                 }
             }
         }
+        catch (AsnContentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse SAN extension ASN.1 data");
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse SAN extension while extracting SPIFFE ID");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse SAN extension");
+            _logger.LogWarning(ex, "Unexpected error parsing SAN extension");
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Enumerates URI entries from a SAN extension's raw ASN.1 data.
+    /// GeneralName ::= CHOICE {
+    ///     ...
+    ///     uniformResourceIdentifier [6] IA5String,
+    ///     ...
+    /// }
+    /// </summary>
+    private static IEnumerable<Uri> EnumerateSanUris(ReadOnlyMemory<byte> sanRawData)
+    {
+        // ASN.1 context-specific tag for uniformResourceIdentifier in GeneralName
+        const int UriTag = 6;
+
+        var reader = new AsnReader(sanRawData, AsnEncodingRules.DER);
+        var sequenceReader = reader.ReadSequence();
+
+        while (sequenceReader.HasData)
+        {
+            var tag = sequenceReader.PeekTag();
+
+            if (tag.TagClass == TagClass.ContextSpecific && tag.TagValue == UriTag)
+            {
+                // Read the URI as IA5String (implicit tagging)
+                var uriString = sequenceReader.ReadCharacterString(UniversalTagNumber.IA5String, tag);
+
+                if (Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
+                {
+                    yield return uri;
+                }
+            }
+            else
+            {
+                // Skip other GeneralName types (dNSName, iPAddress, etc.)
+                sequenceReader.ReadEncodedValue();
+            }
+        }
     }
 
     public Guid? ParseNodeIdFromSpiffeId(string spiffeId)
