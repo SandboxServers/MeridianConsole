@@ -602,10 +602,20 @@ public sealed class CapacityReservationServiceTests
         Assert.False(publisher.HasMessage<CapacityReservationExpired>());
     }
 
+    /// <summary>
+    /// Tests that concurrent reservation requests don't over-provision capacity.
+    ///
+    /// LIMITATION: This test uses SQLite in-memory which does not fully replicate PostgreSQL's
+    /// serializable isolation semantics. SQLite's locking is file-based and may not catch all
+    /// race conditions that would occur in production with PostgreSQL. For full concurrency
+    /// validation, run integration tests against a real PostgreSQL instance in CI.
+    /// See: https://www.sqlite.org/isolation.html vs https://www.postgresql.org/docs/current/transaction-iso.html
+    /// </summary>
     [Fact]
     public async Task ConcurrentReservations_PreventOverProvisioning()
     {
         // Arrange - use SQLite in-memory with a shared connection for real DB concurrency behavior
+        // Note: SQLite serializable != PostgreSQL serializable; see xmldoc for limitations
         using var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
 

@@ -95,8 +95,15 @@ public sealed class CapacityReservedConsumerTests
 
         var consumeContext = ConsumeContextHelper.CreateConsumeContext(message);
 
-        // Act & Assert - should not throw
+        // Act
         await consumer.Consume(consumeContext);
+
+        // Assert - consumer completes without throwing and does not publish alerts
+        // when node is not found (no seeded data). This verifies graceful handling
+        // of reservations for unknown nodes.
+        await publishEndpoint.DidNotReceive().Publish(
+            Arg.Any<NodeCapacityLow>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -187,6 +194,79 @@ public sealed class CapacityReservedConsumerTests
             Arg.Is<NodeCapacityLow>(e =>
                 e.NodeId == nodeId &&
                 e.MemoryUsagePercent >= 80.0 &&
+                e.ThresholdPercent == 80.0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Consume_PublishesLowCapacityAlert_WhenDiskUsageExceedsThreshold()
+    {
+        // Arrange - tests the disk-only branch of the OR condition:
+        // (memoryUsagePercent >= threshold || diskUsagePercent >= threshold)
+        using var context = CreateContext();
+        var publishEndpoint = Substitute.For<IPublishEndpoint>();
+        var options = CreateOptions(lowCapacityThreshold: 80.0);
+        var timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var consumer = CreateConsumer(context, publishEndpoint, options, timeProvider);
+
+        // Seed a node with high disk usage but low memory usage
+        var nodeId = Guid.NewGuid();
+        var node = new Node
+        {
+            Id = nodeId,
+            OrganizationId = Guid.NewGuid(),
+            Name = "test-node-disk-full",
+            Platform = "linux",
+            Status = NodeStatus.Online,
+            CreatedAt = DateTime.UtcNow
+        };
+        context.Nodes.Add(node);
+
+        // Total: 16GB memory, 100GB disk
+        // Available: 12.8GB memory (80% available = 20% used, below threshold)
+        // Available: 15GB disk (15% available = 85% used, above threshold)
+        context.HardwareInventories.Add(new NodeHardwareInventory
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            Hostname = "test-host",
+            MemoryBytes = 16L * 1024 * 1024 * 1024,  // 16GB total
+            DiskBytes = 100L * 1024 * 1024 * 1024,   // 100GB total
+            CpuCores = 8,
+            CollectedAt = DateTime.UtcNow
+        });
+        context.NodeCapacities.Add(new NodeCapacity
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            AvailableMemoryBytes = (long)(16L * 1024 * 1024 * 1024 * 0.80), // 80% available = 20% used
+            AvailableDiskBytes = (long)(100L * 1024 * 1024 * 1024 * 0.15),  // 15% available = 85% used
+            MaxGameServers = 10,
+            CurrentGameServers = 5,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var message = new CapacityReserved(
+            NodeId: nodeId,
+            ReservationToken: Guid.NewGuid(),
+            MemoryMb: 1024,
+            DiskMb: 5000,
+            CpuMillicores: 1000,
+            ExpiresAt: DateTime.UtcNow.AddMinutes(15),
+            RequestedBy: "test-service");
+
+        var consumeContext = ConsumeContextHelper.CreateConsumeContext(message);
+
+        // Act
+        await consumer.Consume(consumeContext);
+
+        // Assert - should publish low capacity alert due to disk usage exceeding threshold
+        await publishEndpoint.Received(1).Publish(
+            Arg.Is<NodeCapacityLow>(e =>
+                e.NodeId == nodeId &&
+                e.DiskUsagePercent >= 80.0 &&
+                e.MemoryUsagePercent < 80.0 && // Memory is fine
                 e.ThresholdPercent == 80.0),
             Arg.Any<CancellationToken>());
     }
