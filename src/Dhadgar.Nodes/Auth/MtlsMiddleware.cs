@@ -211,7 +211,10 @@ public static class MtlsMiddlewareExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.Configure<MtlsOptions>(configuration.GetSection(MtlsOptions.SectionName));
+        services.AddOptions<MtlsOptions>()
+            .Bind(configuration.GetSection(MtlsOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services.AddScoped<ICertificateValidationService, CertificateValidationService>();
 
         return services;

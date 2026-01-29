@@ -43,10 +43,20 @@ public sealed class TestCertificateAuthorityService : ICertificateAuthorityServi
         var thumbprintBytes = SHA256.HashData(nodeId.ToByteArray().Concat(BitConverter.GetBytes(now.Ticks)).ToArray());
         var thumbprint = Convert.ToHexString(thumbprintBytes).ToLowerInvariant();
 
-        var serialBytes = RandomNumberGenerator.GetBytes(16);
+        // Deterministic serial from nodeId for test reproducibility
+        var serialBytes = SHA256.HashData(
+            nodeId.ToByteArray()
+                .Concat(System.Text.Encoding.UTF8.GetBytes(now.ToString("O")))
+                .ToArray()
+        ).Take(16).ToArray();
         var serialNumber = Convert.ToHexString(serialBytes).ToLowerInvariant();
 
-        var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        // Deterministic password from nodeId for test reproducibility
+        var password = Convert.ToBase64String(
+            SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes($"test-password-{nodeId}")
+            )
+        );
 
         // Generate a fake PEM certificate format
         var fakeCertData = Convert.ToBase64String(thumbprintBytes);

@@ -25,7 +25,8 @@ public static class EnrollmentEndpoints
         group.MapDelete("/tokens/{tokenId:guid}", RevokeToken)
             .WithName("RevokeEnrollmentToken")
             .WithDescription("Revoke an enrollment token")
-            .Produces(204);
+            .Produces(204)
+            .Produces(404);
     }
 
     private static async Task<IResult> CreateToken(
@@ -72,7 +73,7 @@ public static class EnrollmentEndpoints
         IEnrollmentTokenService tokenService,
         CancellationToken ct = default)
     {
-        await tokenService.RevokeTokenAsync(tokenId, ct);
-        return Results.NoContent();
+        var revoked = await tokenService.RevokeTokenAsync(organizationId, tokenId, ct);
+        return revoked ? Results.NoContent() : Results.NotFound();
     }
 }

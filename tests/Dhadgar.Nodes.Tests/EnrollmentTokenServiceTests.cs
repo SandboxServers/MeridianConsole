@@ -178,7 +178,7 @@ public sealed class EnrollmentTokenServiceTests
         var (token, plainTextToken) = await service.CreateTokenAsync(TestOrgId, TestUserId, "To Revoke");
 
         // Revoke
-        await service.RevokeTokenAsync(token.Id);
+        await service.RevokeTokenAsync(TestOrgId, token.Id);
 
         // Act
         var validatedToken = await service.ValidateTokenAsync(plainTextToken);
@@ -270,6 +270,23 @@ public sealed class EnrollmentTokenServiceTests
     }
 
     [Fact]
+    public async Task MarkTokenUsedAsync_NonExistentToken_DoesNotThrow()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var service = CreateService(context);
+        var nonExistentTokenId = Guid.NewGuid();
+        var nodeId = Guid.NewGuid();
+
+        // Act - should not throw, just log warning and return
+        var exception = await Record.ExceptionAsync(
+            () => service.MarkTokenUsedAsync(nonExistentTokenId, nodeId));
+
+        // Assert
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public async Task RevokeTokenAsync_SetsRevokedFlag()
     {
         // Arrange
@@ -278,12 +295,47 @@ public sealed class EnrollmentTokenServiceTests
         var (token, _) = await service.CreateTokenAsync(TestOrgId, TestUserId, "To Revoke");
 
         // Act
-        await service.RevokeTokenAsync(token.Id);
+        var result = await service.RevokeTokenAsync(TestOrgId, token.Id);
 
         // Assert
+        Assert.True(result);
         var revokedToken = await context.EnrollmentTokens.FindAsync(token.Id);
         Assert.NotNull(revokedToken);
         Assert.True(revokedToken.IsRevoked);
+    }
+
+    [Fact]
+    public async Task RevokeTokenAsync_WrongOrganization_ReturnsFalse()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var service = CreateService(context);
+        var (token, _) = await service.CreateTokenAsync(TestOrgId, TestUserId, "To Revoke");
+        var wrongOrgId = Guid.NewGuid();
+
+        // Act
+        var result = await service.RevokeTokenAsync(wrongOrgId, token.Id);
+
+        // Assert - token should NOT be revoked
+        Assert.False(result);
+        var dbToken = await context.EnrollmentTokens.FindAsync(token.Id);
+        Assert.NotNull(dbToken);
+        Assert.False(dbToken.IsRevoked);
+    }
+
+    [Fact]
+    public async Task RevokeTokenAsync_NonExistentToken_ReturnsFalse()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var service = CreateService(context);
+        var nonExistentTokenId = Guid.NewGuid();
+
+        // Act
+        var result = await service.RevokeTokenAsync(TestOrgId, nonExistentTokenId);
+
+        // Assert
+        Assert.False(result);
     }
 
     [Fact]
@@ -307,7 +359,7 @@ public sealed class EnrollmentTokenServiceTests
         await service.CreateTokenAsync(otherOrgId, TestUserId, "Other Org");
 
         // Modify states
-        await service.RevokeTokenAsync(revokedToken.Id);
+        await service.RevokeTokenAsync(TestOrgId, revokedToken.Id);
         await service.MarkTokenUsedAsync(usedToken.Id, Guid.NewGuid());
 
         // Advance time to expire one token

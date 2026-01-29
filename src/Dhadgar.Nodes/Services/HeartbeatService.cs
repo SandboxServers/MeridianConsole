@@ -146,10 +146,13 @@ public sealed class HeartbeatService : IHeartbeatService
             }
         }
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Publish status change events
+        // Transactional Outbox Pattern: Publish events BEFORE SaveChangesAsync.
+        // MassTransit's outbox stores messages in the same transaction as entity changes.
+        // When SaveChangesAsync commits, both the entity updates AND the outbox messages
+        // are persisted atomically. The outbox delivery service then sends the messages.
         await PublishStatusEventsAsync(nodeId, previousStatus, node.Status, request, now, ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         // Record metrics
         stopwatch.Stop();
@@ -192,9 +195,10 @@ public sealed class HeartbeatService : IHeartbeatService
             node.UpdatedAt = now;
         }
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Publish events for each node that went offline
+        // Transactional Outbox Pattern: Publish events BEFORE SaveChangesAsync.
+        // MassTransit's outbox stores messages in the same transaction as entity changes.
+        // When SaveChangesAsync commits, both the entity updates AND the outbox messages
+        // are persisted atomically. The outbox delivery service then sends the messages.
         foreach (var node in staleNodes)
         {
             await _publishEndpoint.Publish(
@@ -203,6 +207,8 @@ public sealed class HeartbeatService : IHeartbeatService
 
             _logger.LogWarning("Node {NodeId} marked offline due to heartbeat timeout", node.Id);
         }
+
+        await _dbContext.SaveChangesAsync(ct);
 
         // Record metrics for stale nodes detected
         NodesMetrics.StaleNodesDetected.Add(staleNodes.Count);

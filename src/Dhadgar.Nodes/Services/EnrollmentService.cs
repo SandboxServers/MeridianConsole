@@ -177,17 +177,18 @@ public sealed class EnrollmentService : IEnrollmentService
         // Mark token as used
         await _tokenService.MarkTokenUsedAsync(token.Id, node.Id, ct);
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Publish enrollment event
+        // Publish events BEFORE SaveChangesAsync for transactional outbox pattern.
+        // MassTransit stores messages in the outbox table, which are committed
+        // atomically with entity changes when SaveChangesAsync is called.
         await _publishEndpoint.Publish(
             new NodeEnrolled(node.Id, token.OrganizationId, node.Platform, now),
             ct);
 
-        // Publish certificate issued event
         await _publishEndpoint.Publish(
             new AgentCertificateIssued(node.Id, certResult.Thumbprint!, certResult.NotAfter!.Value),
             ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Node {NodeId} enrolled for organization {OrganizationId}, platform: {Platform}, cert thumbprint: {Thumbprint}",

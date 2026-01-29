@@ -86,10 +86,19 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             var (certificate, privateKey) = CreateClientCertificate(nodeId);
             return CreateIssuanceResult(certificate, privateKey, nodeId);
         }
+        catch (OperationCanceledException)
+        {
+            throw; // Let cancellation propagate
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogError(ex, "Cryptographic failure issuing certificate for node {NodeId}", nodeId);
+            return CertificateIssuanceResult.Fail("certificate_generation_failed");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to issue certificate for node {NodeId}", nodeId);
-            return CertificateIssuanceResult.Fail($"certificate_generation_failed: {ex.Message}");
+            _logger.LogError(ex, "Unexpected error issuing certificate for node {NodeId}", nodeId);
+            return CertificateIssuanceResult.Fail("certificate_generation_failed");
         }
     }
 
@@ -115,10 +124,19 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
             return CreateIssuanceResult(certificate, privateKey, nodeId);
         }
+        catch (OperationCanceledException)
+        {
+            throw; // Let cancellation propagate
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogError(ex, "Cryptographic failure renewing certificate for node {NodeId}", nodeId);
+            return CertificateIssuanceResult.Fail("certificate_renewal_failed");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to renew certificate for node {NodeId}", nodeId);
-            return CertificateIssuanceResult.Fail($"certificate_renewal_failed: {ex.Message}");
+            _logger.LogError(ex, "Unexpected error renewing certificate for node {NodeId}", nodeId);
+            return CertificateIssuanceResult.Fail("certificate_renewal_failed");
         }
     }
 
@@ -162,6 +180,15 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             // Verify the issuing CA is our CA
             var issuer = chain.ChainElements[^1].Certificate;
             return issuer.Thumbprint == _caCertificate!.Thumbprint;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogWarning(ex, "Certificate validation failed due to cryptographic error");
+            return false;
         }
         catch (Exception ex)
         {

@@ -34,8 +34,10 @@ public interface IEnrollmentTokenService
 
     /// <summary>
     /// Revokes a token so it can no longer be used.
+    /// Returns true if the token was found and revoked, false if not found or doesn't belong to the organization.
     /// </summary>
-    Task RevokeTokenAsync(
+    Task<bool> RevokeTokenAsync(
+        Guid organizationId,
         Guid tokenId,
         CancellationToken ct = default);
 

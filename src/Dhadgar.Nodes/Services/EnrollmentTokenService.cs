@@ -133,42 +133,59 @@ public sealed class EnrollmentTokenService : IEnrollmentTokenService
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var token = await _dbContext.EnrollmentTokens.FindAsync([tokenId], ct);
-        if (token is not null)
+
+        if (token is null)
         {
-            token.UsedAt = now;
-            token.UsedByNodeId = nodeId;
-            await _dbContext.SaveChangesAsync(ct);
+            _logger.LogWarning(
+                "Attempted to mark non-existent token {TokenId} as used by node {NodeId}",
+                tokenId, nodeId);
+            return;
         }
+
+        token.UsedAt = now;
+        token.UsedByNodeId = nodeId;
+        await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Enrollment token {TokenId} used by node {NodeId}",
             tokenId, nodeId);
     }
 
-    public async Task RevokeTokenAsync(
+    public async Task<bool> RevokeTokenAsync(
+        Guid organizationId,
         Guid tokenId,
         CancellationToken ct = default)
     {
-        var token = await _dbContext.EnrollmentTokens.FindAsync([tokenId], ct);
-        if (token is not null)
-        {
-            token.IsRevoked = true;
-            await _dbContext.SaveChangesAsync(ct);
-            NodesMetrics.TokensRevoked.Add(1);
+        var token = await _dbContext.EnrollmentTokens
+            .FirstOrDefaultAsync(t => t.Id == tokenId && t.OrganizationId == organizationId, ct);
 
-            // Audit the token revocation
-            await _auditService.LogAsync(
-                AuditActions.EnrollmentTokenRevoked,
-                ResourceTypes.EnrollmentToken,
-                tokenId,
-                AuditOutcome.Success,
-                new { Label = token.Label },
-                resourceName: token.Label ?? tokenId.ToString(),
-                organizationId: token.OrganizationId,
-                ct: ct);
+        if (token is null)
+        {
+            _logger.LogWarning(
+                "Token {TokenId} not found or does not belong to organization {OrganizationId}",
+                tokenId, organizationId);
+            return false;
         }
 
-        _logger.LogInformation("Enrollment token {TokenId} revoked", tokenId);
+        token.IsRevoked = true;
+        await _dbContext.SaveChangesAsync(ct);
+        NodesMetrics.TokensRevoked.Add(1);
+
+        // Audit the token revocation
+        await _auditService.LogAsync(
+            AuditActions.EnrollmentTokenRevoked,
+            ResourceTypes.EnrollmentToken,
+            tokenId,
+            AuditOutcome.Success,
+            new { Label = token.Label },
+            resourceName: token.Label ?? tokenId.ToString(),
+            organizationId: token.OrganizationId,
+            ct: ct);
+
+        _logger.LogInformation(
+            "Enrollment token {TokenId} revoked for organization {OrganizationId}",
+            tokenId, organizationId);
+        return true;
     }
 
     public async Task<IReadOnlyList<EnrollmentTokenSummary>> GetActiveTokensAsync(

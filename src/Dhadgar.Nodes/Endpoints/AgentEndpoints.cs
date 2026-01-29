@@ -77,21 +77,27 @@ public static class AgentEndpoints
         HttpContext context,
         IHeartbeatService heartbeatService,
         TimeProvider timeProvider,
+        ILogger<Program> logger,
         CancellationToken ct = default)
     {
-        // In a full implementation, we would verify the node ID from the certificate matches
-        // the node ID in the URL. For now, we just process the heartbeat.
+        // Verify the node ID from the certificate matches the URL
         var nodeIdFromCert = context.User.FindFirst("node_id")?.Value;
 
-        // Verify the node ID matches (security check)
-        if (nodeIdFromCert is not null && !Guid.TryParse(nodeIdFromCert, out var certNodeId))
+        if (nodeIdFromCert is not null)
         {
-            return Results.Forbid();
-        }
+            if (!Guid.TryParse(nodeIdFromCert, out var certNodeId))
+            {
+                logger.LogWarning("Invalid node_id claim format in certificate: {NodeIdClaim}", nodeIdFromCert);
+                return Results.Forbid();
+            }
 
-        if (nodeIdFromCert is not null && Guid.Parse(nodeIdFromCert) != nodeId)
-        {
-            return Results.Forbid();
+            if (certNodeId != nodeId)
+            {
+                logger.LogWarning(
+                    "Node ID mismatch: certificate has {CertNodeId}, request is for {RequestNodeId}",
+                    certNodeId, nodeId);
+                return Results.Forbid();
+            }
         }
 
         var result = await heartbeatService.ProcessHeartbeatAsync(nodeId, request, ct);

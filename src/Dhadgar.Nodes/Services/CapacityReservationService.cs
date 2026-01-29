@@ -96,9 +96,11 @@ public sealed class CapacityReservationService : ICapacityReservationService
         };
 
         _dbContext.CapacityReservations.Add(reservation);
-        await _dbContext.SaveChangesAsync(ct);
 
-        // Publish event
+        // Transactional Outbox Pattern: Publish BEFORE SaveChangesAsync.
+        // MassTransit's outbox stores the message in the same transaction as entity changes.
+        // If SaveChanges fails, both the entity and message are rolled back together,
+        // ensuring exactly-once delivery semantics.
         await _publishEndpoint.Publish(new CapacityReserved(
             nodeId,
             reservation.ReservationToken,
@@ -107,6 +109,8 @@ public sealed class CapacityReservationService : ICapacityReservationService
             cpuMillicores,
             reservation.ExpiresAt,
             requestedBy), ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         NodesMetrics.ReservationsCreated.Add(1);
 
@@ -147,14 +151,14 @@ public sealed class CapacityReservationService : ICapacityReservationService
         reservation.ServerId = serverId;
         reservation.ClaimedAt = now;
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Publish event
+        // Publish BEFORE SaveChangesAsync for transactional outbox
         await _publishEndpoint.Publish(new CapacityClaimed(
             reservation.NodeId,
             reservationToken,
             serverId,
             now), ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         NodesMetrics.ReservationsClaimed.Add(1);
 
@@ -187,13 +191,13 @@ public sealed class CapacityReservationService : ICapacityReservationService
         reservation.Status = ReservationStatus.Released;
         reservation.ReleasedAt = now;
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Publish event
+        // Publish BEFORE SaveChangesAsync for transactional outbox
         await _publishEndpoint.Publish(new CapacityReleased(
             reservation.NodeId,
             reservationToken,
             reason ?? "Explicit release"), ct);
+
+        await _dbContext.SaveChangesAsync(ct);
 
         NodesMetrics.ReservationsReleased.Add(1);
 
@@ -282,12 +286,12 @@ public sealed class CapacityReservationService : ICapacityReservationService
             return 0;
         }
 
+        // Publish all events BEFORE SaveChangesAsync for transactional outbox
         foreach (var reservation in expiredReservations)
         {
             reservation.Status = ReservationStatus.Expired;
             reservation.ReleasedAt = now;
 
-            // Publish event for each expired reservation
             await _publishEndpoint.Publish(new CapacityReservationExpired(
                 reservation.NodeId,
                 reservation.ReservationToken,
