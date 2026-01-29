@@ -31,6 +31,7 @@
 
     <!-- Messaging -->
     <PackageVersion Include="MassTransit" Version="8.3.6" />
+    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.3.6" />
     <PackageVersion Include="MassTransit.RabbitMQ" Version="8.3.6" />
 
     <!-- Observability -->
