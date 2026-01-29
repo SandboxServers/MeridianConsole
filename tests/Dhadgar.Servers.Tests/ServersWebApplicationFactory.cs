@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Dhadgar.Servers.Tests;
 
@@ -14,6 +15,11 @@ namespace Dhadgar.Servers.Tests;
 public class ServersWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"servers-tests-{Guid.NewGuid()}";
+
+    /// <summary>
+    /// Test-friendly TimeProvider that can be controlled in tests.
+    /// </summary>
+    public FakeTimeProvider FakeTimeProvider { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -34,8 +40,8 @@ public class ServersWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseInMemoryDatabase(_databaseName)
                     .UseInternalServiceProvider(efProvider));
 
-            // Register TimeProvider for AuditCleanupService
-            services.AddSingleton(TimeProvider.System);
+            // Register FakeTimeProvider for testing time-dependent services
+            services.AddSingleton<TimeProvider>(FakeTimeProvider);
         });
     }
 }

@@ -6,15 +6,16 @@ This runbook covers operational procedures for the Meridian Console Nodes servic
 
 ### Available Endpoints
 
-| Endpoint | Purpose | Expected Response |
-|----------|---------|-------------------|
-| `/healthz` | Basic health | 200 OK with service info |
-| `/livez` | Kubernetes liveness | 200 OK |
-| `/readyz` | Kubernetes readiness | 200 OK with dependency status |
+|Endpoint|Purpose|Expected Response|
+|---|---|---|
+|`/healthz`|Basic health|200 OK with service info|
+|`/livez`|Kubernetes liveness|200 OK|
+|`/readyz`|Kubernetes readiness|200 OK with dependency status|
 
 ### Health Check Details
 
 **`/healthz`** - Returns basic health information:
+
 ```json
 {
   "status": "Healthy",
@@ -87,8 +88,8 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 **Before Decommissioning:**
 1. Migrate or stop all game servers on the node
-2. Release any active capacity reservations
-3. Revoke agent certificate (optional, automatic on decommission)
+1. Release any active capacity reservations
+1. Revoke agent certificate (optional, automatic on decommission)
 
 ## Agent Enrollment
 
@@ -159,6 +160,7 @@ ORDER BY issued_at DESC;
 If a certificate is compromised:
 
 1. **Revoke via API:**
+
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -166,13 +168,14 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   "http://gateway:5000/api/v1/organizations/{orgId}/nodes/{nodeId}/certificates/revoke"
 ```
 
-2. **Verify revocation in database:**
+1. **Verify revocation in database:**
+
 ```sql
 SELECT * FROM agent_certificates
 WHERE node_id = 'uuid' AND revoked_at IS NOT NULL;
 ```
 
-3. **Force agent re-enrollment** by creating new enrollment token
+1. **Force agent re-enrollment** by creating new enrollment token
 
 ### CA Certificate Rotation
 
@@ -187,14 +190,14 @@ cp -r /app/CA /backup/CA-$(date +%Y%m%d)
 az keyvault certificate backup --vault-name $VAULT --name meridian-agent-ca -f ca-backup.blob
 ```
 
-2. **Delete CA files/secrets** (service will regenerate)
+1. **Delete CA files/secrets** (service will regenerate)
 
-3. **Restart service:**
+1. **Restart service:**
 ```bash
 kubectl rollout restart deployment/nodes
 ```
 
-4. **Re-enroll all agents** - existing certificates will be invalid
+1. **Re-enroll all agents** - existing certificates will be invalid
 
 ## Health Monitoring
 
@@ -230,7 +233,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```
 Look at `lastHeartbeat` timestamp.
 
-2. **Check agent logs on customer hardware:**
+1. **Check agent logs on customer hardware:**
 ```bash
 # Linux
 journalctl -u meridian-agent -f
@@ -239,7 +242,7 @@ journalctl -u meridian-agent -f
 Get-EventLog -LogName Application -Source "Meridian Agent" -Newest 50
 ```
 
-3. **Common causes:**
+1. **Common causes:**
    - Network connectivity issues
    - Agent process crashed
    - Certificate expired
@@ -296,7 +299,7 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 ### Connection String
 
-```
+```ini
 Host=localhost;Port=5432;Database=dhadgar_platform;Username=dhadgar;Password=dhadgar
 ```
 
@@ -396,11 +399,11 @@ If many nodes go offline simultaneously:
 curl http://nodes:5040/healthz
 ```
 
-2. **Check RabbitMQ connectivity** - heartbeat events may be backing up
+1. **Check RabbitMQ connectivity** - heartbeat events may be backing up
 
-3. **Check recent deployments** - configuration changes may affect agent auth
+1. **Check recent deployments** - configuration changes may affect agent auth
 
-4. **Review stale node detection logs:**
+1. **Review stale node detection logs:**
 ```bash
 kubectl logs -l app=nodes --since=15m | grep "StaleNodeDetection"
 ```
@@ -411,7 +414,7 @@ If enrollment requests spike unexpectedly:
 
 1. **Check rate limiting** at Gateway level
 
-2. **Review token creation audit logs:**
+1. **Review token creation audit logs:**
 ```sql
 SELECT * FROM node_audit_logs
 WHERE action = 'EnrollmentTokenCreated'
@@ -419,7 +422,7 @@ ORDER BY occurred_at DESC
 LIMIT 100;
 ```
 
-3. **Consider temporary token revocation** if malicious
+1. **Consider temporary token revocation** if malicious
 
 ### Certificate Authority Compromise
 
@@ -431,11 +434,11 @@ UPDATE agent_certificates SET revoked_at = NOW(), revocation_reason = 'CA compro
 WHERE revoked_at IS NULL;
 ```
 
-2. **Rotate CA** (see CA Certificate Rotation above)
+1. **Rotate CA** (see CA Certificate Rotation above)
 
-3. **Re-enroll all agents** with new tokens
+1. **Re-enroll all agents** with new tokens
 
-4. **Audit all actions** during compromise window
+1. **Audit all actions** during compromise window
 
 ## Backup and Recovery
 
@@ -460,14 +463,14 @@ pg_dump -h localhost -U dhadgar dhadgar_platform > backup.sql
 psql -h localhost -U dhadgar dhadgar_platform < backup.sql
 ```
 
-2. **Restore CA certificate** (if using local storage)
+1. **Restore CA certificate** (if using local storage)
 
-3. **Restart service:**
+1. **Restart service:**
 ```bash
 kubectl rollout restart deployment/nodes
 ```
 
-4. **Verify agent connectivity** - agents should reconnect automatically
+1. **Verify agent connectivity** - agents should reconnect automatically
 
 ## Maintenance Procedures
 
@@ -481,9 +484,9 @@ kubectl rollout status deployment/nodes
 ### Configuration Update
 
 1. Update `appsettings.json` or environment variables
-2. Deploy new configuration
-3. Verify with `/healthz`
-4. Monitor for errors
+1. Deploy new configuration
+1. Verify with `/healthz`
+1. Monitor for errors
 
 ### Scaling
 

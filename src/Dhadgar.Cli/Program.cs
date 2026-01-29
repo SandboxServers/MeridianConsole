@@ -745,7 +745,23 @@ var nodesListCmd = new Command("list", "List nodes");
 var nodesListOrgOpt = new Option<string?>("--org", "Organization ID (defaults to current org)");
 var nodesListStatusOpt = new Option<string?>("--status", "Filter by status (online, offline, degraded, maintenance)");
 var nodesListSkipOpt = new Option<int?>("--skip", "Number of items to skip (pagination)");
+nodesListSkipOpt.AddValidator(result =>
+{
+    var value = result.GetValueForOption(nodesListSkipOpt);
+    if (value.HasValue && value.Value < 0)
+    {
+        result.ErrorMessage = "skip must be >= 0";
+    }
+});
 var nodesListTakeOpt = new Option<int?>("--take", "Number of items to take (pagination)");
+nodesListTakeOpt.AddValidator(result =>
+{
+    var value = result.GetValueForOption(nodesListTakeOpt);
+    if (value.HasValue && value.Value <= 0)
+    {
+        result.ErrorMessage = "take must be > 0";
+    }
+});
 nodesListCmd.AddOption(nodesListOrgOpt);
 nodesListCmd.AddOption(nodesListStatusOpt);
 nodesListCmd.AddOption(nodesListSkipOpt);

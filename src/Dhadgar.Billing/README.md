@@ -257,7 +257,7 @@ public class UsageRecord
 
 #### Usage Collection Architecture
 
-```
+```text
 +-------------+     +-------------+     +-------------+
 |   Servers   |     |    Nodes    |     |    Files    |
 +------+------+     +------+------+     +------+------+

@@ -27,7 +27,7 @@ The `Dhadgar.Messaging` library provides centralized MassTransit configuration f
 The Dhadgar platform follows a strict microservices architecture where services **must not** reference each other via `ProjectReference`. Services communicate through:
 
 1. **Synchronous HTTP**: Request/response patterns requiring immediate responses
-2. **Asynchronous Messaging**: Event-driven patterns, fire-and-forget operations, and decoupled workflows
+1. **Asynchronous Messaging**: Event-driven patterns, fire-and-forget operations, and decoupled workflows
 
 ### What This Library Provides
 
@@ -71,7 +71,7 @@ This convention:
 
 ### Message Flow Architecture
 
-```
+```text
 +------------------+     +------------------+     +------------------+
 |   Service A      |     |    RabbitMQ      |     |   Service B      |
 |                  |     |                  |     |                  |
@@ -145,10 +145,10 @@ public sealed class UserDeactivatedConsumer : IConsumer<UserDeactivated>
 ### Consumer Guidelines
 
 1. **Single Responsibility**: One consumer per message type
-2. **Idempotency**: Design for at-least-once delivery; the same message may arrive twice
-3. **Error Handling**: Let exceptions propagate for MassTransit retry handling
-4. **Logging**: Log at start and end of processing with correlation data
-5. **Keep Fast**: Avoid long-running operations; offload to background jobs if needed
+1. **Idempotency**: Design for at-least-once delivery; the same message may arrive twice
+1. **Error Handling**: Let exceptions propagate for MassTransit retry handling
+1. **Logging**: Log at start and end of processing with correlation data
+1. **Keep Fast**: Avoid long-running operations; offload to background jobs if needed
 
 ### Registering Consumers
 
@@ -356,7 +356,7 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 
 Access RabbitMQ Management UI:
 
-- **URL**: http://localhost:15672
+- **URL**: [http://localhost:15672](http://localhost:15672)
 - **Credentials**: dhadgar / dhadgar
 
 RabbitMQ Ports:
@@ -522,7 +522,7 @@ public record SomethingHappened(
     DateTimeOffset OccurredAtUtc);
 ```
 
-2. **Create the consumer class** in your service:
+1. **Create the consumer class** in your service:
 
 ```csharp
 // src/Dhadgar.YourService/Consumers/SomethingHappenedConsumer.cs
@@ -550,7 +550,7 @@ public sealed class SomethingHappenedConsumer : IConsumer<SomethingHappened>
 }
 ```
 
-3. **Register the consumer** in `Program.cs`:
+1. **Register the consumer** in `Program.cs`:
 
 ```csharp
 builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
@@ -563,7 +563,7 @@ builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
 
 1. **Define the message contract** (if not already defined)
 
-2. **Create the publisher interface and implementation**:
+1. **Create the publisher interface and implementation**:
 
 ```csharp
 // Interface
@@ -587,7 +587,7 @@ public sealed class YourDomainEventPublisher : IYourDomainEventPublisher
 }
 ```
 
-3. **Register the publisher** in `Program.cs`:
+1. **Register the publisher** in `Program.cs`:
 
 ```csharp
 builder.Services.AddScoped<IYourDomainEventPublisher, YourDomainEventPublisher>();
@@ -596,10 +596,10 @@ builder.Services.AddScoped<IYourDomainEventPublisher, YourDomainEventPublisher>(
 ### Message Contract Guidelines
 
 1. **Use Records**: Immutable by default, value equality, with-expressions
-2. **Include Timestamps**: Always include `DateTimeOffset OccurredAtUtc` for events
-3. **Include IDs**: Reference entities by ID, not full objects
-4. **Keep Minimal**: Include only what consumers need
-5. **Document**: Add XML comments explaining when events are published
+1. **Include Timestamps**: Always include `DateTimeOffset OccurredAtUtc` for events
+1. **Include IDs**: Reference entities by ID, not full objects
+1. **Keep Minimal**: Include only what consumers need
+1. **Document**: Add XML comments explaining when events are published
 
 ```csharp
 /// <summary>

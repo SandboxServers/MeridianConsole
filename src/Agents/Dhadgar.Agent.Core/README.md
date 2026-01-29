@@ -54,8 +54,8 @@ The current implementation includes:
 
 ### What This Library Is NOT
 
-- **NOT a standalone executable for production use** - While it can be run directly, the production agents are `Dhadgar.Agent.Linux` and `Dhadgar.Agent.Windows`, which extend this library with platform-specific functionality.
-- **NOT a general-purpose library** - This is specifically designed for the Meridian Console agent architecture and should not be used outside of this context.
+- **Not a standalone executable** — Production agents are provided by `Dhadgar.Agent.Linux` and `Dhadgar.Agent.Windows`, which extend this library.
+- **Not a general-purpose library** — Intended only for the Meridian Console agent architecture.
 
 ---
 

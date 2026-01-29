@@ -146,18 +146,20 @@ internal static class NodesCommandHelpers
         return safe.Count == 0 ? null : safe;
     }
 
-    private static bool IsSafeErrorField(string name)
+    private static readonly HashSet<string> SafeErrorFields = new(StringComparer.OrdinalIgnoreCase)
     {
-        return name.Equals("error", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("error_description", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("error_uri", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("message", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("code", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("correlationId", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("correlation_id", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("traceId", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("trace_id", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("requestId", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("request_id", StringComparison.OrdinalIgnoreCase);
-    }
+        "error",
+        "error_description",
+        "error_uri",
+        "message",
+        "code",
+        "correlationId",
+        "correlation_id",
+        "traceId",
+        "trace_id",
+        "requestId",
+        "request_id"
+    };
+
+    private static bool IsSafeErrorField(string name) => SafeErrorFields.Contains(name);
 }

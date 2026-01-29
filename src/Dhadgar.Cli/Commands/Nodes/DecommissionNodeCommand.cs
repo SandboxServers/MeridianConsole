@@ -30,8 +30,15 @@ public sealed class DecommissionNodeCommand
 
         if (!force)
         {
+            if (Console.IsInputRedirected)
+            {
+                return NodesCommandHelpers.WriteError(
+                    "non_interactive",
+                    "Cannot prompt for confirmation in non-interactive mode. Use --force to skip confirmation.");
+            }
+
             var confirm = AnsiConsole.Confirm(
-                $"[yellow]Are you sure you want to decommission node '{nodeId}'?[/] This action cannot be undone.",
+                $"[yellow]Are you sure you want to decommission node '{Markup.Escape(nodeId)}'?[/] This action cannot be undone.",
                 defaultValue: false);
 
             if (!confirm)

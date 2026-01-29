@@ -52,6 +52,7 @@ spec:
           value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "console") }}:80"
         - name: ServiceUrls__Notifications
           value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "notifications") }}:80"
+        - name: ServiceUrls__Firewall
           value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "firewall") }}:80"
         - name: ServiceUrls__Secrets
           value: "http://{{ include "meridian.service.fullname" (dict "context" . "service" "secrets") }}:80"

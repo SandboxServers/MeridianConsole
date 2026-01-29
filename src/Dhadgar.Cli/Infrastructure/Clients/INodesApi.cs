@@ -96,7 +96,7 @@ public class NodeSummaryResponse
     public string Platform { get; set; } = string.Empty;
 
     [JsonPropertyName("lastHeartbeat")]
-    public DateTime? LastHeartbeat { get; set; }
+    public DateTimeOffset? LastHeartbeat { get; set; }
 }
 
 public class NodeDetailResponse
@@ -123,10 +123,10 @@ public class NodeDetailResponse
     public string Platform { get; set; } = string.Empty;
 
     [JsonPropertyName("lastHeartbeat")]
-    public DateTime? LastHeartbeat { get; set; }
+    public DateTimeOffset? LastHeartbeat { get; set; }
 
     [JsonPropertyName("createdAt")]
-    public DateTime CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 
     [JsonPropertyName("hardware")]
     public NodeHardwareResponse? Hardware { get; set; }

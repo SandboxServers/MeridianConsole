@@ -30,8 +30,15 @@ public sealed class RevokeTokenCommand
 
         if (!force)
         {
+            if (Console.IsInputRedirected)
+            {
+                return NodesCommandHelpers.WriteError(
+                    "non_interactive",
+                    "Cannot prompt for confirmation in non-interactive mode. Use --force to skip confirmation.");
+            }
+
             var confirm = AnsiConsole.Confirm(
-                $"[yellow]Are you sure you want to revoke enrollment token '{tokenId}'?[/]",
+                $"[yellow]Are you sure you want to revoke enrollment token '{Markup.Escape(tokenId)}'?[/]",
                 defaultValue: false);
 
             if (!confirm)

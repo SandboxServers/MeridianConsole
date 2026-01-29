@@ -1004,4 +1004,4 @@ The Console service is instrumented with OpenTelemetry for full observability:
 - **Servers Service**: `/src/Dhadgar.Servers/` - Server lifecycle management
 - **Agent Core**: `/src/Agents/Dhadgar.Agent.Core/` - Agent-side console handling
 - **Docker Compose**: `/deploy/compose/README.md` - Local infrastructure setup
-- **SignalR Documentation**: https://learn.microsoft.com/aspnet/core/signalr/
+- **SignalR Documentation**: <https://learn.microsoft.com/aspnet/core/signalr/>

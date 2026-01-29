@@ -87,6 +87,8 @@ public sealed class AlertDispatcherTests
 
         // Assert - No exception should propagate (fire-and-forget alerting design)
         await act.Should().NotThrowAsync();
+        // Discord should have been attempted (even though it failed)
+        await _mockDiscord.Received(1).SendAlertAsync(Arg.Any<AlertMessage>(), Arg.Any<CancellationToken>());
         // Email should still have been called despite Discord failure
         await _mockEmail.Received(1).SendAlertEmailAsync(alert, Arg.Any<CancellationToken>());
     }

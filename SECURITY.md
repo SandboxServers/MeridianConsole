@@ -8,7 +8,7 @@ If you discover a security vulnerability in Meridian Console, please report it r
 
 ### How to Report
 
-Email security concerns to: **security@meridianconsole.com**
+Email security concerns to: **<security@meridianconsole.com>**
 
 Include:
 
@@ -33,7 +33,7 @@ Meridian Console is a **control plane** that orchestrates game servers on **cust
 
 ### Trust Boundaries
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                        INTERNET                                  │
 └─────────────────────────────────────────────────────────────────┘
@@ -202,6 +202,6 @@ If a security incident occurs:
 
 ## Contact
 
-- **Security Issues**: security@meridianconsole.com
+- **Security Issues**: <security@meridianconsole.com>
 - **General Questions**: Use GitHub Discussions
 - **Bug Reports**: Use GitHub Issues (non-security bugs only)
