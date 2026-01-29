@@ -1,5 +1,8 @@
 using Dhadgar.Nodes;
 using Dhadgar.Nodes.Audit;
+using Dhadgar.Nodes.Auth;
+using Dhadgar.Nodes.BackgroundServices;
+using Dhadgar.Nodes.Consumers;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Observability;
@@ -9,6 +12,7 @@ using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -38,17 +42,34 @@ builder.Services.AddHealthChecks()
         name: "postgres",
         tags: ["db", "ready"]);
 
-// Register core services
+// Register services
 builder.Services.AddScoped<INodeService, NodeService>();
+builder.Services.AddScoped<IEnrollmentTokenService, EnrollmentTokenService>();
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+builder.Services.AddScoped<IHeartbeatService, HeartbeatService>();
+builder.Services.AddScoped<IHealthScoringService, HealthScoringService>();
+builder.Services.AddScoped<ICapacityReservationService, CapacityReservationService>();
 
-// Register audit services (required by NodeService)
+// Register Certificate Authority services
+builder.Services.AddSingleton<ICaStorageProvider, LocalFileCaStorageProvider>();
+builder.Services.AddSingleton<ICertificateAuthorityService, CertificateAuthorityService>();
+
+// Register mTLS authentication services
+builder.Services.AddMtlsAuthentication(builder.Configuration);
+
+// Register audit services
 builder.Services.AddScoped<IAuditContextAccessor, AuditContextAccessor>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 
 // Register TimeProvider for testability
 builder.Services.AddSingleton(TimeProvider.System);
 
-// Configure MassTransit (no consumers in core - just publisher capability)
+// Register background services
+builder.Services.AddHostedService<StaleNodeDetectionService>();
+builder.Services.AddHostedService<AuditLogCleanupService>();
+builder.Services.AddHostedService<ReservationExpiryService>();
+
+// Configure MassTransit
 var rabbitHost = builder.Configuration.GetConnectionString("RabbitMqHost") ?? "localhost";
 var rabbitUsername = builder.Configuration["RabbitMq:Username"] ?? "dhadgar";
 var rabbitPassword = builder.Configuration["RabbitMq:Password"] ?? "dhadgar";
@@ -56,6 +77,13 @@ var rabbitPassword = builder.Configuration["RabbitMq:Password"] ?? "dhadgar";
 builder.Services.AddMassTransit(x =>
 {
     x.SetKebabCaseEndpointNameFormatter();
+
+    // Register consumers for node and capacity events
+    x.AddConsumer<CapacityReservedConsumer>();
+    x.AddConsumer<CapacityReleasedConsumer>();
+    x.AddConsumer<CapacityReservationExpiredConsumer>();
+    x.AddConsumer<NodeDegradedConsumer>();
+    x.AddConsumer<NodeOfflineConsumer>();
 
     // Configure MassTransit health checks with "ready" tag for /readyz endpoint
     x.ConfigureHealthCheckOptions(options =>
@@ -79,11 +107,18 @@ builder.Services.AddMassTransit(x =>
 
 // Configure authorization
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IAuthorizationHandler, TenantScopedHandler>();
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("TenantScoped", policy =>
     {
-        // Require authenticated user (tenant scope validation added in features PR)
+        // Require authenticated user and tenant scope validation
+        policy.RequireAuthenticatedUser();
+        policy.AddRequirements(new TenantScopedRequirement());
+    })
+    .AddPolicy("AgentPolicy", policy =>
+    {
+        // Require authenticated user (via mTLS certificate in production)
         policy.RequireAuthenticatedUser();
     });
 
@@ -154,6 +189,9 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// mTLS authentication middleware for agent endpoints
+app.UseMtlsAuthentication();
+
 // Optional: apply EF Core migrations automatically during local/dev runs.
 if (app.Environment.IsDevelopment())
 {
@@ -170,6 +208,18 @@ if (app.Environment.IsDevelopment())
     }
 }
 
+// Initialize the Certificate Authority on startup
+try
+{
+    var caService = app.Services.GetRequiredService<ICertificateAuthorityService>();
+    await caService.InitializeAsync();
+    app.Logger.LogInformation("Certificate Authority initialized successfully");
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Failed to initialize Certificate Authority. Certificate operations will fail.");
+}
+
 // Map endpoints
 app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Nodes", message = Dhadgar.Nodes.Hello.Message }))
     .WithTags("Health").WithName("NodesServiceInfo");
@@ -177,8 +227,12 @@ app.MapGet("/hello", () => Results.Text(Dhadgar.Nodes.Hello.Message))
     .WithTags("Health").WithName("NodesHello");
 app.MapDhadgarDefaultEndpoints();
 
-// Map API endpoints (core only - enrollment, agent, reservation endpoints added in features PR)
+// Map API endpoints
 NodesEndpoints.Map(app);
+EnrollmentEndpoints.Map(app);
+AgentEndpoints.Map(app);
+AuditEndpoints.Map(app);
+ReservationEndpoints.Map(app);
 
 await app.RunAsync();
 
