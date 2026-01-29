@@ -266,13 +266,15 @@ public sealed class CapacityReservationServiceTests
             availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB available
 
         // Create existing reservation for 1GB
-        await service.ReserveAsync(
+        var existingReservation = await service.ReserveAsync(
             node.Id,
             memoryMb: 1024, // 1GB reserved
             diskMb: 1024,
             cpuMillicores: 0,
             requestedBy: "existing",
             ttlMinutes: 15);
+
+        Assert.True(existingReservation.Success, $"Existing reservation failed: {existingReservation.Error}");
 
         // Act - try to reserve another 1.5GB
         var result = await service.ReserveAsync(
@@ -393,7 +395,8 @@ public sealed class CapacityReservationServiceTests
             requestedBy: "test",
             ttlMinutes: 15);
 
-        await service.ClaimAsync(reservation.Value!.ReservationToken, "server-123");
+        var firstClaim = await service.ClaimAsync(reservation.Value!.ReservationToken, "server-123");
+        Assert.True(firstClaim.Success, $"First claim failed: {firstClaim.Error}");
 
         // Act - try to claim again
         var result = await service.ClaimAsync(reservation.Value.ReservationToken, "server-456");
@@ -487,7 +490,11 @@ public sealed class CapacityReservationServiceTests
             requestedBy: "test",
             ttlMinutes: 15);
 
-        await service.ReleaseAsync(reservation1.Value!.ReservationToken);
+        Assert.True(reservation1.Success, $"First reservation failed: {reservation1.Error}");
+        Assert.NotEqual(Guid.Empty, reservation1.Value!.ReservationToken);
+
+        var releaseResult = await service.ReleaseAsync(reservation1.Value.ReservationToken);
+        Assert.True(releaseResult.Success, $"Release failed: {releaseResult.Error}");
 
         // Act - try to create another 1.5GB reservation (should succeed now)
         var result = await service.ReserveAsync(

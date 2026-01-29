@@ -171,7 +171,7 @@ public sealed class CapacityReservedConsumerTests
     }
 
     [Fact]
-    public async Task Consume_PublishesLowCapacityAlert_WhenBelowThreshold()
+    public async Task Consume_PublishesLowCapacityAlert_WhenMemoryUsageExceedsThreshold()
     {
         // Arrange
         using var context = CreateContext();
@@ -313,7 +313,7 @@ public sealed class CapacityReservedConsumerTests
     }
 
     [Fact]
-    public async Task Consume_DoesNotPublishAlert_WhenAboveThreshold()
+    public async Task Consume_DoesNotPublishAlert_WhenUsageIsBelowThreshold()
     {
         // Arrange
         using var context = CreateContext();
