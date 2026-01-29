@@ -3,7 +3,7 @@
     "Dhadgar.Nodes": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "applicationUrl": "http://localhost:5004"
+      "applicationUrl": "http://localhost:5040"
     }
   }
 }
