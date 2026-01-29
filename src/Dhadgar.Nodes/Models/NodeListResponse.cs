@@ -49,8 +49,19 @@ public sealed record FilterMetadata
     public bool? HasActiveServers { get; init; }
     public string? Search { get; init; }
     public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>
+    /// Field used for sorting. Default: "name".
+    /// Note: This default must match NodeListQuery.SortBy default.
+    /// </summary>
     public string SortBy { get; init; } = "name";
+
+    /// <summary>
+    /// Sort direction. Default: "asc".
+    /// Note: This default must match NodeListQuery.SortOrder default.
+    /// </summary>
     public string SortOrder { get; init; } = "asc";
+
     public bool IncludeDecommissioned { get; init; }
 }
 

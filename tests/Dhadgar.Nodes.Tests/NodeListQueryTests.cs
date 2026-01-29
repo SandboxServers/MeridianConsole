@@ -1,4 +1,3 @@
-using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
 
 namespace Dhadgar.Nodes.Tests;

@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Dhadgar.Nodes.Data.Configurations;
 using Dhadgar.Nodes.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Dhadgar.Nodes.Data;
 
@@ -54,11 +56,16 @@ public sealed class NodesDbContext : DbContext
                 .Property(a => a.Details)
                 .HasColumnType(null);
 
-            // Remove JSONB column type for node tags
+            // Use JSON value converter for node tags (SQLite/InMemory don't support JSONB)
+            var tagsConverter = new ValueConverter<List<string>, string>(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>());
+
             modelBuilder.Entity<Node>()
                 .Property(n => n.Tags)
                 .HasColumnType(null)
-                .HasDefaultValue(new List<string>());
+                .HasConversion(tagsConverter)
+                .HasDefaultValueSql("'[]'");
         }
     }
 }

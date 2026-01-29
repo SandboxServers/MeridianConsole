@@ -10,6 +10,7 @@ using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -24,19 +25,20 @@ builder.Services.AddMeridianSwagger(
     title: "Dhadgar Nodes API",
     description: "Node inventory, health, and capacity management for Meridian Console");
 
-// Configure Nodes service options
-builder.Services.Configure<NodesOptions>(
-    builder.Configuration.GetSection(NodesOptions.SectionName));
+// Configure Nodes service options with validation
+builder.Services.AddOptions<NodesOptions>()
+    .Bind(builder.Configuration.GetSection(NodesOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// Register the custom validator for cross-property validation
+builder.Services.AddSingleton<IValidateOptions<NodesOptions>, NodesOptions>();
 
 builder.Services.AddDbContext<NodesDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-// Health checks for dependencies (PostgreSQL only - MassTransit handles RabbitMQ health checks)
-builder.Services.AddHealthChecks()
-    .AddNpgSql(
-        connectionString: builder.Configuration.GetConnectionString("Postgres") ?? string.Empty,
-        name: "postgres",
-        tags: ["db", "ready"]);
+// Note: PostgreSQL health check is already registered by AddDhadgarServiceDefaults
+// with HealthCheckDependencies.Postgres - no need to add it again here.
 
 // Register core services
 builder.Services.AddScoped<INodeService, NodeService>();
@@ -83,8 +85,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("TenantScoped", policy =>
     {
-        // Require authenticated user (tenant scope validation added in features PR)
         policy.RequireAuthenticatedUser();
+        // Require org_id claim for tenant-scoped operations
+        policy.RequireClaim("org_id");
     });
 
 // OpenTelemetry configuration

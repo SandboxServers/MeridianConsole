@@ -63,6 +63,8 @@ public sealed class NodeService : INodeService
         dbQuery = ApplySorting(dbQuery, query);
 
         // Apply pagination
+        // Health score calculation inlined for EF Core translation:
+        // Score = 100 - avg(cpu, memory, disk) with rounding
         var nodes = await dbQuery
             .Skip(query.Skip)
             .Take(query.NormalizedPageSize)
@@ -74,7 +76,9 @@ public sealed class NodeService : INodeService
                 n.Platform,
                 n.LastHeartbeat,
                 n.CreatedAt,
-                n.Health != null ? CalculateHealthScore(n.Health) : null,
+                n.Health != null
+                    ? (int)Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0)
+                    : null,
                 n.Health != null ? n.Health.ActiveGameServers : 0,
                 n.Tags))
             .ToListAsync(ct);
@@ -87,6 +91,7 @@ public sealed class NodeService : INodeService
     }
 
     public async Task<ServiceResult<NodeDetail>> GetNodeAsync(
+        Guid organizationId,
         Guid nodeId,
         CancellationToken ct = default)
     {
@@ -95,7 +100,7 @@ public sealed class NodeService : INodeService
             .Include(n => n.HardwareInventory)
             .Include(n => n.Health)
             .Include(n => n.Capacity)
-            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+            .FirstOrDefaultAsync(n => n.Id == nodeId && n.OrganizationId == organizationId, ct);
 
         if (node is null)
         {
@@ -107,6 +112,7 @@ public sealed class NodeService : INodeService
     }
 
     public async Task<ServiceResult<NodeDetail>> UpdateNodeAsync(
+        Guid organizationId,
         Guid nodeId,
         UpdateNodeRequest request,
         CancellationToken ct = default)
@@ -115,7 +121,7 @@ public sealed class NodeService : INodeService
             .Include(n => n.HardwareInventory)
             .Include(n => n.Health)
             .Include(n => n.Capacity)
-            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+            .FirstOrDefaultAsync(n => n.Id == nodeId && n.OrganizationId == organizationId, ct);
 
         if (node is null)
         {
@@ -129,7 +135,7 @@ public sealed class NodeService : INodeService
             // Check for duplicate name within organization
             var nameExists = await _dbContext.Nodes
                 .AnyAsync(n =>
-                    n.OrganizationId == node.OrganizationId &&
+                    n.OrganizationId == organizationId &&
                     n.Name == request.Name.Trim() &&
                     n.Id != nodeId,
                     ct);
@@ -161,7 +167,7 @@ public sealed class NodeService : INodeService
             AuditOutcome.Success,
             new { Name = request.Name, DisplayName = request.DisplayName },
             resourceName: node.Name,
-            organizationId: node.OrganizationId,
+            organizationId: organizationId,
             ct: ct);
 
         _logger.LogInformation("Node {NodeId} updated", nodeId);
@@ -171,6 +177,7 @@ public sealed class NodeService : INodeService
     }
 
     public async Task<ServiceResult<NodeDetail>> UpdateNodeTagsAsync(
+        Guid organizationId,
         Guid nodeId,
         UpdateNodeTagsRequest request,
         CancellationToken ct = default)
@@ -179,7 +186,7 @@ public sealed class NodeService : INodeService
             .Include(n => n.HardwareInventory)
             .Include(n => n.Health)
             .Include(n => n.Capacity)
-            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+            .FirstOrDefaultAsync(n => n.Id == nodeId && n.OrganizationId == organizationId, ct);
 
         if (node is null)
         {
@@ -202,7 +209,7 @@ public sealed class NodeService : INodeService
             AuditOutcome.Success,
             new { Tags = normalizedTags },
             resourceName: node.Name,
-            organizationId: node.OrganizationId,
+            organizationId: organizationId,
             ct: ct);
 
         _logger.LogInformation("Node {NodeId} tags updated to [{Tags}]",
@@ -213,15 +220,24 @@ public sealed class NodeService : INodeService
     }
 
     public async Task<ServiceResult<bool>> DecommissionNodeAsync(
+        Guid organizationId,
         Guid nodeId,
         CancellationToken ct = default)
     {
+        // Use IgnoreQueryFilters to find node even if already soft-deleted (idempotency)
         var node = await _dbContext.Nodes
-            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(n => n.Id == nodeId && n.OrganizationId == organizationId, ct);
 
         if (node is null)
         {
             return ServiceResult.Fail<bool>("node_not_found");
+        }
+
+        // Idempotent: if already decommissioned, return success
+        if (node.Status == NodeStatus.Decommissioned)
+        {
+            return ServiceResult.Ok(true);
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -257,7 +273,7 @@ public sealed class NodeService : INodeService
             AuditOutcome.Success,
             new { CertificatesRevoked = activeCerts.Count },
             resourceName: node.Name,
-            organizationId: node.OrganizationId,
+            organizationId: organizationId,
             ct: ct);
 
         _logger.LogInformation("Node {NodeId} decommissioned", nodeId);
@@ -266,11 +282,14 @@ public sealed class NodeService : INodeService
     }
 
     public async Task<ServiceResult<bool>> EnterMaintenanceAsync(
+        Guid organizationId,
         Guid nodeId,
         CancellationToken ct = default)
     {
+        // Use IgnoreQueryFilters to check if node is decommissioned
         var node = await _dbContext.Nodes
-            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(n => n.Id == nodeId && n.OrganizationId == organizationId, ct);
 
         if (node is null)
         {
@@ -305,7 +324,7 @@ public sealed class NodeService : INodeService
             nodeId,
             AuditOutcome.Success,
             resourceName: node.Name,
-            organizationId: node.OrganizationId,
+            organizationId: organizationId,
             ct: ct);
 
         _logger.LogInformation("Node {NodeId} entered maintenance mode", nodeId);
@@ -314,11 +333,12 @@ public sealed class NodeService : INodeService
     }
 
     public async Task<ServiceResult<bool>> ExitMaintenanceAsync(
+        Guid organizationId,
         Guid nodeId,
         CancellationToken ct = default)
     {
         var node = await _dbContext.Nodes
-            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+            .FirstOrDefaultAsync(n => n.Id == nodeId && n.OrganizationId == organizationId, ct);
 
         if (node is null)
         {
@@ -333,8 +353,9 @@ public sealed class NodeService : INodeService
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         // Determine new status based on last heartbeat
+        // Null LastHeartbeat is treated as Offline (node has never checked in)
         var heartbeatThreshold = now.AddMinutes(-_options.HeartbeatThresholdMinutes);
-        node.Status = node.LastHeartbeat >= heartbeatThreshold
+        node.Status = node.LastHeartbeat.HasValue && node.LastHeartbeat >= heartbeatThreshold
             ? NodeStatus.Online
             : NodeStatus.Offline;
 
@@ -354,7 +375,7 @@ public sealed class NodeService : INodeService
             AuditOutcome.Success,
             new { NewStatus = node.Status.ToString() },
             resourceName: node.Name,
-            organizationId: node.OrganizationId,
+            organizationId: organizationId,
             ct: ct);
 
         _logger.LogInformation("Node {NodeId} exited maintenance mode, new status: {Status}",
@@ -385,24 +406,24 @@ public sealed class NodeService : INodeService
         }
 
         // Filter by health score range (requires Health navigation)
+        // Health score = 100 - avg(cpu, memory, disk) with rounding
         if (filters.MinHealthScore.HasValue || filters.MaxHealthScore.HasValue)
         {
-            // Health score is calculated from CPU, memory, and disk usage
-            // We need to calculate it in the query
             if (filters.MinHealthScore.HasValue)
             {
                 var min = filters.MinHealthScore.Value;
                 query = query.Where(n =>
                     n.Health != null &&
-                    (100 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3) >= min);
+                    Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0) >= min);
             }
 
             if (filters.MaxHealthScore.HasValue)
             {
                 var max = filters.MaxHealthScore.Value;
+                // Nodes with no health data should pass MaxHealthScore filter (unknown health)
                 query = query.Where(n =>
                     n.Health == null ||
-                    (100 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3) <= max);
+                    Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0) <= max);
             }
         }
 
@@ -468,9 +489,9 @@ public sealed class NodeService : INodeService
 
             "healthscore" => isAscending
                 ? query.OrderBy(n => n.Health == null ? 0 :
-                    100 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3)
+                    (int)Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0))
                 : query.OrderByDescending(n => n.Health == null ? 0 :
-                    100 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3),
+                    (int)Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0)),
 
             "lastheartbeat" => isAscending
                 ? query.OrderBy(n => n.LastHeartbeat)

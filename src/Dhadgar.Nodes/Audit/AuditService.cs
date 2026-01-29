@@ -64,12 +64,23 @@ public sealed class AuditService : IAuditService
             UserAgent = _contextAccessor.GetUserAgent()
         };
 
-        // Log to database
-        _dbContext.AuditLogs.Add(auditLog);
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Also log to structured logging for SIEM integration
-        LogToStructuredLogging(auditLog);
+        try
+        {
+            // Log to database
+            _dbContext.AuditLogs.Add(auditLog);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            // Log database failure separately - audit entry will still be emitted to SIEM
+            _logger.LogError(ex, "Failed to persist audit log to database for action {Action}", auditLog.Action);
+            throw;
+        }
+        finally
+        {
+            // Always log to structured logging for SIEM integration, even if DB save fails
+            LogToStructuredLogging(auditLog);
+        }
     }
 
     public Task LogAsync(
@@ -110,14 +121,19 @@ public sealed class AuditService : IAuditService
 
         if (query.StartDate.HasValue)
         {
-            dbQuery = dbQuery.Where(a => a.Timestamp >= query.StartDate.Value);
+            var startUtc = query.StartDate.Value.UtcDateTime;
+            dbQuery = dbQuery.Where(a => a.Timestamp >= startUtc);
         }
 
         if (query.EndDate.HasValue)
         {
-            // Include the entire end day
-            var endOfDay = query.EndDate.Value.Date.AddDays(1).AddTicks(-1);
-            dbQuery = dbQuery.Where(a => a.Timestamp <= endOfDay);
+            // If EndDate has a non-midnight time component, use it verbatim.
+            // If it's midnight (00:00:00), normalize to end of that day.
+            var endDate = query.EndDate.Value;
+            var effectiveEnd = endDate.TimeOfDay == TimeSpan.Zero
+                ? endDate.Date.AddDays(1).AddTicks(-1)
+                : endDate.UtcDateTime;
+            dbQuery = dbQuery.Where(a => a.Timestamp <= effectiveEnd);
         }
 
         if (!string.IsNullOrEmpty(query.ActorId))
@@ -164,7 +180,7 @@ public sealed class AuditService : IAuditService
 
         // Apply pagination (always order by timestamp descending for audit logs)
         var page = Math.Max(1, query.Page);
-        var limit = Math.Clamp(query.Limit, 1, 100);
+        var limit = query.EffectiveLimit;
         var skip = (page - 1) * limit;
 
         var items = await dbQuery

@@ -26,7 +26,7 @@ In the Meridian Console architecture, customers own and operate their own hardwa
 **Core Responsibilities:**
 
 | Responsibility | Description |
-|----------------|-------------|
+| -------------- | ----------- |
 | **Node Registration** | Track all hardware nodes enrolled in the platform |
 | **Agent Enrollment** | Manage secure enrollment with one-time tokens and mTLS certificates |
 | **Health Monitoring** | Receive and process heartbeats from agents |
@@ -89,7 +89,7 @@ dotnet run --project src/Dhadgar.Nodes
 dotnet watch --project src/Dhadgar.Nodes
 ```
 
-The service starts on **http://localhost:5040**.
+The service starts on `http://localhost:5040`.
 
 ### Step 3: Verify
 
@@ -120,7 +120,7 @@ dotnet test tests/Dhadgar.Nodes.Tests --filter "FullyQualifiedName~EnrollmentTes
 
 ### Service Boundaries
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         Gateway (YARP)                                   │
 │                    http://localhost:5000                                 │
@@ -303,8 +303,9 @@ src/Dhadgar.Nodes/
 
 ### Primary Entities
 
-**Node**
-```
+#### Node
+
+```text
 nodes
 ├── id (PK)                    UUID
 ├── organization_id (FK)       UUID
@@ -321,8 +322,9 @@ nodes
 └── row_version                UINT (xmin for optimistic concurrency)
 ```
 
-**NodeHealth**
-```
+#### NodeHealth
+
+```text
 node_health
 ├── id (PK)                    UUID
 ├── node_id (FK)               UUID
@@ -336,8 +338,9 @@ node_health
 └── reported_at                TIMESTAMP
 ```
 
-**EnrollmentToken**
-```
+#### EnrollmentToken
+
+```text
 enrollment_tokens
 ├── id (PK)                    UUID
 ├── organization_id (FK)       UUID
@@ -351,8 +354,9 @@ enrollment_tokens
 └── created_at                 TIMESTAMP
 ```
 
-**CapacityReservation**
-```
+#### CapacityReservation
+
+```text
 capacity_reservations
 ├── id (PK)                    UUID
 ├── node_id (FK)               UUID

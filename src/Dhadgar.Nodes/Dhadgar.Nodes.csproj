@@ -10,7 +10,7 @@
     <ProjectReference Include="..\Shared\Dhadgar.ServiceDefaults\Dhadgar.ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
+    <PackageReference Include="AspNetCore.HealthChecks.Npgsql" />
     <PackageReference Include="MassTransit" />
     <PackageReference Include="MassTransit.RabbitMQ" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />

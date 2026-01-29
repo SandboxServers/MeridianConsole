@@ -1,7 +1,6 @@
 using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Services;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Dhadgar.Nodes.Endpoints;
 
@@ -109,17 +108,11 @@ public static class NodesEndpoints
         INodeService nodeService,
         CancellationToken ct = default)
     {
-        var result = await nodeService.GetNodeAsync(nodeId, ct);
+        var result = await nodeService.GetNodeAsync(organizationId, nodeId, ct);
 
         if (!result.Success)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "node_not_found");
-        }
-
-        // Verify organization ownership
-        if (result.Value?.OrganizationId != organizationId)
-        {
-            return ProblemDetailsHelper.NotFound("node_not_found");
         }
 
         return Results.Ok(result.Value);
@@ -132,17 +125,16 @@ public static class NodesEndpoints
         INodeService nodeService,
         CancellationToken ct = default)
     {
-        // First verify the node belongs to this organization
-        var existing = await nodeService.GetNodeAsync(nodeId, ct);
-        if (!existing.Success || existing.Value?.OrganizationId != organizationId)
+        var result = await nodeService.UpdateNodeAsync(organizationId, nodeId, request, ct);
+
+        if (!result.Success)
         {
-            return ProblemDetailsHelper.NotFound("node_not_found");
+            return result.Error == "node_not_found"
+                ? ProblemDetailsHelper.NotFound(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
         }
 
-        var result = await nodeService.UpdateNodeAsync(nodeId, request, ct);
-        return result.Success
-            ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
+        return Results.Ok(result.Value);
     }
 
     private static async Task<IResult> UpdateNodeTags(
@@ -152,17 +144,16 @@ public static class NodesEndpoints
         INodeService nodeService,
         CancellationToken ct = default)
     {
-        // First verify the node belongs to this organization
-        var existing = await nodeService.GetNodeAsync(nodeId, ct);
-        if (!existing.Success || existing.Value?.OrganizationId != organizationId)
+        var result = await nodeService.UpdateNodeTagsAsync(organizationId, nodeId, request, ct);
+
+        if (!result.Success)
         {
-            return ProblemDetailsHelper.NotFound("node_not_found");
+            return result.Error == "node_not_found"
+                ? ProblemDetailsHelper.NotFound(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
         }
 
-        var result = await nodeService.UpdateNodeTagsAsync(nodeId, request, ct);
-        return result.Success
-            ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
+        return Results.Ok(result.Value);
     }
 
     private static async Task<IResult> DecommissionNode(
@@ -171,17 +162,16 @@ public static class NodesEndpoints
         INodeService nodeService,
         CancellationToken ct = default)
     {
-        // First verify the node belongs to this organization
-        var existing = await nodeService.GetNodeAsync(nodeId, ct);
-        if (!existing.Success || existing.Value?.OrganizationId != organizationId)
+        var result = await nodeService.DecommissionNodeAsync(organizationId, nodeId, ct);
+
+        if (!result.Success)
         {
-            return ProblemDetailsHelper.NotFound("node_not_found");
+            return result.Error == "node_not_found"
+                ? ProblemDetailsHelper.NotFound(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "decommission_failed");
         }
 
-        var result = await nodeService.DecommissionNodeAsync(nodeId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(result.Error ?? "decommission_failed");
+        return Results.NoContent();
     }
 
     private static async Task<IResult> EnterMaintenance(
@@ -190,17 +180,16 @@ public static class NodesEndpoints
         INodeService nodeService,
         CancellationToken ct = default)
     {
-        // First verify the node belongs to this organization
-        var existing = await nodeService.GetNodeAsync(nodeId, ct);
-        if (!existing.Success || existing.Value?.OrganizationId != organizationId)
+        var result = await nodeService.EnterMaintenanceAsync(organizationId, nodeId, ct);
+
+        if (!result.Success)
         {
-            return ProblemDetailsHelper.NotFound("node_not_found");
+            return result.Error == "node_not_found"
+                ? ProblemDetailsHelper.NotFound(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "maintenance_failed");
         }
 
-        var result = await nodeService.EnterMaintenanceAsync(nodeId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(result.Error ?? "maintenance_failed");
+        return Results.NoContent();
     }
 
     private static async Task<IResult> ExitMaintenance(
@@ -209,16 +198,15 @@ public static class NodesEndpoints
         INodeService nodeService,
         CancellationToken ct = default)
     {
-        // First verify the node belongs to this organization
-        var existing = await nodeService.GetNodeAsync(nodeId, ct);
-        if (!existing.Success || existing.Value?.OrganizationId != organizationId)
+        var result = await nodeService.ExitMaintenanceAsync(organizationId, nodeId, ct);
+
+        if (!result.Success)
         {
-            return ProblemDetailsHelper.NotFound("node_not_found");
+            return result.Error == "node_not_found"
+                ? ProblemDetailsHelper.NotFound(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "maintenance_failed");
         }
 
-        var result = await nodeService.ExitMaintenanceAsync(nodeId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(result.Error ?? "maintenance_failed");
+        return Results.NoContent();
     }
 }

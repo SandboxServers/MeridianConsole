@@ -70,7 +70,10 @@ public sealed class NodeFilteringTests
             CreateNode("maintenance-node-1", NodeStatus.Maintenance, "Linux"),
 
             // Node from different org (should not appear in results)
-            CreateNode("other-org-node", NodeStatus.Online, "Linux", OtherOrgId)
+            CreateNode("other-org-node", NodeStatus.Online, "Linux", OtherOrgId),
+
+            // Node with unique display name for display-name-specific search test
+            CreateNode("special-node-1", NodeStatus.Online, "Linux", displayNameOverride: "UniqueDisplayOnly Server")
         };
 
         context.Nodes.AddRange(nodes);
@@ -104,7 +107,8 @@ public sealed class NodeFilteringTests
         NodeStatus status,
         string platform,
         Guid? orgId = null,
-        List<string>? tags = null)
+        List<string>? tags = null,
+        string? displayNameOverride = null)
     {
         // CA5394 suppressed: Random is acceptable for test data generation - no security implications
 #pragma warning disable CA5394 // Do not use insecure randomness
@@ -113,7 +117,7 @@ public sealed class NodeFilteringTests
             Id = Guid.NewGuid(),
             OrganizationId = orgId ?? TestOrgId,
             Name = name,
-            DisplayName = $"Display: {name}",
+            DisplayName = displayNameOverride ?? $"Display: {name}",
             Status = status,
             Platform = platform,
             AgentVersion = "1.0.0",
@@ -158,7 +162,7 @@ public sealed class NodeFilteringTests
 
         // Assert
         Assert.All(result.Items, n => Assert.Equal(NodeStatus.Online, n.Status));
-        Assert.Equal(5, result.Total); // 5 online nodes in TestOrg
+        Assert.Equal(6, result.Total); // 6 online nodes in TestOrg (including special-node-1)
     }
 
     [Fact]
@@ -210,7 +214,7 @@ public sealed class NodeFilteringTests
 
         // Assert
         Assert.All(result.Items, n => Assert.Equal("Linux", n.Platform, ignoreCase: true));
-        Assert.Equal(6, result.Total);
+        Assert.Equal(7, result.Total); // 7 Linux nodes (including special-node-1)
     }
 
     [Fact]
@@ -308,11 +312,17 @@ public sealed class NodeFilteringTests
         await SeedTestDataAsync(context);
         var (service, _) = CreateService(context);
 
-        // Act - search for "Display" which is in all display names
-        var result = await service.GetNodesAsync(TestOrgId, new NodeListQuery { Search = "staging" });
+        // Act - search for "UniqueDisplayOnly" which is only in the display name, not the node name
+        var result = await service.GetNodesAsync(TestOrgId, new NodeListQuery { Search = "UniqueDisplayOnly" });
 
-        // Assert
+        // Assert - should find exactly the node with the unique display name
         Assert.NotEmpty(result.Items);
+        Assert.All(result.Items, n =>
+        {
+            Assert.Contains("UniqueDisplayOnly", n.DisplayName!, StringComparison.OrdinalIgnoreCase);
+            // Verify the search term is NOT in the name (proving we matched on DisplayName)
+            Assert.DoesNotContain("UniqueDisplayOnly", n.Name, StringComparison.OrdinalIgnoreCase);
+        });
     }
 
     [Fact]
@@ -657,6 +667,7 @@ public sealed class NodeFilteringTests
 
         // Act
         var result = await service.UpdateNodeTagsAsync(
+            TestOrgId,
             node.Id,
             new UpdateNodeTagsRequest(["new-tag-1", "new-tag-2", "new-tag-3"]));
 
@@ -681,6 +692,7 @@ public sealed class NodeFilteringTests
 
         // Act
         var result = await service.UpdateNodeTagsAsync(
+            TestOrgId,
             node.Id,
             new UpdateNodeTagsRequest([" PRODUCTION ", "Production", "  staging  "]));
 
@@ -702,7 +714,7 @@ public sealed class NodeFilteringTests
         var (service, _) = CreateService(context);
 
         // Act
-        var result = await service.UpdateNodeTagsAsync(node.Id, new UpdateNodeTagsRequest([]));
+        var result = await service.UpdateNodeTagsAsync(TestOrgId, node.Id, new UpdateNodeTagsRequest([]));
 
         // Assert
         Assert.True(result.Success);
@@ -718,6 +730,7 @@ public sealed class NodeFilteringTests
 
         // Act
         var result = await service.UpdateNodeTagsAsync(
+            TestOrgId,
             Guid.NewGuid(),
             new UpdateNodeTagsRequest(["tag1"]));
 

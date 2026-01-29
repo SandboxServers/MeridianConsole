@@ -157,7 +157,7 @@ namespace Dhadgar.Nodes.Data.Migrations
                 name: "ix_audit_timestamp",
                 table: "node_audit_logs",
                 column: "Timestamp",
-                descending: Array.Empty<bool>());
+                descending: new[] { true });
         }
 
         /// <inheritdoc />

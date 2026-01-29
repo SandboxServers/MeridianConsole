@@ -47,17 +47,7 @@ public sealed class AuditContextAccessor : IAuditContextAccessor
             return "system";
         }
 
-        // Check for authenticated user
-        var userId = httpContext.User.FindFirst("sub")?.Value
-            ?? httpContext.User.FindFirst("client_id")?.Value
-            ?? httpContext.User.Identity?.Name;
-
-        if (!string.IsNullOrEmpty(userId))
-        {
-            return userId;
-        }
-
-        // Check for agent authentication (certificate-based)
+        // Check for agent authentication first (certificate-based) - matches GetActorType precedence
         var nodeId = httpContext.User.FindFirst("node_id")?.Value;
         if (!string.IsNullOrEmpty(nodeId))
         {
@@ -69,6 +59,16 @@ public sealed class AuditContextAccessor : IAuditContextAccessor
         if (!string.IsNullOrEmpty(serviceName))
         {
             return $"service:{serviceName}";
+        }
+
+        // Check for authenticated user
+        var userId = httpContext.User.FindFirst("sub")?.Value
+            ?? httpContext.User.FindFirst("client_id")?.Value
+            ?? httpContext.User.Identity?.Name;
+
+        if (!string.IsNullOrEmpty(userId))
+        {
+            return userId;
         }
 
         return "anonymous";
@@ -149,23 +149,9 @@ public sealed class AuditContextAccessor : IAuditContextAccessor
             return null;
         }
 
-        // Check X-Forwarded-For header (when behind proxy/load balancer)
-        var forwardedFor = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwardedFor))
-        {
-            // Take the first IP (original client)
-            var firstIp = forwardedFor.Split(',')[0].Trim();
-            return firstIp;
-        }
-
-        // Check X-Real-IP header (nginx style)
-        var realIp = httpContext.Request.Headers["X-Real-IP"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(realIp))
-        {
-            return realIp;
-        }
-
-        // Fallback to connection remote IP
+        // Rely on ForwardedHeadersMiddleware to populate RemoteIpAddress correctly.
+        // The middleware handles X-Forwarded-For and X-Real-IP headers securely,
+        // validating against known proxies to prevent IP spoofing.
         return httpContext.Connection.RemoteIpAddress?.ToString();
     }
 

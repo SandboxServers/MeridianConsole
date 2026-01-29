@@ -72,24 +72,63 @@ public sealed class TestNodesEventPublisher : IPublishEndpoint
 
     public Task Publish<T>(object values, CancellationToken cancellationToken = default) where T : class
     {
-        _publishedMessages.Enqueue(values);
+        // Validate that values can be cast to T for GetMessages<T>() to find it
+        if (values is T typedMessage)
+        {
+            _publishedMessages.Enqueue(typedMessage);
+        }
+        else
+        {
+            throw new ArgumentException($"Cannot publish object of type {values.GetType().Name} as {typeof(T).Name}", nameof(values));
+        }
         return Task.CompletedTask;
     }
 
     public Task Publish<T>(object values, IPipe<PublishContext<T>> publishPipe, CancellationToken cancellationToken = default) where T : class
     {
-        _publishedMessages.Enqueue(values);
+        if (values is T typedMessage)
+        {
+            _publishedMessages.Enqueue(typedMessage);
+        }
+        else
+        {
+            throw new ArgumentException($"Cannot publish object of type {values.GetType().Name} as {typeof(T).Name}", nameof(values));
+        }
         return Task.CompletedTask;
     }
 
     public Task Publish<T>(object values, IPipe<PublishContext> publishPipe, CancellationToken cancellationToken = default) where T : class
     {
-        _publishedMessages.Enqueue(values);
+        if (values is T typedMessage)
+        {
+            _publishedMessages.Enqueue(typedMessage);
+        }
+        else
+        {
+            throw new ArgumentException($"Cannot publish object of type {values.GetType().Name} as {typeof(T).Name}", nameof(values));
+        }
         return Task.CompletedTask;
     }
 
     public ConnectHandle ConnectPublishObserver(IPublishObserver observer)
     {
-        throw new NotImplementedException();
+        // Return a no-op connect handle for tests
+        return new NoOpConnectHandle();
+    }
+
+    /// <summary>
+    /// No-op implementation of ConnectHandle for test scenarios.
+    /// </summary>
+    private sealed class NoOpConnectHandle : ConnectHandle
+    {
+        public void Disconnect()
+        {
+            // No-op
+        }
+
+        public void Dispose()
+        {
+            // No-op
+        }
     }
 }

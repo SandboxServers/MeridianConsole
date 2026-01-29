@@ -78,11 +78,18 @@ public sealed record AuditQuery
     /// <summary>Filter by organization ID (required for non-admin users).</summary>
     public Guid? OrganizationId { get; init; }
 
-    /// <summary>Filter by start date (inclusive).</summary>
-    public DateTime? StartDate { get; init; }
+    /// <summary>
+    /// Filter by start date (inclusive). Uses DateTimeOffset for timezone clarity.
+    /// The offset portion indicates the timezone; comparisons are done in UTC.
+    /// </summary>
+    public DateTimeOffset? StartDate { get; init; }
 
-    /// <summary>Filter by end date (inclusive).</summary>
-    public DateTime? EndDate { get; init; }
+    /// <summary>
+    /// Filter by end date (inclusive). Uses DateTimeOffset for timezone clarity.
+    /// If time is midnight (00:00:00), the entire day is included.
+    /// The offset portion indicates the timezone; comparisons are done in UTC.
+    /// </summary>
+    public DateTimeOffset? EndDate { get; init; }
 
     /// <summary>Filter by actor ID.</summary>
     public string? ActorId { get; init; }
@@ -105,8 +112,14 @@ public sealed record AuditQuery
     /// <summary>Pagination page (1-based).</summary>
     public int Page { get; init; } = 1;
 
-    /// <summary>Items per page (max 100).</summary>
+    /// <summary>Items per page (1-100). Values outside this range are clamped.</summary>
     public int Limit { get; init; } = 50;
+
+    /// <summary>
+    /// Gets the effective limit after clamping to valid range (1-100).
+    /// Use this property instead of Limit directly for query execution.
+    /// </summary>
+    public int EffectiveLimit => Math.Clamp(Limit, 1, 100);
 }
 
 /// <summary>

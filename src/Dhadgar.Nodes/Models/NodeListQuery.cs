@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using Dhadgar.Nodes.Data.Entities;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Dhadgar.Nodes.Models;
 
@@ -66,6 +65,12 @@ public sealed class NodeListQuery
 
     /// <summary>
     /// Parse tags string into a normalized list.
+    /// Applies same normalization rules as UpdateNodeTagsRequest.GetNormalizedTags():
+    /// - Trims whitespace
+    /// - Converts to lowercase
+    /// - Filters out empty entries
+    /// - Truncates tags longer than 50 characters
+    /// - Returns at most 20 distinct tags
     /// </summary>
     public IReadOnlyList<string> ParseTagsFilter()
     {
@@ -76,8 +81,10 @@ public sealed class NodeListQuery
 
         return Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Select(t => t.ToLowerInvariant())
+            .Select(t => t.Trim().ToLowerInvariant())
+            .Where(t => t.Length <= 50) // Max tag length (matches GetNormalizedTags)
             .Distinct()
+            .Take(20) // Max 20 tags (matches GetNormalizedTags)
             .ToList();
     }
 }

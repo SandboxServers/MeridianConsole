@@ -134,7 +134,7 @@ public sealed class NodeServiceTests
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.GetNodeAsync(node.Id);
+        var result = await service.GetNodeAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(result.Success);
@@ -153,7 +153,7 @@ public sealed class NodeServiceTests
         var (service, _, _) = CreateService(context);
 
         // Act
-        var result = await service.GetNodeAsync(Guid.NewGuid());
+        var result = await service.GetNodeAsync(TestOrgId, Guid.NewGuid());
 
         // Assert
         Assert.False(result.Success);
@@ -169,7 +169,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context);
 
         // Act
-        var result = await service.UpdateNodeAsync(node.Id, new UpdateNodeRequest(null, "New Display Name"));
+        var result = await service.UpdateNodeAsync(TestOrgId, node.Id, new UpdateNodeRequest(null, "New Display Name"));
 
         // Assert
         Assert.True(result.Success);
@@ -189,7 +189,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context, name: "old-name");
 
         // Act
-        var result = await service.UpdateNodeAsync(node.Id, new UpdateNodeRequest("new-name", null));
+        var result = await service.UpdateNodeAsync(TestOrgId, node.Id, new UpdateNodeRequest("new-name", null));
 
         // Assert
         Assert.True(result.Success);
@@ -206,7 +206,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context, TestOrgId, name: "my-node");
 
         // Act
-        var result = await service.UpdateNodeAsync(node.Id, new UpdateNodeRequest("existing-name", null));
+        var result = await service.UpdateNodeAsync(TestOrgId, node.Id, new UpdateNodeRequest("existing-name", null));
 
         // Assert
         Assert.False(result.Success);
@@ -221,7 +221,7 @@ public sealed class NodeServiceTests
         var (service, _, _) = CreateService(context);
 
         // Act
-        var result = await service.UpdateNodeAsync(Guid.NewGuid(), new UpdateNodeRequest(null, "Whatever"));
+        var result = await service.UpdateNodeAsync(TestOrgId, Guid.NewGuid(), new UpdateNodeRequest(null, "Whatever"));
 
         // Assert
         Assert.False(result.Success);
@@ -237,7 +237,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context);
 
         // Act
-        var result = await service.UpdateNodeAsync(node.Id, new UpdateNodeRequest(null, ""));
+        var result = await service.UpdateNodeAsync(TestOrgId, node.Id, new UpdateNodeRequest(null, ""));
 
         // Assert
         Assert.True(result.Success);
@@ -255,7 +255,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context, status: NodeStatus.Online);
 
         // Act
-        var result = await service.DecommissionNodeAsync(node.Id);
+        var result = await service.DecommissionNodeAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(result.Success);
@@ -302,7 +302,7 @@ public sealed class NodeServiceTests
         await context.SaveChangesAsync();
 
         // Act
-        await service.DecommissionNodeAsync(node.Id);
+        await service.DecommissionNodeAsync(TestOrgId, node.Id);
 
         // Assert
         var certs = await context.AgentCertificates
@@ -324,7 +324,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context);
 
         // Act
-        await service.DecommissionNodeAsync(node.Id);
+        await service.DecommissionNodeAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(publisher.HasMessage<NodeDecommissioned>());
@@ -341,7 +341,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context, status: NodeStatus.Online);
 
         // Act
-        var result = await service.EnterMaintenanceAsync(node.Id);
+        var result = await service.EnterMaintenanceAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(result.Success);
@@ -360,7 +360,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context, status: NodeStatus.Maintenance);
 
         // Act
-        var result = await service.EnterMaintenanceAsync(node.Id);
+        var result = await service.EnterMaintenanceAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.False(result.Success);
@@ -388,7 +388,7 @@ public sealed class NodeServiceTests
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.EnterMaintenanceAsync(decomNode.Id);
+        var result = await service.EnterMaintenanceAsync(TestOrgId, decomNode.Id);
 
         // Assert
         Assert.False(result.Success);
@@ -408,7 +408,7 @@ public sealed class NodeServiceTests
             lastHeartbeat: now.UtcDateTime.AddMinutes(-2)); // 2 mins ago = recent
 
         // Act
-        var result = await service.ExitMaintenanceAsync(node.Id);
+        var result = await service.ExitMaintenanceAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(result.Success);
@@ -431,7 +431,7 @@ public sealed class NodeServiceTests
             lastHeartbeat: now.UtcDateTime.AddMinutes(-10)); // 10 mins ago = stale
 
         // Act
-        var result = await service.ExitMaintenanceAsync(node.Id);
+        var result = await service.ExitMaintenanceAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(result.Success);
@@ -449,7 +449,7 @@ public sealed class NodeServiceTests
         var node = await SeedNodeAsync(context, status: NodeStatus.Online);
 
         // Act
-        var result = await service.ExitMaintenanceAsync(node.Id);
+        var result = await service.ExitMaintenanceAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.False(result.Success);
@@ -464,7 +464,7 @@ public sealed class NodeServiceTests
         var (service, _, _) = CreateService(context);
 
         // Act
-        var result = await service.ExitMaintenanceAsync(Guid.NewGuid());
+        var result = await service.ExitMaintenanceAsync(TestOrgId, Guid.NewGuid());
 
         // Assert
         Assert.False(result.Success);
@@ -523,7 +523,7 @@ public sealed class NodeServiceTests
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.GetNodeAsync(node.Id);
+        var result = await service.GetNodeAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(result.Success);
@@ -553,7 +553,7 @@ public sealed class NodeServiceTests
         await context.SaveChangesAsync();
 
         // Act
-        var result = await service.GetNodeAsync(node.Id);
+        var result = await service.GetNodeAsync(TestOrgId, node.Id);
 
         // Assert
         Assert.True(result.Success);

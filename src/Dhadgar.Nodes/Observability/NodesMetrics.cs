@@ -197,49 +197,47 @@ public static class NodesMetrics
     }
 
     // Consumer event metrics - recorded when processing MassTransit events
+    // Note: These methods intentionally omit node_id to prevent high-cardinality metric explosion.
+    // Node-specific context should be logged via structured logging or traces instead.
 
     /// <summary>
     /// Records a capacity reservation event from the message bus.
     /// </summary>
-    public static void RecordCapacityReservation(Guid nodeId)
+    public static void RecordCapacityReservation()
     {
-        ReservationsCreated.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+        ReservationsCreated.Add(1);
     }
 
     /// <summary>
     /// Records a capacity release event from the message bus.
     /// </summary>
-    public static void RecordCapacityRelease(Guid nodeId)
+    public static void RecordCapacityRelease()
     {
-        ReservationsReleased.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+        ReservationsReleased.Add(1);
     }
 
     /// <summary>
     /// Records a capacity reservation expiration event from the message bus.
     /// </summary>
-    public static void RecordCapacityExpiration(Guid nodeId)
+    public static void RecordCapacityExpiration()
     {
-        ReservationsExpired.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+        ReservationsExpired.Add(1);
     }
 
     /// <summary>
     /// Records a node degraded event from the message bus.
     /// </summary>
-    public static void RecordNodeDegraded(Guid nodeId)
+    public static void RecordNodeDegraded()
     {
-        StatusTransitions.Add(1,
-            new KeyValuePair<string, object?>("node_id", nodeId.ToString()),
-            new KeyValuePair<string, object?>("to_status", "Degraded"));
+        StatusTransitions.Add(1, new KeyValuePair<string, object?>("to_status", "Degraded"));
     }
 
     /// <summary>
     /// Records a node offline event from the message bus.
     /// </summary>
-    public static void RecordNodeOffline(Guid nodeId)
+    public static void RecordNodeOffline()
     {
-        StatusTransitions.Add(1,
-            new KeyValuePair<string, object?>("node_id", nodeId.ToString()),
-            new KeyValuePair<string, object?>("to_status", "Offline"));
-        StaleNodesDetected.Add(1, new KeyValuePair<string, object?>("node_id", nodeId.ToString()));
+        StatusTransitions.Add(1, new KeyValuePair<string, object?>("to_status", "Offline"));
+        StaleNodesDetected.Add(1);
     }
 }

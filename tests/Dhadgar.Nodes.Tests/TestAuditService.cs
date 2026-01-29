@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dhadgar.Contracts;
 using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Data.Entities;
@@ -102,18 +103,21 @@ public sealed class TestAuditService : IAuditService
 
         var total = filteredList.Count;
         var page = Math.Max(1, query.Page);
-        var limit = Math.Clamp(query.Limit, 1, 100);
+        var limit = query.EffectiveLimit;
         var skip = (page - 1) * limit;
 
+        // Track entry index for deterministic IDs in tests
+        var startIndex = skip;
         var items = filteredList
             .Skip(skip)
             .Take(limit)
-            .Select(e => new AuditLogDto
+            .Select((e, index) => new AuditLogDto
             {
-                Id = Guid.NewGuid(),
+                // Use deterministic GUID based on entry position for test reproducibility
+                Id = new Guid(0, 0, 0, [(byte)(startIndex + index), 0, 0, 0, 0, 0, 0, 0]),
                 Timestamp = DateTime.UtcNow,
-                ActorId = "test-actor",
-                ActorType = "User",
+                ActorId = e.ActorIdOverride ?? "test-actor",
+                ActorType = (e.ActorTypeOverride ?? ActorType.User).ToString(),
                 Action = e.Action,
                 ResourceType = e.ResourceType,
                 ResourceId = e.ResourceId,
@@ -121,7 +125,7 @@ public sealed class TestAuditService : IAuditService
                 OrganizationId = e.OrganizationId,
                 Outcome = e.Outcome.ToString(),
                 FailureReason = e.FailureReason,
-                Details = e.Details?.ToString()
+                Details = e.Details is not null ? JsonSerializer.Serialize(e.Details) : null
             })
             .ToList();
 

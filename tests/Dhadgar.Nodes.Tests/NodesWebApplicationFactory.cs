@@ -254,13 +254,17 @@ public sealed class TestNodesAuthHandler : AuthenticationHandler<AuthenticationS
 /// <summary>
 /// Test implementation of IAuditContextAccessor for integration tests.
 /// Returns sensible defaults without depending on HTTP context.
+/// IDs are cached per instance to ensure consistency within a single test.
 /// </summary>
 public sealed class TestNodesAuditContextAccessor : IAuditContextAccessor
 {
+    private readonly string _correlationId = Guid.NewGuid().ToString();
+    private readonly string _requestId = Guid.NewGuid().ToString();
+
     public string GetActorId() => "test-user";
     public ActorType GetActorType() => ActorType.User;
-    public string? GetCorrelationId() => Guid.NewGuid().ToString();
-    public string? GetRequestId() => Guid.NewGuid().ToString();
+    public string? GetCorrelationId() => _correlationId;
+    public string? GetRequestId() => _requestId;
     public string? GetIpAddress() => "127.0.0.1";
     public string? GetUserAgent() => "Test/1.0";
 }
