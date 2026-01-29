@@ -184,7 +184,7 @@ The **SecurityCodeScan** analyzer detects:
 
 ### Library Structure
 
-```
+```text
 Dhadgar.Agent.Core/
 ├── Dhadgar.Agent.Core.csproj    # Project file with security settings
 ├── Program.cs                    # Entry point (scaffolding)
@@ -737,10 +737,13 @@ public static class PathValidator
         );
 
         // Ensure the requested path is within the base path
-        // Use case-sensitive comparison and ensure full directory match
+        // Use OS-appropriate comparison: case-insensitive on Windows, case-sensitive elsewhere
         var fullBaseWithSeparator = Path.TrimEndingDirectorySeparator(fullBase)
             + Path.DirectorySeparatorChar;
-        return fullRequested.StartsWith(fullBaseWithSeparator, StringComparison.Ordinal);
+        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return fullRequested.StartsWith(fullBaseWithSeparator, comparison);
     }
 }
 

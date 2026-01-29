@@ -20,19 +20,19 @@ dhadgar --help
 
 ## Command Groups
 
-|Command|Description|
-|---|---|
-|`auth`|Authentication and token management|
-|`me`|Self-service (profile, sessions, permissions)|
-|`identity`|Organizations, users, and roles management|
-|`member`|Organization member management|
-|`secret`|Secret management (get, set, rotate)|
-|`keyvault`|Azure Key Vault management|
-|`gateway`|Gateway diagnostics and health|
-|`nodes`|Node management (list, get, maintenance)|
-|`enrollment`|Agent enrollment tokens|
-|`commands`|List all available commands|
-|`version`|Show CLI build info|
+| Command | Description |
+| ------- | ----------- |
+| `auth` | Authentication and token management |
+| `me` | Self-service (profile, sessions, permissions) |
+| `identity` | Organizations, users, and roles management |
+| `member` | Organization member management |
+| `secret` | Secret management (get, set, rotate) |
+| `keyvault` | Azure Key Vault management |
+| `gateway` | Gateway diagnostics and health |
+| `nodes` | Node management (list, get, maintenance) |
+| `enrollment` | Agent enrollment tokens |
+| `commands` | List all available commands |
+| `version` | Show CLI build info |
 
 ## Key Directories
 

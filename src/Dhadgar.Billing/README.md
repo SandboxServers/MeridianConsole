@@ -304,7 +304,7 @@ Services publish usage events; Billing aggregates and stores them.
 
 #### Payment Flow (Planned)
 
-```
+```text
 User clicks "Subscribe"
         |
         v
@@ -457,7 +457,7 @@ public sealed class SampleEntity
 
 #### Entity Relationship Diagram (Planned)
 
-```
+```text
 +------------------+       +------------------+       +------------------+
 | OrganizationBilling |<--| Subscription     |<------| SubscriptionPlan |
 +------------------+       +------------------+       +------------------+
@@ -850,7 +850,7 @@ In production, configure via environment variables:
 
 ### Test Project Structure
 
-```
+```text
 tests/Dhadgar.Billing.Tests/
     BillingWebApplicationFactory.cs   # Test server configuration
     HelloWorldTests.cs                # Basic unit tests
@@ -1164,7 +1164,7 @@ app.MapPost("/webhooks/stripe", async (HttpRequest request, IConfiguration confi
 
 #### Database Connection Failed
 
-```
+```text
 Error: Npgsql.NpgsqlException: Failed to connect to localhost:5432
 ```
 
@@ -1176,7 +1176,7 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d postgres
 
 #### Migration Failed
 
-```
+```text
 Error: No migrations configuration found
 ```
 
