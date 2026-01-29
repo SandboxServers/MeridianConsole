@@ -164,8 +164,8 @@ public class MiddlewareUnitTests
         Assert.Equal("Internal Server Error", root.GetProperty("title").GetString());
         Assert.Equal("kaboom", root.GetProperty("detail").GetString());
         Assert.Equal("corr-123", root.GetProperty("traceId").GetString());
-        Assert.True(root.TryGetProperty("extensions", out var extensions));
-        Assert.True(extensions.TryGetProperty("stackTrace", out _));
+        // Extensions are serialized as root-level properties (ProblemDetails uses [JsonExtensionData])
+        Assert.True(root.TryGetProperty("stackTrace", out _));
     }
 
     [Fact]

@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
@@ -18,6 +20,12 @@ namespace Dhadgar.ServiceDefaults.Middleware;
 /// </remarks>
 public sealed class ProblemDetailsMiddleware
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly RequestDelegate _next;
     private readonly ILogger<ProblemDetailsMiddleware> _logger;
     private readonly IHostEnvironment _environment;
@@ -101,6 +109,7 @@ public sealed class ProblemDetailsMiddleware
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
         context.Response.ContentType = "application/problem+json";
 
-        await context.Response.WriteAsJsonAsync(problemDetails, context.RequestAborted);
+        var json = JsonSerializer.Serialize(problemDetails, JsonOptions);
+        await context.Response.WriteAsync(json, context.RequestAborted);
     }
 }

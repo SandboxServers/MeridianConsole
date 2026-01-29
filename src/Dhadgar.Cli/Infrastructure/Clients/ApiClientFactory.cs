@@ -11,40 +11,48 @@ public sealed class ApiClientFactory : IDisposable
     private static readonly Uri DefaultGatewayUri = new("http://localhost:5000");
     private static readonly Uri DefaultIdentityUri = new("http://localhost:5001");
     private static readonly Uri DefaultSecretsUri = new("http://localhost:5002");
+    private static readonly Uri DefaultNodesUri = new("http://localhost:5040");
 
     private readonly Uri _gatewayUri;
     private readonly Uri _identityUri;
     private readonly Uri _secretsUri;
+    private readonly Uri _nodesUri;
     private readonly string? _accessToken;
     private readonly AuthenticatedHttpClientHandler _identityHandler;
     private readonly AuthenticatedHttpClientHandler _secretsHandler;
     private readonly AuthenticatedHttpClientHandler _keyVaultHandler;
     private readonly AuthenticatedHttpClientHandler _gatewayHandler;
+    private readonly AuthenticatedHttpClientHandler _nodesHandler;
     private readonly HttpClient _identityClient;
     private readonly HttpClient _secretsClient;
     private readonly HttpClient _keyVaultClient;
     private readonly HttpClient _gatewayClient;
+    private readonly HttpClient _nodesClient;
 
     public ApiClientFactory(
         Uri? gatewayUrl = null,
         Uri? identityUrl = null,
         Uri? secretsUrl = null,
+        Uri? nodesUrl = null,
         string? accessToken = null)
     {
         _gatewayUri = gatewayUrl ?? DefaultGatewayUri;
         _identityUri = identityUrl ?? DefaultIdentityUri;
         _secretsUri = secretsUrl ?? DefaultSecretsUri;
+        _nodesUri = nodesUrl ?? DefaultNodesUri;
         _accessToken = accessToken;
 
         _identityHandler = CreateHandler();
         _secretsHandler = CreateHandler();
         _keyVaultHandler = CreateHandler();
         _gatewayHandler = CreateHandler();
+        _nodesHandler = CreateHandler();
 
         _identityClient = CreateClient(_identityUri, _identityHandler);
         _secretsClient = CreateClient(_secretsUri, _secretsHandler);
         _keyVaultClient = CreateClient(_secretsUri, _keyVaultHandler);
         _gatewayClient = CreateClient(_gatewayUri, _gatewayHandler);
+        _nodesClient = CreateClient(_nodesUri, _nodesHandler);
     }
 
     public ApiClientFactory(CliConfig config)
@@ -52,6 +60,7 @@ public sealed class ApiClientFactory : IDisposable
             gatewayUrl: EnsureAbsoluteUri(config.EffectiveGatewayUrl, "Gateway URL"),
             identityUrl: EnsureAbsoluteUri(config.EffectiveIdentityUrl, "Identity URL"),
             secretsUrl: NormalizeSecretsBase(EnsureAbsoluteUri(config.SecretsUrl ?? config.EffectiveGatewayUrl, "Secrets URL")),
+            nodesUrl: EnsureAbsoluteUri(config.EffectiveNodesUrl, "Nodes URL"),
             accessToken: config.AccessToken)
     {
     }
@@ -87,7 +96,12 @@ public sealed class ApiClientFactory : IDisposable
             return null;
         }
 
-        return new ApiClientFactory(gatewayUri, identityUri, secretsUri, config.AccessToken);
+        if (!TryResolveUri(null, config.EffectiveNodesUrl, "Nodes URL", out var nodesUri, out error))
+        {
+            return null;
+        }
+
+        return new ApiClientFactory(gatewayUri, identityUri, secretsUri, nodesUri, config.AccessToken);
     }
 
     public IIdentityApi CreateIdentityClient()
@@ -125,16 +139,28 @@ public sealed class ApiClientFactory : IDisposable
         return RestService.For<IHealthApi>(_secretsClient);
     }
 
+    public INodesApi CreateNodesClient()
+    {
+        return RestService.For<INodesApi>(_nodesClient);
+    }
+
+    public IHealthApi CreateNodesHealthClient()
+    {
+        return RestService.For<IHealthApi>(_nodesClient);
+    }
+
     public void Dispose()
     {
         _identityClient.Dispose();
         _secretsClient.Dispose();
         _keyVaultClient.Dispose();
         _gatewayClient.Dispose();
+        _nodesClient.Dispose();
         _identityHandler.Dispose();
         _secretsHandler.Dispose();
         _keyVaultHandler.Dispose();
         _gatewayHandler.Dispose();
+        _nodesHandler.Dispose();
     }
 
     private AuthenticatedHttpClientHandler CreateHandler()

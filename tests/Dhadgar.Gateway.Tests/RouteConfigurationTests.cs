@@ -25,13 +25,13 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave15Routes()
+    public void ReverseProxyShouldHave17Routes()
     {
-        // 11 backend services + Better Auth + console hub route + agents route + internal-block = 15 total
+        // 10 backend services + Better Auth + console hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 17 total
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(15, routes.Count);
+        Assert.Equal(17, routes.Count);
     }
 
     [Fact]
@@ -118,7 +118,9 @@ public class RouteConfigurationTests
     [InlineData("identity-route", 10)]
     [InlineData("betterauth-route", 10)]
     [InlineData("servers-route", 20)]
-    [InlineData("nodes-route", 20)]
+    [InlineData("nodes-org-route", 20)]
+    [InlineData("enrollment-route", 20)]
+    [InlineData("agents-enroll-route", 25)]
     [InlineData("agents-route", 30)]
     public void RouteShouldHaveCorrectOrder(string routeName, int expectedOrder)
     {

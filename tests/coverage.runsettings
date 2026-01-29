@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura,opencover</Format>
+
+          <!-- Exclude auto-generated and infrastructure code -->
+          <ExcludeByFile>
+            <!-- EF Core Migrations -->
+            **/Migrations/*.cs,
+            <!-- Design-time DbContext factories -->
+            **/*DbContextFactory.cs,
+            <!-- OpenAPI/NSwag/Kiota generated code -->
+            **/Generated/*.cs,
+            **/OpenApi/*.cs,
+            <!-- Build artifacts -->
+            **/obj/**/*.cs
+          </ExcludeByFile>
+
+          <!-- Exclude by attribute -->
+          <ExcludeByAttribute>
+            ExcludeFromCodeCoverage,
+            GeneratedCodeAttribute,
+            CompilerGeneratedAttribute
+          </ExcludeByAttribute>
+
+          <!-- Exclude specific assemblies -->
+          <Exclude>
+            [*.Tests]*,
+            [*.Tests.*]*
+          </Exclude>
+
+          <!-- Include only Dhadgar assemblies -->
+          <Include>
+            [Dhadgar.*]*
+          </Include>
+
+          <!-- Skip auto-generated properties (backing fields, etc.) -->
+          <SkipAutoProps>true</SkipAutoProps>
+
+          <!-- Deterministic report generation -->
+          <DeterministicReport>true</DeterministicReport>
+
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+
+  <RunConfiguration>
+    <!-- Test timeout per test (30 seconds) -->
+    <TestSessionTimeout>300000</TestSessionTimeout>
+  </RunConfiguration>
+</RunSettings>

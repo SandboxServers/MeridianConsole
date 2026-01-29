@@ -425,7 +425,7 @@ public class GlobalExceptionHandlerTests
 
     [Theory]
     [InlineData(typeof(ArgumentNullException), 400)]
-    [InlineData(typeof(InvalidOperationException), 400)]
+    [InlineData(typeof(InvalidOperationException), 500)] // Generic programming error = 500
     [InlineData(typeof(UnauthorizedAccessException), 401)]
     [InlineData(typeof(NotImplementedException), 501)]
     [InlineData(typeof(TimeoutException), 504)]
