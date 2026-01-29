@@ -403,14 +403,43 @@ public sealed class NodeService : INodeService
     /// This handles race conditions where a duplicate name is inserted between
     /// the pre-check and the SaveChangesAsync call.
     /// </summary>
+    /// <remarks>
+    /// Uses reflection to detect provider-specific exception types and error codes:
+    /// <list type="bullet">
+    ///   <item><description>PostgreSQL (Npgsql): SqlState "23505" (unique_violation)</description></item>
+    ///   <item><description>SQL Server: Error numbers 2601 (unique index) and 2627 (unique constraint)</description></item>
+    ///   <item><description>SQLite: Extended error codes 2067 (SQLITE_CONSTRAINT_UNIQUE) and 1555 (SQLITE_CONSTRAINT_PRIMARYKEY)</description></item>
+    /// </list>
+    /// Falls back to message-based detection if provider-specific checks don't match.
+    /// </remarks>
     private static bool IsUniqueConstraintViolation(DbUpdateException ex)
     {
-        // Check the inner exception message for common unique constraint violation patterns
-        // PostgreSQL: "duplicate key value violates unique constraint"
-        // SQL Server: "Cannot insert duplicate key" or "Violation of UNIQUE KEY constraint"
-        // SQLite: "UNIQUE constraint failed"
-        var innerMessage = ex.InnerException?.Message ?? string.Empty;
+        // Check for provider-specific exception types and error codes
+        var inner = ex.InnerException;
 
+        // PostgreSQL: SqlState "23505" is unique_violation
+        if (inner?.GetType().FullName == "Npgsql.PostgresException")
+        {
+            var sqlState = inner.GetType().GetProperty("SqlState")?.GetValue(inner) as string;
+            if (sqlState == "23505") return true;
+        }
+
+        // SQL Server: Error numbers 2601 (unique index) and 2627 (unique constraint)
+        if (inner?.GetType().FullName == "Microsoft.Data.SqlClient.SqlException")
+        {
+            var number = inner.GetType().GetProperty("Number")?.GetValue(inner) as int?;
+            if (number == 2601 || number == 2627) return true;
+        }
+
+        // SQLite: SQLITE_CONSTRAINT_UNIQUE (2067) or SQLITE_CONSTRAINT_PRIMARYKEY (1555)
+        if (inner?.GetType().FullName == "Microsoft.Data.Sqlite.SqliteException")
+        {
+            var errorCode = inner.GetType().GetProperty("SqliteExtendedErrorCode")?.GetValue(inner) as int?;
+            if (errorCode == 2067 || errorCode == 1555) return true;
+        }
+
+        // Fallback to message-based detection as last resort
+        var innerMessage = inner?.Message ?? string.Empty;
         return innerMessage.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
             || innerMessage.Contains("unique constraint", StringComparison.OrdinalIgnoreCase)
             || innerMessage.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase);
@@ -419,7 +448,7 @@ public sealed class NodeService : INodeService
     // IMPORTANT: Health score formula must be consistent across all query expressions.
     // Formula: (int)Math.Round(100.0 - (CpuUsagePercent + MemoryUsagePercent + DiskUsagePercent) / 3.0)
     // This formula is inlined in EF Core LINQ expressions because it must translate to SQL.
-    // Changes here must be reflected in: ApplyFilters, ApplySorting, GetNodesAsync Select, and CalculateHealthScore.
+    // Changes here must be reflected in: ApplyFilters, ApplySorting, and the LINQ Select in GetNodesAsync.
 
     private static IQueryable<Node> ApplyFilters(IQueryable<Node> query, NodeListQuery filters)
     {

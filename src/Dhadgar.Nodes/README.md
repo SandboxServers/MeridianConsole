@@ -37,7 +37,7 @@ In the Meridian Console architecture, customers own and operate their own hardwa
 ### Key Concepts
 
 | Concept | Description |
-|---------|-------------|
+| --- | --- |
 | **Node** | A physical or virtual machine that can host game servers. Owned by the customer. |
 | **Agent** | Software installed on customer hardware that communicates with the control plane via outbound HTTPS. |
 | **Enrollment Token** | One-time use token for agent enrollment (SHA-256 hashed, never stored in plaintext). |
@@ -48,7 +48,7 @@ In the Meridian Console architecture, customers own and operate their own hardwa
 ### Technology Stack
 
 | Technology | Version | Purpose |
-|------------|---------|---------|
+| --- | --- | --- |
 | .NET | 10.0 | Runtime and SDK |
 | ASP.NET Core | 10.0 | Web framework (Minimal APIs) |
 | PostgreSQL | 16 | Primary database |
@@ -218,7 +218,7 @@ src/Dhadgar.Nodes/
 ```
 
 | State | Value | Description |
-|-------|-------|-------------|
+| --- | --- | --- |
 | Enrolling | 0 | Agent is completing enrollment |
 | Online | 1 | Healthy, receiving heartbeats |
 | Degraded | 2 | Online but reporting issues (high CPU/memory/disk) |
@@ -247,16 +247,16 @@ src/Dhadgar.Nodes/
 **Query Parameters for GET /**:
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+| --- | --- | --- |
 | `status` | string | Filter by status (Online, Degraded, etc.) |
 | `platform` | string | Filter by platform (linux, windows) |
 | `minHealthScore` | int | Minimum health score (0-100) |
 | `maxHealthScore` | int | Maximum health score (0-100) |
 | `hasActiveServers` | bool | Filter by active servers |
 | `search` | string | Search by name |
-| `tags` | string[] | Filter by tags |
+| `tags` | string (comma-separated) | Filter by tags |
 | `page` | int | Page number (default: 1) |
-| `pageSize` | int | Items per page (default: 50, max: 100) |
+| `pageSize` | int | Items per page (default: 20, max: 100) |
 
 ### Enrollment Tokens
 
@@ -325,7 +325,7 @@ nodes
 #### NodeHealth
 
 ```text
-node_health
+node_healths
 ├── id (PK)                    UUID
 ├── node_id (FK)               UUID
 ├── cpu_usage_percent          DECIMAL (0-100)
@@ -423,7 +423,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 **Node Lifecycle Events:**
 
 | Event | When Published |
-|-------|----------------|
+| --- | --- |
 | `NodeEnrolled` | New node completes enrollment |
 | `NodeOnline` | Node transitions to online (first heartbeat) |
 | `NodeOffline` | Node misses heartbeat threshold |
@@ -436,7 +436,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 **Certificate Events:**
 
 | Event | When Published |
-|-------|----------------|
+| --- | --- |
 | `AgentCertificateIssued` | New certificate issued during enrollment |
 | `AgentCertificateRevoked` | Certificate is revoked |
 | `AgentCertificateRenewed` | Certificate is renewed |
@@ -444,7 +444,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 **Capacity Events:**
 
 | Event | When Published |
-|-------|----------------|
+| --- | --- |
 | `CapacityReserved` | Capacity reservation created |
 | `CapacityClaimed` | Reservation claimed by server |
 | `CapacityReleased` | Reservation explicitly released |
@@ -453,7 +453,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 ### Commands
 
 | Command | Purpose |
-|---------|---------|
+| --- | --- |
 | `CheckNodeHealth` | Request health check for a node |
 | `UpdateNodeCapacity` | Update node's capacity configuration |
 
@@ -486,7 +486,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 ### Certificate Authority Configuration
 
 | Option | Default | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `CaStorageType` | "local" | "local" or "azurekeyvault" |
 | `CaStoragePath` | AppData/MeridianConsole/CA | Local CA storage path |
 | `CaKeyPassword` | auto-generated | Password for CA private key |
@@ -500,7 +500,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 ### Environment Variables
 
 | Variable | Purpose |
-|----------|---------|
+| --- | --- |
 | `ConnectionStrings__Postgres` | PostgreSQL connection string |
 | `ConnectionStrings__RabbitMqHost` | RabbitMQ host |
 | `RabbitMq__Username` | RabbitMQ username |
@@ -617,7 +617,7 @@ docker run -p 5040:8080 \
 ### Health Endpoints
 
 | Endpoint | Purpose |
-|----------|---------|
+| --- | --- |
 | `/healthz` | Full health check |
 | `/livez` | Kubernetes liveness probe |
 | `/readyz` | Kubernetes readiness probe |
@@ -627,7 +627,7 @@ docker run -p 5040:8080 \
 ## Related Documentation
 
 | Document | Location |
-|----------|----------|
+| --- | --- |
 | Main README | `/README.md` |
 | Contracts Library | `/docs/libraries/contracts.md` |
 | Messaging Library | `/docs/libraries/messaging.md` |
@@ -636,7 +636,7 @@ docker run -p 5040:8080 \
 ### Related Services
 
 | Service | Purpose | Port |
-|---------|---------|------|
+| --- | --- | --- |
 | Gateway | API routing | 5000 |
 | Identity | Authentication | 5010 |
 | Servers | Server management | 5030 |
@@ -645,7 +645,7 @@ docker run -p 5040:8080 \
 ### Agent Projects
 
 | Project | Purpose |
-|---------|---------|
+| --- | --- |
 | `Agent.Core` | Shared agent logic |
 | `Agent.Linux` | Linux-specific agent |
 | `Agent.Windows` | Windows-specific agent |
