@@ -85,7 +85,7 @@ public sealed class NodeServiceTests
         // Assert
         Assert.Equal(2, result.Total);
         Assert.Equal(2, result.Items.Count);
-        Assert.All(result.Items, n => Assert.True(n.Name.StartsWith("node-")));
+        Assert.All(result.Items, n => Assert.StartsWith("node-", n.Name, StringComparison.Ordinal));
     }
 
     [Fact]

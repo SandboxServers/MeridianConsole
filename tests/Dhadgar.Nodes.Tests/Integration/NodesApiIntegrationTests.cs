@@ -84,7 +84,7 @@ public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplication
         if (response.StatusCode != HttpStatusCode.OK)
         {
             var body = await response.Content.ReadAsStringAsync();
-            throw new Exception($"Expected OK but got {response.StatusCode}. Body: '{body}'");
+            throw new InvalidOperationException($"Expected OK but got {response.StatusCode}. Body: '{body}'");
         }
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

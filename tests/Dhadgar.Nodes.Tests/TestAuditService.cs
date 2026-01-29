@@ -97,12 +97,15 @@ public sealed class TestAuditService : IAuditService
             filtered = filtered.Where(e => e.Outcome == query.Outcome.Value);
         }
 
-        var total = filtered.Count();
+        // Materialize to list to avoid multiple enumeration (CA1851)
+        var filteredList = filtered.ToList();
+
+        var total = filteredList.Count;
         var page = Math.Max(1, query.Page);
         var limit = Math.Clamp(query.Limit, 1, 100);
         var skip = (page - 1) * limit;
 
-        var items = filtered
+        var items = filteredList
             .Skip(skip)
             .Take(limit)
             .Select(e => new AuditLogDto

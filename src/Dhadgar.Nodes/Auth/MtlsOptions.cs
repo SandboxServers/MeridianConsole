@@ -58,7 +58,7 @@ public sealed class MtlsOptions
     /// Paths that are exempt from mTLS authentication (relative to AgentEndpointPrefix).
     /// These endpoints use other authentication methods (e.g., enrollment token).
     /// </summary>
-    public string[] ExemptPaths { get; set; } =
+    public IReadOnlyList<string> ExemptPaths { get; set; } =
     [
         "/enroll",           // Uses one-time enrollment token
         "/ca-certificate"    // Public endpoint to fetch CA certificate

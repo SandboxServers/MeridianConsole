@@ -128,14 +128,14 @@ public sealed class LocalFileCaStorageProvider : ICaStorageProvider
             }
 
             // Parse certificate
-            var cert = X509Certificate2.CreateFromPem(certPem);
+            using var cert = X509Certificate2.CreateFromPem(certPem);
 
             // Parse encrypted private key and combine with certificate
             using var rsa = RSA.Create();
             rsa.ImportFromEncryptedPem(keyPem, password);
 
             // Create certificate with private key
-            var certWithKey = cert.CopyWithPrivateKey(rsa);
+            using var certWithKey = cert.CopyWithPrivateKey(rsa);
 
             // Export and reimport to get a certificate that can be used for signing
             // This is necessary because CopyWithPrivateKey doesn't always result in a usable key

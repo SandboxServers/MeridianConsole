@@ -35,8 +35,8 @@ public sealed class ReservationExpiryServiceTests
         scope.ServiceProvider.Returns(serviceProvider);
         scopeFactory.CreateScope().Returns(scope);
 
-        var cts = new CancellationTokenSource();
-        var service = new ReservationExpiryService(
+        using var cts = new CancellationTokenSource();
+        using var service = new ReservationExpiryService(
             scopeFactory,
             CreateOptions(),
             NullLogger<ReservationExpiryService>.Instance);
@@ -100,8 +100,8 @@ public sealed class ReservationExpiryServiceTests
             ReservationExpiryCheckIntervalMinutes = 0 // Will result in minimum TimeSpan
         });
 
-        var cts = new CancellationTokenSource();
-        var service = new ReservationExpiryService(
+        using var cts = new CancellationTokenSource();
+        using var service = new ReservationExpiryService(
             scopeFactory,
             options,
             NullLogger<ReservationExpiryService>.Instance);
@@ -144,8 +144,8 @@ public sealed class ReservationExpiryServiceTests
         scope.ServiceProvider.Returns(serviceProvider);
         scopeFactory.CreateScope().Returns(scope);
 
-        var cts = new CancellationTokenSource();
-        var service = new ReservationExpiryService(
+        using var cts = new CancellationTokenSource();
+        using var service = new ReservationExpiryService(
             scopeFactory,
             CreateOptions(60), // 60 minute interval
             NullLogger<ReservationExpiryService>.Instance);

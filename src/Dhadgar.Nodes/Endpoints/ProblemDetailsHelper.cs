@@ -83,6 +83,6 @@ public static class ProblemDetailsHelper
         "capacity_data_missing" => "The node does not have capacity data configured.",
         "insufficient_memory" => "Insufficient memory available on the node.",
         "insufficient_disk" => "Insufficient disk space available on the node.",
-        _ => errorCode.Replace("_", " ")
+        _ => errorCode.Replace("_", " ", StringComparison.Ordinal)
     };
 }

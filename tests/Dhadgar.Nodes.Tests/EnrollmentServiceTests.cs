@@ -212,8 +212,8 @@ public sealed class EnrollmentServiceTests
 
         // Assert
         Assert.NotEmpty(result.Value!.CertificateThumbprint);
-        Assert.Contains("BEGIN CERTIFICATE", result.Value.Certificate);
-        Assert.Contains("END CERTIFICATE", result.Value.Certificate);
+        Assert.Contains("BEGIN CERTIFICATE", result.Value.Certificate, StringComparison.Ordinal);
+        Assert.Contains("END CERTIFICATE", result.Value.Certificate, StringComparison.Ordinal);
     }
 
     [Fact]

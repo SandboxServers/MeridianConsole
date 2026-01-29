@@ -125,9 +125,6 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
     // OID for Subject Alternative Name extension
     private const string SubjectAlternativeNameOid = "2.5.29.17";
 
-    // OID for Extended Key Usage extension
-    private const string ExtendedKeyUsageOid = "2.5.29.37";
-
     // OID for Client Authentication
     private const string ClientAuthenticationOid = "1.3.6.1.5.5.7.3.2";
 

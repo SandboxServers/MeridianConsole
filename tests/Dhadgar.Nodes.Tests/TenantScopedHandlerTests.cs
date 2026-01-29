@@ -20,7 +20,7 @@ public sealed class TenantScopedHandlerTests
         return (handler, accessor);
     }
 
-    private static HttpContext CreateHttpContext(string? routeOrgId, ClaimsPrincipal? user = null)
+    private static DefaultHttpContext CreateHttpContext(string? routeOrgId, ClaimsPrincipal? user = null)
     {
         var httpContext = new DefaultHttpContext();
 

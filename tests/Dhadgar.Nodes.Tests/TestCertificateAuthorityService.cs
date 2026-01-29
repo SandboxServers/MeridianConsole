@@ -92,6 +92,6 @@ public sealed class TestCertificateAuthorityService : ICertificateAuthorityServi
     public Task<bool> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
     {
         // In tests, we consider a certificate valid if it contains our fake header
-        return Task.FromResult(certificatePem.Contains("BEGIN CERTIFICATE"));
+        return Task.FromResult(certificatePem.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal));
     }
 }

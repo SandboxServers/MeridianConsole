@@ -29,7 +29,7 @@ public sealed class StaleNodeDetectionServiceTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(serviceScope);
 
-        var service = new StaleNodeDetectionService(
+        using var service = new StaleNodeDetectionService(
             scopeFactory,
             CreateOptions(),
             NullLogger<StaleNodeDetectionService>.Instance);
@@ -39,7 +39,7 @@ public sealed class StaleNodeDetectionServiceTests
         // Act - start the service and let it run one iteration
         var executeTask = service.StartAsync(cts.Token);
         await Task.Delay(100); // Give it time to execute once
-        cts.Cancel();
+        await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
 
         // Assert
@@ -63,7 +63,7 @@ public sealed class StaleNodeDetectionServiceTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(serviceScope);
 
-        var service = new StaleNodeDetectionService(
+        using var service = new StaleNodeDetectionService(
             scopeFactory,
             CreateOptions(),
             NullLogger<StaleNodeDetectionService>.Instance);
@@ -73,7 +73,7 @@ public sealed class StaleNodeDetectionServiceTests
         // Act - start the service, it should handle the exception
         var executeTask = service.StartAsync(cts.Token);
         await Task.Delay(100);
-        cts.Cancel();
+        await cts.CancelAsync();
 
         // Assert - should not throw
         await service.StopAsync(CancellationToken.None);
@@ -96,7 +96,7 @@ public sealed class StaleNodeDetectionServiceTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(serviceScope);
 
-        var service = new StaleNodeDetectionService(
+        using var service = new StaleNodeDetectionService(
             scopeFactory,
             CreateOptions(),
             NullLogger<StaleNodeDetectionService>.Instance);
@@ -105,7 +105,7 @@ public sealed class StaleNodeDetectionServiceTests
 
         // Act
         await service.StartAsync(cts.Token);
-        cts.Cancel();
+        await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
 
         // Assert - should complete without hanging
@@ -131,7 +131,7 @@ public sealed class StaleNodeDetectionServiceTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(serviceScope);
 
-        var service = new StaleNodeDetectionService(
+        using var service = new StaleNodeDetectionService(
             scopeFactory,
             options,
             NullLogger<StaleNodeDetectionService>.Instance);
@@ -141,7 +141,7 @@ public sealed class StaleNodeDetectionServiceTests
         // Act - let it run for a bit to execute multiple iterations
         await service.StartAsync(cts.Token);
         await Task.Delay(200);
-        cts.Cancel();
+        await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
 
         // Assert - should have been called multiple times
@@ -168,7 +168,7 @@ public sealed class StaleNodeDetectionServiceTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(serviceScope);
 
-        var service = new StaleNodeDetectionService(
+        using var service = new StaleNodeDetectionService(
             scopeFactory,
             CreateOptions(),
             NullLogger<StaleNodeDetectionService>.Instance);
@@ -178,7 +178,7 @@ public sealed class StaleNodeDetectionServiceTests
         // Act
         await service.StartAsync(cts.Token);
         await Task.Delay(100);
-        cts.Cancel();
+        await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
 
         // Assert - the service ran successfully with stale nodes

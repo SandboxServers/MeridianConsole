@@ -80,14 +80,20 @@ public sealed record UpdateNodeRequest(
 /// <summary>
 /// Request to update a node's tags.
 /// </summary>
+/// <remarks>
+/// CA1002 suppressed: ASP.NET Core model binding requires concrete List&lt;T&gt; for JSON deserialization
+/// of array properties in request bodies. Using Collection&lt;T&gt; breaks model binding.
+/// </remarks>
+#pragma warning disable CA1002 // Do not expose generic lists - required for ASP.NET Core model binding
 public sealed record UpdateNodeTagsRequest(
     [MaxLength(20, ErrorMessage = "Maximum 20 tags allowed")]
     List<string> Tags)
+#pragma warning restore CA1002
 {
     /// <summary>
     /// Validates and normalizes tags (lowercase, trimmed, unique).
     /// </summary>
-    public List<string> GetNormalizedTags()
+    public IReadOnlyList<string> GetNormalizedTags()
     {
         if (Tags is null || Tags.Count == 0)
         {

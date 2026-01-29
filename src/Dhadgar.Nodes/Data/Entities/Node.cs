@@ -46,7 +46,13 @@ public sealed class Node
     /// User-defined tags for filtering and categorization.
     /// Stored as JSONB array in PostgreSQL.
     /// </summary>
+    /// <remarks>
+    /// CA1002 suppressed: EF Core requires List&lt;T&gt; for JSONB column mapping with PostgreSQL.
+    /// Using Collection&lt;T&gt; or IList&lt;T&gt; breaks the JSON serialization.
+    /// </remarks>
+#pragma warning disable CA1002 // Do not expose generic lists - required for EF Core JSONB mapping
     public List<string> Tags { get; set; } = [];
+#pragma warning restore CA1002
 
     /// <summary>
     /// PostgreSQL xmin-based optimistic concurrency token.

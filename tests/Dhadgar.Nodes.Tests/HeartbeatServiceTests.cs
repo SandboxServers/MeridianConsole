@@ -25,7 +25,7 @@ public sealed class HeartbeatServiceTests
     private static IOptions<NodesOptions> CreateOptions() =>
         Options.Create(new NodesOptions());
 
-    private static IHealthScoringService CreateHealthScoringService()
+    private static HealthScoringService CreateHealthScoringService()
     {
         return new HealthScoringService(
             CreateOptions(),
@@ -562,8 +562,8 @@ public sealed class HeartbeatServiceTests
         // Assert
         var health = await context.NodeHealths.FirstOrDefaultAsync(h => h.NodeId == node.Id);
         Assert.NotNull(health);
-        Assert.Contains("Issue 1", health.HealthIssues);
-        Assert.Contains("Issue 2", health.HealthIssues);
+        Assert.Contains("Issue 1", health.HealthIssues, StringComparison.Ordinal);
+        Assert.Contains("Issue 2", health.HealthIssues, StringComparison.Ordinal);
     }
 
     #region Health Scoring Integration Tests

@@ -194,7 +194,7 @@ public sealed class NodeService : INodeService
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var normalizedTags = request.GetNormalizedTags();
 
-        node.Tags = normalizedTags;
+        node.Tags = normalizedTags.ToList();
         node.UpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(ct);
@@ -382,7 +382,11 @@ public sealed class NodeService : INodeService
         if (!string.IsNullOrWhiteSpace(filters.Platform))
         {
             var platform = filters.Platform.Trim().ToLowerInvariant();
-            query = query.Where(n => n.Platform.ToLower() == platform);
+            // CA1862 suppressed: string.Equals with StringComparison doesn't translate reliably
+            // across EF Core database providers. Using ToLowerInvariant() translates to SQL LOWER().
+#pragma warning disable CA1862 // Use StringComparison method overloads
+            query = query.Where(n => n.Platform.ToLowerInvariant() == platform);
+#pragma warning restore CA1862
         }
 
         // Filter by health score range (requires Health navigation)
@@ -425,9 +429,14 @@ public sealed class NodeService : INodeService
         {
             var searchTerm = filters.Search.Trim().ToLowerInvariant();
 
+            // CA1862 suppressed: StringComparison overloads don't translate consistently across
+            // EF Core database providers (PostgreSQL production vs InMemory tests).
+            // Using ToLowerInvariant() on both sides translates to SQL LOWER() reliably.
+#pragma warning disable CA1862 // Use StringComparison method overloads
             query = query.Where(n =>
-                n.Name.ToLower().Contains(searchTerm) ||
-                (n.DisplayName != null && n.DisplayName.ToLower().Contains(searchTerm)));
+                n.Name.ToLowerInvariant().Contains(searchTerm) ||
+                (n.DisplayName != null && n.DisplayName.ToLowerInvariant().Contains(searchTerm)));
+#pragma warning restore CA1862
         }
 
         // Filter by tags (any match)

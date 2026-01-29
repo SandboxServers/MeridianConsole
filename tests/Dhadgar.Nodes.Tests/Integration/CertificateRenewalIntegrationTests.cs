@@ -12,7 +12,6 @@ public sealed class CertificateRenewalIntegrationTests : IClassFixture<NodesWebA
 {
     private readonly NodesWebApplicationFactory _factory;
     private static readonly Guid TestOrgId = Guid.NewGuid();
-    private const string TestUserId = "test-user-123";
 
     public CertificateRenewalIntegrationTests(NodesWebApplicationFactory factory)
     {
@@ -40,7 +39,7 @@ public sealed class CertificateRenewalIntegrationTests : IClassFixture<NodesWebA
         Assert.NotNull(result);
         Assert.NotEmpty(result.CertificateThumbprint);
         Assert.NotEqual(originalCert.Thumbprint, result.CertificateThumbprint);
-        Assert.Contains("BEGIN CERTIFICATE", result.Certificate);
+        Assert.Contains("BEGIN CERTIFICATE", result.Certificate, StringComparison.Ordinal);
         Assert.NotEmpty(result.Pkcs12Base64);
         Assert.NotEmpty(result.Pkcs12Password);
     }
@@ -122,7 +121,7 @@ public sealed class CertificateRenewalIntegrationTests : IClassFixture<NodesWebA
         Assert.NotNull(revokedCert);
         Assert.True(revokedCert.IsRevoked);
         Assert.NotNull(revokedCert.RevokedAt);
-        Assert.Contains("Renewed", revokedCert.RevocationReason);
+        Assert.Contains("Renewed", revokedCert.RevocationReason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -163,8 +162,8 @@ public sealed class CertificateRenewalIntegrationTests : IClassFixture<NodesWebA
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var content = await response.Content.ReadAsStringAsync();
-        Assert.Contains("BEGIN CERTIFICATE", content);
-        Assert.Contains("END CERTIFICATE", content);
+        Assert.Contains("BEGIN CERTIFICATE", content, StringComparison.Ordinal);
+        Assert.Contains("END CERTIFICATE", content, StringComparison.Ordinal);
     }
 
     [Fact]

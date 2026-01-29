@@ -64,7 +64,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task InitializeAsync_CreatesNewCa_WhenNoExistingCa()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
 
         // Act
         await service.InitializeAsync();
@@ -72,20 +72,20 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         // Assert - CA certificate should be created
         var caPem = await service.GetCaCertificatePemAsync();
         Assert.NotNull(caPem);
-        Assert.Contains("BEGIN CERTIFICATE", caPem);
-        Assert.Contains("END CERTIFICATE", caPem);
+        Assert.Contains("BEGIN CERTIFICATE", caPem, StringComparison.Ordinal);
+        Assert.Contains("END CERTIFICATE", caPem, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task InitializeAsync_LoadsExistingCa_WhenCaExists()
     {
         // Arrange - Initialize once to create CA
-        var service1 = CreateService();
+        using var service1 = CreateService();
         await service1.InitializeAsync();
         var caPem1 = await service1.GetCaCertificatePemAsync();
 
         // Act - Create new service instance and initialize
-        var service2 = CreateService();
+        using var service2 = CreateService();
         await service2.InitializeAsync();
         var caPem2 = await service2.GetCaCertificatePemAsync();
 
@@ -97,7 +97,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task IssueCertificateAsync_GeneratesValidCertificate()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -119,7 +119,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task IssueCertificateAsync_CertificateHasCorrectSubject()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -128,17 +128,17 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // Assert
         var certPem = result.CertificatePem!;
-        var cert = X509Certificate2.CreateFromPem(certPem);
+        using var cert = X509Certificate2.CreateFromPem(certPem);
 
-        Assert.Contains($"CN={nodeId}", cert.Subject);
-        Assert.Contains("O=MeridianConsole", cert.Subject);
+        Assert.Contains($"CN={nodeId}", cert.Subject, StringComparison.Ordinal);
+        Assert.Contains("O=MeridianConsole", cert.Subject, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task IssueCertificateAsync_CertificateHasSpiffeId()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -147,7 +147,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // Assert
         var certPem = result.CertificatePem!;
-        var cert = X509Certificate2.CreateFromPem(certPem);
+        using var cert = X509Certificate2.CreateFromPem(certPem);
 
         // Check Subject Alternative Name extension contains SPIFFE ID
         var sanExtension = cert.Extensions
@@ -158,14 +158,14 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // The SAN should contain the SPIFFE URI
         var sanString = sanExtension.Format(multiLine: true);
-        Assert.Contains($"spiffe://meridianconsole.com/nodes/{nodeId}", sanString);
+        Assert.Contains($"spiffe://meridianconsole.com/nodes/{nodeId}", sanString, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task IssueCertificateAsync_CertificateHasClientAuthEku()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -174,7 +174,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // Assert
         var certPem = result.CertificatePem!;
-        var cert = X509Certificate2.CreateFromPem(certPem);
+        using var cert = X509Certificate2.CreateFromPem(certPem);
 
         var ekuExtension = cert.Extensions
             .OfType<X509EnhancedKeyUsageExtension>()
@@ -194,7 +194,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task IssueCertificateAsync_CertificateIsNotCa()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -203,7 +203,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // Assert
         var certPem = result.CertificatePem!;
-        var cert = X509Certificate2.CreateFromPem(certPem);
+        using var cert = X509Certificate2.CreateFromPem(certPem);
 
         var bcExtension = cert.Extensions
             .OfType<X509BasicConstraintsExtension>()
@@ -217,7 +217,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task IssueCertificateAsync_Pkcs12CanBeLoaded()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -226,7 +226,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // Assert - PKCS#12 should be loadable with the provided password
         var pfxBytes = Convert.FromBase64String(result.Pkcs12Base64!);
-        var cert = new X509Certificate2(pfxBytes, result.Pkcs12Password, X509KeyStorageFlags.Exportable);
+        using var cert = new X509Certificate2(pfxBytes, result.Pkcs12Password, X509KeyStorageFlags.Exportable);
 
         Assert.True(cert.HasPrivateKey);
         Assert.NotNull(cert.GetRSAPrivateKey());
@@ -236,7 +236,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task IssueCertificateAsync_ThumbprintIsSha256()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -246,10 +246,10 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         // Assert - Thumbprint should be 64 hex characters (32 bytes = SHA-256)
         Assert.NotNull(result.Thumbprint);
         Assert.Equal(64, result.Thumbprint.Length);
-        Assert.True(result.Thumbprint.All(c => "0123456789abcdef".Contains(c)));
+        Assert.True(result.Thumbprint.All(c => "0123456789abcdef".Contains(c, StringComparison.Ordinal)));
 
         // Verify it matches actual SHA-256 hash of certificate
-        var cert = X509Certificate2.CreateFromPem(result.CertificatePem!);
+        using var cert = X509Certificate2.CreateFromPem(result.CertificatePem!);
         var expectedThumbprint = Convert.ToHexString(SHA256.HashData(cert.RawData)).ToLowerInvariant();
         Assert.Equal(expectedThumbprint, result.Thumbprint);
     }
@@ -258,7 +258,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task IssueCertificateAsync_MultipleCertificatesHaveUniqueSerialNumbers()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
 
         // Act
@@ -275,7 +275,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task RenewCertificateAsync_GeneratesNewCertificate()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -294,7 +294,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task RenewCertificateAsync_NewCertificateHasSameNodeId()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -304,15 +304,15 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         var renewedResult = await service.RenewCertificateAsync(nodeId, originalResult.Thumbprint!);
 
         // Assert
-        var cert = X509Certificate2.CreateFromPem(renewedResult.CertificatePem!);
-        Assert.Contains($"CN={nodeId}", cert.Subject);
+        using var cert = X509Certificate2.CreateFromPem(renewedResult.CertificatePem!);
+        Assert.Contains($"CN={nodeId}", cert.Subject, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task GetCaCertificatePemAsync_ReturnsValidPem()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
 
         // Act
@@ -320,24 +320,24 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // Assert
         Assert.NotNull(caPem);
-        Assert.StartsWith("-----BEGIN CERTIFICATE-----", caPem);
-        Assert.Contains("-----END CERTIFICATE-----", caPem);
+        Assert.StartsWith("-----BEGIN CERTIFICATE-----", caPem, StringComparison.Ordinal);
+        Assert.Contains("-----END CERTIFICATE-----", caPem, StringComparison.Ordinal);
 
         // Should be loadable
-        var caCert = X509Certificate2.CreateFromPem(caPem);
-        Assert.Contains("Meridian Console Agent CA", caCert.Subject);
+        using var caCert = X509Certificate2.CreateFromPem(caPem);
+        Assert.Contains("Meridian Console Agent CA", caCert.Subject, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task GetCaCertificatePemAsync_CaIsSelfSigned()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
 
         // Act
         var caPem = await service.GetCaCertificatePemAsync();
-        var caCert = X509Certificate2.CreateFromPem(caPem);
+        using var caCert = X509Certificate2.CreateFromPem(caPem);
 
         // Assert - Subject and Issuer should be the same for self-signed
         Assert.Equal(caCert.Subject, caCert.Issuer);
@@ -347,12 +347,12 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task GetCaCertificatePemAsync_CaHasCaBasicConstraint()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
 
         // Act
         var caPem = await service.GetCaCertificatePemAsync();
-        var caCert = X509Certificate2.CreateFromPem(caPem);
+        using var caCert = X509Certificate2.CreateFromPem(caPem);
 
         // Assert
         var bcExtension = caCert.Extensions
@@ -367,7 +367,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task ValidateCertificateAsync_ReturnsTrueForIssuedCertificate()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -384,13 +384,13 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task ValidateCertificateAsync_ReturnsFalseForForeignCertificate()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
 
         // Create a self-signed certificate not issued by our CA
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=Foreign", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        var foreignCert = request.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddYears(1));
+        using var foreignCert = request.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddYears(1));
         var foreignPem = foreignCert.ExportCertificatePem();
 
         // Act
@@ -404,7 +404,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task IssueCertificateAsync_CertificateChainIsValid()
     {
         // Arrange
-        var service = CreateService();
+        using var service = CreateService();
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -413,8 +413,8 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
         // Get CA certificate
         var caPem = await service.GetCaCertificatePemAsync();
-        var caCert = X509Certificate2.CreateFromPem(caPem);
-        var clientCert = X509Certificate2.CreateFromPem(result.CertificatePem!);
+        using var caCert = X509Certificate2.CreateFromPem(caPem);
+        using var clientCert = X509Certificate2.CreateFromPem(result.CertificatePem!);
 
         // Assert - Build chain
         using var chain = new X509Chain();

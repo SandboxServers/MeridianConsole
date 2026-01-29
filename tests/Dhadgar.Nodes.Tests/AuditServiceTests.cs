@@ -17,7 +17,7 @@ public sealed class AuditServiceTests
         return new NodesDbContext(options);
     }
 
-    private static IAuditContextAccessor CreateMockContextAccessor(
+    private static TestAuditContextAccessor CreateMockContextAccessor(
         string actorId = "test-user",
         ActorType actorType = ActorType.User,
         string? correlationId = "test-correlation-id",
@@ -102,7 +102,7 @@ public sealed class AuditServiceTests
         Assert.Equal("test-request-id", auditLog.RequestId);
         Assert.Equal("192.168.1.1", auditLog.IpAddress);
         Assert.Equal("TestAgent/1.0", auditLog.UserAgent);
-        Assert.Contains("TestValue", auditLog.Details!);
+        Assert.Contains("TestValue", auditLog.Details!, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -270,7 +270,7 @@ public sealed class AuditServiceTests
 
         // Assert
         Assert.Equal(2, result.Total);
-        Assert.All(result.Items, item => Assert.StartsWith("node.", item.Action));
+        Assert.All(result.Items, item => Assert.StartsWith("node.", item.Action, StringComparison.Ordinal));
     }
 
     [Fact]

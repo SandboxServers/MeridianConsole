@@ -19,8 +19,6 @@ namespace Dhadgar.Nodes.Tests;
 
 public class MtlsMiddlewareTests
 {
-    private readonly FakeTimeProvider _timeProvider = new(DateTimeOffset.UtcNow);
-
     [Fact]
     public async Task InvokeAsync_NonAgentEndpoint_PassesThrough()
     {
@@ -187,7 +185,7 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_InvalidCertificate_Returns401()
     {
         // Arrange
-        var certificate = CreateSelfSignedCertificate();
+        using var certificate = CreateSelfSignedCertificate();
         var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
@@ -218,7 +216,7 @@ public class MtlsMiddlewareTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        var certificate = CreateSelfSignedCertificate();
+        using var certificate = CreateSelfSignedCertificate();
         var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
@@ -255,7 +253,7 @@ public class MtlsMiddlewareTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        var certificate = CreateSelfSignedCertificate();
+        using var certificate = CreateSelfSignedCertificate();
         var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
         var next = new RequestDelegate(_ => Task.CompletedTask);
 
@@ -360,7 +358,7 @@ public class CertificateValidationServiceTests
     public async Task ValidateClientCertificateAsync_ExpiredCertificate_ReturnsFailure()
     {
         // Arrange
-        var certificate = CreateExpiredCertificate();
+        using var certificate = CreateExpiredCertificate();
         var service = CreateService(allowExpired: false);
 
         // Act
@@ -377,7 +375,7 @@ public class CertificateValidationServiceTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        var certificate = CreateCertificateWithSpiffeId(nodeId, expired: true);
+        using var certificate = CreateCertificateWithSpiffeId(nodeId, expired: true);
         var caService = CreateMockCaService(validatesTo: true);
         var service = CreateService(caService: caService, allowExpired: true);
 
@@ -394,7 +392,7 @@ public class CertificateValidationServiceTests
     public async Task ValidateClientCertificateAsync_NotYetValidCertificate_ReturnsFailure()
     {
         // Arrange
-        var certificate = CreateNotYetValidCertificate();
+        using var certificate = CreateNotYetValidCertificate();
         var service = CreateService();
 
         // Act
@@ -409,7 +407,7 @@ public class CertificateValidationServiceTests
     public async Task ValidateClientCertificateAsync_InvalidIssuer_ReturnsFailure()
     {
         // Arrange
-        var certificate = CreateSelfSignedCertificate();
+        using var certificate = CreateSelfSignedCertificate();
         var caService = CreateMockCaService(validatesTo: false);
         var service = CreateService(caService: caService);
 
@@ -425,7 +423,7 @@ public class CertificateValidationServiceTests
     public async Task ValidateClientCertificateAsync_MissingClientAuthEku_ReturnsFailure()
     {
         // Arrange
-        var certificate = CreateCertificateWithoutClientAuthEku();
+        using var certificate = CreateCertificateWithoutClientAuthEku();
         var caService = CreateMockCaService(validatesTo: true);
         var service = CreateService(caService: caService);
 
@@ -441,7 +439,7 @@ public class CertificateValidationServiceTests
     public async Task ValidateClientCertificateAsync_MissingSpiffeId_ReturnsFailure()
     {
         // Arrange
-        var certificate = CreateCertificateWithClientAuthEkuButNoSpiffe();
+        using var certificate = CreateCertificateWithClientAuthEkuButNoSpiffe();
         var caService = CreateMockCaService(validatesTo: true);
         var service = CreateService(caService: caService);
 
@@ -458,7 +456,7 @@ public class CertificateValidationServiceTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        var certificate = CreateCertificateWithSpiffeId(nodeId, trustDomain: "wrong-domain.com");
+        using var certificate = CreateCertificateWithSpiffeId(nodeId, trustDomain: "wrong-domain.com");
         var caService = CreateMockCaService(validatesTo: true);
         var service = CreateService(caService: caService);
 
@@ -475,7 +473,7 @@ public class CertificateValidationServiceTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        var certificate = CreateCertificateWithSpiffeId(nodeId);
+        using var certificate = CreateCertificateWithSpiffeId(nodeId);
         var caService = CreateMockCaService(validatesTo: true);
         var service = CreateService(caService: caService);
 
@@ -495,7 +493,7 @@ public class CertificateValidationServiceTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        var certificate = CreateCertificateWithSpiffeId(nodeId);
+        using var certificate = CreateCertificateWithSpiffeId(nodeId);
         var service = CreateService();
 
         // Act
@@ -510,7 +508,7 @@ public class CertificateValidationServiceTests
     public void ExtractSpiffeId_CertificateWithoutSan_ReturnsNull()
     {
         // Arrange
-        var certificate = CreateSelfSignedCertificate();
+        using var certificate = CreateSelfSignedCertificate();
         var service = CreateService();
 
         // Act
@@ -693,7 +691,7 @@ public class MtlsMiddlewareIntegrationTests : IClassFixture<NodesWebApplicationF
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Assert.DoesNotContain("missing_client_certificate", content);
+            Assert.DoesNotContain("missing_client_certificate", content, StringComparison.Ordinal);
         }
     }
 

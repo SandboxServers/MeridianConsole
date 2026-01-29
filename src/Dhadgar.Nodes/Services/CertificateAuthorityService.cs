@@ -1,4 +1,5 @@
 using System.Formats.Asn1;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -10,15 +11,15 @@ namespace Dhadgar.Nodes.Services;
 /// Certificate Authority service for issuing and managing agent mTLS certificates.
 /// Uses .NET built-in cryptography APIs (System.Security.Cryptography.X509Certificates).
 /// </summary>
-public sealed class CertificateAuthorityService : ICertificateAuthorityService
+public sealed class CertificateAuthorityService : ICertificateAuthorityService, IDisposable
 {
     private readonly ICaStorageProvider _storageProvider;
     private readonly NodesOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CertificateAuthorityService> _logger;
 
-    // SPIFFE ID format for agent certificates
-    private const string SpiffeIdFormat = "spiffe://meridianconsole.com/nodes/{0}";
+    // SPIFFE ID format for agent certificates - cached for performance (CA1863)
+    private static readonly CompositeFormat SpiffeIdFormat = CompositeFormat.Parse("spiffe://meridianconsole.com/nodes/{0}");
     private const string OrganizationName = "MeridianConsole";
     private const string CaCommonName = "Meridian Console Agent CA";
 
@@ -134,7 +135,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService
         {
             await EnsureInitializedAsync(ct);
 
-            var certificate = X509Certificate2.CreateFromPem(certificatePem);
+            using var certificate = X509Certificate2.CreateFromPem(certificatePem);
 
             // Build certificate chain and validate against CA
             using var chain = new X509Chain();
@@ -264,7 +265,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService
 
         // Subject Alternative Name with SPIFFE ID
         var sanBuilder = new SubjectAlternativeNameBuilder();
-        var spiffeId = string.Format(SpiffeIdFormat, nodeId);
+        var spiffeId = string.Format(CultureInfo.InvariantCulture, SpiffeIdFormat, nodeId);
         sanBuilder.AddUri(new Uri(spiffeId));
         request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
 
@@ -381,5 +382,14 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService
         // Generate a 32-byte random password and encode as base64
         var bytes = RandomNumberGenerator.GetBytes(32);
         return Convert.ToBase64String(bytes);
+    }
+
+    /// <summary>
+    /// Disposes the initialization semaphore and cached CA certificate.
+    /// </summary>
+    public void Dispose()
+    {
+        _initLock.Dispose();
+        _caCertificate?.Dispose();
     }
 }

@@ -64,7 +64,7 @@ public sealed class EnrollmentTokenServiceTests
         var (token, plainTextToken) = await service.CreateTokenAsync(TestOrgId, TestUserId, "Test Label");
 
         // Assert - hash should NOT contain the plaintext token
-        Assert.DoesNotContain(plainTextToken, token.TokenHash);
+        Assert.DoesNotContain(plainTextToken, token.TokenHash, StringComparison.Ordinal);
         Assert.NotEmpty(token.TokenHash);
         Assert.Equal(64, token.TokenHash.Length); // SHA-256 produces 64 hex chars
     }
