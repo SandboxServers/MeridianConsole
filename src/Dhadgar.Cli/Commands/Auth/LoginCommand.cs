@@ -150,8 +150,8 @@ public sealed class LoginCommand
             if (!string.IsNullOrWhiteSpace(error) || !string.IsNullOrWhiteSpace(description))
             {
                 var detail = string.IsNullOrWhiteSpace(description)
-                    ? error
-                    : $"{error}: {description}";
+                    ? error ?? "Unknown error"
+                    : $"{error ?? "Error"}: {description}";
                 AnsiConsole.MarkupLine($"[dim]{Markup.Escape(detail)}[/]");
             }
         }

@@ -1,38 +1,40 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.OpenApi;
-using Swashbuckle.AspNetCore.SwaggerGen;
+using Scalar.AspNetCore;
 
 namespace Dhadgar.ServiceDefaults.Swagger;
 
 /// <summary>
-/// Extension methods for configuring Swagger/OpenAPI in Meridian Console services.
+/// Extension methods for configuring OpenAPI in Meridian Console services.
 /// </summary>
 public static class SwaggerExtensions
 {
     /// <summary>
-    /// Adds Swagger/OpenAPI services with standard Meridian Console configuration.
+    /// Adds OpenAPI services with standard Meridian Console configuration.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="title">The API title shown in Swagger UI.</param>
     /// <param name="description">The API description shown in Swagger UI.</param>
-    /// <param name="configureOptions">Optional additional Swagger configuration.</param>
+    /// <param name="configureOptions">Optional additional OpenAPI configuration.</param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddMeridianSwagger(
         this IServiceCollection services,
         string title,
         string description,
-        Action<SwaggerGenOptions>? configureOptions = null)
+        Action<OpenApiOptions>? configureOptions = null)
     {
         services.AddEndpointsApiExplorer();
-        services.AddSwaggerGen(options =>
+        services.AddOpenApi("v1", options =>
         {
-            options.SwaggerDoc("v1", new OpenApiInfo
+            options.AddDocumentTransformer((document, context, cancellationToken) =>
             {
-                Title = title,
-                Version = "v1",
-                Description = description
+                document.Info.Title = title;
+                document.Info.Version = "v1";
+                document.Info.Description = description;
+
+                return Task.CompletedTask;
             });
 
             // Apply any additional configuration (including security if needed)
@@ -43,23 +45,19 @@ public static class SwaggerExtensions
     }
 
     /// <summary>
-    /// Configures Swagger middleware for Development and Testing environments.
+    /// Configures OpenAPI middleware for Development and Testing environments.
     /// Call this after app.Build() and before app.Run().
     /// </summary>
     /// <param name="app">The web application.</param>
     /// <returns>The web application for chaining.</returns>
     public static WebApplication UseMeridianSwagger(this WebApplication app)
     {
-        // Enable Swagger in Development and Testing environments
+        // Enable OpenAPI in Development and Testing environments
         // Testing is used by WebApplicationFactory integration tests
         if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Testing")
         {
-            app.UseSwagger();
-            app.UseSwaggerUI(options =>
-            {
-                options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
-                options.RoutePrefix = "swagger";
-            });
+            app.MapOpenApi("/openapi/{documentName}.json");
+            app.MapScalarApiReference();
         }
 
         return app;

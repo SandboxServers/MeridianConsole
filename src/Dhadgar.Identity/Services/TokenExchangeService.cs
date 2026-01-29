@@ -127,7 +127,7 @@ public sealed class TokenExchangeService
             return TokenExchangeOutcome.Fail("token_already_used");
         }
 
-        User user;
+        User? user;
         Organization activeOrg;
         UserOrganization membership;
         var now = _timeProvider.GetUtcNow();

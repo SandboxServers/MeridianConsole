@@ -19,7 +19,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = CreateMinimalSwaggerJson("Identity API")
+                ["http://localhost:5010/openapi/v1.json"] = CreateMinimalSwaggerJson("Identity API")
             });
 
         // Act
@@ -43,7 +43,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = swaggerJson
+                ["http://localhost:5010/openapi/v1.json"] = swaggerJson
             });
 
         // Act
@@ -64,7 +64,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = swaggerJson
+                ["http://localhost:5010/openapi/v1.json"] = swaggerJson
             });
 
         // Act
@@ -95,7 +95,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = swaggerJson
+                ["http://localhost:5010/openapi/v1.json"] = swaggerJson
             });
 
         // Act
@@ -117,7 +117,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = swaggerJson
+                ["http://localhost:5010/openapi/v1.json"] = swaggerJson
             });
 
         // Act
@@ -137,8 +137,8 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010"), ("servers", "http://localhost:5030")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = CreateSwaggerJsonWithPath("/users", "get", "ListUsers"),
-                ["http://localhost:5030/swagger/v1/swagger.json"] = CreateSwaggerJsonWithPath("/servers", "get", "ListServers")
+                ["http://localhost:5010/openapi/v1.json"] = CreateSwaggerJsonWithPath("/users", "get", "ListUsers"),
+                ["http://localhost:5030/openapi/v1.json"] = CreateSwaggerJsonWithPath("/servers", "get", "ListServers")
             });
 
         // Act
@@ -240,7 +240,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = CreateMinimalSwaggerJson("Identity API")
+                ["http://localhost:5010/openapi/v1.json"] = CreateMinimalSwaggerJson("Identity API")
             });
 
         // Act
@@ -262,8 +262,8 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010"), ("betterauth", "http://localhost:5130")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = CreateSwaggerJsonWithPath("/users", "get", "ListUsers"),
-                ["http://localhost:5130/swagger/v1/swagger.json"] = CreateSwaggerJsonWithPath("/auth", "post", "Login")
+                ["http://localhost:5010/openapi/v1.json"] = CreateSwaggerJsonWithPath("/users", "get", "ListUsers"),
+                ["http://localhost:5130/openapi/v1.json"] = CreateSwaggerJsonWithPath("/auth", "post", "Login")
             });
 
         // Act
@@ -301,7 +301,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = swaggerJson
+                ["http://localhost:5010/openapi/v1.json"] = swaggerJson
             });
 
         // Act
@@ -363,7 +363,7 @@ public class OpenApiAggregationServiceTests
             clusters: [("identity", "http://localhost:5010")],
             responses: new Dictionary<string, string>
             {
-                ["http://localhost:5010/swagger/v1/swagger.json"] = swaggerJson
+                ["http://localhost:5010/openapi/v1.json"] = swaggerJson
             });
 
         // Act

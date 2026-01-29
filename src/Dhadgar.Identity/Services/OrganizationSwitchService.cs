@@ -91,7 +91,7 @@ public sealed class OrganizationSwitchService
         {
             new("sub", user.Id.ToString()),
             new("org_id", organizationId.ToString()),
-            new("email", user.Email),
+            new("email", user.Email ?? string.Empty),
             new("role", membership.Role),
             new("principal_type", "user")
         };

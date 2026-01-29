@@ -122,10 +122,23 @@ public class OpenApiAggregationService
         {
             try
             {
-                var swaggerUrl = $"{service.BaseUrl}/swagger/v1/swagger.json";
-                _logger.LogDebug("Fetching OpenAPI spec from {Service} at {Url}", service.Name, swaggerUrl);
+                // SECURITY: Validate URL is well-formed and uses allowed schemes
+                // This prevents SSRF by ensuring we only fetch from HTTP/HTTPS URLs
+                // that are configured in YARP cluster destinations (admin-controlled)
+                if (!Uri.TryCreate(service.BaseUrl, UriKind.Absolute, out var baseUri) ||
+                    (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+                {
+                    _logger.LogWarning(
+                        "Invalid service URL for {Service}: scheme must be http or https",
+                        service.Name);
+                    return (service, Spec: (JsonObject?)null);
+                }
 
-                var response = await client.GetAsync(swaggerUrl, cancellationToken);
+                // SECURITY: Ensure the path is fixed and cannot be manipulated
+                var openApiUri = new Uri(baseUri, "/openapi/v1.json");
+                _logger.LogDebug("Fetching OpenAPI spec from {Service} at {Url}", service.Name, openApiUri);
+
+                var response = await client.GetAsync(openApiUri, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
