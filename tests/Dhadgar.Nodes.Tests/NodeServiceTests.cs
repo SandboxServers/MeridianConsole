@@ -6,6 +6,7 @@ using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -20,6 +21,7 @@ public sealed class NodeServiceTests
     {
         var options = new DbContextOptionsBuilder<NodesDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return new NodesDbContext(options);
     }

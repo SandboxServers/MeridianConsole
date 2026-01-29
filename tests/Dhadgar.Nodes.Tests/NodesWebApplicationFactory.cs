@@ -2,8 +2,11 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Dhadgar.Nodes;
 using Dhadgar.Nodes.Audit;
+using Dhadgar.Nodes.Auth;
+using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
+using Dhadgar.Nodes.Services;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -11,6 +14,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -26,6 +30,7 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = $"nodes-tests-{Guid.NewGuid()}";
     public TestNodesEventPublisher EventPublisher { get; } = new();
     public FakeTimeProvider TimeProvider { get; } = new(DateTimeOffset.UtcNow);
+    public TestCertificateAuthorityService CaService { get; private set; } = null!;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -42,6 +47,7 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<NodesDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName)
+                    .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                     .UseInternalServiceProvider(efProvider));
 
             // Remove all MassTransit services and replace with test publisher
@@ -61,6 +67,19 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             // Remove real TimeProvider and use fake
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(TimeProvider);
+
+            // Replace CA services with test implementations
+            CaService = new TestCertificateAuthorityService(TimeProvider);
+            CaService.InitializeAsync().GetAwaiter().GetResult();
+            services.RemoveAll<ICaStorageProvider>();
+            services.RemoveAll<ICertificateAuthorityService>();
+            services.AddSingleton<ICertificateAuthorityService>(CaService);
+
+            // Disable mTLS for testing (tests use TestNodesAuthHandler instead)
+            services.Configure<MtlsOptions>(options =>
+            {
+                options.Enabled = false;
+            });
 
             // Remove background services during testing
             services.RemoveAll<IHostedService>();
@@ -137,6 +156,17 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
         {
             client.DefaultRequestHeaders.Add(TestNodesAuthHandler.OrgIdHeader, organizationId.Value.ToString());
         }
+        return client;
+    }
+
+    /// <summary>
+    /// Creates an HTTP client with agent authentication (for agent endpoints).
+    /// </summary>
+    public HttpClient CreateAgentClient(Guid nodeId)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.UserIdHeader, nodeId.ToString());
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.NodeIdHeader, nodeId.ToString());
         return client;
     }
 

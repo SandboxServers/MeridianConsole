@@ -175,11 +175,27 @@ public sealed class NodesOptions : IValidateOptions<NodesOptions>
     public int MaxReservationTtlMinutes { get; set; } = 1440;
 
     /// <summary>
+    /// Capacity usage percentage threshold for triggering low capacity alerts.
+    /// When remaining capacity drops below this percentage of total, an alert is published.
+    /// Default: 80% (alert when less than 20% capacity remains).
+    /// </summary>
+    [Range(0, 100, ErrorMessage = "LowCapacityThresholdPercent must be between 0 and 100")]
+    public double LowCapacityThresholdPercent { get; set; } = 80.0;
+
+    /// <summary>
     /// Validates the options, including cross-property invariants.
     /// </summary>
     public ValidateOptionsResult Validate(string? name, NodesOptions options)
     {
         var failures = new List<string>();
+
+        // Enforce 90-day certificate validity policy for agent/client certificates (security requirement)
+        const int RequiredCertificateValidityDays = 90;
+        if (options.CertificateValidityDays != RequiredCertificateValidityDays)
+        {
+            failures.Add($"CertificateValidityDays must be {RequiredCertificateValidityDays} (security policy). " +
+                $"Configured value: {options.CertificateValidityDays}");
+        }
 
         // Cross-property validations
         if (options.DefaultEnrollmentTokenExpiryMinutes > options.MaxEnrollmentTokenExpiryMinutes)

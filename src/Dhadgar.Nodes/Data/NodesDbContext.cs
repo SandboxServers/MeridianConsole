@@ -70,10 +70,12 @@ public sealed class NodesDbContext : DbContext
             // Note: HasDefaultValue with a List<string> is safe here because EF Core
             // creates new instances for each entity, not reusing the reference.
             // The ValueConverter handles serialization to/from JSON for storage.
+            // Must clear HasDefaultValueSql (set by NodeConfiguration) before setting HasDefaultValue.
             modelBuilder.Entity<Node>()
                 .Property(n => n.Tags)
                 .HasColumnType(null)
                 .HasConversion(tagsConverter)
+                .HasDefaultValueSql(null)
                 .HasDefaultValue(new List<string>());
         }
     }
