@@ -182,9 +182,13 @@ public sealed class CapacityReservationService : ICapacityReservationService
             return ServiceResult.Fail<bool>("reservation_not_found");
         }
 
+        // Idempotent: return success if already released/expired
         if (reservation.Status is ReservationStatus.Released or ReservationStatus.Expired)
         {
-            return ServiceResult.Fail<bool>("reservation_already_released");
+            _logger.LogDebug(
+                "Reservation {ReservationToken} already in {Status} state, returning success (idempotent)",
+                reservationToken, reservation.Status);
+            return ServiceResult.Ok(true);
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;

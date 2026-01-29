@@ -447,12 +447,11 @@ public sealed class CapacityReservationServiceTests
 
         await service.ReleaseAsync(reservation.Value!.ReservationToken);
 
-        // Act - try to release again
+        // Act - try to release again (should be idempotent)
         var result = await service.ReleaseAsync(reservation.Value.ReservationToken);
 
-        // Assert
-        Assert.False(result.Success);
-        Assert.Equal("reservation_already_released", result.Error);
+        // Assert - idempotent release returns success
+        Assert.True(result.Success);
     }
 
     [Fact]

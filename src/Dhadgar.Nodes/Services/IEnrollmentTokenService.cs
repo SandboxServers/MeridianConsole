@@ -26,11 +26,10 @@ public interface IEnrollmentTokenService
 
     /// <summary>
     /// Marks a token as used by a specific node.
+    /// This method only updates the entity's fields; it does not persist changes.
+    /// The caller must call SaveChangesAsync on the DbContext to commit the changes.
     /// </summary>
-    Task MarkTokenUsedAsync(
-        Guid tokenId,
-        Guid nodeId,
-        CancellationToken ct = default);
+    void MarkTokenUsed(EnrollmentToken token, Guid nodeId);
 
     /// <summary>
     /// Revokes a token so it can no longer be used.

@@ -196,8 +196,9 @@ public sealed class EnrollmentTokenServiceTests
         var (token, plainTextToken) = await service.CreateTokenAsync(TestOrgId, TestUserId, "Single Use");
         var nodeId = Guid.NewGuid();
 
-        // Mark as used
-        await service.MarkTokenUsedAsync(token.Id, nodeId);
+        // Mark as used and persist (simulating the enrollment flow)
+        service.MarkTokenUsed(token, nodeId);
+        await context.SaveChangesAsync();
 
         // Act
         var validatedToken = await service.ValidateTokenAsync(plainTextToken);
@@ -249,7 +250,7 @@ public sealed class EnrollmentTokenServiceTests
     }
 
     [Fact]
-    public async Task MarkTokenUsedAsync_UpdatesTokenCorrectly()
+    public async Task MarkTokenUsed_UpdatesTokenCorrectly()
     {
         // Arrange
         var now = new DateTimeOffset(2024, 1, 15, 10, 0, 0, TimeSpan.Zero);
@@ -260,7 +261,8 @@ public sealed class EnrollmentTokenServiceTests
         var nodeId = Guid.NewGuid();
 
         // Act
-        await service.MarkTokenUsedAsync(token.Id, nodeId);
+        service.MarkTokenUsed(token, nodeId);
+        await context.SaveChangesAsync();
 
         // Assert
         var updatedToken = await context.EnrollmentTokens.FindAsync(token.Id);
@@ -270,20 +272,14 @@ public sealed class EnrollmentTokenServiceTests
     }
 
     [Fact]
-    public async Task MarkTokenUsedAsync_NonExistentToken_DoesNotThrow()
+    public void MarkTokenUsed_NullToken_ThrowsArgumentNullException()
     {
         // Arrange
         using var context = CreateContext();
         var service = CreateService(context);
-        var nonExistentTokenId = Guid.NewGuid();
-        var nodeId = Guid.NewGuid();
 
-        // Act - should not throw, just log warning and return
-        var exception = await Record.ExceptionAsync(
-            () => service.MarkTokenUsedAsync(nonExistentTokenId, nodeId));
-
-        // Assert
-        Assert.Null(exception);
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => service.MarkTokenUsed(null!, Guid.NewGuid()));
     }
 
     [Fact]
@@ -360,7 +356,8 @@ public sealed class EnrollmentTokenServiceTests
 
         // Modify states
         await service.RevokeTokenAsync(TestOrgId, revokedToken.Id);
-        await service.MarkTokenUsedAsync(usedToken.Id, Guid.NewGuid());
+        service.MarkTokenUsed(usedToken, Guid.NewGuid());
+        await context.SaveChangesAsync();
 
         // Advance time to expire one token
         timeProvider.Advance(TimeSpan.FromMinutes(45));

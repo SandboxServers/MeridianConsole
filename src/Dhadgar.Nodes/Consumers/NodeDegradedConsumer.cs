@@ -20,8 +20,9 @@ public sealed class NodeDegradedConsumer : IConsumer<NodeDegraded>
     public Task Consume(ConsumeContext<NodeDegraded> context)
     {
         var message = context.Message;
-        var issuesSummary = message.Issues.Count > 0
-            ? string.Join(", ", message.Issues)
+        var issues = message.Issues ?? [];
+        var issuesSummary = issues.Count > 0
+            ? string.Join(", ", issues)
             : "No specific issues reported";
 
         _logger.LogWarning(

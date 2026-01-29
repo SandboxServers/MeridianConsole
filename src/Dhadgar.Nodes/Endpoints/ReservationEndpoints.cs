@@ -99,6 +99,8 @@ public static class ReservationEndpoints
                     "Insufficient memory available on node"),
                 "insufficient_disk" => ProblemDetailsHelper.BadRequest(result.Error,
                     "Insufficient disk space available on node"),
+                "insufficient_cpu" => ProblemDetailsHelper.BadRequest(result.Error,
+                    "Insufficient CPU available on node"),
                 _ => ProblemDetailsHelper.BadRequest(result.Error ?? "reservation_failed")
             };
         }

@@ -122,3 +122,17 @@ public record CapacityReservationExpired(
     Guid NodeId,
     Guid ReservationToken,
     DateTime ExpiredAt);
+
+/// <summary>
+/// Published when a node's remaining capacity falls below the configured threshold.
+/// </summary>
+public record NodeCapacityLow(
+    Guid NodeId,
+    DateTime Timestamp,
+    long AvailableMemoryBytes,
+    long TotalMemoryBytes,
+    long AvailableDiskBytes,
+    long TotalDiskBytes,
+    double MemoryUsagePercent,
+    double DiskUsagePercent,
+    double ThresholdPercent);

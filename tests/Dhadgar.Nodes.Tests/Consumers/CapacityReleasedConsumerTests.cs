@@ -1,5 +1,6 @@
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Consumers;
+using Dhadgar.Nodes.Tests.TestHelpers;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -28,7 +29,7 @@ public sealed class CapacityReleasedConsumerTests
             ReservationToken: reservationToken,
             Reason: "Server deployment cancelled");
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act
         await _consumer.Consume(context);
@@ -51,7 +52,7 @@ public sealed class CapacityReleasedConsumerTests
             ReservationToken: Guid.NewGuid(),
             Reason: "User cancelled");
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should not throw
         await _consumer.Consume(context);
@@ -70,16 +71,9 @@ public sealed class CapacityReleasedConsumerTests
             ReservationToken: Guid.NewGuid(),
             Reason: reason);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should handle all reason types
         await _consumer.Consume(context);
-    }
-
-    private static ConsumeContext<CapacityReleased> CreateConsumeContext(CapacityReleased message)
-    {
-        var context = Substitute.For<ConsumeContext<CapacityReleased>>();
-        context.Message.Returns(message);
-        return context;
     }
 }

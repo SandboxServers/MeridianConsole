@@ -34,10 +34,21 @@ public static class EnrollmentEndpoints
         CreateEnrollmentTokenRequest request,
         HttpContext context,
         IEnrollmentTokenService tokenService,
+        ILogger<IEnrollmentTokenService> logger,
         CancellationToken ct = default)
     {
-        // Get user ID from claims (placeholder - actual implementation depends on auth setup)
-        var userId = context.User.FindFirst("sub")?.Value ?? "system";
+        var subClaim = context.User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(subClaim))
+        {
+            logger.LogWarning(
+                "Missing 'sub' claim in token for enrollment token creation. OrganizationId: {OrganizationId}, Path: {Path}, User: {User}",
+                organizationId,
+                context.Request.Path,
+                context.User.Identity?.Name ?? "anonymous");
+            return Results.Unauthorized();
+        }
+
+        var userId = subClaim;
 
         TimeSpan? validity = request.ExpiresInMinutes.HasValue
             ? TimeSpan.FromMinutes(request.ExpiresInMinutes.Value)

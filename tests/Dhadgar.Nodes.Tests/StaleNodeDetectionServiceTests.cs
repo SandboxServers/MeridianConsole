@@ -148,7 +148,7 @@ public sealed class StaleNodeDetectionServiceTests
         await heartbeatService.Received().CheckStaleNodesAsync(Arg.Any<CancellationToken>());
         var callCount = heartbeatService.ReceivedCalls()
             .Count(c => c.GetMethodInfo().Name == "CheckStaleNodesAsync");
-        Assert.True(callCount >= 1);
+        Assert.True(callCount >= 2, $"Expected at least 2 calls, but got {callCount}");
     }
 
     [Fact]

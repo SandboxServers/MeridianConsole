@@ -45,7 +45,7 @@ public sealed class ReservationApiIntegrationTests : IClassFixture<NodesWebAppli
             CpuCores = 8,
             MemoryBytes = 32L * 1024 * 1024 * 1024, // 32GB
             DiskBytes = 1000L * 1024 * 1024 * 1024, // 1TB
-            CollectedAt = DateTime.UtcNow
+            CollectedAt = _factory.TimeProvider.GetUtcNow().UtcDateTime
         };
 
         var capacity = new NodeCapacity
@@ -56,7 +56,7 @@ public sealed class ReservationApiIntegrationTests : IClassFixture<NodesWebAppli
             CurrentGameServers = 2,
             AvailableMemoryBytes = 16L * 1024 * 1024 * 1024, // 16GB
             AvailableDiskBytes = 500L * 1024 * 1024 * 1024, // 500GB
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = _factory.TimeProvider.GetUtcNow().UtcDateTime
         };
 
         db.Nodes.Add(node);
@@ -150,7 +150,7 @@ public sealed class ReservationApiIntegrationTests : IClassFixture<NodesWebAppli
     }
 
     [Fact]
-    public async Task CreateReservation_CrossTenant_ReturnsForbidden()
+    public async Task CreateReservation_CrossTenant_ReturnsNotFound()
     {
         // Arrange
         var orgId1 = Guid.NewGuid();

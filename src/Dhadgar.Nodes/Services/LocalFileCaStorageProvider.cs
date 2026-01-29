@@ -61,7 +61,7 @@ public sealed class LocalFileCaStorageProvider : ICaStorageProvider
             await File.WriteAllTextAsync(_certPath, certPem, ct);
 
             // Export private key (encrypted with password from config)
-            var rsaKey = certificate.GetRSAPrivateKey();
+            using var rsaKey = certificate.GetRSAPrivateKey();
             if (rsaKey is null)
             {
                 throw new InvalidOperationException("CA certificate must have an RSA private key");
@@ -127,20 +127,8 @@ public sealed class LocalFileCaStorageProvider : ICaStorageProvider
                 }
             }
 
-            // Parse certificate
-            using var cert = X509Certificate2.CreateFromPem(certPem);
-
-            // Parse encrypted private key and combine with certificate
-            using var rsa = RSA.Create();
-            rsa.ImportFromEncryptedPem(keyPem, password);
-
-            // Create certificate with private key
-            using var certWithKey = cert.CopyWithPrivateKey(rsa);
-
-            // Export and reimport to get a certificate that can be used for signing
-            // This is necessary because CopyWithPrivateKey doesn't always result in a usable key
-            var pfxBytes = certWithKey.Export(X509ContentType.Pfx, password);
-            return new X509Certificate2(pfxBytes, password, X509KeyStorageFlags.Exportable);
+            // Use CreateFromEncryptedPem to load certificate with encrypted private key in one step
+            return X509Certificate2.CreateFromEncryptedPem(certPem, keyPem, password);
         }
         finally
         {

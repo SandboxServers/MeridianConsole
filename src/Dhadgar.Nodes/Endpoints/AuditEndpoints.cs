@@ -1,6 +1,7 @@
 using Dhadgar.Contracts;
 using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Data.Entities;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Dhadgar.Nodes.Endpoints;
 
@@ -15,7 +16,8 @@ public static class AuditEndpoints
         group.MapGet("", QueryAuditLogs)
             .WithName("QueryAuditLogs")
             .WithDescription("Query audit logs for an organization with filtering and pagination")
-            .Produces<PagedResponse<AuditLogDto>>();
+            .Produces<PagedResponse<AuditLogDto>>()
+            .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
     }
 
     private static async Task<IResult> QueryAuditLogs(
@@ -33,6 +35,21 @@ public static class AuditEndpoints
         int limit = 50,
         CancellationToken ct = default)
     {
+        // Validate pagination parameters
+        if (page < 1)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                "invalid_page",
+                "Page must be greater than or equal to 1.");
+        }
+
+        if (limit < 1 || limit > 100)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                "invalid_limit",
+                "Limit must be between 1 and 100.");
+        }
+
         // Parse outcome if provided
         AuditOutcome? parsedOutcome = null;
         if (!string.IsNullOrEmpty(outcome))

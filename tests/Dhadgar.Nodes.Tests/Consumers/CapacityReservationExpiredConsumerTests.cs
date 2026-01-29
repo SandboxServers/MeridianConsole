@@ -1,5 +1,6 @@
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Consumers;
+using Dhadgar.Nodes.Tests.TestHelpers;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -29,7 +30,7 @@ public sealed class CapacityReservationExpiredConsumerTests
             ReservationToken: reservationToken,
             ExpiredAt: expiredAt);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act
         await _consumer.Consume(context);
@@ -52,7 +53,7 @@ public sealed class CapacityReservationExpiredConsumerTests
             ReservationToken: Guid.NewGuid(),
             ExpiredAt: DateTime.UtcNow);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should not throw
         await _consumer.Consume(context);
@@ -67,16 +68,9 @@ public sealed class CapacityReservationExpiredConsumerTests
             ReservationToken: Guid.NewGuid(),
             ExpiredAt: DateTime.UtcNow.AddDays(-7));
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should handle old timestamps
         await _consumer.Consume(context);
-    }
-
-    private static ConsumeContext<CapacityReservationExpired> CreateConsumeContext(CapacityReservationExpired message)
-    {
-        var context = Substitute.For<ConsumeContext<CapacityReservationExpired>>();
-        context.Message.Returns(message);
-        return context;
     }
 }

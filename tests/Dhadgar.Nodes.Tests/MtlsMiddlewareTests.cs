@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Encodings.Web;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Services;
+using Dhadgar.Nodes.Tests.TestHelpers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +24,6 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_NonAgentEndpoint_PassesThrough()
     {
         // Arrange
-        var middleware = CreateMiddleware(enabled: true);
         var context = CreateHttpContext("/api/v1/organizations/123/nodes");
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
@@ -185,7 +185,7 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_InvalidCertificate_Returns401()
     {
         // Arrange
-        using var certificate = CreateSelfSignedCertificate();
+        using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
         var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
@@ -216,7 +216,7 @@ public class MtlsMiddlewareTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        using var certificate = CreateSelfSignedCertificate();
+        using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
         var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
@@ -253,7 +253,7 @@ public class MtlsMiddlewareTests
     {
         // Arrange
         var nodeId = Guid.NewGuid();
-        using var certificate = CreateSelfSignedCertificate();
+        using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
         var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
         var next = new RequestDelegate(_ => Task.CompletedTask);
 
@@ -282,15 +282,6 @@ public class MtlsMiddlewareTests
         Assert.Equal("abc123thumbprint", context.User.FindFirst("certificate_thumbprint")?.Value);
     }
 
-    private static MtlsMiddleware CreateMiddleware(bool enabled = true)
-    {
-        var options = new MtlsOptions { Enabled = enabled };
-        return new MtlsMiddleware(
-            _ => Task.CompletedTask,
-            Options.Create(options),
-            NullLogger<MtlsMiddleware>.Instance);
-    }
-
     private static DefaultHttpContext CreateHttpContext(string path, X509Certificate2? certificate = null)
     {
         var context = new DefaultHttpContext();
@@ -304,18 +295,6 @@ public class MtlsMiddlewareTests
         }
 
         return context;
-    }
-
-    private static X509Certificate2 CreateSelfSignedCertificate()
-    {
-        using var rsa = RSA.Create(2048);
-        var request = new CertificateRequest(
-            "CN=Test",
-            rsa,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1);
-
-        return request.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(1));
     }
 }
 
@@ -407,7 +386,7 @@ public class CertificateValidationServiceTests
     public async Task ValidateClientCertificateAsync_InvalidIssuer_ReturnsFailure()
     {
         // Arrange
-        using var certificate = CreateSelfSignedCertificate();
+        using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
         var caService = CreateMockCaService(validatesTo: false);
         var service = CreateService(caService: caService);
 
@@ -508,7 +487,7 @@ public class CertificateValidationServiceTests
     public void ExtractSpiffeId_CertificateWithoutSan_ReturnsNull()
     {
         // Arrange
-        using var certificate = CreateSelfSignedCertificate();
+        using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
         var service = CreateService();
 
         // Act
@@ -542,18 +521,6 @@ public class CertificateValidationServiceTests
         mock.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(validatesTo);
         return mock;
-    }
-
-    private static X509Certificate2 CreateSelfSignedCertificate()
-    {
-        using var rsa = RSA.Create(2048);
-        var request = new CertificateRequest(
-            "CN=Test",
-            rsa,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1);
-
-        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
     }
 
     private static X509Certificate2 CreateExpiredCertificate()

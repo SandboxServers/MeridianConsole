@@ -1,5 +1,6 @@
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Consumers;
+using Dhadgar.Nodes.Tests.TestHelpers;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -27,7 +28,7 @@ public sealed class NodeDegradedConsumerTests
             Timestamp: DateTime.UtcNow,
             Issues: ["High CPU usage", "Memory pressure"]);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act
         await _consumer.Consume(context);
@@ -50,7 +51,7 @@ public sealed class NodeDegradedConsumerTests
             Timestamp: DateTime.UtcNow,
             Issues: ["Test issue"]);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should not throw
         await _consumer.Consume(context);
@@ -74,7 +75,7 @@ public sealed class NodeDegradedConsumerTests
             Timestamp: DateTime.UtcNow,
             Issues: issues);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should handle multiple issues
         await _consumer.Consume(context);
@@ -89,7 +90,7 @@ public sealed class NodeDegradedConsumerTests
             Timestamp: DateTime.UtcNow,
             Issues: []);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should handle empty issues
         await _consumer.Consume(context);
@@ -105,7 +106,7 @@ public sealed class NodeDegradedConsumerTests
             Timestamp: DateTime.UtcNow,
             Issues: issues);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act
         await _consumer.Consume(context);
@@ -117,12 +118,5 @@ public sealed class NodeDegradedConsumerTests
             Arg.Is<object>(o => o.ToString()!.Contains("Issue A") && o.ToString()!.Contains("Issue B")),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
-    }
-
-    private static ConsumeContext<NodeDegraded> CreateConsumeContext(NodeDegraded message)
-    {
-        var context = Substitute.For<ConsumeContext<NodeDegraded>>();
-        context.Message.Returns(message);
-        return context;
     }
 }

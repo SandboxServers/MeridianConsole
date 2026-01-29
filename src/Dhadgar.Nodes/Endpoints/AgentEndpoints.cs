@@ -46,7 +46,7 @@ public static class AgentEndpoints
         group.MapGet("/ca-certificate", GetCaCertificate)
             .WithName("GetCaCertificate")
             .WithDescription("Get the CA certificate for agents to add to their trust store")
-            .Produces<CaCertificateResponse>(200, "text/plain")
+            .Produces<string>(200, "application/x-pem-file")
             .AllowAnonymous();
     }
 
@@ -81,23 +81,26 @@ public static class AgentEndpoints
         CancellationToken ct = default)
     {
         // Verify the node ID from the certificate matches the URL
-        var nodeIdFromCert = context.User.FindFirst("node_id")?.Value;
-
-        if (nodeIdFromCert is not null)
+        var nodeIdClaim = context.User.FindFirst("node_id");
+        if (nodeIdClaim is null)
         {
-            if (!Guid.TryParse(nodeIdFromCert, out var certNodeId))
-            {
-                logger.LogWarning("Invalid node_id claim format in certificate: {NodeIdClaim}", nodeIdFromCert);
-                return Results.Forbid();
-            }
+            logger.LogWarning("Missing node_id claim in certificate for heartbeat request to node {NodeId}", nodeId);
+            return Results.Forbid();
+        }
 
-            if (certNodeId != nodeId)
-            {
-                logger.LogWarning(
-                    "Node ID mismatch: certificate has {CertNodeId}, request is for {RequestNodeId}",
-                    certNodeId, nodeId);
-                return Results.Forbid();
-            }
+        var nodeIdFromCert = nodeIdClaim.Value;
+        if (!Guid.TryParse(nodeIdFromCert, out var certNodeId))
+        {
+            logger.LogWarning("Invalid node_id claim format in certificate: {NodeIdClaim}", nodeIdFromCert);
+            return Results.Forbid();
+        }
+
+        if (certNodeId != nodeId)
+        {
+            logger.LogWarning(
+                "Node ID mismatch: certificate has {CertNodeId}, request is for {RequestNodeId}",
+                certNodeId, nodeId);
+            return Results.Forbid();
         }
 
         var result = await heartbeatService.ProcessHeartbeatAsync(nodeId, request, ct);
@@ -131,13 +134,26 @@ public static class AgentEndpoints
         CancellationToken ct = default)
     {
         // Verify the node ID from the certificate matches the URL
-        var nodeIdFromCert = context.User.FindFirst("node_id")?.Value;
-        if (nodeIdFromCert is not null)
+        var nodeIdClaim = context.User.FindFirst("node_id");
+        if (nodeIdClaim is null)
         {
-            if (!Guid.TryParse(nodeIdFromCert, out var certNodeId) || certNodeId != nodeId)
-            {
-                return Results.Forbid();
-            }
+            logger.LogWarning("Missing node_id claim in certificate for certificate renewal request to node {NodeId}", nodeId);
+            return Results.Forbid();
+        }
+
+        var nodeIdFromCert = nodeIdClaim.Value;
+        if (!Guid.TryParse(nodeIdFromCert, out var certNodeId))
+        {
+            logger.LogWarning("Invalid node_id claim format in certificate: {NodeIdClaim}", nodeIdFromCert);
+            return Results.Forbid();
+        }
+
+        if (certNodeId != nodeId)
+        {
+            logger.LogWarning(
+                "Node ID mismatch: certificate has {CertNodeId}, request is for {RequestNodeId}",
+                certNodeId, nodeId);
+            return Results.Forbid();
         }
 
         // Find the node
@@ -199,9 +215,7 @@ public static class AgentEndpoints
         currentCert.RevokedAt = now;
         currentCert.RevocationReason = "Renewed - superseded by new certificate";
 
-        await dbContext.SaveChangesAsync(ct);
-
-        // Publish events
+        // Publish events before SaveChangesAsync to use MassTransit outbox for atomic persistence
         await publishEndpoint.Publish(
             new AgentCertificateRenewed(nodeId, currentCert.Thumbprint, certResult.Thumbprint!),
             ct);
@@ -213,6 +227,8 @@ public static class AgentEndpoints
         await publishEndpoint.Publish(
             new AgentCertificateIssued(nodeId, certResult.Thumbprint!, certResult.NotAfter!.Value),
             ct);
+
+        await dbContext.SaveChangesAsync(ct);
 
         logger.LogInformation(
             "Certificate renewed for node {NodeId}. Old: {OldThumbprint}, New: {NewThumbprint}",

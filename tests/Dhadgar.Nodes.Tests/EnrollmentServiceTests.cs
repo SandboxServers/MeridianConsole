@@ -38,7 +38,7 @@ public sealed class EnrollmentServiceTests
             NullLogger<EnrollmentTokenService>.Instance);
     }
 
-    private static (EnrollmentService Service, TestNodesEventPublisher Publisher, TestCertificateAuthorityService CaService) CreateService(
+    private static async Task<(EnrollmentService Service, TestNodesEventPublisher Publisher, TestCertificateAuthorityService CaService)> CreateServiceAsync(
         NodesDbContext context,
         IEnrollmentTokenService tokenService,
         FakeTimeProvider? timeProvider = null)
@@ -47,7 +47,7 @@ public sealed class EnrollmentServiceTests
         var publisher = new TestNodesEventPublisher();
         var caService = new TestCertificateAuthorityService(provider);
         var auditService = new TestAuditService();
-        caService.InitializeAsync().GetAwaiter().GetResult();
+        await caService.InitializeAsync();
 
         var service = new EnrollmentService(
             context,
@@ -79,7 +79,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -107,7 +107,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -140,7 +140,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         // 32GB RAM, 8 cores = min(32/4, 8/2) = min(8, 4) = 4 max servers
@@ -173,7 +173,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -199,7 +199,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -222,7 +222,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (token, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -245,7 +245,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, publisher, _) = CreateService(context, tokenService);
+        var (service, publisher, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -270,7 +270,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var request = new EnrollNodeRequest(
             Token: "invalid-token-that-does-not-exist",
@@ -293,7 +293,7 @@ public sealed class EnrollmentServiceTests
         var timeProvider = new FakeTimeProvider(now);
         using var context = CreateContext();
         var tokenService = CreateTokenService(context, timeProvider);
-        var (service, _, _) = CreateService(context, tokenService, timeProvider);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService, timeProvider);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(
             TestOrgId, TestUserId, "Test", TimeSpan.FromMinutes(30));
@@ -320,7 +320,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -345,7 +345,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -367,7 +367,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -390,7 +390,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         // First enrollment
         var (_, token1) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test1");
@@ -429,7 +429,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -452,7 +452,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -476,7 +476,7 @@ public sealed class EnrollmentServiceTests
         var timeProvider = new FakeTimeProvider(now);
         using var context = CreateContext();
         var tokenService = CreateTokenService(context, timeProvider);
-        var (service, _, _) = CreateService(context, tokenService, timeProvider);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService, timeProvider);
 
         var (_, plainToken) = await tokenService.CreateTokenAsync(TestOrgId, TestUserId, "Test");
         var request = new EnrollNodeRequest(
@@ -501,7 +501,7 @@ public sealed class EnrollmentServiceTests
         // Arrange
         using var context = CreateContext();
         var tokenService = CreateTokenService(context);
-        var (service, _, _) = CreateService(context, tokenService);
+        var (service, _, _) = await CreateServiceAsync(context, tokenService);
 
         var org1 = Guid.NewGuid();
         var org2 = Guid.NewGuid();

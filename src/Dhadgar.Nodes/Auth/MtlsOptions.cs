@@ -14,13 +14,13 @@ public sealed class MtlsOptions
 
     /// <summary>
     /// Whether mTLS is enabled. When disabled, the middleware will skip certificate validation.
-    /// Default: false (disabled for development).
+    /// Default: true (enabled for security).
     /// </summary>
     /// <remarks>
-    /// In production, this should always be true. Disabling mTLS allows testing without
-    /// configuring client certificates.
+    /// This is enforced to be true in non-Development environments. Disabling mTLS is only
+    /// permitted in Development mode for testing without client certificates.
     /// </remarks>
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 
     /// <summary>
     /// Whether to allow expired certificates. This should only be true in development/testing.

@@ -128,6 +128,7 @@ public sealed class HeartbeatService : IHeartbeatService
         NodesMetrics.RecordHealthScore(newScore, node.Platform, healthCategory.ToString());
 
         // Determine new status based on health score (if not in maintenance)
+        var healthTransitionRecorded = false;
         if (node.Status != NodeStatus.Maintenance)
         {
             var newStatus = _healthScoringService.ShouldTransitionStatus(node.Status, newScore);
@@ -138,6 +139,7 @@ public sealed class HeartbeatService : IHeartbeatService
                     previousStatus.ToString(),
                     newStatus.Value.ToString(),
                     healthCategory.ToString());
+                healthTransitionRecorded = true;
             }
             else if (wasOffline)
             {
@@ -158,7 +160,8 @@ public sealed class HeartbeatService : IHeartbeatService
         stopwatch.Stop();
         NodesMetrics.RecordHeartbeat(node.Platform, stopwatch.Elapsed.TotalMilliseconds);
 
-        if (previousStatus != node.Status)
+        // Record status transition if not already recorded as a health-based transition
+        if (previousStatus != node.Status && !healthTransitionRecorded)
         {
             NodesMetrics.RecordStatusTransition(previousStatus.ToString(), node.Status.ToString());
         }

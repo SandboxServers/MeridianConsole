@@ -42,7 +42,18 @@ public sealed class EnrollmentTokenService : IEnrollmentTokenService
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var defaultValidity = TimeSpan.FromMinutes(_options.DefaultEnrollmentTokenExpiryMinutes);
-        var expiresAt = now.Add(validity ?? defaultValidity);
+        var maxValidity = TimeSpan.FromMinutes(_options.MaxEnrollmentTokenExpiryMinutes);
+        var requestedValidity = validity ?? defaultValidity;
+        var effectiveValidity = requestedValidity > maxValidity ? maxValidity : requestedValidity;
+
+        if (requestedValidity > maxValidity)
+        {
+            _logger.LogWarning(
+                "Requested enrollment token validity {RequestedMinutes} minutes exceeds maximum {MaxMinutes} minutes; clamped to maximum",
+                requestedValidity.TotalMinutes, maxValidity.TotalMinutes);
+        }
+
+        var expiresAt = now.Add(effectiveValidity);
 
         // Generate cryptographically secure token
         var tokenBytes = RandomNumberGenerator.GetBytes(TokenLengthBytes);
@@ -125,30 +136,43 @@ public sealed class EnrollmentTokenService : IEnrollmentTokenService
         return token;
     }
 
-    public async Task MarkTokenUsedAsync(
-        Guid tokenId,
-        Guid nodeId,
-        CancellationToken ct = default)
+    public void MarkTokenUsed(EnrollmentToken token, Guid nodeId)
     {
+        ArgumentNullException.ThrowIfNull(token);
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        var token = await _dbContext.EnrollmentTokens.FindAsync([tokenId], ct);
-
-        if (token is null)
+        // Validate token state before marking as used
+        if (token.UsedAt is not null)
         {
             _logger.LogWarning(
-                "Attempted to mark non-existent token {TokenId} as used by node {NodeId}",
-                tokenId, nodeId);
+                "Attempted to mark already-used token {TokenId} as used by node {NodeId}; token was previously used at {UsedAt}",
+                token.Id, nodeId, token.UsedAt);
+            return;
+        }
+
+        if (token.IsRevoked)
+        {
+            _logger.LogWarning(
+                "Attempted to mark revoked token {TokenId} as used by node {NodeId}",
+                token.Id, nodeId);
+            return;
+        }
+
+        if (token.ExpiresAt <= now)
+        {
+            _logger.LogWarning(
+                "Attempted to mark expired token {TokenId} as used by node {NodeId}; token expired at {ExpiresAt}",
+                token.Id, nodeId, token.ExpiresAt);
             return;
         }
 
         token.UsedAt = now;
         token.UsedByNodeId = nodeId;
-        await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Enrollment token {TokenId} used by node {NodeId}",
-            tokenId, nodeId);
+            "Enrollment token {TokenId} marked as used by node {NodeId}",
+            token.Id, nodeId);
     }
 
     public async Task<bool> RevokeTokenAsync(

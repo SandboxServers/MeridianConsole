@@ -22,6 +22,9 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
     private const string OrganizationName = "MeridianConsole";
     private const string CaCommonName = "Meridian Console Agent CA";
 
+    // Agent/client certificates must be valid for exactly 90 days (security policy)
+    private const int AgentCertificateValidityDays = 90;
+
     // Cached CA certificate for performance
     private X509Certificate2? _caCertificate;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -79,11 +82,13 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         Guid nodeId,
         CancellationToken ct = default)
     {
+        X509Certificate2? certificate = null;
+        RSA? privateKey = null;
         try
         {
             await EnsureInitializedAsync(ct);
 
-            var (certificate, privateKey) = CreateClientCertificate(nodeId);
+            (certificate, privateKey) = CreateClientCertificate(nodeId);
             return CreateIssuanceResult(certificate, privateKey, nodeId);
         }
         catch (OperationCanceledException)
@@ -100,6 +105,11 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             _logger.LogError(ex, "Unexpected error issuing certificate for node {NodeId}", nodeId);
             return CertificateIssuanceResult.Fail("certificate_generation_failed");
         }
+        finally
+        {
+            certificate?.Dispose();
+            privateKey?.Dispose();
+        }
     }
 
     public async Task<CertificateIssuanceResult> RenewCertificateAsync(
@@ -107,6 +117,8 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         string currentCertificateThumbprint,
         CancellationToken ct = default)
     {
+        X509Certificate2? certificate = null;
+        RSA? privateKey = null;
         try
         {
             await EnsureInitializedAsync(ct);
@@ -114,7 +126,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             // Validation of current certificate is done at the endpoint level
             // by checking the AgentCertificate table. Here we just issue a new cert.
 
-            var (certificate, privateKey) = CreateClientCertificate(nodeId);
+            (certificate, privateKey) = CreateClientCertificate(nodeId);
 
             _logger.LogInformation(
                 "Certificate renewed for node {NodeId}. Old thumbprint: {OldThumbprint}, New thumbprint: {NewThumbprint}",
@@ -137,6 +149,11 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         {
             _logger.LogError(ex, "Unexpected error renewing certificate for node {NodeId}", nodeId);
             return CertificateIssuanceResult.Fail("certificate_renewal_failed");
+        }
+        finally
+        {
+            certificate?.Dispose();
+            privateKey?.Dispose();
         }
     }
 
@@ -300,9 +317,9 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         // Ensure the serial number is positive (MSB must be 0)
         serialBytes[0] &= 0x7F;
 
-        // Sign with CA certificate
+        // Sign with CA certificate - use fixed 90-day validity (security policy)
         var notBefore = now;
-        var notAfter = now.AddDays(_options.CertificateValidityDays);
+        var notAfter = now.AddDays(AgentCertificateValidityDays);
 
         var caPrivateKey = _caCertificate!.GetRSAPrivateKey()
             ?? throw new InvalidOperationException("CA certificate does not have a private key");

@@ -1,5 +1,6 @@
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Consumers;
+using Dhadgar.Nodes.Tests.TestHelpers;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -27,7 +28,7 @@ public sealed class NodeOfflineConsumerTests
             Timestamp: DateTime.UtcNow,
             Reason: "Heartbeat timeout");
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act
         await _consumer.Consume(context);
@@ -50,7 +51,7 @@ public sealed class NodeOfflineConsumerTests
             Timestamp: DateTime.UtcNow,
             Reason: "Connection lost");
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should not throw
         await _consumer.Consume(context);
@@ -65,7 +66,7 @@ public sealed class NodeOfflineConsumerTests
             Timestamp: DateTime.UtcNow,
             Reason: null);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should handle null reason gracefully
         await _consumer.Consume(context);
@@ -85,7 +86,7 @@ public sealed class NodeOfflineConsumerTests
             Timestamp: DateTime.UtcNow,
             Reason: reason);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act & Assert - should handle all reason types
         await _consumer.Consume(context);
@@ -102,7 +103,7 @@ public sealed class NodeOfflineConsumerTests
             Timestamp: DateTime.UtcNow,
             Reason: reason);
 
-        var context = CreateConsumeContext(message);
+        var context = ConsumeContextHelper.CreateConsumeContext(message);
 
         // Act
         await _consumer.Consume(context);
@@ -114,12 +115,5 @@ public sealed class NodeOfflineConsumerTests
             Arg.Is<object>(o => o.ToString()!.Contains(reason)),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
-    }
-
-    private static ConsumeContext<NodeOffline> CreateConsumeContext(NodeOffline message)
-    {
-        var context = Substitute.For<ConsumeContext<NodeOffline>>();
-        context.Message.Returns(message);
-        return context;
     }
 }

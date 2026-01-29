@@ -47,6 +47,44 @@ public sealed class EnrollmentService : IEnrollmentService
         EnrollNodeRequest request,
         CancellationToken ct = default)
     {
+        // Validate platform first (before calling ToLowerInvariant)
+        if (string.IsNullOrWhiteSpace(request.Platform) || !IsValidPlatform(request.Platform))
+        {
+            var platformForMetrics = string.IsNullOrWhiteSpace(request.Platform) ? "unknown" : request.Platform.ToLowerInvariant();
+            NodesMetrics.RecordEnrollmentAttempt(platformForMetrics);
+            NodesMetrics.RecordEnrollmentFailure(platformForMetrics, "invalid_platform");
+
+            await _auditService.LogAsync(
+                AuditActions.EnrollmentFailed,
+                ResourceTypes.Node,
+                null,
+                AuditOutcome.Failure,
+                new { Platform = request.Platform, Hostname = request.Hardware?.Hostname },
+                failureReason: "invalid_platform",
+                ct: ct);
+
+            return ServiceResult.Fail<EnrollNodeResponse>("invalid_platform");
+        }
+
+        // Validate hardware
+        if (request.Hardware is null || string.IsNullOrWhiteSpace(request.Hardware.Hostname))
+        {
+            var platformForMetrics = request.Platform.ToLowerInvariant();
+            NodesMetrics.RecordEnrollmentAttempt(platformForMetrics);
+            NodesMetrics.RecordEnrollmentFailure(platformForMetrics, "invalid_hardware");
+
+            await _auditService.LogAsync(
+                AuditActions.EnrollmentFailed,
+                ResourceTypes.Node,
+                null,
+                AuditOutcome.Failure,
+                new { Platform = request.Platform, Hostname = (string?)null },
+                failureReason: "invalid_hardware",
+                ct: ct);
+
+            return ServiceResult.Fail<EnrollNodeResponse>("invalid_hardware");
+        }
+
         var platform = request.Platform.ToLowerInvariant();
         NodesMetrics.RecordEnrollmentAttempt(platform);
 
@@ -68,25 +106,6 @@ public sealed class EnrollmentService : IEnrollmentService
                 ct: ct);
 
             return ServiceResult.Fail<EnrollNodeResponse>("invalid_token");
-        }
-
-        // Validate platform
-        if (!IsValidPlatform(request.Platform))
-        {
-            NodesMetrics.RecordEnrollmentFailure(platform, "invalid_platform");
-
-            // Audit the failed enrollment attempt
-            await _auditService.LogAsync(
-                AuditActions.EnrollmentFailed,
-                ResourceTypes.Node,
-                null,
-                AuditOutcome.Failure,
-                new { Platform = platform, Hostname = request.Hardware.Hostname },
-                organizationId: token.OrganizationId,
-                failureReason: "invalid_platform",
-                ct: ct);
-
-            return ServiceResult.Fail<EnrollNodeResponse>("invalid_platform");
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -174,8 +193,8 @@ public sealed class EnrollmentService : IEnrollmentService
         _dbContext.NodeCapacities.Add(capacity);
         _dbContext.AgentCertificates.Add(certificate);
 
-        // Mark token as used
-        await _tokenService.MarkTokenUsedAsync(token.Id, node.Id, ct);
+        // Mark token as used (entity is tracked, will be saved with the same SaveChangesAsync below)
+        _tokenService.MarkTokenUsed(token, node.Id);
 
         // Publish events BEFORE SaveChangesAsync for transactional outbox pattern.
         // MassTransit stores messages in the outbox table, which are committed

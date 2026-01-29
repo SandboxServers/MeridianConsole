@@ -198,7 +198,7 @@ public sealed class AuditServiceTests
     }
 
     [Fact]
-    public async Task QueryAsync_FiltersbyOrganization()
+    public async Task QueryAsync_FiltersByOrganization()
     {
         // Arrange
         using var context = CreateContext();
@@ -319,11 +319,11 @@ public sealed class AuditServiceTests
         timeProvider.Advance(TimeSpan.FromDays(1));
         await service.LogAsync(AuditActions.NodeDecommissioned, ResourceTypes.Node, Guid.NewGuid(), AuditOutcome.Success);
 
-        // Act - filter for middle day only
+        // Act - filter for middle day using full day range for robustness
         var result = await service.QueryAsync(new AuditQuery
         {
             StartDate = startDate.UtcDateTime.AddDays(1),
-            EndDate = startDate.UtcDateTime.AddDays(1)
+            EndDate = startDate.UtcDateTime.AddDays(2).AddTicks(-1)
         });
 
         // Assert

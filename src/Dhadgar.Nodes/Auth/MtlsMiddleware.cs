@@ -144,27 +144,41 @@ public sealed class MtlsMiddleware
 
     private bool IsAgentEndpoint(string path)
     {
-        return path.StartsWith(_options.AgentEndpointPrefix, StringComparison.OrdinalIgnoreCase);
+        var normalizedPrefix = NormalizePrefix(_options.AgentEndpointPrefix);
+        return path.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsExemptPath(string path)
     {
+        var normalizedPrefix = NormalizePrefix(_options.AgentEndpointPrefix);
+
         // Remove the prefix to get the relative path
-        var relativePath = path[_options.AgentEndpointPrefix.Length..];
+        var relativePath = path[normalizedPrefix.Length..];
+
+        // Ensure relative path starts with '/' for consistent comparison
+        if (relativePath.Length > 0 && !relativePath.StartsWith('/'))
+        {
+            relativePath = "/" + relativePath;
+        }
 
         foreach (var exemptPath in _options.ExemptPaths)
         {
+            // Normalize exempt path to start with '/'
+            var normalizedExemptPath = exemptPath.StartsWith('/')
+                ? exemptPath
+                : "/" + exemptPath;
+
             // Exact match
-            if (string.Equals(relativePath, exemptPath, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(relativePath, normalizedExemptPath, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
             // Match with or without trailing slash
-            if (relativePath.StartsWith(exemptPath, StringComparison.OrdinalIgnoreCase))
+            if (relativePath.StartsWith(normalizedExemptPath, StringComparison.OrdinalIgnoreCase))
             {
                 // Must be exact match or followed by '/' or query string
-                var remaining = relativePath[exemptPath.Length..];
+                var remaining = relativePath[normalizedExemptPath.Length..];
                 if (remaining.Length == 0 ||
                     remaining.StartsWith('/') ||
                     remaining.StartsWith('?'))
@@ -175,6 +189,19 @@ public sealed class MtlsMiddleware
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Normalizes the prefix to ensure it starts with '/' and does not end with '/'.
+    /// </summary>
+    private static string NormalizePrefix(string prefix)
+    {
+        var normalized = prefix.TrimEnd('/');
+        if (!normalized.StartsWith('/'))
+        {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
     private static async Task WriteUnauthorizedResponse(
@@ -207,6 +234,10 @@ public static class MtlsMiddlewareExtensions
     /// <summary>
     /// Adds mTLS services to the service collection.
     /// </summary>
+    /// <remarks>
+    /// In non-Development environments, this method enforces that MtlsOptions.Enabled is true.
+    /// If mTLS is disabled in production, the service will fail to start.
+    /// </remarks>
     public static IServiceCollection AddMtlsAuthentication(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -215,6 +246,23 @@ public static class MtlsMiddlewareExtensions
             .Bind(configuration.GetSection(MtlsOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        // Enforce mTLS is enabled in non-Development environments
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+        if (!environment.Equals("Development", StringComparison.OrdinalIgnoreCase))
+        {
+            var mtlsSection = configuration.GetSection(MtlsOptions.SectionName);
+            var enabledValue = mtlsSection.GetValue<bool?>("Enabled");
+
+            // If explicitly set to false in config, fail startup
+            if (enabledValue == false)
+            {
+                throw new InvalidOperationException(
+                    $"mTLS cannot be disabled in {environment} environment. " +
+                    $"Set '{MtlsOptions.SectionName}:Enabled' to true or remove the setting to use the default (true).");
+            }
+        }
+
         services.AddScoped<ICertificateValidationService, CertificateValidationService>();
 
         return services;
