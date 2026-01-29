@@ -109,13 +109,49 @@ public sealed class CapacityReservedConsumerTests
     [Fact]
     public async Task Consume_HandlesLargeCapacityValues()
     {
-        // Arrange
+        // Arrange - seed a node with large capacity totals so the consumer's math actually runs
         using var context = CreateContext();
         var publishEndpoint = Substitute.For<IPublishEndpoint>();
-        var consumer = CreateConsumer(context, publishEndpoint);
+        var options = CreateOptions(lowCapacityThreshold: 80.0);
+        var consumer = CreateConsumer(context, publishEndpoint, options);
+
+        var nodeId = Guid.NewGuid();
+        var node = new Node
+        {
+            Id = nodeId,
+            OrganizationId = Guid.NewGuid(),
+            Name = "large-capacity-node",
+            Platform = "linux",
+            Status = NodeStatus.Online,
+            CreatedAt = DateTime.UtcNow
+        };
+        context.Nodes.Add(node);
+
+        // Large capacity: 256GB memory, 4TB disk - with plenty available (no alert expected)
+        context.HardwareInventories.Add(new NodeHardwareInventory
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            Hostname = "large-host",
+            MemoryBytes = 256L * 1024 * 1024 * 1024,  // 256GB total
+            DiskBytes = 4L * 1024 * 1024 * 1024 * 1024, // 4TB total
+            CpuCores = 64,
+            CollectedAt = DateTime.UtcNow
+        });
+        context.NodeCapacities.Add(new NodeCapacity
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            AvailableMemoryBytes = 200L * 1024 * 1024 * 1024,  // ~78% available
+            AvailableDiskBytes = 3L * 1024 * 1024 * 1024 * 1024, // ~75% available
+            MaxGameServers = 100,
+            CurrentGameServers = 20,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
 
         var message = new CapacityReserved(
-            NodeId: Guid.NewGuid(),
+            NodeId: nodeId,
             ReservationToken: Guid.NewGuid(),
             MemoryMb: 128000, // 128GB
             DiskMb: 2000000, // 2TB
@@ -125,8 +161,13 @@ public sealed class CapacityReservedConsumerTests
 
         var consumeContext = ConsumeContextHelper.CreateConsumeContext(message);
 
-        // Act & Assert - should handle large values
+        // Act
         await consumer.Consume(consumeContext);
+
+        // Assert - with plenty of capacity available, no low capacity alert should be published
+        await publishEndpoint.DidNotReceive().Publish(
+            Arg.Any<NodeCapacityLow>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

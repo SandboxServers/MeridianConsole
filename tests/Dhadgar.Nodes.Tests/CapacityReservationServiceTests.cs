@@ -125,7 +125,7 @@ public sealed class CapacityReservationServiceTests
         var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         // Act
-        await service.ReserveAsync(
+        var result = await service.ReserveAsync(
             node.Id,
             memoryMb: 1024,
             diskMb: 10240,
@@ -133,12 +133,16 @@ public sealed class CapacityReservationServiceTests
             requestedBy: "tasks-service",
             ttlMinutes: 15);
 
-        // Assert
+        // Assert - verify reservation succeeded before checking event
+        Assert.True(result.Success, $"Reservation failed: {result.Error}");
+        Assert.NotNull(result.Value);
+
         Assert.True(publisher.HasMessage<CapacityReserved>());
         var evt = publisher.GetLastMessage<CapacityReserved>()!;
         Assert.Equal(node.Id, evt.NodeId);
         Assert.Equal(1024, evt.MemoryMb);
         Assert.Equal(10240, evt.DiskMb);
+        Assert.Equal(result.Value.ReservationToken, evt.ReservationToken);
     }
 
     [Fact]
@@ -331,11 +335,16 @@ public sealed class CapacityReservationServiceTests
         publisher.Clear();
 
         // Act
-        await service.ClaimAsync(reservation.Value!.ReservationToken, "server-123");
+        var claimResult = await service.ClaimAsync(reservation.Value!.ReservationToken, "server-123");
 
-        // Assert
+        // Assert - verify claim succeeded before checking event
+        Assert.True(claimResult.Success, $"Claim failed: {claimResult.Error}");
+        Assert.Equal(ReservationStatus.Claimed, claimResult.Value!.Status);
+
         Assert.True(publisher.HasMessage<CapacityClaimed>());
         var evt = publisher.GetLastMessage<CapacityClaimed>()!;
+        Assert.Equal(node.Id, evt.NodeId);
+        Assert.Equal(reservation.Value.ReservationToken, evt.ReservationToken);
         Assert.Equal("server-123", evt.ServerId);
     }
 
