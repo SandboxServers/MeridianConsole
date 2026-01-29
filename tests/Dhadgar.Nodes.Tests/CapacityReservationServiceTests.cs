@@ -36,11 +36,14 @@ public sealed class CapacityReservationServiceTests
 
     private static async Task<Node> SeedNodeWithCapacityAsync(
         NodesDbContext context,
+        TimeProvider timeProvider,
         Guid? orgId = null,
         NodeStatus status = NodeStatus.Online,
         long availableMemoryBytes = 16L * 1024 * 1024 * 1024, // 16GB
         long availableDiskBytes = 500L * 1024 * 1024 * 1024) // 500GB
     {
+        var utcNow = timeProvider.GetUtcNow().UtcDateTime;
+
         var node = new Node
         {
             Id = Guid.NewGuid(),
@@ -48,7 +51,7 @@ public sealed class CapacityReservationServiceTests
             Name = $"test-node-{Guid.NewGuid():N}".Substring(0, 20),
             Status = status,
             Platform = "linux",
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = utcNow
         };
 
         var hardware = new NodeHardwareInventory
@@ -59,7 +62,7 @@ public sealed class CapacityReservationServiceTests
             CpuCores = 8,
             MemoryBytes = 32L * 1024 * 1024 * 1024, // 32GB
             DiskBytes = 1000L * 1024 * 1024 * 1024, // 1TB
-            CollectedAt = DateTime.UtcNow
+            CollectedAt = utcNow
         };
 
         var capacity = new NodeCapacity
@@ -70,7 +73,7 @@ public sealed class CapacityReservationServiceTests
             CurrentGameServers = 2,
             AvailableMemoryBytes = availableMemoryBytes,
             AvailableDiskBytes = availableDiskBytes,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = utcNow
         };
 
         context.Nodes.Add(node);
@@ -86,8 +89,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, publisher, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, publisher, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         // Act
         var result = await service.ReserveAsync(
@@ -115,8 +118,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, publisher, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, publisher, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         // Act
         await service.ReserveAsync(
@@ -161,8 +164,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context, status: NodeStatus.Offline);
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider, status: NodeStatus.Offline);
 
         // Act
         var result = await service.ReserveAsync(
@@ -183,8 +186,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context, status: NodeStatus.Maintenance);
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider, status: NodeStatus.Maintenance);
 
         // Act
         var result = await service.ReserveAsync(
@@ -205,8 +208,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context,
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider,
             availableMemoryBytes: 512L * 1024 * 1024); // Only 512MB available
 
         // Act
@@ -228,8 +231,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context,
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider,
             availableDiskBytes: 5L * 1024 * 1024 * 1024); // Only 5GB available
 
         // Act
@@ -251,8 +254,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context,
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider,
             availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB available
 
         // Create existing reservation for 1GB
@@ -283,8 +286,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, publisher, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, publisher, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         var reservation = await service.ReserveAsync(
             node.Id,
@@ -311,8 +314,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, publisher, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, publisher, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         var reservation = await service.ReserveAsync(
             node.Id,
@@ -340,8 +343,8 @@ public sealed class CapacityReservationServiceTests
         var now = new DateTimeOffset(2024, 1, 15, 10, 0, 0, TimeSpan.Zero);
         var timeProvider = new FakeTimeProvider(now);
         using var context = CreateContext();
-        var (service, _, tp) = CreateService(context, timeProvider);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, _, _) = CreateService(context, timeProvider);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         var reservation = await service.ReserveAsync(
             node.Id,
@@ -367,8 +370,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         var reservation = await service.ReserveAsync(
             node.Id,
@@ -408,8 +411,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, publisher, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, publisher, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         var reservation = await service.ReserveAsync(
             node.Id,
@@ -434,8 +437,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         var reservation = await service.ReserveAsync(
             node.Id,
@@ -459,8 +462,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context,
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider,
             availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB available
 
         // Create and then release a reservation
@@ -492,8 +495,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context,
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider,
             availableMemoryBytes: 8L * 1024 * 1024 * 1024, // 8GB
             availableDiskBytes: 100L * 1024 * 1024 * 1024); // 100GB
 
@@ -522,8 +525,8 @@ public sealed class CapacityReservationServiceTests
     {
         // Arrange
         using var context = CreateContext();
-        var (service, _, _) = CreateService(context);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var (service, _, timeProvider) = CreateService(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         // Create multiple reservations in different states
         var pending = await service.ReserveAsync(node.Id, 512, 1024, 0, "test1", 15);
@@ -551,7 +554,7 @@ public sealed class CapacityReservationServiceTests
         var timeProvider = new FakeTimeProvider(now);
         using var context = CreateContext();
         var (service, publisher, _) = CreateService(context, timeProvider);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         // Create some reservations
         await service.ReserveAsync(node.Id, 512, 1024, 0, "test1", 5); // 5 min TTL
@@ -578,7 +581,7 @@ public sealed class CapacityReservationServiceTests
         var timeProvider = new FakeTimeProvider(now);
         using var context = CreateContext();
         var (service, publisher, _) = CreateService(context, timeProvider);
-        var node = await SeedNodeWithCapacityAsync(context);
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider);
 
         // Create and claim a reservation
         var reservation = await service.ReserveAsync(node.Id, 512, 1024, 0, "test1", 5);
@@ -606,10 +609,11 @@ public sealed class CapacityReservationServiceTests
             .Options;
 
         // Seed the node in a separate context
+        var seedTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
         Guid nodeId;
         using (var setupContext = new NodesDbContext(options))
         {
-            var node = await SeedNodeWithCapacityAsync(setupContext,
+            var node = await SeedNodeWithCapacityAsync(setupContext, seedTimeProvider,
                 availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB
             nodeId = node.Id;
         }

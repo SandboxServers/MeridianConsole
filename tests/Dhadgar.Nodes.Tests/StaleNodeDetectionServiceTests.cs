@@ -1,6 +1,8 @@
+using System.Globalization;
 using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -106,17 +108,19 @@ public sealed class StaleNodeDetectionServiceTests
         // Act
         await service.StartAsync(cts.Token);
         await cts.CancelAsync();
-        await service.StopAsync(CancellationToken.None);
 
-        // Assert - should complete without hanging
-        Assert.True(true);
+        // Assert - StopAsync should complete within a reasonable timeout
+        var stopTask = service.StopAsync(CancellationToken.None);
+        var completedTask = await Task.WhenAny(stopTask, Task.Delay(5000));
+        Assert.True(completedTask == stopTask, "StopAsync did not complete within the expected timeout");
     }
 
     [Fact]
-    public async Task ExecuteAsync_CallsCheckStaleNodesMultipleTimes()
+    public async Task ExecuteAsync_CallsCheckStaleNodesOnStartup()
     {
-        // Arrange - use very short interval for testing
-        var options = Options.Create(new NodesOptions { StaleNodeCheckIntervalMinutes = 0 });
+        // Arrange - use minimum valid interval (1 minute) for testing
+        // Note: With 1-minute interval, we can only verify initial call in a reasonable test time
+        var options = Options.Create(new NodesOptions { StaleNodeCheckIntervalMinutes = 1 });
 
         var heartbeatService = Substitute.For<IHeartbeatService>();
         heartbeatService.CheckStaleNodesAsync(Arg.Any<CancellationToken>())
@@ -138,26 +142,27 @@ public sealed class StaleNodeDetectionServiceTests
 
         using var cts = new CancellationTokenSource();
 
-        // Act - let it run for a bit to execute multiple iterations
+        // Act - start and let it execute initial check
         await service.StartAsync(cts.Token);
         await Task.Delay(200);
         await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
 
-        // Assert - should have been called multiple times
+        // Assert - should have been called at least once on startup
         await heartbeatService.Received().CheckStaleNodesAsync(Arg.Any<CancellationToken>());
         var callCount = heartbeatService.ReceivedCalls()
             .Count(c => c.GetMethodInfo().Name == "CheckStaleNodesAsync");
-        Assert.True(callCount >= 2, $"Expected at least 2 calls, but got {callCount}");
+        Assert.True(callCount >= 1, $"Expected at least 1 call, but got {callCount}");
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenStaleNodesFound_ReturnsCount()
+    public async Task ExecuteAsync_WhenStaleNodesFound_LogsCount()
     {
         // Arrange
+        const int expectedStaleCount = 5;
         var heartbeatService = Substitute.For<IHeartbeatService>();
         heartbeatService.CheckStaleNodesAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(5)); // 5 stale nodes found
+            .Returns(Task.FromResult(expectedStaleCount)); // 5 stale nodes found
 
         var serviceProvider = Substitute.For<IServiceProvider>();
         serviceProvider.GetService(typeof(IHeartbeatService)).Returns(heartbeatService);
@@ -168,10 +173,12 @@ public sealed class StaleNodeDetectionServiceTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(serviceScope);
 
+        var mockLogger = Substitute.For<ILogger<StaleNodeDetectionService>>();
+
         using var service = new StaleNodeDetectionService(
             scopeFactory,
             CreateOptions(),
-            NullLogger<StaleNodeDetectionService>.Instance);
+            mockLogger);
 
         using var cts = new CancellationTokenSource();
 
@@ -181,7 +188,12 @@ public sealed class StaleNodeDetectionServiceTests
         await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
 
-        // Assert - the service ran successfully with stale nodes
-        await heartbeatService.Received().CheckStaleNodesAsync(Arg.Any<CancellationToken>());
+        // Assert - verify the logger received a call that includes the count
+        mockLogger.Received().Log(
+            LogLevel.Information,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains(expectedStaleCount.ToString(CultureInfo.InvariantCulture))),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
     }
 }

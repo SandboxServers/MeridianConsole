@@ -258,7 +258,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         var notBefore = now;
         var notAfter = now.AddYears(_options.CaValidityYears);
 
-        var caCert = request.CreateSelfSigned(notBefore, notAfter);
+        using var caCert = request.CreateSelfSigned(notBefore, notAfter);
 
         // Export and reimport to ensure the certificate is fully usable
         var pfxBytes = caCert.Export(X509ContentType.Pfx);
@@ -321,10 +321,10 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         var notBefore = now;
         var notAfter = now.AddDays(AgentCertificateValidityDays);
 
-        var caPrivateKey = _caCertificate!.GetRSAPrivateKey()
+        using var caPrivateKey = _caCertificate!.GetRSAPrivateKey()
             ?? throw new InvalidOperationException("CA certificate does not have a private key");
 
-        var clientCert = request.Create(
+        using var clientCert = request.Create(
             _caCertificate,
             notBefore,
             notAfter,

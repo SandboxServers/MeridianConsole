@@ -79,6 +79,14 @@ public sealed class CapacityReservationService : ICapacityReservationService
             return ServiceResult.Fail<ReservationResponse>("insufficient_disk");
         }
 
+        if (cpuMillicores > availableCapacity.EffectiveAvailableCpuMillicores)
+        {
+            _logger.LogWarning(
+                "Insufficient CPU for reservation on node {NodeId}. Requested: {RequestedMillicores}m, Available: {AvailableMillicores}m",
+                nodeId, cpuMillicores, availableCapacity.EffectiveAvailableCpuMillicores);
+            return ServiceResult.Fail<ReservationResponse>("insufficient_cpu");
+        }
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var reservation = new CapacityReservation
         {
@@ -278,39 +286,64 @@ public sealed class CapacityReservationService : ICapacityReservationService
 
     public async Task<int> ExpireStaleReservationsAsync(CancellationToken ct = default)
     {
+        const int batchSize = 100;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var totalExpired = 0;
+        Guid? lastProcessedId = null;
 
-        // Find all pending reservations that have expired
-        var expiredReservations = await _dbContext.CapacityReservations
-            .Where(r => r.Status == ReservationStatus.Pending && r.ExpiresAt < now)
-            .ToListAsync(ct);
-
-        if (expiredReservations.Count == 0)
+        while (true)
         {
-            return 0;
+            // Use keyset pagination to process in batches, avoiding OOM at scale
+            var query = _dbContext.CapacityReservations
+                .Where(r => r.Status == ReservationStatus.Pending && r.ExpiresAt < now);
+
+            if (lastProcessedId.HasValue)
+            {
+                query = query.Where(r => r.Id > lastProcessedId.Value);
+            }
+
+            var batch = await query
+                .OrderBy(r => r.Id)
+                .Take(batchSize)
+                .ToListAsync(ct);
+
+            if (batch.Count == 0)
+            {
+                break;
+            }
+
+            // Publish events BEFORE SaveChangesAsync for transactional outbox
+            foreach (var reservation in batch)
+            {
+                reservation.Status = ReservationStatus.Expired;
+                reservation.ReleasedAt = now;
+
+                await _publishEndpoint.Publish(new CapacityReservationExpired(
+                    reservation.NodeId,
+                    reservation.ReservationToken,
+                    now), ct);
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            totalExpired += batch.Count;
+            lastProcessedId = batch[^1].Id;
+
+            _logger.LogDebug(
+                "Processed batch of {BatchCount} expired reservations, total so far: {TotalCount}",
+                batch.Count, totalExpired);
         }
 
-        // Publish all events BEFORE SaveChangesAsync for transactional outbox
-        foreach (var reservation in expiredReservations)
+        if (totalExpired > 0)
         {
-            reservation.Status = ReservationStatus.Expired;
-            reservation.ReleasedAt = now;
+            NodesMetrics.ReservationsExpired.Add(totalExpired);
 
-            await _publishEndpoint.Publish(new CapacityReservationExpired(
-                reservation.NodeId,
-                reservation.ReservationToken,
-                now), ct);
+            _logger.LogInformation(
+                "Expired {Count} stale capacity reservations",
+                totalExpired);
         }
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        NodesMetrics.ReservationsExpired.Add(expiredReservations.Count);
-
-        _logger.LogInformation(
-            "Expired {Count} stale capacity reservations",
-            expiredReservations.Count);
-
-        return expiredReservations.Count;
+        return totalExpired;
     }
 
     private async Task<AvailableCapacityResponse?> GetAvailableCapacityInternalAsync(
@@ -331,12 +364,19 @@ public sealed class CapacityReservationService : ICapacityReservationService
 
         var reservedMemoryBytes = activeReservations.Sum(r => (long)r.MemoryMb * 1024 * 1024);
         var reservedDiskBytes = activeReservations.Sum(r => (long)r.DiskMb * 1024 * 1024);
+        var reservedCpuMillicores = activeReservations.Sum(r => r.CpuMillicores);
         var reservedSlots = activeReservations.Count;
 
         var effectiveAvailableMemory = Math.Max(0, node.Capacity.AvailableMemoryBytes - reservedMemoryBytes);
         var effectiveAvailableDisk = Math.Max(0, node.Capacity.AvailableDiskBytes - reservedDiskBytes);
         var effectiveAvailableSlots = Math.Max(0,
             node.Capacity.MaxGameServers - node.Capacity.CurrentGameServers - reservedSlots);
+
+        // CPU is tracked in millicores (1000 millicores = 1 core)
+        var totalCpuMillicores = node.HardwareInventory.CpuCores * 1000;
+        // Available CPU = Total CPU (we don't track real-time CPU usage in Capacity, so use total)
+        var availableCpuMillicores = totalCpuMillicores;
+        var effectiveAvailableCpuMillicores = Math.Max(0, availableCpuMillicores - reservedCpuMillicores);
 
         return new AvailableCapacityResponse(
             node.Id,
@@ -348,6 +388,10 @@ public sealed class CapacityReservationService : ICapacityReservationService
             node.Capacity.AvailableDiskBytes,
             reservedDiskBytes,
             effectiveAvailableDisk,
+            totalCpuMillicores,
+            availableCpuMillicores,
+            reservedCpuMillicores,
+            effectiveAvailableCpuMillicores,
             node.Capacity.MaxGameServers,
             node.Capacity.CurrentGameServers,
             reservedSlots,

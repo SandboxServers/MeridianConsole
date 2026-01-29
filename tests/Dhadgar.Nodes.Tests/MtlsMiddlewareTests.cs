@@ -362,8 +362,8 @@ public class CertificateValidationServiceTests
         var result = await service.ValidateClientCertificateAsync(certificate);
 
         // Assert
-        // Should fail on CA validation since we're using a self-signed cert
-        // but the test verifies it didn't fail on expiration
+        // CA validation is mocked to succeed, so this test verifies that
+        // the expired certificate is not rejected due to expiration when allowExpired is true
         Assert.NotEqual("certificate_expired", result.ErrorCode);
     }
 

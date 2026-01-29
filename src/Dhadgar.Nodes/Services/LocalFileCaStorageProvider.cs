@@ -128,7 +128,11 @@ public sealed class LocalFileCaStorageProvider : ICaStorageProvider
             }
 
             // Use CreateFromEncryptedPem to load certificate with encrypted private key in one step
-            return X509Certificate2.CreateFromEncryptedPem(certPem, keyPem, password);
+            // Then perform PFX round-trip to ensure the certificate is exportable/persistent across platforms
+            // (CreateFromEncryptedPem yields an ephemeral private key on Windows)
+            using var ephemeralCert = X509Certificate2.CreateFromEncryptedPem(certPem, keyPem, password);
+            var pfxBytes = ephemeralCert.Export(X509ContentType.Pfx);
+            return new X509Certificate2(pfxBytes, (string?)null, X509KeyStorageFlags.Exportable);
         }
         finally
         {

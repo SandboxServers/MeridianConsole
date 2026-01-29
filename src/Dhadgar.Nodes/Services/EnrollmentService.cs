@@ -313,6 +313,15 @@ public sealed class EnrollmentService : IEnrollmentService
             .Where(c => char.IsLetterOrDigit(c) || c == '-')
             .ToArray());
 
+        // If sanitized is empty (hostname had only disallowed chars), generate deterministic fallback
+        if (string.IsNullOrEmpty(sanitized))
+        {
+            // Use SHA256 hash of original hostname for deterministic, unique fallback
+            var hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(hostname));
+            var hashSlug = Convert.ToHexString(hashBytes)[..8].ToLowerInvariant();
+            sanitized = $"node-{hashSlug}";
+        }
+
         return sanitized.Length > 50 ? sanitized[..50] : sanitized;
     }
 
