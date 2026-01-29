@@ -19,7 +19,8 @@ public class RateLimiterConfigurationTests
     [InlineData("identity-route", "Auth")]
     [InlineData("billing-route", "PerTenant")]
     [InlineData("servers-route", "PerTenant")]
-    [InlineData("nodes-route", "PerTenant")]
+    [InlineData("nodes-org-route", "PerTenant")]
+    [InlineData("enrollment-route", "PerTenant")]
     [InlineData("tasks-route", "PerTenant")]
     [InlineData("files-route", "PerTenant")]
     [InlineData("console-api-route", "PerTenant")]
@@ -28,6 +29,7 @@ public class RateLimiterConfigurationTests
     [InlineData("notifications-route", "PerTenant")]
     [InlineData("secrets-route", "PerTenant")]
     [InlineData("discord-route", "PerTenant")]
+    [InlineData("agents-enroll-route", "Auth")]
     [InlineData("agents-route", "PerAgent")]
     public void Routes_ShouldDeclareRateLimiterPolicy(string routeName, string expectedPolicy)
     {

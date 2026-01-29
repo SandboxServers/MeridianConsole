@@ -73,7 +73,7 @@ public sealed class AlertDispatcherTests
     }
 
     [Fact]
-    public async Task DispatchAsync_DiscordFails_ThrowsAggregateException()
+    public async Task DispatchAsync_DiscordFails_ContinuesWithOtherChannels()
     {
         // Arrange
         var alert = CreateAlert();
@@ -81,12 +81,15 @@ public sealed class AlertDispatcherTests
             .SendAlertAsync(Arg.Any<AlertMessage>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new HttpRequestException("Discord unreachable")));
 
-        // Act
+        // Act - AlertDispatcher intentionally isolates channel failures
+        // so one channel failing doesn't prevent other channels from receiving alerts
         Func<Task> act = () => _dispatcher.DispatchAsync(alert);
 
-        // Assert - Task.WhenAll aggregates exceptions
-        await act.Should().ThrowAsync<HttpRequestException>();
-        // Email should still have been called (parallel execution)
+        // Assert - No exception should propagate (fire-and-forget alerting design)
+        await act.Should().NotThrowAsync();
+        // Discord should have been attempted (even though it failed)
+        await _mockDiscord.Received(1).SendAlertAsync(Arg.Any<AlertMessage>(), Arg.Any<CancellationToken>());
+        // Email should still have been called despite Discord failure
         await _mockEmail.Received(1).SendAlertEmailAsync(alert, Arg.Any<CancellationToken>());
     }
 

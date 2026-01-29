@@ -136,7 +136,7 @@ npm install
 npm run dev
 ```
 
-The development server runs on **http://localhost:4321** by default. Changes to source files trigger instant hot module replacement (HMR).
+The development server runs on **<http://localhost:4321>** by default. Changes to source files trigger instant hot module replacement (HMR).
 
 ### Available npm Scripts
 

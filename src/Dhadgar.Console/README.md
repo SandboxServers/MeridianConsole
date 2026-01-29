@@ -150,25 +150,25 @@ dotnet run --project src/Dhadgar.Console
 dotnet watch --project src/Dhadgar.Console
 ```
 
-The service runs on `http://localhost:5007` by default.
+The service runs on `http://localhost:5070` by default.
 
 ### Verify the Service
 
 ```bash
 # Health check
-curl http://localhost:5007/healthz
+curl http://localhost:5070/healthz
 # Returns: {"service":"Dhadgar.Console","status":"ok","timestamp":"...","checks":{...}}
 
 # Hello endpoint
-curl http://localhost:5007/hello
+curl http://localhost:5070/hello
 # Returns: Hello from Dhadgar.Console
 
 # Root endpoint
-curl http://localhost:5007/
+curl http://localhost:5070/
 # Returns: {"service":"Dhadgar.Console","message":"Hello from Dhadgar.Console"}
 
 # Swagger UI
-open http://localhost:5007/swagger
+open http://localhost:5070/swagger
 ```
 
 ### Test SignalR Connection
@@ -180,7 +180,7 @@ You can test the SignalR hub using a simple JavaScript client:
 const signalR = require("@microsoft/signalr");
 
 const connection = new signalR.HubConnectionBuilder()
-  .withUrl("http://localhost:5007/hubs/console")
+  .withUrl("http://localhost:5070/hubs/console")
   .build();
 
 connection.on("pong", () => {
@@ -955,7 +955,7 @@ The Console service is instrumented with OpenTelemetry for full observability:
 
 **Solutions**:
 
-1. Verify the service is running: `curl http://localhost:5007/healthz`
+1. Verify the service is running: `curl http://localhost:5070/healthz`
 2. Check CORS configuration allows your client origin
 3. Ensure WebSocket upgrade is not blocked by proxy
 4. Check for authentication issues (invalid/expired token)
@@ -1004,4 +1004,4 @@ The Console service is instrumented with OpenTelemetry for full observability:
 - **Servers Service**: `/src/Dhadgar.Servers/` - Server lifecycle management
 - **Agent Core**: `/src/Agents/Dhadgar.Agent.Core/` - Agent-side console handling
 - **Docker Compose**: `/deploy/compose/README.md` - Local infrastructure setup
-- **SignalR Documentation**: https://learn.microsoft.com/aspnet/core/signalr/
+- **SignalR Documentation**: <https://learn.microsoft.com/aspnet/core/signalr/>

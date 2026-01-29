@@ -42,7 +42,7 @@ The Agent Core library serves as the foundation for agents that:
 
 ### Current Status
 
-**Status: Early-Stage Scaffolding**
+#### Status: Early-Stage Scaffolding
 
 The Agent Core library is currently in its foundational scaffolding phase. The existing code provides the basic project structure and "hello world" functionality used for build verification and smoke tests. The full implementation of agent functionality (command execution, process management, telemetry, etc.) is planned but not yet implemented.
 
@@ -54,8 +54,8 @@ The current implementation includes:
 
 ### What This Library Is NOT
 
-- **NOT a standalone executable for production use** - While it can be run directly, the production agents are `Dhadgar.Agent.Linux` and `Dhadgar.Agent.Windows`, which extend this library with platform-specific functionality.
-- **NOT a general-purpose library** - This is specifically designed for the Meridian Console agent architecture and should not be used outside of this context.
+- **Not a standalone executable** — Production agents are provided by `Dhadgar.Agent.Linux` and `Dhadgar.Agent.Windows`, which extend this library.
+- **Not a general-purpose library** — Intended only for the Meridian Console agent architecture.
 
 ---
 
@@ -184,7 +184,7 @@ The **SecurityCodeScan** analyzer detects:
 
 ### Library Structure
 
-```
+```text
 Dhadgar.Agent.Core/
 ├── Dhadgar.Agent.Core.csproj    # Project file with security settings
 ├── Program.cs                    # Entry point (scaffolding)
@@ -737,7 +737,13 @@ public static class PathValidator
         );
 
         // Ensure the requested path is within the base path
-        return fullRequested.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase);
+        // Use OS-appropriate comparison: case-insensitive on Windows, case-sensitive elsewhere
+        var fullBaseWithSeparator = Path.TrimEndingDirectorySeparator(fullBase)
+            + Path.DirectorySeparatorChar;
+        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return fullRequested.StartsWith(fullBaseWithSeparator, comparison);
     }
 }
 
@@ -1031,8 +1037,9 @@ Security review checklist:
 **NEVER do these things in agent code:**
 
 ```csharp
-// NEVER: Execute shell commands with user input
-Process.Start("bash", $"-c '{userInput}'");  // Command injection!
+// NEVER: Execute shell commands with user input (vulnerable on both Windows and Linux)
+Process.Start("bash", $"-c '{userInput}'");   // Linux command injection!
+Process.Start("cmd.exe", $"/c {userInput}");  // Windows command injection!
 
 // NEVER: Concatenate paths without validation
 var path = basePath + "/" + userInput;  // Path traversal!

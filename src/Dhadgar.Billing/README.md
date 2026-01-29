@@ -257,7 +257,7 @@ public class UsageRecord
 
 #### Usage Collection Architecture
 
-```
+```text
 +-------------+     +-------------+     +-------------+
 |   Servers   |     |    Nodes    |     |    Files    |
 +------+------+     +------+------+     +------+------+
@@ -304,7 +304,7 @@ Services publish usage events; Billing aggregates and stores them.
 
 #### Payment Flow (Planned)
 
-```
+```text
 User clicks "Subscribe"
         |
         v
@@ -457,7 +457,7 @@ public sealed class SampleEntity
 
 #### Entity Relationship Diagram (Planned)
 
-```
+```text
 +------------------+       +------------------+       +------------------+
 | OrganizationBilling |<--| Subscription     |<------| SubscriptionPlan |
 +------------------+       +------------------+       +------------------+
@@ -850,7 +850,7 @@ In production, configure via environment variables:
 
 ### Test Project Structure
 
-```
+```text
 tests/Dhadgar.Billing.Tests/
     BillingWebApplicationFactory.cs   # Test server configuration
     HelloWorldTests.cs                # Basic unit tests
@@ -1164,7 +1164,7 @@ app.MapPost("/webhooks/stripe", async (HttpRequest request, IConfiguration confi
 
 #### Database Connection Failed
 
-```
+```text
 Error: Npgsql.NpgsqlException: Failed to connect to localhost:5432
 ```
 
@@ -1176,7 +1176,7 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d postgres
 
 #### Migration Failed
 
-```
+```text
 Error: No migrations configuration found
 ```
 
@@ -1243,4 +1243,4 @@ When contributing to the Billing service:
 
 5. **Use Migrations**: Never modify the database schema directly. Always use EF Core migrations.
 
-For questions about billing architecture, consult with the team lead or review the architecture documents in `/docs/architecture/`.
+For questions about billing architecture, consult the team lead or review the architecture documents in `/docs/architecture/`.

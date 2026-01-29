@@ -27,7 +27,7 @@ The `Dhadgar.Messaging` library provides centralized MassTransit configuration f
 The Dhadgar platform follows a strict microservices architecture where services **must not** reference each other via `ProjectReference`. Services communicate through:
 
 1. **Synchronous HTTP**: Request/response patterns requiring immediate responses
-2. **Asynchronous Messaging**: Event-driven patterns, fire-and-forget operations, and decoupled workflows
+1. **Asynchronous Messaging**: Event-driven patterns, fire-and-forget operations, and decoupled workflows
 
 ### What This Library Provides
 
@@ -71,7 +71,7 @@ This convention:
 
 ### Message Flow Architecture
 
-```
+```text
 +------------------+     +------------------+     +------------------+
 |   Service A      |     |    RabbitMQ      |     |   Service B      |
 |                  |     |                  |     |                  |
@@ -145,10 +145,10 @@ public sealed class UserDeactivatedConsumer : IConsumer<UserDeactivated>
 ### Consumer Guidelines
 
 1. **Single Responsibility**: One consumer per message type
-2. **Idempotency**: Design for at-least-once delivery; the same message may arrive twice
-3. **Error Handling**: Let exceptions propagate for MassTransit retry handling
-4. **Logging**: Log at start and end of processing with correlation data
-5. **Keep Fast**: Avoid long-running operations; offload to background jobs if needed
+1. **Idempotency**: Design for at-least-once delivery; the same message may arrive twice
+1. **Error Handling**: Let exceptions propagate for MassTransit retry handling
+1. **Logging**: Log at start and end of processing with correlation data
+1. **Keep Fast**: Avoid long-running operations; offload to background jobs if needed
 
 ### Registering Consumers
 
@@ -356,7 +356,7 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 
 Access RabbitMQ Management UI:
 
-- **URL**: http://localhost:15672
+- **URL**: [http://localhost:15672](http://localhost:15672)
 - **Credentials**: dhadgar / dhadgar
 
 RabbitMQ Ports:
@@ -522,7 +522,7 @@ public record SomethingHappened(
     DateTimeOffset OccurredAtUtc);
 ```
 
-2. **Create the consumer class** in your service:
+1. **Create the consumer class** in your service:
 
 ```csharp
 // src/Dhadgar.YourService/Consumers/SomethingHappenedConsumer.cs
@@ -550,7 +550,7 @@ public sealed class SomethingHappenedConsumer : IConsumer<SomethingHappened>
 }
 ```
 
-3. **Register the consumer** in `Program.cs`:
+1. **Register the consumer** in `Program.cs`:
 
 ```csharp
 builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
@@ -563,7 +563,7 @@ builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
 
 1. **Define the message contract** (if not already defined)
 
-2. **Create the publisher interface and implementation**:
+1. **Create the publisher interface and implementation**:
 
 ```csharp
 // Interface
@@ -587,7 +587,7 @@ public sealed class YourDomainEventPublisher : IYourDomainEventPublisher
 }
 ```
 
-3. **Register the publisher** in `Program.cs`:
+1. **Register the publisher** in `Program.cs`:
 
 ```csharp
 builder.Services.AddScoped<IYourDomainEventPublisher, YourDomainEventPublisher>();
@@ -596,10 +596,10 @@ builder.Services.AddScoped<IYourDomainEventPublisher, YourDomainEventPublisher>(
 ### Message Contract Guidelines
 
 1. **Use Records**: Immutable by default, value equality, with-expressions
-2. **Include Timestamps**: Always include `DateTimeOffset OccurredAtUtc` for events
-3. **Include IDs**: Reference entities by ID, not full objects
-4. **Keep Minimal**: Include only what consumers need
-5. **Document**: Add XML comments explaining when events are published
+1. **Include Timestamps**: Always include `DateTimeOffset OccurredAtUtc` for events
+1. **Include IDs**: Reference entities by ID, not full objects
+1. **Keep Minimal**: Include only what consumers need
+1. **Document**: Add XML comments explaining when events are published
 
 ```csharp
 /// <summary>
@@ -748,10 +748,63 @@ This library has **no project references** to maintain its position as a foundat
 | ------------- | ------------------------------------------------ |
 | Identity      | Publishes authentication and organization events |
 | Servers       | Publishes/consumes server provisioning messages  |
-| Nodes         | Publishes node health events                     |
+| Nodes         | Publishes node lifecycle, certificate, and capacity events |
 | Tasks         | Orchestrates background tasks via messaging      |
 | Notifications | Consumes events to send notifications            |
 | Billing       | Consumes usage events for metering               |
+
+### Nodes Service Events
+
+The Nodes service publishes 15 events across three categories:
+
+**Node Lifecycle Events:**
+
+|Event|Exchange Name|When Published|
+|---|---|---|
+|`NodeEnrolled`|`meridian.nodeenrolled`|New agent completes enrollment|
+|`NodeOnline`|`meridian.nodeonline`|Node transitions to online state|
+|`NodeOffline`|`meridian.nodeoffline`|Node misses heartbeat threshold (5 min)|
+|`NodeDegraded`|`meridian.nodedegraded`|Node reports health issues (CPU/memory/disk > 90%)|
+|`NodeRecovered`|`meridian.noderecovered`|Node recovers from degraded state|
+|`NodeDecommissioned`|`meridian.nodedecommissioned`|Node is permanently removed|
+|`NodeMaintenanceStarted`|`meridian.nodemaintenancestarted`|Node enters maintenance mode|
+|`NodeMaintenanceEnded`|`meridian.nodemaintenanceended`|Node exits maintenance mode|
+
+**Certificate Events:**
+
+|Event|Exchange Name|When Published|
+|---|---|---|
+|`AgentCertificateIssued`|`meridian.agentcertificateissued`|mTLS cert issued during enrollment|
+|`AgentCertificateRevoked`|`meridian.agentcertificaterevoked`|Certificate manually revoked|
+|`AgentCertificateRenewed`|`meridian.agentcertificaterenewed`|Certificate renewed before expiry|
+
+**Capacity Events:**
+
+|Event|Exchange Name|When Published|
+|---|---|---|
+|`CapacityReserved`|`meridian.capacityreserved`|Resource reservation created|
+|`CapacityClaimed`|`meridian.capacityclaimed`|Reservation bound to server|
+|`CapacityReleased`|`meridian.capacityreleased`|Reservation explicitly released|
+|`CapacityReservationExpired`|`meridian.capacityreservationexpired`|Reservation timeout|
+
+**Example Consumer:**
+```csharp
+public sealed class NodeOfflineConsumer : IConsumer<NodeOffline>
+{
+    private readonly IAlertService _alerts;
+
+    public NodeOfflineConsumer(IAlertService alerts) => _alerts = alerts;
+
+    public async Task Consume(ConsumeContext<NodeOffline> context)
+    {
+        var message = context.Message;
+        await _alerts.SendNodeOfflineAlertAsync(
+            message.NodeId,
+            message.Timestamp,
+            message.Reason);
+    }
+}
+```
 
 ---
 

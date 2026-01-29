@@ -244,7 +244,7 @@ GET /api/v1/betterauth/callback/{provider}?code={code}&state={state}
 
 **Response (302 Found):**
 
-```
+```http
 Location: {callbackURL}
 Set-Cookie: better-auth.session_token=...; HttpOnly; Secure; SameSite=None; Path=/
 ```
