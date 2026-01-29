@@ -19,4 +19,8 @@
     <ProjectReference Include="..\..\src\Dhadgar.Mods\Dhadgar.Mods.csproj" />
     <ProjectReference Include="..\Dhadgar.ServiceDefaults.Tests\Dhadgar.ServiceDefaults.Tests.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

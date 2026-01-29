@@ -8,7 +8,8 @@ using Xunit;
 
 namespace Dhadgar.Nodes.Tests.Integration;
 
-public sealed class ReservationApiIntegrationTests : IClassFixture<NodesWebApplicationFactory>
+[Collection("Nodes Integration")]
+public sealed class ReservationApiIntegrationTests
 {
     private readonly NodesWebApplicationFactory _factory;
     private static readonly Guid TestUserId = Guid.NewGuid();

@@ -11,8 +11,11 @@
 
     <!-- Code quality enforcement -->
     <TreatWarningsAsErrors Condition="'$(CI)' == 'true'">true</TreatWarningsAsErrors>
-    <AnalysisMode>AllEnabledByDefault</AnalysisMode>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Fast local builds, full analysis in CI -->
+    <AnalysisMode Condition="'$(CI)' != 'true'">None</AnalysisMode>
+    <AnalysisMode Condition="'$(CI)' == 'true'">AllEnabledByDefault</AnalysisMode>
+    <EnforceCodeStyleInBuild Condition="'$(CI)' == 'true'">true</EnforceCodeStyleInBuild>
+    <EnforceCodeStyleInBuild Condition="'$(CI)' != 'true'">false</EnforceCodeStyleInBuild>
 
     <!-- Quality of life - only applies outside CI -->
     <TreatWarningsAsErrors Condition="'$(CI)' != 'true'">false</TreatWarningsAsErrors>

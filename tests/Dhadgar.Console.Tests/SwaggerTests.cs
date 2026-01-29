@@ -1,20 +1,16 @@
 using Dhadgar.ServiceDefaults.Tests;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 namespace Dhadgar.Console.Tests;
 
-public class SwaggerTests : IClassFixture<WebApplicationFactory<Program>>
+[Collection("Console Integration")]
+public class SwaggerTests
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ConsoleWebApplicationFactory _factory;
 
-    public SwaggerTests(WebApplicationFactory<Program> factory)
+    public SwaggerTests(ConsoleWebApplicationFactory factory)
     {
-        _factory = factory.WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment("Testing");
-        });
+        _factory = factory;
     }
 
     [Fact]

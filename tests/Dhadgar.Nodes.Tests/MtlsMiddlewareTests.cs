@@ -619,7 +619,8 @@ public class CertificateValidationServiceTests
 /// <summary>
 /// Integration tests for mTLS middleware with the full web application.
 /// </summary>
-public class MtlsMiddlewareIntegrationTests : IClassFixture<NodesWebApplicationFactory>
+[Collection("Nodes Integration")]
+public class MtlsMiddlewareIntegrationTests
 {
     private readonly NodesWebApplicationFactory _factory;
 

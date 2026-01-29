@@ -9,16 +9,19 @@ public sealed class AlertThrottler
 {
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastAlertTimes = new();
     private readonly TimeSpan _throttleWindow;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Creates a new throttler with the specified throttle window.
     /// </summary>
     /// <param name="throttleWindow">Minimum time between duplicate alerts.</param>
+    /// <param name="timeProvider">Optional time provider for testing. Defaults to system time.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when throttleWindow is zero or negative.</exception>
-    public AlertThrottler(TimeSpan throttleWindow)
+    public AlertThrottler(TimeSpan throttleWindow, TimeProvider? timeProvider = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(throttleWindow, TimeSpan.Zero, nameof(throttleWindow));
         _throttleWindow = throttleWindow;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -32,7 +35,7 @@ public sealed class AlertThrottler
         ArgumentNullException.ThrowIfNull(alert);
 
         var key = GetAlertKey(alert);
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var shouldSend = false;
 
         // Use atomic AddOrUpdate to prevent race conditions

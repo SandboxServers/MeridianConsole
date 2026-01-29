@@ -7,7 +7,8 @@ using Xunit;
 
 namespace Dhadgar.Nodes.Tests.Integration;
 
-public sealed class NodesApiIntegrationTests : IClassFixture<NodesWebApplicationFactory>
+[Collection("Nodes Integration")]
+public sealed class NodesApiIntegrationTests
 {
     private readonly NodesWebApplicationFactory _factory;
     private static readonly Guid TestOrgId = Guid.NewGuid();

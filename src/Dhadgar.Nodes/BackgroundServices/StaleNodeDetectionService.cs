@@ -12,15 +12,18 @@ public sealed class StaleNodeDetectionService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<StaleNodeDetectionService> _logger;
     private readonly TimeSpan _checkInterval;
+    private readonly TimeProvider _timeProvider;
 
     public StaleNodeDetectionService(
         IServiceScopeFactory scopeFactory,
         IOptions<NodesOptions> options,
-        ILogger<StaleNodeDetectionService> logger)
+        ILogger<StaleNodeDetectionService> logger,
+        TimeProvider? timeProvider = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _checkInterval = TimeSpan.FromMinutes(options.Value.StaleNodeCheckIntervalMinutes);
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -45,7 +48,7 @@ public sealed class StaleNodeDetectionService : BackgroundService
 
             try
             {
-                await Task.Delay(_checkInterval, stoppingToken);
+                await Task.Delay(_checkInterval, _timeProvider, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

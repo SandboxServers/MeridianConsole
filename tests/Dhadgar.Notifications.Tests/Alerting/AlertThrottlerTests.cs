@@ -1,5 +1,6 @@
 using Dhadgar.Notifications.Alerting;
 using FluentAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Dhadgar.Notifications.Tests.Alerting;
@@ -89,13 +90,14 @@ public sealed class AlertThrottlerTests
     [Fact]
     public void ShouldSend_AfterWindowExpires_ReturnsTrue()
     {
-        // Arrange - Use very short window for testing
-        var throttler = new AlertThrottler(TimeSpan.FromMilliseconds(50));
+        // Arrange
+        var timeProvider = new FakeTimeProvider();
+        var throttler = new AlertThrottler(TimeSpan.FromMilliseconds(50), timeProvider);
         var alert = CreateAlert("TestService", "Test Alert");
 
         // Act
         throttler.ShouldSend(alert); // First call
-        Thread.Sleep(100); // Wait for window to expire
+        timeProvider.Advance(TimeSpan.FromMilliseconds(100)); // Advance time past the window
         var result = throttler.ShouldSend(alert); // After window
 
         // Assert

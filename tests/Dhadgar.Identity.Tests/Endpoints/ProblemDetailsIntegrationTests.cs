@@ -10,7 +10,8 @@ namespace Dhadgar.Identity.Tests.Endpoints;
 /// Integration tests verifying RFC 9457 Problem Details format for error responses.
 /// Tests focus on endpoints that explicitly return Problem Details format.
 /// </summary>
-public sealed class ProblemDetailsIntegrationTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class ProblemDetailsIntegrationTests
 {
     private readonly IdentityWebApplicationFactory _factory;
     private static readonly JsonSerializerOptions JsonOptions = new()

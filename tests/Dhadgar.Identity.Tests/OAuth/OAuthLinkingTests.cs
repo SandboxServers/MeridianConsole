@@ -7,7 +7,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests.OAuth;
 
-public sealed class OAuthLinkingTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class OAuthLinkingTests
 {
     private readonly IdentityWebApplicationFactory _factory;
 

@@ -27,7 +27,8 @@ public class GatewayWebApplicationFactory : WebApplicationFactory<Program>
     }
 }
 
-public class GatewayIntegrationTests : IClassFixture<GatewayWebApplicationFactory>
+[Collection("Gateway Integration")]
+public class GatewayIntegrationTests
 {
     private readonly HttpClient _client;
 

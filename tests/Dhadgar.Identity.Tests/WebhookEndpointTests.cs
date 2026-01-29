@@ -8,7 +8,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests;
 
-public sealed class WebhookEndpointTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class WebhookEndpointTests
 {
     private readonly IdentityWebApplicationFactory _factory;
 

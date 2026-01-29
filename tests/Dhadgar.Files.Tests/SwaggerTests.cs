@@ -3,7 +3,8 @@ using Xunit;
 
 namespace Dhadgar.Files.Tests;
 
-public class SwaggerTests : IClassFixture<FilesWebApplicationFactory>
+[Collection("Files Integration")]
+public class SwaggerTests
 {
     private readonly FilesWebApplicationFactory _factory;
 
