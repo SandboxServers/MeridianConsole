@@ -533,7 +533,7 @@ Agents authenticate using mutual TLS (mTLS):
 Applied at Gateway level:
 
 | Policy | Limit | Scope |
-|--------|-------|-------|
+|:-------|:------|:------|
 | `PerTenant` | 100 req/sec | Organization |
 | `PerAgent` | 500 req/60sec | Per agent |
 

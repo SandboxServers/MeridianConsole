@@ -581,22 +581,6 @@ public sealed class NodeService : INodeService
     }
 
     /// <summary>
-    /// Calculates a health score (0-100) based on resource usage.
-    /// Higher score = healthier node.
-    /// </summary>
-    private static int? CalculateHealthScore(NodeHealth? health)
-    {
-        if (health is null)
-        {
-            return null;
-        }
-
-        // Average of (100 - each usage percentage)
-        var avgUsage = (health.CpuUsagePercent + health.MemoryUsagePercent + health.DiskUsagePercent) / 3;
-        return (int)Math.Round(100 - avgUsage);
-    }
-
-    /// <summary>
     /// Gets a description of applied filters for logging.
     /// </summary>
     private static string GetAppliedFiltersDescription(NodeListQuery query)

@@ -67,6 +67,9 @@ public sealed class NodesDbContext : DbContext
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                 v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>());
 
+            // Note: HasDefaultValue with a List<string> is safe here because EF Core
+            // creates new instances for each entity, not reusing the reference.
+            // The ValueConverter handles serialization to/from JSON for storage.
             modelBuilder.Entity<Node>()
                 .Property(n => n.Tags)
                 .HasColumnType(null)

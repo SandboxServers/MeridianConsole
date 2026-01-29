@@ -173,9 +173,9 @@ public sealed class NodeListQueryTests
     }
 
     [Fact]
-    public void ParseTagsFilter_TruncatesLongTags_ToMaxLength()
+    public void ParseTagsFilter_DropsTagsExceedingMaxLength()
     {
-        // Create a tag that is longer than 50 characters
+        // Create tags that are longer than 50 characters (these should be filtered out)
         var longTag = new string('a', 60);
         var anotherLongTag = new string('b', 100);
         var normalTag = "production";
@@ -183,10 +183,10 @@ public sealed class NodeListQueryTests
         var query = new NodeListQuery { Tags = $"{longTag},{anotherLongTag},{normalTag}" };
         var tags = query.ParseTagsFilter();
 
-        // All returned tags should have length <= 50
+        // Long tags should be filtered out, so all returned tags should have length <= 50
         Assert.All(tags, t => Assert.True(t.Length <= 50, $"Tag '{t}' exceeds max length of 50 (actual: {t.Length})"));
 
-        // Verify the normal tag is still present
+        // Verify the normal tag is still present (long tags were dropped)
         Assert.Contains("production", tags);
     }
 
