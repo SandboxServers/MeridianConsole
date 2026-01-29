@@ -106,7 +106,6 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             // Standard .NET exceptions mapped to appropriate status codes
             ArgumentNullException => (400, "https://meridian.console/errors/bad-request", "Bad Request"),
             ArgumentException => (400, "https://meridian.console/errors/bad-request", "Bad Request"),
-            InvalidOperationException => (400, "https://meridian.console/errors/bad-request", "Bad Request"),
             UnauthorizedAccessException => (401, "https://meridian.console/errors/unauthorized", "Unauthorized"),
             KeyNotFoundException => (404, "https://meridian.console/errors/not-found", "Not Found"),
             NotImplementedException => (501, "https://meridian.console/errors/not-implemented", "Not Implemented"),

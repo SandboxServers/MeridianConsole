@@ -1,26 +1,19 @@
 using Dhadgar.Servers.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Dhadgar.Servers.Tests;
 
 /// <summary>
 /// WebApplicationFactory for Servers service integration tests.
-/// Uses SQLite in-memory database to support ExecuteDeleteAsync for audit tests.
+/// Uses InMemory database with isolated provider to avoid conflicts with Npgsql.
 /// </summary>
 public class ServersWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly SqliteConnection _connection;
-
-    public ServersWebApplicationFactory()
-    {
-        // Keep connection open for the lifetime of the factory
-        _connection = new SqliteConnection("Data Source=:memory:");
-        _connection.Open();
-    }
+    private readonly string _databaseName = $"servers-tests-{Guid.NewGuid()}";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -28,43 +21,21 @@ public class ServersWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Remove the existing DbContext registration
-            var descriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(DbContextOptions<ServersDbContext>));
-            if (descriptor != null)
-            {
-                services.Remove(descriptor);
-            }
+            // Remove all DbContext-related registrations to avoid provider conflicts
+            services.RemoveAll<DbContextOptions<ServersDbContext>>();
 
-            // Remove any existing connection factory
-            var connectionFactoryDescriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(Microsoft.EntityFrameworkCore.Storage.RelationalConnectionDependencies));
-            if (connectionFactoryDescriptor != null)
-            {
-                services.Remove(connectionFactoryDescriptor);
-            }
+            // Create isolated EF provider for InMemory
+            var efProvider = new ServiceCollection()
+                .AddEntityFrameworkInMemoryDatabase()
+                .BuildServiceProvider();
 
-            // Add SQLite in-memory database for testing
-            // SQLite supports ExecuteDeleteAsync unlike the InMemory provider
+            // Add InMemory database for testing with isolated provider
             services.AddDbContext<ServersDbContext>(options =>
-            {
-                options.UseSqlite(_connection);
-            });
+                options.UseInMemoryDatabase(_databaseName)
+                    .UseInternalServiceProvider(efProvider));
 
-            // Build the service provider and ensure database is created
-            var sp = services.BuildServiceProvider();
-            using var scope = sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ServersDbContext>();
-            db.Database.EnsureCreated();
+            // Register TimeProvider for AuditCleanupService
+            services.AddSingleton(TimeProvider.System);
         });
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-        if (disposing)
-        {
-            _connection.Dispose();
-        }
     }
 }

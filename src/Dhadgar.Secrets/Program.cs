@@ -99,6 +99,9 @@ builder.Services.AddSingleton<ISecretsAuditLogger, SecretsAuditLogger>();
 // Error handling infrastructure (RFC 9457 Problem Details)
 builder.Services.AddDhadgarErrorHandling();
 
+// Register request logging messages for RequestLoggingMiddleware
+builder.Services.AddSingleton<Dhadgar.ServiceDefaults.Logging.RequestLoggingMessages>();
+
 // Rate limiting configuration
 builder.Services.AddRateLimiter(options =>
 {
