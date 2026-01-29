@@ -2,7 +2,9 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
+using Scalar.AspNetCore;
 using Dhadgar.Identity;
 using Dhadgar.Identity.Authentication;
 using Dhadgar.Identity.Data;
@@ -46,22 +48,34 @@ using Dhadgar.Identity.Data.Entities;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+builder.Services.AddOpenApi("v1", options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        Title = "Dhadgar Identity API",
-        Version = "v1",
-        Description = "Identity and access management API for Meridian Console"
-    });
+        document.Info.Title = "Dhadgar Identity API";
+        document.Info.Version = "v1";
+        document.Info.Description = "Identity and access management API for Meridian Console";
 
-    // Add JWT Bearer authentication to Swagger UI
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        Description = "Enter your JWT token"
+        // Add JWT Bearer authentication security scheme
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "Enter your JWT token"
+        };
+
+        // Apply Bearer authentication globally to all operations
+        document.Security ??= [];
+        var schemeRef = new OpenApiSecuritySchemeReference("Bearer", document);
+        document.Security.Add(new OpenApiSecurityRequirement
+        {
+            [schemeRef] = new List<string>()
+        });
+
+        return Task.CompletedTask;
     });
 });
 
@@ -786,11 +800,11 @@ builder.Services.AddOpenTelemetry()
 
 var app = builder.Build();
 
-// Enable Swagger in Development and Testing environments
+// Enable OpenAPI and Scalar in Development and Testing environments
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 // SECURITY: Handle request size limit exceptions with proper JSON responses

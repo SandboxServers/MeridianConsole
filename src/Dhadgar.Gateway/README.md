@@ -74,7 +74,8 @@ The Gateway runs on port **5000** (development) or **8080** (container).
 | ASP.NET Core | 10.0 | Web framework |
 | YARP | 2.3.0 | Reverse proxy |
 | OpenTelemetry | 1.14.0 | Distributed tracing and metrics |
-| Swashbuckle | Latest | Swagger/OpenAPI documentation |
+| Microsoft.AspNetCore.OpenApi | 10.0.0 | OpenAPI document generation |
+| Scalar.AspNetCore | 2.12.20 | API reference UI |
 | MassTransit | 8.3.6 | Message bus abstraction (future use) |
 
 **Project Dependencies**:
@@ -818,7 +819,7 @@ In Development mode, the Gateway aggregates OpenAPI specifications from all back
 **Swagger UI**: http://localhost:5000/swagger
 
 The `OpenApiAggregationService`:
-1. Fetches `/swagger/v1/swagger.json` from each backend service
+1. Fetches `/openapi/v1.json` from each backend service
 2. Prefixes all paths with the service's route prefix (e.g., `/api/v1/servers`)
 3. Prefixes schema names to avoid conflicts (e.g., `Servers_GameServer`)
 4. Updates internal `$ref` references to match prefixed schema names

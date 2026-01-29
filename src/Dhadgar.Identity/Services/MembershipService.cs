@@ -90,7 +90,7 @@ public sealed class MembershipService
                 (membership, user) => new MemberSummary(
                     membership.UserId,
                     membership.OrganizationId,
-                    user.Email,
+                    user.Email ?? "",
                     membership.Role,
                     membership.IsActive,
                     membership.JoinedAt))

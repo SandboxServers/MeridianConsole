@@ -2,6 +2,7 @@
     <PropertyGroup>
       <AssemblyName>Dhadgar.Billing</AssemblyName>
       <RootNamespace>Dhadgar.Billing</RootNamespace>
+      <Nullable>enable</Nullable>
     </PropertyGroup>
     <ItemGroup>
   <ProjectReference Include="..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
@@ -19,7 +20,7 @@
 </ItemGroup>
   
   <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Scalar.AspNetCore" />
   </ItemGroup>
 </Project>
 

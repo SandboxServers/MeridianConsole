@@ -12,6 +12,7 @@ using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Errors;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -19,17 +20,39 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+builder.Services.AddOpenApi("v1", options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        Title = "Dhadgar Secrets API",
-        Version = "v1",
-        Description = "Secret storage and rotation for Meridian Console"
+        document.Info.Title = "Dhadgar Secrets API";
+        document.Info.Version = "v1";
+        document.Info.Description = "Secret storage and rotation for Meridian Console";
+
+        // Add JWT Bearer authentication security scheme
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "Enter your JWT token"
+        };
+
+        // Apply Bearer authentication globally to all operations
+        document.Security ??= [];
+        var schemeRef = new OpenApiSecuritySchemeReference("Bearer", document);
+        document.Security.Add(new OpenApiSecurityRequirement
+        {
+            [schemeRef] = new List<string>()
+        });
+
+        return Task.CompletedTask;
     });
 });
 
@@ -232,8 +255,8 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 app.UseMiddleware<CorrelationMiddleware>();

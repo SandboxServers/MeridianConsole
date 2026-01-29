@@ -40,8 +40,9 @@
 </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
     <!-- Security analyzer for authentication service -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>

@@ -11,12 +11,18 @@ namespace Dhadgar.Identity.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "AvatarUrl",
-                table: "users",
-                type: "character varying(500)",
-                maxLength: 500,
-                nullable: true);
+            // Add AvatarUrl column only if it doesn't already exist (idempotent)
+            migrationBuilder.Sql("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'users' AND column_name = 'AvatarUrl'
+                    ) THEN
+                        ALTER TABLE users ADD COLUMN "AvatarUrl" character varying(500);
+                    END IF;
+                END $$;
+                """);
 
             migrationBuilder.CreateTable(
                 name: "api_audit_records",

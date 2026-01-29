@@ -1,6 +1,5 @@
 using System.Net;
 using System.Threading.RateLimiting;
-using Microsoft.OpenApi;
 using Microsoft.Extensions.Options;
 using Dhadgar.Gateway;
 using Dhadgar.Gateway.Endpoints;
@@ -22,6 +21,7 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,13 +35,14 @@ builder.WebHost.ConfigureKestrel(options =>
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
+    builder.Services.AddOpenApi("gateway", options =>
     {
-        options.SwaggerDoc("gateway", new OpenApiInfo
+        options.AddDocumentTransformer((document, context, cancellationToken) =>
         {
-            Title = "Dhadgar Gateway API",
-            Version = "v1",
-            Description = "API Gateway endpoints (health checks, diagnostics)"
+            document.Info.Title = "Dhadgar Gateway API";
+            document.Info.Version = "v1";
+            document.Info.Description = "API Gateway endpoints (health checks, diagnostics)";
+            return Task.CompletedTask;
         });
     });
 }
@@ -387,7 +388,7 @@ app.UseCircuitBreaker();
 
 if (app.Environment.IsDevelopment())
 {
-    // Serve aggregated OpenAPI spec at a path that won't be intercepted by UseSwagger middleware
+    // Serve aggregated OpenAPI spec at a path for SwaggerUI
     app.MapGet("/openapi/all.json", async (OpenApiAggregationService aggregator, CancellationToken ct) =>
     {
         var spec = await aggregator.GetAggregatedSpecAsync(ct);
@@ -396,17 +397,21 @@ if (app.Environment.IsDevelopment())
     .AllowAnonymous()
     .ExcludeFromDescription();
 
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
+    // Map OpenAPI endpoint using Microsoft.AspNetCore.OpenApi (replaces UseSwagger)
+    app.MapOpenApi("/openapi/{documentName}.json");
+
+    // Scalar API Reference - Gateway-only endpoints
+    app.MapScalarApiReference("/scalar/gateway", options =>
     {
-        // Single aggregated spec containing all services (served from /openapi/all.json)
-        options.SwaggerEndpoint("/openapi/all.json", "All Services");
+        options.Title = "Gateway API";
+        options.OpenApiRoutePattern = "/openapi/gateway.json";
+    });
 
-        // Individual service specs (still available if needed)
-        options.SwaggerEndpoint("/swagger/gateway/swagger.json", "Gateway Only");
-
-        options.DocumentTitle = "Meridian Console API";
-        options.RoutePrefix = "swagger";
+    // Scalar API Reference - All services aggregated (main documentation page)
+    app.MapScalarApiReference("/scalar/v1", options =>
+    {
+        options.Title = "Meridian Console API";
+        options.OpenApiRoutePattern = "/openapi/all.json";
     });
 }
 
