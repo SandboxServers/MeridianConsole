@@ -57,6 +57,7 @@ What goes where (services can only reference these, not each other):
 
 - Create feature branches from `main`
 - Conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`
+- **PR Size Limit**: Keep PRs under **85 files** (hard limit: 100). CodeRabbit cannot process PRs with 100+ files. If a feature requires more, split into multiple PRs.
 - NEVER force push to main/master
 - NEVER skip pre-commit hooks unless user explicitly requests
 
