@@ -43,20 +43,15 @@ public sealed class NodeService : INodeService
         CancellationToken ct = default)
     {
         // Start with base query for organization
-        IQueryable<Node> dbQuery = _dbContext.Nodes
+        // Use IgnoreQueryFilters when decommissioned nodes are requested
+        IQueryable<Node> dbQuery = query.IncludeDecommissioned
+            ? _dbContext.Nodes.IgnoreQueryFilters()
+            : _dbContext.Nodes;
+
+        dbQuery = dbQuery
             .AsNoTracking()
             .Include(n => n.Health)
             .Where(n => n.OrganizationId == organizationId);
-
-        // Include decommissioned nodes if requested (bypass the global query filter)
-        if (query.IncludeDecommissioned)
-        {
-            dbQuery = _dbContext.Nodes
-                .IgnoreQueryFilters()
-                .AsNoTracking()
-                .Include(n => n.Health)
-                .Where(n => n.OrganizationId == organizationId);
-        }
 
         // Apply filters
         dbQuery = ApplyFilters(dbQuery, query);
@@ -455,8 +450,9 @@ public sealed class NodeService : INodeService
     private static IQueryable<Node> ApplySorting(IQueryable<Node> query, NodeListQuery filters)
     {
         var isAscending = filters.IsAscending;
+        var sortBy = (filters.SortBy ?? "name").ToLowerInvariant();
 
-        return filters.SortBy.ToLowerInvariant() switch
+        return sortBy switch
         {
             "name" => isAscending
                 ? query.OrderBy(n => n.Name)
@@ -508,7 +504,7 @@ public sealed class NodeService : INodeService
     {
         var parameter = Expression.Parameter(typeof(Node), "n");
         var tagsProperty = Expression.Property(parameter, nameof(Node.Tags));
-        var containsMethod = typeof(List<string>).GetMethod("Contains", [typeof(string)])!;
+        var containsMethod = typeof(List<string>).GetMethod("Contains", new[] { typeof(string) })!;
 
         Expression? combinedCondition = null;
 

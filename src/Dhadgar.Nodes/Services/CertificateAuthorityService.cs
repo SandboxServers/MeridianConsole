@@ -1,4 +1,3 @@
-using System.Formats.Asn1;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -331,43 +330,16 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             pkcs12Password);
     }
 
-    private static X509Extension CreateAuthorityKeyIdentifierExtension(X509Certificate2 caCertificate)
+    private static X509AuthorityKeyIdentifierExtension CreateAuthorityKeyIdentifierExtension(X509Certificate2 caCertificate)
     {
         // Get the Subject Key Identifier from the CA certificate
         var skiExtension = caCertificate.Extensions
             .OfType<X509SubjectKeyIdentifierExtension>()
-            .FirstOrDefault();
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException("CA certificate does not have a Subject Key Identifier");
 
-        if (skiExtension is null)
-        {
-            throw new InvalidOperationException("CA certificate does not have a Subject Key Identifier");
-        }
-
-        // Build the Authority Key Identifier
-        // OID: 2.5.29.35
-        // Format: SEQUENCE { [0] OCTET STRING (key identifier) }
-        var keyId = HexStringToBytes(skiExtension.SubjectKeyIdentifier!);
-
-        var builder = new AsnWriter(AsnEncodingRules.DER);
-        using (builder.PushSequence())
-        {
-            builder.WriteOctetString(keyId, new Asn1Tag(TagClass.ContextSpecific, 0));
-        }
-
-        return new X509Extension(
-            new Oid("2.5.29.35", "Authority Key Identifier"),
-            builder.Encode(),
-            critical: false);
-    }
-
-    private static byte[] HexStringToBytes(string hex)
-    {
-        var bytes = new byte[hex.Length / 2];
-        for (int i = 0; i < bytes.Length; i++)
-        {
-            bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
-        }
-        return bytes;
+        // Use built-in method to create AKI from SKI (.NET 7+)
+        return X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(skiExtension);
     }
 
     private static string CalculateSha256Thumbprint(X509Certificate2 certificate)

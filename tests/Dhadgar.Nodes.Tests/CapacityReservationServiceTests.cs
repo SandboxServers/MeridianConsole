@@ -606,19 +606,17 @@ public sealed class CapacityReservationServiceTests
         var node = await SeedNodeWithCapacityAsync(context,
             availableMemoryBytes: 2L * 1024 * 1024 * 1024); // 2GB
 
-        // Create multiple reservations that together exceed capacity
-        var results = new List<ServiceResult<Models.ReservationResponse>>();
-        for (int i = 0; i < 5; i++)
-        {
-            var result = await service.ReserveAsync(
+        // Create multiple reservations concurrently that together exceed capacity
+        var tasks = Enumerable.Range(0, 5).Select(i =>
+            service.ReserveAsync(
                 node.Id,
                 memoryMb: 512, // 0.5GB each = 2.5GB total would exceed
                 diskMb: 1024,
                 cpuMillicores: 0,
                 requestedBy: $"test-{i}",
-                ttlMinutes: 15);
-            results.Add(result);
-        }
+                ttlMinutes: 15));
+
+        var results = await Task.WhenAll(tasks);
 
         // Assert
         var successCount = results.Count(r => r.Success);
@@ -626,6 +624,6 @@ public sealed class CapacityReservationServiceTests
 
         Assert.Equal(4, successCount); // Only 4 should succeed (4 * 512MB = 2GB)
         Assert.Equal(1, failCount); // Last one should fail
-        Assert.Equal("insufficient_memory", results.Last(r => !r.Success).Error);
+        Assert.Equal("insufficient_memory", results.First(r => !r.Success).Error);
     }
 }

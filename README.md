@@ -560,6 +560,7 @@ These services have basic scaffolding (hello world, health checks) but core func
 **Implemented:** Hardware inventory, agent enrollment with mTLS, health monitoring via heartbeats, capacity reservation system, Certificate Authority for agent authentication.
 
 **Key features:**
+
 - Node lifecycle management (Enrolling, Online, Degraded, Offline, Maintenance, Decommissioned)
 - One-time enrollment tokens (SHA-256 hashed)
 - mTLS certificates for agent authentication (90-day validity, auto-renewal)
