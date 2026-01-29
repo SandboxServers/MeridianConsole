@@ -484,9 +484,9 @@ public sealed class NodeService : INodeService
             if (filters.MaxHealthScore.HasValue)
             {
                 var max = filters.MaxHealthScore.Value;
-                // Nodes with no health data should pass MaxHealthScore filter (unknown health)
+                // Only include nodes with health data when filtering by max score
                 query = query.Where(n =>
-                    n.Health == null ||
+                    n.Health != null &&
                     (int)Math.Round(100.0 - (n.Health.CpuUsagePercent + n.Health.MemoryUsagePercent + n.Health.DiskUsagePercent) / 3.0) <= max);
             }
         }
