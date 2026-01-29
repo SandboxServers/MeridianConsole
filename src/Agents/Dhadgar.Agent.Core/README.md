@@ -737,7 +737,10 @@ public static class PathValidator
         );
 
         // Ensure the requested path is within the base path
-        return fullRequested.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase);
+        // Use case-sensitive comparison and ensure full directory match
+        var fullBaseWithSeparator = Path.TrimEndingDirectorySeparator(fullBase)
+            + Path.DirectorySeparatorChar;
+        return fullRequested.StartsWith(fullBaseWithSeparator, StringComparison.Ordinal);
     }
 }
 
@@ -1031,8 +1034,9 @@ Security review checklist:
 **NEVER do these things in agent code:**
 
 ```csharp
-// NEVER: Execute shell commands with user input
-Process.Start("bash", $"-c '{userInput}'");  // Command injection!
+// NEVER: Execute shell commands with user input (vulnerable on both Windows and Linux)
+Process.Start("bash", $"-c '{userInput}'");   // Linux command injection!
+Process.Start("cmd.exe", $"/c {userInput}");  // Windows command injection!
 
 // NEVER: Concatenate paths without validation
 var path = basePath + "/" + userInput;  // Path traversal!
