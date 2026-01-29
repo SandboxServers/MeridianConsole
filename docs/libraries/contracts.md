@@ -80,6 +80,7 @@ Contracts are organized into folders by **domain** (the service that owns them):
 | Folder       | Owner Service    | Contents                              |
 | ------------ | ---------------- | ------------------------------------- |
 | `/Identity/` | Identity Service | User, org, membership events and DTOs |
+| `/Nodes/`    | Nodes Service    | Node lifecycle, certificate, and capacity events |
 | `/Servers/`  | Servers Service  | Server provisioning contracts         |
 | Root level   | Cross-cutting    | Pagination, utilities                 |
 
@@ -594,8 +595,37 @@ public class PaginationTests
 | Identity DTOs       | 4       | `/Identity/IdentityServiceContracts.cs` |
 | Identity interfaces | 1       | `/Identity/IdentityServiceContracts.cs` |
 | Identity constants  | 1 class | `/Identity/IdentityEvents.cs`           |
+| Nodes events        | 15      | `/Nodes/NodeEvents.cs`                  |
+| Nodes commands      | 2       | `/Nodes/NodeCommands.cs`                |
 | Server contracts    | 3       | `/Servers/Contracts.cs`                 |
 | Utility types       | 1       | `/Hello.cs`                             |
+
+### Nodes Contracts
+
+**Node Lifecycle Events** (`/Nodes/NodeEvents.cs`):
+- `NodeEnrolled` - New node completes enrollment
+- `NodeOnline` - Node comes online (first heartbeat)
+- `NodeOffline` - Node misses heartbeat threshold
+- `NodeDegraded` - Node reports health issues
+- `NodeRecovered` - Node recovers from degraded state
+- `NodeDecommissioned` - Node permanently removed
+- `NodeMaintenanceStarted` - Node enters maintenance mode
+- `NodeMaintenanceEnded` - Node exits maintenance mode
+
+**Certificate Events** (`/Nodes/NodeEvents.cs`):
+- `AgentCertificateIssued` - Certificate issued during enrollment
+- `AgentCertificateRevoked` - Certificate revoked
+- `AgentCertificateRenewed` - Certificate renewed
+
+**Capacity Events** (`/Nodes/NodeEvents.cs`):
+- `CapacityReserved` - Capacity reservation created
+- `CapacityClaimed` - Reservation claimed by server
+- `CapacityReleased` - Reservation explicitly released
+- `CapacityReservationExpired` - Reservation expired without claim
+
+**Commands** (`/Nodes/NodeCommands.cs`):
+- `CheckNodeHealth` - Request health check for a node
+- `UpdateNodeCapacity` - Update node's capacity configuration
 
 ### Consuming Services
 

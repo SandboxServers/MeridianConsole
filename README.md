@@ -557,7 +557,14 @@ These services have basic scaffolding (hello world, health checks) but core func
 
 #### 🔌 Nodes (`src/Dhadgar.Nodes`) - Port 5040
 
-**Planned:** Hardware inventory, health monitoring, capacity management, agent enrollment
+**Implemented:** Hardware inventory, agent enrollment with mTLS, health monitoring via heartbeats, capacity reservation system, Certificate Authority for agent authentication.
+
+**Key features:**
+- Node lifecycle management (Enrolling, Online, Degraded, Offline, Maintenance, Decommissioned)
+- One-time enrollment tokens (SHA-256 hashed)
+- mTLS certificates for agent authentication (90-day validity, auto-renewal)
+- Capacity reservations to prevent over-provisioning
+- Background services for stale node detection and reservation cleanup
 
 #### 📋 Tasks (`src/Dhadgar.Tasks`) - Port 5050
 
