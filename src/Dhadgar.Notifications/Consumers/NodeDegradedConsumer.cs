@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Messaging.Consumers;
 using Dhadgar.Notifications.Alerting;
@@ -26,19 +27,19 @@ public sealed class NodeDegradedConsumer : DhadgarConsumer<NodeDegraded>
         Logger.LogWarning(
             "Received NodeDegraded event for node {NodeId}. Issues: {Issues}",
             message.NodeId,
-            string.Join(", ", message.Issues));
+            string.Join(", ", message.Issues ?? Array.Empty<string>()));
 
         var alert = new AlertMessage
         {
             Title = "Node Degraded Alert",
-            Message = $"Node {message.NodeId} is degraded. Issues: {string.Join(", ", message.Issues)}",
+            Message = $"Node {message.NodeId} is degraded. Issues: {string.Join(", ", message.Issues ?? Array.Empty<string>())}",
             Severity = AlertSeverity.Warning,
             ServiceName = "Nodes",
             Timestamp = new DateTimeOffset(message.Timestamp, TimeSpan.Zero),
             AdditionalData = new Dictionary<string, string>
             {
                 ["NodeId"] = message.NodeId.ToString(),
-                ["IssueCount"] = message.Issues.Count.ToString()
+                ["IssueCount"] = (message.Issues?.Count ?? 0).ToString(CultureInfo.InvariantCulture)
             }
         };
 

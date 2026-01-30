@@ -79,11 +79,7 @@ public static class MessagingExtensions
                 cfg.MessageTopology.SetEntityNameFormatter(new StaticEntityNameFormatter());
 
                 // Configure default retry policy for all consumers
-                cfg.UseMessageRetry(r => r.Exponential(
-                    RetryDefaults.RetryCount,
-                    RetryDefaults.InitialInterval,
-                    RetryDefaults.MaxInterval,
-                    TimeSpan.FromMilliseconds(200))); // jitter
+                cfg.UseMessageRetry(r => ConfigureExponentialRetry(r, RetryDefaults.RetryCount));
 
                 // Configure dead-letter queue for messages that fail all retries
                 // RabbitMQ automatically routes to _error queue after all retries exhausted
@@ -133,13 +129,23 @@ public static class MessagingExtensions
         int retryCount = RetryDefaults.RetryCount)
         where TConsumer : class, IConsumer
     {
-        configurator.UseMessageRetry(r => r.Exponential(
+        configurator.UseMessageRetry(r => ConfigureExponentialRetry(r, retryCount));
+
+        return configurator;
+    }
+
+    /// <summary>
+    /// Configures exponential retry with consistent backoff parameters.
+    /// </summary>
+    /// <param name="retryConfigurator">The retry configurator.</param>
+    /// <param name="retryCount">Number of retry attempts.</param>
+    private static void ConfigureExponentialRetry(IRetryConfigurator retryConfigurator, int retryCount)
+    {
+        retryConfigurator.Exponential(
             retryCount,
             RetryDefaults.InitialInterval,
             RetryDefaults.MaxInterval,
-            TimeSpan.FromMilliseconds(200)));
-
-        return configurator;
+            TimeSpan.FromMilliseconds(200)); // jitter
     }
 
     private sealed class StaticEntityNameFormatter : IEntityNameFormatter

@@ -2,6 +2,7 @@
       <PropertyGroup>
         <AssemblyName>Dhadgar.Messaging</AssemblyName>
         <RootNamespace>Dhadgar.Messaging</RootNamespace>
+        <Nullable>enable</Nullable>
       </PropertyGroup>
       <ItemGroup>
   <PackageReference Include="MassTransit" />

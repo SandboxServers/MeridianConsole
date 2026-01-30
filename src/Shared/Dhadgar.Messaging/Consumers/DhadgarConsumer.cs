@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
@@ -74,6 +75,7 @@ public abstract class DhadgarConsumer<TMessage> : IConsumer<TMessage>
         var messageType = typeof(TMessage).Name;
         var messageId = context.MessageId?.ToString() ?? "unknown";
         var correlationId = context.CorrelationId?.ToString() ?? context.MessageId?.ToString() ?? Guid.NewGuid().ToString();
+        var stopwatch = Stopwatch.StartNew();
 
         using var scope = Logger.BeginScope(new Dictionary<string, object>
         {
@@ -89,18 +91,23 @@ public abstract class DhadgarConsumer<TMessage> : IConsumer<TMessage>
         {
             await ConsumeAsync(context, context.CancellationToken);
 
-            Logger.LogDebug("Successfully consumed {MessageType} message {MessageId}", messageType, messageId);
+            stopwatch.Stop();
+            Logger.LogDebug("Successfully consumed {MessageType} message {MessageId} in {ElapsedMs}ms",
+                messageType, messageId, stopwatch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
         {
-            Logger.LogWarning("Consumption of {MessageType} message {MessageId} was cancelled", messageType, messageId);
+            stopwatch.Stop();
+            Logger.LogWarning("Consumption of {MessageType} message {MessageId} was cancelled after {ElapsedMs}ms",
+                messageType, messageId, stopwatch.ElapsedMilliseconds);
             throw;
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
             Logger.LogError(ex,
-                "Error consuming {MessageType} message {MessageId}: {ErrorMessage}",
-                messageType, messageId, ex.Message);
+                "Error consuming {MessageType} message {MessageId} after {ElapsedMs}ms: {ErrorMessage}",
+                messageType, messageId, stopwatch.ElapsedMilliseconds, ex.Message);
             throw;
         }
     }

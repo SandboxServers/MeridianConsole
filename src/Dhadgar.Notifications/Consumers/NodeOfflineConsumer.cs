@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Messaging.Consumers;
 using Dhadgar.Notifications.Alerting;
@@ -35,6 +36,8 @@ public sealed class NodeOfflineConsumer : DhadgarConsumer<NodeOffline>
             Severity = AlertSeverity.Critical,
             ServiceName = "Nodes",
             Timestamp = new DateTimeOffset(message.Timestamp, TimeSpan.Zero),
+            CorrelationId = context.CorrelationId?.ToString(),
+            TraceId = Activity.Current?.TraceId.ToString(),
             AdditionalData = new Dictionary<string, string>
             {
                 ["NodeId"] = message.NodeId.ToString(),

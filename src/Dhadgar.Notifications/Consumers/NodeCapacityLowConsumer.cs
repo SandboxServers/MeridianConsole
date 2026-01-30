@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Messaging.Consumers;
 using Dhadgar.Notifications.Alerting;
@@ -33,16 +35,18 @@ public sealed class NodeCapacityLowConsumer : DhadgarConsumer<NodeCapacityLow>
         {
             Title = "Node Capacity Low Alert",
             Message = $"Node {message.NodeId} is running low on resources. " +
-                      $"Memory: {message.MemoryUsagePercent:F1}% used, Disk: {message.DiskUsagePercent:F1}% used",
+                      $"Memory: {message.MemoryUsagePercent.ToString("F1", CultureInfo.InvariantCulture)}% used, Disk: {message.DiskUsagePercent.ToString("F1", CultureInfo.InvariantCulture)}% used",
             Severity = AlertSeverity.Warning,
             ServiceName = "Nodes",
             Timestamp = new DateTimeOffset(message.Timestamp, TimeSpan.Zero),
+            CorrelationId = context.CorrelationId?.ToString(),
+            TraceId = Activity.Current?.TraceId.ToString(),
             AdditionalData = new Dictionary<string, string>
             {
                 ["NodeId"] = message.NodeId.ToString(),
-                ["MemoryUsagePercent"] = message.MemoryUsagePercent.ToString("F1"),
-                ["DiskUsagePercent"] = message.DiskUsagePercent.ToString("F1"),
-                ["ThresholdPercent"] = message.ThresholdPercent.ToString("F1")
+                ["MemoryUsagePercent"] = message.MemoryUsagePercent.ToString("F1", CultureInfo.InvariantCulture),
+                ["DiskUsagePercent"] = message.DiskUsagePercent.ToString("F1", CultureInfo.InvariantCulture),
+                ["ThresholdPercent"] = message.ThresholdPercent.ToString("F1", CultureInfo.InvariantCulture)
             }
         };
 
