@@ -6,6 +6,7 @@
       <ItemGroup>
   <PackageReference Include="MassTransit" />
   <PackageReference Include="MassTransit.RabbitMQ" />
+  <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
 </ItemGroup>
 
     </Project>
