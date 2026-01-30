@@ -9,6 +9,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
+// Alias local models to avoid ambiguity with Contracts types
+using EnrollNodeRequest = Dhadgar.Nodes.Models.EnrollNodeRequest;
+using HardwareInventoryDto = Dhadgar.Nodes.Models.HardwareInventoryDto;
+
 namespace Dhadgar.Nodes.Tests;
 
 public sealed class EnrollmentServiceTests

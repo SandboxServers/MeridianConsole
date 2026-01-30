@@ -10,6 +10,10 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
+// Alias local models to avoid ambiguity with Contracts types
+using LocalEnrollNodeRequest = Dhadgar.Nodes.Models.EnrollNodeRequest;
+using LocalEnrollNodeResponse = Dhadgar.Nodes.Models.EnrollNodeResponse;
+
 namespace Dhadgar.Nodes.Services;
 
 public sealed class EnrollmentService : IEnrollmentService
@@ -43,8 +47,8 @@ public sealed class EnrollmentService : IEnrollmentService
         _logger = logger;
     }
 
-    public async Task<ServiceResult<EnrollNodeResponse>> EnrollAsync(
-        EnrollNodeRequest request,
+    public async Task<ServiceResult<LocalEnrollNodeResponse>> EnrollAsync(
+        LocalEnrollNodeRequest request,
         CancellationToken ct = default)
     {
         // Validate platform first (before calling ToLowerInvariant)
@@ -63,7 +67,7 @@ public sealed class EnrollmentService : IEnrollmentService
                 failureReason: "invalid_platform",
                 ct: ct);
 
-            return ServiceResult.Fail<EnrollNodeResponse>("invalid_platform");
+            return ServiceResult.Fail<LocalEnrollNodeResponse>("invalid_platform");
         }
 
         // Validate hardware
@@ -82,7 +86,7 @@ public sealed class EnrollmentService : IEnrollmentService
                 failureReason: "invalid_hardware",
                 ct: ct);
 
-            return ServiceResult.Fail<EnrollNodeResponse>("invalid_hardware");
+            return ServiceResult.Fail<LocalEnrollNodeResponse>("invalid_hardware");
         }
 
         var platform = request.Platform.ToLowerInvariant();
@@ -105,7 +109,7 @@ public sealed class EnrollmentService : IEnrollmentService
                 failureReason: "invalid_token",
                 ct: ct);
 
-            return ServiceResult.Fail<EnrollNodeResponse>("invalid_token");
+            return ServiceResult.Fail<LocalEnrollNodeResponse>("invalid_token");
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -173,7 +177,7 @@ public sealed class EnrollmentService : IEnrollmentService
                 failureReason: "certificate_generation_failed",
                 ct: ct);
 
-            return ServiceResult.Fail<EnrollNodeResponse>("certificate_generation_failed");
+            return ServiceResult.Fail<LocalEnrollNodeResponse>("certificate_generation_failed");
         }
 
         var certificate = new AgentCertificate
@@ -248,7 +252,7 @@ public sealed class EnrollmentService : IEnrollmentService
             organizationId: token.OrganizationId,
             ct: ct);
 
-        var response = new EnrollNodeResponse(
+        var response = new LocalEnrollNodeResponse(
             node.Id,
             certResult.Thumbprint!,
             certResult.CertificatePem!,

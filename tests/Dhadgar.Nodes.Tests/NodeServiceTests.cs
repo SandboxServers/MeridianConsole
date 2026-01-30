@@ -11,6 +11,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
+// Alias local models to avoid ambiguity with Contracts types
+using UpdateNodeRequest = Dhadgar.Nodes.Models.UpdateNodeRequest;
+using UpdateNodeTagsRequest = Dhadgar.Nodes.Models.UpdateNodeTagsRequest;
+
 namespace Dhadgar.Nodes.Tests;
 
 public sealed class NodeServiceTests

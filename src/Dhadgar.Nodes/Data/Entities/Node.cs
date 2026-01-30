@@ -1,14 +1,13 @@
 using System.ComponentModel.DataAnnotations;
+using Dhadgar.Shared.Data;
 
 namespace Dhadgar.Nodes.Data.Entities;
 
 /// <summary>
 /// Primary node entity representing a customer-owned machine running the Meridian agent.
 /// </summary>
-public sealed class Node
+public sealed class Node : BaseEntity
 {
-    public Guid Id { get; set; }
-
     /// <summary>Organization that owns this node.</summary>
     public Guid OrganizationId { get; set; }
 
@@ -36,12 +35,6 @@ public sealed class Node
     /// <summary>Last time a heartbeat was received from this node.</summary>
     public DateTime? LastHeartbeat { get; set; }
 
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-
-    /// <summary>Soft delete timestamp. When set, node is considered decommissioned.</summary>
-    public DateTime? DeletedAt { get; set; }
-
     /// <summary>
     /// User-defined tags for filtering and categorization.
     /// Stored as JSONB array in PostgreSQL.
@@ -53,11 +46,6 @@ public sealed class Node
 #pragma warning disable CA1002 // Do not expose generic lists - required for EF Core JSONB mapping
     public List<string> Tags { get; set; } = [];
 #pragma warning restore CA1002
-
-    /// <summary>
-    /// PostgreSQL xmin-based optimistic concurrency token.
-    /// </summary>
-    public uint RowVersion { get; set; }
 
     // Navigation properties
     public NodeHardwareInventory? HardwareInventory { get; set; }

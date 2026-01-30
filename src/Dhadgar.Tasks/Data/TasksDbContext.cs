@@ -1,8 +1,9 @@
+using Dhadgar.Shared.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Tasks.Data;
 
-public sealed class TasksDbContext : DbContext
+public sealed class TasksDbContext : DhadgarDbContext
 {
     public TasksDbContext(DbContextOptions<TasksDbContext> options) : base(options) { }
 
@@ -17,6 +18,10 @@ public sealed class TasksDbContext : DbContext
             b.HasKey(x => x.Id);
             b.Property(x => x.Name).HasMaxLength(200);
         });
+
+        // Apply base class conventions
+        ApplySoftDeleteConventions(modelBuilder);
+        ApplyProviderSpecificConventions(modelBuilder);
     }
 }
 

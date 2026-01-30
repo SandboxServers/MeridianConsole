@@ -1,5 +1,6 @@
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
+using Dhadgar.Contracts.Nodes;
 using Refit;
 
 namespace Dhadgar.Cli.Commands.Nodes;
@@ -44,10 +45,7 @@ public sealed class UpdateNodeCommand
 
         try
         {
-            var request = new UpdateNodeRequest
-            {
-                DisplayName = displayName
-            };
+            var request = new UpdateNodeRequest(Name: null, DisplayName: displayName);
 
             var response = await nodesApi.UpdateNodeAsync(orgId, nodeId, request, ct);
             NodesCommandHelpers.WriteJson(response);

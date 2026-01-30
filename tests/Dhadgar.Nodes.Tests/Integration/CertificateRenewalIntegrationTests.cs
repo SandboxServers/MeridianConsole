@@ -6,6 +6,10 @@ using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
 using Microsoft.Extensions.DependencyInjection;
 
+// Alias local models to avoid ambiguity with Contracts types
+using RenewCertificateRequest = Dhadgar.Nodes.Models.RenewCertificateRequest;
+using RenewCertificateResponse = Dhadgar.Nodes.Models.RenewCertificateResponse;
+
 namespace Dhadgar.Nodes.Tests.Integration;
 
 [Collection("Nodes Integration")]
