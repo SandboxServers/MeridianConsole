@@ -36,6 +36,8 @@ public sealed class MassTransitEventPublisher : IEventPublisher
     public async Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)
         where TEvent : class
     {
+        ArgumentNullException.ThrowIfNull(@event);
+
         var eventType = typeof(TEvent).Name;
 
         _logger.LogDebug("Publishing {EventType} event", eventType);
@@ -58,6 +60,8 @@ public sealed class MassTransitEventPublisher : IEventPublisher
     public async Task PublishBatchAsync<TEvent>(IEnumerable<TEvent> events, CancellationToken ct = default)
         where TEvent : class
     {
+        ArgumentNullException.ThrowIfNull(events);
+
         var eventType = typeof(TEvent).Name;
         var eventList = events.ToList();
 

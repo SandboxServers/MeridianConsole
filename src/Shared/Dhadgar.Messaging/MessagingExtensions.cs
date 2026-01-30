@@ -48,7 +48,7 @@ public static class MessagingExtensions
     /// <para>
     /// Configuration keys:
     /// <list type="bullet">
-    ///   <item><description><c>ConnectionStrings:RabbitMqHost</c> - RabbitMQ host (default: localhost)</description></item>
+    ///   <item><description><c>RabbitMq:Host</c> - RabbitMQ host (default: localhost)</description></item>
     ///   <item><description><c>RabbitMq:Username</c> - Username (default: dhadgar)</description></item>
     ///   <item><description><c>RabbitMq:Password</c> - Password (default: dhadgar)</description></item>
     /// </list>
@@ -65,7 +65,7 @@ public static class MessagingExtensions
 
             x.UsingRabbitMq((ctx, cfg) =>
             {
-                var host = config.GetConnectionString("RabbitMqHost") ?? "localhost";
+                var host = config["RabbitMq:Host"] ?? "localhost";
                 var user = config["RabbitMq:Username"] ?? "dhadgar";
                 var pass = config["RabbitMq:Password"] ?? "dhadgar";
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Messaging.Consumers;
@@ -36,6 +37,8 @@ public sealed class NodeDegradedConsumer : DhadgarConsumer<NodeDegraded>
             Severity = AlertSeverity.Warning,
             ServiceName = "Nodes",
             Timestamp = new DateTimeOffset(message.Timestamp, TimeSpan.Zero),
+            CorrelationId = context.CorrelationId?.ToString(),
+            TraceId = Activity.Current?.TraceId.ToString(),
             AdditionalData = new Dictionary<string, string>
             {
                 ["NodeId"] = message.NodeId.ToString(),
