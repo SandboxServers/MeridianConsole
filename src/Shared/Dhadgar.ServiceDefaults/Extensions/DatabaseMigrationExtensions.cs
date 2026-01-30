@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.ServiceDefaults.Extensions;
 
@@ -29,7 +30,21 @@ public static class DatabaseMigrationExtensions
         }
 
         await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
-        await db.Database.MigrateAsync();
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(DatabaseMigrationExtensions));
+        var contextName = typeof(TDbContext).Name;
+
+        try
+        {
+            logger.LogInformation("Applying migrations for {DbContext}...", contextName);
+            var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Migrations applied successfully for {DbContext}", contextName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to apply migrations for {DbContext}", contextName);
+            throw;
+        }
     }
 }

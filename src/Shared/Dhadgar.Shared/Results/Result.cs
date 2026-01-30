@@ -85,6 +85,18 @@ public readonly record struct Result
         }
         return this;
     }
+
+    /// <summary>
+    /// Pattern matches on the result, executing one of two functions based on success or failure.
+    /// </summary>
+    /// <typeparam name="TResult">The return type of both functions.</typeparam>
+    /// <param name="onSuccess">The function to execute if the result is successful.</param>
+    /// <param name="onFailure">The function to execute if the result is a failure.</param>
+    /// <returns>The result of the executed function.</returns>
+    public TResult Match<TResult>(Func<TResult> onSuccess, Func<string, TResult> onFailure)
+    {
+        return IsSuccess ? onSuccess() : onFailure(Error);
+    }
 }
 
 /// <summary>
@@ -244,4 +256,33 @@ public readonly record struct Result<T>
     /// <param name="defaultValue">The default value to return on failure.</param>
     /// <returns>The value or default value.</returns>
     public T ValueOr(T defaultValue) => IsSuccess ? Value : defaultValue;
+
+    /// <summary>
+    /// Pattern matches on the result, executing one of two functions based on success or failure.
+    /// </summary>
+    /// <typeparam name="TResult">The return type of both functions.</typeparam>
+    /// <param name="onSuccess">The function to execute if the result is successful.</param>
+    /// <param name="onFailure">The function to execute if the result is a failure.</param>
+    /// <returns>The result of the executed function.</returns>
+    public TResult Match<TResult>(Func<T, TResult> onSuccess, Func<string, TResult> onFailure)
+    {
+        return IsSuccess ? onSuccess(_value!) : onFailure(Error);
+    }
+
+    /// <summary>
+    /// Tries to get the value from a successful result without throwing exceptions.
+    /// </summary>
+    /// <param name="value">The value if the result is successful; otherwise, the default value of T.</param>
+    /// <returns>True if the result is successful and the value was retrieved; otherwise, false.</returns>
+    public bool TryGetValue([MaybeNullWhen(false)] out T value)
+    {
+        if (IsSuccess)
+        {
+            value = _value!;
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
 }

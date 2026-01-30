@@ -101,7 +101,8 @@ public static partial class StringExtensions
         }
 
         // Adjust length if it exceeds the string boundary
-        if (start + length > value.Length)
+        // Use subtraction to avoid potential integer overflow with large values
+        if (length > value.Length - start)
         {
             length = value.Length - start;
         }
