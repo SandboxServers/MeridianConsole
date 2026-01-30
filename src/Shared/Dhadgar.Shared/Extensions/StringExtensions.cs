@@ -61,6 +61,8 @@ public static partial class StringExtensions
     /// <exception cref="ArgumentOutOfRangeException">Thrown when maxLength is less than the suffix length.</exception>
     public static string Truncate(this string value, int maxLength, string suffix = "...")
     {
+        suffix ??= string.Empty;
+
         if (string.IsNullOrEmpty(value))
         {
             return string.Empty;

@@ -104,11 +104,11 @@ public class JsonSerializerExtensionsTests
         var json = JsonSerializer.Serialize(dto, jsonOptions.SerializerOptions);
 
         // Assert
-        Assert.Contains("\"isAdmin\"", json); // camelCase
-        Assert.DoesNotContain("\"IsAdmin\"", json); // PascalCase should not appear
+        Assert.Contains("\"isAdmin\"", json, StringComparison.Ordinal); // camelCase
+        Assert.DoesNotContain("\"IsAdmin\"", json, StringComparison.Ordinal); // PascalCase should not appear
     }
 
-    private class TestDto
+    private sealed class TestDto
     {
         public bool IsAdmin { get; set; }
     }
