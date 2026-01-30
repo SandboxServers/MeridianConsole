@@ -92,8 +92,8 @@ public static class MessagingExtensions
                 cfg.UseCircuitBreaker(cb =>
                 {
                     cb.TrackingPeriod = TimeSpan.FromMinutes(1);
-                    cb.TripThreshold = 15;       // Trip after 15 failures in tracking period
-                    cb.ActiveThreshold = 10;     // Start tracking after 10 concurrent messages
+                    cb.TripThreshold = 15;       // Trip when failure rate exceeds 15% in tracking period
+                    cb.ActiveThreshold = 10;     // Start tracking after 10 messages observed
                     cb.ResetInterval = TimeSpan.FromMinutes(5);  // Try again after 5 minutes
                 });
 
