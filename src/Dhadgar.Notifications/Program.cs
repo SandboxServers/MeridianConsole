@@ -4,6 +4,7 @@ using Dhadgar.Notifications.Data;
 using Dhadgar.Notifications.Discord;
 using Dhadgar.Notifications.Email;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
@@ -52,29 +53,13 @@ app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-// Optional: apply EF Core migrations automatically during local/dev runs.
-if (app.Environment.IsDevelopment())
-{
-    try
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NotificationsDbContext>();
-        db.Database.Migrate();
-    }
-    catch (Exception ex)
-    {
-        // Keep startup resilient for first-run dev scenarios.
-        app.Logger.LogWarning(ex, "DB migration failed (dev).");
-    }
-}
+// Auto-migrate database in development
+await app.AutoMigrateDatabaseAsync<NotificationsDbContext>();
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Notifications", message = Dhadgar.Notifications.Hello.Message }))
-    .WithTags("Health").WithName("NotificationsServiceInfo");
-app.MapGet("/hello", () => Results.Text(Dhadgar.Notifications.Hello.Message))
-    .WithTags("Health").WithName("NotificationsHello");
+app.MapServiceInfoEndpoints("Dhadgar.Notifications", Dhadgar.Notifications.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
 
-app.Run();
+await app.RunAsync();
 
 // Required for WebApplicationFactory<Program> integration tests.
 public partial class Program { }

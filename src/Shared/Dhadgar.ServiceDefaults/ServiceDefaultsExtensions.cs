@@ -2,6 +2,7 @@ using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
+using Dhadgar.ServiceDefaults.Serialization;
 using Dhadgar.ServiceDefaults.Tracing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -31,6 +32,7 @@ public static class ServiceDefaultsExtensions
     ///   <item>Health checks with "self" check for liveness</item>
     ///   <item><see cref="IOrganizationContext"/> for multi-tenant scenarios</item>
     ///   <item><see cref="RequestLoggingMessages"/> for source-generated HTTP logging</item>
+    ///   <item>Strict JSON serialization (rejects duplicate properties, uses camelCase)</item>
     /// </list>
     /// </para>
     /// <para>
@@ -48,6 +50,9 @@ public static class ServiceDefaultsExtensions
 
         // Register source-generated request logging messages as singleton
         services.AddSingleton<RequestLoggingMessages>();
+
+        // Configure strict JSON serialization for security hardening
+        services.AddStrictJsonSerialization();
 
         return services;
     }
@@ -69,6 +74,7 @@ public static class ServiceDefaultsExtensions
     ///   <item>OpenTelemetry metrics with runtime and process instrumentation</item>
     ///   <item>Logging infrastructure with PII redaction</item>
     ///   <item>Organization context for multi-tenant scenarios</item>
+    ///   <item>Strict JSON serialization (rejects duplicate properties, uses camelCase)</item>
     /// </list>
     /// </para>
     /// <para>
@@ -152,6 +158,9 @@ public static class ServiceDefaultsExtensions
 
         // Add logging infrastructure with PII redaction
         services.AddDhadgarLogging();
+
+        // Configure strict JSON serialization for security hardening
+        services.AddStrictJsonSerialization();
 
         // Configure OpenTelemetry (tracing + metrics)
         ConfigureOpenTelemetry(services, configuration, configureTracing);
