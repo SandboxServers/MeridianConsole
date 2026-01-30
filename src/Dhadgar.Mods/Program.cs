@@ -1,6 +1,7 @@
 using Dhadgar.Mods;
 using Dhadgar.Mods.Data;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
@@ -27,26 +28,10 @@ app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-// Optional: apply EF Core migrations automatically during local/dev runs.
-if (app.Environment.IsDevelopment())
-{
-    try
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ModsDbContext>();
-        db.Database.Migrate();
-    }
-    catch (Exception ex)
-    {
-        // Keep startup resilient for first-run dev scenarios.
-        app.Logger.LogWarning(ex, "DB migration failed (dev).");
-    }
-}
+// Auto-migrate database in development
+await app.AutoMigrateDatabaseAsync<ModsDbContext>();
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Mods", message = Dhadgar.Mods.Hello.Message }))
-    .WithTags("Health").WithName("ModsServiceInfo");
-app.MapGet("/hello", () => Results.Text(Dhadgar.Mods.Hello.Message))
-    .WithTags("Health").WithName("ModsHello");
+app.MapServiceInfoEndpoints("Dhadgar.Mods", Dhadgar.Mods.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
 
 app.Run();

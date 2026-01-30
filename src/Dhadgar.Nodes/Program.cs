@@ -8,6 +8,7 @@ using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
@@ -212,21 +213,8 @@ app.UseAuthentication();
 app.UseMtlsAuthentication();
 app.UseAuthorization();
 
-// Optional: apply EF Core migrations automatically during local/dev runs.
-if (app.Environment.IsDevelopment())
-{
-    try
-    {
-        await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
-        await db.Database.MigrateAsync();
-    }
-    catch (Exception ex)
-    {
-        // Keep startup resilient for first-run dev scenarios.
-        app.Logger.LogWarning(ex, "DB migration failed (dev).");
-    }
-}
+// Auto-migrate database in development
+await app.AutoMigrateDatabaseAsync<NodesDbContext>();
 
 // Initialize the Certificate Authority on startup
 try
@@ -241,10 +229,7 @@ catch (Exception ex)
 }
 
 // Map endpoints
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Nodes", message = Dhadgar.Nodes.Hello.Message }))
-    .WithTags("Health").WithName("NodesServiceInfo");
-app.MapGet("/hello", () => Results.Text(Dhadgar.Nodes.Hello.Message))
-    .WithTags("Health").WithName("NodesHello");
+app.MapServiceInfoEndpoints("Dhadgar.Nodes", Dhadgar.Nodes.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
 
 // Map API endpoints

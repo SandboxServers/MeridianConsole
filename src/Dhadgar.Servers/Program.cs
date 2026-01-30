@@ -2,6 +2,7 @@ using Dhadgar.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Audit;
+using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
@@ -88,26 +89,10 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 // Currently skips all requests (no auth configured yet); will capture authenticated requests once auth is added
 app.UseAuditMiddleware();
 
-// Optional: apply EF Core migrations automatically during local/dev runs.
-if (app.Environment.IsDevelopment())
-{
-    try
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ServersDbContext>();
-        db.Database.Migrate();
-    }
-    catch (Exception ex)
-    {
-        // Keep startup resilient for first-run dev scenarios.
-        app.Logger.LogWarning(ex, "DB migration failed (dev).");
-    }
-}
+// Auto-migrate database in development
+await app.AutoMigrateDatabaseAsync<ServersDbContext>();
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Servers", message = Dhadgar.Servers.Hello.Message }))
-    .WithTags("Health").WithName("ServersServiceInfo");
-app.MapGet("/hello", () => Results.Text(Dhadgar.Servers.Hello.Message))
-    .WithTags("Health").WithName("ServersHello");
+app.MapServiceInfoEndpoints("Dhadgar.Servers", Dhadgar.Servers.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
 
 app.Run();

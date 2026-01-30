@@ -188,6 +188,7 @@ public static IServiceCollection AddDhadgarServiceDefaults(this IServiceCollecti
 - Registers ASP.NET Core health checks
 - Adds a basic "self" health check that always returns `Healthy`
 - Tags the self-check with `["live"]` for Kubernetes liveness probes
+- Configures strict JSON serialization (rejects duplicate properties, uses camelCase naming)
 
 **Usage**:
 ```csharp
@@ -196,7 +197,7 @@ builder.Services.AddDhadgarServiceDefaults();
 
 **Implementation Details**:
 
-The method is intentionally minimal. It sets up the foundation that `MapDhadgarDefaultEndpoints` builds upon:
+The method sets up the foundation that `MapDhadgarDefaultEndpoints` builds upon:
 
 ```csharp
 public static IServiceCollection AddDhadgarServiceDefaults(this IServiceCollection services)
@@ -204,9 +205,26 @@ public static IServiceCollection AddDhadgarServiceDefaults(this IServiceCollecti
     services.AddHealthChecks()
         .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
 
+    // Register organization context for multi-tenant logging
+    services.AddOrganizationContext();
+
+    // Register source-generated request logging messages as singleton
+    services.AddSingleton<RequestLoggingMessages>();
+
+    // Configure strict JSON serialization for security hardening
+    services.AddStrictJsonSerialization();
+
     return services;
 }
 ```
+
+**JSON Security Hardening**:
+
+The `AddStrictJsonSerialization()` call configures the following security measures:
+
+- **Rejects duplicate properties**: Prevents property shadowing attacks (e.g., `{"isAdmin": false, "isAdmin": true}`)
+- **Uses camelCase naming**: Consistent with JavaScript/TypeScript clients (e.g., `"userId"` instead of `"UserId"`)
+- **Allows extra fields**: Does not break clients that send additional properties (opt-in stricter validation per-endpoint if needed)
 
 Services can add additional health checks before or after calling this method:
 

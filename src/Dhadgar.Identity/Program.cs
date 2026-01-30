@@ -33,6 +33,7 @@ using OpenIddict.Server.AspNetCore;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Audit;
 using Dhadgar.ServiceDefaults.Errors;
+using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
@@ -829,7 +830,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 // This must come after UseAuthentication/UseAuthorization but before endpoints
 //app.UseMiddleware<OpenIddictServerMiddleware>(); // Not needed - UseAuthentication() triggers it
 
-// Apply EF Core migrations automatically during local/dev runs or when configured.
+// Auto-migrate database in development or when configured
 var autoMigrate = app.Environment.IsDevelopment() ||
     app.Configuration.GetValue<bool>("Database:AutoMigrate");
 
@@ -844,16 +845,7 @@ if (autoMigrate)
 }
 
 // Anonymous endpoints (no authentication required)
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }))
-    .WithTags("Health")
-    .WithName("ServiceInfo")
-    .WithDescription("Get service information")
-    .AllowAnonymous();
-app.MapGet("/hello", () => Results.Text(IdentityHello.Message))
-    .WithTags("Health")
-    .WithName("Hello")
-    .WithDescription("Simple hello endpoint")
-    .AllowAnonymous();
+app.MapServiceInfoEndpoints("Dhadgar.Identity", IdentityHello.Message);
 app.MapDhadgarDefaultEndpoints(); // Health checks - already configured as anonymous in ServiceDefaults
 
 // Token exchange endpoint - uses its own validation (Better Auth exchange tokens)
