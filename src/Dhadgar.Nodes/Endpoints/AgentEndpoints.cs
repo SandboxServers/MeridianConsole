@@ -74,7 +74,22 @@ public static class AgentEndpoints
             };
         }
 
-        return Results.Created($"/api/v1/agents/{result.Value!.NodeId}", result.Value);
+        // Map local model to Contracts DTO for API response
+        var localResponse = result.Value!;
+        var contractsResponse = new Dhadgar.Contracts.Nodes.EnrollNodeResponse(
+            NodeId: localResponse.NodeId.ToString(),
+            CertificateThumbprint: localResponse.CertificateThumbprint,
+            Certificate: localResponse.Certificate,
+            Pkcs12Base64: localResponse.Pkcs12Base64,
+            Pkcs12Password: localResponse.Pkcs12Password,
+            NotBefore: localResponse.NotBefore.HasValue
+                ? new DateTimeOffset(localResponse.NotBefore.Value, TimeSpan.Zero)
+                : null,
+            NotAfter: localResponse.NotAfter.HasValue
+                ? new DateTimeOffset(localResponse.NotAfter.Value, TimeSpan.Zero)
+                : null);
+
+        return Results.Created($"/api/v1/agents/{localResponse.NodeId}", contractsResponse);
     }
 
     private static async Task<IResult> Heartbeat(
@@ -240,13 +255,16 @@ public static class AgentEndpoints
             "Certificate renewed for node {NodeId}. Old: {OldThumbprint}, New: {NewThumbprint}",
             nodeId, currentCert.Thumbprint, certResult.Thumbprint);
 
-        return Results.Ok(new LocalRenewCertificateResponse(
-            certResult.Thumbprint!,
-            certResult.CertificatePem!,
-            certResult.Pkcs12Base64!,
-            certResult.Pkcs12Password!,
-            certResult.NotBefore!.Value,
-            certResult.NotAfter!.Value));
+        // Map to Contracts DTO for API response (DateTime -> DateTimeOffset)
+        var contractsResponse = new Dhadgar.Contracts.Nodes.RenewCertificateResponse(
+            CertificateThumbprint: certResult.Thumbprint!,
+            Certificate: certResult.CertificatePem!,
+            Pkcs12Base64: certResult.Pkcs12Base64!,
+            Pkcs12Password: certResult.Pkcs12Password!,
+            NotBefore: new DateTimeOffset(certResult.NotBefore!.Value, TimeSpan.Zero),
+            NotAfter: new DateTimeOffset(certResult.NotAfter!.Value, TimeSpan.Zero));
+
+        return Results.Ok(contractsResponse);
     }
 
     private static async Task<IResult> GetCaCertificate(
@@ -264,8 +282,3 @@ public static class AgentEndpoints
         }
     }
 }
-
-/// <summary>
-/// Response containing the CA certificate.
-/// </summary>
-public sealed record CaCertificateResponse(string Certificate);

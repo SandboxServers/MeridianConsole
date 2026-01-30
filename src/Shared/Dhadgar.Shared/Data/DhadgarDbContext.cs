@@ -211,7 +211,7 @@ public abstract class DhadgarDbContext : DbContext
 
     /// <summary>
     /// Saves all changes made in this context to the database, automatically updating
-    /// the <c>UpdatedAt</c> timestamp on modified entities.
+    /// audit timestamps on entities.
     /// </summary>
     /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
     /// <returns>
@@ -220,8 +220,12 @@ public abstract class DhadgarDbContext : DbContext
     /// </returns>
     /// <remarks>
     /// <para>
-    /// This override automatically sets the <c>UpdatedAt</c> property to <see cref="DateTime.UtcNow"/>
-    /// for any tracked entities in the <c>Modified</c> state that have an <c>UpdatedAt</c> property.
+    /// This override automatically sets audit timestamps for tracked entities implementing
+    /// <see cref="IAuditableEntity"/>:
+    /// <list type="bullet">
+    ///   <item><description><c>CreatedAt</c> is set to the current UTC time for entities in the <c>Added</c> state</description></item>
+    ///   <item><description><c>UpdatedAt</c> is set to the current UTC time for entities in the <c>Modified</c> state</description></item>
+    /// </list>
     /// </para>
     /// <para>
     /// This works for both entities extending <see cref="BaseEntity"/> and those implementing
@@ -230,38 +234,46 @@ public abstract class DhadgarDbContext : DbContext
     /// </remarks>
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
-
-        foreach (var entry in ChangeTracker.Entries<IAuditableEntity>())
-        {
-            switch (entry.State)
-            {
-                case EntityState.Added:
-                    entry.Entity.CreatedAt = now;
-                    entry.Entity.UpdatedAt = null;
-                    break;
-                case EntityState.Modified:
-                    entry.Entity.UpdatedAt = now;
-                    break;
-            }
-        }
-
+        ApplyAuditTimestamps(DateTime.UtcNow);
         return await base.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
     /// Saves all changes made in this context to the database, automatically updating
-    /// the <c>UpdatedAt</c> timestamp on modified entities.
+    /// audit timestamps on entities.
     /// </summary>
     /// <returns>The number of state entries written to the database.</returns>
     /// <remarks>
-    /// This override automatically sets the <c>UpdatedAt</c> property to <see cref="DateTime.UtcNow"/>
-    /// for any tracked entities in the <c>Modified</c> state that have an <c>UpdatedAt</c> property.
+    /// <para>
+    /// This override automatically sets audit timestamps for tracked entities implementing
+    /// <see cref="IAuditableEntity"/>:
+    /// <list type="bullet">
+    ///   <item><description><c>CreatedAt</c> is set to the current UTC time for entities in the <c>Added</c> state</description></item>
+    ///   <item><description><c>UpdatedAt</c> is set to the current UTC time for entities in the <c>Modified</c> state</description></item>
+    /// </list>
+    /// </para>
     /// </remarks>
     public override int SaveChanges()
     {
-        var now = DateTime.UtcNow;
+        ApplyAuditTimestamps(DateTime.UtcNow);
+        return base.SaveChanges();
+    }
 
+    /// <summary>
+    /// Applies audit timestamps to tracked entities based on their state.
+    /// </summary>
+    /// <param name="now">The timestamp to apply.</param>
+    /// <remarks>
+    /// <para>
+    /// For entities in the <c>Added</c> state, sets <c>CreatedAt</c> to the provided timestamp
+    /// and clears <c>UpdatedAt</c> to null.
+    /// </para>
+    /// <para>
+    /// For entities in the <c>Modified</c> state, sets <c>UpdatedAt</c> to the provided timestamp.
+    /// </para>
+    /// </remarks>
+    private void ApplyAuditTimestamps(DateTime now)
+    {
         foreach (var entry in ChangeTracker.Entries<IAuditableEntity>())
         {
             switch (entry.State)
@@ -275,7 +287,5 @@ public abstract class DhadgarDbContext : DbContext
                     break;
             }
         }
-
-        return base.SaveChanges();
     }
 }

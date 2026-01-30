@@ -28,9 +28,16 @@ public abstract class BaseEntity : IAuditableEntity
     /// Gets or sets the unique identifier for this entity.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Uses GUID for globally unique identification across distributed systems.
+    /// The ID is generated client-side when the entity is constructed, allowing
+    /// the entity to have an ID before persistence.
+    /// </para>
+    /// <para>
+    /// EF Core is configured to not overwrite this value on insert.
+    /// </para>
     /// </remarks>
-    public Guid Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>
     /// Gets or sets the UTC timestamp when this entity was created.
