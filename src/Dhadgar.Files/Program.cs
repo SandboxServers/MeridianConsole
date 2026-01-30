@@ -34,7 +34,7 @@ await app.AutoMigrateDatabaseAsync<FilesDbContext>();
 app.MapServiceInfoEndpoints("Dhadgar.Files", Dhadgar.Files.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
 
-app.Run();
+await app.RunAsync();
 
 // Required for WebApplicationFactory<Program> integration tests.
 public partial class Program { }

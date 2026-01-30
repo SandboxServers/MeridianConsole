@@ -59,7 +59,7 @@ await app.AutoMigrateDatabaseAsync<NotificationsDbContext>();
 app.MapServiceInfoEndpoints("Dhadgar.Notifications", Dhadgar.Notifications.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
 
-app.Run();
+await app.RunAsync();
 
 // Required for WebApplicationFactory<Program> integration tests.
 public partial class Program { }
