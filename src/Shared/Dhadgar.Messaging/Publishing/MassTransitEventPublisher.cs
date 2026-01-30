@@ -61,24 +61,27 @@ public sealed class MassTransitEventPublisher : IEventPublisher
         var eventType = typeof(TEvent).Name;
         var eventList = events.ToList();
 
+        if (eventList.Count == 0)
+        {
+            _logger.LogDebug("Skipping empty batch publish for {EventType}", eventType);
+            return;
+        }
+
         _logger.LogDebug("Publishing batch of {Count} {EventType} events", eventList.Count, eventType);
 
-        var successCount = 0;
         try
         {
-            foreach (var @event in eventList)
-            {
-                await _publishEndpoint.Publish(@event, ct);
-                successCount++;
-            }
+            // Use MassTransit's batch extension which uses Task.WhenAll internally
+            // for better performance than sequential awaits
+            await _publishEndpoint.PublishBatch(eventList, ct);
 
             _logger.LogDebug("Successfully published batch of {Count} {EventType} events",
                 eventList.Count, eventType);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish batch of {EventType} events. {SuccessCount}/{TotalCount} succeeded before failure: {ErrorMessage}",
-                eventType, successCount, eventList.Count, ex.Message);
+            _logger.LogError(ex, "Failed to publish batch of {EventType} events ({TotalCount} total): {ErrorMessage}",
+                eventType, eventList.Count, ex.Message);
             throw;
         }
     }
