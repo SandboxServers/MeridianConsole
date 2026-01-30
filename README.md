@@ -36,7 +36,7 @@ dotnet run --project src/Dhadgar.Gateway
 # 6. Try it out!
 curl http://localhost:5000/
 curl http://localhost:5000/healthz
-open http://localhost:5000/swagger  # API docs
+open http://localhost:5000/scalar/v1  # API docs (aggregated from all services)
 ```
 
 **That's it!** You now have the entire platform running locally.
@@ -60,7 +60,7 @@ open http://localhost:5000/swagger  # API docs
   - [Optional: Azure Integration](#optional-azure-integration)
 - [Architecture Overview](#architecture-overview)
 - [Services](#services)
-  - [Implemented Services](#implemented-services)
+  - [Core Services](#core-services)
   - [Stub Services](#stub-services)
 - [Development Guide](#development-guide)
 - [Testing](#testing)
@@ -113,42 +113,45 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 **Core Platform:**
 
 - ✅ Full solution builds with .NET 10 (`dotnet build`)
-- ✅ All 561 tests pass (`dotnet test`)
+- ✅ All 947 tests pass (`dotnet test`)
 - ✅ Local infrastructure with Docker Compose
 - ✅ API Gateway with YARP reverse proxy
 - ✅ OpenTelemetry distributed tracing + metrics
 - ✅ Grafana/Prometheus/Loki observability stack
 - ✅ Centralized middleware (correlation IDs, RFC 7807 errors, request logging)
 
-**Implemented Services** (with real functionality):
+**Core Services** (substantial implementation, some TODOs remain):
 
-- **Gateway**: YARP reverse proxy with rate limiting, CORS, correlation tracking
-- **Identity**: User/org management, roles, OAuth providers, search (PostgreSQL + EF Core)
-- **BetterAuth**: Passwordless authentication via Better Auth SDK
+- **Gateway**: YARP reverse proxy with rate limiting, circuit breaker, CORS, Cloudflare IP integration (production-ready)
+- **Identity**: User/org management, roles, OAuth providers (Steam, Battle.net, Epic, Xbox), sessions; MFA returns 501
+- **Nodes**: Agent enrollment with mTLS, Certificate Authority, heartbeat monitoring, capacity reservations
 - **Secrets**: Claims-based authorization, audit logging, rate limiting, Azure Key Vault integration
+- **BetterAuth**: Passwordless authentication via Better Auth SDK
+- **CLI** (`dhadgar`): Global .NET tool for managing identity, secrets, nodes, enrollment, and more
 
 **Frontend Apps** (Astro/React/Tailwind stack):
 
-- **Scope**: Documentation site
-- **ShoppingCart**: OAuth login flow (wireframe, for auth verification)
+- **Scope**: Documentation site with 19 sections and interactive dependency graphs (functional)
+- **Panel**: Control plane UI with OAuth integration (scaffolding, dashboard skeleton)
+- **ShoppingCart**: Marketing site with pricing tiers (wireframe, OAuth flow only)
 
 **Development Experience:**
 
 - ✅ Hot reload with `dotnet watch`
-- ✅ Swagger UI for all services
+- ✅ Scalar API documentation for all services (at `/scalar/v1`)
 - ✅ EF Core migrations for database services
 - ✅ User secrets for local config
 - ✅ Bootstrap script for environment setup
 
 ### 🚧 What's Being Built
 
-- Real authentication flows (JWT, RBAC policy enforcement)
-- Billing integration (SaaS edition)
-- Game server provisioning workflows
-- Agent enrollment with mTLS
-- MassTransit message topology (commands, events, sagas)
-- Production UI features (Panel, ShoppingCart beyond wireframes)
-- Kubernetes manifests and Helm charts
+- Game server provisioning workflows (Servers service)
+- File transfer orchestration and mod distribution (Files, Mods services)
+- Billing and subscription management (SaaS edition)
+- Real-time server console via SignalR (Console service)
+- Notification delivery (email, Discord, webhooks)
+- Production UI features (Panel dashboard, ShoppingCart checkout)
+- Agent implementations (Linux systemd, Windows Service)
 
 **Bottom line:** The foundation is solid. Features are landing incrementally.
 
@@ -432,29 +435,31 @@ Game Servers (running on customer hardware)
 
 ## Services
 
-### Implemented Services
+### Core Services
 
-These services have real functionality beyond basic scaffolding:
+These services have substantial implementations (some TODOs remain):
 
 #### 🌐 Gateway (`src/Dhadgar.Gateway`)
 
 **What it does:** Single entry point for all API traffic. Routes requests to backend services.
 
-**Tech stack:** YARP reverse proxy, rate limiting, CORS, OpenTelemetry
+**Tech stack:** YARP reverse proxy, rate limiting, circuit breaker, CORS, OpenTelemetry
 
 **Key features:**
 
-- Routes all 14 microservices
+- Routes 17 route configurations to 14 backend clusters
 - Rate limiting (global, per-tenant, per-agent, auth endpoints)
-- Active health checks for backend services
-- Session affinity for SignalR connections
-- Security headers, correlation tracking, problem details middleware
+- Circuit breaker with configurable failure thresholds
+- Active health checks for backend services (30s interval)
+- Session affinity for SignalR connections (Console service)
+- Security headers, correlation tracking, Cloudflare IP integration
 
 **Endpoints:**
 
 - `GET /` - Service banner
 - `GET /healthz` - Health check
-- `GET /swagger` - API documentation
+- `GET /scalar/v1` - Aggregated API documentation (Scalar)
+- `GET /scalar/gateway` - Gateway-only API docs
 - `/api/v1/{service}/*` - Proxies to backend services
 
 **Runs on:** Port 5000 (configurable)
@@ -469,27 +474,27 @@ These services have real functionality beyond basic scaffolding:
 
 **Key features:**
 
-- User CRUD operations
+- User CRUD operations (org-scoped)
 - Organization (tenant) management
 - Role system (org-scoped and custom roles)
-- Membership management (add/remove users from orgs)
+- Membership management (invite/remove users from orgs)
 - Search API (users, orgs, roles)
-- OAuth provider integration (Steam, Battle.net, Discord, Microsoft)
+- OAuth provider integration (Steam, Battle.net, Epic, Xbox)
+- Session management
+- Activity tracking and audit logging
 
-**Endpoints:**
+**Endpoints** (all user/role endpoints are org-scoped):
 
-- `POST /users` - Create user
-- `GET /users/:id` - Get user by ID
-- `PATCH /users/:id` - Update user
-- `DELETE /users/:id` - Delete user
 - `POST /organizations` - Create organization
-- `POST /organizations/:id/members` - Add member to org
-- `POST /roles` - Create custom role
-- `GET /search/users` - Search users
-- `GET /search/organizations` - Search organizations
-- `GET /webhooks` - Webhook endpoint for auth providers
+- `GET /organizations/{orgId}/users` - List users in org
+- `POST /organizations/{orgId}/users` - Create user in org
+- `POST /organizations/{orgId}/members/invite` - Invite member to org
+- `POST /organizations/{orgId}/roles` - Create custom role
+- `GET /organizations/search` - Search organizations
+- `GET /organizations/{orgId}/users/search` - Search users in org
+- `POST /webhooks/better-auth` - BetterAuth webhook
 
-**Runs on:** Port 5010
+**Runs on:** Port 5001
 
 **Database:** PostgreSQL (`dhadgar_identity`)
 
@@ -539,55 +544,94 @@ These services have real functionality beyond basic scaffolding:
 - `POST /api/v1/secrets/{name}/rotate` - Rotate secret
 - `DELETE /api/v1/secrets/{name}` - Delete secret
 
-**Runs on:** Port 5110
+**Runs on:** Port 5011
 
 **Database:** None (stateless, uses Azure Key Vault)
+
+#### 🔌 Nodes (`src/Dhadgar.Nodes`)
+
+**What it does:** Hardware inventory, agent enrollment, health monitoring, and capacity management.
+
+**Tech stack:** ASP.NET Core, PostgreSQL, Entity Framework Core, MassTransit
+
+**Key features:**
+
+- Node lifecycle management (Enrolling, Online, Degraded, Offline, Maintenance, Decommissioned)
+- One-time enrollment tokens (SHA-256 hashed, configurable expiry)
+- Certificate Authority for mTLS agent authentication (90-day validity, auto-renewal)
+- Heartbeat-based health monitoring with stale node detection
+- Capacity reservations to prevent over-provisioning
+- Background services for reservation cleanup and node status updates
+- Comprehensive audit logging
+
+**Endpoints:**
+
+- `POST /api/v1/agents/enroll` - Agent enrollment with token (anonymous)
+- `POST /api/v1/agents/{nodeId}/heartbeat` - Health check from agent (mTLS)
+- `POST /api/v1/agents/{nodeId}/certificates/renew` - Certificate renewal (mTLS)
+- `GET /api/v1/agents/ca-certificate` - Get CA certificate for trust store (anonymous)
+- `POST /organizations/{orgId}/enrollment/tokens` - Create enrollment token
+- `GET /organizations/{orgId}/nodes` - List nodes with filtering
+- `POST /organizations/{orgId}/nodes/{nodeId}/reservations` - Reserve node capacity
+
+**Runs on:** Port 5040
+
+**Database:** PostgreSQL (`dhadgar_platform`)
+
+#### 🖥️ CLI (`src/Dhadgar.Cli`)
+
+**What it does:** Command-line tool for managing the platform without the UI.
+
+**Tech stack:** System.CommandLine, Spectre.Console, Refit (typed HTTP clients)
+
+**Key commands:**
+
+- `dhadgar auth` - Authentication and token management
+- `dhadgar identity` - Organization/user/role management
+- `dhadgar member` - Organization membership operations
+- `dhadgar secret` - Secret management
+- `dhadgar keyvault` - Azure Key Vault operations
+- `dhadgar nodes` - Node management
+- `dhadgar enrollment` - Agent enrollment tokens
+- `dhadgar me` - Self-service operations
+
+**Installation:** `dotnet tool install -g dhadgar`
+
+**Config:** Stored in `~/.dhadgar/config.json`
 
 ### Stub Services
 
 These services have basic scaffolding (hello world, health checks) but core functionality is planned:
 
-#### 💰 Billing (`src/Dhadgar.Billing`) - Port 5020
+#### 💰 Billing (`src/Dhadgar.Billing`) - Port 5002
 
 **Planned:** Subscription management, usage metering, invoicing
 
-#### 🖥️ Servers (`src/Dhadgar.Servers`) - Port 5030
+#### 🖥️ Servers (`src/Dhadgar.Servers`) - Port 5003
 
 **Planned:** Game server lifecycle management, configuration, start/stop/restart
 
-#### 🔌 Nodes (`src/Dhadgar.Nodes`) - Port 5040
-
-**Implemented:** Hardware inventory, agent enrollment with mTLS, health monitoring via heartbeats, capacity reservation system, Certificate Authority for agent authentication.
-
-**Key features:**
-
-- Node lifecycle management (Enrolling, Online, Degraded, Offline, Maintenance, Decommissioned)
-- One-time enrollment tokens (SHA-256 hashed)
-- mTLS certificates for agent authentication (90-day validity, auto-renewal)
-- Capacity reservations to prevent over-provisioning
-- Background services for stale node detection and reservation cleanup
-
-#### 📋 Tasks (`src/Dhadgar.Tasks`) - Port 5050
+#### 📋 Tasks (`src/Dhadgar.Tasks`) - Port 5005
 
 **Planned:** Background job orchestration, scheduling, status tracking
 
-#### 📁 Files (`src/Dhadgar.Files`) - Port 5060
+#### 📁 Files (`src/Dhadgar.Files`) - Port 5006
 
 **Planned:** File upload/download, transfer orchestration, mod distribution
 
-#### 🧩 Mods (`src/Dhadgar.Mods`) - Port 5080
-
-**Planned:** Mod registry, versioning, compatibility tracking
-
-#### 🖥️ Console (`src/Dhadgar.Console`) - Port 5070
+#### 🖥️ Console (`src/Dhadgar.Console`) - Port 5007
 
 **Planned:** Real-time server console via SignalR, command execution
 
-#### 📧 Notifications (`src/Dhadgar.Notifications`) - Port 5090
+#### 🧩 Mods (`src/Dhadgar.Mods`) - Port 5008
+
+**Planned:** Mod registry, versioning, compatibility tracking
+
+#### 📧 Notifications (`src/Dhadgar.Notifications`) - Port 5009
 
 **Planned:** Email, Discord, webhook notifications
 
-#### 💬 Discord (`src/Dhadgar.Discord`) - Port 5120
+#### 💬 Discord (`src/Dhadgar.Discord`) - Port 5012
 
 **Planned:** Discord bot integration, server management commands
 
@@ -600,26 +644,29 @@ These services have basic scaffolding (hello world, health checks) but core func
 ```
 MeridianConsole/
 ├── src/
-│   ├── Dhadgar.Gateway/              # API Gateway (YARP)
+│   ├── Dhadgar.Gateway/              # API Gateway (YARP) ✅
 │   ├── Dhadgar.Identity/             # Users, orgs, roles ✅
+│   ├── Dhadgar.Nodes/                # Agent enrollment, mTLS CA ✅
+│   ├── Dhadgar.Secrets/              # Secret management ✅
+│   ├── Dhadgar.Cli/                  # CLI tool (dhadgar) ✅
 │   ├── Dhadgar.BetterAuth/           # Passwordless auth ✅
 │   ├── Dhadgar.{Service}/            # Other services (stubs)
 │   ├── Shared/
 │   │   ├── Dhadgar.Contracts/        # DTOs, message contracts
-│   │   ├── Dhadgar.Shared/           # Utilities, primitives
+│   │   ├── Dhadgar.Shared/           # Utilities, data layer patterns
 │   │   ├── Dhadgar.Messaging/        # MassTransit conventions
 │   │   └── Dhadgar.ServiceDefaults/  # Middleware, observability
 │   ├── Agents/
 │   │   ├── Dhadgar.Agent.Core/       # Shared agent logic
-│   │   ├── Dhadgar.Agent.Linux/      # Linux-specific agent
-│   │   └── Dhadgar.Agent.Windows/    # Windows-specific agent
-│   ├── Dhadgar.Scope/                # Documentation site (Astro/React/Tailwind)
-│   ├── Dhadgar.Panel/                # Main UI (Astro/React/Tailwind - scaffolding)
-│   └── Dhadgar.ShoppingCart/         # Marketing & checkout (Astro/React/Tailwind - wireframe)
-├── tests/                             # 1:1 test projects (24 total)
+│   │   ├── Dhadgar.Agent.Linux/      # Linux-specific agent (systemd)
+│   │   └── Dhadgar.Agent.Windows/    # Windows-specific agent (Service)
+│   ├── Dhadgar.Scope/                # Documentation site ✅
+│   ├── Dhadgar.Panel/                # Main UI (scaffolding)
+│   └── Dhadgar.ShoppingCart/         # Marketing & checkout (wireframe)
+├── tests/                             # 1:1 test projects (23 total, 947 tests)
 ├── deploy/
 │   ├── compose/                       # Docker Compose for local dev
-│   ├── kubernetes/                    # K8s manifests (planned)
+│   ├── kubernetes/helm/              # Helm charts for K8s deployment
 │   └── terraform/                     # Infrastructure as Code (planned)
 ├── scripts/                           # PowerShell/bash automation
 └── docs/                              # Architecture and runbooks

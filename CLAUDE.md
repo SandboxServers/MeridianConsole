@@ -38,23 +38,40 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 
 What goes where (services can only reference these, not each other):
 
-| Library           | Purpose                                              | Can Depend On     |
-| ----------------- | ---------------------------------------------------- | ----------------- |
-| `Contracts`       | DTOs, message contracts, API models                  | Nothing           |
-| `Shared`          | Utilities, primitives, helpers                       | Nothing           |
-| `Messaging`       | MassTransit consumers, publishers, saga base classes | Contracts         |
-| `ServiceDefaults` | ASP.NET Core setup, middleware, observability        | Contracts, Shared |
+| Library           | Purpose                                                           | Can Depend On     |
+| ----------------- | ----------------------------------------------------------------- | ----------------- |
+| `Contracts`       | DTOs, message contracts, API models, events                       | Nothing           |
+| `Shared`          | Result<T>, Guard, EntityId<T>, BaseEntity, DhadgarDbContext       | EF Core           |
+| `Messaging`       | MassTransit config, StaticEntityNameFormatter (meridian.{type})   | Contracts         |
+| `ServiceDefaults` | Middleware, observability, exceptions, caching, audit, tracing    | Contracts, Shared |
+
+**Key Shared patterns:**
+- `Result<T>` - Railway-oriented programming for error handling
+- `BaseEntity` - Audit fields (CreatedAt, UpdatedAt, DeletedAt), RowVersion (xmin)
+- `DhadgarDbContext` - Soft-delete filters, auto-timestamps, provider-specific handling
+- `ITenantScoped` - Multi-tenant entity marker with OrganizationId
 
 ## Service Categories
 
-**With Database** (have EF Core, need migrations): Identity, Billing, Servers, Nodes, Tasks, Files, Mods, Notifications
+**Core Services** (substantial implementation, TODOs remain):
 
-**Stateless**: Gateway, Console, Secrets, Discord, BetterAuth
+- `Gateway` - YARP reverse proxy, rate limiting, circuit breaker, Cloudflare integration (production-ready)
+- `Identity` - Users, orgs, roles, OAuth, sessions, search; MFA endpoints return 501 (PostgreSQL)
+- `Nodes` - Agent enrollment, mTLS CA, heartbeats, capacity reservations; notification TODOs (PostgreSQL)
+- `Secrets` - Azure Key Vault integration, claims-based auth, audit logging; Azure REST API TODOs
+- `CLI` - Global .NET tool (`dhadgar`) for platform management (functional)
+
+Note: Core services have working foundations but contain scaffolded endpoints and incomplete features.
+
+**Stubs** (scaffolding only, functionality planned):
+
+- With Database: Billing, Servers, Tasks, Files, Mods, Notifications
+- Stateless: Console (SignalR hub), Discord, BetterAuth
 
 **Frontend Apps** (Astro/React/Tailwind):
 
-- `Scope` - Documentation site (functional)
-- `Panel` - Control plane UI (scaffolding)
+- `Scope` - Documentation site with 19 sections (functional)
+- `Panel` - Control plane UI with OAuth (scaffolding)
 - `ShoppingCart` - Marketing/checkout (wireframe, OAuth flow only)
 
 ## Git Workflow
@@ -68,7 +85,8 @@ What goes where (services can only reference these, not each other):
 ## Testing
 
 - 1:1 test project mapping (e.g., `Dhadgar.Gateway` → `Dhadgar.Gateway.Tests`)
-- xUnit framework
+- xUnit framework, 947 tests across 23 projects
+- Well-tested: Nodes (352), Identity (173), Gateway (74)
 - Run specific tests: `dotnet test --filter "FullyQualifiedName~TestName"`
 
 ## Specialized Agents
