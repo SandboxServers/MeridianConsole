@@ -107,6 +107,10 @@ public readonly record struct Result
     "Design",
     "CA1000:DoNotDeclareStaticMembersOnGenericTypes",
     Justification = "Factory methods on Result types are conventional and expected.")]
+[SuppressMessage(
+    "Usage",
+    "CA2225:Operator overloads have named alternates",
+    Justification = "FromValue method provides the named alternative for the implicit operator.")]
 public readonly record struct Result<T>
 {
     private readonly T? _value;
