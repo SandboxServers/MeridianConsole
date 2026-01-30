@@ -22,7 +22,7 @@ namespace Dhadgar.Shared.Data;
 /// }
 /// </code>
 /// </example>
-public abstract class BaseEntity
+public abstract class BaseEntity : IAuditableEntity
 {
     /// <summary>
     /// Gets or sets the unique identifier for this entity.
@@ -36,10 +36,10 @@ public abstract class BaseEntity
     /// Gets or sets the UTC timestamp when this entity was created.
     /// </summary>
     /// <remarks>
-    /// Automatically set to <see cref="DateTime.UtcNow"/> when the entity is instantiated.
+    /// Automatically set by <see cref="DhadgarDbContext.SaveChangesAsync"/> when the entity is first persisted.
     /// This value should not be modified after initial creation.
     /// </remarks>
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     /// <summary>
     /// Gets or sets the UTC timestamp when this entity was last updated.

@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Shared.Data;
@@ -84,6 +83,10 @@ public abstract class DhadgarDbContext : DbContext
     /// (<c>e.DeletedAt == null</c>) to any entity that has a <c>DeletedAt</c> property.
     /// </para>
     /// <para>
+    /// If an entity already has a query filter (e.g., for tenant isolation), this method
+    /// merges the soft-delete filter with the existing filter using <c>AndAlso</c>.
+    /// </para>
+    /// <para>
     /// The filter is applied using expression trees to work with any entity type,
     /// including those implementing <see cref="IAuditableEntity"/> or extending <see cref="BaseEntity"/>.
     /// </para>
@@ -105,10 +108,53 @@ public abstract class DhadgarDbContext : DbContext
             var parameter = Expression.Parameter(entityType.ClrType, "e");
             var propertyAccess = Expression.Property(parameter, deletedAtProperty);
             var nullConstant = Expression.Constant(null, typeof(DateTime?));
-            var comparison = Expression.Equal(propertyAccess, nullConstant);
-            var lambda = Expression.Lambda(comparison, parameter);
+            var softDeleteFilter = Expression.Equal(propertyAccess, nullConstant);
 
-            modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
+            // Check for existing query filter and merge if present
+            // Using pragma to suppress obsolete warning - GetDeclaredQueryFilters returns IQueryFilter
+            // which has a different structure than LambdaExpression
+#pragma warning disable CS0618 // Type or member is obsolete
+            var existingFilter = entityType.GetQueryFilter();
+#pragma warning restore CS0618
+
+            LambdaExpression finalLambda;
+            if (existingFilter != null)
+            {
+                // Replace the parameter in the existing filter with our parameter
+                var existingBody = new ParameterReplacerVisitor(existingFilter.Parameters[0], parameter)
+                    .Visit(existingFilter.Body);
+
+                // Combine: existingFilter AND softDeleteFilter
+                var combinedBody = Expression.AndAlso(existingBody, softDeleteFilter);
+                finalLambda = Expression.Lambda(combinedBody, parameter);
+            }
+            else
+            {
+                finalLambda = Expression.Lambda(softDeleteFilter, parameter);
+            }
+
+            modelBuilder.Entity(entityType.ClrType).HasQueryFilter(finalLambda);
+        }
+    }
+
+    /// <summary>
+    /// Expression visitor that replaces one parameter with another.
+    /// Used to canonicalize parameters when merging query filters.
+    /// </summary>
+    private sealed class ParameterReplacerVisitor : ExpressionVisitor
+    {
+        private readonly ParameterExpression _oldParameter;
+        private readonly ParameterExpression _newParameter;
+
+        public ParameterReplacerVisitor(ParameterExpression oldParameter, ParameterExpression newParameter)
+        {
+            _oldParameter = oldParameter;
+            _newParameter = newParameter;
+        }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            return node == _oldParameter ? _newParameter : base.VisitParameter(node);
         }
     }
 
@@ -144,6 +190,7 @@ public abstract class DhadgarDbContext : DbContext
             {
                 modelBuilder.Entity(entityType.ClrType)
                     .Property("RowVersion")
+                    .IsConcurrencyToken()
                     .HasDefaultValue(0u)
                     .ValueGeneratedOnAddOrUpdate();
             }
@@ -185,25 +232,17 @@ public abstract class DhadgarDbContext : DbContext
     {
         var now = DateTime.UtcNow;
 
-        foreach (var entry in ChangeTracker.Entries())
+        foreach (var entry in ChangeTracker.Entries<IAuditableEntity>())
         {
-            if (entry.State != EntityState.Modified)
+            switch (entry.State)
             {
-                continue;
-            }
-
-            // Handle entities implementing IAuditableEntity
-            if (entry.Entity is IAuditableEntity auditableEntity)
-            {
-                auditableEntity.UpdatedAt = now;
-                continue;
-            }
-
-            // Handle entities with UpdatedAt property via reflection (for those not implementing the interface)
-            var updatedAtProperty = entry.Entity.GetType().GetProperty("UpdatedAt");
-            if (updatedAtProperty != null && updatedAtProperty.PropertyType == typeof(DateTime?))
-            {
-                updatedAtProperty.SetValue(entry.Entity, now);
+                case EntityState.Added:
+                    entry.Entity.CreatedAt = now;
+                    entry.Entity.UpdatedAt = null;
+                    break;
+                case EntityState.Modified:
+                    entry.Entity.UpdatedAt = now;
+                    break;
             }
         }
 
@@ -223,25 +262,17 @@ public abstract class DhadgarDbContext : DbContext
     {
         var now = DateTime.UtcNow;
 
-        foreach (var entry in ChangeTracker.Entries())
+        foreach (var entry in ChangeTracker.Entries<IAuditableEntity>())
         {
-            if (entry.State != EntityState.Modified)
+            switch (entry.State)
             {
-                continue;
-            }
-
-            // Handle entities implementing IAuditableEntity
-            if (entry.Entity is IAuditableEntity auditableEntity)
-            {
-                auditableEntity.UpdatedAt = now;
-                continue;
-            }
-
-            // Handle entities with UpdatedAt property via reflection (for those not implementing the interface)
-            var updatedAtProperty = entry.Entity.GetType().GetProperty("UpdatedAt");
-            if (updatedAtProperty != null && updatedAtProperty.PropertyType == typeof(DateTime?))
-            {
-                updatedAtProperty.SetValue(entry.Entity, now);
+                case EntityState.Added:
+                    entry.Entity.CreatedAt = now;
+                    entry.Entity.UpdatedAt = null;
+                    break;
+                case EntityState.Modified:
+                    entry.Entity.UpdatedAt = now;
+                    break;
             }
         }
 

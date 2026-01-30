@@ -78,7 +78,14 @@ public static class QueryableExtensions
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
-        return query.Skip((page - 1) * pageSize).Take(pageSize);
+        // Use long arithmetic to avoid overflow with large page values
+        long offset = (long)(page - 1) * pageSize;
+        if (offset > int.MaxValue)
+        {
+            offset = int.MaxValue;
+        }
+
+        return query.Skip((int)offset).Take(pageSize);
     }
 
     /// <summary>

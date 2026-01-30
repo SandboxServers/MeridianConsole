@@ -24,7 +24,7 @@ public static class AgentEndpoints
         group.MapPost("/enroll", Enroll)
             .WithName("EnrollAgent")
             .WithDescription("Enroll a new agent with the platform")
-            .Produces<LocalEnrollNodeResponse>(201)
+            .Produces<Dhadgar.Contracts.Nodes.EnrollNodeResponse>(201)
             .ProducesProblem(400)
             .ProducesProblem(401)
             .AllowAnonymous();
@@ -42,7 +42,7 @@ public static class AgentEndpoints
         group.MapPost("/{nodeId:guid}/certificates/renew", RenewCertificate)
             .WithName("RenewAgentCertificate")
             .WithDescription("Renew an agent's mTLS certificate")
-            .Produces<LocalRenewCertificateResponse>()
+            .Produces<Dhadgar.Contracts.Nodes.RenewCertificateResponse>()
             .ProducesProblem(400)
             .ProducesProblem(401)
             .ProducesProblem(404)
