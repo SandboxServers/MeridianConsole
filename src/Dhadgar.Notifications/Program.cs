@@ -1,5 +1,7 @@
+using Dhadgar.Messaging;
 using Dhadgar.Notifications;
 using Dhadgar.Notifications.Alerting;
+using Dhadgar.Notifications.Consumers;
 using Dhadgar.Notifications.Data;
 using Dhadgar.Notifications.Discord;
 using Dhadgar.Notifications.Email;
@@ -12,16 +14,24 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Note: RabbitMq health check removed - MassTransit not yet configured
 builder.Services.AddDhadgarServiceDefaults(
     builder.Configuration,
-    HealthCheckDependencies.Postgres);
+    HealthCheckDependencies.Postgres | HealthCheckDependencies.RabbitMq);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Notifications API",
     description: "Email, Discord, and webhook notifications for Meridian Console");
 
 builder.Services.AddDbContext<NotificationsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+
+// Configure MassTransit with event consumers
+builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
+{
+    // Node event consumers - dispatch alerts for node status changes
+    x.AddConsumer<NodeOfflineConsumer>();
+    x.AddConsumer<NodeDegradedConsumer>();
+    x.AddConsumer<NodeCapacityLowConsumer>();
+});
 
 // Configure alerting options
 builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection("Discord"));

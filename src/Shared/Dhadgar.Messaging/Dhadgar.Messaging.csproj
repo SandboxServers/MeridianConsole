@@ -2,10 +2,12 @@
       <PropertyGroup>
         <AssemblyName>Dhadgar.Messaging</AssemblyName>
         <RootNamespace>Dhadgar.Messaging</RootNamespace>
+        <Nullable>enable</Nullable>
       </PropertyGroup>
       <ItemGroup>
   <PackageReference Include="MassTransit" />
   <PackageReference Include="MassTransit.RabbitMQ" />
+  <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
 </ItemGroup>
 
     </Project>
