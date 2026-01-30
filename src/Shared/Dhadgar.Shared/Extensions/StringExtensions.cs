@@ -129,9 +129,9 @@ public static partial class StringExtensions
         return sb.ToString().Normalize(NormalizationForm.FormC);
     }
 
-    [GeneratedRegex(@"[^a-z0-9\-]", RegexOptions.Compiled)]
+    [GeneratedRegex(@"[^a-z0-9\-]")]
     private static partial Regex InvalidCharsRegex();
 
-    [GeneratedRegex(@"-{2,}", RegexOptions.Compiled)]
+    [GeneratedRegex(@"-{2,}")]
     private static partial Regex MultipleHyphensRegex();
 }

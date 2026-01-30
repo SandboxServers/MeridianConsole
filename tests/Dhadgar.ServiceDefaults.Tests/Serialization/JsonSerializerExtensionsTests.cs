@@ -20,7 +20,7 @@ public class JsonSerializerExtensionsTests
 
         // Act
         services.AddStrictJsonSerialization();
-        var serviceProvider = services.BuildServiceProvider();
+        using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = serviceProvider.GetRequiredService<IOptions<JsonOptions>>().Value;
 
         // Assert
@@ -35,7 +35,7 @@ public class JsonSerializerExtensionsTests
 
         // Act
         services.AddStrictJsonSerialization();
-        var serviceProvider = services.BuildServiceProvider();
+        using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = serviceProvider.GetRequiredService<IOptions<JsonOptions>>().Value;
 
         // Assert
@@ -48,7 +48,7 @@ public class JsonSerializerExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddStrictJsonSerialization();
-        var serviceProvider = services.BuildServiceProvider();
+        using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = serviceProvider.GetRequiredService<IOptions<JsonOptions>>().Value;
 
         var jsonWithDuplicates = """
@@ -71,7 +71,7 @@ public class JsonSerializerExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddStrictJsonSerialization();
-        var serviceProvider = services.BuildServiceProvider();
+        using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = serviceProvider.GetRequiredService<IOptions<JsonOptions>>().Value;
 
         var jsonWithExtraFields = """
@@ -95,7 +95,7 @@ public class JsonSerializerExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddStrictJsonSerialization();
-        var serviceProvider = services.BuildServiceProvider();
+        using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = serviceProvider.GetRequiredService<IOptions<JsonOptions>>().Value;
 
         var dto = new TestDto { IsAdmin = true };

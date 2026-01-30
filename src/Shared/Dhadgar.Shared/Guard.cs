@@ -170,6 +170,11 @@ public static class Guard
         int max,
         [CallerArgumentExpression(nameof(value))] string? paramName = null)
     {
+        if (min > max)
+        {
+            throw new ArgumentException($"min ({min}) cannot be greater than max ({max}).");
+        }
+
         if (value < min || value > max)
         {
             throw new ArgumentOutOfRangeException(

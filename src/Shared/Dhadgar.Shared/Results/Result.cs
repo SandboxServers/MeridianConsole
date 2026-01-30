@@ -1,10 +1,16 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Dhadgar.Shared.Results;
 
 /// <summary>
 /// Represents the result of an operation that can succeed or fail.
 /// This is the non-generic version for operations that don't return a value.
 /// </summary>
-public readonly struct Result
+[SuppressMessage(
+    "Design",
+    "CA1000:DoNotDeclareStaticMembersOnGenericTypes",
+    Justification = "Factory methods on Result types are conventional and expected.")]
+public readonly record struct Result
 {
     private readonly string? _error;
 
@@ -85,7 +91,11 @@ public readonly struct Result
 /// Represents the result of an operation that can succeed with a value or fail.
 /// </summary>
 /// <typeparam name="T">The type of the value returned on success.</typeparam>
-public readonly struct Result<T>
+[SuppressMessage(
+    "Design",
+    "CA1000:DoNotDeclareStaticMembersOnGenericTypes",
+    Justification = "Factory methods on Result types are conventional and expected.")]
+public readonly record struct Result<T>
 {
     private readonly T? _value;
     private readonly string? _error;
@@ -158,10 +168,17 @@ public readonly struct Result<T>
     public static Result<T> Failure(string error) => new(false, default, error);
 
     /// <summary>
+    /// Creates a successful result from a value (named alternative for implicit operator).
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>A successful result containing the value.</returns>
+    public static Result<T> FromValue(T value) => Success(value);
+
+    /// <summary>
     /// Implicitly converts a value to a successful result.
     /// </summary>
     /// <param name="value">The value to convert.</param>
-    public static implicit operator Result<T>(T value) => Success(value);
+    public static implicit operator Result<T>(T value) => FromValue(value);
 
     /// <summary>
     /// Executes a function if the result is successful and returns a new result.
