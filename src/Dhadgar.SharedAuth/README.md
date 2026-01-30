@@ -1,5 +1,7 @@
 # Dhadgar.SharedAuth
 
+![Status: In Development](https://img.shields.io/badge/Status-In%20Development-yellow)
+
 **Shared Authentication Client Library for Meridian Console Frontend Applications**
 
 This TypeScript library provides a unified authentication client, token management utilities, and OAuth provider configuration for all Meridian Console frontend applications. It is designed to work with the BetterAuth authentication backend and the Identity service token exchange system.

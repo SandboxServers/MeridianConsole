@@ -1,5 +1,7 @@
 # Dhadgar.Gateway
 
+![Status: Production](https://img.shields.io/badge/Status-Production-green)
+
 The **API Gateway** is the single public entry point for all external traffic to the Meridian Console platform. It acts as a reverse proxy, routing requests to appropriate backend microservices while providing cross-cutting concerns such as authentication, rate limiting, security headers, CORS handling, circuit breaking, and distributed tracing.
 
 ## Table of Contents

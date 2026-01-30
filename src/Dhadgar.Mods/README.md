@@ -1,5 +1,7 @@
 # Dhadgar.Mods Service
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 The Mods service is responsible for managing game modification (mod) registry, versioning, compatibility tracking, and distribution coordination within the Meridian Console platform. It serves as the central catalog for all mods that can be deployed to game servers managed by the control plane.
 
 ## Table of Contents

@@ -1,5 +1,7 @@
 # Dhadgar.Files
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 File metadata storage and transfer orchestration service for Meridian Console. This service acts as the central coordinator for all file-related operations across the platform, managing metadata, coordinating transfers between the control plane and customer-hosted agents, and ensuring file integrity throughout the system.
 
 ## Table of Contents

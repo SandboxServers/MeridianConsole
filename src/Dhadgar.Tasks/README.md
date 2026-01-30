@@ -1,5 +1,7 @@
 # Dhadgar.Tasks
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 The **Tasks service** is the orchestration and background job management engine for Meridian Console. It coordinates work distribution across the platform, dispatches commands to customer-hosted agents, tracks execution status, and provides scheduling capabilities for recurring operations.
 
 ## Table of Contents

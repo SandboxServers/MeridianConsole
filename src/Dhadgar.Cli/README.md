@@ -1,5 +1,7 @@
 # Dhadgar CLI
 
+![Status: In Development](https://img.shields.io/badge/Status-In%20Development-yellow)
+
 Beautiful command-line interface for **Meridian Console** -- the modern game server control plane.
 
 Built with [Spectre.Console](https://spectreconsole.net/) for gorgeous terminal UI with colors, tables, spinners, and interactive prompts.

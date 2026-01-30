@@ -1,5 +1,7 @@
 # Dhadgar.Nodes Service
 
+![Status: Production](https://img.shields.io/badge/Status-Production-green)
+
 The Nodes service is the **hardware inventory and agent management hub** for the Meridian Console platform. It acts as the bridge between the cloud-hosted control plane and customer-hosted agents running on their physical hardware.
 
 ## Table of Contents
