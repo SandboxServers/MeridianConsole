@@ -1,13 +1,14 @@
 using System.Text.Json;
 using Dhadgar.Nodes.Data.Configurations;
 using Dhadgar.Nodes.Data.Entities;
+using Dhadgar.Shared.Data;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Dhadgar.Nodes.Data;
 
-public sealed class NodesDbContext : DbContext
+public sealed class NodesDbContext : DhadgarDbContext
 {
     public NodesDbContext(DbContextOptions<NodesDbContext> options) : base(options) { }
 
@@ -39,29 +40,13 @@ public sealed class NodesDbContext : DbContext
         modelBuilder.AddOutboxStateEntity();
         modelBuilder.AddOutboxMessageEntity();
 
-        // Handle InMemory and SQLite providers that can't handle PostgreSQL-specific features
-        if (Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true ||
-            Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
+        // Apply base class conventions (soft-delete filters and provider-specific handling)
+        ApplySoftDeleteConventions(modelBuilder);
+        ApplyProviderSpecificConventions(modelBuilder);
+
+        // Handle additional test provider-specific configurations not covered by base class
+        if (IsTestProvider)
         {
-            // Remove JSONB column types for non-PostgreSQL providers
-            modelBuilder.Entity<NodeHardwareInventory>()
-                .Property(h => h.NetworkInterfaces)
-                .HasColumnType(null);
-
-            modelBuilder.Entity<NodeHealth>()
-                .Property(h => h.HealthIssues)
-                .HasColumnType(null);
-
-            // SQLite doesn't support PostgreSQL's xmin row version column
-            modelBuilder.Entity<Node>().Property(n => n.RowVersion)
-                .HasDefaultValue(0u)
-                .ValueGeneratedOnAddOrUpdate();
-
-            // Remove JSONB column type for audit logs
-            modelBuilder.Entity<NodeAuditLog>()
-                .Property(a => a.Details)
-                .HasColumnType(null);
-
             // Use JSON value converter for node tags (SQLite/InMemory don't support JSONB)
             var tagsConverter = new ValueConverter<List<string>, string>(
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
@@ -73,7 +58,6 @@ public sealed class NodesDbContext : DbContext
             // Must clear HasDefaultValueSql (set by NodeConfiguration) before setting HasDefaultValue.
             modelBuilder.Entity<Node>()
                 .Property(n => n.Tags)
-                .HasColumnType(null)
                 .HasConversion(tagsConverter)
                 .HasDefaultValueSql(null)
                 .HasDefaultValue(new List<string>());

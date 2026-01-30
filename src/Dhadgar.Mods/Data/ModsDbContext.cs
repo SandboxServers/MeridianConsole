@@ -1,8 +1,9 @@
+using Dhadgar.Shared.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Mods.Data;
 
-public sealed class ModsDbContext : DbContext
+public sealed class ModsDbContext : DhadgarDbContext
 {
     public ModsDbContext(DbContextOptions<ModsDbContext> options) : base(options) { }
 
@@ -17,6 +18,10 @@ public sealed class ModsDbContext : DbContext
             b.HasKey(x => x.Id);
             b.Property(x => x.Name).HasMaxLength(200);
         });
+
+        // Apply base class conventions
+        ApplySoftDeleteConventions(modelBuilder);
+        ApplyProviderSpecificConventions(modelBuilder);
     }
 }
 

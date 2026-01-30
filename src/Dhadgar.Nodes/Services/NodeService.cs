@@ -9,6 +9,10 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
+// Alias local models to avoid ambiguity with Contracts types
+using LocalUpdateNodeRequest = Dhadgar.Nodes.Models.UpdateNodeRequest;
+using LocalUpdateNodeTagsRequest = Dhadgar.Nodes.Models.UpdateNodeTagsRequest;
+
 namespace Dhadgar.Nodes.Services;
 
 public sealed class NodeService : INodeService
@@ -114,7 +118,7 @@ public sealed class NodeService : INodeService
     public async Task<ServiceResult<NodeDetail>> UpdateNodeAsync(
         Guid organizationId,
         Guid nodeId,
-        UpdateNodeRequest request,
+        LocalUpdateNodeRequest request,
         CancellationToken ct = default)
     {
         var node = await _dbContext.Nodes
@@ -186,7 +190,7 @@ public sealed class NodeService : INodeService
     public async Task<ServiceResult<NodeDetail>> UpdateNodeTagsAsync(
         Guid organizationId,
         Guid nodeId,
-        UpdateNodeTagsRequest request,
+        LocalUpdateNodeTagsRequest request,
         CancellationToken ct = default)
     {
         var node = await _dbContext.Nodes

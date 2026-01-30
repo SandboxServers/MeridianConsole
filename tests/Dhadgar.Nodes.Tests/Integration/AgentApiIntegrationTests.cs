@@ -8,6 +8,11 @@ using Dhadgar.Nodes.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
+// Alias local models to avoid ambiguity with Contracts types
+using EnrollNodeRequest = Dhadgar.Nodes.Models.EnrollNodeRequest;
+using EnrollNodeResponse = Dhadgar.Nodes.Models.EnrollNodeResponse;
+using HardwareInventoryDto = Dhadgar.Nodes.Models.HardwareInventoryDto;
+
 namespace Dhadgar.Nodes.Tests.Integration;
 
 [Collection("Nodes Integration")]

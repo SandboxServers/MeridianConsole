@@ -5,6 +5,12 @@ using Dhadgar.Nodes.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
+// Alias local models to avoid ambiguity with Contracts types
+using LocalEnrollNodeRequest = Dhadgar.Nodes.Models.EnrollNodeRequest;
+using LocalEnrollNodeResponse = Dhadgar.Nodes.Models.EnrollNodeResponse;
+using LocalRenewCertificateRequest = Dhadgar.Nodes.Models.RenewCertificateRequest;
+using LocalRenewCertificateResponse = Dhadgar.Nodes.Models.RenewCertificateResponse;
+
 namespace Dhadgar.Nodes.Endpoints;
 
 public static class AgentEndpoints
@@ -18,7 +24,7 @@ public static class AgentEndpoints
         group.MapPost("/enroll", Enroll)
             .WithName("EnrollAgent")
             .WithDescription("Enroll a new agent with the platform")
-            .Produces<EnrollNodeResponse>(201)
+            .Produces<LocalEnrollNodeResponse>(201)
             .ProducesProblem(400)
             .ProducesProblem(401)
             .AllowAnonymous();
@@ -36,7 +42,7 @@ public static class AgentEndpoints
         group.MapPost("/{nodeId:guid}/certificates/renew", RenewCertificate)
             .WithName("RenewAgentCertificate")
             .WithDescription("Renew an agent's mTLS certificate")
-            .Produces<RenewCertificateResponse>()
+            .Produces<LocalRenewCertificateResponse>()
             .ProducesProblem(400)
             .ProducesProblem(401)
             .ProducesProblem(404)
@@ -51,7 +57,7 @@ public static class AgentEndpoints
     }
 
     private static async Task<IResult> Enroll(
-        EnrollNodeRequest request,
+        LocalEnrollNodeRequest request,
         IEnrollmentService enrollmentService,
         CancellationToken ct = default)
     {
@@ -124,7 +130,7 @@ public static class AgentEndpoints
 
     private static async Task<IResult> RenewCertificate(
         Guid nodeId,
-        RenewCertificateRequest request,
+        LocalRenewCertificateRequest request,
         HttpContext context,
         NodesDbContext dbContext,
         ICertificateAuthorityService caService,
@@ -234,7 +240,7 @@ public static class AgentEndpoints
             "Certificate renewed for node {NodeId}. Old: {OldThumbprint}, New: {NewThumbprint}",
             nodeId, currentCert.Thumbprint, certResult.Thumbprint);
 
-        return Results.Ok(new RenewCertificateResponse(
+        return Results.Ok(new LocalRenewCertificateResponse(
             certResult.Thumbprint!,
             certResult.CertificatePem!,
             certResult.Pkcs12Base64!,

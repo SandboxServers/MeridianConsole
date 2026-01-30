@@ -1,8 +1,9 @@
+using Dhadgar.Shared.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Files.Data;
 
-public sealed class FilesDbContext : DbContext
+public sealed class FilesDbContext : DhadgarDbContext
 {
     public FilesDbContext(DbContextOptions<FilesDbContext> options) : base(options) { }
 
@@ -17,6 +18,10 @@ public sealed class FilesDbContext : DbContext
             b.HasKey(x => x.Id);
             b.Property(x => x.Name).HasMaxLength(200);
         });
+
+        // Apply base class conventions
+        ApplySoftDeleteConventions(modelBuilder);
+        ApplyProviderSpecificConventions(modelBuilder);
     }
 }
 

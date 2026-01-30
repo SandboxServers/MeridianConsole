@@ -1,6 +1,10 @@
 using Dhadgar.Contracts;
 using Dhadgar.Nodes.Models;
 
+// Alias local models to avoid ambiguity with Contracts types
+using LocalUpdateNodeRequest = Dhadgar.Nodes.Models.UpdateNodeRequest;
+using LocalUpdateNodeTagsRequest = Dhadgar.Nodes.Models.UpdateNodeTagsRequest;
+
 namespace Dhadgar.Nodes.Services;
 
 public interface INodeService
@@ -29,7 +33,7 @@ public interface INodeService
     Task<ServiceResult<NodeDetail>> UpdateNodeAsync(
         Guid organizationId,
         Guid nodeId,
-        UpdateNodeRequest request,
+        LocalUpdateNodeRequest request,
         CancellationToken ct = default);
 
     /// <summary>
@@ -39,7 +43,7 @@ public interface INodeService
     Task<ServiceResult<NodeDetail>> UpdateNodeTagsAsync(
         Guid organizationId,
         Guid nodeId,
-        UpdateNodeTagsRequest request,
+        LocalUpdateNodeTagsRequest request,
         CancellationToken ct = default);
 
     /// <summary>

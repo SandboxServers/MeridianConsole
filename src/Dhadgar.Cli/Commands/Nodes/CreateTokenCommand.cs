@@ -1,5 +1,6 @@
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
+using Dhadgar.Contracts.Nodes;
 using Refit;
 
 namespace Dhadgar.Cli.Commands.Nodes;
@@ -37,11 +38,7 @@ public sealed class CreateTokenCommand
 
         try
         {
-            var request = new CreateEnrollmentTokenRequest
-            {
-                Label = label,
-                ExpiresInMinutes = expiresInMinutes
-            };
+            var request = new CreateEnrollmentTokenRequest(Label: label, ExpiresInMinutes: expiresInMinutes);
 
             var response = await nodesApi.CreateEnrollmentTokenAsync(orgId, request, ct);
             NodesCommandHelpers.WriteJson(response);
