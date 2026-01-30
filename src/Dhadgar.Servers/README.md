@@ -1,5 +1,7 @@
 # Dhadgar.Servers
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 Game server lifecycle management service for Meridian Console. This service is the central component responsible for managing the complete lifecycle of game servers across customer-owned hardware, including provisioning, configuration, state management, and orchestration coordination.
 
 ## Table of Contents

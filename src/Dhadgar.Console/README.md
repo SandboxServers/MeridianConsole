@@ -1,5 +1,7 @@
 # Dhadgar.Console
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 The **Console Service** provides real-time, bidirectional communication between the Meridian Console control plane and game servers running on customer nodes. Using ASP.NET Core SignalR, this service enables live console output streaming, command execution, and interactive terminal sessions for game server management.
 
 ## Table of Contents

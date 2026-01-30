@@ -1,5 +1,7 @@
 # Dhadgar.Scope - Meridian Console Documentation Site
 
+![Status: In Development](https://img.shields.io/badge/Status-In%20Development-yellow)
+
 ## Table of Contents
 
 1. [Overview](#overview)

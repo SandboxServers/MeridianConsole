@@ -1,5 +1,7 @@
 # Dhadgar.Notifications Service
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 The **Notifications** service is the centralized notification delivery system for Meridian Console. It provides multi-channel notification capabilities including email, Discord webhooks, and custom webhook integrations. This service acts as the single point of notification dispatch, receiving notification requests from other services via MassTransit messaging and delivering them through configured channels based on user preferences.
 
 ## Table of Contents

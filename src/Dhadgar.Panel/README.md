@@ -1,5 +1,7 @@
 # Dhadgar.Panel
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 The main control plane user interface for Meridian Console - a modern, security-first game server control plane.
 
 ## Table of Contents

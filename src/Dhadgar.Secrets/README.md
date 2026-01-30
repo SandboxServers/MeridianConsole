@@ -1,5 +1,7 @@
 # Dhadgar.Secrets Service
 
+![Status: Production](https://img.shields.io/badge/Status-Production-green)
+
 A secure, production-ready secrets management microservice for the Meridian Console platform. This service acts as a controlled gateway to Azure Key Vault, providing secrets dispensing with fine-grained authorization, comprehensive audit logging, rate limiting, and support for multiple authentication mechanisms including Workload Identity Federation (WIF).
 
 ## Table of Contents

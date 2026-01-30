@@ -1,5 +1,7 @@
 # Dhadgar.BetterAuth
 
+![Status: In Development](https://img.shields.io/badge/Status-In%20Development-yellow)
+
 **Passwordless authentication service using Better Auth SDK for Meridian Console.**
 
 This service provides user-facing authentication via social OAuth providers (Discord, Google, GitHub, Twitch, Facebook, Apple, Microsoft) and email/password login. It operates as part of a hybrid identity architecture where Better Auth handles the user-facing authentication flows while the Identity service (Dhadgar.Identity) manages authorization, permissions, and JWT token issuance.

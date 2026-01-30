@@ -1,5 +1,7 @@
 # Dhadgar.Billing Service
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 ## Overview
 
 The **Dhadgar.Billing** service is the subscription management, usage metering, and invoicing component of the Meridian Console platform. It handles the commercial aspects of the SaaS offering, including subscription lifecycle management, payment processing integration, usage-based billing, and invoice generation.

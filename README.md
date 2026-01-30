@@ -888,6 +888,7 @@ This repo has multiple code review bots:
 
 - **CLAUDE.md**: AI-assisted development guide (for Claude Code users)
 - **GEMINI.md**: AI-assisted development guide (for Gemini users)
+- **[docs/adr/](docs/adr/)**: Architecture Decision Records (ADRs)
 - **docs/architecture/**: Architecture decisions and design docs
 - **docs/implementation-plans/**: Service implementation plans
 - **deploy/compose/README.md**: Local infrastructure troubleshooting

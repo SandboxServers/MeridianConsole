@@ -1,5 +1,7 @@
 # Dhadgar.Identity
 
+![Status: Production](https://img.shields.io/badge/Status-Production-green)
+
 Identity and access management service for Meridian Console. This is the central authentication and authorization service that handles user lifecycle, organization management, role-based access control (RBAC), OAuth provider integration, and multi-tenancy for the entire platform.
 
 ## Table of Contents

@@ -1,5 +1,7 @@
 # Dhadgar.ShoppingCart
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 **Marketing Site and Checkout Flow for Meridian Console**
 
 Dhadgar.ShoppingCart is the public-facing marketing website and subscription checkout application for the Meridian Console platform. Built with Astro, React, and Tailwind CSS, it serves as the primary landing page for prospective customers, showcases product features and pricing, and handles user authentication for the SaaS platform.

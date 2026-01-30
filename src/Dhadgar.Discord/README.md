@@ -1,5 +1,7 @@
 # Dhadgar.Discord Service
 
+![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+
 Discord bot integration service for Meridian Console, providing Discord-based server management, notifications, and user interaction capabilities.
 
 ## Table of Contents
