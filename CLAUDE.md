@@ -7,6 +7,10 @@ See @README.md for full project overview.
 ## Build Commands
 
 ```bash
+# Enable MSBuild Server for faster repeat builds (set this BEFORE running dotnet commands)
+# Add to .bashrc/.zshrc for persistence, or run in your shell before building
+export DOTNET_CLI_USE_MSBUILD_SERVER=1
+
 # Build & test
 dotnet build
 dotnet test

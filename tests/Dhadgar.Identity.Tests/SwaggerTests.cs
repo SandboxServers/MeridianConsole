@@ -3,7 +3,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests;
 
-public class SwaggerTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public class SwaggerTests
 {
     private readonly IdentityWebApplicationFactory _factory;
 

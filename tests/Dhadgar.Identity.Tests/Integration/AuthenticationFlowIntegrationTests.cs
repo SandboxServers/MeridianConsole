@@ -21,7 +21,8 @@ namespace Dhadgar.Identity.Tests.Integration;
 /// Integration tests for end-to-end authentication flows:
 /// Better Auth → Token Exchange → JWT → Gateway header injection
 /// </summary>
-public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityWebApplicationFactory>, IAsyncLifetime
+[Collection("Identity Integration")]
+public sealed class AuthenticationFlowIntegrationTests : IAsyncLifetime
 {
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;

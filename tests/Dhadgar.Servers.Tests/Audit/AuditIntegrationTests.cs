@@ -23,7 +23,8 @@ namespace Dhadgar.Servers.Tests.Audit;
 /// These tests verify the full audit flow: authenticated requests create audit records,
 /// unauthenticated requests don't, and SQL queries work as expected (AUDIT-03).
 /// </summary>
-public class AuditIntegrationTests : IClassFixture<AuditTestFactory>
+[Collection("Servers Audit Integration")]
+public class AuditIntegrationTests
 {
     private readonly AuditTestFactory _factory;
 
@@ -266,6 +267,11 @@ public class AuditIntegrationTests : IClassFixture<AuditTestFactory>
             count.Should().Be(0);
         }
     }
+}
+
+[CollectionDefinition("Servers Audit Integration")]
+public class ServersAuditTestCollectionDefinition : ICollectionFixture<AuditTestFactory>
+{
 }
 
 /// <summary>

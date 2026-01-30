@@ -11,7 +11,8 @@ namespace Dhadgar.Identity.Tests.Integration;
 /// <summary>
 /// Integration tests for OAuth provider challenge and callback flows
 /// </summary>
-public sealed class OAuthProviderIntegrationTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class OAuthProviderIntegrationTests
 {
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;

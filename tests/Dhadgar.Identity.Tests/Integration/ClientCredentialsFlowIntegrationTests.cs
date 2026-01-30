@@ -13,7 +13,8 @@ namespace Dhadgar.Identity.Tests.Integration;
 /// <summary>
 /// Integration tests for OpenIddict Client Credentials flow (service-to-service authentication)
 /// </summary>
-public sealed class ClientCredentialsFlowIntegrationTests : IClassFixture<IdentityWebApplicationFactory>, IAsyncLifetime
+[Collection("Identity Integration")]
+public sealed class ClientCredentialsFlowIntegrationTests : IAsyncLifetime
 {
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;

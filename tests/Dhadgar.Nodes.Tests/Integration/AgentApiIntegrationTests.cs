@@ -10,7 +10,8 @@ using Xunit;
 
 namespace Dhadgar.Nodes.Tests.Integration;
 
-public sealed class AgentApiIntegrationTests : IClassFixture<NodesWebApplicationFactory>
+[Collection("Nodes Integration")]
+public sealed class AgentApiIntegrationTests
 {
     private readonly NodesWebApplicationFactory _factory;
     private static readonly Guid TestOrgId = Guid.NewGuid();
@@ -100,10 +101,12 @@ public sealed class AgentApiIntegrationTests : IClassFixture<NodesWebApplication
     [Fact]
     public async Task Enroll_WithExpiredToken_ReturnsUnauthorized()
     {
+        // Note: This test advances the shared TimeProvider. Other tests in this collection
+        // should create tokens/entities relative to current time, not rely on a specific time state.
         var orgId = Guid.NewGuid();
         var token = await CreateEnrollmentTokenAsync(orgId, TimeSpan.FromMinutes(30));
 
-        // Advance time past expiration
+        // Advance time past expiration (token was created with 30-min validity)
         _factory.TimeProvider.Advance(TimeSpan.FromHours(1));
 
         using var client = _factory.CreateClient();

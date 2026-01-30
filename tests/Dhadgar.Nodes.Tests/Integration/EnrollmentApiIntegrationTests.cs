@@ -5,7 +5,8 @@ using Xunit;
 
 namespace Dhadgar.Nodes.Tests.Integration;
 
-public sealed class EnrollmentApiIntegrationTests : IClassFixture<NodesWebApplicationFactory>
+[Collection("Nodes Integration")]
+public sealed class EnrollmentApiIntegrationTests
 {
     private readonly NodesWebApplicationFactory _factory;
     private static readonly Guid TestUserId = Guid.NewGuid();

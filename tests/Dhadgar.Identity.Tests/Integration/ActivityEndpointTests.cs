@@ -9,7 +9,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests.Integration;
 
-public sealed class ActivityEndpointTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class ActivityEndpointTests
 {
     private readonly IdentityWebApplicationFactory _factory;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

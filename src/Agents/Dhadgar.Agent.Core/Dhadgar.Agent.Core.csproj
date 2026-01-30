@@ -2,12 +2,12 @@
   <PropertyGroup>
     <AssemblyName>Dhadgar.Agent.Core</AssemblyName>
     <RootNamespace>Dhadgar.Agent.Core</RootNamespace>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
-    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
-    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
 
     <!-- CA1303: Agents don't need localization for console output -->
     <NoWarn>$(NoWarn);CA1303</NoWarn>

@@ -3,7 +3,8 @@ using Xunit;
 
 namespace Dhadgar.Notifications.Tests;
 
-public class SwaggerTests : IClassFixture<NotificationsWebApplicationFactory>
+[Collection("Notifications Integration")]
+public class SwaggerTests
 {
     private readonly NotificationsWebApplicationFactory _factory;
 

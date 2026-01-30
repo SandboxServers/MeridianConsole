@@ -11,15 +11,18 @@ public sealed class ReservationExpiryService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ReservationExpiryService> _logger;
     private readonly TimeSpan _checkInterval;
+    private readonly TimeProvider _timeProvider;
 
     public ReservationExpiryService(
         IServiceScopeFactory scopeFactory,
         IOptions<NodesOptions> options,
-        ILogger<ReservationExpiryService> logger)
+        ILogger<ReservationExpiryService> logger,
+        TimeProvider? timeProvider = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _checkInterval = TimeSpan.FromMinutes(options.Value.ReservationExpiryCheckIntervalMinutes);
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,7 +47,7 @@ public sealed class ReservationExpiryService : BackgroundService
 
             try
             {
-                await Task.Delay(_checkInterval, stoppingToken);
+                await Task.Delay(_checkInterval, _timeProvider, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

@@ -7,7 +7,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests.Integration;
 
-public sealed class ReadinessIntegrationTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class ReadinessIntegrationTests
 {
     private readonly IdentityWebApplicationFactory _factory;
 

@@ -11,7 +11,8 @@ namespace Dhadgar.Secrets.Tests.Endpoints;
 /// <summary>
 /// Integration tests verifying RFC 9457 Problem Details format for error responses.
 /// </summary>
-public sealed class ProblemDetailsIntegrationTests : IClassFixture<SecureSecretsWebApplicationFactory>
+[Collection("Secure Secrets Integration")]
+public sealed class ProblemDetailsIntegrationTests
 {
     private readonly SecureSecretsWebApplicationFactory _factory;
     private static readonly JsonSerializerOptions JsonOptions = new()

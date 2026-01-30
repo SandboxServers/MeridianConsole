@@ -8,7 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Dhadgar.Nodes.Tests.Integration;
 
-public sealed class CertificateRenewalIntegrationTests : IClassFixture<NodesWebApplicationFactory>
+[Collection("Nodes Integration")]
+public sealed class CertificateRenewalIntegrationTests
 {
     private readonly NodesWebApplicationFactory _factory;
     private static readonly Guid TestOrgId = Guid.NewGuid();
