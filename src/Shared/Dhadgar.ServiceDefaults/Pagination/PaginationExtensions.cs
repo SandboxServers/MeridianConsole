@@ -13,7 +13,7 @@ public static class PaginationExtensions
     /// <typeparam name="T">The type of items in the collection.</typeparam>
     /// <param name="items">The full collection of items.</param>
     /// <param name="page">Page number (1-based, defaults to 1).</param>
-    /// <param name="pageSize">Items per page (defaults to 50, max 100).</param>
+    /// <param name="pageSize">Items per page (defaults to 50). Value is clamped to 1-100 by <see cref="PaginationRequest.NormalizedPageSize"/>.</param>
     /// <returns>A paged response containing the requested page of items.</returns>
     public static PagedResponse<T> ToPagedResponse<T>(
         this IReadOnlyCollection<T> items,
@@ -56,7 +56,7 @@ public static class PaginationExtensions
     /// <typeparam name="T">The type of items in the collection.</typeparam>
     /// <param name="items">The enumerable of items.</param>
     /// <param name="page">Page number (1-based, defaults to 1).</param>
-    /// <param name="pageSize">Items per page (defaults to 50, max 100).</param>
+    /// <param name="pageSize">Items per page (defaults to 50). Value is clamped to 1-100 by <see cref="PaginationRequest.NormalizedPageSize"/>.</param>
     /// <returns>A paged response containing the requested page of items.</returns>
     public static PagedResponse<T> ToPagedResponse<T>(
         this IEnumerable<T> items,

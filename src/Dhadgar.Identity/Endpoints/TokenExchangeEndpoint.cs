@@ -19,6 +19,17 @@ public static class TokenExchangeEndpoint
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
+            // Return specific error code for ExchangeToken validation failures
+            var hasExchangeTokenError = validationResult.Errors.Exists(e =>
+                e.PropertyName == nameof(TokenExchangeRequest.ExchangeToken));
+
+            if (hasExchangeTokenError)
+            {
+                return ProblemDetailsHelper.BadRequest(
+                    ErrorCodes.AuthErrors.MissingExchangeToken,
+                    "Exchange token is required.");
+            }
+
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
                 validationResult.Errors[0].ErrorMessage);
