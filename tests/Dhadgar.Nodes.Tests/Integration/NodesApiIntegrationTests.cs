@@ -67,7 +67,7 @@ public sealed class NodesApiIntegrationTests
         using var client = _factory.CreateClient();
         var orgId = Guid.NewGuid();
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes");
+        var response = await client.GetAsync($"/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -80,7 +80,7 @@ public sealed class NodesApiIntegrationTests
 
         using var client = _factory.CreateAuthenticatedClient(TestUserId, TestOrgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{TestOrgId}/nodes");
+        var response = await client.GetAsync($"/organizations/{TestOrgId}/nodes");
 
         if (response.StatusCode != HttpStatusCode.OK)
         {
@@ -97,7 +97,7 @@ public sealed class NodesApiIntegrationTests
         var orgId = Guid.NewGuid();
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes");
+        var response = await client.GetAsync($"/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
@@ -113,7 +113,7 @@ public sealed class NodesApiIntegrationTests
         var nodes = await _factory.SeedNodesAsync(orgId, 3);
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes");
+        var response = await client.GetAsync($"/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
@@ -129,7 +129,7 @@ public sealed class NodesApiIntegrationTests
         await _factory.SeedNodesAsync(orgId, 10);
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes?page=1&pageSize=3");
+        var response = await client.GetAsync($"/organizations/{orgId}/nodes?page=1&pageSize=3");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
@@ -147,7 +147,7 @@ public sealed class NodesApiIntegrationTests
         var node = await _factory.SeedNodeAsync(orgId, "my-server");
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes/{node.Id}");
+        var response = await client.GetAsync($"/organizations/{orgId}/nodes/{node.Id}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<NodeDetail>();
@@ -164,7 +164,7 @@ public sealed class NodesApiIntegrationTests
         var nonExistentId = Guid.NewGuid();
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes/{nonExistentId}");
+        var response = await client.GetAsync($"/organizations/{orgId}/nodes/{nonExistentId}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -178,7 +178,7 @@ public sealed class NodesApiIntegrationTests
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId2);
 
         // Trying to access node from orgId1 while authenticated to orgId2
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId2}/nodes/{node.Id}");
+        var response = await client.GetAsync($"/organizations/{orgId2}/nodes/{node.Id}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -192,7 +192,7 @@ public sealed class NodesApiIntegrationTests
 
         var request = new { Name = "updated-name", DisplayName = "Updated Display Name" };
         var response = await client.PatchAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}", request);
+            $"/organizations/{orgId}/nodes/{node.Id}", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<NodeDetail>();
@@ -209,7 +209,7 @@ public sealed class NodesApiIntegrationTests
 
         var request = new { Name = "new-name" };
         var response = await client.PatchAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{Guid.NewGuid()}", request);
+            $"/organizations/{orgId}/nodes/{Guid.NewGuid()}", request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -221,12 +221,12 @@ public sealed class NodesApiIntegrationTests
         var node = await _factory.SeedNodeAsync(orgId, "to-decommission");
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.DeleteAsync($"/api/v1/organizations/{orgId}/nodes/{node.Id}");
+        var response = await client.DeleteAsync($"/organizations/{orgId}/nodes/{node.Id}");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         // Verify node is decommissioned
-        var getResponse = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes/{node.Id}");
+        var getResponse = await client.GetAsync($"/organizations/{orgId}/nodes/{node.Id}");
         // Decommissioned nodes should not be found (soft deleted)
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
@@ -239,12 +239,12 @@ public sealed class NodesApiIntegrationTests
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
         var response = await client.PostAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/maintenance", null);
+            $"/organizations/{orgId}/nodes/{node.Id}/maintenance", null);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         // Verify node is in maintenance
-        var getResponse = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes/{node.Id}");
+        var getResponse = await client.GetAsync($"/organizations/{orgId}/nodes/{node.Id}");
         var result = await getResponse.Content.ReadFromJsonAsync<NodeDetail>();
         Assert.NotNull(result);
         Assert.Equal(NodeStatus.Maintenance, result.Status);
@@ -258,7 +258,7 @@ public sealed class NodesApiIntegrationTests
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
         var response = await client.PostAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/maintenance", null);
+            $"/organizations/{orgId}/nodes/{node.Id}/maintenance", null);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -271,12 +271,12 @@ public sealed class NodesApiIntegrationTests
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
         var response = await client.DeleteAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/maintenance");
+            $"/organizations/{orgId}/nodes/{node.Id}/maintenance");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         // Verify node is out of maintenance
-        var getResponse = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes/{node.Id}");
+        var getResponse = await client.GetAsync($"/organizations/{orgId}/nodes/{node.Id}");
         var result = await getResponse.Content.ReadFromJsonAsync<NodeDetail>();
         Assert.NotNull(result);
         Assert.NotEqual(NodeStatus.Maintenance, result.Status);
@@ -290,7 +290,7 @@ public sealed class NodesApiIntegrationTests
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
         var response = await client.DeleteAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/maintenance");
+            $"/organizations/{orgId}/nodes/{node.Id}/maintenance");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -315,7 +315,7 @@ public sealed class NodesApiIntegrationTests
         // Client authenticated to userOrgId tries to access targetOrgId
         using var client = _factory.CreateAuthenticatedClient(TestUserId, userOrgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{targetOrgId}/nodes");
+        var response = await client.GetAsync($"/organizations/{targetOrgId}/nodes");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -330,7 +330,7 @@ public sealed class NodesApiIntegrationTests
         // Client authenticated to userOrgId tries to access node in targetOrgId
         using var client = _factory.CreateAuthenticatedClient(TestUserId, userOrgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{targetOrgId}/nodes/{nodeId}");
+        var response = await client.GetAsync($"/organizations/{targetOrgId}/nodes/{nodeId}");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

@@ -54,11 +54,15 @@ public sealed class MtlsOptions
 
     /// <summary>
     /// The path prefix for agent endpoints that require mTLS authentication.
-    /// Default: "/api/v1/agents".
+    /// Default: "/agents".
     /// </summary>
+    /// <remarks>
+    /// The Gateway adds /api/v1/nodes prefix via YARP transforms, so services
+    /// should not include the /api/v1/ prefix in their own route mappings.
+    /// </remarks>
     [Required(ErrorMessage = "AgentEndpointPrefix is required")]
     [StringLength(256, MinimumLength = 1, ErrorMessage = "AgentEndpointPrefix must be between 1 and 256 characters")]
-    public string AgentEndpointPrefix { get; set; } = "/api/v1/agents";
+    public string AgentEndpointPrefix { get; set; } = "/agents";
 
     /// <summary>
     /// Paths that are exempt from mTLS authentication (relative to AgentEndpointPrefix).

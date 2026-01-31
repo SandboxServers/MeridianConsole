@@ -9,7 +9,7 @@ public static class KeyVaultEndpoints
 {
     public static void MapKeyVaultEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/keyvaults")
+        var group = app.MapGroup("/keyvaults")
             .WithTags("Key Vaults")
             .RequireAuthorization();
 
@@ -91,11 +91,9 @@ public static class KeyVaultEndpoints
 
         if (vault == null)
         {
-            return Results.Problem(
-                detail: $"Vault '{vaultName}' not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(
+                ErrorCodes.KeyVaults.VaultNotFound,
+                $"Vault '{vaultName}' not found.");
         }
 
         return Results.Ok(new VaultDetailResponse(
@@ -131,11 +129,9 @@ public static class KeyVaultEndpoints
 
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Location))
         {
-            return Results.Problem(
-                detail: "Name and Location are required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/validation");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.KeyVaults.VaultDataRequired,
+                "Name and Location are required.");
         }
 
         try
@@ -164,27 +160,21 @@ public static class KeyVaultEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.Problem(
-                detail: ex.Message,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.Generic.ValidationFailed,
+                ex.Message);
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("exists", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Problem(
-                    detail: ex.Message,
-                    statusCode: StatusCodes.Status409Conflict,
-                    title: "Conflict",
-                    type: "https://meridian.console/errors/conflict");
+                return ProblemDetailsHelper.Conflict(
+                    ErrorCodes.KeyVaults.VaultAlreadyExists,
+                    ex.Message);
             }
-            return Results.Problem(
-                detail: ex.Message,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.Generic.ValidationFailed,
+                ex.Message);
         }
     }
 
@@ -232,27 +222,21 @@ public static class KeyVaultEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.Problem(
-                detail: ex.Message,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.Generic.ValidationFailed,
+                ex.Message);
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Problem(
-                    detail: ex.Message,
-                    statusCode: StatusCodes.Status404NotFound,
-                    title: "Not Found",
-                    type: "https://meridian.console/errors/not-found");
+                return ProblemDetailsHelper.NotFound(
+                    ErrorCodes.KeyVaults.VaultNotFound,
+                    ex.Message);
             }
-            return Results.Problem(
-                detail: ex.Message,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.Generic.ValidationFailed,
+                ex.Message);
         }
     }
 
@@ -271,11 +255,9 @@ public static class KeyVaultEndpoints
 
         if (!success)
         {
-            return Results.Problem(
-                detail: $"Vault '{vaultName}' not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(
+                ErrorCodes.KeyVaults.VaultNotFound,
+                $"Vault '{vaultName}' not found.");
         }
 
         return Results.NoContent();

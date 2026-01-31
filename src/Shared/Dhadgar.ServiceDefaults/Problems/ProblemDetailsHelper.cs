@@ -178,6 +178,19 @@ public static class ProblemDetailsHelper
         "invalid_secret_name" => "The secret name contains invalid characters.",
         "secret_too_large" => "The secret value exceeds the maximum allowed size.",
         "rate_limit_exceeded" => "You have exceeded the rate limit for this operation.",
+        "secret_value_required" => "The secret value is required.",
+        "rotation_failed" => "An error occurred during secret rotation.",
+
+        // Certificate errors
+        "certificate_not_found" => "The specified certificate was not found.",
+        "certificate_data_required" => "Certificate name and data are required.",
+        "invalid_certificate_data" => "The certificate data is not valid base64.",
+        "certificate_already_exists" => "A certificate with this name already exists.",
+
+        // Key Vault errors
+        "vault_not_found" => "The specified Key Vault was not found.",
+        "vault_data_required" => "Vault name and location are required.",
+        "vault_already_exists" => "A Key Vault with this name already exists.",
 
         // Authentication errors
         "invalid_credentials" => "The provided credentials are invalid.",

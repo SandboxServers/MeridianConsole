@@ -8,7 +8,7 @@ public static class NodesEndpoints
 {
     public static void Map(WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/organizations/{organizationId:guid}/nodes")
+        var group = app.MapGroup("/organizations/{organizationId:guid}/nodes")
             .WithTags("Nodes")
             .RequireAuthorization("TenantScoped");
 

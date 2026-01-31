@@ -45,7 +45,7 @@ public sealed class AgentApiIntegrationTests
                 DiskBytes: 500L * 1024 * 1024 * 1024,
                 NetworkInterfaces: null));
 
-        var response = await client.PostAsJsonAsync("/api/v1/agents/enroll", request);
+        var response = await client.PostAsJsonAsync("/agents/enroll", request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<EnrollNodeResponse>();
@@ -74,7 +74,7 @@ public sealed class AgentApiIntegrationTests
                 DiskBytes: 100L * 1024 * 1024 * 1024,
                 NetworkInterfaces: null));
 
-        await client.PostAsJsonAsync("/api/v1/agents/enroll", request);
+        await client.PostAsJsonAsync("/agents/enroll", request);
 
         Assert.True(_factory.EventPublisher.HasMessage<NodeEnrolled>());
         var evt = _factory.EventPublisher.GetLastMessage<NodeEnrolled>()!;
@@ -98,7 +98,7 @@ public sealed class AgentApiIntegrationTests
                 DiskBytes: 500L * 1024 * 1024 * 1024,
                 NetworkInterfaces: null));
 
-        var response = await client.PostAsJsonAsync("/api/v1/agents/enroll", request);
+        var response = await client.PostAsJsonAsync("/agents/enroll", request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -126,7 +126,7 @@ public sealed class AgentApiIntegrationTests
                 DiskBytes: 500L * 1024 * 1024 * 1024,
                 NetworkInterfaces: null));
 
-        var response = await client.PostAsJsonAsync("/api/v1/agents/enroll", request);
+        var response = await client.PostAsJsonAsync("/agents/enroll", request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -148,7 +148,7 @@ public sealed class AgentApiIntegrationTests
                 DiskBytes: 500L * 1024 * 1024 * 1024,
                 NetworkInterfaces: null));
 
-        var response = await client.PostAsJsonAsync("/api/v1/agents/enroll", request);
+        var response = await client.PostAsJsonAsync("/agents/enroll", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -171,11 +171,11 @@ public sealed class AgentApiIntegrationTests
                 NetworkInterfaces: null));
 
         // First enrollment should succeed
-        var response1 = await client.PostAsJsonAsync("/api/v1/agents/enroll", request);
+        var response1 = await client.PostAsJsonAsync("/agents/enroll", request);
         Assert.Equal(HttpStatusCode.Created, response1.StatusCode);
 
         // Second enrollment with same token should fail
-        var response2 = await client.PostAsJsonAsync("/api/v1/agents/enroll", request);
+        var response2 = await client.PostAsJsonAsync("/agents/enroll", request);
         Assert.Equal(HttpStatusCode.Unauthorized, response2.StatusCode);
     }
 
@@ -194,7 +194,7 @@ public sealed class AgentApiIntegrationTests
             AgentVersion: "1.0.1",
             HealthIssues: null);
 
-        var response = await client.PostAsJsonAsync($"/api/v1/agents/{node.Id}/heartbeat", request);
+        var response = await client.PostAsJsonAsync($"/agents/{node.Id}/heartbeat", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<HeartbeatResponse>();
@@ -216,7 +216,7 @@ public sealed class AgentApiIntegrationTests
             AgentVersion: "1.0.0",
             HealthIssues: null);
 
-        var response = await client.PostAsJsonAsync($"/api/v1/agents/{nodeId}/heartbeat", request);
+        var response = await client.PostAsJsonAsync($"/agents/{nodeId}/heartbeat", request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -235,7 +235,7 @@ public sealed class AgentApiIntegrationTests
             AgentVersion: "1.0.0",
             HealthIssues: null);
 
-        var response = await client.PostAsJsonAsync($"/api/v1/agents/{fakeNodeId}/heartbeat", request);
+        var response = await client.PostAsJsonAsync($"/agents/{fakeNodeId}/heartbeat", request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -255,7 +255,7 @@ public sealed class AgentApiIntegrationTests
             AgentVersion: "1.0.0",
             HealthIssues: null);
 
-        var response = await client.PostAsJsonAsync($"/api/v1/agents/{node.Id}/heartbeat", request);
+        var response = await client.PostAsJsonAsync($"/agents/{node.Id}/heartbeat", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -276,7 +276,7 @@ public sealed class AgentApiIntegrationTests
             AgentVersion: "1.0.0",
             HealthIssues: null);
 
-        await client.PostAsJsonAsync($"/api/v1/agents/{node.Id}/heartbeat", request);
+        await client.PostAsJsonAsync($"/agents/{node.Id}/heartbeat", request);
 
         Assert.True(_factory.EventPublisher.HasMessage<NodeOnline>());
         var evt = _factory.EventPublisher.GetLastMessage<NodeOnline>()!;
@@ -299,7 +299,7 @@ public sealed class AgentApiIntegrationTests
             AgentVersion: "1.0.0",
             HealthIssues: null);
 
-        await client.PostAsJsonAsync($"/api/v1/agents/{node.Id}/heartbeat", request);
+        await client.PostAsJsonAsync($"/agents/{node.Id}/heartbeat", request);
 
         Assert.True(_factory.EventPublisher.HasMessage<NodeDegraded>());
     }

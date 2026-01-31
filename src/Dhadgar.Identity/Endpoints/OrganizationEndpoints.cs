@@ -81,11 +81,7 @@ public static class OrganizationEndpoints
         var result = await organizationService.GetAsync(organizationId, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            : ProblemDetailsHelper.NotFound(ErrorCodes.Identity.OrganizationNotFound, result.Error);
     }
 
     private static async Task<IResult> CreateOrganization(
@@ -102,11 +98,7 @@ public static class OrganizationEndpoints
         var result = await organizationService.CreateAsync(userId, request, ct);
         return result.Success
             ? Results.Created($"/organizations/{result.Value?.Id}", new { id = result.Value?.Id })
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> UpdateOrganization(
@@ -137,11 +129,7 @@ public static class OrganizationEndpoints
         var result = await organizationService.UpdateAsync(organizationId, request, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            : ProblemDetailsHelper.NotFound(ErrorCodes.Identity.OrganizationNotFound, result.Error);
     }
 
     private static async Task<IResult> DeleteOrganization(
@@ -171,11 +159,7 @@ public static class OrganizationEndpoints
         var result = await organizationService.SoftDeleteAsync(organizationId, ct);
         return result.Success
             ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            : ProblemDetailsHelper.NotFound(ErrorCodes.Identity.OrganizationNotFound, result.Error);
     }
 
     private static async Task<IResult> SwitchOrganization(
@@ -192,11 +176,7 @@ public static class OrganizationEndpoints
         var outcome = await switchService.SwitchAsync(userId, organizationId, ct);
         if (!outcome.Success)
         {
-            return Results.Problem(
-                detail: outcome.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, outcome.Error);
         }
 
         return Results.Ok(new
@@ -231,21 +211,9 @@ public static class OrganizationEndpoints
         {
             return result.Error switch
             {
-                "not_owner" => Results.Problem(
-                    detail: "Only the organization owner can transfer ownership.",
-                    statusCode: StatusCodes.Status403Forbidden,
-                    title: "Forbidden",
-                    type: "https://meridian.console/errors/forbidden"),
-                "org_not_found" => Results.Problem(
-                    detail: result.Error,
-                    statusCode: StatusCodes.Status404NotFound,
-                    title: "Not Found",
-                    type: "https://meridian.console/errors/not-found"),
-                _ => Results.Problem(
-                    detail: result.Error,
-                    statusCode: StatusCodes.Status400BadRequest,
-                    title: "Bad Request",
-                    type: "https://meridian.console/errors/bad-request")
+                "not_owner" => ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "Only the organization owner can transfer ownership."),
+                "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.Identity.OrganizationNotFound),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error)
             };
         }
 

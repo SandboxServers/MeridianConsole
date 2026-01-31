@@ -101,11 +101,7 @@ public static class RoleEndpoints
         var result = await roleService.GetAsync(organizationId, roleId, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            : ProblemDetailsHelper.NotFound(ErrorCodes.Identity.RoleNotFound, result.Error);
     }
 
     private static async Task<IResult> CreateRole(
@@ -137,11 +133,7 @@ public static class RoleEndpoints
         var result = await roleService.CreateAsync(organizationId, userId, request, ct);
         return result.Success
             ? Results.Created($"/organizations/{organizationId}/roles/{result.Value?.Id}", result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> AssignRole(
@@ -181,11 +173,7 @@ public static class RoleEndpoints
 
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RevokeRole(
@@ -225,11 +213,7 @@ public static class RoleEndpoints
 
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> UpdateRole(
@@ -261,11 +245,7 @@ public static class RoleEndpoints
         var result = await roleService.UpdateAsync(organizationId, userId, roleId, request, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> DeleteRole(
@@ -296,11 +276,7 @@ public static class RoleEndpoints
         var result = await roleService.DeleteAsync(organizationId, userId, roleId, ct);
         return result.Success
             ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> GetRoleMembers(
@@ -331,10 +307,6 @@ public static class RoleEndpoints
         var result = await roleService.GetMembersAsync(organizationId, roleId, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            : ProblemDetailsHelper.NotFound(ErrorCodes.Identity.RoleNotFound, result.Error);
     }
 }

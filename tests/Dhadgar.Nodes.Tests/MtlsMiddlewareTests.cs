@@ -48,7 +48,7 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_ExemptEnrollPath_PassesThrough()
     {
         // Arrange
-        var context = CreateHttpContext("/api/v1/agents/enroll");
+        var context = CreateHttpContext("/agents/enroll");
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
         {
@@ -72,7 +72,7 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_ExemptCaCertificatePath_PassesThrough()
     {
         // Arrange
-        var context = CreateHttpContext("/api/v1/agents/ca-certificate");
+        var context = CreateHttpContext("/agents/ca-certificate");
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
         {
@@ -96,7 +96,7 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_MtlsDisabled_PassesThroughWithoutValidation()
     {
         // Arrange
-        var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat");
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat");
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
         {
@@ -124,7 +124,7 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_NoCertificateAndRequired_Returns401()
     {
         // Arrange
-        var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat");
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat");
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
         {
@@ -155,7 +155,7 @@ public class MtlsMiddlewareTests
     public async Task InvokeAsync_NoCertificateButNotRequired_PassesThrough()
     {
         // Arrange
-        var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat");
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat");
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
         {
@@ -186,7 +186,7 @@ public class MtlsMiddlewareTests
     {
         // Arrange
         using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
-        var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat", certificate);
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
         {
@@ -217,7 +217,7 @@ public class MtlsMiddlewareTests
         // Arrange
         var nodeId = Guid.NewGuid();
         using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
-        var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat", certificate);
         var nextCalled = false;
         var next = new RequestDelegate(_ =>
         {
@@ -254,7 +254,7 @@ public class MtlsMiddlewareTests
         // Arrange
         var nodeId = Guid.NewGuid();
         using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
-        var context = CreateHttpContext("/api/v1/agents/some-node-id/heartbeat", certificate);
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat", certificate);
         var next = new RequestDelegate(_ => Task.CompletedTask);
 
         var validationService = Substitute.For<ICertificateValidationService>();
@@ -636,7 +636,7 @@ public class MtlsMiddlewareIntegrationTests
         var client = _factory.CreateClient();
 
         // Act - just verify the endpoint is accessible (will fail validation but not auth)
-        var response = await client.PostAsJsonAsync("/api/v1/agents/enroll", new
+        var response = await client.PostAsJsonAsync("/agents/enroll", new
         {
             token = "test-token",
             hostname = "test-host",
@@ -671,7 +671,7 @@ public class MtlsMiddlewareIntegrationTests
         var client = _factory.CreateClient();
 
         // Act
-        var response = await client.GetAsync("/api/v1/agents/ca-certificate");
+        var response = await client.GetAsync("/agents/ca-certificate");
 
         // Assert - should successfully return the CA certificate
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -686,7 +686,7 @@ public class MtlsMiddlewareIntegrationTests
         var client = _factory.CreateAgentClient(node.Id);
 
         // Act
-        var response = await client.PostAsJsonAsync($"/api/v1/agents/{node.Id}/heartbeat", new
+        var response = await client.PostAsJsonAsync($"/agents/{node.Id}/heartbeat", new
         {
             cpuUsagePercent = 50.0,
             memoryUsagePercent = 60.0,

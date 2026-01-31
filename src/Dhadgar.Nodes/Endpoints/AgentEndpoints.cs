@@ -17,7 +17,7 @@ public static class AgentEndpoints
 {
     public static void Map(WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/agents")
+        var group = app.MapGroup("/agents")
             .WithTags("Agents");
 
         // Enrollment endpoint - no auth required (uses token in body)
@@ -89,7 +89,7 @@ public static class AgentEndpoints
                 ? new DateTimeOffset(localResponse.NotAfter.Value, TimeSpan.Zero)
                 : null);
 
-        return Results.Created($"/api/v1/agents/{localResponse.NodeId}", contractsResponse);
+        return Results.Created($"/agents/{localResponse.NodeId}", contractsResponse);
     }
 
     private static async Task<IResult> Heartbeat(

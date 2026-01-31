@@ -39,7 +39,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -50,7 +50,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token");
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -61,7 +61,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateClient();
 
         using var content = JsonContent.Create(new { secretNames = new[] { "oauth-steam-api-key" } });
-        var response = await client.PostAsync("/api/v1/secrets/batch", content);
+        var response = await client.PostAsync("/secrets/batch", content);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -72,7 +72,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateClient();
 
         using var content = JsonContent.Create(new { value = "new-secret-value" });
-        var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
+        var response = await client.PutAsync("/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -82,7 +82,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.PostAsync("/api/v1/secrets/oauth-steam-api-key/rotate", null);
+        var response = await client.PostAsync("/secrets/oauth-steam-api-key/rotate", null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -92,7 +92,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.DeleteAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.DeleteAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -106,7 +106,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:read:oauth");
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -116,7 +116,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("admin-1", "secrets:*");
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -126,7 +126,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:read:infrastructure");
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -136,7 +136,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1");
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -146,7 +146,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:read:oauth");
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth");
+        var response = await client.GetAsync("/secrets/oauth");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -156,7 +156,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:read:oauth");
 
-        var response = await client.GetAsync("/api/v1/secrets/infrastructure");
+        var response = await client.GetAsync("/secrets/infrastructure");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -171,7 +171,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:write:oauth");
 
         using var content = JsonContent.Create(new { value = "new-secret-value" });
-        var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
+        var response = await client.PutAsync("/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -182,7 +182,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:read:oauth");
 
         using var content = JsonContent.Create(new { value = "new-secret-value" });
-        var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
+        var response = await client.PutAsync("/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -192,7 +192,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:delete:oauth");
 
-        var response = await client.DeleteAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.DeleteAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
@@ -202,7 +202,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:read:oauth");
 
-        var response = await client.DeleteAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.DeleteAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -216,7 +216,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:rotate:oauth");
 
-        var response = await client.PostAsync("/api/v1/secrets/oauth-steam-api-key/rotate", null);
+        var response = await client.PostAsync("/secrets/oauth-steam-api-key/rotate", null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -227,7 +227,7 @@ public sealed class SecretsSecurityIntegrationTests
         // Write permission alone doesn't grant rotate
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:write:oauth");
 
-        var response = await client.PostAsync("/api/v1/secrets/oauth-steam-api-key/rotate", null);
+        var response = await client.PostAsync("/secrets/oauth-steam-api-key/rotate", null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -245,7 +245,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
-        var response = await client.GetAsync($"/api/v1/secrets/{Uri.EscapeDataString(maliciousName)}");
+        var response = await client.GetAsync($"/secrets/{Uri.EscapeDataString(maliciousName)}");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -256,7 +256,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
         // Empty route segment typically results in 404 (route not matched) or 400
-        var response = await client.GetAsync("/api/v1/secrets/");
+        var response = await client.GetAsync("/secrets/");
 
         Assert.True(
             response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.BadRequest,
@@ -269,7 +269,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:write:oauth");
 
         using var content = JsonContent.Create(new { value = "" });
-        var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
+        var response = await client.PutAsync("/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -280,7 +280,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:write:oauth");
 
         using var content = JsonContent.Create(new { value = (string?)null });
-        var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
+        var response = await client.PutAsync("/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -295,7 +295,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateBreakGlassClient("emergency-user", "Critical incident");
 
         // No permission claims, but break-glass should allow access
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -306,7 +306,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateBreakGlassClient("emergency-user", "Critical incident");
 
         using var content = JsonContent.Create(new { value = "emergency-value" });
-        var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
+        var response = await client.PutAsync("/secrets/oauth-steam-api-key", content);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -320,7 +320,7 @@ public sealed class SecretsSecurityIntegrationTests
     {
         using var client = _factory.CreateServiceAccountClient("svc-betterauth", "secrets:read:oauth");
 
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -335,7 +335,7 @@ public sealed class SecretsSecurityIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
         // This secret is not in the AllowedSecrets list
-        var response = await client.GetAsync("/api/v1/secrets/some-unknown-secret");
+        var response = await client.GetAsync("/secrets/some-unknown-secret");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

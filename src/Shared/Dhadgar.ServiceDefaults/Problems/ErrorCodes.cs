@@ -115,6 +115,45 @@ public static class ErrorCodes
 
         /// <summary>You have exceeded the rate limit for this operation.</summary>
         public const string RateLimitExceeded = "rate_limit_exceeded";
+
+        /// <summary>The secret value is required.</summary>
+        public const string SecretValueRequired = "secret_value_required";
+
+        /// <summary>Rotation failed due to an internal error.</summary>
+        public const string RotationFailed = "rotation_failed";
+    }
+
+    /// <summary>
+    /// Error codes for certificate operations in the Secrets service.
+    /// </summary>
+    public static class Certificates
+    {
+        /// <summary>The specified certificate was not found.</summary>
+        public const string CertificateNotFound = "certificate_not_found";
+
+        /// <summary>Certificate name and data are required.</summary>
+        public const string CertificateDataRequired = "certificate_data_required";
+
+        /// <summary>The certificate data is not valid base64.</summary>
+        public const string InvalidCertificateData = "invalid_certificate_data";
+
+        /// <summary>A certificate with this name already exists.</summary>
+        public const string CertificateAlreadyExists = "certificate_already_exists";
+    }
+
+    /// <summary>
+    /// Error codes for Key Vault management operations.
+    /// </summary>
+    public static class KeyVaults
+    {
+        /// <summary>The specified Key Vault was not found.</summary>
+        public const string VaultNotFound = "vault_not_found";
+
+        /// <summary>Vault name and location are required.</summary>
+        public const string VaultDataRequired = "vault_data_required";
+
+        /// <summary>A Key Vault with this name already exists.</summary>
+        public const string VaultAlreadyExists = "vault_already_exists";
     }
 
     /// <summary>

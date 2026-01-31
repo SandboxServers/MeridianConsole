@@ -145,7 +145,8 @@ public sealed class ProblemDetailsIntegrationTests
 
         Assert.NotNull(problemDetails);
         Assert.NotNull(problemDetails.Type);
-        Assert.Contains("meridian.console/errors", problemDetails.Type, StringComparison.Ordinal);
+        // Uses centralized ProblemDetailsHelper with https://errors.meridianconsole.com/ URIs
+        Assert.Contains("errors.meridianconsole.com", problemDetails.Type, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -64,11 +64,7 @@ public static class InternalEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.Subject))
         {
-            return Results.Problem(
-                detail: "Subject is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Subject is required.");
         }
 
         var audience = request.Audience ?? "api://AzureADTokenExchange";
@@ -94,11 +90,7 @@ public static class InternalEndpoints
 
         if (user is null)
         {
-            return Results.Problem(
-                detail: "User not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.UserNotFound);
         }
 
         return Results.Ok(user);
@@ -111,20 +103,12 @@ public static class InternalEndpoints
     {
         if (request.UserIds is null || request.UserIds.Count == 0)
         {
-            return Results.Problem(
-                detail: "No user IDs provided.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "No user IDs provided.");
         }
 
         if (request.UserIds.Count > 100)
         {
-            return Results.Problem(
-                detail: "Too many user IDs provided. Maximum allowed is 100.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Too many user IDs provided. Maximum allowed is 100.");
         }
 
         var users = await dbContext.Users
@@ -159,11 +143,7 @@ public static class InternalEndpoints
 
         if (org is null)
         {
-            return Results.Problem(
-                detail: "Organization not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.OrganizationNotFound);
         }
 
         return Results.Ok(org);
@@ -256,11 +236,7 @@ public static class InternalEndpoints
 
         if (membership is null)
         {
-            return Results.Problem(
-                detail: "Membership not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.MemberNotFound);
         }
 
         return Results.Ok(membership);

@@ -34,7 +34,7 @@ public sealed class CertificateRenewalIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/agents/{node.Id}/certificates/renew",
+            $"/agents/{node.Id}/certificates/renew",
             request);
 
         // Assert
@@ -60,7 +60,7 @@ public sealed class CertificateRenewalIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/agents/{node.Id}/certificates/renew",
+            $"/agents/{node.Id}/certificates/renew",
             request);
 
         // Assert
@@ -79,7 +79,7 @@ public sealed class CertificateRenewalIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/agents/{node.Id}/certificates/renew",
+            $"/agents/{node.Id}/certificates/renew",
             request);
 
         // Assert
@@ -97,7 +97,7 @@ public sealed class CertificateRenewalIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/agents/{nonExistentNodeId}/certificates/renew",
+            $"/agents/{nonExistentNodeId}/certificates/renew",
             request);
 
         // Assert
@@ -115,7 +115,7 @@ public sealed class CertificateRenewalIntegrationTests
 
         // Act
         await client.PostAsJsonAsync(
-            $"/api/v1/agents/{node.Id}/certificates/renew",
+            $"/agents/{node.Id}/certificates/renew",
             request);
 
         // Assert - Check that old certificate is revoked
@@ -141,7 +141,7 @@ public sealed class CertificateRenewalIntegrationTests
 
         // Act
         await client.PostAsJsonAsync(
-            $"/api/v1/agents/{node.Id}/certificates/renew",
+            $"/agents/{node.Id}/certificates/renew",
             request);
 
         // Assert
@@ -161,7 +161,7 @@ public sealed class CertificateRenewalIntegrationTests
         var client = _factory.CreateClient();
 
         // Act
-        var response = await client.GetAsync("/api/v1/agents/ca-certificate");
+        var response = await client.GetAsync("/agents/ca-certificate");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -178,7 +178,7 @@ public sealed class CertificateRenewalIntegrationTests
         var client = _factory.CreateClient();
 
         // Act
-        var response = await client.GetAsync("/api/v1/agents/ca-certificate");
+        var response = await client.GetAsync("/agents/ca-certificate");
 
         // Assert - Should succeed without authentication
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

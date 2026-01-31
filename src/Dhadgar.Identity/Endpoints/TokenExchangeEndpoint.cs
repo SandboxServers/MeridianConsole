@@ -28,11 +28,7 @@ public static class TokenExchangeEndpoint
 
         if (string.IsNullOrWhiteSpace(request.ExchangeToken))
         {
-            return Results.Problem(
-                detail: "Exchange token is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Exchange token is required.");
         }
 
         var outcome = await service.ExchangeAsync(request.ExchangeToken, ct);
@@ -56,21 +52,9 @@ public static class TokenExchangeEndpoint
             {
                 // Consolidated: all token validation failures return same generic message
                 "invalid_exchange_token" or "invalid_purpose" or "missing_jti" or "missing_claims" =>
-                    Results.Problem(
-                        detail: "Invalid or expired exchange token.",
-                        statusCode: StatusCodes.Status401Unauthorized,
-                        title: "Unauthorized",
-                        type: "https://meridian.console/errors/unauthorized"),
-                "email_not_verified" => Results.Problem(
-                    detail: "Email address must be verified before exchanging tokens.",
-                    statusCode: StatusCodes.Status403Forbidden,
-                    title: "Forbidden",
-                    type: "https://meridian.console/errors/forbidden"),
-                _ => Results.Problem(
-                    detail: safeError == "exchange_failed" ? "Token exchange failed." : safeError,
-                    statusCode: StatusCodes.Status400BadRequest,
-                    title: "Bad Request",
-                    type: "https://meridian.console/errors/bad-request")
+                    ProblemDetailsHelper.Unauthorized(ErrorCodes.Auth.TokenExpired, "Invalid or expired exchange token."),
+                "email_not_verified" => ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "Email address must be verified before exchanging tokens."),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, safeError == "exchange_failed" ? "Token exchange failed." : safeError)
             };
         }
 

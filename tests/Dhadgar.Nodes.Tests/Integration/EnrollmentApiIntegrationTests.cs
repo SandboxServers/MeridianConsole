@@ -24,7 +24,7 @@ public sealed class EnrollmentApiIntegrationTests
 
         var request = new CreateEnrollmentTokenRequest("Test Token", null);
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens", request);
+            $"/organizations/{orgId}/enrollment/tokens", request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -37,7 +37,7 @@ public sealed class EnrollmentApiIntegrationTests
 
         var request = new CreateEnrollmentTokenRequest("Test Token", null);
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens", request);
+            $"/organizations/{orgId}/enrollment/tokens", request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<CreateEnrollmentTokenResponse>();
@@ -55,7 +55,7 @@ public sealed class EnrollmentApiIntegrationTests
 
         var request = new CreateEnrollmentTokenRequest("Custom Expiry Token", 120); // 2 hours
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens", request);
+            $"/organizations/{orgId}/enrollment/tokens", request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<CreateEnrollmentTokenResponse>();
@@ -72,7 +72,7 @@ public sealed class EnrollmentApiIntegrationTests
         var orgId = Guid.NewGuid();
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/enrollment/tokens");
+        var response = await client.GetAsync($"/organizations/{orgId}/enrollment/tokens");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -83,7 +83,7 @@ public sealed class EnrollmentApiIntegrationTests
         var orgId = Guid.NewGuid();
         using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/enrollment/tokens");
+        var response = await client.GetAsync($"/organizations/{orgId}/enrollment/tokens");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<List<EnrollmentTokenSummary>>();
@@ -99,9 +99,9 @@ public sealed class EnrollmentApiIntegrationTests
 
         // Create a token
         var createRequest = new CreateEnrollmentTokenRequest("Active Token", null);
-        await client.PostAsJsonAsync($"/api/v1/organizations/{orgId}/enrollment/tokens", createRequest);
+        await client.PostAsJsonAsync($"/organizations/{orgId}/enrollment/tokens", createRequest);
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/enrollment/tokens");
+        var response = await client.GetAsync($"/organizations/{orgId}/enrollment/tokens");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<List<EnrollmentTokenSummary>>();
@@ -119,17 +119,17 @@ public sealed class EnrollmentApiIntegrationTests
         // Create a token
         var createRequest = new CreateEnrollmentTokenRequest("To Revoke", null);
         var createResponse = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens", createRequest);
+            $"/organizations/{orgId}/enrollment/tokens", createRequest);
         var created = await createResponse.Content.ReadFromJsonAsync<CreateEnrollmentTokenResponse>();
 
         // Revoke the token
         var revokeResponse = await client.DeleteAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens/{created!.TokenId}");
+            $"/organizations/{orgId}/enrollment/tokens/{created!.TokenId}");
 
         Assert.Equal(HttpStatusCode.NoContent, revokeResponse.StatusCode);
 
         // Verify token no longer appears in active list
-        var listResponse = await client.GetAsync($"/api/v1/organizations/{orgId}/enrollment/tokens");
+        var listResponse = await client.GetAsync($"/organizations/{orgId}/enrollment/tokens");
         var tokens = await listResponse.Content.ReadFromJsonAsync<List<EnrollmentTokenSummary>>();
         Assert.NotNull(tokens);
         Assert.DoesNotContain(tokens, t => t.Id == created.TokenId);
@@ -144,11 +144,11 @@ public sealed class EnrollmentApiIntegrationTests
         // Create a token
         var createRequest = new CreateEnrollmentTokenRequest("To Revoke", null);
         var createResponse = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens", createRequest);
+            $"/organizations/{orgId}/enrollment/tokens", createRequest);
         var created = await createResponse.Content.ReadFromJsonAsync<CreateEnrollmentTokenResponse>();
 
         // Revoke the token
-        await client.DeleteAsync($"/api/v1/organizations/{orgId}/enrollment/tokens/{created!.TokenId}");
+        await client.DeleteAsync($"/organizations/{orgId}/enrollment/tokens/{created!.TokenId}");
 
         // Try to use the revoked token for enrollment
         using var anonClient = _factory.CreateClient();
@@ -163,7 +163,7 @@ public sealed class EnrollmentApiIntegrationTests
                 DiskBytes: 500L * 1024 * 1024 * 1024,
                 NetworkInterfaces: null));
 
-        var enrollResponse = await anonClient.PostAsJsonAsync("/api/v1/agents/enroll", enrollRequest);
+        var enrollResponse = await anonClient.PostAsJsonAsync("/agents/enroll", enrollRequest);
 
         Assert.Equal(HttpStatusCode.Unauthorized, enrollResponse.StatusCode);
     }
@@ -176,22 +176,22 @@ public sealed class EnrollmentApiIntegrationTests
 
         // Create tokens in order
         await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens",
+            $"/organizations/{orgId}/enrollment/tokens",
             new CreateEnrollmentTokenRequest("First", null));
 
         _factory.TimeProvider.Advance(TimeSpan.FromMinutes(1));
 
         await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens",
+            $"/organizations/{orgId}/enrollment/tokens",
             new CreateEnrollmentTokenRequest("Second", null));
 
         _factory.TimeProvider.Advance(TimeSpan.FromMinutes(1));
 
         await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/enrollment/tokens",
+            $"/organizations/{orgId}/enrollment/tokens",
             new CreateEnrollmentTokenRequest("Third", null));
 
-        var response = await client.GetAsync($"/api/v1/organizations/{orgId}/enrollment/tokens");
+        var response = await client.GetAsync($"/organizations/{orgId}/enrollment/tokens");
         var tokens = await response.Content.ReadFromJsonAsync<List<EnrollmentTokenSummary>>();
 
         Assert.NotNull(tokens);
@@ -210,24 +210,24 @@ public sealed class EnrollmentApiIntegrationTests
         // Create token in org1
         using var client1 = _factory.CreateAuthenticatedClient(TestUserId, orgId1);
         await client1.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId1}/enrollment/tokens",
+            $"/organizations/{orgId1}/enrollment/tokens",
             new CreateEnrollmentTokenRequest("Org1 Token", null));
 
         // Create token in org2
         using var client2 = _factory.CreateAuthenticatedClient(TestUserId, orgId2);
         await client2.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId2}/enrollment/tokens",
+            $"/organizations/{orgId2}/enrollment/tokens",
             new CreateEnrollmentTokenRequest("Org2 Token", null));
 
         // List tokens for org1 - should only see org1's token
-        var response1 = await client1.GetAsync($"/api/v1/organizations/{orgId1}/enrollment/tokens");
+        var response1 = await client1.GetAsync($"/organizations/{orgId1}/enrollment/tokens");
         var tokens1 = await response1.Content.ReadFromJsonAsync<List<EnrollmentTokenSummary>>();
         Assert.NotNull(tokens1);
         Assert.Single(tokens1);
         Assert.Equal("Org1 Token", tokens1[0].Label);
 
         // List tokens for org2 - should only see org2's token
-        var response2 = await client2.GetAsync($"/api/v1/organizations/{orgId2}/enrollment/tokens");
+        var response2 = await client2.GetAsync($"/organizations/{orgId2}/enrollment/tokens");
         var tokens2 = await response2.Content.ReadFromJsonAsync<List<EnrollmentTokenSummary>>();
         Assert.NotNull(tokens2);
         Assert.Single(tokens2);
@@ -245,7 +245,7 @@ public sealed class EnrollmentApiIntegrationTests
 
         var request = new CreateEnrollmentTokenRequest("Cross-tenant Token", null);
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{targetOrgId}/enrollment/tokens", request);
+            $"/organizations/{targetOrgId}/enrollment/tokens", request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

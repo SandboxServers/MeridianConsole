@@ -77,11 +77,7 @@ public static class MeEndpoints
 
         if (user is null)
         {
-            return Results.Problem(
-                detail: "User not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.UserNotFound);
         }
 
         // Get auth providers (login methods) for this user
@@ -126,11 +122,7 @@ public static class MeEndpoints
 
         if (user is null)
         {
-            return Results.Problem(
-                detail: "User not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.UserNotFound);
         }
 
         var updated = false;
@@ -155,11 +147,7 @@ public static class MeEndpoints
 
             if (!isMember)
             {
-                return Results.Problem(
-                    detail: "User is not a member of the specified organization.",
-                    statusCode: StatusCodes.Status400BadRequest,
-                    title: "Bad Request",
-                    type: "https://meridian.console/errors/bad-request");
+                return ProblemDetailsHelper.BadRequest(ErrorCodes.Identity.MemberNotFound, "User is not a member of the specified organization.");
             }
 
             user.PreferredOrganizationId = request.PreferredOrganizationId.Value;
@@ -168,11 +156,7 @@ public static class MeEndpoints
 
         if (!updated)
         {
-            return Results.Problem(
-                detail: "No updates provided.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "No updates provided.");
         }
 
         user.UpdatedAt = timeProvider.GetUtcNow().DateTime;
@@ -261,11 +245,7 @@ public static class MeEndpoints
         var orgId = EndpointHelpers.GetOrganizationId(context);
         if (!orgId.HasValue)
         {
-            return Results.Problem(
-                detail: "No organization context. Please select an organization first.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "No organization context. Please select an organization first.");
         }
 
         var permissions = await permissionService.CalculatePermissionsAsync(userId, orgId.Value, ct);
@@ -305,11 +285,7 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
         }
 
         return Results.Ok(new
@@ -334,11 +310,7 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
         }
 
         return Results.Ok(new { message = "Account deletion cancelled" });

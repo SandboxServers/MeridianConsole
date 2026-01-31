@@ -11,7 +11,7 @@ public static class SecretsEndpoints
 {
     public static void MapSecretsEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/secrets")
+        var group = app.MapGroup("/secrets")
             .WithTags("Secrets")
             .RequireAuthorization();
 
@@ -65,11 +65,9 @@ public static class SecretsEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.Problem(
-                detail: validation.ErrorMessage,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/validation");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.Secrets.InvalidSecretName,
+                validation.ErrorMessage);
         }
 
         // Check if secret is in allowed list
@@ -114,11 +112,9 @@ public static class SecretsEndpoints
                 IsBreakGlass: authResult.IsBreakGlass,
                 IsServiceAccount: authResult.IsServiceAccount));
 
-            return Results.Problem(
-                detail: $"Secret '{secretName}' not found or not configured.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(
+                ErrorCodes.Secrets.SecretNotFound,
+                $"Secret '{secretName}' not found or not configured.");
         }
 
         // Log successful access
@@ -145,11 +141,9 @@ public static class SecretsEndpoints
     {
         if (request.SecretNames is null || request.SecretNames.Count == 0)
         {
-            return Results.Problem(
-                detail: "SecretNames is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.Generic.ValidationFailed,
+                "SecretNames is required.");
         }
 
         // Validate all secret names
@@ -158,11 +152,9 @@ public static class SecretsEndpoints
             var validation = SecretNameValidator.Validate(name);
             if (!validation.IsValid)
             {
-                return Results.Problem(
-                    detail: $"Invalid secret name '{name}': {validation.ErrorMessage}",
-                    statusCode: StatusCodes.Status400BadRequest,
-                    title: "Bad Request",
-                    type: "https://meridian.console/errors/validation");
+                return ProblemDetailsHelper.BadRequest(
+                    ErrorCodes.Secrets.InvalidSecretName,
+                    $"Invalid secret name '{name}': {validation.ErrorMessage}");
             }
         }
 

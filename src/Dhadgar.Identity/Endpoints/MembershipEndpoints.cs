@@ -90,13 +90,13 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        var pagination = new PaginationRequest { Page = page ?? 1, Limit = limit ?? 50 };
+        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = limit ?? 50 };
         var allMembers = await membershipService.ListMembersAsync(organizationId, ct);
 
         // Apply pagination in memory (for backward compatibility with existing service)
         var pagedMembers = allMembers
             .Skip(pagination.Skip)
-            .Take(pagination.NormalizedLimit)
+            .Take(pagination.NormalizedPageSize)
             .ToArray();
 
         return Results.Ok(PagedResponse<MemberSummary>.Create(pagedMembers, allMembers.Count, pagination));
@@ -130,11 +130,7 @@ public static class MembershipEndpoints
         var result = await membershipService.InviteAsync(organizationId, userId, request, ct);
         return result.Success
             ? Results.Ok(new { membershipId = result.Value?.Id })
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> AcceptInvite(
@@ -151,11 +147,7 @@ public static class MembershipEndpoints
         var result = await membershipService.AcceptInviteAsync(organizationId, userId, ct);
         return result.Success
             ? Results.Ok(new { membershipId = result.Value?.Id })
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RejectInvite(
@@ -172,11 +164,7 @@ public static class MembershipEndpoints
         var result = await membershipService.RejectInviteAsync(organizationId, userId, ct);
         return result.Success
             ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> WithdrawInvitation(
@@ -207,11 +195,7 @@ public static class MembershipEndpoints
         var result = await membershipService.WithdrawInviteAsync(organizationId, userId, targetUserId, ct);
         return result.Success
             ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RemoveMember(
@@ -242,11 +226,7 @@ public static class MembershipEndpoints
         var result = await membershipService.RemoveMemberAsync(organizationId, memberId, ct);
         return result.Success
             ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Identity.MemberNotFound, result.Error);
     }
 
     private static async Task<IResult> AssignRole(
@@ -278,21 +258,13 @@ public static class MembershipEndpoints
         var role = request.Role?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(role))
         {
-            return Results.Problem(
-                detail: "Role is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Role is required.");
         }
 
         var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, role, ct);
         return result.Success
             ? Results.Ok(new { role = result.Value?.Role })
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> ListClaims(
@@ -323,11 +295,7 @@ public static class MembershipEndpoints
         var result = await membershipService.ListClaimsAsync(organizationId, memberId, ct);
         if (!result.Success)
         {
-            return Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.MemberNotFound, result.Error);
         }
 
         var claims = result.Value?.Select(c => new MemberClaimDto(c.Id, c.Type, c.Value, c.ExpiresAt, c.CreatedAt)).ToList()
@@ -364,11 +332,7 @@ public static class MembershipEndpoints
         var result = await membershipService.AddClaimAsync(organizationId, userId, memberId, request, ct);
         return result.Success
             ? Results.Ok(new { claimId = result.Value?.Id })
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RemoveClaim(
@@ -400,11 +364,7 @@ public static class MembershipEndpoints
         var result = await membershipService.RemoveClaimAsync(organizationId, memberId, claimId, ct);
         return result.Success
             ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> BulkInviteMembers(
@@ -434,11 +394,7 @@ public static class MembershipEndpoints
 
         if (request.Invites is null || request.Invites.Count == 0)
         {
-            return Results.Problem(
-                detail: "At least one invite is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "At least one invite is required.");
         }
 
         var result = await membershipService.BulkInviteAsync(organizationId, userId, request.Invites, ct);
@@ -480,11 +436,7 @@ public static class MembershipEndpoints
 
         if (request.MemberIds is null || request.MemberIds.Count == 0)
         {
-            return Results.Problem(
-                detail: "At least one member ID is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "At least one member ID is required.");
         }
 
         var result = await membershipService.BulkRemoveAsync(organizationId, request.MemberIds, ct);

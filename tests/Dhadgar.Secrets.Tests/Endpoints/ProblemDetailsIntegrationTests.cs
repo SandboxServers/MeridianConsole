@@ -32,7 +32,7 @@ public sealed class ProblemDetailsIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
         // Act - The path must be URL-encoded to reach the endpoint with the invalid characters
-        var response = await client.GetAsync("/api/v1/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
+        var response = await client.GetAsync("/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -45,7 +45,7 @@ public sealed class ProblemDetailsIntegrationTests
         Assert.Equal(400, problemDetails.Status);
         Assert.NotNull(problemDetails.Type);
         Assert.NotNull(problemDetails.Title);
-        Assert.Contains("meridian.console/errors", problemDetails.Type, StringComparison.Ordinal);
+        Assert.Contains("errors.meridianconsole.com", problemDetails.Type, StringComparison.Ordinal);
 
         // Verify trace context is included
         Assert.True(problemDetails.Extensions.ContainsKey("traceId"), "Expected traceId in extensions");
@@ -59,7 +59,7 @@ public sealed class ProblemDetailsIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
         // Act
-        var response = await client.GetAsync("/api/v1/secrets/unknown-secret");
+        var response = await client.GetAsync("/secrets/unknown-secret");
 
         // Assert
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -73,7 +73,7 @@ public sealed class ProblemDetailsIntegrationTests
 
         // Act
         using var content = JsonContent.Create(new { value = "" });
-        var response = await client.PutAsync("/api/v1/secrets/oauth-steam-api-key", content);
+        var response = await client.PutAsync("/secrets/oauth-steam-api-key", content);
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -96,12 +96,12 @@ public sealed class ProblemDetailsIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:delete:oauth");
 
         // Act
-        var response = await client.DeleteAsync("/api/v1/secrets/oauth-discord-client-secret");
+        var response = await client.DeleteAsync("/secrets/oauth-discord-client-secret");
 
         // Assert - Either 204 (if found and deleted) or 404 (if not found)
         // Since FakeSecretProvider has this secret, it will delete successfully
         // Let's test with a different approach - try to delete twice
-        var response2 = await client.DeleteAsync("/api/v1/secrets/oauth-discord-client-secret");
+        var response2 = await client.DeleteAsync("/secrets/oauth-discord-client-secret");
 
         // Second delete should return 404 since it was already deleted
         Assert.Equal(HttpStatusCode.NotFound, response2.StatusCode);
@@ -124,7 +124,7 @@ public sealed class ProblemDetailsIntegrationTests
 
         // Act - Use a secret name with path traversal (URL encoded)
         using var content = JsonContent.Create(new { value = "some-value" });
-        var response = await client.PutAsync("/api/v1/secrets/" + Uri.EscapeDataString("..%2Fhack"), content);
+        var response = await client.PutAsync("/secrets/" + Uri.EscapeDataString("..%2Fhack"), content);
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -133,7 +133,7 @@ public sealed class ProblemDetailsIntegrationTests
         var problemDetails = JsonSerializer.Deserialize<ProblemDetails>(responseContent, JsonOptions);
 
         Assert.NotNull(problemDetails);
-        Assert.Contains("validation", problemDetails.Type!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("errors.meridianconsole.com", problemDetails.Type!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public sealed class ProblemDetailsIntegrationTests
         using var client = _factory.CreateClient();
 
         // Act
-        var response = await client.GetAsync("/api/v1/secrets/oauth-steam-api-key");
+        var response = await client.GetAsync("/secrets/oauth-steam-api-key");
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -156,7 +156,7 @@ public sealed class ProblemDetailsIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
         // Act - Use a secret name with invalid characters (URL encoded)
-        var response = await client.GetAsync("/api/v1/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
+        var response = await client.GetAsync("/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -175,7 +175,7 @@ public sealed class ProblemDetailsIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
         // Act - Use a secret name with invalid characters (URL encoded)
-        var response = await client.GetAsync("/api/v1/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
+        var response = await client.GetAsync("/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
 
         // Assert
         var content = await response.Content.ReadAsStringAsync();
@@ -195,7 +195,7 @@ public sealed class ProblemDetailsIntegrationTests
         using var client = _factory.CreateAuthenticatedClient("user-1", "secrets:*");
 
         // Act - Use a secret name with invalid characters (URL encoded)
-        var response = await client.GetAsync("/api/v1/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
+        var response = await client.GetAsync("/secrets/" + Uri.EscapeDataString("..%2Finvalid"));
 
         // Assert
         var content = await response.Content.ReadAsStringAsync();
