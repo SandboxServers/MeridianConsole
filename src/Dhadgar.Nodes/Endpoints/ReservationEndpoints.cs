@@ -9,7 +9,7 @@ public static class ReservationEndpoints
     public static void Map(WebApplication app)
     {
         // Organization-scoped endpoints (user-facing)
-        var orgGroup = app.MapGroup("/api/v1/organizations/{organizationId:guid}/nodes/{nodeId:guid}/reservations")
+        var orgGroup = app.MapGroup("/organizations/{organizationId:guid}/nodes/{nodeId:guid}/reservations")
             .WithTags("Capacity Reservations")
             .RequireAuthorization("TenantScoped");
 
@@ -32,7 +32,7 @@ public static class ReservationEndpoints
             .ProducesProblem(404);
 
         // Token-based endpoints (service-to-service)
-        var tokenGroup = app.MapGroup("/api/v1/reservations/{token:guid}")
+        var tokenGroup = app.MapGroup("/reservations/{token:guid}")
             .WithTags("Capacity Reservations")
             .RequireAuthorization();
 
@@ -106,7 +106,7 @@ public static class ReservationEndpoints
         }
 
         return Results.Created(
-            $"/api/v1/reservations/{result.Value!.ReservationToken}",
+            $"/reservations/{result.Value!.ReservationToken}",
             result.Value);
     }
 

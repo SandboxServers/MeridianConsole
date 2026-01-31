@@ -11,6 +11,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
 
     <!-- Node.js build configuration -->
@@ -26,10 +27,10 @@
     <Message Importance="high" Text="Skipping .NET restore for Dhadgar.ShoppingCart (Node.js project)" />
   </Target>
 
-  <!-- Run npm install if node_modules doesn't exist or package.json changed -->
+  <!-- Run npm ci if node_modules doesn't exist or package.json changed -->
   <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(ShoppingCartProjectDir)\package.json;$(ShoppingCartProjectDir)\package-lock.json" Outputs="$(NodeModulesDir)\.package-lock.json">
-    <Message Importance="high" Text="Running npm install for Dhadgar.ShoppingCart..." />
-    <Exec Command="$(NpmCommand) install" WorkingDirectory="$(ShoppingCartProjectDir)" />
+    <Message Importance="high" Text="Running npm ci for Dhadgar.ShoppingCart..." />
+    <Exec Command="$(NpmCommand) ci --prefer-offline --no-audit" WorkingDirectory="$(ShoppingCartProjectDir)" />
   </Target>
 
   <!-- Run npm build -->

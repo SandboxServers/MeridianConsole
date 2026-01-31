@@ -7,7 +7,7 @@ public static class EnrollmentEndpoints
 {
     public static void Map(WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/organizations/{organizationId:guid}/enrollment")
+        var group = app.MapGroup("/organizations/{organizationId:guid}/enrollment")
             .WithTags("Enrollment")
             .RequireAuthorization("TenantScoped");
 
@@ -66,7 +66,8 @@ public static class EnrollmentEndpoints
             plainTextToken,
             token.ExpiresAt);
 
-        return Results.Created($"/api/v1/organizations/{organizationId}/enrollment/tokens/{token.Id}", response);
+        var location = $"{context.Request.PathBase}/organizations/{organizationId}/enrollment/tokens/{token.Id}";
+        return Results.Created(location, response);
     }
 
     private static async Task<IResult> ListTokens(

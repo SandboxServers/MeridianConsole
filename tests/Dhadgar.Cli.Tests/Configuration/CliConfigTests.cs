@@ -99,7 +99,7 @@ public class CliConfigTests
             GatewayUrl = "http://my-gateway:8080"
         };
 
-        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/api/v1/identity");
+        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/identity");
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class CliConfigTests
             GatewayUrl = "http://my-gateway:8080/"
         };
 
-        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/api/v1/identity");
+        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/identity");
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class CliConfigTests
             GatewayUrl = null
         };
 
-        config.EffectiveIdentityUrl.Should().Be("http://localhost:5000/api/v1/identity");
+        config.EffectiveIdentityUrl.Should().Be("http://localhost:5000/identity");
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class CliConfigTests
             GatewayUrl = "http://my-gateway:8080"
         };
 
-        config.EffectiveSecretsUrl.Should().Be("http://my-gateway:8080/api/v1/secrets");
+        config.EffectiveSecretsUrl.Should().Be("http://my-gateway:8080/secrets");
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -93,11 +94,7 @@ public static class UserEndpoints
         var result = await userService.GetAsync(organizationId, userId, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error);
     }
 
     private static async Task<IResult> CreateUser(
@@ -126,13 +123,17 @@ public static class UserEndpoints
         }
 
         var result = await userService.CreateAsync(organizationId, actorUserId, request, ct);
-        return result.Success
-            ? Results.Created($"/organizations/{organizationId}/users/{result.Value?.Id}", result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+        if (result.Success)
+        {
+            return Results.Created($"/organizations/{organizationId}/users/{result.Value?.Id}", result.Value);
+        }
+
+        return result.Error switch
+        {
+            "invalid_email" => ProblemDetailsHelper.UnprocessableEntity(ErrorCodes.IdentityErrors.InvalidEmail),
+            "email_already_exists" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.EmailAlreadyExists),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> UpdateUser(
@@ -142,13 +143,16 @@ public static class UserEndpoints
         UserUpdateRequest request,
         UserService userService,
         IPermissionService permissionService,
+        IValidator<UserUpdateRequest> validator,
         CancellationToken ct)
     {
+        // 1. Auth check
         if (!EndpointHelpers.TryGetUserId(context, out var actorUserId))
         {
             return Results.Unauthorized();
         }
 
+        // 2. Permission check
         var permissionResult = await EndpointHelpers.RequirePermissionAsync(
             actorUserId,
             organizationId,
@@ -161,23 +165,20 @@ public static class UserEndpoints
             return permissionResult;
         }
 
-        if (string.IsNullOrWhiteSpace(request.Email) && string.IsNullOrWhiteSpace(request.DisplayName))
+        // 3. Validation (after auth)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return Results.Problem(
-                detail: "No updates provided.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
+        // 4. Business logic
         var result = await userService.UpdateAsync(organizationId, userId, request, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> DeleteUser(
@@ -206,13 +207,17 @@ public static class UserEndpoints
         }
 
         var result = await userService.SoftDeleteAsync(organizationId, userId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "user_not_found" or "not_found" =>
+                ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> UnlinkAccount(
@@ -255,20 +260,12 @@ public static class UserEndpoints
 
         if (!membershipExists)
         {
-            return Results.Problem(
-                detail: "User not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, "User is not a member of this organization.");
         }
 
         var result = await linkedAccountService.UnlinkAsync(userId, linkedAccountId, ct);
         return result.Success
             ? Results.NoContent()
-            : Results.Problem(
-                detail: result.Error,
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 }

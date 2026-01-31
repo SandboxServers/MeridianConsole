@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Services;
 using Dhadgar.ServiceDefaults.Security;
+using FluentValidation;
 
 namespace Dhadgar.Identity.Endpoints;
 
@@ -7,33 +8,34 @@ public static class TokenExchangeEndpoint
 {
     public sealed record TokenExchangeRequest(string ExchangeToken);
 
-    // Error codes that should be exposed vs hidden
-    // SECURITY: These are the only error codes returned to clients
-    // All other errors are mapped to generic "exchange_failed" to prevent information leakage
-    private static readonly HashSet<string> SafeErrorCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "missing_exchange_token",
-        "token_already_used",  // Safe: doesn't reveal user existence
-        "email_not_verified"   // Safe: only after successful token validation
-    };
-
     public static async Task<IResult> Handle(
         HttpContext context,
         TokenExchangeRequest request,
         TokenExchangeService service,
         ISecurityEventLogger securityLogger,
+        IValidator<TokenExchangeRequest> validator,
         CancellationToken ct)
     {
-        var clientIp = context.Connection.RemoteIpAddress?.ToString();
-
-        if (string.IsNullOrWhiteSpace(request.ExchangeToken))
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return Results.Problem(
-                detail: "Exchange token is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            // Return specific error code for ExchangeToken validation failures
+            var exchangeTokenError = validationResult.Errors.FirstOrDefault(e =>
+                e.PropertyName == nameof(TokenExchangeRequest.ExchangeToken));
+
+            if (exchangeTokenError is not null)
+            {
+                return ProblemDetailsHelper.BadRequest(
+                    ErrorCodes.AuthErrors.MissingExchangeToken,
+                    exchangeTokenError.ErrorMessage);
+            }
+
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
+
+        var clientIp = context.Connection.RemoteIpAddress?.ToString();
 
         var outcome = await service.ExchangeAsync(request.ExchangeToken, ct);
 
@@ -48,29 +50,17 @@ public static class TokenExchangeEndpoint
 
             // SECURITY: Return generic errors for sensitive failures
             // to prevent information leakage about user existence
-            var safeError = SafeErrorCodes.Contains(outcome.Error ?? "")
-                ? outcome.Error
-                : "exchange_failed";
-
             return outcome.Error switch
             {
                 // Consolidated: all token validation failures return same generic message
                 "invalid_exchange_token" or "invalid_purpose" or "missing_jti" or "missing_claims" =>
-                    Results.Problem(
-                        detail: "Invalid or expired exchange token.",
-                        statusCode: StatusCodes.Status401Unauthorized,
-                        title: "Unauthorized",
-                        type: "https://meridian.console/errors/unauthorized"),
-                "email_not_verified" => Results.Problem(
-                    detail: "Email address must be verified before exchanging tokens.",
-                    statusCode: StatusCodes.Status403Forbidden,
-                    title: "Forbidden",
-                    type: "https://meridian.console/errors/forbidden"),
-                _ => Results.Problem(
-                    detail: safeError == "exchange_failed" ? "Token exchange failed." : safeError,
-                    statusCode: StatusCodes.Status400BadRequest,
-                    title: "Bad Request",
-                    type: "https://meridian.console/errors/bad-request")
+                    ProblemDetailsHelper.Unauthorized(ErrorCodes.AuthErrors.TokenExpired, "Invalid or expired exchange token."),
+                "email_not_verified" => ProblemDetailsHelper.Forbidden(ErrorCodes.AuthErrors.AccessDenied, "Email address must be verified before exchanging tokens."),
+                // Safe error codes that can be exposed to clients
+                "missing_exchange_token" => ProblemDetailsHelper.BadRequest(ErrorCodes.AuthErrors.MissingExchangeToken, "Exchange token is required."),
+                "token_already_used" => ProblemDetailsHelper.BadRequest(ErrorCodes.AuthErrors.TokenAlreadyUsed, "This exchange token has already been used."),
+                // Generic fallback for all other errors to prevent information leakage
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "Token exchange failed.")
             };
         }
 

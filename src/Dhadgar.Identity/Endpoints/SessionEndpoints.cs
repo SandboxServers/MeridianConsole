@@ -76,11 +76,7 @@ public static class SessionEndpoints
 
         if (!revoked)
         {
-            return Results.Problem(
-                detail: "Session not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.AuthErrors.SessionNotFound, "Session not found.");
         }
 
         var clientIp = context.Connection.RemoteIpAddress?.ToString();

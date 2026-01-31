@@ -182,7 +182,7 @@ public sealed class ApiClientFactory : IDisposable
     private static Uri NormalizeSecretsBase(Uri uri)
     {
         var path = uri.AbsolutePath.TrimEnd('/');
-        const string suffix = "/api/v1/secrets";
+        const string suffix = "/secrets";
 
         if (path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
         {

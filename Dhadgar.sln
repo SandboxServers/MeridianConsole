@@ -101,6 +101,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dhadgar.SharedAuth", "src\Dhadgar.SharedAuth\Dhadgar.SharedAuth.csproj", "{DD388DA8-A055-47BF-9996-5B5D6855EF94}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{C8E42992-5E42-0C2B-DBFE-AA848D06431C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dhadgar.Testing", "src\Shared\Dhadgar.Testing\Dhadgar.Testing.csproj", "{297DD46A-D3D9-4844-9E6B-40CDC1D68908}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -687,11 +691,25 @@ Global
 		{DD388DA8-A055-47BF-9996-5B5D6855EF94}.Release|x64.Build.0 = Release|Any CPU
 		{DD388DA8-A055-47BF-9996-5B5D6855EF94}.Release|x86.ActiveCfg = Release|Any CPU
 		{DD388DA8-A055-47BF-9996-5B5D6855EF94}.Release|x86.Build.0 = Release|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Debug|x64.Build.0 = Debug|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Debug|x86.Build.0 = Debug|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Release|Any CPU.Build.0 = Release|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Release|x64.ActiveCfg = Release|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Release|x64.Build.0 = Release|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Release|x86.ActiveCfg = Release|Any CPU
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{DD388DA8-A055-47BF-9996-5B5D6855EF94} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{C8E42992-5E42-0C2B-DBFE-AA848D06431C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{297DD46A-D3D9-4844-9E6B-40CDC1D68908} = {C8E42992-5E42-0C2B-DBFE-AA848D06431C}
 	EndGlobalSection
 EndGlobal

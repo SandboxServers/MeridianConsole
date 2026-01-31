@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -58,17 +59,17 @@ public static class InternalEndpoints
             .WithDescription("Generate a client assertion JWT for Microsoft federated credential authentication");
     }
 
-    private static IResult GenerateMicrosoftAssertion(
+    private static async Task<IResult> GenerateMicrosoftAssertion(
         ClientAssertionRequest request,
-        Services.IClientAssertionService assertionService)
+        Services.IClientAssertionService assertionService,
+        IValidator<ClientAssertionRequest> validator)
     {
-        if (string.IsNullOrWhiteSpace(request.Subject))
+        var validationResult = await validator.ValidateAsync(request);
+        if (!validationResult.IsValid)
         {
-            return Results.Problem(
-                detail: "Subject is required.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var audience = request.Audience ?? "api://AzureADTokenExchange";
@@ -94,11 +95,7 @@ public static class InternalEndpoints
 
         if (user is null)
         {
-            return Results.Problem(
-                detail: "User not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound);
         }
 
         return Results.Ok(user);
@@ -107,24 +104,15 @@ public static class InternalEndpoints
     private static async Task<IResult> GetUsersBatch(
         UserBatchRequest request,
         IdentityDbContext dbContext,
+        IValidator<UserBatchRequest> validator,
         CancellationToken ct)
     {
-        if (request.UserIds is null || request.UserIds.Count == 0)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return Results.Problem(
-                detail: "No user IDs provided.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
-        }
-
-        if (request.UserIds.Count > 100)
-        {
-            return Results.Problem(
-                detail: "Too many user IDs provided. Maximum allowed is 100.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request",
-                type: "https://meridian.console/errors/bad-request");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var users = await dbContext.Users
@@ -159,11 +147,7 @@ public static class InternalEndpoints
 
         if (org is null)
         {
-            return Results.Problem(
-                detail: "Organization not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound);
         }
 
         return Results.Ok(org);
@@ -256,11 +240,7 @@ public static class InternalEndpoints
 
         if (membership is null)
         {
-            return Results.Problem(
-                detail: "Membership not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                title: "Not Found",
-                type: "https://meridian.console/errors/not-found");
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound);
         }
 
         return Results.Ok(membership);

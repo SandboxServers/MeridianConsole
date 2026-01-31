@@ -188,13 +188,13 @@ public sealed class AuditService : IAuditService
 
         // Apply pagination (always order by timestamp descending for audit logs)
         var page = Math.Max(1, query.Page);
-        var limit = query.EffectiveLimit;
-        var skip = (page - 1) * limit;
+        var pageSize = query.EffectivePageSize;
+        var skip = (page - 1) * pageSize;
 
         var items = await dbQuery
             .OrderByDescending(a => a.Timestamp)
             .Skip(skip)
-            .Take(limit)
+            .Take(pageSize)
             .Select(a => new AuditLogDto
             {
                 Id = a.Id,
@@ -220,7 +220,7 @@ public sealed class AuditService : IAuditService
         {
             Items = items,
             Page = page,
-            Limit = limit,
+            PageSize = pageSize,
             Total = total
         };
     }

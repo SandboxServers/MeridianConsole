@@ -103,12 +103,12 @@ public sealed class TestAuditService : IAuditService
 
         var total = filteredList.Count;
         var page = Math.Max(1, query.Page);
-        var limit = query.EffectiveLimit;
-        var skip = (page - 1) * limit;
+        var pageSize = query.EffectivePageSize;
+        var skip = (page - 1) * pageSize;
 
         var items = filteredList
             .Skip(skip)
-            .Take(limit)
+            .Take(pageSize)
             .Select(e => new AuditLogDto
             {
                 // Preserve fidelity: use actual entry fields, not synthetic values
@@ -131,7 +131,7 @@ public sealed class TestAuditService : IAuditService
         {
             Items = items,
             Page = page,
-            Limit = limit,
+            PageSize = pageSize,
             Total = total
         });
     }

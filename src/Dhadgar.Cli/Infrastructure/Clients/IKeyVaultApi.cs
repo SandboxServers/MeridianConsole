@@ -9,19 +9,19 @@ namespace Dhadgar.Cli.Infrastructure.Clients;
 /// </summary>
 public interface IKeyVaultApi
 {
-    [Get("/api/v1/keyvaults")]
+    [Get("/keyvaults")]
     Task<KeyVaultListResponse> GetVaultsAsync(CancellationToken ct = default);
 
-    [Get("/api/v1/keyvaults/{vaultName}")]
+    [Get("/keyvaults/{vaultName}")]
     Task<KeyVaultResponse> GetVaultAsync(string vaultName, CancellationToken ct = default);
 
-    [Post("/api/v1/keyvaults")]
+    [Post("/keyvaults")]
     Task<KeyVaultResponse> CreateVaultAsync([Body] CreateVaultRequest request, CancellationToken ct = default);
 
-    [Patch("/api/v1/keyvaults/{vaultName}")]
+    [Patch("/keyvaults/{vaultName}")]
     Task<KeyVaultResponse> UpdateVaultAsync(string vaultName, [Body] UpdateVaultRequest request, CancellationToken ct = default);
 
-    [Delete("/api/v1/keyvaults/{vaultName}")]
+    [Delete("/keyvaults/{vaultName}")]
     Task DeleteVaultAsync(string vaultName, CancellationToken ct = default);
 }
 

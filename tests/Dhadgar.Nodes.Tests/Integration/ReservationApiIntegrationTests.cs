@@ -87,7 +87,7 @@ public sealed class ReservationApiIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations",
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations",
             request);
 
         // Assert
@@ -120,7 +120,7 @@ public sealed class ReservationApiIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{nodeId}/reservations",
+            $"/organizations/{orgId}/nodes/{nodeId}/reservations",
             request);
 
         // Assert
@@ -143,7 +143,7 @@ public sealed class ReservationApiIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{Guid.NewGuid()}/reservations",
+            $"/organizations/{orgId}/nodes/{Guid.NewGuid()}/reservations",
             request);
 
         // Assert
@@ -170,7 +170,7 @@ public sealed class ReservationApiIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId2}/nodes/{node.Id}/reservations",
+            $"/organizations/{orgId2}/nodes/{node.Id}/reservations",
             request);
 
         // Assert
@@ -195,13 +195,13 @@ public sealed class ReservationApiIntegrationTests
         };
 
         await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations", request);
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations", request);
         await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations", request);
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations", request);
 
         // Act
         var response = await client.GetAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations");
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -220,7 +220,7 @@ public sealed class ReservationApiIntegrationTests
 
         // Act
         var response = await client.GetAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations/capacity");
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations/capacity");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -247,14 +247,14 @@ public sealed class ReservationApiIntegrationTests
             RequestedBy = "tasks-service"
         };
         var createResponse = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations",
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations",
             createRequest);
         var reservation = await createResponse.Content.ReadFromJsonAsync<ReservationResponse>();
 
         // Act
         var claimRequest = new { ServerId = "server-123" };
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/reservations/{reservation!.ReservationToken}/claim",
+            $"/reservations/{reservation!.ReservationToken}/claim",
             claimRequest);
 
         // Assert
@@ -275,7 +275,7 @@ public sealed class ReservationApiIntegrationTests
 
         // Act
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/reservations/{Guid.NewGuid()}/claim",
+            $"/reservations/{Guid.NewGuid()}/claim",
             claimRequest);
 
         // Assert
@@ -298,13 +298,13 @@ public sealed class ReservationApiIntegrationTests
             RequestedBy = "tasks-service"
         };
         var createResponse = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations",
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations",
             createRequest);
         var reservation = await createResponse.Content.ReadFromJsonAsync<ReservationResponse>();
 
         // Act
         var response = await client.DeleteAsync(
-            $"/api/v1/reservations/{reservation!.ReservationToken}?reason=no+longer+needed");
+            $"/reservations/{reservation!.ReservationToken}?reason=no+longer+needed");
 
         // Assert
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -318,7 +318,7 @@ public sealed class ReservationApiIntegrationTests
 
         // Act
         var response = await client.DeleteAsync(
-            $"/api/v1/reservations/{Guid.NewGuid()}");
+            $"/reservations/{Guid.NewGuid()}");
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -340,13 +340,13 @@ public sealed class ReservationApiIntegrationTests
             RequestedBy = "tasks-service"
         };
         var createResponse = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations",
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations",
             createRequest);
         var reservation = await createResponse.Content.ReadFromJsonAsync<ReservationResponse>();
 
         // Act
         var response = await client.GetAsync(
-            $"/api/v1/reservations/{reservation!.ReservationToken}");
+            $"/reservations/{reservation!.ReservationToken}");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -371,7 +371,7 @@ public sealed class ReservationApiIntegrationTests
             RequestedBy = "tasks-service"
         };
         var createResponse = await client.PostAsJsonAsync(
-            $"/api/v1/organizations/{orgId}/nodes/{node.Id}/reservations",
+            $"/organizations/{orgId}/nodes/{node.Id}/reservations",
             createRequest);
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var reservation = await createResponse.Content.ReadFromJsonAsync<ReservationResponse>();
@@ -380,7 +380,7 @@ public sealed class ReservationApiIntegrationTests
         // Step 2: Claim reservation
         var claimRequest = new { ServerId = "game-server-1" };
         var claimResponse = await client.PostAsJsonAsync(
-            $"/api/v1/reservations/{reservation.ReservationToken}/claim",
+            $"/reservations/{reservation.ReservationToken}/claim",
             claimRequest);
         Assert.Equal(HttpStatusCode.OK, claimResponse.StatusCode);
         var claimedReservation = await claimResponse.Content.ReadFromJsonAsync<ReservationResponse>();
@@ -389,12 +389,12 @@ public sealed class ReservationApiIntegrationTests
 
         // Step 3: Release reservation (e.g., when server is stopped)
         var releaseResponse = await client.DeleteAsync(
-            $"/api/v1/reservations/{reservation.ReservationToken}?reason=server+stopped");
+            $"/reservations/{reservation.ReservationToken}?reason=server+stopped");
         Assert.Equal(HttpStatusCode.NoContent, releaseResponse.StatusCode);
 
         // Verify it's released
         var getResponse = await client.GetAsync(
-            $"/api/v1/reservations/{reservation.ReservationToken}");
+            $"/reservations/{reservation.ReservationToken}");
         var releasedReservation = await getResponse.Content.ReadFromJsonAsync<ReservationResponse>();
         Assert.Equal(ReservationStatus.Released, releasedReservation!.Status);
     }

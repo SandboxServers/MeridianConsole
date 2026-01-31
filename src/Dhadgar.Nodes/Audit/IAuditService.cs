@@ -123,13 +123,13 @@ public sealed record AuditQuery
     public int Page { get; init; } = 1;
 
     /// <summary>Items per page (1-100). Values outside this range are clamped.</summary>
-    public int Limit { get; init; } = 50;
+    public int PageSize { get; init; } = 50;
 
     /// <summary>
-    /// Gets the effective limit after clamping to valid range (1-100).
-    /// Use this property instead of Limit directly for query execution.
+    /// Gets the effective page size after clamping to valid range (1-100).
+    /// Use this property instead of PageSize directly for query execution.
     /// </summary>
-    public int EffectiveLimit => Math.Clamp(Limit, 1, 100);
+    public int EffectivePageSize => Math.Clamp(PageSize, 1, 100);
 }
 
 /// <summary>

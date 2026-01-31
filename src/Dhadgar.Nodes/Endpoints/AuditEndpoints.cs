@@ -9,7 +9,7 @@ public static class AuditEndpoints
 {
     public static void Map(WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/organizations/{organizationId:guid}/audit-logs")
+        var group = app.MapGroup("/organizations/{organizationId:guid}/audit-logs")
             .WithTags("Audit")
             .RequireAuthorization("TenantScoped");
 
@@ -32,7 +32,7 @@ public static class AuditEndpoints
         string? outcome = null,
         string? correlationId = null,
         int page = 1,
-        int limit = 50,
+        int pageSize = 50,
         CancellationToken ct = default)
     {
         // Validate pagination parameters
@@ -43,11 +43,11 @@ public static class AuditEndpoints
                 "Page must be greater than or equal to 1.");
         }
 
-        if (limit < 1 || limit > 100)
+        if (pageSize < 1 || pageSize > 100)
         {
             return ProblemDetailsHelper.BadRequest(
-                "invalid_limit",
-                "Limit must be between 1 and 100.");
+                "invalid_page_size",
+                "PageSize must be between 1 and 100.");
         }
 
         // Parse outcome if provided
@@ -78,7 +78,7 @@ public static class AuditEndpoints
             Outcome = parsedOutcome,
             CorrelationId = correlationId,
             Page = page,
-            Limit = limit
+            PageSize = pageSize
         };
 
         var result = await auditService.QueryAsync(query, ct);

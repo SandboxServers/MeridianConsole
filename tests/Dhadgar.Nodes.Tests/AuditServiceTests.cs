@@ -352,9 +352,9 @@ public sealed class AuditServiceTests
         }
 
         // Act
-        var page1 = await service.QueryAsync(new AuditQuery { Page = 1, Limit = 5 });
-        var page2 = await service.QueryAsync(new AuditQuery { Page = 2, Limit = 5 });
-        var page3 = await service.QueryAsync(new AuditQuery { Page = 3, Limit = 5 });
+        var page1 = await service.QueryAsync(new AuditQuery { Page = 1, PageSize = 5 });
+        var page2 = await service.QueryAsync(new AuditQuery { Page = 2, PageSize = 5 });
+        var page3 = await service.QueryAsync(new AuditQuery { Page = 3, PageSize = 5 });
 
         // Assert
         Assert.Equal(15, page1.Total);
