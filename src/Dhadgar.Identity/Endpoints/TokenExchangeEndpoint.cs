@@ -20,14 +20,14 @@ public static class TokenExchangeEndpoint
         if (!validationResult.IsValid)
         {
             // Return specific error code for ExchangeToken validation failures
-            var hasExchangeTokenError = validationResult.Errors.Exists(e =>
+            var exchangeTokenError = validationResult.Errors.Find(e =>
                 e.PropertyName == nameof(TokenExchangeRequest.ExchangeToken));
 
-            if (hasExchangeTokenError)
+            if (exchangeTokenError is not null)
             {
                 return ProblemDetailsHelper.BadRequest(
                     ErrorCodes.AuthErrors.MissingExchangeToken,
-                    "Exchange token is required.");
+                    exchangeTokenError.ErrorMessage);
             }
 
             return ProblemDetailsHelper.BadRequest(
