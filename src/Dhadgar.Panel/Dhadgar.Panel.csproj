@@ -27,10 +27,10 @@
     <Message Importance="high" Text="Skipping .NET restore for Dhadgar.Panel (Node.js project)" />
   </Target>
 
-  <!-- Run npm install if node_modules doesn't exist or package.json changed -->
+  <!-- Run npm ci if node_modules doesn't exist or package.json changed -->
   <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(PanelProjectDir)\package.json;$(PanelProjectDir)\package-lock.json" Outputs="$(NodeModulesDir)\.package-lock.json">
-    <Message Importance="high" Text="Running npm install for Dhadgar.Panel..." />
-    <Exec Command="$(NpmCommand) install" WorkingDirectory="$(PanelProjectDir)" />
+    <Message Importance="high" Text="Running npm ci for Dhadgar.Panel..." />
+    <Exec Command="$(NpmCommand) ci --prefer-offline --no-audit" WorkingDirectory="$(PanelProjectDir)" />
   </Target>
 
   <!-- Run npm build -->

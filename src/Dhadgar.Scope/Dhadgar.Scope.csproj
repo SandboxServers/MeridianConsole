@@ -26,10 +26,10 @@
     <Message Importance="high" Text="Skipping .NET restore for Dhadgar.Scope (Node.js project)" />
   </Target>
 
-  <!-- Run npm install if node_modules doesn't exist or package.json changed -->
+  <!-- Run npm ci if node_modules doesn't exist or package.json changed -->
   <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(ScopeProjectDir)\package.json;$(ScopeProjectDir)\package-lock.json" Outputs="$(NodeModulesDir)\.package-lock.json">
-    <Message Importance="high" Text="Running npm install for Dhadgar.Scope..." />
-    <Exec Command="$(NpmCommand) install" WorkingDirectory="$(ScopeProjectDir)" />
+    <Message Importance="high" Text="Running npm ci for Dhadgar.Scope..." />
+    <Exec Command="$(NpmCommand) ci --prefer-offline --no-audit" WorkingDirectory="$(ScopeProjectDir)" />
   </Target>
 
   <!-- Run npm build -->

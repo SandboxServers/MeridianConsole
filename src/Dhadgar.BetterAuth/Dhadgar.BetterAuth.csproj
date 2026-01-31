@@ -28,8 +28,8 @@
   </Target>
 
   <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(BetterAuthProjectDir)/package.json;$(BetterAuthProjectDir)/package-lock.json" Outputs="$(NodeModulesDir)/.package-lock.json">
-    <Message Importance="high" Text="Running npm install for Dhadgar.BetterAuth..." />
-    <Exec Command="$(NpmCommand) install" WorkingDirectory="$(BetterAuthProjectDir)" />
+    <Message Importance="high" Text="Running npm ci for Dhadgar.BetterAuth..." />
+    <Exec Command="$(NpmCommand) ci --prefer-offline --no-audit" WorkingDirectory="$(BetterAuthProjectDir)" />
   </Target>
 
   <Target Name="Build" DependsOnTargets="NpmInstall">
