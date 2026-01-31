@@ -41,14 +41,15 @@ public sealed class CliConfig
     public DateTime? TokenExpiresAt { get; set; }
 
     // Computed properties for service URLs (all behind gateway)
+    // Note: Gateway's YARP config adds /api/v1/ prefix, so CLI clients use paths without it
     [JsonIgnore]
-    public string EffectiveIdentityUrl => IdentityUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/api/v1/identity";
+    public string EffectiveIdentityUrl => IdentityUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/identity";
 
     [JsonIgnore]
-    public string EffectiveSecretsUrl => SecretsUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/api/v1/secrets";
+    public string EffectiveSecretsUrl => SecretsUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/secrets";
 
     [JsonIgnore]
-    public string EffectiveNodesUrl => NodesUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/api/v1/nodes";
+    public string EffectiveNodesUrl => NodesUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/nodes";
 
     [JsonIgnore]
     public string EffectiveGatewayUrl => (GatewayUrl ?? "http://localhost:5000").TrimEnd('/');

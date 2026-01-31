@@ -98,7 +98,7 @@ public static class OrganizationEndpoints
         var result = await organizationService.CreateAsync(userId, request, ct);
         return result.Success
             ? Results.Created($"/organizations/{result.Value?.Id}", new { id = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> UpdateOrganization(
@@ -176,7 +176,7 @@ public static class OrganizationEndpoints
         var outcome = await switchService.SwitchAsync(userId, organizationId, ct);
         if (!outcome.Success)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, outcome.Error);
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, outcome.Error);
         }
 
         return Results.Ok(new
@@ -213,7 +213,7 @@ public static class OrganizationEndpoints
             {
                 "not_owner" => ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "Only the organization owner can transfer ownership."),
                 "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound),
-                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error)
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
             };
         }
 

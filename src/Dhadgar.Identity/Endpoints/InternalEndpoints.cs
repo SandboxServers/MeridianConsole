@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -58,13 +59,17 @@ public static class InternalEndpoints
             .WithDescription("Generate a client assertion JWT for Microsoft federated credential authentication");
     }
 
-    private static IResult GenerateMicrosoftAssertion(
+    private static async Task<IResult> GenerateMicrosoftAssertion(
         ClientAssertionRequest request,
-        Services.IClientAssertionService assertionService)
+        Services.IClientAssertionService assertionService,
+        IValidator<ClientAssertionRequest> validator)
     {
-        if (string.IsNullOrWhiteSpace(request.Subject))
+        var validationResult = await validator.ValidateAsync(request);
+        if (!validationResult.IsValid)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "Subject is required.");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
 
         var audience = request.Audience ?? "api://AzureADTokenExchange";
@@ -99,16 +104,15 @@ public static class InternalEndpoints
     private static async Task<IResult> GetUsersBatch(
         UserBatchRequest request,
         IdentityDbContext dbContext,
+        IValidator<UserBatchRequest> validator,
         CancellationToken ct)
     {
-        if (request.UserIds is null || request.UserIds.Count == 0)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "No user IDs provided.");
-        }
-
-        if (request.UserIds.Count > 100)
-        {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "Too many user IDs provided. Maximum allowed is 100.");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
 
         var users = await dbContext.Users

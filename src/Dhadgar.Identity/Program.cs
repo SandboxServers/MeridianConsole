@@ -45,6 +45,8 @@ using OpenTelemetry.Trace;
 using StackExchange.Redis;
 using IdentityHello = Dhadgar.Identity.Hello;
 using Dhadgar.Identity.Data.Entities;
+using Dhadgar.Identity.Validators;
+using FluentValidation;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -161,6 +163,9 @@ builder.Services.AddTokenCleanupService();
 builder.Services.AddInvitationCleanupService();
 builder.Services.AddHealthChecks()
     .AddCheck<IdentityReadinessCheck>("identity_ready", tags: ["ready"]);
+
+// FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<ClientAssertionRequestValidator>();
 
 // Memory cache for webhook secret caching
 builder.Services.AddMemoryCache();

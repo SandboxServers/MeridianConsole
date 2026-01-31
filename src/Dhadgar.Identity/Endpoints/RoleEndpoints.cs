@@ -145,7 +145,7 @@ public static class RoleEndpoints
             "unknown_permissions" or "cannot_grant_unowned_permissions" =>
                 ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidPermissions, result.Error),
             "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound),
-            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error)
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
         };
     }
 
@@ -186,7 +186,7 @@ public static class RoleEndpoints
 
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RevokeRole(
@@ -226,7 +226,7 @@ public static class RoleEndpoints
 
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> UpdateRole(
@@ -258,7 +258,7 @@ public static class RoleEndpoints
         var result = await roleService.UpdateAsync(organizationId, userId, roleId, request, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> DeleteRole(
@@ -289,7 +289,7 @@ public static class RoleEndpoints
         var result = await roleService.DeleteAsync(organizationId, userId, roleId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> GetRoleMembers(

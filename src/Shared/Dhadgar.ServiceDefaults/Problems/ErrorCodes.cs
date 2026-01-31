@@ -192,7 +192,7 @@ public static class ErrorCodes
     /// <summary>
     /// Common error codes applicable across all services.
     /// </summary>
-    public static class Common
+    public static class CommonErrors
     {
         /// <summary>An internal server error occurred. Please try again later.</summary>
         public const string InternalError = "internal_error";

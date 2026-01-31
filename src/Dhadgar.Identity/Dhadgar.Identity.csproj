@@ -45,6 +45,8 @@
     <PackageReference Include="Scalar.AspNetCore" />
     <!-- Security analyzer for authentication service -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
+    <!-- Validation -->
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
   </ItemGroup>
 </Project>
 

@@ -142,7 +142,7 @@ public static class SecretsEndpoints
         if (request.SecretNames is null || request.SecretNames.Count == 0)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Common.ValidationFailed,
+                ErrorCodes.CommonErrors.ValidationFailed,
                 "SecretNames is required.");
         }
 

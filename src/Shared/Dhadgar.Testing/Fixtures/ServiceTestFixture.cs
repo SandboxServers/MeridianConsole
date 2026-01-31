@@ -90,9 +90,10 @@ public abstract class ServiceTestFixture<TProgram, TDbContext> : WebApplicationF
 
     /// <summary>
     /// Disposes of the test fixture asynchronously.
+    /// Ensures the WebApplicationFactory base class is properly disposed.
     /// </summary>
-    Task IAsyncLifetime.DisposeAsync()
+    async Task IAsyncLifetime.DisposeAsync()
     {
-        return Task.CompletedTask;
+        await base.DisposeAsync();
     }
 }

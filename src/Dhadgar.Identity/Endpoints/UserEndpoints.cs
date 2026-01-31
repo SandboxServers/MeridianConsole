@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -124,7 +125,7 @@ public static class UserEndpoints
         var result = await userService.CreateAsync(organizationId, actorUserId, request, ct);
         return result.Success
             ? Results.Created($"/organizations/{organizationId}/users/{result.Value?.Id}", result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> UpdateUser(
@@ -134,8 +135,17 @@ public static class UserEndpoints
         UserUpdateRequest request,
         UserService userService,
         IPermissionService permissionService,
+        IValidator<UserUpdateRequest> validator,
         CancellationToken ct)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
+        }
+
         if (!EndpointHelpers.TryGetUserId(context, out var actorUserId))
         {
             return Results.Unauthorized();
@@ -153,15 +163,10 @@ public static class UserEndpoints
             return permissionResult;
         }
 
-        if (string.IsNullOrWhiteSpace(request.Email) && string.IsNullOrWhiteSpace(request.DisplayName))
-        {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "No updates provided.");
-        }
-
         var result = await userService.UpdateAsync(organizationId, userId, request, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> DeleteUser(
@@ -192,7 +197,7 @@ public static class UserEndpoints
         var result = await userService.SoftDeleteAsync(organizationId, userId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> UnlinkAccount(
@@ -241,6 +246,6 @@ public static class UserEndpoints
         var result = await linkedAccountService.UnlinkAsync(userId, linkedAccountId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
     }
 }

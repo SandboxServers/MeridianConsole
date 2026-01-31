@@ -121,15 +121,20 @@ Thread-safe utility for capturing and inspecting published messages in tests.
 - Capture messages of any type
 - Retrieve messages by type
 - Check for message existence with predicates
-- Async waiting for messages with timeout
+- Async waiting for messages with timeout (uses efficient signaling, not polling)
 - Thread-safe for concurrent test execution
+- Bounded capacity to prevent memory exhaustion (default: 10,000 messages)
 
 **Usage:**
 
 ```csharp
 public class MessagePublishingTests
 {
+    // Default capacity of 10,000 messages
     private readonly InMemoryMessageCapture _messageCapture = new();
+
+    // Or specify a custom capacity
+    private readonly InMemoryMessageCapture _smallCapture = new(capacity: 100);
 
     [Fact]
     public async Task CreateUser_PublishesUserCreatedEvent()

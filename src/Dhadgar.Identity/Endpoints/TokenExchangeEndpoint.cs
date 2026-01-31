@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Services;
 using Dhadgar.ServiceDefaults.Security;
+using FluentValidation;
 
 namespace Dhadgar.Identity.Endpoints;
 
@@ -22,14 +23,18 @@ public static class TokenExchangeEndpoint
         TokenExchangeRequest request,
         TokenExchangeService service,
         ISecurityEventLogger securityLogger,
+        IValidator<TokenExchangeRequest> validator,
         CancellationToken ct)
     {
-        var clientIp = context.Connection.RemoteIpAddress?.ToString();
-
-        if (string.IsNullOrWhiteSpace(request.ExchangeToken))
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "Exchange token is required.");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
+
+        var clientIp = context.Connection.RemoteIpAddress?.ToString();
 
         var outcome = await service.ExchangeAsync(request.ExchangeToken, ct);
 
@@ -54,7 +59,7 @@ public static class TokenExchangeEndpoint
                 "invalid_exchange_token" or "invalid_purpose" or "missing_jti" or "missing_claims" =>
                     ProblemDetailsHelper.Unauthorized(ErrorCodes.Auth.TokenExpired, "Invalid or expired exchange token."),
                 "email_not_verified" => ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "Email address must be verified before exchanging tokens."),
-                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, safeError == "exchange_failed" ? "Token exchange failed." : safeError)
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, safeError == "exchange_failed" ? "Token exchange failed." : safeError)
             };
         }
 

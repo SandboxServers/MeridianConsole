@@ -7,20 +7,44 @@ namespace Dhadgar.Testing.Messaging;
 /// Captures messages of any type and provides methods to retrieve and inspect them.
 /// Messages are stored in FIFO (first-in, first-out) order.
 /// </summary>
+/// <remarks>
+/// This class uses a bounded capacity to prevent memory exhaustion during tests.
+/// When the capacity is reached, the oldest messages are dropped to make room for new ones.
+/// </remarks>
 public sealed class InMemoryMessageCapture : IDisposable
 {
+    private readonly int _capacity;
     private readonly ConcurrentQueue<object> _messages = new();
+    private readonly SemaphoreSlim _messageAvailable = new(0);
     private bool _disposed;
+
+    /// <summary>
+    /// Creates a new instance of <see cref="InMemoryMessageCapture"/> with the specified capacity.
+    /// </summary>
+    /// <param name="capacity">Maximum number of messages to retain (default: 10000). When exceeded, oldest messages are dropped.</param>
+    public InMemoryMessageCapture(int capacity = 10000)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(capacity, 0);
+        _capacity = capacity;
+    }
 
     /// <summary>
     /// Captures a message for later inspection.
     /// </summary>
     /// <typeparam name="T">The type of message to capture</typeparam>
     /// <param name="message">The message to capture</param>
+    /// <remarks>
+    /// If the capture is at capacity, the oldest message will be dropped to make room.
+    /// </remarks>
     public void Capture<T>(T message) where T : notnull
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // Enforce capacity - drop oldest if at limit
+        while (_messages.Count >= _capacity && _messages.TryDequeue(out _)) { }
+
         _messages.Enqueue(message);
+        _messageAvailable.Release();
     }
 
     /// <summary>
@@ -31,7 +55,8 @@ public sealed class InMemoryMessageCapture : IDisposable
     public IReadOnlyList<T> GetMessages<T>()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _messages.ToArray().OfType<T>().ToList();
+        var snapshot = _messages.ToArray();
+        return snapshot.OfType<T>().ToList();
     }
 
     /// <summary>
@@ -42,7 +67,8 @@ public sealed class InMemoryMessageCapture : IDisposable
     public T? GetLastMessage<T>() where T : class
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _messages.ToArray().OfType<T>().LastOrDefault();
+        var snapshot = _messages.ToArray();
+        return snapshot.OfType<T>().LastOrDefault();
     }
 
     /// <summary>
@@ -55,7 +81,8 @@ public sealed class InMemoryMessageCapture : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var messages = _messages.ToArray().OfType<T>();
+        var snapshot = _messages.ToArray();
+        var messages = snapshot.OfType<T>();
         return predicate == null
             ? messages.Any()
             : messages.Any(predicate);
@@ -68,15 +95,18 @@ public sealed class InMemoryMessageCapture : IDisposable
     /// <param name="timeout">Maximum time to wait (default: 5 seconds)</param>
     /// <returns>The captured message</returns>
     /// <exception cref="TimeoutException">Thrown if the message is not captured within the timeout period</exception>
+    /// <remarks>
+    /// This method uses efficient signaling instead of polling. It will return immediately
+    /// if a message of the specified type already exists.
+    /// </remarks>
     public async Task<T> WaitForMessageAsync<T>(TimeSpan? timeout = null) where T : class
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var actualTimeout = timeout ?? TimeSpan.FromSeconds(5);
-        using var cancellationTokenSource = new CancellationTokenSource(actualTimeout);
-        var token = cancellationTokenSource.Token;
+        using var cts = new CancellationTokenSource(actualTimeout);
 
-        while (!token.IsCancellationRequested)
+        while (!cts.Token.IsCancellationRequested)
         {
             var message = GetLastMessage<T>();
             if (message != null)
@@ -86,9 +116,9 @@ public sealed class InMemoryMessageCapture : IDisposable
 
             try
             {
-                await Task.Delay(50, token);
+                await _messageAvailable.WaitAsync(cts.Token);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 break;
             }
@@ -130,6 +160,7 @@ public sealed class InMemoryMessageCapture : IDisposable
         {
             // Clear managed resources
             _messages.Clear();
+            _messageAvailable.Dispose();
         }
 
         _disposed = true;

@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -110,8 +111,17 @@ public static class MeEndpoints
         UpdateProfileRequest request,
         IdentityDbContext dbContext,
         TimeProvider timeProvider,
+        IValidator<UpdateProfileRequest> validator,
         CancellationToken ct)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
+        }
+
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
         {
             return Results.Unauthorized();
@@ -125,12 +135,9 @@ public static class MeEndpoints
             return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound);
         }
 
-        var updated = false;
-
         if (!string.IsNullOrWhiteSpace(request.DisplayName))
         {
             user.DisplayName = request.DisplayName.Trim();
-            updated = true;
         }
 
         if (request.PreferredOrganizationId.HasValue)
@@ -151,12 +158,6 @@ public static class MeEndpoints
             }
 
             user.PreferredOrganizationId = request.PreferredOrganizationId.Value;
-            updated = true;
-        }
-
-        if (!updated)
-        {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "No updates provided.");
         }
 
         user.UpdatedAt = timeProvider.GetUtcNow().DateTime;
@@ -245,7 +246,7 @@ public static class MeEndpoints
         var orgId = EndpointHelpers.GetOrganizationId(context);
         if (!orgId.HasValue)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "No organization context. Please select an organization first.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "No organization context. Please select an organization first.");
         }
 
         var permissions = await permissionService.CalculatePermissionsAsync(userId, orgId.Value, ct);
@@ -285,7 +286,7 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
         }
 
         return Results.Ok(new
@@ -310,7 +311,7 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
         }
 
         return Results.Ok(new { message = "Account deletion cancelled" });
