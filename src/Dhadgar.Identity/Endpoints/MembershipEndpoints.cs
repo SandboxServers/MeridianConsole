@@ -299,7 +299,7 @@ public static class MembershipEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, request.Role, ct);
@@ -462,7 +462,7 @@ public static class MembershipEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await membershipService.BulkInviteAsync(organizationId, userId, request.Invites, ct);
@@ -508,7 +508,7 @@ public static class MembershipEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await membershipService.BulkRemoveAsync(organizationId, request.MemberIds, ct);

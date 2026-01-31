@@ -126,7 +126,7 @@ public static class MeEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         // 3. Business logic

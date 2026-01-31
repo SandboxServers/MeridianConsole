@@ -171,7 +171,7 @@ public static class UserEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         // 4. Business logic

@@ -42,7 +42,7 @@ public static class SearchEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         return null;

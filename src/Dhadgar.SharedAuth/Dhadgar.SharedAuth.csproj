@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.Build.NoTargets/3.7.56">
   <!--
     This is a "shim" project that integrates the shared auth TypeScript library into the .NET solution.
-    It doesn't compile any .NET code - it just ensures npm install runs for the package.
+    It doesn't compile any .NET code - it just ensures npm ci runs for deterministic installs.
 
     SharedAuth is a TypeScript library consumed by Panel and ShoppingCart via file: references.
     The consuming projects handle the actual build/bundling of this code.
@@ -26,8 +26,8 @@
     <Message Importance="high" Text="Skipping .NET restore for Dhadgar.SharedAuth (Node.js library)" />
   </Target>
 
-  <!-- Run npm ci if node_modules doesn't exist or package.json changed -->
-  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(PackageJsonPath)" Outputs="$(NodeModulesDir)/.package-lock.json">
+  <!-- Run npm ci if node_modules doesn't exist or package.json/package-lock.json changed -->
+  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(PackageJsonPath);$(SharedAuthProjectDir)/package-lock.json" Outputs="$(NodeModulesDir)/.package-lock.json">
     <Message Importance="high" Text="Running npm ci for Dhadgar.SharedAuth..." />
     <Exec Command="$(NpmCommand) ci --prefer-offline --no-audit" WorkingDirectory="$(SharedAuthProjectDir)" />
   </Target>

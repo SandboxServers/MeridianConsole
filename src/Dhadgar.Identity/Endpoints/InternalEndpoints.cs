@@ -69,7 +69,7 @@ public static class InternalEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var audience = request.Audience ?? "api://AzureADTokenExchange";
@@ -112,7 +112,7 @@ public static class InternalEndpoints
         {
             return ProblemDetailsHelper.BadRequest(
                 ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var users = await dbContext.Users

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Node.js shim project for Better Auth so it participates in solution builds.
-    This project does not compile .NET code; it runs npm install.
+    This project does not compile .NET code; it runs npm ci for deterministic installs.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
