@@ -8,7 +8,7 @@ public sealed class MemberRoleRequestValidator : AbstractValidator<MemberRoleReq
     public MemberRoleRequestValidator()
     {
         RuleFor(x => x.Role)
-            .NotEmpty()
+            .Must(x => !string.IsNullOrWhiteSpace(x))
             .WithMessage("Role is required.");
     }
 }

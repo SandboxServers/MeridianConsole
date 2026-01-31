@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Dhadgar.ServiceDefaults.Tests.Problems;
 
-public class ErrorCodesTests
+public partial class ErrorCodesTests
 {
     [Fact]
     public void AllErrorCodes_ShouldBeUnique()
@@ -24,16 +24,18 @@ public class ErrorCodesTests
     [Fact]
     public void AllErrorCodes_ShouldBeSnakeCase()
     {
-        var snakeCaseRegex = new Regex(@"^[a-z][a-z0-9]*(_[a-z0-9]+)*$");
         var errorCodes = GetAllErrorCodeValues();
         var violations = errorCodes
-            .Where(x => !snakeCaseRegex.IsMatch(x.Value))
+            .Where(x => !SnakeCaseRegex().IsMatch(x.Value))
             .Select(x => $"'{x.Name}' = '{x.Value}'")
             .ToList();
 
         Assert.True(violations.Count == 0,
             $"Error codes not in snake_case format:\n{string.Join("\n", violations)}");
     }
+
+    [GeneratedRegex(@"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")]
+    private static partial Regex SnakeCaseRegex();
 
     private static List<(string Name, string Value)> GetAllErrorCodeValues()
     {

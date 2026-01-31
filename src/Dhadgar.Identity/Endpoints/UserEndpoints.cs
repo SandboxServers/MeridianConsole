@@ -123,9 +123,17 @@ public static class UserEndpoints
         }
 
         var result = await userService.CreateAsync(organizationId, actorUserId, request, ct);
-        return result.Success
-            ? Results.Created($"/organizations/{organizationId}/users/{result.Value?.Id}", result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.Created($"/organizations/{organizationId}/users/{result.Value?.Id}", result.Value);
+        }
+
+        return result.Error switch
+        {
+            "email_already_exists" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.EmailAlreadyExists),
+            "invalid_email" => ProblemDetailsHelper.UnprocessableEntity(ErrorCodes.IdentityErrors.InvalidEmail, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> UpdateUser(

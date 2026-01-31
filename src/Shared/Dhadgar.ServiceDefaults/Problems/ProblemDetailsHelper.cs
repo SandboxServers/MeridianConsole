@@ -169,11 +169,18 @@ public static class ProblemDetailsHelper
         "role_not_found" => "The specified role was not found.",
         "member_not_found" => "The specified member was not found in this organization.",
         "already_member" => "The user is already a member of this organization.",
+        "invite_not_found" => "The specified invitation was not found or has expired.",
+        "invite_expired" => "The invitation has expired.",
+        "invitation_exists" => "A pending invitation already exists for this user.",
+        "claim_not_found" => "The specified claim was not found.",
         "invalid_email" => "The email address is invalid.",
         "email_already_exists" => "A user with this email address already exists.",
         "role_already_exists" => "A role with this name already exists in the organization.",
         "invalid_role_name" => "The role name is invalid (empty, too long, or reserved).",
         "invalid_permissions" => "The specified permissions are invalid or cannot be granted.",
+        "cannot_update_system_role" => "System roles cannot be updated.",
+        "cannot_delete_system_role" => "System roles cannot be deleted.",
+        "role_has_active_members" => "The role has active members and cannot be deleted.",
 
         // Secrets errors
         "secret_not_found" => "The specified secret was not found.",

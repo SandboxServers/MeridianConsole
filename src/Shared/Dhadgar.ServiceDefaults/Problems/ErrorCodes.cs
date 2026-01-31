@@ -92,6 +92,18 @@ public static class ErrorCodes
         /// <summary>The user is already a member of this organization.</summary>
         public const string AlreadyMember = "already_member";
 
+        /// <summary>The specified invitation was not found or has expired.</summary>
+        public const string InviteNotFound = "invite_not_found";
+
+        /// <summary>The invitation has expired.</summary>
+        public const string InviteExpired = "invite_expired";
+
+        /// <summary>A pending invitation already exists for this user.</summary>
+        public const string InvitationExists = "invitation_exists";
+
+        /// <summary>The specified claim was not found.</summary>
+        public const string ClaimNotFound = "claim_not_found";
+
         /// <summary>The email address is invalid.</summary>
         public const string InvalidEmail = "invalid_email";
 
@@ -112,6 +124,15 @@ public static class ErrorCodes
 
         /// <summary>The organization name is invalid (empty, too short, or too long).</summary>
         public const string InvalidOrganizationName = "invalid_organization_name";
+
+        /// <summary>System roles cannot be updated.</summary>
+        public const string CannotUpdateSystemRole = "cannot_update_system_role";
+
+        /// <summary>System roles cannot be deleted.</summary>
+        public const string CannotDeleteSystemRole = "cannot_delete_system_role";
+
+        /// <summary>The role has active members and cannot be deleted.</summary>
+        public const string RoleHasActiveMembers = "role_has_active_members";
     }
 
     /// <summary>

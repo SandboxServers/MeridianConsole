@@ -1,5 +1,6 @@
 using Dhadgar.Contracts;
 using Dhadgar.Identity.Services;
+using Dhadgar.ServiceDefaults.Problems;
 using FluentValidation;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -129,9 +130,19 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.InviteAsync(organizationId, userId, request, ct);
-        return result.Success
-            ? Results.Ok(new { membershipId = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.Ok(new { membershipId = result.Value?.Id });
+        }
+
+        return result.Error switch
+        {
+            "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error),
+            "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound, result.Error),
+            "already_member" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.AlreadyMember, result.Error),
+            "invitation_exists" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.InvitationExists, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> AcceptInvite(
@@ -146,9 +157,17 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.AcceptInviteAsync(organizationId, userId, ct);
-        return result.Success
-            ? Results.Ok(new { membershipId = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.Ok(new { membershipId = result.Value?.Id });
+        }
+
+        return result.Error switch
+        {
+            "invite_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.InviteNotFound, result.Error),
+            "invite_expired" => ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InviteExpired, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> RejectInvite(
@@ -163,9 +182,17 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.RejectInviteAsync(organizationId, userId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "invite_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.InviteNotFound, result.Error),
+            "invite_expired" => ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InviteExpired, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> WithdrawInvitation(
@@ -194,9 +221,16 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.WithdrawInviteAsync(organizationId, userId, targetUserId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "invite_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.InviteNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> RemoveMember(
@@ -266,9 +300,17 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, request.Role, ct);
-        return result.Success
-            ? Results.Ok(new { role = result.Value?.Role })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.Ok(new { role = result.Value?.Role });
+        }
+
+        return result.Error switch
+        {
+            "membership_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            "actor_not_member" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> ListClaims(
@@ -334,9 +376,16 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.AddClaimAsync(organizationId, userId, memberId, request, ct);
-        return result.Success
-            ? Results.Ok(new { claimId = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.Ok(new { claimId = result.Value?.Id });
+        }
+
+        return result.Error switch
+        {
+            "membership_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> RemoveClaim(
@@ -366,9 +415,17 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.RemoveClaimAsync(organizationId, memberId, claimId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "membership_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            "claim_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.ClaimNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> BulkInviteMembers(
@@ -377,6 +434,7 @@ public static class MembershipEndpoints
         BulkInviteRequest request,
         MembershipService membershipService,
         IPermissionService permissionService,
+        IValidator<BulkInviteRequest> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -396,9 +454,12 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        if (request.Invites is null || request.Invites.Count == 0)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "At least one invite is required.");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
 
         var result = await membershipService.BulkInviteAsync(organizationId, userId, request.Invites, ct);
@@ -419,6 +480,7 @@ public static class MembershipEndpoints
         BulkRemoveRequest request,
         MembershipService membershipService,
         IPermissionService permissionService,
+        IValidator<BulkRemoveRequest> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -438,9 +500,12 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        if (request.MemberIds is null || request.MemberIds.Count == 0)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "At least one member ID is required.");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
 
         var result = await membershipService.BulkRemoveAsync(organizationId, request.MemberIds, ct);

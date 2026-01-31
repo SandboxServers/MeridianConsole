@@ -308,7 +308,5 @@ See the test projects for complete examples:
 
 ## Related Documentation
 
-- [Testing Strategy](../../../docs/testing-strategy.md)
-- [Integration Testing Guide](../../../docs/integration-testing.md)
 - [xUnit Documentation](https://xunit.net/)
 - [WebApplicationFactory Docs](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests)
