@@ -218,6 +218,9 @@ public static class ErrorCodes
         /// <summary>Your session has expired. Please log in again.</summary>
         public const string SessionExpired = "session_expired";
 
+        /// <summary>The specified session was not found.</summary>
+        public const string SessionNotFound = "session_not_found";
+
         /// <summary>The authentication token has expired.</summary>
         public const string TokenExpired = "token_expired";
 

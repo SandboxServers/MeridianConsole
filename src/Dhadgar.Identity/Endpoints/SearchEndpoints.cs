@@ -1,3 +1,4 @@
+using Dhadgar.Contracts;
 using Dhadgar.Identity.Services;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -28,6 +29,8 @@ public static class SearchEndpoints
     private static async Task<IResult> SearchOrganizations(
         HttpContext context,
         string? query,
+        int? page,
+        int? pageSize,
         OrganizationService organizationService,
         CancellationToken ct)
     {
@@ -36,14 +39,24 @@ public static class SearchEndpoints
             return Results.Unauthorized();
         }
 
-        var results = await organizationService.SearchForUserAsync(userId, query ?? string.Empty, ct);
-        return Results.Ok(results);
+        var allResults = await organizationService.SearchForUserAsync(userId, query ?? string.Empty, ct);
+
+        // Apply pagination
+        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
+        var pagedResults = allResults
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
+            .ToArray();
+
+        return Results.Ok(PagedResponse<OrganizationSummary>.Create(pagedResults, allResults.Count, pagination));
     }
 
     private static async Task<IResult> SearchUsers(
         HttpContext context,
         Guid organizationId,
         string? query,
+        int? page,
+        int? pageSize,
         UserService userService,
         IPermissionService permissionService,
         CancellationToken ct)
@@ -65,14 +78,24 @@ public static class SearchEndpoints
             return permissionResult;
         }
 
-        var results = await userService.SearchAsync(organizationId, query ?? string.Empty, ct);
-        return Results.Ok(results);
+        var allResults = await userService.SearchAsync(organizationId, query ?? string.Empty, ct);
+
+        // Apply pagination
+        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
+        var pagedResults = allResults
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
+            .ToArray();
+
+        return Results.Ok(PagedResponse<UserSummary>.Create(pagedResults, allResults.Count, pagination));
     }
 
     private static async Task<IResult> SearchRoles(
         HttpContext context,
         Guid organizationId,
         string? query,
+        int? page,
+        int? pageSize,
         RoleService roleService,
         IPermissionService permissionService,
         CancellationToken ct)
@@ -94,7 +117,15 @@ public static class SearchEndpoints
             return permissionResult;
         }
 
-        var results = await roleService.SearchAsync(organizationId, query ?? string.Empty, ct);
-        return Results.Ok(results);
+        var allResults = await roleService.SearchAsync(organizationId, query ?? string.Empty, ct);
+
+        // Apply pagination
+        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
+        var pagedResults = allResults
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
+            .ToArray();
+
+        return Results.Ok(PagedResponse<RoleSummary>.Create(pagedResults, allResults.Count, pagination));
     }
 }

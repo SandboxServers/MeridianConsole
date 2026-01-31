@@ -8,16 +8,6 @@ public static class TokenExchangeEndpoint
 {
     public sealed record TokenExchangeRequest(string ExchangeToken);
 
-    // Error codes that should be exposed vs hidden
-    // SECURITY: These are the only error codes returned to clients
-    // All other errors are mapped to generic "exchange_failed" to prevent information leakage
-    private static readonly HashSet<string> SafeErrorCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "missing_exchange_token",
-        "token_already_used",  // Safe: doesn't reveal user existence
-        "email_not_verified"   // Safe: only after successful token validation
-    };
-
     public static async Task<IResult> Handle(
         HttpContext context,
         TokenExchangeRequest request,
@@ -49,10 +39,6 @@ public static class TokenExchangeEndpoint
 
             // SECURITY: Return generic errors for sensitive failures
             // to prevent information leakage about user existence
-            var safeError = SafeErrorCodes.Contains(outcome.Error ?? "")
-                ? outcome.Error
-                : "exchange_failed";
-
             return outcome.Error switch
             {
                 // Consolidated: all token validation failures return same generic message

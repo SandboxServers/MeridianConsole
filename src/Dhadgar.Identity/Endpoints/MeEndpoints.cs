@@ -114,6 +114,13 @@ public static class MeEndpoints
         IValidator<UpdateProfileRequest> validator,
         CancellationToken ct)
     {
+        // 1. Auth check (before validation to prevent information leakage)
+        if (!EndpointHelpers.TryGetUserId(context, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        // 2. Validation (after auth)
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
@@ -122,11 +129,7 @@ public static class MeEndpoints
                 validationResult.Errors[0].ErrorMessage);
         }
 
-        if (!EndpointHelpers.TryGetUserId(context, out var userId))
-        {
-            return Results.Unauthorized();
-        }
-
+        // 3. Business logic
         var user = await dbContext.Users
             .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null, ct);
 
