@@ -106,6 +106,12 @@ public static class ErrorCodes
 
         /// <summary>The specified permissions are invalid or cannot be granted.</summary>
         public const string InvalidPermissions = "invalid_permissions";
+
+        /// <summary>An organization with this slug already exists.</summary>
+        public const string OrganizationSlugExists = "organization_slug_exists";
+
+        /// <summary>The organization name is invalid (empty, too short, or too long).</summary>
+        public const string InvalidOrganizationName = "invalid_organization_name";
     }
 
     /// <summary>

@@ -12,6 +12,8 @@ public sealed class ClientAssertionRequestValidator : AbstractValidator<ClientAs
     {
         RuleFor(x => x.Subject)
             .NotEmpty()
-            .WithMessage("Subject is required.");
+            .WithMessage("Subject is required.")
+            .Must(subject => !string.IsNullOrWhiteSpace(subject))
+            .WithMessage("Subject cannot be whitespace only.");
     }
 }

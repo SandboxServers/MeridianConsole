@@ -292,8 +292,8 @@ For complex database features (stored procedures, triggers), consider using Test
 The fixture uses `RemoveAll` instead of `SingleOrDefault` to handle both `AddDbContext` and `AddDbContextPool` patterns:
 
 ```csharp
-services.RemoveAll(typeof(DbContextOptions<TDbContext>));
-services.RemoveAll(typeof(TDbContext));
+services.RemoveAll<DbContextOptions<TDbContext>>();
+services.RemoveAll<TDbContext>();
 ```
 
 This ensures all DbContext registrations are removed before adding the test database.

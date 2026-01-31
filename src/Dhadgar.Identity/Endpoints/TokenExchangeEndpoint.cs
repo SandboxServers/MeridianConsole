@@ -59,7 +59,11 @@ public static class TokenExchangeEndpoint
                 "invalid_exchange_token" or "invalid_purpose" or "missing_jti" or "missing_claims" =>
                     ProblemDetailsHelper.Unauthorized(ErrorCodes.Auth.TokenExpired, "Invalid or expired exchange token."),
                 "email_not_verified" => ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "Email address must be verified before exchanging tokens."),
-                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, safeError == "exchange_failed" ? "Token exchange failed." : safeError)
+                // Safe error codes that can be exposed to clients
+                "missing_exchange_token" => ProblemDetailsHelper.BadRequest("missing_exchange_token", "Exchange token is required."),
+                "token_already_used" => ProblemDetailsHelper.BadRequest("token_already_used", "This exchange token has already been used."),
+                // Generic fallback for all other errors to prevent information leakage
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "Token exchange failed.")
             };
         }
 

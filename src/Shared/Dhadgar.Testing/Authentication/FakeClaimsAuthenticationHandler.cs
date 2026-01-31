@@ -48,13 +48,17 @@ public class FakeClaimsAuthenticationHandler : AuthenticationHandler<Authenticat
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         // Check if user ID header is present
-        if (!Request.Headers.TryGetValue(UserIdHeader, out var userIdValues) ||
-            string.IsNullOrEmpty(userIdValues.ToString()))
+        if (!Request.Headers.TryGetValue(UserIdHeader, out var userIdValues))
         {
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        var userId = userIdValues.ToString();
+        var userId = userIdValues.FirstOrDefault();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, userId),
@@ -62,18 +66,24 @@ public class FakeClaimsAuthenticationHandler : AuthenticationHandler<Authenticat
         };
 
         // Add organization ID claim if present
-        if (Request.Headers.TryGetValue(OrgIdHeader, out var orgIdValues) &&
-            !string.IsNullOrEmpty(orgIdValues.ToString()))
+        if (Request.Headers.TryGetValue(OrgIdHeader, out var orgIdValues))
         {
-            claims.Add(new Claim("org_id", orgIdValues.ToString()));
+            var orgId = orgIdValues.FirstOrDefault();
+            if (!string.IsNullOrEmpty(orgId))
+            {
+                claims.Add(new Claim("org_id", orgId));
+            }
         }
 
         // Add role claim if present
-        if (Request.Headers.TryGetValue(RoleHeader, out var roleValues) &&
-            !string.IsNullOrEmpty(roleValues.ToString()))
+        if (Request.Headers.TryGetValue(RoleHeader, out var roleValues))
         {
-            claims.Add(new Claim(ClaimTypes.Role, roleValues.ToString()));
-            claims.Add(new Claim("role", roleValues.ToString()));
+            var role = roleValues.FirstOrDefault();
+            if (!string.IsNullOrEmpty(role))
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+                claims.Add(new Claim("role", role));
+            }
         }
 
         var identity = new ClaimsIdentity(claims, Scheme.Name);

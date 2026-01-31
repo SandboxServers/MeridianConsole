@@ -208,7 +208,7 @@ public static class ProblemDetailsHelper
         "validation_failed" => "The request contains invalid data.",
 
         // Default: convert snake_case to sentence case
-        _ => errorCode.Replace("_", " ", StringComparison.Ordinal)
+        _ => string.IsNullOrEmpty(errorCode) ? "An error occurred." : errorCode.Replace("_", " ", StringComparison.Ordinal)
     };
 
     /// <summary>
@@ -236,7 +236,7 @@ public static class ProblemDetailsHelper
         return TypedResults.Problem(
             statusCode: statusCode,
             title: title,
-            detail: detail ?? GetDefaultDetail(errorCode),
+            detail: detail ?? (string.IsNullOrEmpty(errorCode) ? title : GetDefaultDetail(errorCode)),
             type: typeUri,
             extensions: extensions);
     }

@@ -96,9 +96,19 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.CreateAsync(userId, request, ct);
-        return result.Success
-            ? Results.Created($"/organizations/{result.Value?.Id}", new { id = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (!result.Success)
+        {
+            return result.Error switch
+            {
+                "slug_already_exists" or "organization_slug_exists" =>
+                    ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.OrganizationSlugExists, result.Error),
+                "name_required" or "name_too_long" or "invalid_name" =>
+                    ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidOrganizationName, result.Error),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+            };
+        }
+
+        return Results.Created($"/organizations/{result.Value?.Id}", new { id = result.Value?.Id });
     }
 
     private static async Task<IResult> UpdateOrganization(

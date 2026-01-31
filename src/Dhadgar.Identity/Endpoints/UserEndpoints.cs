@@ -195,9 +195,17 @@ public static class UserEndpoints
         }
 
         var result = await userService.SoftDeleteAsync(organizationId, userId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "user_not_found" or "not_found" =>
+                ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> UnlinkAccount(

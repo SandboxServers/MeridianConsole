@@ -16,6 +16,7 @@ public sealed class InMemoryMessageCapture : IDisposable
     private readonly int _capacity;
     private readonly ConcurrentQueue<object> _messages = new();
     private readonly SemaphoreSlim _messageAvailable = new(0);
+    private int _count;
     private bool _disposed;
 
     /// <summary>
@@ -41,9 +42,20 @@ public sealed class InMemoryMessageCapture : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         // Enforce capacity - drop oldest if at limit
-        while (_messages.Count >= _capacity && _messages.TryDequeue(out _)) { }
+        while (Interlocked.CompareExchange(ref _count, 0, 0) >= _capacity)
+        {
+            if (_messages.TryDequeue(out _))
+            {
+                Interlocked.Decrement(ref _count);
+            }
+            else
+            {
+                break;
+            }
+        }
 
         _messages.Enqueue(message);
+        Interlocked.Increment(ref _count);
         _messageAvailable.Release();
     }
 
@@ -133,7 +145,11 @@ public sealed class InMemoryMessageCapture : IDisposable
     public void Clear()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _messages.Clear();
+        while (_messages.TryDequeue(out _))
+        {
+            Interlocked.Decrement(ref _count);
+        }
+        Interlocked.Exchange(ref _count, 0); // Ensure reset
     }
 
     /// <summary>
@@ -158,8 +174,8 @@ public sealed class InMemoryMessageCapture : IDisposable
 
         if (disposing)
         {
-            // Clear managed resources
             _messages.Clear();
+            Interlocked.Exchange(ref _count, 0);
             _messageAvailable.Dispose();
         }
 

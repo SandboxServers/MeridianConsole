@@ -1,5 +1,6 @@
 using Dhadgar.Contracts;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 
 namespace Dhadgar.Identity.Endpoints;
 
@@ -226,7 +227,7 @@ public static class MembershipEndpoints
         var result = await membershipService.RemoveMemberAsync(organizationId, memberId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.MemberNotFound, result.Error);
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error);
     }
 
     private static async Task<IResult> AssignRole(
@@ -236,6 +237,7 @@ public static class MembershipEndpoints
         MemberRoleRequest request,
         MembershipService membershipService,
         IPermissionService permissionService,
+        IValidator<MemberRoleRequest> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -255,13 +257,15 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        var role = request.Role?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(role))
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "Role is required.");
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
 
-        var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, role, ct);
+        var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, request.Role, ct);
         return result.Success
             ? Results.Ok(new { role = result.Value?.Role })
             : ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
