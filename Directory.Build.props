@@ -20,6 +20,8 @@
     <!-- Quality of life - only applies outside CI -->
     <TreatWarningsAsErrors Condition="'$(CI)' != 'true'">false</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
+    <!-- NuGet lock files for deterministic restores and faster CI caching -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
