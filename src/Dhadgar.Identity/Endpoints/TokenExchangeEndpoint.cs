@@ -20,7 +20,7 @@ public static class TokenExchangeEndpoint
         if (!validationResult.IsValid)
         {
             // Return specific error code for ExchangeToken validation failures
-            var exchangeTokenError = validationResult.Errors.Find(e =>
+            var exchangeTokenError = validationResult.Errors.FirstOrDefault(e =>
                 e.PropertyName == nameof(TokenExchangeRequest.ExchangeToken));
 
             if (exchangeTokenError is not null)
