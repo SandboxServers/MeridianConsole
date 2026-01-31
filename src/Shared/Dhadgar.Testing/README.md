@@ -21,6 +21,42 @@ Add a project reference to your test project:
 </ItemGroup>
 ```
 
+## Prerequisites
+
+Before using `Dhadgar.Testing`, ensure your service and test projects meet these requirements:
+
+### Service Project Requirements
+
+1. **Declare a public partial Program class** in your service's `Program.cs`:
+   ```csharp
+   // At the end of Program.cs
+   public partial class Program { }
+   ```
+   This is required for `WebApplicationFactory<Program>` to work.
+
+2. **Reference Dhadgar.ServiceDefaults** for shared middleware and configuration.
+
+### Test Project Requirements
+
+Add these package references to your test `.csproj`:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  <PackageReference Include="xunit" />
+  <PackageReference Include="xunit.runner.visualstudio" />
+  <ProjectReference Include="../../src/Shared/Dhadgar.Testing/Dhadgar.Testing.csproj" />
+</ItemGroup>
+```
+
+### Required Namespaces
+
+When using `IServiceCollection.Replace()` in test fixtures:
+```csharp
+using Microsoft.Extensions.DependencyInjection.Extensions; // For Replace(), RemoveAll()
+```
+
 ## Components
 
 ### 1. ServiceTestFixture

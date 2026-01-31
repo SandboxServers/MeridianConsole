@@ -130,8 +130,8 @@ public static class UserEndpoints
 
         return result.Error switch
         {
+            "invalid_email" => ProblemDetailsHelper.UnprocessableEntity(ErrorCodes.IdentityErrors.InvalidEmail),
             "email_already_exists" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.EmailAlreadyExists),
-            "invalid_email" => ProblemDetailsHelper.UnprocessableEntity(ErrorCodes.IdentityErrors.InvalidEmail, result.Error),
             _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
         };
     }
@@ -146,19 +146,13 @@ public static class UserEndpoints
         IValidator<UserUpdateRequest> validator,
         CancellationToken ct)
     {
-        var validationResult = await validator.ValidateAsync(request, ct);
-        if (!validationResult.IsValid)
-        {
-            return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.CommonErrors.ValidationFailed,
-                validationResult.Errors[0].ErrorMessage);
-        }
-
+        // 1. Auth check
         if (!EndpointHelpers.TryGetUserId(context, out var actorUserId))
         {
             return Results.Unauthorized();
         }
 
+        // 2. Permission check
         var permissionResult = await EndpointHelpers.RequirePermissionAsync(
             actorUserId,
             organizationId,
@@ -171,6 +165,16 @@ public static class UserEndpoints
             return permissionResult;
         }
 
+        // 3. Validation (after auth)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
+        }
+
+        // 4. Business logic
         var result = await userService.UpdateAsync(organizationId, userId, request, ct);
         return result.Success
             ? Results.Ok(result.Value)

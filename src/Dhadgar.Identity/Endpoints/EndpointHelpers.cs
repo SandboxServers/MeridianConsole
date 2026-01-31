@@ -113,7 +113,7 @@ public static class EndpointHelpers
             return null; // Email is verified
         }
 
-        return ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "This organization requires email verification.");
+        return ProblemDetailsHelper.Forbidden(ErrorCodes.AuthErrors.AccessDenied, "This organization requires email verification.");
     }
 
     /// <summary>

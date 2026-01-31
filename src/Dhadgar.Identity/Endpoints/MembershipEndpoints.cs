@@ -137,6 +137,9 @@ public static class MembershipEndpoints
 
         return result.Error switch
         {
+            "invites_disabled" => ProblemDetailsHelper.Forbidden(ErrorCodes.IdentityErrors.InvitesDisabled, result.Error),
+            "invalid_role" => ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidRole, result.Error),
+            "member_limit_reached" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.MemberLimitReached, result.Error),
             "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error),
             "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound, result.Error),
             "already_member" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.AlreadyMember, result.Error),

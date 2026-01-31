@@ -55,14 +55,14 @@ public static class SecretWriteEndpoints
         if (!validation.IsValid)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Secrets.InvalidSecretName,
+                ErrorCodes.SecretErrors.InvalidSecretName,
                 validation.ErrorMessage);
         }
 
         if (string.IsNullOrWhiteSpace(request.Value))
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Secrets.SecretValueRequired,
+                ErrorCodes.SecretErrors.SecretValueRequired,
                 "Value is required.");
         }
 
@@ -143,7 +143,7 @@ public static class SecretWriteEndpoints
         if (!validation.IsValid)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Secrets.InvalidSecretName,
+                ErrorCodes.SecretErrors.InvalidSecretName,
                 validation.ErrorMessage);
         }
 
@@ -218,7 +218,7 @@ public static class SecretWriteEndpoints
                 ErrorMessage: ex.Message));
 
             return ProblemDetailsHelper.InternalServerError(
-                ErrorCodes.Secrets.RotationFailed,
+                ErrorCodes.SecretErrors.RotationFailed,
                 "An error occurred during secret rotation.");
         }
     }
@@ -236,7 +236,7 @@ public static class SecretWriteEndpoints
         if (!validation.IsValid)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Secrets.InvalidSecretName,
+                ErrorCodes.SecretErrors.InvalidSecretName,
                 validation.ErrorMessage);
         }
 
@@ -281,7 +281,7 @@ public static class SecretWriteEndpoints
         if (!success)
         {
             return ProblemDetailsHelper.NotFound(
-                ErrorCodes.Secrets.SecretNotFound,
+                ErrorCodes.SecretErrors.SecretNotFound,
                 $"Secret '{secretName}' not found.");
         }
 

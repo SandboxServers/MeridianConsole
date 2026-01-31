@@ -111,7 +111,7 @@ public static class CertificateEndpoints
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.CertificateData))
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Certificates.CertificateDataRequired,
+                ErrorCodes.CertificateErrors.CertificateDataRequired,
                 "Name and CertificateData are required.");
         }
 
@@ -131,7 +131,7 @@ public static class CertificateEndpoints
         catch (FormatException)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Certificates.InvalidCertificateData,
+                ErrorCodes.CertificateErrors.InvalidCertificateData,
                 "Invalid base64 encoded certificate data.");
         }
         catch (InvalidOperationException ex)
@@ -139,7 +139,7 @@ public static class CertificateEndpoints
             if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
                 return ProblemDetailsHelper.Conflict(
-                    ErrorCodes.Certificates.CertificateAlreadyExists,
+                    ErrorCodes.CertificateErrors.CertificateAlreadyExists,
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
@@ -163,7 +163,7 @@ public static class CertificateEndpoints
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.CertificateData))
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Certificates.CertificateDataRequired,
+                ErrorCodes.CertificateErrors.CertificateDataRequired,
                 "Name and CertificateData are required.");
         }
 
@@ -183,7 +183,7 @@ public static class CertificateEndpoints
         catch (FormatException)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Certificates.InvalidCertificateData,
+                ErrorCodes.CertificateErrors.InvalidCertificateData,
                 "Invalid base64 encoded certificate data.");
         }
         catch (InvalidOperationException ex)
@@ -191,7 +191,7 @@ public static class CertificateEndpoints
             if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
                 return ProblemDetailsHelper.Conflict(
-                    ErrorCodes.Certificates.CertificateAlreadyExists,
+                    ErrorCodes.CertificateErrors.CertificateAlreadyExists,
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
@@ -216,7 +216,7 @@ public static class CertificateEndpoints
         if (!success)
         {
             return ProblemDetailsHelper.NotFound(
-                ErrorCodes.Certificates.CertificateNotFound,
+                ErrorCodes.CertificateErrors.CertificateNotFound,
                 $"Certificate '{name}' not found.");
         }
 

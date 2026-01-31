@@ -92,7 +92,7 @@ public static class KeyVaultEndpoints
         if (vault == null)
         {
             return ProblemDetailsHelper.NotFound(
-                ErrorCodes.KeyVaults.VaultNotFound,
+                ErrorCodes.KeyVaultErrors.VaultNotFound,
                 $"Vault '{vaultName}' not found.");
         }
 
@@ -130,7 +130,7 @@ public static class KeyVaultEndpoints
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Location))
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.KeyVaults.VaultDataRequired,
+                ErrorCodes.KeyVaultErrors.VaultDataRequired,
                 "Name and Location are required.");
         }
 
@@ -169,7 +169,7 @@ public static class KeyVaultEndpoints
             if (ex.Message.Contains("exists", StringComparison.OrdinalIgnoreCase))
             {
                 return ProblemDetailsHelper.Conflict(
-                    ErrorCodes.KeyVaults.VaultAlreadyExists,
+                    ErrorCodes.KeyVaultErrors.VaultAlreadyExists,
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
@@ -231,7 +231,7 @@ public static class KeyVaultEndpoints
             if (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
                 return ProblemDetailsHelper.NotFound(
-                    ErrorCodes.KeyVaults.VaultNotFound,
+                    ErrorCodes.KeyVaultErrors.VaultNotFound,
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
@@ -256,7 +256,7 @@ public static class KeyVaultEndpoints
         if (!success)
         {
             return ProblemDetailsHelper.NotFound(
-                ErrorCodes.KeyVaults.VaultNotFound,
+                ErrorCodes.KeyVaultErrors.VaultNotFound,
                 $"Vault '{vaultName}' not found.");
         }
 

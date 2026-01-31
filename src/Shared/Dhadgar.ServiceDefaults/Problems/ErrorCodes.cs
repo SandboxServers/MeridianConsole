@@ -54,7 +54,7 @@ public static class ErrorCodes
     /// <summary>
     /// Error codes for capacity reservation operations.
     /// </summary>
-    public static class Reservations
+    public static class ReservationErrors
     {
         /// <summary>The specified reservation was not found.</summary>
         public const string ReservationNotFound = "reservation_not_found";
@@ -133,12 +133,21 @@ public static class ErrorCodes
 
         /// <summary>The role has active members and cannot be deleted.</summary>
         public const string RoleHasActiveMembers = "role_has_active_members";
+
+        /// <summary>Invitations are disabled for this organization.</summary>
+        public const string InvitesDisabled = "invites_disabled";
+
+        /// <summary>The specified role is invalid or does not exist.</summary>
+        public const string InvalidRole = "invalid_role";
+
+        /// <summary>The organization has reached its member limit.</summary>
+        public const string MemberLimitReached = "member_limit_reached";
     }
 
     /// <summary>
     /// Error codes for the Secrets service (Azure Key Vault integration).
     /// </summary>
-    public static class Secrets
+    public static class SecretErrors
     {
         /// <summary>The specified secret was not found.</summary>
         public const string SecretNotFound = "secret_not_found";
@@ -162,7 +171,7 @@ public static class ErrorCodes
     /// <summary>
     /// Error codes for certificate operations in the Secrets service.
     /// </summary>
-    public static class Certificates
+    public static class CertificateErrors
     {
         /// <summary>The specified certificate was not found.</summary>
         public const string CertificateNotFound = "certificate_not_found";
@@ -180,7 +189,7 @@ public static class ErrorCodes
     /// <summary>
     /// Error codes for Key Vault management operations.
     /// </summary>
-    public static class KeyVaults
+    public static class KeyVaultErrors
     {
         /// <summary>The specified Key Vault was not found.</summary>
         public const string VaultNotFound = "vault_not_found";
@@ -195,7 +204,7 @@ public static class ErrorCodes
     /// <summary>
     /// Error codes for authentication and authorization.
     /// </summary>
-    public static class Auth
+    public static class AuthErrors
     {
         /// <summary>The provided credentials are invalid.</summary>
         public const string InvalidCredentials = "invalid_credentials";

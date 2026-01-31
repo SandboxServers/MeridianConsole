@@ -66,7 +66,7 @@ public static class SecretsEndpoints
         if (!validation.IsValid)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Secrets.InvalidSecretName,
+                ErrorCodes.SecretErrors.InvalidSecretName,
                 validation.ErrorMessage);
         }
 
@@ -113,7 +113,7 @@ public static class SecretsEndpoints
                 IsServiceAccount: authResult.IsServiceAccount));
 
             return ProblemDetailsHelper.NotFound(
-                ErrorCodes.Secrets.SecretNotFound,
+                ErrorCodes.SecretErrors.SecretNotFound,
                 $"Secret '{secretName}' not found or not configured.");
         }
 
@@ -153,7 +153,7 @@ public static class SecretsEndpoints
             if (!validation.IsValid)
             {
                 return ProblemDetailsHelper.BadRequest(
-                    ErrorCodes.Secrets.InvalidSecretName,
+                    ErrorCodes.SecretErrors.InvalidSecretName,
                     $"Invalid secret name '{name}': {validation.ErrorMessage}");
             }
         }

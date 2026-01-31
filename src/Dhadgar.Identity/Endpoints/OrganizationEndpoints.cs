@@ -221,7 +221,7 @@ public static class OrganizationEndpoints
         {
             return result.Error switch
             {
-                "not_owner" => ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "Only the organization owner can transfer ownership."),
+                "not_owner" => ProblemDetailsHelper.Forbidden(ErrorCodes.AuthErrors.AccessDenied, "Only the organization owner can transfer ownership."),
                 "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound),
                 _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
             };
