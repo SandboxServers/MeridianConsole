@@ -8,6 +8,12 @@
         "resolved": "6.0.4",
         "contentHash": "lkhqpF8Pu2Y7IiN7OntbsTtdbpR1syMsm2F3IgX6ootA4ffRqWL5jF7XipHuZQTdVuWG/gVAAcf8mjk8Tz0xPg=="
       },
+      "FluentValidation": {
+        "type": "Direct",
+        "requested": "[12.1.1, )",
+        "resolved": "12.1.1",
+        "contentHash": "EPpkIe1yh1a0OXyC100oOA8WMbZvqUu5plwhvYcb7oSELfyUZzfxV48BLhvs3kKo4NwG7MGLNgy1RJiYtT8Dpw=="
+      },
       "Microsoft.AspNetCore.Mvc.Testing": {
         "type": "Direct",
         "requested": "[10.0.0, )",
@@ -1323,6 +1329,7 @@
           "AspNetCore.HealthChecks.NpgSql": "[9.0.0, )",
           "AspNetCore.HealthChecks.Rabbitmq": "[9.0.0, )",
           "AspNetCore.HealthChecks.Redis": "[9.0.0, )",
+          "Dhadgar.Contracts": "[1.0.0, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.0, )",
@@ -1453,12 +1460,6 @@
         "requested": "[8.3.0, )",
         "resolved": "8.3.0",
         "contentHash": "iri1druxHPUAvaFqTUKJG7NOHwnOLmWwfDorgezZWpeBWBJmk2o8niI7jL7zW9TEFGnUpMJi/JLG6FXgr3cM3A=="
-      },
-      "FluentValidation": {
-        "type": "CentralTransitive",
-        "requested": "[12.1.1, )",
-        "resolved": "12.1.1",
-        "contentHash": "EPpkIe1yh1a0OXyC100oOA8WMbZvqUu5plwhvYcb7oSELfyUZzfxV48BLhvs3kKo4NwG7MGLNgy1RJiYtT8Dpw=="
       },
       "FluentValidation.DependencyInjectionExtensions": {
         "type": "CentralTransitive",

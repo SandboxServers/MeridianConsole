@@ -624,12 +624,16 @@
           "xunit.extensibility.core": "[2.9.2]"
         }
       },
+      "dhadgar.contracts": {
+        "type": "Project"
+      },
       "dhadgar.servicedefaults": {
         "type": "Project",
         "dependencies": {
           "AspNetCore.HealthChecks.NpgSql": "[9.0.0, )",
           "AspNetCore.HealthChecks.Rabbitmq": "[9.0.0, )",
           "AspNetCore.HealthChecks.Redis": "[9.0.0, )",
+          "Dhadgar.Contracts": "[1.0.0, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.0, )",

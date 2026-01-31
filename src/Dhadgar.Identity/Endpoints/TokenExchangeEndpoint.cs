@@ -46,8 +46,8 @@ public static class TokenExchangeEndpoint
                     ProblemDetailsHelper.Unauthorized(ErrorCodes.AuthErrors.TokenExpired, "Invalid or expired exchange token."),
                 "email_not_verified" => ProblemDetailsHelper.Forbidden(ErrorCodes.AuthErrors.AccessDenied, "Email address must be verified before exchanging tokens."),
                 // Safe error codes that can be exposed to clients
-                "missing_exchange_token" => ProblemDetailsHelper.BadRequest("missing_exchange_token", "Exchange token is required."),
-                "token_already_used" => ProblemDetailsHelper.BadRequest("token_already_used", "This exchange token has already been used."),
+                "missing_exchange_token" => ProblemDetailsHelper.BadRequest(ErrorCodes.AuthErrors.MissingExchangeToken, "Exchange token is required."),
+                "token_already_used" => ProblemDetailsHelper.BadRequest(ErrorCodes.AuthErrors.TokenAlreadyUsed, "This exchange token has already been used."),
                 // Generic fallback for all other errors to prevent information leakage
                 _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "Token exchange failed.")
             };

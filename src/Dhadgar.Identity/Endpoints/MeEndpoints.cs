@@ -289,7 +289,11 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+            return result.Error switch
+            {
+                "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+            };
         }
 
         return Results.Ok(new
@@ -314,7 +318,13 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error);
+            // Note: "user_not_found_or_already_deleted" is returned when user exists but has no pending deletion,
+            // which is a validation error (nothing to cancel), not a "not found" error.
+            return result.Error switch
+            {
+                "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+            };
         }
 
         return Results.Ok(new { message = "Account deletion cancelled" });

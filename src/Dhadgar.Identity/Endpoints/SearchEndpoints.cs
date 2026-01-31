@@ -1,5 +1,8 @@
-using Dhadgar.Contracts;
 using Dhadgar.Identity.Services;
+using Dhadgar.Identity.Validators;
+using Dhadgar.ServiceDefaults.Pagination;
+using Dhadgar.ServiceDefaults.Problems;
+using FluentValidation;
 
 namespace Dhadgar.Identity.Endpoints;
 
@@ -32,6 +35,7 @@ public static class SearchEndpoints
         int? page,
         int? pageSize,
         OrganizationService organizationService,
+        IValidator<SearchQueryParameters> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -39,16 +43,18 @@ public static class SearchEndpoints
             return Results.Unauthorized();
         }
 
+        var searchParams = new SearchQueryParameters { Query = query, Page = page, PageSize = pageSize };
+        var validationResult = await validator.ValidateAsync(searchParams, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
+        }
+
         var allResults = await organizationService.SearchForUserAsync(userId, query ?? string.Empty, ct);
 
-        // Apply pagination
-        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
-        var pagedResults = allResults
-            .Skip(pagination.Skip)
-            .Take(pagination.NormalizedPageSize)
-            .ToArray();
-
-        return Results.Ok(PagedResponse<OrganizationSummary>.Create(pagedResults, allResults.Count, pagination));
+        return Results.Ok(allResults.ToPagedResponse(page, pageSize));
     }
 
     private static async Task<IResult> SearchUsers(
@@ -59,11 +65,21 @@ public static class SearchEndpoints
         int? pageSize,
         UserService userService,
         IPermissionService permissionService,
+        IValidator<SearchQueryParameters> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
         {
             return Results.Unauthorized();
+        }
+
+        var searchParams = new SearchQueryParameters { Query = query, Page = page, PageSize = pageSize };
+        var validationResult = await validator.ValidateAsync(searchParams, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
 
         var permissionResult = await EndpointHelpers.RequirePermissionAsync(
@@ -80,14 +96,7 @@ public static class SearchEndpoints
 
         var allResults = await userService.SearchAsync(organizationId, query ?? string.Empty, ct);
 
-        // Apply pagination
-        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
-        var pagedResults = allResults
-            .Skip(pagination.Skip)
-            .Take(pagination.NormalizedPageSize)
-            .ToArray();
-
-        return Results.Ok(PagedResponse<UserSummary>.Create(pagedResults, allResults.Count, pagination));
+        return Results.Ok(allResults.ToPagedResponse(page, pageSize));
     }
 
     private static async Task<IResult> SearchRoles(
@@ -98,11 +107,21 @@ public static class SearchEndpoints
         int? pageSize,
         RoleService roleService,
         IPermissionService permissionService,
+        IValidator<SearchQueryParameters> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
         {
             return Results.Unauthorized();
+        }
+
+        var searchParams = new SearchQueryParameters { Query = query, Page = page, PageSize = pageSize };
+        var validationResult = await validator.ValidateAsync(searchParams, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                validationResult.Errors[0].ErrorMessage);
         }
 
         var permissionResult = await EndpointHelpers.RequirePermissionAsync(
@@ -119,13 +138,6 @@ public static class SearchEndpoints
 
         var allResults = await roleService.SearchAsync(organizationId, query ?? string.Empty, ct);
 
-        // Apply pagination
-        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
-        var pagedResults = allResults
-            .Skip(pagination.Skip)
-            .Take(pagination.NormalizedPageSize)
-            .ToArray();
-
-        return Results.Ok(PagedResponse<RoleSummary>.Create(pagedResults, allResults.Count, pagination));
+        return Results.Ok(allResults.ToPagedResponse(page, pageSize));
     }
 }

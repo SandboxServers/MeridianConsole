@@ -226,6 +226,12 @@ public static class ErrorCodes
 
         /// <summary>The OAuth provider is not supported.</summary>
         public const string InvalidOAuthProvider = "invalid_oauth_provider";
+
+        /// <summary>The exchange token is required but was not provided.</summary>
+        public const string MissingExchangeToken = "missing_exchange_token";
+
+        /// <summary>The exchange token has already been used.</summary>
+        public const string TokenAlreadyUsed = "token_already_used";
     }
 
     /// <summary>

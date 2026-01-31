@@ -224,6 +224,9 @@
         "resolved": "7.0.0",
         "contentHash": "8YJz22mOSMtkbIVuVSz2HbJwbpKwRoXQ1uqbczDUt1w1Ds8dxFs6dkV/oZ8AlTmkErZjtQelHv+oBu52ud00WA=="
       },
+      "dhadgar.contracts": {
+        "type": "Project"
+      },
       "OpenTelemetry": {
         "type": "CentralTransitive",
         "requested": "[1.14.0, )",
