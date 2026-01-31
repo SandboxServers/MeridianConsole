@@ -161,7 +161,7 @@ public static class KeyVaultEndpoints
         catch (ArgumentException ex)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Generic.ValidationFailed,
+                ErrorCodes.Common.ValidationFailed,
                 ex.Message);
         }
         catch (InvalidOperationException ex)
@@ -173,7 +173,7 @@ public static class KeyVaultEndpoints
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Generic.ValidationFailed,
+                ErrorCodes.Common.ValidationFailed,
                 ex.Message);
         }
     }
@@ -223,7 +223,7 @@ public static class KeyVaultEndpoints
         catch (ArgumentException ex)
         {
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Generic.ValidationFailed,
+                ErrorCodes.Common.ValidationFailed,
                 ex.Message);
         }
         catch (InvalidOperationException ex)
@@ -235,7 +235,7 @@ public static class KeyVaultEndpoints
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Generic.ValidationFailed,
+                ErrorCodes.Common.ValidationFailed,
                 ex.Message);
         }
     }

@@ -67,7 +67,7 @@ public class UserControllerTests : IClassFixture<IdentityServiceFixture>
         _client.WithTestUser(userId);
 
         // Act
-        var response = await _client.GetAsync($"/api/v1/users/{userId}");
+        var response = await _client.GetAsync($"/users/{userId}");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -110,7 +110,7 @@ _client
     .WithTestOrg("org-456")
     .WithTestRole("Admin");
 
-var response = await _client.GetAsync("/api/v1/protected-resource");
+var response = await _client.GetAsync("/protected-resource");
 ```
 
 ### 3. InMemoryMessageCapture
@@ -185,11 +185,11 @@ var response = await _client
     .WithTestUser("user-123")
     .WithTestOrg("org-456")
     .WithTestRole("Admin")
-    .GetAsync("/api/v1/organizations/org-456/settings");
+    .GetAsync("/organizations/org-456/settings");
 
 // Use individual headers
 _client.WithTestUser("user-123");
-var response = await _client.GetAsync("/api/v1/users/user-123");
+var response = await _client.GetAsync("/users/user-123");
 ```
 
 ## Best Practices
@@ -244,7 +244,7 @@ public async Task DeleteUser_Returns403_WhenNotAdmin()
     _client.WithTestUser("user-123");
 
     // Act
-    var response = await _client.DeleteAsync("/api/v1/users/other-user");
+    var response = await _client.DeleteAsync("/users/other-user");
 
     // Assert
     Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -257,7 +257,7 @@ public async Task DeleteUser_Returns204_WhenAdmin()
     _client.WithTestUser("admin-user").WithTestRole("Admin");
 
     // Act
-    var response = await _client.DeleteAsync("/api/v1/users/other-user");
+    var response = await _client.DeleteAsync("/users/other-user");
 
     // Assert
     Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);

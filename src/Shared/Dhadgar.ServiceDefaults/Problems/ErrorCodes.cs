@@ -12,7 +12,7 @@ public static class ErrorCodes
     /// <summary>
     /// Error codes for the Nodes service (hardware inventory, agent enrollment, capacity management).
     /// </summary>
-    public static class Nodes
+    public static class NodeErrors
     {
         /// <summary>The specified node was not found or the user doesn't have access to it.</summary>
         public const string NodeNotFound = "node_not_found";
@@ -75,7 +75,7 @@ public static class ErrorCodes
     /// <summary>
     /// Error codes for the Identity service (users, organizations, roles).
     /// </summary>
-    public static class Identity
+    public static class IdentityErrors
     {
         /// <summary>The specified user was not found.</summary>
         public const string UserNotFound = "user_not_found";
@@ -97,6 +97,15 @@ public static class ErrorCodes
 
         /// <summary>A user with this email address already exists.</summary>
         public const string EmailAlreadyExists = "email_already_exists";
+
+        /// <summary>A role with this name already exists in the organization.</summary>
+        public const string RoleAlreadyExists = "role_already_exists";
+
+        /// <summary>The role name is invalid (empty, too long, or reserved).</summary>
+        public const string InvalidRoleName = "invalid_role_name";
+
+        /// <summary>The specified permissions are invalid or cannot be granted.</summary>
+        public const string InvalidPermissions = "invalid_permissions";
     }
 
     /// <summary>
@@ -181,9 +190,9 @@ public static class ErrorCodes
     }
 
     /// <summary>
-    /// Generic error codes applicable across all services.
+    /// Common error codes applicable across all services.
     /// </summary>
-    public static class Generic
+    public static class Common
     {
         /// <summary>An internal server error occurred. Please try again later.</summary>
         public const string InternalError = "internal_error";

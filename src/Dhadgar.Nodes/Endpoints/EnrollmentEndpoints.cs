@@ -66,7 +66,8 @@ public static class EnrollmentEndpoints
             plainTextToken,
             token.ExpiresAt);
 
-        return Results.Created($"/organizations/{organizationId}/enrollment/tokens/{token.Id}", response);
+        var location = $"{context.Request.PathBase}/organizations/{organizationId}/enrollment/tokens/{token.Id}";
+        return Results.Created(location, response);
     }
 
     private static async Task<IResult> ListTokens(

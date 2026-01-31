@@ -5,10 +5,11 @@ namespace Dhadgar.Testing.Messaging;
 /// <summary>
 /// Thread-safe in-memory message capture utility for testing message publishing.
 /// Captures messages of any type and provides methods to retrieve and inspect them.
+/// Messages are stored in FIFO (first-in, first-out) order.
 /// </summary>
-public class InMemoryMessageCapture : IDisposable
+public sealed class InMemoryMessageCapture : IDisposable
 {
-    private readonly ConcurrentBag<object> _messages = new();
+    private readonly ConcurrentQueue<object> _messages = new();
     private bool _disposed;
 
     /// <summary>
@@ -19,18 +20,18 @@ public class InMemoryMessageCapture : IDisposable
     public void Capture<T>(T message) where T : notnull
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _messages.Add(message);
+        _messages.Enqueue(message);
     }
 
     /// <summary>
-    /// Retrieves all captured messages of a specific type.
+    /// Retrieves all captured messages of a specific type in insertion order.
     /// </summary>
     /// <typeparam name="T">The type of messages to retrieve</typeparam>
     /// <returns>Read-only list of all messages of the specified type</returns>
     public IReadOnlyList<T> GetMessages<T>()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _messages.OfType<T>().ToList();
+        return _messages.ToArray().OfType<T>().ToList();
     }
 
     /// <summary>
@@ -41,7 +42,7 @@ public class InMemoryMessageCapture : IDisposable
     public T? GetLastMessage<T>() where T : class
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _messages.OfType<T>().LastOrDefault();
+        return _messages.ToArray().OfType<T>().LastOrDefault();
     }
 
     /// <summary>
@@ -54,7 +55,7 @@ public class InMemoryMessageCapture : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var messages = _messages.OfType<T>();
+        var messages = _messages.ToArray().OfType<T>();
         return predicate == null
             ? messages.Any()
             : messages.Any(predicate);
@@ -72,28 +73,28 @@ public class InMemoryMessageCapture : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var actualTimeout = timeout ?? TimeSpan.FromSeconds(5);
-        var cancellationTokenSource = new CancellationTokenSource(actualTimeout);
+        using var cancellationTokenSource = new CancellationTokenSource(actualTimeout);
         var token = cancellationTokenSource.Token;
 
-        try
+        while (!token.IsCancellationRequested)
         {
-            while (!token.IsCancellationRequested)
+            var message = GetLastMessage<T>();
+            if (message != null)
             {
-                var message = GetLastMessage<T>();
-                if (message != null)
-                {
-                    return message;
-                }
-
-                await Task.Delay(50, token);
+                return message;
             }
 
-            throw new TimeoutException($"No message of type {typeof(T).Name} was captured within {actualTimeout.TotalSeconds} seconds.");
+            try
+            {
+                await Task.Delay(50, token);
+            }
+            catch (TaskCanceledException)
+            {
+                break;
+            }
         }
-        finally
-        {
-            cancellationTokenSource.Dispose();
-        }
+
+        throw new TimeoutException($"No message of type {typeof(T).Name} was captured within {actualTimeout.TotalSeconds} seconds.");
     }
 
     /// <summary>
@@ -110,13 +111,27 @@ public class InMemoryMessageCapture : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes of managed resources.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer</param>
+    private void Dispose(bool disposing)
+    {
         if (_disposed)
         {
             return;
         }
 
-        _messages.Clear();
+        if (disposing)
+        {
+            // Clear managed resources
+            _messages.Clear();
+        }
+
         _disposed = true;
-        GC.SuppressFinalize(this);
     }
 }

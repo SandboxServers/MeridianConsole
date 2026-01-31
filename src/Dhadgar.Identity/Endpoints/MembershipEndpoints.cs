@@ -70,7 +70,7 @@ public static class MembershipEndpoints
         MembershipService membershipService,
         IPermissionService permissionService,
         int? page,
-        int? limit,
+        int? pageSize,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -90,7 +90,7 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = limit ?? 50 };
+        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
         var allMembers = await membershipService.ListMembersAsync(organizationId, ct);
 
         // Apply pagination in memory (for backward compatibility with existing service)
@@ -130,7 +130,7 @@ public static class MembershipEndpoints
         var result = await membershipService.InviteAsync(organizationId, userId, request, ct);
         return result.Success
             ? Results.Ok(new { membershipId = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> AcceptInvite(
@@ -147,7 +147,7 @@ public static class MembershipEndpoints
         var result = await membershipService.AcceptInviteAsync(organizationId, userId, ct);
         return result.Success
             ? Results.Ok(new { membershipId = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RejectInvite(
@@ -164,7 +164,7 @@ public static class MembershipEndpoints
         var result = await membershipService.RejectInviteAsync(organizationId, userId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> WithdrawInvitation(
@@ -195,7 +195,7 @@ public static class MembershipEndpoints
         var result = await membershipService.WithdrawInviteAsync(organizationId, userId, targetUserId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RemoveMember(
@@ -226,7 +226,7 @@ public static class MembershipEndpoints
         var result = await membershipService.RemoveMemberAsync(organizationId, memberId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Identity.MemberNotFound, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.MemberNotFound, result.Error);
     }
 
     private static async Task<IResult> AssignRole(
@@ -258,13 +258,13 @@ public static class MembershipEndpoints
         var role = request.Role?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(role))
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Role is required.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "Role is required.");
         }
 
         var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, role, ct);
         return result.Success
             ? Results.Ok(new { role = result.Value?.Role })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> ListClaims(
@@ -295,7 +295,7 @@ public static class MembershipEndpoints
         var result = await membershipService.ListClaimsAsync(organizationId, memberId, ct);
         if (!result.Success)
         {
-            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.MemberNotFound, result.Error);
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error);
         }
 
         var claims = result.Value?.Select(c => new MemberClaimDto(c.Id, c.Type, c.Value, c.ExpiresAt, c.CreatedAt)).ToList()
@@ -332,7 +332,7 @@ public static class MembershipEndpoints
         var result = await membershipService.AddClaimAsync(organizationId, userId, memberId, request, ct);
         return result.Success
             ? Results.Ok(new { claimId = result.Value?.Id })
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RemoveClaim(
@@ -364,7 +364,7 @@ public static class MembershipEndpoints
         var result = await membershipService.RemoveClaimAsync(organizationId, memberId, claimId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> BulkInviteMembers(
@@ -394,7 +394,7 @@ public static class MembershipEndpoints
 
         if (request.Invites is null || request.Invites.Count == 0)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "At least one invite is required.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "At least one invite is required.");
         }
 
         var result = await membershipService.BulkInviteAsync(organizationId, userId, request.Invites, ct);
@@ -436,7 +436,7 @@ public static class MembershipEndpoints
 
         if (request.MemberIds is null || request.MemberIds.Count == 0)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "At least one member ID is required.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "At least one member ID is required.");
         }
 
         var result = await membershipService.BulkRemoveAsync(organizationId, request.MemberIds, ct);

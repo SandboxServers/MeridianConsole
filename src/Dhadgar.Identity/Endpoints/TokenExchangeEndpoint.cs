@@ -28,7 +28,7 @@ public static class TokenExchangeEndpoint
 
         if (string.IsNullOrWhiteSpace(request.ExchangeToken))
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Exchange token is required.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "Exchange token is required.");
         }
 
         var outcome = await service.ExchangeAsync(request.ExchangeToken, ct);
@@ -54,7 +54,7 @@ public static class TokenExchangeEndpoint
                 "invalid_exchange_token" or "invalid_purpose" or "missing_jti" or "missing_claims" =>
                     ProblemDetailsHelper.Unauthorized(ErrorCodes.Auth.TokenExpired, "Invalid or expired exchange token."),
                 "email_not_verified" => ProblemDetailsHelper.Forbidden(ErrorCodes.Auth.AccessDenied, "Email address must be verified before exchanging tokens."),
-                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, safeError == "exchange_failed" ? "Token exchange failed." : safeError)
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, safeError == "exchange_failed" ? "Token exchange failed." : safeError)
             };
         }
 

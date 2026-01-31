@@ -42,8 +42,8 @@ public abstract class ServiceTestFixture<TProgram, TDbContext> : WebApplicationF
         builder.ConfigureServices(services =>
         {
             // Remove all DbContext registrations (handles both AddDbContext and AddDbContextPool)
-            services.RemoveAll(typeof(DbContextOptions<TDbContext>));
-            services.RemoveAll(typeof(TDbContext));
+            services.RemoveAll<DbContextOptions<TDbContext>>();
+            services.RemoveAll<TDbContext>();
 
             // Add in-memory database with unique name for isolation
             services.AddDbContext<TDbContext>(options =>

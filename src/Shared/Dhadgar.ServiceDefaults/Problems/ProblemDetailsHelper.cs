@@ -24,11 +24,11 @@ namespace Dhadgar.ServiceDefaults.Problems;
 /// using Dhadgar.ServiceDefaults.Problems;
 ///
 /// // Using predefined error codes
-/// return ProblemDetailsHelper.NotFound(ErrorCodes.Nodes.NodeNotFound);
+/// return ProblemDetailsHelper.NotFound(ErrorCodes.NodeErrors.NodeNotFound);
 ///
 /// // With custom detail message
 /// return ProblemDetailsHelper.NotFound(
-///     ErrorCodes.Nodes.NodeNotFound,
+///     ErrorCodes.NodeErrors.NodeNotFound,
 ///     $"Node '{nodeId}' was not found in organization '{orgId}'."
 /// );
 ///
@@ -171,6 +171,9 @@ public static class ProblemDetailsHelper
         "already_member" => "The user is already a member of this organization.",
         "invalid_email" => "The email address is invalid.",
         "email_already_exists" => "A user with this email address already exists.",
+        "role_already_exists" => "A role with this name already exists in the organization.",
+        "invalid_role_name" => "The role name is invalid (empty, too long, or reserved).",
+        "invalid_permissions" => "The specified permissions are invalid or cannot be granted.",
 
         // Secrets errors
         "secret_not_found" => "The specified secret was not found.",
@@ -225,11 +228,16 @@ public static class ProblemDetailsHelper
             ["traceId"] = traceId
         };
 
+        // Use errorCode for specific error documentation URI, fall back to statusCode
+        var typeUri = !string.IsNullOrEmpty(errorCode)
+            ? $"{TypeUriBase}{errorCode}"
+            : $"{TypeUriBase}{statusCode}";
+
         return TypedResults.Problem(
             statusCode: statusCode,
             title: title,
             detail: detail ?? GetDefaultDetail(errorCode),
-            type: $"{TypeUriBase}{statusCode}",
+            type: typeUri,
             extensions: extensions);
     }
 }

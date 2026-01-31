@@ -101,7 +101,7 @@ public static class RoleEndpoints
         var result = await roleService.GetAsync(organizationId, roleId, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.NotFound(ErrorCodes.Identity.RoleNotFound, result.Error);
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error);
     }
 
     private static async Task<IResult> CreateRole(
@@ -131,9 +131,22 @@ public static class RoleEndpoints
 
         // Pass actor userId for privilege escalation validation
         var result = await roleService.CreateAsync(organizationId, userId, request, ct);
-        return result.Success
-            ? Results.Created($"/organizations/{organizationId}/roles/{result.Value?.Id}", result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+        if (result.Success)
+        {
+            return Results.Created($"/organizations/{organizationId}/roles/{result.Value?.Id}", result.Value);
+        }
+
+        // Map specific error codes to appropriate HTTP status and error codes
+        return result.Error switch
+        {
+            "role_already_exists" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.RoleAlreadyExists),
+            "role_name_required" or "role_name_too_long" or "reserved_role_name" =>
+                ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidRoleName, result.Error),
+            "unknown_permissions" or "cannot_grant_unowned_permissions" =>
+                ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidPermissions, result.Error),
+            "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> AssignRole(
@@ -173,7 +186,7 @@ public static class RoleEndpoints
 
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> RevokeRole(
@@ -213,7 +226,7 @@ public static class RoleEndpoints
 
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> UpdateRole(
@@ -245,7 +258,7 @@ public static class RoleEndpoints
         var result = await roleService.UpdateAsync(organizationId, userId, roleId, request, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> DeleteRole(
@@ -276,7 +289,7 @@ public static class RoleEndpoints
         var result = await roleService.DeleteAsync(organizationId, userId, roleId, ct);
         return result.Success
             ? Results.NoContent()
-            : ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, result.Error);
+            : ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, result.Error);
     }
 
     private static async Task<IResult> GetRoleMembers(
@@ -307,6 +320,6 @@ public static class RoleEndpoints
         var result = await roleService.GetMembersAsync(organizationId, roleId, ct);
         return result.Success
             ? Results.Ok(result.Value)
-            : ProblemDetailsHelper.NotFound(ErrorCodes.Identity.RoleNotFound, result.Error);
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error);
     }
 }

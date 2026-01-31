@@ -125,7 +125,7 @@ public static class SecretWriteEndpoints
                 ErrorMessage: ex.Message));
 
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Generic.ValidationFailed,
+                ErrorCodes.Common.ValidationFailed,
                 ex.Message);
         }
     }

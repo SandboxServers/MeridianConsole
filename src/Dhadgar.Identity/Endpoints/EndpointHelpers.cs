@@ -99,7 +99,7 @@ public static class EndpointHelpers
 
         if (org is null)
         {
-            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.OrganizationNotFound);
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound);
         }
 
         if (!org.RequireEmailVerification)

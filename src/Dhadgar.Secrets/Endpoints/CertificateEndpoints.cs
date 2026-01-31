@@ -143,7 +143,7 @@ public static class CertificateEndpoints
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Generic.ValidationFailed,
+                ErrorCodes.Common.ValidationFailed,
                 ex.Message);
         }
     }
@@ -195,7 +195,7 @@ public static class CertificateEndpoints
                     ex.Message);
             }
             return ProblemDetailsHelper.BadRequest(
-                ErrorCodes.Generic.ValidationFailed,
+                ErrorCodes.Common.ValidationFailed,
                 ex.Message);
         }
     }

@@ -64,7 +64,7 @@ public static class InternalEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.Subject))
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Subject is required.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "Subject is required.");
         }
 
         var audience = request.Audience ?? "api://AzureADTokenExchange";
@@ -90,7 +90,7 @@ public static class InternalEndpoints
 
         if (user is null)
         {
-            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.UserNotFound);
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound);
         }
 
         return Results.Ok(user);
@@ -103,12 +103,12 @@ public static class InternalEndpoints
     {
         if (request.UserIds is null || request.UserIds.Count == 0)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "No user IDs provided.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "No user IDs provided.");
         }
 
         if (request.UserIds.Count > 100)
         {
-            return ProblemDetailsHelper.BadRequest(ErrorCodes.Generic.ValidationFailed, "Too many user IDs provided. Maximum allowed is 100.");
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.Common.ValidationFailed, "Too many user IDs provided. Maximum allowed is 100.");
         }
 
         var users = await dbContext.Users
@@ -143,7 +143,7 @@ public static class InternalEndpoints
 
         if (org is null)
         {
-            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.OrganizationNotFound);
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound);
         }
 
         return Results.Ok(org);
@@ -236,7 +236,7 @@ public static class InternalEndpoints
 
         if (membership is null)
         {
-            return ProblemDetailsHelper.NotFound(ErrorCodes.Identity.MemberNotFound);
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound);
         }
 
         return Results.Ok(membership);
