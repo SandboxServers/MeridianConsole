@@ -45,7 +45,12 @@ public sealed class EnrollmentService : IEnrollmentService
         string enrollmentToken,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(enrollmentToken);
+        // Validate input using Result pattern instead of throwing
+        if (string.IsNullOrWhiteSpace(enrollmentToken))
+        {
+            return Result<EnrollmentResult>.Failure(
+                "[Enrollment.InvalidToken] Enrollment token cannot be null or empty");
+        }
 
         _logger.LogInformation("Starting enrollment with control plane");
 

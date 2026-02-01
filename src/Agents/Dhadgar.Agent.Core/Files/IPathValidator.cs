@@ -24,8 +24,9 @@ public interface IPathValidator
 
     /// <summary>
     /// Normalize a path for the current platform.
+    /// Returns Result to avoid exception-based DoS.
     /// </summary>
     /// <param name="path">Path to normalize.</param>
-    /// <returns>Normalized path.</returns>
-    string NormalizePath(string path);
+    /// <returns>Result containing normalized path or failure.</returns>
+    Result<string> NormalizePath(string path);
 }

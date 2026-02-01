@@ -87,6 +87,23 @@ public sealed class FileTransferService : IFileTransferService
 
             // Download the file
             using var client = _httpClientFactory.CreateClient("ControlPlaneMtls");
+
+            // SECURITY: Enforce HTTPS for all file transfers
+            if (client.BaseAddress is not null &&
+                !string.Equals(client.BaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.InsecureTransport] File transfers require HTTPS");
+            }
+
+            // Validate source URL scheme if it's an absolute URL
+            if (Uri.TryCreate(request.SourceUrl, UriKind.Absolute, out var sourceUri) &&
+                !string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.InsecureTransport] Source URL must use HTTPS");
+            }
+
             using var response = await client.GetAsync(
                 request.SourceUrl,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -200,10 +217,11 @@ public sealed class FileTransferService : IFileTransferService
             transferState.State = FileTransferState.Completed;
 
             _meter.RecordFileTransfer(bytesTransferred, isUpload: false);
+            // SECURITY: Log only filename, not full path to avoid exposing filesystem layout
             _logger.LogInformation(
-                "Download completed: {TransferId} to {Path}, {Bytes} bytes in {Duration}",
+                "Download completed: {TransferId} to {FileName}, {Bytes} bytes in {Duration}",
                 request.TransferId,
-                destinationPath,
+                Path.GetFileName(destinationPath),
                 bytesTransferred,
                 duration);
 
@@ -242,8 +260,9 @@ public sealed class FileTransferService : IFileTransferService
         {
             transferState.State = FileTransferState.Failed;
             transferState.ErrorMessage = ex.Message;
-            _logger.LogError(ex, "Download failed for {TransferId}: {Path}",
-                request.TransferId, request.DestinationPath);
+            // SECURITY: Log only filename, not full path
+            _logger.LogError(ex, "Download failed for {TransferId}: {FileName}",
+                request.TransferId, Path.GetFileName(request.DestinationPath));
             // Return sanitized error message without exception details
             return Result<FileTransferResult>.Failure(
                 "[Transfer.Failed] Download failed due to an unexpected error");
@@ -315,6 +334,15 @@ public sealed class FileTransferService : IFileTransferService
             transferState.State = FileTransferState.Transferring;
 
             using var client = _httpClientFactory.CreateClient("ControlPlaneMtls");
+
+            // SECURITY: Enforce HTTPS for all file transfers
+            if (client.BaseAddress is not null &&
+                !string.Equals(client.BaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.InsecureTransport] File transfers require HTTPS");
+            }
+
             await using var fileStream = new FileStream(
                 sourcePath,
                 FileMode.Open,
@@ -344,10 +372,11 @@ public sealed class FileTransferService : IFileTransferService
             transferState.State = FileTransferState.Completed;
 
             _meter.RecordFileTransfer(fileInfo.Length, isUpload: true);
+            // SECURITY: Log only filename, not full path to avoid exposing filesystem layout
             _logger.LogInformation(
-                "Upload completed: {TransferId} from {Path}, {Bytes} bytes in {Duration}",
+                "Upload completed: {TransferId} from {FileName}, {Bytes} bytes in {Duration}",
                 request.TransferId,
-                sourcePath,
+                Path.GetFileName(sourcePath),
                 fileInfo.Length,
                 duration);
 

@@ -10,6 +10,11 @@ public sealed class CertificateValidator
 {
     private readonly X509Certificate2? _caCertificate;
 
+    /// <summary>
+    /// Timeout for online revocation checks to prevent hanging.
+    /// </summary>
+    private static readonly TimeSpan RevocationTimeout = TimeSpan.FromSeconds(5);
+
     public CertificateValidator(X509Certificate2? caCertificate = null)
     {
         _caCertificate = caCertificate;
@@ -50,9 +55,10 @@ public sealed class CertificateValidator
                 "[Certificate.ChainMissing] Certificate chain is required for validation");
         }
 
-        // Configure revocation checking
+        // Configure revocation checking with bounded timeout to prevent hangs
         chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
         chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
+        chain.ChainPolicy.UrlRetrievalTimeout = RevocationTimeout;
 
         // If we have a CA certificate, validate against custom trust; otherwise use system trust
         if (_caCertificate is not null)
@@ -61,15 +67,26 @@ public sealed class CertificateValidator
             chain.ChainPolicy.CustomTrustStore.Add(_caCertificate);
         }
 
-        if (!chain.Build(certificate))
+        try
         {
-            var errors = string.Join(", ",
-                chain.ChainStatus.Select(s => s.StatusInformation));
-            return Result<bool>.Failure(
-                $"[Certificate.ChainValidationFailed] Chain validation failed: {errors}");
-        }
+            if (!chain.Build(certificate))
+            {
+                var errors = string.Join(", ",
+                    chain.ChainStatus.Select(s => s.StatusInformation));
+                return Result<bool>.Failure(
+                    $"[Certificate.ChainValidationFailed] Chain validation failed: {errors}");
+            }
 
-        return Result<bool>.Success(true);
+            return Result<bool>.Success(true);
+        }
+        catch (System.Security.Cryptography.CryptographicException ex)
+        {
+            var chainErrors = chain.ChainStatus.Length > 0
+                ? string.Join(", ", chain.ChainStatus.Select(s => s.StatusInformation))
+                : "none";
+            return Result<bool>.Failure(
+                $"[Certificate.ChainBuildError] Chain build failed: {ex.Message}. Chain status: {chainErrors}");
+        }
     }
 
     /// <summary>

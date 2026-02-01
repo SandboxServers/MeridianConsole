@@ -42,7 +42,12 @@ public sealed class PathValidator : IPathValidator
         try
         {
             // Normalize the path
-            var normalizedPath = NormalizePath(path);
+            var normalizeResult = NormalizePath(path);
+            if (!normalizeResult.IsSuccess)
+            {
+                return Result<string>.Failure(normalizeResult.Error!);
+            }
+            var normalizedPath = normalizeResult.Value!;
 
             // Check for path safety
             if (!IsSafePath(normalizedPath))
@@ -86,7 +91,13 @@ public sealed class PathValidator : IPathValidator
                 string normalizedBase;
                 try
                 {
-                    normalizedBase = Path.GetFullPath(NormalizePath(basePath));
+                    var baseNormalizeResult = NormalizePath(basePath);
+                    if (!baseNormalizeResult.IsSuccess)
+                    {
+                        _logger.LogWarning("Skipping invalid base path during validation: normalization failed");
+                        continue; // Skip malformed base paths
+                    }
+                    normalizedBase = Path.GetFullPath(baseNormalizeResult.Value!);
                 }
                 catch (Exception ex) when (ex is ArgumentException or PathTooLongException or System.Security.SecurityException)
                 {
@@ -180,35 +191,51 @@ public sealed class PathValidator : IPathValidator
         return true;
     }
 
-    public string NormalizePath(string path)
+    /// <summary>
+    /// Normalizes a file path by replacing alternate separators and removing duplicates.
+    /// Returns Result to avoid exception-based DoS.
+    /// </summary>
+    /// <param name="path">The path to normalize.</param>
+    /// <returns>Result containing the normalized path or a failure.</returns>
+    public Result<string> NormalizePath(string path)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-
-        // Replace alternate separators with the platform separator
-        var normalized = path.Replace(
-            Path.AltDirectorySeparatorChar,
-            Path.DirectorySeparatorChar);
-
-        // Remove duplicate separators, but preserve the root (drive/UNC/device prefix)
-        // This prevents \\server\share from becoming \server\share or C:\ becoming C:
-        var root = Path.GetPathRoot(normalized) ?? string.Empty;
-        var rest = normalized[root.Length..];
-        var doubleSeparator = $"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}";
-        while (rest.Contains(doubleSeparator, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(path))
         {
-            rest = rest.Replace(
-                doubleSeparator,
-                $"{Path.DirectorySeparatorChar}",
-                StringComparison.Ordinal);
-        }
-        normalized = root + rest;
-
-        // Trim trailing separators (except for root)
-        if (normalized.Length > root.Length + 1)
-        {
-            normalized = Path.TrimEndingDirectorySeparator(normalized);
+            return Result<string>.Failure("[Path.Empty] Path cannot be null or empty");
         }
 
-        return normalized;
+        try
+        {
+            // Replace alternate separators with the platform separator
+            var normalized = path.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar);
+
+            // Remove duplicate separators, but preserve the root (drive/UNC/device prefix)
+            // This prevents \\server\share from becoming \server\share or C:\ becoming C:
+            var root = Path.GetPathRoot(normalized) ?? string.Empty;
+            var rest = normalized[root.Length..];
+            var doubleSeparator = $"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}";
+            while (rest.Contains(doubleSeparator, StringComparison.Ordinal))
+            {
+                rest = rest.Replace(
+                    doubleSeparator,
+                    $"{Path.DirectorySeparatorChar}",
+                    StringComparison.Ordinal);
+            }
+            normalized = root + rest;
+
+            // Trim trailing separators (except for root)
+            if (normalized.Length > root.Length + 1)
+            {
+                normalized = Path.TrimEndingDirectorySeparator(normalized);
+            }
+
+            return Result<string>.Success(normalized);
+        }
+        catch (Exception ex) when (ex is ArgumentException)
+        {
+            return Result<string>.Failure("[Path.NormalizationFailed] Path normalization failed");
+        }
     }
 }

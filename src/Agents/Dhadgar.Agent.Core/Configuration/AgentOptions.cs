@@ -55,9 +55,17 @@ public sealed class AgentOptions : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        // If enrolled (NodeId set), security options must have valid certificate configuration
+        // If enrolled (NodeId set), additional validations are required
         if (NodeId.HasValue)
         {
+            // OrganizationId must also be set for tenant isolation
+            if (!OrganizationId.HasValue)
+            {
+                yield return new ValidationResult(
+                    $"{nameof(OrganizationId)} is required for enrolled agents to ensure tenant isolation",
+                    [nameof(OrganizationId)]);
+            }
+
             // Either CertificateThumbprint or (CertificatePath + PrivateKeyPath) must be configured
             var hasThumbprint = !string.IsNullOrEmpty(Security.CertificateThumbprint);
             var hasCertPath = !string.IsNullOrEmpty(Security.CertificatePath);
