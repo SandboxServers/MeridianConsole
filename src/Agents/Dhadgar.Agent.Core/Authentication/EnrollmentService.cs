@@ -105,9 +105,9 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Enrollment.InvalidResponse] Invalid enrollment response from control plane");
             }
 
-            // Store the certificate
+            // Store the certificate (use X509CertificateLoader for security)
             var certBytes = Convert.FromBase64String(enrollmentResponse.Certificate);
-            var cert = new X509Certificate2(certBytes);
+            var cert = X509CertificateLoader.LoadCertificate(certBytes);
 
             // Validate that the certificate's public key matches our locally generated keypair
             // This prevents the server from issuing a certificate for a different key
@@ -136,7 +136,7 @@ public sealed class EnrollmentService : IEnrollmentService
             if (!string.IsNullOrEmpty(enrollmentResponse.CaCertificate))
             {
                 var caBytes = Convert.FromBase64String(enrollmentResponse.CaCertificate);
-                using var caCert = new X509Certificate2(caBytes);
+                using var caCert = X509CertificateLoader.LoadCertificate(caBytes);
                 await _certificateStore.StoreCaCertificateAsync(caCert, cancellationToken);
             }
 
@@ -251,9 +251,9 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Renewal.InvalidResponse] Invalid renewal response from control plane");
             }
 
-            // Store the new certificate
+            // Store the new certificate (use X509CertificateLoader for security)
             var certBytes = Convert.FromBase64String(renewalResponse.Certificate);
-            var newCert = new X509Certificate2(certBytes);
+            var newCert = X509CertificateLoader.LoadCertificate(certBytes);
 
             // Validate that the certificate's public key matches our locally generated keypair
             // This prevents the server from issuing a certificate for a different key

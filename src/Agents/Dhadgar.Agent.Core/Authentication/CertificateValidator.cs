@@ -27,17 +27,20 @@ public sealed class CertificateValidator
     {
         ArgumentNullException.ThrowIfNull(certificate);
 
-        // Check expiration
-        if (certificate.NotAfter < DateTime.UtcNow)
+        // Check expiration (normalize to UTC for correct comparison)
+        var notAfterUtc = certificate.NotAfter.ToUniversalTime();
+        var notBeforeUtc = certificate.NotBefore.ToUniversalTime();
+
+        if (notAfterUtc < DateTime.UtcNow)
         {
             return Result<bool>.Failure(
-                $"[Certificate.Expired] Certificate expired on {certificate.NotAfter:O}");
+                $"[Certificate.Expired] Certificate expired on {notAfterUtc:O}");
         }
 
-        if (certificate.NotBefore > DateTime.UtcNow)
+        if (notBeforeUtc > DateTime.UtcNow)
         {
             return Result<bool>.Failure(
-                $"[Certificate.NotYetValid] Certificate not valid until {certificate.NotBefore:O}");
+                $"[Certificate.NotYetValid] Certificate not valid until {notBeforeUtc:O}");
         }
 
         // Chain validation is required for mTLS security
@@ -79,7 +82,8 @@ public sealed class CertificateValidator
     {
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentOutOfRangeException.ThrowIfNegative(thresholdDays);
-        return certificate.NotAfter <= DateTime.UtcNow.AddDays(thresholdDays);
+        // Normalize to UTC for correct comparison
+        return certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow.AddDays(thresholdDays);
     }
 
     /// <summary>

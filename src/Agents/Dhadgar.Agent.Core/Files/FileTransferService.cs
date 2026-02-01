@@ -220,6 +220,21 @@ public sealed class FileTransferService : IFileTransferService
         catch (OperationCanceledException)
         {
             transferState.State = FileTransferState.Cancelled;
+
+            // Clean up partial download file
+            try
+            {
+                if (File.Exists(request.DestinationPath))
+                {
+                    File.Delete(request.DestinationPath);
+                    _logger.LogDebug("Cleaned up partial download for cancelled transfer {TransferId}", request.TransferId);
+                }
+            }
+            catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(cleanupEx, "Failed to clean up partial download for cancelled transfer {TransferId}", request.TransferId);
+            }
+
             return Result<FileTransferResult>.Failure(
                 "[Transfer.Cancelled] File transfer was cancelled");
         }
