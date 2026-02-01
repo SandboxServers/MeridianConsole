@@ -86,6 +86,48 @@ Note: Core services have working foundations but contain scaffolded endpoints an
 - NEVER force push to main/master
 - NEVER skip pre-commit hooks unless user explicitly requests
 
+## PR Review Loop (CodeRabbit + qodo)
+
+When asked to "open a PR" or "create a PR", run this autonomous review loop:
+
+### The Loop
+
+```text
+1. Create PR
+2. Wait 5 min (CodeRabbit + qodo need time to review)
+3. Loop (max 10 iterations):
+   a. Check for CodeRabbit and qodo-code-review feedback
+   b. Implement fixes that align with design philosophy
+   c. Reply to disagreements explaining reasoning (leave unresolved for human override)
+   d. Wait until 15 min since last push (CodeRabbit rate limit)
+   e. Push fixes (first push combines CodeRabbit + qodo feedback)
+   f. Sleep 5 min, then check for new feedback
+   g. Exit when: all CI checks green + no new actionable feedback
+4. Leave comment on PR: "All checks passing, bot feedback addressed. Ready for review."
+5. Ping PR author with @mention
+```
+
+### Timing Rules
+
+- **15 min minimum between pushes** - CodeRabbit rate limits; use timestamp of most recent `git push` to PR branch
+- **Check every 5 min** - Use `sleep 300` then poll for new comments
+- **Max 10 iterations** - If still failing, stop and summarize blockers in PR comment
+
+### Handling Feedback
+
+| Response | Action |
+| -------- | ------ |
+| Agree | Fix and include in next push |
+| Disagree | Reply explaining why, leave unresolved |
+| False positive | Reply `@coderabbitai ignore` |
+
+### What to Fix
+
+- **CA analyzer rules** (CA1054, CA2208, etc.) - Fix, these block CI
+- **Security (SCS)** - Fix immediately
+- **Nullability warnings** - Fix, nullable enabled project-wide
+- **Style/docs suggestions** - Use judgment, follow existing patterns
+
 ## Testing
 
 - 1:1 test project mapping (e.g., `Dhadgar.Gateway` → `Dhadgar.Gateway.Tests`)
