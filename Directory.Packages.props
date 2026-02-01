@@ -97,6 +97,7 @@
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
     <PackageVersion Include="Aspire.StackExchange.Redis" Version="13.1.0" />
     <PackageVersion Include="Aspire.RabbitMQ.Client" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.1.0" />
 
     <!-- Tests -->
     <PackageVersion Include="xunit" Version="2.9.2" />

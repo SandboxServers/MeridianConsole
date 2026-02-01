@@ -633,6 +633,7 @@
           "AspNetCore.HealthChecks.NpgSql": "[9.0.0, )",
           "AspNetCore.HealthChecks.Rabbitmq": "[9.0.0, )",
           "AspNetCore.HealthChecks.Redis": "[9.0.0, )",
+          "Aspire.ServiceDefaults": "[13.1.0, )",
           "Dhadgar.Contracts": "[1.0.0, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.0, )",
