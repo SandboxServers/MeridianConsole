@@ -1,3 +1,7 @@
+// SECURITY REVIEW: This file is part of the Agent runtime code (Dhadgar.Agent.Core).
+// Changes must be reviewed by the agent-service-guardian team before merge.
+// Agent code runs on customer hardware with elevated privileges.
+
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Configuration;

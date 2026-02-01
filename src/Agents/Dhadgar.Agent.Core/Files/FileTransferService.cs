@@ -42,11 +42,15 @@ public sealed class FileTransferService : IFileTransferService
     }
 
     public async Task<Result<FileTransferResult>> DownloadAsync(
-        FileDownloadRequest request,
+        FileDownloadRequest? request,
         IProgress<FileTransferProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        if (request is null)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.InvalidRequest] Download request cannot be null");
+        }
 
         var transferState = new TransferState
         {
@@ -282,11 +286,15 @@ public sealed class FileTransferService : IFileTransferService
     }
 
     public async Task<Result<FileTransferResult>> UploadAsync(
-        FileUploadRequest request,
+        FileUploadRequest? request,
         IProgress<FileTransferProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        if (request is null)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.InvalidRequest] Upload request cannot be null");
+        }
 
         var transferState = new TransferState
         {

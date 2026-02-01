@@ -156,12 +156,20 @@ public sealed partial class SecurityOptions : IValidatableObject
                 $"{propertyName} is not a valid path",
                 [propertyName]);
         }
-        else if (!path.Equals(normalizedPath, StringComparison.Ordinal) &&
-            !path.Equals(normalizedPath!.TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
+        else
         {
-            yield return new ValidationResult(
-                $"{propertyName} must be a normalized absolute path (use '{normalizedPath}' instead)",
-                [propertyName]);
+            // Use OS-aware comparison: case-insensitive on Windows, case-sensitive on Unix
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            if (!path.Equals(normalizedPath, comparison) &&
+                !path.Equals(normalizedPath!.TrimEnd(Path.DirectorySeparatorChar), comparison))
+            {
+                yield return new ValidationResult(
+                    $"{propertyName} must be a normalized absolute path (use '{normalizedPath}' instead)",
+                    [propertyName]);
+            }
         }
     }
 

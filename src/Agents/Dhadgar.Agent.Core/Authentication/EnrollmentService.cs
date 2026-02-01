@@ -13,6 +13,13 @@ namespace Dhadgar.Agent.Core.Authentication;
 /// </summary>
 public sealed class EnrollmentService : IEnrollmentService
 {
+    /// <summary>
+    /// Maximum allowed size for base64-encoded certificate data.
+    /// X.509 certificates are typically 1-2KB; 8KB encoded allows for generous headroom
+    /// while preventing memory exhaustion from malicious payloads.
+    /// </summary>
+    private const int MaxCertificateBase64Length = 8192;
+
     private readonly ICertificateStore _certificateStore;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AgentOptions _options;
@@ -129,6 +136,15 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Enrollment.InvalidCertificate] Enrollment response contains empty certificate");
             }
 
+            // Validate certificate size to prevent memory exhaustion
+            if (enrollmentResponse.Certificate.Length > MaxCertificateBase64Length)
+            {
+                _logger.LogWarning("Certificate data exceeds maximum size ({Length} > {Max})",
+                    enrollmentResponse.Certificate.Length, MaxCertificateBase64Length);
+                return Result<EnrollmentResult>.Failure(
+                    "[Enrollment.CertificateTooLarge] Certificate data exceeds maximum allowed size");
+            }
+
             // Store the certificate (use X509CertificateLoader for security)
             var certBytes = Convert.FromBase64String(enrollmentResponse.Certificate);
             DateTime certExpiry;
@@ -172,6 +188,15 @@ public sealed class EnrollmentService : IEnrollmentService
             // Store CA certificate if provided
             if (!string.IsNullOrEmpty(enrollmentResponse.CaCertificate))
             {
+                // Validate CA certificate size
+                if (enrollmentResponse.CaCertificate.Length > MaxCertificateBase64Length)
+                {
+                    _logger.LogWarning("CA certificate data exceeds maximum size ({Length} > {Max})",
+                        enrollmentResponse.CaCertificate.Length, MaxCertificateBase64Length);
+                    return Result<EnrollmentResult>.Failure(
+                        "[Enrollment.CaCertificateTooLarge] CA certificate data exceeds maximum allowed size");
+                }
+
                 var caBytes = Convert.FromBase64String(enrollmentResponse.CaCertificate);
                 using var caCert = X509CertificateLoader.LoadCertificate(caBytes);
                 await _certificateStore.StoreCaCertificateAsync(caCert, cancellationToken);
@@ -286,6 +311,22 @@ public sealed class EnrollmentService : IEnrollmentService
             {
                 return Result<CertificateRenewalResult>.Failure(
                     "[Renewal.InvalidResponse] Invalid renewal response from control plane");
+            }
+
+            // Validate certificate field is not empty
+            if (string.IsNullOrWhiteSpace(renewalResponse.Certificate))
+            {
+                return Result<CertificateRenewalResult>.Failure(
+                    "[Renewal.InvalidCertificate] Renewal response contains empty certificate");
+            }
+
+            // Validate certificate size to prevent memory exhaustion
+            if (renewalResponse.Certificate.Length > MaxCertificateBase64Length)
+            {
+                _logger.LogWarning("Renewal certificate data exceeds maximum size ({Length} > {Max})",
+                    renewalResponse.Certificate.Length, MaxCertificateBase64Length);
+                return Result<CertificateRenewalResult>.Failure(
+                    "[Renewal.CertificateTooLarge] Certificate data exceeds maximum allowed size");
             }
 
             // Store the new certificate (use X509CertificateLoader for security)
