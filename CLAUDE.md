@@ -15,7 +15,11 @@ export DOTNET_CLI_USE_MSBUILD_SERVER=1
 dotnet build
 dotnet test
 
-# Run a service
+# Run with Aspire (RECOMMENDED for local dev - starts all services + infrastructure)
+dotnet run --project src/Dhadgar.AppHost
+# Opens Aspire Dashboard at https://localhost:17178 with traces, metrics, logs
+
+# Run individual service (standalone mode, needs manual infrastructure)
 dotnet run --project src/Dhadgar.Gateway
 dotnet watch --project src/Dhadgar.Gateway  # with hot reload
 
@@ -23,7 +27,7 @@ dotnet watch --project src/Dhadgar.Gateway  # with hot reload
 dotnet ef migrations add MigrationName --project src/Dhadgar.Identity --startup-project src/Dhadgar.Identity --output-dir Data/Migrations
 dotnet ef database update --project src/Dhadgar.Identity --startup-project src/Dhadgar.Identity
 
-# Local infrastructure
+# Local infrastructure (alternative to Aspire, or for CI/CD)
 docker compose -f deploy/compose/docker-compose.dev.yml up -d
 ```
 

@@ -922,6 +922,25 @@ try {
             }
         }
 
+        # .NET Aspire workload (for local development orchestration)
+        $aspireInstalled = & dotnet workload list 2>&1 | Select-String "aspire"
+        if (-not $aspireInstalled) {
+            Write-Log "Installing .NET Aspire workload..."
+            & dotnet workload install aspire
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Aspire workload installed successfully" -Level Success
+                $results["Aspire Workload"] = "Installed"
+            }
+            else {
+                Write-Log "Failed to install Aspire workload. Run 'dotnet workload install aspire' manually." -Level Warning
+                $results["Aspire Workload"] = "Failed"
+            }
+        }
+        else {
+            Write-Log "Aspire workload already installed" -Level Success
+            $results["Aspire Workload"] = "Already installed"
+        }
+
         # kubectl
         if (-not $SkipMinikube) {
             $results["kubectl"] = Install-WingetPackage -PackageId "Kubernetes.kubectl" -DisplayName "kubectl"
