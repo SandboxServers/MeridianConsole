@@ -23,6 +23,10 @@ public interface IHealthReporter
     /// Add a warning that will be included in the next heartbeat.
     /// </summary>
     /// <param name="warning">Warning message.</param>
+    /// <remarks>
+    /// Implementations should enforce a maximum warning count (e.g., 100) to prevent
+    /// unbounded memory growth. When the limit is reached, oldest warnings should be evicted.
+    /// </remarks>
     void AddWarning(string warning);
 
     /// <summary>

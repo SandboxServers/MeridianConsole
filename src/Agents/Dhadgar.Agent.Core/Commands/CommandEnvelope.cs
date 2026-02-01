@@ -22,6 +22,11 @@ public sealed class CommandEnvelope
     /// Maximum signature length.
     /// </summary>
     public const int MaxSignatureLength = 2048;
+
+    /// <summary>
+    /// Maximum correlation ID length.
+    /// </summary>
+    public const int MaxCorrelationIdLength = 128;
     /// <summary>
     /// Unique identifier for this command instance.
     /// </summary>
@@ -78,6 +83,7 @@ public sealed class CommandEnvelope
     /// <summary>
     /// Correlation ID for distributed tracing.
     /// </summary>
+    [MaxLength(MaxCorrelationIdLength)]
     public string? CorrelationId { get; init; }
 }
 

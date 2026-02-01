@@ -17,6 +17,11 @@ public sealed class HealthReporter : IHealthReporter
     private readonly IProcessManager? _processManager;
     private readonly ILogger<HealthReporter> _logger;
 
+    /// <summary>
+    /// Maximum number of warnings to retain to prevent unbounded memory growth.
+    /// </summary>
+    private const int MaxWarnings = 100;
+
     private NodeStatus _status = NodeStatus.Starting;
     private string? _statusReason;
     private readonly List<string> _warnings = [];
@@ -76,6 +81,13 @@ public sealed class HealthReporter : IHealthReporter
         {
             if (!_warnings.Contains(warning))
             {
+                // Cap warnings to prevent unbounded memory growth
+                if (_warnings.Count >= MaxWarnings)
+                {
+                    // Remove oldest warning to make room for new one
+                    _warnings.RemoveAt(0);
+                }
+
                 _warnings.Add(warning);
                 _logger.LogWarning("Health warning added: {Warning}", warning);
             }

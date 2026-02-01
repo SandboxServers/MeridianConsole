@@ -5,7 +5,7 @@ namespace Dhadgar.Agent.Core.Configuration;
 /// <summary>
 /// Root configuration options for the agent.
 /// </summary>
-public sealed class AgentOptions
+public sealed class AgentOptions : IValidatableObject
 {
     /// <summary>
     /// Configuration section name.
@@ -46,4 +46,26 @@ public sealed class AgentOptions
     /// </summary>
     [Required]
     public FileOptions Files { get; set; } = new();
+
+    /// <inheritdoc />
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        // If enrolled (NodeId set), security options must have valid certificate configuration
+        if (NodeId.HasValue)
+        {
+            // Either CertificateThumbprint or (CertificatePath + PrivateKeyPath) must be configured
+            var hasThumbprint = !string.IsNullOrEmpty(Security.CertificateThumbprint);
+            var hasCertPath = !string.IsNullOrEmpty(Security.CertificatePath);
+            var hasKeyPath = !string.IsNullOrEmpty(Security.PrivateKeyPath);
+
+            if (!hasThumbprint && !hasCertPath && !hasKeyPath)
+            {
+                yield return new ValidationResult(
+                    "Enrolled agents must have certificate configuration. " +
+                    $"Specify either {nameof(SecurityOptions.CertificateThumbprint)} or " +
+                    $"both {nameof(SecurityOptions.CertificatePath)} and {nameof(SecurityOptions.PrivateKeyPath)}.",
+                    [nameof(Security)]);
+            }
+        }
+    }
 }

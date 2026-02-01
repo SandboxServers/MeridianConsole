@@ -68,6 +68,29 @@ public sealed partial class FileOptions : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // TempDirectory must be an absolute, normalized path (same as ProcessOptions.ServerBasePath)
+        if (!string.IsNullOrEmpty(TempDirectory))
+        {
+            if (!Path.IsPathRooted(TempDirectory))
+            {
+                yield return new ValidationResult(
+                    $"{nameof(TempDirectory)} must be an absolute path",
+                    [nameof(TempDirectory)]);
+            }
+            else
+            {
+                // Ensure path is normalized (no .. or . components)
+                var normalizedPath = Path.GetFullPath(TempDirectory);
+                if (!TempDirectory.Equals(normalizedPath, StringComparison.Ordinal) &&
+                    !TempDirectory.Equals(normalizedPath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
+                {
+                    yield return new ValidationResult(
+                        $"{nameof(TempDirectory)} must be a normalized absolute path (use '{normalizedPath}' instead)",
+                        [nameof(TempDirectory)]);
+                }
+            }
+        }
+
         if (!string.IsNullOrEmpty(StunServerUrl) && !IsValidStunTurnUrl(StunServerUrl, isStun: true))
         {
             yield return new ValidationResult(

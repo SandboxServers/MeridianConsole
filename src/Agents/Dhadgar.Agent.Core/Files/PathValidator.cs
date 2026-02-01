@@ -138,20 +138,24 @@ public sealed class PathValidator : IPathValidator
             Path.AltDirectorySeparatorChar,
             Path.DirectorySeparatorChar);
 
-        // Remove duplicate separators
+        // Remove duplicate separators, but preserve the root (drive/UNC/device prefix)
+        // This prevents \\server\share from becoming \server\share or C:\ becoming C:
+        var root = Path.GetPathRoot(normalized) ?? string.Empty;
+        var rest = normalized[root.Length..];
         var doubleSeparator = $"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}";
-        while (normalized.Contains(doubleSeparator, StringComparison.Ordinal))
+        while (rest.Contains(doubleSeparator, StringComparison.Ordinal))
         {
-            normalized = normalized.Replace(
+            rest = rest.Replace(
                 doubleSeparator,
                 $"{Path.DirectorySeparatorChar}",
                 StringComparison.Ordinal);
         }
+        normalized = root + rest;
 
         // Trim trailing separators (except for root)
-        if (normalized.Length > 1)
+        if (normalized.Length > root.Length + 1)
         {
-            normalized = normalized.TrimEnd(Path.DirectorySeparatorChar);
+            normalized = Path.TrimEndingDirectorySeparator(normalized);
         }
 
         return normalized;

@@ -11,7 +11,7 @@ namespace Dhadgar.Agent.Core.Authentication;
 /// <summary>
 /// Handles initial agent enrollment with the control plane.
 /// </summary>
-public sealed class EnrollmentService
+public sealed class EnrollmentService : IEnrollmentService
 {
     private readonly ICertificateStore _certificateStore;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -67,6 +67,22 @@ public sealed class EnrollmentService
 
             // Send enrollment request
             using var client = _httpClientFactory.CreateClient("ControlPlane");
+
+            // Enforce HTTPS for enrollment - tokens should never traverse plain HTTP
+            if (client.BaseAddress is null)
+            {
+                return Result<EnrollmentResult>.Failure(
+                    "[Enrollment.ConfigError] Control plane base address not configured");
+            }
+
+            if (!string.Equals(client.BaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError("Enrollment rejected: control plane must use HTTPS. Configured: {Scheme}",
+                    client.BaseAddress.Scheme);
+                return Result<EnrollmentResult>.Failure(
+                    "[Enrollment.InsecureTransport] Enrollment requires HTTPS");
+            }
+
             var response = await client.PostAsJsonAsync(
                 "api/v1/agents/enroll",
                 request,

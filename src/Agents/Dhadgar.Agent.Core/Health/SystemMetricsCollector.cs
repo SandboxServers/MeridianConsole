@@ -14,7 +14,8 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
     private readonly AgentMeter _meter;
     private readonly ILogger<SystemMetricsCollector> _logger;
 
-    // For CPU calculation
+    // For CPU calculation (thread-safe access via lock)
+    private readonly object _cpuLock = new();
     private DateTime _lastCpuCheck = DateTime.UtcNow;
     private TimeSpan _lastTotalProcessorTime = TimeSpan.Zero;
     private bool _isFirstCollection = true;
@@ -51,30 +52,39 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
     {
         try
         {
-            using var process = System.Diagnostics.Process.GetCurrentProcess();
-            var currentTime = DateTime.UtcNow;
-            var currentCpuTime = process.TotalProcessorTime;
-
-            if (_isFirstCollection)
+            // Capture CPU time outside the lock to minimize lock duration
+            TimeSpan currentCpuTime;
+            using (var process = System.Diagnostics.Process.GetCurrentProcess())
             {
-                _lastCpuCheck = currentTime;
-                _lastTotalProcessorTime = currentCpuTime;
-                _isFirstCollection = false;
-                return 0;
+                currentCpuTime = process.TotalProcessorTime;
             }
 
-            var timeDiff = currentTime - _lastCpuCheck;
-            var cpuDiff = currentCpuTime - _lastTotalProcessorTime;
+            var currentTime = DateTime.UtcNow;
 
-            _lastCpuCheck = currentTime;
-            _lastTotalProcessorTime = currentCpuTime;
-
-            if (timeDiff.TotalMilliseconds > 0)
+            // Thread-safe access to shared state
+            lock (_cpuLock)
             {
-                // Calculate CPU percentage across all processors
-                var cpuPercent = (cpuDiff.TotalMilliseconds / timeDiff.TotalMilliseconds)
-                    / Environment.ProcessorCount * 100;
-                return Math.Min(100, Math.Max(0, cpuPercent));
+                if (_isFirstCollection)
+                {
+                    _lastCpuCheck = currentTime;
+                    _lastTotalProcessorTime = currentCpuTime;
+                    _isFirstCollection = false;
+                    return 0;
+                }
+
+                var timeDiff = currentTime - _lastCpuCheck;
+                var cpuDiff = currentCpuTime - _lastTotalProcessorTime;
+
+                _lastCpuCheck = currentTime;
+                _lastTotalProcessorTime = currentCpuTime;
+
+                if (timeDiff.TotalMilliseconds > 0)
+                {
+                    // Calculate CPU percentage across all processors
+                    var cpuPercent = (cpuDiff.TotalMilliseconds / timeDiff.TotalMilliseconds)
+                        / Environment.ProcessorCount * 100;
+                    return Math.Min(100, Math.Max(0, cpuPercent));
+                }
             }
 
             return 0;
