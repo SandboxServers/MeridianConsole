@@ -150,7 +150,9 @@ public sealed class AllowedSecretsOptions
     [
         "postgres-password",
         "rabbitmq-password",
-        "redis-password"
+        "redis-password",
+        // Discord bot token for internal admin notifications
+        "discord-bot-token"
     ];
 }
 

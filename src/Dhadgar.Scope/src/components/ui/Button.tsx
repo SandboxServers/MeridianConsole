@@ -48,6 +48,14 @@ export function Button({
   );
 
   if (href) {
+    if (disabled) {
+      return (
+        <span className={classes} aria-disabled="true" tabIndex={-1}>
+          {children}
+        </span>
+      );
+    }
+
     return (
       <a href={href} className={classes}>
         {children}

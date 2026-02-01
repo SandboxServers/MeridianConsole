@@ -29,7 +29,14 @@ export function SectionNav({ section, prevSection, nextSection, total }: Section
           </span>
           <span>{Math.round(progress)}% complete</span>
         </div>
-        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/10"
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Reading progress: ${Math.round(progress)}%`}
+        >
           <div
             className="h-full rounded-full bg-indigo-500 transition-all"
             style={{ width: `${progress}%` }}
@@ -44,7 +51,13 @@ export function SectionNav({ section, prevSection, nextSection, total }: Section
             href={`/s/${prevSection.slug}`}
             className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/10"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -66,7 +79,13 @@ export function SectionNav({ section, prevSection, nextSection, total }: Section
           >
             <span className="hidden sm:inline">{nextSection.title}</span>
             <span className="sm:hidden">Next</span>
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </a>

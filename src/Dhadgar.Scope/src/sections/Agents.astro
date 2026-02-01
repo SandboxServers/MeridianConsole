@@ -12,24 +12,45 @@
   </p>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Agent Types</h3>
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>Project</th>
-        <th>Platform</th>
-        <th>Purpose</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Project</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Platform</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Purpose</th
+        >
       </tr>
     </thead>
     <tbody>
-      <tr><td>Dhadgar.Agent.Core</td><td>Cross-platform</td><td>Shared logic, abstractions</td></tr>
-      <tr><td>Dhadgar.Agent.Linux</td><td>Linux</td><td>Linux-specific implementation</td></tr>
-      <tr><td>Dhadgar.Agent.Windows</td><td>Windows</td><td>Windows-specific implementation</td></tr
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Dhadgar.Agent.Core</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Cross-platform</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Shared logic, abstractions</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Dhadgar.Agent.Linux</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Linux</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Linux-specific implementation</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Dhadgar.Agent.Windows</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Windows</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top"
+          >Windows-specific implementation</td
+        ></tr
       >
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Communication Model</h3>
-  <div class="scope-panel mb-6">
+  <div class="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
     <p class="mb-2 font-semibold">Outbound-Only Design:</p>
     <ul class="space-y-1 text-white/70">
       <li>- Agents initiate all connections to control plane</li>
@@ -40,26 +61,26 @@
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Security Model</h3>
-  <div class="scope-callout">
+  <div class="rounded-2xl border border-indigo-500/35 bg-indigo-500/[0.12] p-4">
     <strong>High Trust:</strong> Agents run with elevated privileges to manage game server processes.
     mTLS certificates authenticate agents to control plane. Short-lived certificates with automatic rotation.
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Capabilities</h3>
   <div class="grid gap-3 md:grid-cols-2">
-    <div class="scope-panel">
+    <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <h4 class="font-semibold">Process Management</h4>
       <p class="text-sm text-white/70">Start, stop, restart game server processes</p>
     </div>
-    <div class="scope-panel">
+    <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <h4 class="font-semibold">File Operations</h4>
       <p class="text-sm text-white/70">Download, upload, backup game files</p>
     </div>
-    <div class="scope-panel">
+    <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <h4 class="font-semibold">Console Streaming</h4>
       <p class="text-sm text-white/70">Real-time stdout/stdin relay via SignalR</p>
     </div>
-    <div class="scope-panel">
+    <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <h4 class="font-semibold">Health Reporting</h4>
       <p class="text-sm text-white/70">CPU, memory, disk usage metrics</p>
     </div>

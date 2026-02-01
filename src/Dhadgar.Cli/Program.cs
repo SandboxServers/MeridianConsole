@@ -1,12 +1,16 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using Dhadgar.Cli.Commands.Auth;
+using Dhadgar.Cli.Commands.Discord;
 using Dhadgar.Cli.Commands.Help;
 using Dhadgar.Cli.Commands.Gateway;
 using Dhadgar.Cli.Commands.Member;
+using Dhadgar.Cli.Commands.Notifications;
 using Dhadgar.Cli.Commands.Secret;
 using Dhadgar.Cli.Commands.KeyVault;
 using Dhadgar.Cli.Commands.Version;
+using AuthStatusCommand = Dhadgar.Cli.Commands.Auth.StatusCommand;
+using DiscordStatusCommand = Dhadgar.Cli.Commands.Discord.StatusCommand;
 using Spectre.Console;
 using IdentityListOrgsCommand = Dhadgar.Cli.Commands.Identity.ListOrgsCommand;
 using IdentityGetOrgCommand = Dhadgar.Cli.Commands.Identity.GetOrgCommand;
@@ -70,6 +74,8 @@ root.SetHandler(() =>
     table.AddRow("[cyan]dhadgar gateway[/]", "[dim]Gateway diagnostics (health check)[/]");
     table.AddRow("[cyan]dhadgar nodes[/]", "[dim]Node management (list, get, maintenance)[/]");
     table.AddRow("[cyan]dhadgar enrollment[/]", "[dim]Agent enrollment tokens (create, list, revoke)[/]");
+    table.AddRow("[cyan]dhadgar notifications[/]", "[dim]Notification service commands (logs, test)[/]");
+    table.AddRow("[cyan]dhadgar discord[/]", "[dim]Discord service commands (status, channels)[/]");
     table.AddRow("[cyan]dhadgar commands[/]", "[dim]List available commands and usage[/]");
     table.AddRow("[cyan]dhadgar version[/]", "[dim]Show CLI build and breaking change info[/]");
 
@@ -99,7 +105,7 @@ authLoginCmd.SetHandler(async (string? clientId, string? clientSecret, Uri? iden
 var authStatusCmd = new Command("status", "Show authentication status and configuration");
 authStatusCmd.SetHandler(async () =>
 {
-    await StatusCommand.ExecuteAsync(CancellationToken.None);
+    await AuthStatusCommand.ExecuteAsync(CancellationToken.None);
 });
 
 var authLogoutCmd = new Command("logout", "Clear authentication tokens and log out");
@@ -883,6 +889,72 @@ enrollmentTokensCmd.AddCommand(enrollmentTokensRevokeCmd);
 enrollmentCmd.AddCommand(enrollmentTokensCmd);
 
 // ============================================================================
+// NOTIFICATIONS COMMANDS
+// ============================================================================
+
+var notificationsCmd = new Command("notifications", "Notification service commands");
+
+var notificationsLogsCmd = new Command("logs", "List notification logs");
+var notificationsLimitOpt = new Option<int?>("--limit", "Maximum number of logs to return (default 50, max 100)");
+var notificationsStatusOpt = new Option<string?>("--status", "Filter by status (sent, failed, pending)");
+var notificationsOrgOpt = new Option<Guid?>("--org", "Filter by organization ID");
+notificationsLogsCmd.AddOption(notificationsLimitOpt);
+notificationsLogsCmd.AddOption(notificationsStatusOpt);
+notificationsLogsCmd.AddOption(notificationsOrgOpt);
+notificationsLogsCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    var limit = ctx.ParseResult.GetValueForOption(notificationsLimitOpt);
+    var status = ctx.ParseResult.GetValueForOption(notificationsStatusOpt);
+    var orgId = ctx.ParseResult.GetValueForOption(notificationsOrgOpt);
+    ctx.ExitCode = await ListLogsCommand.ExecuteAsync(limit, status, orgId, ctx.GetCancellationToken());
+});
+
+notificationsCmd.AddCommand(notificationsLogsCmd);
+
+var notificationsTestCmd = new Command("test", "Send a test notification to Discord");
+var notificationsTestTitleOpt = new Option<string?>("--title", "Notification title");
+var notificationsTestMessageOpt = new Option<string?>("--message", "Notification message");
+var notificationsTestSeverityOpt = new Option<string?>("--severity", "Severity level (Info, Warning, Error, Critical)");
+var notificationsTestOrgOpt = new Option<Guid?>("--org", "Organization ID");
+notificationsTestCmd.AddOption(notificationsTestTitleOpt);
+notificationsTestCmd.AddOption(notificationsTestMessageOpt);
+notificationsTestCmd.AddOption(notificationsTestSeverityOpt);
+notificationsTestCmd.AddOption(notificationsTestOrgOpt);
+notificationsTestCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    var title = ctx.ParseResult.GetValueForOption(notificationsTestTitleOpt);
+    var message = ctx.ParseResult.GetValueForOption(notificationsTestMessageOpt);
+    var severity = ctx.ParseResult.GetValueForOption(notificationsTestSeverityOpt);
+    var orgId = ctx.ParseResult.GetValueForOption(notificationsTestOrgOpt);
+    ctx.ExitCode = await SendTestCommand.ExecuteAsync(title, message, severity, orgId, ctx.GetCancellationToken());
+});
+notificationsCmd.AddCommand(notificationsTestCmd);
+
+// ============================================================================
+// DISCORD COMMANDS
+// ============================================================================
+
+var discordCmd = new Command("discord", "Discord service commands");
+
+var discordStatusCmd = new Command("status", "Check Discord bot status and platform health");
+discordStatusCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    ctx.ExitCode = await DiscordStatusCommand.ExecuteAsync(ctx.GetCancellationToken());
+});
+
+discordCmd.AddCommand(discordStatusCmd);
+
+var discordChannelsCmd = new Command("channels", "List Discord channels the bot can see");
+var discordGuildIdOpt = new Option<ulong?>("--guild", "Filter by specific guild ID");
+discordChannelsCmd.AddOption(discordGuildIdOpt);
+discordChannelsCmd.SetHandler(async (InvocationContext ctx) =>
+{
+    var guildId = ctx.ParseResult.GetValueForOption(discordGuildIdOpt);
+    ctx.ExitCode = await ChannelsCommand.ExecuteAsync(guildId, ctx.GetCancellationToken());
+});
+discordCmd.AddCommand(discordChannelsCmd);
+
+// ============================================================================
 // COMMANDS LIST
 // ============================================================================
 
@@ -938,6 +1010,8 @@ root.AddCommand(keyvaultCmd);
 root.AddCommand(gatewayCmd);
 root.AddCommand(nodesCmd);
 root.AddCommand(enrollmentCmd);
+root.AddCommand(notificationsCmd);
+root.AddCommand(discordCmd);
 root.AddCommand(commandsCmd);
 root.AddCommand(versionCmd);
 root.AddCommand(ping);

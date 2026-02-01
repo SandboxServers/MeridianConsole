@@ -36,6 +36,14 @@
     <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.3.6" />
     <PackageVersion Include="MassTransit.RabbitMQ" Version="8.3.6" />
 
+    <!-- Discord -->
+    <PackageVersion Include="Discord.Net" Version="3.18.0" />
+
+    <!-- Email -->
+    <PackageVersion Include="SendGrid" Version="9.29.3" />
+    <PackageVersion Include="Microsoft.Graph" Version="5.78.0" />
+    <PackageVersion Include="MailKit" Version="4.11.0" />
+
     <!-- Observability -->
     <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="10.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Telemetry" Version="10.2.0" />
@@ -63,9 +71,6 @@
 
     <!-- Gateway -->
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
-
-    <!-- Email -->
-    <PackageVersion Include="MailKit" Version="4.11.0" />
 
     <!-- CLI -->
     <PackageVersion Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />

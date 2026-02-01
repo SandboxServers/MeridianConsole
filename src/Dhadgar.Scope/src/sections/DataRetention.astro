@@ -6,28 +6,55 @@
   <h2 class="mb-4 text-2xl font-bold">Section 6: Data Retention Policies</h2>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Retention Schedule</h3>
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>Data Type</th>
-        <th>Retention</th>
-        <th>Notes</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Data Type</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Retention</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Notes</th>
       </tr>
     </thead>
     <tbody>
       <tr
-        ><td>User accounts</td><td>Until deletion + 30 days</td><td>Soft delete, then purge</td></tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">User accounts</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Until deletion + 30 days</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Soft delete, then purge</td></tr
       >
-      <tr><td>Server configurations</td><td>Until server deleted</td><td>Backed up daily</td></tr>
-      <tr><td>Game server logs</td><td>7 days rolling</td><td>User-configurable up to 30</td></tr>
-      <tr><td>Billing records</td><td>7 years</td><td>Legal requirement</td></tr>
-      <tr><td>Audit logs</td><td>90 days</td><td>Security events</td></tr>
-      <tr><td>Telemetry/metrics</td><td>30 days</td><td>Performance data</td></tr>
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Server configurations</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Until server deleted</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Backed up daily</td></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Game server logs</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">7 days rolling</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">User-configurable up to 30</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Billing records</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">7 years</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Legal requirement</td></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Audit logs</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">90 days</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Security events</td></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Telemetry/metrics</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">30 days</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Performance data</td></tr
+      >
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Backup Strategy</h3>
-  <div class="scope-panel mb-6">
+  <div class="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
     <ul class="space-y-2 text-white/70">
       <li>- Daily automated backups of all PostgreSQL databases</li>
       <li>- User-initiated game server backups stored in S3</li>
@@ -37,7 +64,7 @@
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Data Minimization</h3>
-  <div class="scope-callout">
+  <div class="rounded-2xl border border-indigo-500/35 bg-indigo-500/[0.12] p-4">
     <strong>Principle:</strong> Collect only what's necessary for service operation. No customer game
     data is stored unless explicitly backed up by the user.
   </div>

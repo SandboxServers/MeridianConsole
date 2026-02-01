@@ -12,7 +12,7 @@
   </p>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Directory Structure</h3>
-  <div class="scope-code mb-6">
+  <div class="mb-6 rounded-2xl border border-white/10 bg-black/35 p-4 overflow-x-auto">
     <pre><code>MeridianConsole/
 ├── Dhadgar.sln              # Main solution
 ├── global.json              # .NET SDK version
@@ -54,23 +54,43 @@
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Key Files</h3>
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>File</th>
-        <th>Purpose</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">File</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Purpose</th
+        >
       </tr>
     </thead>
     <tbody>
-      <tr><td>global.json</td><td>Pins .NET SDK to 10.0.100</td></tr>
-      <tr><td>Directory.Packages.props</td><td>Central package version management</td></tr>
-      <tr><td>CLAUDE.md</td><td>Instructions for Claude Code AI assistant</td></tr>
-      <tr><td>azure-pipelines.yml</td><td>CI/CD pipeline definition</td></tr>
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">global.json</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Pins .NET SDK to 10.0.100</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Directory.Packages.props</td><td
+          class="border border-white/10 px-2.5 py-2 align-top"
+          >Central package version management</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">CLAUDE.md</td><td
+          class="border border-white/10 px-2.5 py-2 align-top"
+          >Instructions for Claude Code AI assistant</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">azure-pipelines.yml</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">CI/CD pipeline definition</td
+        ></tr
+      >
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Branching Strategy</h3>
-  <div class="scope-callout">
+  <div class="rounded-2xl border border-indigo-500/35 bg-indigo-500/[0.12] p-4">
     <strong>Trunk-based:</strong> Short-lived feature branches merged to main. PRs require review and
     passing CI. No long-lived release branches (yet).
   </div>

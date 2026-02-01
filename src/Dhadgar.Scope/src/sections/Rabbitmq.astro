@@ -12,23 +12,43 @@
   </p>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Exchange Types</h3>
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>Exchange</th>
-        <th>Type</th>
-        <th>Purpose</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Exchange</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Type</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Purpose</th
+        >
       </tr>
     </thead>
     <tbody>
-      <tr><td>Events</td><td>Fanout</td><td>Broadcast domain events to all subscribers</td></tr>
-      <tr><td>Commands</td><td>Direct</td><td>Point-to-point command delivery</td></tr>
-      <tr><td>Delayed</td><td>x-delayed-message</td><td>Scheduled/retry messages</td></tr>
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Events</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Fanout</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top"
+          >Broadcast domain events to all subscribers</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Commands</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Direct</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top"
+          >Point-to-point command delivery</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Delayed</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">x-delayed-message</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Scheduled/retry messages</td></tr
+      >
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Key Message Contracts</h3>
-  <div class="scope-panel mb-6">
+  <div class="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
     <ul class="space-y-1 text-white/70">
       <li>- <code>ServerProvisionRequested</code> - Trigger server creation</li>
       <li>- <code>ServerStateChanged</code> - Status update events</li>
@@ -38,7 +58,7 @@
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Error Handling</h3>
-  <div class="scope-callout">
+  <div class="rounded-2xl border border-indigo-500/35 bg-indigo-500/[0.12] p-4">
     Failed messages go to service-specific error queues (_error suffix). Dead letter queues
     (_skipped) capture poison messages after retry exhaustion.
   </div>

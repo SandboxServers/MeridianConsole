@@ -12,34 +12,46 @@ public sealed class ApiClientFactory : IDisposable
     private static readonly Uri DefaultIdentityUri = new("http://localhost:5001");
     private static readonly Uri DefaultSecretsUri = new("http://localhost:5002");
     private static readonly Uri DefaultNodesUri = new("http://localhost:5040");
+    private static readonly Uri DefaultNotificationsUri = new("http://localhost:5008");
+    private static readonly Uri DefaultDiscordUri = new("http://localhost:5009");
 
     private readonly Uri _gatewayUri;
     private readonly Uri _identityUri;
     private readonly Uri _secretsUri;
     private readonly Uri _nodesUri;
+    private readonly Uri _notificationsUri;
+    private readonly Uri _discordUri;
     private readonly string? _accessToken;
     private readonly AuthenticatedHttpClientHandler _identityHandler;
     private readonly AuthenticatedHttpClientHandler _secretsHandler;
     private readonly AuthenticatedHttpClientHandler _keyVaultHandler;
     private readonly AuthenticatedHttpClientHandler _gatewayHandler;
     private readonly AuthenticatedHttpClientHandler _nodesHandler;
+    private readonly AuthenticatedHttpClientHandler _notificationsHandler;
+    private readonly AuthenticatedHttpClientHandler _discordHandler;
     private readonly HttpClient _identityClient;
     private readonly HttpClient _secretsClient;
     private readonly HttpClient _keyVaultClient;
     private readonly HttpClient _gatewayClient;
     private readonly HttpClient _nodesClient;
+    private readonly HttpClient _notificationsClient;
+    private readonly HttpClient _discordClient;
 
     public ApiClientFactory(
         Uri? gatewayUrl = null,
         Uri? identityUrl = null,
         Uri? secretsUrl = null,
         Uri? nodesUrl = null,
+        Uri? notificationsUrl = null,
+        Uri? discordUrl = null,
         string? accessToken = null)
     {
         _gatewayUri = gatewayUrl ?? DefaultGatewayUri;
         _identityUri = identityUrl ?? DefaultIdentityUri;
         _secretsUri = secretsUrl ?? DefaultSecretsUri;
         _nodesUri = nodesUrl ?? DefaultNodesUri;
+        _notificationsUri = notificationsUrl ?? DefaultNotificationsUri;
+        _discordUri = discordUrl ?? DefaultDiscordUri;
         _accessToken = accessToken;
 
         _identityHandler = CreateHandler();
@@ -47,12 +59,16 @@ public sealed class ApiClientFactory : IDisposable
         _keyVaultHandler = CreateHandler();
         _gatewayHandler = CreateHandler();
         _nodesHandler = CreateHandler();
+        _notificationsHandler = CreateHandler();
+        _discordHandler = CreateHandler();
 
         _identityClient = CreateClient(_identityUri, _identityHandler);
         _secretsClient = CreateClient(_secretsUri, _secretsHandler);
         _keyVaultClient = CreateClient(_secretsUri, _keyVaultHandler);
         _gatewayClient = CreateClient(_gatewayUri, _gatewayHandler);
         _nodesClient = CreateClient(_nodesUri, _nodesHandler);
+        _notificationsClient = CreateClient(_notificationsUri, _notificationsHandler);
+        _discordClient = CreateClient(_discordUri, _discordHandler);
     }
 
     public ApiClientFactory(CliConfig config)
@@ -61,6 +77,8 @@ public sealed class ApiClientFactory : IDisposable
             identityUrl: EnsureAbsoluteUri(config.EffectiveIdentityUrl, "Identity URL"),
             secretsUrl: NormalizeSecretsBase(EnsureAbsoluteUri(config.SecretsUrl ?? config.EffectiveGatewayUrl, "Secrets URL")),
             nodesUrl: EnsureAbsoluteUri(config.EffectiveNodesUrl, "Nodes URL"),
+            notificationsUrl: EnsureAbsoluteUri(config.EffectiveNotificationsUrl, "Notifications URL"),
+            discordUrl: EnsureAbsoluteUri(config.EffectiveDiscordUrl, "Discord URL"),
             accessToken: config.AccessToken)
     {
     }
@@ -69,7 +87,39 @@ public sealed class ApiClientFactory : IDisposable
         CliConfig config,
         out string error)
     {
-        return TryCreate(config, null, null, null, out error);
+        error = string.Empty;
+
+        if (!TryResolveUri(null, config.EffectiveGatewayUrl, "Gateway URL", out var gatewayUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveUri(null, config.EffectiveIdentityUrl, "Identity URL", out var identityUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveSecretsUri(null, config.SecretsUrl ?? config.EffectiveGatewayUrl, out var secretsUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveUri(null, config.EffectiveNodesUrl, "Nodes URL", out var nodesUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveUri(null, config.EffectiveNotificationsUrl, "Notifications URL", out var notificationsUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveUri(null, config.EffectiveDiscordUrl, "Discord URL", out var discordUri, out error))
+        {
+            return null;
+        }
+
+        return new ApiClientFactory(gatewayUri, identityUri, secretsUri, nodesUri, notificationsUri, discordUri, config.AccessToken);
     }
 
     public static ApiClientFactory? TryCreate(
@@ -101,7 +151,17 @@ public sealed class ApiClientFactory : IDisposable
             return null;
         }
 
-        return new ApiClientFactory(gatewayUri, identityUri, secretsUri, nodesUri, config.AccessToken);
+        if (!TryResolveUri(null, config.EffectiveNotificationsUrl, "Notifications URL", out var notificationsUri, out error))
+        {
+            return null;
+        }
+
+        if (!TryResolveUri(null, config.EffectiveDiscordUrl, "Discord URL", out var discordUri, out error))
+        {
+            return null;
+        }
+
+        return new ApiClientFactory(gatewayUri, identityUri, secretsUri, nodesUri, notificationsUri, discordUri, config.AccessToken);
     }
 
     public IIdentityApi CreateIdentityClient()
@@ -149,6 +209,26 @@ public sealed class ApiClientFactory : IDisposable
         return RestService.For<IHealthApi>(_nodesClient);
     }
 
+    public INotificationsApi CreateNotificationsClient()
+    {
+        return RestService.For<INotificationsApi>(_notificationsClient);
+    }
+
+    public IDiscordApi CreateDiscordClient()
+    {
+        return RestService.For<IDiscordApi>(_discordClient);
+    }
+
+    public IHealthApi CreateNotificationsHealthClient()
+    {
+        return RestService.For<IHealthApi>(_notificationsClient);
+    }
+
+    public IHealthApi CreateDiscordHealthClient()
+    {
+        return RestService.For<IHealthApi>(_discordClient);
+    }
+
     public void Dispose()
     {
         _identityClient.Dispose();
@@ -156,11 +236,15 @@ public sealed class ApiClientFactory : IDisposable
         _keyVaultClient.Dispose();
         _gatewayClient.Dispose();
         _nodesClient.Dispose();
+        _notificationsClient.Dispose();
+        _discordClient.Dispose();
         _identityHandler.Dispose();
         _secretsHandler.Dispose();
         _keyVaultHandler.Dispose();
         _gatewayHandler.Dispose();
         _nodesHandler.Dispose();
+        _notificationsHandler.Dispose();
+        _discordHandler.Dispose();
     }
 
     private AuthenticatedHttpClientHandler CreateHandler()
@@ -290,7 +374,7 @@ public sealed class ApiClientFactory : IDisposable
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, 
+            HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             if (!string.IsNullOrEmpty(_accessToken))

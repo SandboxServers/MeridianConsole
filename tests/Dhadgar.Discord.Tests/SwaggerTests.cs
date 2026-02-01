@@ -3,8 +3,7 @@ using Xunit;
 
 namespace Dhadgar.Discord.Tests;
 
-[Collection("Discord Integration")]
-public class SwaggerTests
+public class SwaggerTests : IClassFixture<DiscordWebApplicationFactory>
 {
     private readonly DiscordWebApplicationFactory _factory;
 

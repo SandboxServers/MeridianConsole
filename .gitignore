@@ -56,5 +56,9 @@ tmpclaude-*
 
 .mcp.json
 
+.serena/
+
+.claude/
+
 # Planning docs (local development artifacts)
 .planning/

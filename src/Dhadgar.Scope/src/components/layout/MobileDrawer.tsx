@@ -53,9 +53,16 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close navigation menu"
             className="rounded-lg border border-white/10 bg-white/5 p-1.5 transition-colors hover:bg-white/10"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

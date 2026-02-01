@@ -12,7 +12,7 @@
   </p>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Ingress Flow</h3>
-  <div class="scope-code mb-6">
+  <div class="mb-6 rounded-2xl border border-white/10 bg-black/35 p-4 overflow-x-auto">
     <code>
       User → Cloudflare (WAF/CDN) → YARP Gateway → Target Service<br />
       Agent → Cloudflare → Gateway → Control Plane Services
@@ -20,27 +20,50 @@
   </div>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Internal Communication</h3>
-  <table class="scope-table mb-6">
+  <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th>Protocol</th>
-        <th>Use Case</th>
-        <th>Examples</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Protocol</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Use Case</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Examples</th
+        >
       </tr>
     </thead>
     <tbody>
-      <tr><td>HTTP/REST</td><td>Synchronous requests</td><td>Service-to-service APIs</td></tr>
       <tr
-        ><td>RabbitMQ/AMQP</td><td>Async events, commands</td><td>Provisioning, notifications</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">HTTP/REST</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Synchronous requests</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Service-to-service APIs</td></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">RabbitMQ/AMQP</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Async events, commands</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Provisioning, notifications</td
         ></tr
       >
-      <tr><td>SignalR/WSS</td><td>Real-time</td><td>Console streaming, status updates</td></tr>
-      <tr><td>PostgreSQL</td><td>Data persistence</td><td>Each service to its own DB</td></tr>
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">SignalR/WSS</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Real-time</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top"
+          >Console streaming, status updates</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">PostgreSQL</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Data persistence</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Each service to its own DB</td
+        ></tr
+      >
     </tbody>
   </table>
 
   <h3 class="mb-3 text-lg font-semibold text-indigo-400">Agent Communication</h3>
-  <div class="scope-callout">
+  <div class="rounded-2xl border border-indigo-500/35 bg-indigo-500/[0.12] p-4">
     Agents initiate all connections outbound to the control plane. No inbound ports required on
     customer infrastructure.
   </div>
