@@ -142,7 +142,18 @@ app.MapGet("/hello", () => Results.Text(Dhadgar.Discord.Hello.Message))
 app.MapGet("/healthz", (IDiscordBotService bot) =>
 {
     var botStatus = bot.ConnectionState.ToString();
-    return Results.Ok(new { service = "Dhadgar.Discord", status = "ok", botStatus });
+    var isConnected = bot.ConnectionState == Discord.ConnectionState.Connected;
+
+    // Return 503 Service Unavailable when bot is disconnected
+    // Kubernetes/orchestration expects this for proper health checking
+    if (!isConnected)
+    {
+        return Results.Json(
+            new { service = "Dhadgar.Discord", status = "degraded", botStatus },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return Results.Ok(new { service = "Dhadgar.Discord", status = "healthy", botStatus });
 }).WithTags("Health").WithName("DiscordHealthCheck");
 
 // Admin endpoints - Protected by API key authentication

@@ -28,8 +28,16 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable, IDisco
         var config = new DiscordSocketConfig
         {
             LogLevel = LogSeverity.Info,
-            GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildMessages,
-            UseInteractionSnowflakeDate = false
+            // Use AllUnprivileged as base, add MessageContent for reading message text
+            // GuildMembers is a privileged intent - enable only if needed
+            GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.MessageContent,
+            UseInteractionSnowflakeDate = false,
+            // Auto-reconnection with exponential backoff
+            DefaultRetryMode = RetryMode.AlwaysRetry,
+            // Connection timeout - fail fast if network issues
+            ConnectionTimeout = 15000, // 15 seconds
+            // Prevent hanging on large guild sync
+            MaxWaitBetweenGuildAvailablesBeforeReady = 10000 // 10 seconds
         };
 
         _client = new DiscordSocketClient(config);
@@ -132,7 +140,12 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable, IDisco
 
     private Task OnDisconnectedAsync(Exception exception)
     {
-        _logger.LogWarning(exception, "Discord bot disconnected");
+        // Discord.NET with DefaultRetryMode.AlwaysRetry handles reconnection automatically
+        // Log the disconnection with structured data for observability
+        _logger.LogWarning(
+            exception,
+            "Discord bot disconnected. Auto-reconnection enabled. ConnectionState: {ConnectionState}",
+            _client.ConnectionState);
         return Task.CompletedTask;
     }
 
