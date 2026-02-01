@@ -92,7 +92,7 @@ When asked to "open a PR" or "create a PR", run this autonomous review loop:
 
 ### The Loop
 
-```
+```text
 1. Create PR
 2. Wait 5 min (CodeRabbit + qodo need time to review)
 3. Loop (max 10 iterations):
