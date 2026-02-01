@@ -57,7 +57,10 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
         var payload = new { embeds = new[] { embed } };
         var jsonPayload = JsonSerializer.Serialize(payload);
 
+        // HttpClient from IHttpClientFactory should not be disposed - the factory manages the lifetime
+#pragma warning disable CA2000 // The factory manages HttpClient lifetime
         var httpClient = _httpClientFactory.CreateClient();
+#pragma warning restore CA2000
 
         try
         {
@@ -225,7 +228,7 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
         };
     }
 
-    private static object BuildEmbed(SendDiscordNotification message)
+    private static Dictionary<string, object> BuildEmbed(SendDiscordNotification message)
     {
         var color = message.Severity switch
         {

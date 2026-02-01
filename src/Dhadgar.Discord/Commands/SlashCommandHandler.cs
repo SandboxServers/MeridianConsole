@@ -200,7 +200,7 @@ public sealed class SlashCommandHandler
         await command.RespondAsync(embed: embed, ephemeral: true);
     }
 
-    private async Task HandlePingCommandAsync(SocketSlashCommand command)
+    private static async Task HandlePingCommandAsync(SocketSlashCommand command)
     {
         // Measure round-trip time by responding and modifying
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();

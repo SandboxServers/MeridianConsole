@@ -43,7 +43,7 @@ public sealed class ServerStoppedConsumer : IConsumer<ServerStopped>
                 {
                     ["Server"] = message.ServerName,
                     ["Reason"] = message.Reason,
-                    ["Stopped At"] = message.OccurredAtUtc.ToString("g")
+                    ["Stopped At"] = message.OccurredAtUtc.ToString("g", System.Globalization.CultureInfo.InvariantCulture)
                 }),
             context.CancellationToken);
     }

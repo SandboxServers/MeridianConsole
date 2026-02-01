@@ -33,12 +33,12 @@ public sealed class ServerCrashedConsumer : IConsumer<ServerCrashed>
         {
             ["Server"] = message.ServerName,
             ["Error"] = message.ErrorSummary,
-            ["Crashed At"] = message.OccurredAtUtc.ToString("g")
+            ["Crashed At"] = message.OccurredAtUtc.ToString("g", System.Globalization.CultureInfo.InvariantCulture)
         };
 
         if (message.ExitCode.HasValue)
         {
-            fields["Exit Code"] = message.ExitCode.Value.ToString();
+            fields["Exit Code"] = message.ExitCode.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         await _dispatcher.DispatchAsync(

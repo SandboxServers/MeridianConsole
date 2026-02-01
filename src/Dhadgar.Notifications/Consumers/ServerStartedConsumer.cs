@@ -43,7 +43,7 @@ public sealed class ServerStartedConsumer : IConsumer<ServerStarted>
                 {
                     ["Server"] = message.ServerName,
                     ["Game"] = message.GameType,
-                    ["Started At"] = message.OccurredAtUtc.ToString("g")
+                    ["Started At"] = message.OccurredAtUtc.ToString("g", System.Globalization.CultureInfo.InvariantCulture)
                 }),
             context.CancellationToken);
     }
