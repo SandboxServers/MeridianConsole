@@ -11,7 +11,7 @@ public static class SecretsEndpoints
 {
     public static void MapSecretsEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/secrets")
+        var group = app.MapGroup("/secrets")
             .WithTags("Secrets")
             .RequireAuthorization();
 
@@ -65,7 +65,9 @@ public static class SecretsEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.SecretErrors.InvalidSecretName,
+                validation.ErrorMessage);
         }
 
         // Check if secret is in allowed list
@@ -110,7 +112,9 @@ public static class SecretsEndpoints
                 IsBreakGlass: authResult.IsBreakGlass,
                 IsServiceAccount: authResult.IsServiceAccount));
 
-            return Results.NotFound(new { error = $"Secret '{secretName}' not found or not configured." });
+            return ProblemDetailsHelper.NotFound(
+                ErrorCodes.SecretErrors.SecretNotFound,
+                $"Secret '{secretName}' not found or not configured.");
         }
 
         // Log successful access
@@ -137,7 +141,9 @@ public static class SecretsEndpoints
     {
         if (request.SecretNames is null || request.SecretNames.Count == 0)
         {
-            return Results.BadRequest(new { error = "SecretNames is required." });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                "SecretNames is required.");
         }
 
         // Validate all secret names
@@ -146,7 +152,9 @@ public static class SecretsEndpoints
             var validation = SecretNameValidator.Validate(name);
             if (!validation.IsValid)
             {
-                return Results.BadRequest(new { error = $"Invalid secret name '{name}': {validation.ErrorMessage}" });
+                return ProblemDetailsHelper.BadRequest(
+                    ErrorCodes.SecretErrors.InvalidSecretName,
+                    $"Invalid secret name '{name}': {validation.ErrorMessage}");
             }
         }
 

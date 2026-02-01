@@ -9,7 +9,8 @@ namespace Dhadgar.Identity.Tests.Integration;
 /// <summary>
 /// Integration tests for security fixes including header trust vulnerability.
 /// </summary>
-public sealed class SecurityIntegrationTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class SecurityIntegrationTests
 {
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;

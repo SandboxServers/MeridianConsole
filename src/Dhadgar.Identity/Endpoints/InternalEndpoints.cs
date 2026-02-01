@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -51,6 +52,30 @@ public static class InternalEndpoints
         group.MapGet("/users/{userId:guid}/organizations/{organizationId:guid}/membership", GetMembership)
             .WithName("InternalGetMembership")
             .WithDescription("Get user's membership in organization");
+
+        // Client assertions for federated identity
+        group.MapPost("/assertions/microsoft", GenerateMicrosoftAssertion)
+            .WithName("InternalGenerateMicrosoftAssertion")
+            .WithDescription("Generate a client assertion JWT for Microsoft federated credential authentication");
+    }
+
+    private static async Task<IResult> GenerateMicrosoftAssertion(
+        ClientAssertionRequest request,
+        Services.IClientAssertionService assertionService,
+        IValidator<ClientAssertionRequest> validator)
+    {
+        var validationResult = await validator.ValidateAsync(request);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
+        var audience = request.Audience ?? "api://AzureADTokenExchange";
+        var assertion = assertionService.GenerateMicrosoftAssertion(request.Subject, audience);
+
+        return Results.Ok(new ClientAssertionResponse(assertion, 600)); // 10 minute expiry
     }
 
     private static async Task<IResult> GetUser(
@@ -70,7 +95,7 @@ public static class InternalEndpoints
 
         if (user is null)
         {
-            return Results.NotFound(new { error = "user_not_found" });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound);
         }
 
         return Results.Ok(user);
@@ -79,16 +104,15 @@ public static class InternalEndpoints
     private static async Task<IResult> GetUsersBatch(
         UserBatchRequest request,
         IdentityDbContext dbContext,
+        IValidator<UserBatchRequest> validator,
         CancellationToken ct)
     {
-        if (request.UserIds is null || request.UserIds.Count == 0)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return Results.BadRequest(new { error = "no_user_ids_provided" });
-        }
-
-        if (request.UserIds.Count > 100)
-        {
-            return Results.BadRequest(new { error = "too_many_user_ids", maxAllowed = 100 });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var users = await dbContext.Users
@@ -123,7 +147,7 @@ public static class InternalEndpoints
 
         if (org is null)
         {
-            return Results.NotFound(new { error = "organization_not_found" });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound);
         }
 
         return Results.Ok(org);
@@ -216,7 +240,7 @@ public static class InternalEndpoints
 
         if (membership is null)
         {
-            return Results.NotFound(new { error = "membership_not_found" });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound);
         }
 
         return Results.Ok(membership);
@@ -231,3 +255,5 @@ public sealed record OrganizationInfo(Guid Id, string Name, string Slug, Guid Ow
 public sealed record OrganizationMemberInfo(Guid UserId, string Role, bool IsActive);
 public sealed record PermissionCheckRequest(Guid UserId, Guid OrganizationId, string Permission);
 public sealed record PermissionCheckResponse(bool HasPermission);
+public sealed record ClientAssertionRequest(string Subject, string? Audience = null);
+public sealed record ClientAssertionResponse(string Assertion, int ExpiresIn);

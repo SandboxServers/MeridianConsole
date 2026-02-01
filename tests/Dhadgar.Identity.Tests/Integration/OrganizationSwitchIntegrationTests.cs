@@ -13,7 +13,8 @@ namespace Dhadgar.Identity.Tests.Integration;
 /// <summary>
 /// Integration tests for organization switching with JWT re-issuance
 /// </summary>
-public sealed class OrganizationSwitchIntegrationTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class OrganizationSwitchIntegrationTests
 {
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;

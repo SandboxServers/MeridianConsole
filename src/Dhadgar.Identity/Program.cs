@@ -2,7 +2,9 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
+using Scalar.AspNetCore;
 using Dhadgar.Identity;
 using Dhadgar.Identity.Authentication;
 using Dhadgar.Identity.Data;
@@ -29,7 +31,13 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Audit;
+using Dhadgar.ServiceDefaults.Errors;
+using Dhadgar.ServiceDefaults.Extensions;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
+using Dhadgar.ServiceDefaults.Tracing;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -37,26 +45,40 @@ using OpenTelemetry.Trace;
 using StackExchange.Redis;
 using IdentityHello = Dhadgar.Identity.Hello;
 using Dhadgar.Identity.Data.Entities;
+using Dhadgar.Identity.Validators;
+using FluentValidation;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+builder.Services.AddOpenApi("v1", options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        Title = "Dhadgar Identity API",
-        Version = "v1",
-        Description = "Identity and access management API for Meridian Console"
-    });
+        document.Info.Title = "Dhadgar Identity API";
+        document.Info.Version = "v1";
+        document.Info.Description = "Identity and access management API for Meridian Console";
 
-    // Add JWT Bearer authentication to Swagger UI
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        Description = "Enter your JWT token"
+        // Add JWT Bearer authentication security scheme
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "Enter your JWT token"
+        };
+
+        // Apply Bearer authentication globally to all operations
+        document.Security ??= [];
+        var schemeRef = new OpenApiSecuritySchemeReference("Bearer", document);
+        document.Security.Add(new OpenApiSecurityRequirement
+        {
+            [schemeRef] = new List<string>()
+        });
+
+        return Task.CompletedTask;
     });
 });
 
@@ -126,6 +148,7 @@ builder.Services.AddIdentityCore<User>(options =>
 builder.Services.AddSingleton<IExchangeTokenValidator, ExchangeTokenValidator>();
 builder.Services.AddSingleton<IExchangeTokenReplayStore, RedisExchangeTokenReplayStore>();
 builder.Services.AddSingleton<IJwtService, JwtService>();
+builder.Services.AddSingleton<IClientAssertionService, ClientAssertionService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<TokenExchangeService>();
 builder.Services.AddScoped<ILinkedAccountService, LinkedAccountService>();
@@ -140,6 +163,9 @@ builder.Services.AddTokenCleanupService();
 builder.Services.AddInvitationCleanupService();
 builder.Services.AddHealthChecks()
     .AddCheck<IdentityReadinessCheck>("identity_ready", tags: ["ready"]);
+
+// FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<ClientAssertionRequestValidator>();
 
 // Memory cache for webhook secret caching
 builder.Services.AddMemoryCache();
@@ -351,6 +377,18 @@ else
 
 builder.Services.AddScoped<IIdentityEventPublisher, IdentityEventPublisher>();
 builder.Services.AddSecurityEventLogger();
+
+// Add Dhadgar logging infrastructure with PII redaction
+builder.Services.AddDhadgarLogging();
+builder.Services.AddOrganizationContext();
+builder.Services.AddSingleton<RequestLoggingMessages>();
+builder.Logging.AddDhadgarLogging("Dhadgar.Identity", builder.Configuration);
+
+// API audit infrastructure for compliance logging (separate from domain AuditEvents)
+builder.Services.AddAuditInfrastructure<IdentityDbContext>();
+
+// Error handling infrastructure (RFC 9457 Problem Details)
+builder.Services.AddDhadgarErrorHandling();
 
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -739,20 +777,18 @@ builder.Logging.AddOpenTelemetry(options =>
     }
 });
 
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
+// Tracing (centralized with EF Core and Redis instrumentation)
+builder.Services.AddDhadgarTracing(
+    builder.Configuration,
+    "Dhadgar.Identity",
+    tracing =>
     {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+        // Add Redis instrumentation - resolves IConnectionMultiplexer from DI
+        tracing.AddRedisInstrumentation();
+    });
 
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
-    })
+// Metrics
+builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics
@@ -766,26 +802,30 @@ builder.Services.AddOpenTelemetry()
         {
             metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
         }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
     });
 
 var app = builder.Build();
 
-// Enable Swagger in Development and Testing environments
+// Enable OpenAPI and Scalar in Development and Testing environments
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 // SECURITY: Handle request size limit exceptions with proper JSON responses
 app.UseRequestLimitsMiddleware();
 
 app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
+app.UseMiddleware<TenantEnrichmentMiddleware>();
+app.UseDhadgarErrorHandling();  // RFC 9457 Problem Details with trace context
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Audit middleware - captures authenticated API requests for compliance
+app.UseAuditMiddleware();
+
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseRateLimiter();
@@ -795,7 +835,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 // This must come after UseAuthentication/UseAuthorization but before endpoints
 //app.UseMiddleware<OpenIddictServerMiddleware>(); // Not needed - UseAuthentication() triggers it
 
-// Apply EF Core migrations automatically during local/dev runs or when configured.
+// Auto-migrate database in development or when configured
 var autoMigrate = app.Environment.IsDevelopment() ||
     app.Configuration.GetValue<bool>("Database:AutoMigrate");
 
@@ -810,16 +850,7 @@ if (autoMigrate)
 }
 
 // Anonymous endpoints (no authentication required)
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Identity", message = IdentityHello.Message }))
-    .WithTags("Health")
-    .WithName("ServiceInfo")
-    .WithDescription("Get service information")
-    .AllowAnonymous();
-app.MapGet("/hello", () => Results.Text(IdentityHello.Message))
-    .WithTags("Health")
-    .WithName("Hello")
-    .WithDescription("Simple hello endpoint")
-    .AllowAnonymous();
+app.MapServiceInfoEndpoints("Dhadgar.Identity", IdentityHello.Message);
 app.MapDhadgarDefaultEndpoints(); // Health checks - already configured as anonymous in ServiceDefaults
 
 // Token exchange endpoint - uses its own validation (Better Auth exchange tokens)
@@ -939,6 +970,18 @@ static async Task SeedDevOpenIddictClientAsync(
         defaultClientId: "betterauth-service",
         defaultDisplayName: "BetterAuth Service",
         scopes: ["secrets:read"]); // Needs to read secrets from Secrets service
+
+    // BetterAuth WIF client for Microsoft federated credentials
+    // This client is used to get tokens for authenticating to Microsoft OAuth
+    // The client_id matches the "subject" in the Azure federated credential
+    await SeedServiceAccountAsync(
+        manager,
+        configuration,
+        logger,
+        serviceKey: "BetterAuthWif",
+        defaultClientId: "betterauth-client",
+        defaultDisplayName: "BetterAuth WIF Client",
+        scopes: ["wif"]); // Needs WIF for Microsoft federated credential
 }
 
 static async Task SeedServiceAccountAsync(

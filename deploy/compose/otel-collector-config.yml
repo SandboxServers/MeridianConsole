@@ -16,6 +16,19 @@ exporters:
     endpoint: "0.0.0.0:8889"
   loki:
     endpoint: http://loki:3100/loki/api/v1/push
+    # Convert resource attributes to Loki labels for querying
+    # service.name becomes service_name label used by alert rules
+    default_labels_enabled:
+      exporter: false
+      job: true
+    labels:
+      attributes:
+        service.name: service_name
+        deployment.environment: environment
+      resource:
+        service.name: service_name
+        service.version: service_version
+        deployment.environment: environment
 
 service:
   pipelines:

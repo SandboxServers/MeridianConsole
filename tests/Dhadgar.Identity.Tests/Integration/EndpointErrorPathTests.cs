@@ -7,7 +7,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests.Integration;
 
-public sealed class EndpointErrorPathTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class EndpointErrorPathTests
 {
     private readonly IdentityWebApplicationFactory _factory;
 

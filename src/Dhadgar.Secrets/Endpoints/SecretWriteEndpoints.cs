@@ -10,7 +10,7 @@ public static class SecretWriteEndpoints
 {
     public static void MapSecretWriteEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/secrets")
+        var group = app.MapGroup("/secrets")
             .WithTags("Secrets")
             .RequireAuthorization();
 
@@ -54,12 +54,16 @@ public static class SecretWriteEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.SecretErrors.InvalidSecretName,
+                validation.ErrorMessage);
         }
 
         if (string.IsNullOrWhiteSpace(request.Value))
         {
-            return Results.BadRequest(new { error = "Value is required." });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.SecretErrors.SecretValueRequired,
+                "Value is required.");
         }
 
         // Check if secret is in allowed list
@@ -120,7 +124,9 @@ public static class SecretWriteEndpoints
                 CorrelationId: context.TraceIdentifier,
                 ErrorMessage: ex.Message));
 
-            return Results.BadRequest(new { error = ex.Message });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                ex.Message);
         }
     }
 
@@ -136,7 +142,9 @@ public static class SecretWriteEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.SecretErrors.InvalidSecretName,
+                validation.ErrorMessage);
         }
 
         // Check if secret is in allowed list
@@ -209,10 +217,9 @@ public static class SecretWriteEndpoints
                 CorrelationId: context.TraceIdentifier,
                 ErrorMessage: ex.Message));
 
-            return Results.Problem(
-                title: "Rotation failed",
-                detail: "An error occurred during secret rotation.",
-                statusCode: StatusCodes.Status500InternalServerError);
+            return ProblemDetailsHelper.InternalServerError(
+                ErrorCodes.SecretErrors.RotationFailed,
+                "An error occurred during secret rotation.");
         }
     }
 
@@ -228,7 +235,9 @@ public static class SecretWriteEndpoints
         var validation = SecretNameValidator.Validate(secretName);
         if (!validation.IsValid)
         {
-            return Results.BadRequest(new { error = validation.ErrorMessage });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.SecretErrors.InvalidSecretName,
+                validation.ErrorMessage);
         }
 
         // Check if secret is in allowed list
@@ -271,7 +280,9 @@ public static class SecretWriteEndpoints
 
         if (!success)
         {
-            return Results.NotFound(new { error = $"Secret '{secretName}' not found." });
+            return ProblemDetailsHelper.NotFound(
+                ErrorCodes.SecretErrors.SecretNotFound,
+                $"Secret '{secretName}' not found.");
         }
 
         return Results.NoContent();

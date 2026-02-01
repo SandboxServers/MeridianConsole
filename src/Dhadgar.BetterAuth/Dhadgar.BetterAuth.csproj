@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Node.js shim project for Better Auth so it participates in solution builds.
-    This project does not compile .NET code; it runs npm install.
+    This project does not compile .NET code; it runs npm ci for deterministic installs.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -28,8 +28,8 @@
   </Target>
 
   <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(BetterAuthProjectDir)/package.json;$(BetterAuthProjectDir)/package-lock.json" Outputs="$(NodeModulesDir)/.package-lock.json">
-    <Message Importance="high" Text="Running npm install for Dhadgar.BetterAuth..." />
-    <Exec Command="$(NpmCommand) install" WorkingDirectory="$(BetterAuthProjectDir)" />
+    <Message Importance="high" Text="Running npm ci for Dhadgar.BetterAuth..." />
+    <Exec Command="$(NpmCommand) ci --prefer-offline --no-audit" WorkingDirectory="$(BetterAuthProjectDir)" />
   </Target>
 
   <Target Name="Build" DependsOnTargets="NpmInstall">

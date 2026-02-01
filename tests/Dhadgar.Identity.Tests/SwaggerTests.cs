@@ -3,7 +3,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests;
 
-public class SwaggerTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public class SwaggerTests
 {
     private readonly IdentityWebApplicationFactory _factory;
 
@@ -17,7 +18,8 @@ public class SwaggerTests : IClassFixture<IdentityWebApplicationFactory>
     {
         await SwaggerTestHelper.VerifySwaggerEndpointAsync(
             _factory,
-            expectedTitle: "Dhadgar Identity API");
+            expectedTitle: "Dhadgar Identity API",
+            swaggerPath: "/openapi/v1.json");
     }
 
     [Fact]
@@ -32,6 +34,7 @@ public class SwaggerTests : IClassFixture<IdentityWebApplicationFactory>
         // Identity uses /me for user endpoints and /organizations for org management
         await SwaggerTestHelper.VerifySwaggerContainsPathsAsync(
             _factory,
-            ["/", "/hello", "/me", "/organizations"]);
+            ["/", "/hello", "/me", "/organizations"],
+            swaggerPath: "/openapi/v1.json");
     }
 }

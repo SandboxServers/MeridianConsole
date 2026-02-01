@@ -1,20 +1,33 @@
 using Dhadgar.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Audit;
+using Dhadgar.ServiceDefaults.Extensions;
+using Dhadgar.ServiceDefaults.Health;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
+using Dhadgar.ServiceDefaults.Tracing;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults();
+builder.Services.AddDhadgarServiceDefaults(
+    builder.Configuration,
+    HealthCheckDependencies.Postgres);
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Servers API",
     description: "Game server lifecycle management for Meridian Console");
+
+// Add Dhadgar logging infrastructure with PII redaction
+builder.Services.AddDhadgarLogging();
+builder.Logging.AddDhadgarLogging("Dhadgar.Servers", builder.Configuration);
+
+// Audit infrastructure for compliance logging
+builder.Services.AddAuditInfrastructure<ServersDbContext>();
 
 builder.Services.AddDbContext<ServersDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
@@ -44,19 +57,11 @@ builder.Logging.AddOpenTelemetry(options =>
     }
 });
 
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+// Tracing (centralized with EF Core instrumentation)
+builder.Services.AddDhadgarTracing(builder.Configuration, "Dhadgar.Servers");
 
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    })
+// Metrics
+builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics
@@ -76,34 +81,21 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
+// Standard middleware (includes Correlation, TenantEnrichment, and RequestLogging)
+app.UseDhadgarMiddleware();
 app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
 
-// Optional: apply EF Core migrations automatically during local/dev runs.
-if (app.Environment.IsDevelopment())
-{
-    try
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ServersDbContext>();
-        db.Database.Migrate();
-    }
-    catch (Exception ex)
-    {
-        // Keep startup resilient for first-run dev scenarios.
-        app.Logger.LogWarning(ex, "DB migration failed (dev).");
-    }
-}
+// Audit middleware - MUST run after authentication
+// Currently skips all requests (no auth configured yet); will capture authenticated requests once auth is added
+app.UseAuditMiddleware();
 
-app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Servers", message = Dhadgar.Servers.Hello.Message }))
-    .WithTags("Health").WithName("ServersServiceInfo");
-app.MapGet("/hello", () => Results.Text(Dhadgar.Servers.Hello.Message))
-    .WithTags("Health").WithName("ServersHello");
+// Auto-migrate database in development
+await app.AutoMigrateDatabaseAsync<ServersDbContext>();
+
+app.MapServiceInfoEndpoints("Dhadgar.Servers", Dhadgar.Servers.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
 
-app.Run();
+await app.RunAsync();
 
 // Required for WebApplicationFactory<Program> integration tests.
 public partial class Program { }

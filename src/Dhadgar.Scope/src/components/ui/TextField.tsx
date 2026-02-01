@@ -36,7 +36,10 @@ export function TextField({
       )}
       <div className="relative">
         {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400" aria-hidden="true">
+          <div
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400"
+            aria-hidden="true"
+          >
             {icon}
           </div>
         )}

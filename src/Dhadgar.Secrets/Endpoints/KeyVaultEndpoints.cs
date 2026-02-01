@@ -9,7 +9,7 @@ public static class KeyVaultEndpoints
 {
     public static void MapKeyVaultEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/keyvaults")
+        var group = app.MapGroup("/keyvaults")
             .WithTags("Key Vaults")
             .RequireAuthorization();
 
@@ -91,7 +91,9 @@ public static class KeyVaultEndpoints
 
         if (vault == null)
         {
-            return Results.NotFound(new { error = $"Vault '{vaultName}' not found." });
+            return ProblemDetailsHelper.NotFound(
+                ErrorCodes.KeyVaultErrors.VaultNotFound,
+                $"Vault '{vaultName}' not found.");
         }
 
         return Results.Ok(new VaultDetailResponse(
@@ -127,7 +129,9 @@ public static class KeyVaultEndpoints
 
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Location))
         {
-            return Results.BadRequest(new { error = "Name and Location are required." });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.KeyVaultErrors.VaultDataRequired,
+                "Name and Location are required.");
         }
 
         try
@@ -156,15 +160,21 @@ public static class KeyVaultEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                ex.Message);
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("exists", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Conflict(new { error = ex.Message });
+                return ProblemDetailsHelper.Conflict(
+                    ErrorCodes.KeyVaultErrors.VaultAlreadyExists,
+                    ex.Message);
             }
-            return Results.BadRequest(new { error = ex.Message });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                ex.Message);
         }
     }
 
@@ -212,15 +222,21 @@ public static class KeyVaultEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                ex.Message);
         }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.NotFound(new { error = ex.Message });
+                return ProblemDetailsHelper.NotFound(
+                    ErrorCodes.KeyVaultErrors.VaultNotFound,
+                    ex.Message);
             }
-            return Results.BadRequest(new { error = ex.Message });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                ex.Message);
         }
     }
 
@@ -239,7 +255,9 @@ public static class KeyVaultEndpoints
 
         if (!success)
         {
-            return Results.NotFound(new { error = $"Vault '{vaultName}' not found." });
+            return ProblemDetailsHelper.NotFound(
+                ErrorCodes.KeyVaultErrors.VaultNotFound,
+                $"Vault '{vaultName}' not found.");
         }
 
         return Results.NoContent();

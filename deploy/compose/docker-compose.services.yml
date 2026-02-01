@@ -45,7 +45,6 @@ services:
       ReverseProxy__Clusters__console__Destinations__d1__Address: http://console:8080/
       ReverseProxy__Clusters__mods__Destinations__d1__Address: http://mods:8080/
       ReverseProxy__Clusters__notifications__Destinations__d1__Address: http://notifications:8080/
-      ReverseProxy__Clusters__firewall__Destinations__d1__Address: http://firewall:8080/
       ReverseProxy__Clusters__secrets__Destinations__d1__Address: http://secrets:8080/
       ReverseProxy__Clusters__discord__Destinations__d1__Address: http://discord:8080/
     ports:
@@ -167,16 +166,6 @@ services:
     depends_on: *service-depends
     restart: unless-stopped
 
-  firewall:
-    build:
-      context: ../..
-      dockerfile: src/Dhadgar.Firewall/Dockerfile
-    environment: *service-env
-    ports:
-      - "5100:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
   secrets:
     build:
       context: ../..
@@ -213,6 +202,7 @@ services:
       Secrets__Development__Secrets__postgres-password: dhadgar
       Secrets__Development__Secrets__oauth-discord-client-id: ${OAUTH_DISCORD_CLIENT_ID:-}
       Secrets__Development__Secrets__oauth-discord-client-secret: ${OAUTH_DISCORD_CLIENT_SECRET:-}
+      Secrets__Development__Secrets__oauth-microsoft-client-id: ${OAUTH_MICROSOFT_CLIENT_ID:-}
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
     ports:
       - "5110:8080"
@@ -241,6 +231,10 @@ services:
       # Dedicated service account for BetterAuth (seeded by Identity)
       SERVICE_CLIENT_ID: betterauth-service
       SERVICE_CLIENT_SECRET: ${BETTERAUTH_SERVICE_CLIENT_SECRET:-betterauth-service-dev-secret-change-in-prod}
+      # WIF client for Microsoft federated credentials (seeded by Identity)
+      # The client_id matches the "subject" in the Azure federated credential
+      WIF_CLIENT_ID: betterauth-client
+      WIF_CLIENT_SECRET: ${BETTERAUTH_WIF_CLIENT_SECRET:-betterauth-client-dev-secret-change-in-prod}
       BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
       BETTER_AUTH_TRUSTED_ORIGINS: https://dev.meridianconsole.com,https://cart.meridianconsole.com,https://panel.meridianconsole.com,http://localhost:4321,http://localhost:4322
       BETTER_AUTH_CLIENT_APPS: panel,shop

@@ -79,7 +79,9 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.GetAsync(organizationId, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound, result.Error);
     }
 
     private static async Task<IResult> CreateOrganization(
@@ -94,9 +96,19 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.CreateAsync(userId, request, ct);
-        return result.Success
-            ? Results.Created($"/organizations/{result.Value?.Id}", new { id = result.Value?.Id })
-            : Results.BadRequest(new { error = result.Error });
+        if (!result.Success)
+        {
+            return result.Error switch
+            {
+                "slug_already_exists" or "organization_slug_exists" =>
+                    ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.OrganizationSlugExists, result.Error),
+                "name_required" or "name_too_long" or "invalid_name" =>
+                    ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidOrganizationName, result.Error),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+            };
+        }
+
+        return Results.Created($"/organizations/{result.Value?.Id}", new { id = result.Value?.Id });
     }
 
     private static async Task<IResult> UpdateOrganization(
@@ -125,7 +137,9 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.UpdateAsync(organizationId, request, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound, result.Error);
     }
 
     private static async Task<IResult> DeleteOrganization(
@@ -153,7 +167,9 @@ public static class OrganizationEndpoints
         }
 
         var result = await organizationService.SoftDeleteAsync(organizationId, ct);
-        return result.Success ? Results.NoContent() : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.NoContent()
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound, result.Error);
     }
 
     private static async Task<IResult> SwitchOrganization(
@@ -170,7 +186,7 @@ public static class OrganizationEndpoints
         var outcome = await switchService.SwitchAsync(userId, organizationId, ct);
         if (!outcome.Success)
         {
-            return Results.BadRequest(new { error = outcome.Error });
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, outcome.Error);
         }
 
         return Results.Ok(new
@@ -205,9 +221,9 @@ public static class OrganizationEndpoints
         {
             return result.Error switch
             {
-                "not_owner" => Results.Forbid(),
-                "org_not_found" => Results.NotFound(new { error = result.Error }),
-                _ => Results.BadRequest(new { error = result.Error })
+                "not_owner" => ProblemDetailsHelper.Forbidden(ErrorCodes.AuthErrors.AccessDenied, "Only the organization owner can transfer ownership."),
+                "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
             };
         }
 

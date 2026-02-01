@@ -68,7 +68,7 @@ public static class WebhookEndpoint
         using var document = JsonDocument.Parse(rawBody);
         if (!TryGetEventName(document.RootElement, out var eventName))
         {
-            return Results.BadRequest(new { error = "missing_event" });
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "Webhook payload must include an event type.");
         }
 
         var data = document.RootElement.TryGetProperty("data", out var dataElement)

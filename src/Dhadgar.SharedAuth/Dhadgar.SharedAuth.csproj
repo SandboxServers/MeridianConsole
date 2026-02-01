@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.Build.NoTargets/3.7.56">
+  <!--
+    This is a "shim" project that integrates the shared auth TypeScript library into the .NET solution.
+    It doesn't compile any .NET code - it just ensures npm ci runs for deterministic installs.
+
+    SharedAuth is a TypeScript library consumed by Panel and ShoppingCart via file: references.
+    The consuming projects handle the actual build/bundling of this code.
+
+    Using Microsoft.Build.NoTargets SDK to prevent any .NET output (no dll, pdb, deps.json).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+
+    <!-- Node.js build configuration (use forward slashes for cross-platform compatibility) -->
+    <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
+    <NpmCommand Condition="'$(OS)' != 'Windows_NT'">npm</NpmCommand>
+    <SharedAuthProjectDir>$(MSBuildProjectDirectory)</SharedAuthProjectDir>
+    <NodeModulesDir>$(SharedAuthProjectDir)/node_modules</NodeModulesDir>
+    <PackageJsonPath>$(SharedAuthProjectDir)/package.json</PackageJsonPath>
+  </PropertyGroup>
+
+  <!-- Skip restore for this project - npm handles dependencies -->
+  <Target Name="DisableDotNetRestore" BeforeTargets="Restore">
+    <Message Importance="high" Text="Skipping .NET restore for Dhadgar.SharedAuth (Node.js library)" />
+  </Target>
+
+  <!-- Run npm ci if node_modules doesn't exist or package.json/package-lock.json changed -->
+  <Target Name="NpmInstall" BeforeTargets="Build" Inputs="$(PackageJsonPath);$(SharedAuthProjectDir)/package-lock.json" Outputs="$(NodeModulesDir)/.package-lock.json">
+    <Message Importance="high" Text="Running npm ci for Dhadgar.SharedAuth..." />
+    <Exec Command="$(NpmCommand) ci --prefer-offline --no-audit" WorkingDirectory="$(SharedAuthProjectDir)" />
+  </Target>
+
+  <!-- Override default Build - just ensure dependencies are installed -->
+  <Target Name="Build" DependsOnTargets="NpmInstall">
+    <Message Importance="high" Text="Dhadgar.SharedAuth dependencies ready." />
+  </Target>
+
+  <!-- Clean target to remove node_modules -->
+  <Target Name="Clean">
+    <Message Importance="high" Text="Cleaning Dhadgar.SharedAuth..." />
+    <RemoveDir Directories="$(NodeModulesDir)" Condition="Exists('$(NodeModulesDir)')" />
+  </Target>
+
+  <!-- Rebuild = Clean + Build -->
+  <Target Name="Rebuild" DependsOnTargets="Clean;Build" />
+
+  <!-- Publish just runs the build -->
+  <Target Name="Publish" DependsOnTargets="Build">
+    <Message Importance="high" Text="Dhadgar.SharedAuth ready for consumption" />
+  </Target>
+
+</Project>

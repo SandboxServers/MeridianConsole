@@ -3,7 +3,8 @@ using Xunit;
 
 namespace Dhadgar.Billing.Tests;
 
-public class SwaggerTests : IClassFixture<BillingWebApplicationFactory>
+[Collection("Billing Integration")]
+public class SwaggerTests
 {
     private readonly BillingWebApplicationFactory _factory;
 

@@ -14,7 +14,8 @@ using Xunit;
 
 namespace Dhadgar.Secrets.Tests;
 
-public sealed class ReadinessIntegrationTests : IClassFixture<SecretsWebApplicationFactory>
+[Collection("Secrets Integration")]
+public sealed class ReadinessIntegrationTests
 {
     private readonly SecretsWebApplicationFactory _factory;
 

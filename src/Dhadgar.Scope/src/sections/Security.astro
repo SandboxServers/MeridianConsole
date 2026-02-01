@@ -9,16 +9,43 @@
   <table class="mb-6 w-full border-collapse text-sm">
     <thead>
       <tr>
-        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Boundary</th>
-        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Protection</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Boundary</th
+        >
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Protection</th
+        >
       </tr>
     </thead>
     <tbody>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Edge (Internet)</td><td class="border border-white/10 px-2.5 py-2 align-top">Cloudflare WAF, DDoS protection</td></tr>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Gateway</td><td class="border border-white/10 px-2.5 py-2 align-top">Authentication, rate limiting, input validation</td></tr>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Service-to-Service</td><td class="border border-white/10 px-2.5 py-2 align-top">mTLS (planned), internal network only</td></tr>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Agent-to-Control Plane</td><td class="border border-white/10 px-2.5 py-2 align-top">mTLS certificates, outbound-only</td></tr>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Database</td><td class="border border-white/10 px-2.5 py-2 align-top">TLS, per-service credentials, network isolation</td></tr>
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Edge (Internet)</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Cloudflare WAF, DDoS protection</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Gateway</td><td
+          class="border border-white/10 px-2.5 py-2 align-top"
+          >Authentication, rate limiting, input validation</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Service-to-Service</td><td
+          class="border border-white/10 px-2.5 py-2 align-top"
+          >mTLS (planned), internal network only</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Agent-to-Control Plane</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">mTLS certificates, outbound-only</td
+        ></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Database</td><td
+          class="border border-white/10 px-2.5 py-2 align-top"
+          >TLS, per-service credentials, network isolation</td
+        ></tr
+      >
     </tbody>
   </table>
 
@@ -38,14 +65,32 @@
       <tr>
         <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Role</th>
         <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Scope</th>
-        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90">Permissions</th>
+        <th class="border border-white/10 bg-white/5 px-2.5 py-2 text-left text-white/90"
+          >Permissions</th
+        >
       </tr>
     </thead>
     <tbody>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Owner</td><td class="border border-white/10 px-2.5 py-2 align-top">Organization</td><td class="border border-white/10 px-2.5 py-2 align-top">Full control, billing</td></tr>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Admin</td><td class="border border-white/10 px-2.5 py-2 align-top">Organization</td><td class="border border-white/10 px-2.5 py-2 align-top">Manage users, servers</td></tr>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Operator</td><td class="border border-white/10 px-2.5 py-2 align-top">Server</td><td class="border border-white/10 px-2.5 py-2 align-top">Start/stop, configure</td></tr>
-      <tr><td class="border border-white/10 px-2.5 py-2 align-top">Viewer</td><td class="border border-white/10 px-2.5 py-2 align-top">Server</td><td class="border border-white/10 px-2.5 py-2 align-top">View status, logs</td></tr>
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Owner</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Organization</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Full control, billing</td></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Admin</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Organization</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Manage users, servers</td></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Operator</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Server</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Start/stop, configure</td></tr
+      >
+      <tr
+        ><td class="border border-white/10 px-2.5 py-2 align-top">Viewer</td><td
+          class="border border-white/10 px-2.5 py-2 align-top">Server</td
+        ><td class="border border-white/10 px-2.5 py-2 align-top">View status, logs</td></tr
+      >
     </tbody>
   </table>
 

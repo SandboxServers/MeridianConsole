@@ -159,7 +159,6 @@ All services use **10-port gaps** for future expansion:
 | **Console** | 5070 | http://localhost:5070 | SignalR console streaming |
 | **Mods** | 5080 | http://localhost:5080 | Mod registry |
 | **Notifications** | 5090 | http://localhost:5090 | Email/Discord/webhooks |
-| **Firewall** | 5100 | http://localhost:5100 | Port management |
 | **Secrets** | 5110 | http://localhost:5110 | Secret storage |
 | **Discord** | 5120 | http://localhost:5120 | Discord integration |
 
@@ -786,7 +785,6 @@ public class RouteConfigurationTests
     [InlineData("console", "5070")]
     [InlineData("mods", "5080")]
     [InlineData("notifications", "5090")]
-    [InlineData("firewall", "5100")]
     [InlineData("secrets", "5110")]
     [InlineData("discord", "5120")]
     public void Cluster_ShouldHaveCorrectPort(string clusterName, string expectedPort)
@@ -4092,7 +4090,6 @@ dotnet user-secrets set "Jwt:SigningKey" "your-256-bit-secret-key" --project src
 | Console | 5070 |
 | Mods | 5080 |
 | Notifications | 5090 |
-| Firewall | 5100 |
 | Secrets | 5110 |
 | Discord | 5120 |
 

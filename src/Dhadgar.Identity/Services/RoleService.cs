@@ -670,7 +670,7 @@ public sealed class RoleService
                 uo.LeftAt == null)
             .Select(uo => new RoleMember(
                 uo.UserId,
-                uo.User.Email,
+                uo.User.Email ?? string.Empty,
                 uo.User.DisplayName,
                 uo.JoinedAt))
             .OrderBy(m => m.Email)

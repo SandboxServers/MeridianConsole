@@ -359,8 +359,8 @@ export async function loadSecrets() {
     "oauth-github-client-secret": "OAUTH_GITHUB_CLIENT_SECRET",
     "oauth-apple-client-id": "OAUTH_APPLE_CLIENT_ID",
     "oauth-apple-client-secret": "OAUTH_APPLE_CLIENT_SECRET",
-    "oauth-microsoft-personal-client-id": "OAUTH_MICROSOFT_CLIENT_ID",
-    "oauth-microsoft-personal-client-secret": "OAUTH_MICROSOFT_CLIENT_SECRET",
+    // Microsoft uses federated credentials (no client secret needed)
+    "oauth-microsoft-client-id": "OAUTH_MICROSOFT_CLIENT_ID",
   };
 
   for (const [secretName, envVar] of Object.entries(oauthMapping)) {

@@ -16,7 +16,6 @@ trigger:
       - src/Dhadgar.Mods/**
       - src/Dhadgar.Console/**
       - src/Dhadgar.Notifications/**
-      - src/Dhadgar.Firewall/**
       - src/Dhadgar.Secrets/**
       - src/Dhadgar.Discord/**
       - src/Shared/**
@@ -71,9 +70,6 @@ extends:
       - name: Notifications
         imageName: dhadgar/notifications
         dockerfilePath: src/Dhadgar.Notifications/Dockerfile
-      - name: Firewall
-        imageName: dhadgar/firewall
-        dockerfilePath: src/Dhadgar.Firewall/Dockerfile
       - name: Secrets
         imageName: dhadgar/secrets
         dockerfilePath: src/Dhadgar.Secrets/Dockerfile

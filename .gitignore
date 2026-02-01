@@ -59,3 +59,6 @@ tmpclaude-*
 .serena/
 
 .claude/
+
+# Planning docs (local development artifacts)
+.planning/

@@ -106,7 +106,7 @@ public sealed class UserService
         return members.Select(member =>
             new UserSummary(
                 member.UserId,
-                member.Email,
+                member.Email ?? "",
                 member.DisplayName,
                 member.Role,
                 member.IsActive,
@@ -177,7 +177,7 @@ public sealed class UserService
         return members.Select(member =>
                 new UserSummary(
                     member.UserId,
-                    member.Email,
+                    member.Email ?? "",
                     member.DisplayName,
                     member.Role,
                     member.IsActive,

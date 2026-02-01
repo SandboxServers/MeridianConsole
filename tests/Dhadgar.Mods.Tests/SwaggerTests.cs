@@ -3,7 +3,8 @@ using Xunit;
 
 namespace Dhadgar.Mods.Tests;
 
-public class SwaggerTests : IClassFixture<ModsWebApplicationFactory>
+[Collection("Mods Integration")]
+public class SwaggerTests
 {
     private readonly ModsWebApplicationFactory _factory;
 

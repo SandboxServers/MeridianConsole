@@ -76,7 +76,7 @@ public static class SessionEndpoints
 
         if (!revoked)
         {
-            return Results.NotFound(new { error = "session_not_found" });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.AuthErrors.SessionNotFound, "Session not found.");
         }
 
         var clientIp = context.Connection.RemoteIpAddress?.ToString();

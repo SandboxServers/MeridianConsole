@@ -99,7 +99,9 @@ public static class RoleEndpoints
         }
 
         var result = await roleService.GetAsync(organizationId, roleId, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error);
     }
 
     private static async Task<IResult> CreateRole(
@@ -129,9 +131,22 @@ public static class RoleEndpoints
 
         // Pass actor userId for privilege escalation validation
         var result = await roleService.CreateAsync(organizationId, userId, request, ct);
-        return result.Success
-            ? Results.Created($"/organizations/{organizationId}/roles/{result.Value?.Id}", result.Value)
-            : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.Created($"/organizations/{organizationId}/roles/{result.Value?.Id}", result.Value);
+        }
+
+        // Map specific error codes to appropriate HTTP status and error codes
+        return result.Error switch
+        {
+            "role_already_exists" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.RoleAlreadyExists),
+            "role_name_required" or "role_name_too_long" or "reserved_role_name" =>
+                ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidRoleName, result.Error),
+            "unknown_permissions" or "cannot_grant_unowned_permissions" =>
+                ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidPermissions, result.Error),
+            "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> AssignRole(
@@ -169,7 +184,21 @@ public static class RoleEndpoints
             membershipService,
             ct);
 
-        return result.Success ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.Ok(result.Value);
+        }
+
+        return result.Error switch
+        {
+            "role_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error),
+            "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error),
+            "member_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            "cannot_assign_role_with_unowned_permissions" =>
+                ProblemDetailsHelper.Forbidden(ErrorCodes.IdentityErrors.InvalidPermissions, result.Error),
+            "role_not_assigned" => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> RevokeRole(
@@ -207,7 +236,19 @@ public static class RoleEndpoints
             membershipService,
             ct);
 
-        return result.Success ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.Ok(result.Value);
+        }
+
+        return result.Error switch
+        {
+            "role_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error),
+            "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error),
+            "member_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            "role_not_assigned" => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> UpdateRole(
@@ -237,7 +278,18 @@ public static class RoleEndpoints
         }
 
         var result = await roleService.UpdateAsync(organizationId, userId, roleId, request, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.Ok(result.Value);
+        }
+
+        return result.Error switch
+        {
+            "role_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error),
+            "cannot_update_system_role" => ProblemDetailsHelper.Forbidden(ErrorCodes.IdentityErrors.CannotUpdateSystemRole),
+            "role_name_too_long" => ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidRoleName, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> DeleteRole(
@@ -266,7 +318,18 @@ public static class RoleEndpoints
         }
 
         var result = await roleService.DeleteAsync(organizationId, userId, roleId, ct);
-        return result.Success ? Results.NoContent() : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "role_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error),
+            "cannot_delete_system_role" => ProblemDetailsHelper.Forbidden(ErrorCodes.IdentityErrors.CannotDeleteSystemRole),
+            "role_has_active_members" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.RoleHasActiveMembers),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> GetRoleMembers(
@@ -295,6 +358,8 @@ public static class RoleEndpoints
         }
 
         var result = await roleService.GetMembersAsync(organizationId, roleId, ct);
-        return result.Success ? Results.Ok(result.Value) : Results.NotFound(new { error = result.Error });
+        return result.Success
+            ? Results.Ok(result.Value)
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.RoleNotFound, result.Error);
     }
 }

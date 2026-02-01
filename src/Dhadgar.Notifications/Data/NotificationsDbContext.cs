@@ -1,4 +1,5 @@
 using Dhadgar.Notifications.Data.Entities;
+using Dhadgar.Shared.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Notifications.Data;
@@ -7,7 +8,7 @@ namespace Dhadgar.Notifications.Data;
 /// Database context for the Notifications service.
 /// Stores logs of all dispatched notifications for audit/debugging.
 /// </summary>
-public sealed class NotificationsDbContext : DbContext
+public sealed class NotificationsDbContext : DhadgarDbContext
 {
     public NotificationsDbContext(DbContextOptions<NotificationsDbContext> options) : base(options) { }
 
@@ -34,5 +35,9 @@ public sealed class NotificationsDbContext : DbContext
             // Index for querying logs by channel
             b.HasIndex(x => new { x.Channel, x.Status });
         });
+
+        // Apply base class conventions
+        ApplySoftDeleteConventions(modelBuilder);
+        ApplyProviderSpecificConventions(modelBuilder);
     }
 }

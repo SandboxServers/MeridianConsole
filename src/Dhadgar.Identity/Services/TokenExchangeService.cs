@@ -11,6 +11,8 @@ using Microsoft.Extensions.Options;
 
 namespace Dhadgar.Identity.Services;
 
+public sealed record LinkedProvider(string ProviderId, string AccountId);
+
 public sealed record TokenExchangeOutcome(
     bool Success,
     string? Error,
@@ -32,6 +34,7 @@ public sealed record TokenExchangeOutcome(
 public sealed class TokenExchangeService
 {
     private static readonly TimeSpan ReplayWindow = TimeSpan.FromMinutes(2);
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IdentityDbContext _dbContext;
     private readonly IExchangeTokenValidator _validator;
@@ -87,6 +90,25 @@ public sealed class TokenExchangeService
         var picture = principal.FindFirstValue("picture");
         var jti = principal.FindFirstValue("jti");
         var clientApp = principal.FindFirstValue("client_app");
+        var provider = principal.FindFirstValue("provider") ?? "unknown";
+        var providersJson = principal.FindFirstValue("providers");
+
+        // Parse the providers array from the exchange token
+        var linkedProviders = new List<LinkedProvider>();
+        if (!string.IsNullOrWhiteSpace(providersJson))
+        {
+            try
+            {
+                linkedProviders = System.Text.Json.JsonSerializer.Deserialize<List<LinkedProvider>>(
+                    providersJson,
+                    JsonOptions)
+                    ?? [];
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse providers claim from exchange token");
+            }
+        }
 
         if (string.IsNullOrWhiteSpace(externalAuthId) || string.IsNullOrWhiteSpace(email))
         {
@@ -105,7 +127,7 @@ public sealed class TokenExchangeService
             return TokenExchangeOutcome.Fail("token_already_used");
         }
 
-        User user;
+        User? user;
         Organization activeOrg;
         UserOrganization membership;
         var now = _timeProvider.GetUtcNow();
@@ -177,22 +199,67 @@ public sealed class TokenExchangeService
                 }
             }
 
-            // Check for existing login link - use DbContext directly
-            var existingLogin = await _dbContext.UserLogins
-                .AnyAsync(l => l.UserId == user.Id &&
-                               l.LoginProvider == "betterauth" &&
-                               l.ProviderKey == externalAuthId, ct);
+            // Sync all linked providers from BetterAuth to Identity UserLogins
+            var existingLogins = await _dbContext.UserLogins
+                .Where(l => l.UserId == user.Id)
+                .ToListAsync(ct);
 
-            if (!existingLogin)
+            if (linkedProviders.Count > 0)
             {
-                // Add login directly via DbContext for transaction atomicity
-                _dbContext.UserLogins.Add(new IdentityUserLogin<Guid>
+                var currentLogins = new HashSet<(string ProviderId, string AccountId)>(
+                    linkedProviders.Select(p => (p.ProviderId, p.AccountId)));
+
+                // Remove logins that are no longer linked (including legacy "betterauth" logins)
+                var loginsToRemove = existingLogins.Where(l =>
+                    !currentLogins.Contains((l.LoginProvider, l.ProviderKey)));
+                _dbContext.UserLogins.RemoveRange(loginsToRemove);
+
+                // Add new logins (using Add() to implicitly deduplicate linkedProviders)
+                var existingLoginSet = new HashSet<(string ProviderId, string AccountId)>(
+                    existingLogins.Select(l => (l.LoginProvider, l.ProviderKey)));
+
+                foreach (var linked in linkedProviders)
                 {
-                    UserId = user.Id,
-                    LoginProvider = "betterauth",
-                    ProviderKey = externalAuthId,
-                    ProviderDisplayName = "BetterAuth"
-                });
+                    // Add returns true only if item was not already present, preventing duplicates
+                    if (existingLoginSet.Add((linked.ProviderId, linked.AccountId)))
+                    {
+                        _dbContext.UserLogins.Add(new IdentityUserLogin<Guid>
+                        {
+                            UserId = user.Id,
+                            LoginProvider = linked.ProviderId,
+                            ProviderKey = linked.AccountId,
+                            ProviderDisplayName = GetProviderDisplayName(linked.ProviderId)
+                        });
+                    }
+                }
+            }
+            else if (provider != "unknown")
+            {
+                // Fallback: if no providers array, use the single provider claim
+                // Remove legacy "betterauth" logins only when we have a replacement
+                var legacyLogins = existingLogins
+                    .Where(l => l.LoginProvider == "betterauth")
+                    .ToList();
+                foreach (var legacy in legacyLogins)
+                {
+                    _dbContext.UserLogins.Remove(legacy);
+                    existingLogins.Remove(legacy);
+                }
+
+                var exists = existingLogins.Any(l =>
+                    l.LoginProvider == provider &&
+                    l.ProviderKey == externalAuthId);
+
+                if (!exists)
+                {
+                    _dbContext.UserLogins.Add(new IdentityUserLogin<Guid>
+                    {
+                        UserId = user.Id,
+                        LoginProvider = provider,
+                        ProviderKey = externalAuthId,
+                        ProviderDisplayName = GetProviderDisplayName(provider)
+                    });
+                }
             }
 
             var memberships = await _dbContext.UserOrganizations
@@ -394,5 +461,38 @@ public sealed class TokenExchangeService
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
         return Convert.ToHexString(bytes);
+    }
+
+    private static string GetProviderDisplayName(string provider)
+    {
+        if (string.IsNullOrEmpty(provider))
+        {
+            return "Unknown";
+        }
+
+        return provider.ToLowerInvariant() switch
+        {
+            "amazon" => "Amazon",
+            "apple" => "Apple",
+            "battlenet" => "Battle.net",
+            "credential" => "Email/Password",
+            "discord" => "Discord",
+            "facebook" => "Facebook",
+            "github" => "GitHub",
+            "google" => "Google",
+            "lego" => "LEGO",
+            "microsoft" => "Microsoft",
+            "paypal" => "PayPal",
+            "reddit" => "Reddit",
+            "roblox" => "Roblox",
+            "slack" => "Slack",
+            "spotify" => "Spotify",
+            "steam" => "Steam",
+            "twitch" => "Twitch",
+            "unknown" => "BetterAuth",
+            "xbox" => "Xbox",
+            "yahoo" => "Yahoo",
+            _ => char.ToUpperInvariant(provider[0]) + provider[1..] // Title case fallback
+        };
     }
 }

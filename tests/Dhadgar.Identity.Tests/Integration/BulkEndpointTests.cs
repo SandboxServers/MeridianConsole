@@ -8,7 +8,8 @@ using Xunit;
 
 namespace Dhadgar.Identity.Tests.Integration;
 
-public sealed class BulkEndpointTests : IClassFixture<IdentityWebApplicationFactory>
+[Collection("Identity Integration")]
+public sealed class BulkEndpointTests
 {
     private readonly IdentityWebApplicationFactory _factory;
 

@@ -99,7 +99,7 @@ public static class EndpointHelpers
 
         if (org is null)
         {
-            return Results.NotFound(new { error = "org_not_found" });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound);
         }
 
         if (!org.RequireEmailVerification)
@@ -113,9 +113,7 @@ public static class EndpointHelpers
             return null; // Email is verified
         }
 
-        return Results.Json(
-            new { error = "email_verification_required", message = "This organization requires email verification" },
-            statusCode: StatusCodes.Status403Forbidden);
+        return ProblemDetailsHelper.Forbidden(ErrorCodes.AuthErrors.AccessDenied, "This organization requires email verification.");
     }
 
     /// <summary>

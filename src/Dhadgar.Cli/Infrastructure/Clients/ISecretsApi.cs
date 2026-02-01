@@ -9,40 +9,40 @@ namespace Dhadgar.Cli.Infrastructure.Clients;
 /// </summary>
 public interface ISecretsApi
 {
-    [Get("/api/v1/secrets/{name}")]
+    [Get("/secrets/{name}")]
     Task<SecretResponse> GetSecretAsync(string name, CancellationToken ct = default);
 
-    [Get("/api/v1/secrets/oauth")]
+    [Get("/secrets/oauth")]
     Task<SecretsResponse> GetOAuthSecretsAsync(CancellationToken ct = default);
 
-    [Get("/api/v1/secrets/betterauth")]
+    [Get("/secrets/betterauth")]
     Task<SecretsResponse> GetBetterAuthSecretsAsync(CancellationToken ct = default);
 
-    [Get("/api/v1/secrets/infrastructure")]
+    [Get("/secrets/infrastructure")]
     Task<SecretsResponse> GetInfrastructureSecretsAsync(CancellationToken ct = default);
 
-    [Post("/api/v1/secrets/batch")]
+    [Post("/secrets/batch")]
     Task<SecretsResponse> GetSecretsBatchAsync([Body] BatchSecretsRequest request, CancellationToken ct = default);
 
-    [Put("/api/v1/secrets/{name}")]
+    [Put("/secrets/{name}")]
     Task<SetSecretResponse> SetSecretAsync(string name, [Body] SetSecretRequest request, CancellationToken ct = default);
 
-    [Post("/api/v1/secrets/{name}/rotate")]
+    [Post("/secrets/{name}/rotate")]
     Task<RotateSecretResponse> RotateSecretAsync(string name, CancellationToken ct = default);
 
-    [Delete("/api/v1/secrets/{name}")]
+    [Delete("/secrets/{name}")]
     Task DeleteSecretAsync(string name, CancellationToken ct = default);
 
-    [Get("/api/v1/certificates")]
+    [Get("/certificates")]
     Task<CertificateListResponse> GetCertificatesAsync(CancellationToken ct = default);
 
-    [Get("/api/v1/keyvaults/{vaultName}/certificates")]
+    [Get("/keyvaults/{vaultName}/certificates")]
     Task<CertificateListResponse> GetVaultCertificatesAsync(string vaultName, CancellationToken ct = default);
 
-    [Post("/api/v1/certificates")]
+    [Post("/certificates")]
     Task<CertificateImportResponse> ImportCertificateAsync([Body] ImportCertificateRequest request, CancellationToken ct = default);
 
-    [Post("/api/v1/keyvaults/{vaultName}/certificates")]
+    [Post("/keyvaults/{vaultName}/certificates")]
     Task<CertificateImportResponse> ImportVaultCertificateAsync(
         string vaultName,
         [Body] ImportCertificateRequest request,

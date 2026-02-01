@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Dhadgar.Gateway.Middleware;
+using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
@@ -116,9 +117,11 @@ public class MiddlewareUnitTests
         var context = CreateContext();
         context.Response.StatusCode = StatusCodes.Status204NoContent;
 
+        var requestLogger = new RequestLoggingMessages(
+            NullLogger<RequestLoggingMessages>.Instance);
         var middleware = new RequestLoggingMiddleware(
             _ => Task.CompletedTask,
-            NullLogger<RequestLoggingMiddleware>.Instance);
+            requestLogger);
 
         await middleware.InvokeAsync(context);
     }
@@ -127,9 +130,11 @@ public class MiddlewareUnitTests
     public async Task RequestLoggingMiddlewareRethrowsOnFailure()
     {
         var context = CreateContext();
+        var requestLogger = new RequestLoggingMessages(
+            NullLogger<RequestLoggingMessages>.Instance);
         var middleware = new RequestLoggingMiddleware(
             _ => throw new InvalidOperationException("boom"),
-            NullLogger<RequestLoggingMiddleware>.Instance);
+            requestLogger);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(context));
     }
@@ -159,8 +164,8 @@ public class MiddlewareUnitTests
         Assert.Equal("Internal Server Error", root.GetProperty("title").GetString());
         Assert.Equal("kaboom", root.GetProperty("detail").GetString());
         Assert.Equal("corr-123", root.GetProperty("traceId").GetString());
-        Assert.True(root.TryGetProperty("extensions", out var extensions));
-        Assert.True(extensions.TryGetProperty("stackTrace", out _));
+        // Extensions are serialized as root-level properties (ProblemDetails uses [JsonExtensionData])
+        Assert.True(root.TryGetProperty("stackTrace", out _));
     }
 
     [Fact]

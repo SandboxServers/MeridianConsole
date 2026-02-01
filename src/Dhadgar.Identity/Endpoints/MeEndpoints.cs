@@ -1,5 +1,6 @@
 using Dhadgar.Identity.Data;
 using Dhadgar.Identity.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhadgar.Identity.Endpoints;
@@ -77,7 +78,7 @@ public static class MeEndpoints
 
         if (user is null)
         {
-            return Results.NotFound(new { error = "user_not_found" });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound);
         }
 
         // Get auth providers (login methods) for this user
@@ -110,27 +111,36 @@ public static class MeEndpoints
         UpdateProfileRequest request,
         IdentityDbContext dbContext,
         TimeProvider timeProvider,
+        IValidator<UpdateProfileRequest> validator,
         CancellationToken ct)
     {
+        // 1. Auth check (before validation to prevent information leakage)
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
         {
             return Results.Unauthorized();
         }
 
+        // 2. Validation (after auth)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
+        // 3. Business logic
         var user = await dbContext.Users
             .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null, ct);
 
         if (user is null)
         {
-            return Results.NotFound(new { error = "user_not_found" });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound);
         }
-
-        var updated = false;
 
         if (!string.IsNullOrWhiteSpace(request.DisplayName))
         {
             user.DisplayName = request.DisplayName.Trim();
-            updated = true;
         }
 
         if (request.PreferredOrganizationId.HasValue)
@@ -147,16 +157,10 @@ public static class MeEndpoints
 
             if (!isMember)
             {
-                return Results.BadRequest(new { error = "not_member_of_organization" });
+                return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, "User is not a member of the specified organization.");
             }
 
             user.PreferredOrganizationId = request.PreferredOrganizationId.Value;
-            updated = true;
-        }
-
-        if (!updated)
-        {
-            return Results.BadRequest(new { error = "no_updates_provided" });
         }
 
         user.UpdatedAt = timeProvider.GetUtcNow().DateTime;
@@ -245,7 +249,7 @@ public static class MeEndpoints
         var orgId = EndpointHelpers.GetOrganizationId(context);
         if (!orgId.HasValue)
         {
-            return Results.BadRequest(new { error = "no_organization_context" });
+            return ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, "No organization context. Please select an organization first.");
         }
 
         var permissions = await permissionService.CalculatePermissionsAsync(userId, orgId.Value, ct);
@@ -285,7 +289,11 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return Results.BadRequest(new { error = result.Error });
+            return result.Error switch
+            {
+                "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+            };
         }
 
         return Results.Ok(new
@@ -310,7 +318,13 @@ public static class MeEndpoints
 
         if (!result.Success)
         {
-            return Results.BadRequest(new { error = result.Error });
+            // Note: "user_not_found_or_already_deleted" is returned when user exists but has no pending deletion,
+            // which is a validation error (nothing to cancel), not a "not found" error.
+            return result.Error switch
+            {
+                "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound),
+                _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+            };
         }
 
         return Results.Ok(new { message = "Account deletion cancelled" });

@@ -1,5 +1,7 @@
 using Dhadgar.Contracts;
 using Dhadgar.Identity.Services;
+using Dhadgar.ServiceDefaults.Problems;
+using FluentValidation;
 
 namespace Dhadgar.Identity.Endpoints;
 
@@ -70,7 +72,7 @@ public static class MembershipEndpoints
         MembershipService membershipService,
         IPermissionService permissionService,
         int? page,
-        int? limit,
+        int? pageSize,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -90,13 +92,13 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        var pagination = new PaginationRequest { Page = page ?? 1, Limit = limit ?? 50 };
+        var pagination = new PaginationRequest { Page = page ?? 1, PageSize = pageSize ?? 50 };
         var allMembers = await membershipService.ListMembersAsync(organizationId, ct);
 
         // Apply pagination in memory (for backward compatibility with existing service)
         var pagedMembers = allMembers
             .Skip(pagination.Skip)
-            .Take(pagination.NormalizedLimit)
+            .Take(pagination.NormalizedPageSize)
             .ToArray();
 
         return Results.Ok(PagedResponse<MemberSummary>.Create(pagedMembers, allMembers.Count, pagination));
@@ -128,9 +130,22 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.InviteAsync(organizationId, userId, request, ct);
-        return result.Success
-            ? Results.Ok(new { membershipId = result.Value?.Id })
-            : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.Ok(new { membershipId = result.Value?.Id });
+        }
+
+        return result.Error switch
+        {
+            "invites_disabled" => ProblemDetailsHelper.Forbidden(ErrorCodes.IdentityErrors.InvitesDisabled, result.Error),
+            "invalid_role" => ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InvalidRole, result.Error),
+            "member_limit_reached" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.MemberLimitReached, result.Error),
+            "user_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.UserNotFound, result.Error),
+            "org_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.OrganizationNotFound, result.Error),
+            "already_member" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.AlreadyMember, result.Error),
+            "invitation_exists" => ProblemDetailsHelper.Conflict(ErrorCodes.IdentityErrors.InvitationExists, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> AcceptInvite(
@@ -145,9 +160,17 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.AcceptInviteAsync(organizationId, userId, ct);
-        return result.Success
-            ? Results.Ok(new { membershipId = result.Value?.Id })
-            : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.Ok(new { membershipId = result.Value?.Id });
+        }
+
+        return result.Error switch
+        {
+            "invite_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.InviteNotFound, result.Error),
+            "invite_expired" => ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InviteExpired, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> RejectInvite(
@@ -162,9 +185,17 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.RejectInviteAsync(organizationId, userId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "invite_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.InviteNotFound, result.Error),
+            "invite_expired" => ProblemDetailsHelper.BadRequest(ErrorCodes.IdentityErrors.InviteExpired, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> WithdrawInvitation(
@@ -193,9 +224,16 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.WithdrawInviteAsync(organizationId, userId, targetUserId, ct);
-        return result.Success
-            ? Results.NoContent()
-            : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "invite_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.InviteNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> RemoveMember(
@@ -224,7 +262,9 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.RemoveMemberAsync(organizationId, memberId, ct);
-        return result.Success ? Results.NoContent() : Results.BadRequest(new { error = result.Error });
+        return result.Success
+            ? Results.NoContent()
+            : ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error);
     }
 
     private static async Task<IResult> AssignRole(
@@ -234,6 +274,7 @@ public static class MembershipEndpoints
         MemberRoleRequest request,
         MembershipService membershipService,
         IPermissionService permissionService,
+        IValidator<MemberRoleRequest> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -253,14 +294,26 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        var role = request.Role?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(role))
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return Results.BadRequest(new { error = "invalid_role" });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
-        var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, role, ct);
-        return result.Success ? Results.Ok(new { role = result.Value?.Role }) : Results.BadRequest(new { error = result.Error });
+        var result = await membershipService.AssignRoleAsync(organizationId, userId, memberId, request.Role, ct);
+        if (result.Success)
+        {
+            return Results.Ok(new { role = result.Value?.Role });
+        }
+
+        return result.Error switch
+        {
+            "membership_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            "actor_not_member" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> ListClaims(
@@ -291,7 +344,7 @@ public static class MembershipEndpoints
         var result = await membershipService.ListClaimsAsync(organizationId, memberId, ct);
         if (!result.Success)
         {
-            return Results.NotFound(new { error = result.Error });
+            return ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error);
         }
 
         var claims = result.Value?.Select(c => new MemberClaimDto(c.Id, c.Type, c.Value, c.ExpiresAt, c.CreatedAt)).ToList()
@@ -326,9 +379,16 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.AddClaimAsync(organizationId, userId, memberId, request, ct);
-        return result.Success
-            ? Results.Ok(new { claimId = result.Value?.Id })
-            : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.Ok(new { claimId = result.Value?.Id });
+        }
+
+        return result.Error switch
+        {
+            "membership_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> RemoveClaim(
@@ -358,7 +418,17 @@ public static class MembershipEndpoints
         }
 
         var result = await membershipService.RemoveClaimAsync(organizationId, memberId, claimId, ct);
-        return result.Success ? Results.NoContent() : Results.BadRequest(new { error = result.Error });
+        if (result.Success)
+        {
+            return Results.NoContent();
+        }
+
+        return result.Error switch
+        {
+            "membership_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.MemberNotFound, result.Error),
+            "claim_not_found" => ProblemDetailsHelper.NotFound(ErrorCodes.IdentityErrors.ClaimNotFound, result.Error),
+            _ => ProblemDetailsHelper.BadRequest(ErrorCodes.CommonErrors.ValidationFailed, result.Error)
+        };
     }
 
     private static async Task<IResult> BulkInviteMembers(
@@ -367,6 +437,7 @@ public static class MembershipEndpoints
         BulkInviteRequest request,
         MembershipService membershipService,
         IPermissionService permissionService,
+        IValidator<BulkInviteRequest> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -386,9 +457,12 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        if (request.Invites is null || request.Invites.Count == 0)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return Results.BadRequest(new { error = "no_invites_provided" });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await membershipService.BulkInviteAsync(organizationId, userId, request.Invites, ct);
@@ -409,6 +483,7 @@ public static class MembershipEndpoints
         BulkRemoveRequest request,
         MembershipService membershipService,
         IPermissionService permissionService,
+        IValidator<BulkRemoveRequest> validator,
         CancellationToken ct)
     {
         if (!EndpointHelpers.TryGetUserId(context, out var userId))
@@ -428,9 +503,12 @@ public static class MembershipEndpoints
             return permissionResult;
         }
 
-        if (request.MemberIds is null || request.MemberIds.Count == 0)
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
         {
-            return Results.BadRequest(new { error = "no_members_provided" });
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
 
         var result = await membershipService.BulkRemoveAsync(organizationId, request.MemberIds, ct);

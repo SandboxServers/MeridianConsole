@@ -12,16 +12,16 @@ namespace Dhadgar.ServiceDefaults.Tests;
 public static class SwaggerTestHelper
 {
     /// <summary>
-    /// Verifies that the /swagger/v1/swagger.json endpoint returns valid OpenAPI JSON.
+    /// Verifies that the OpenAPI endpoint returns valid OpenAPI JSON.
     /// </summary>
     /// <typeparam name="TEntryPoint">The Program class of the service under test.</typeparam>
     /// <param name="factory">The WebApplicationFactory for the service.</param>
     /// <param name="expectedTitle">Optional: expected API title in the OpenAPI info section.</param>
-    /// <param name="swaggerPath">Path to swagger.json. Defaults to /swagger/v1/swagger.json.</param>
+    /// <param name="swaggerPath">Path to OpenAPI JSON. Defaults to /openapi/v1.json.</param>
     public static async Task VerifySwaggerEndpointAsync<TEntryPoint>(
         WebApplicationFactory<TEntryPoint> factory,
         string? expectedTitle = null,
-        string swaggerPath = "/swagger/v1/swagger.json")
+        string swaggerPath = "/openapi/v1.json")
         where TEntryPoint : class
     {
         // Arrange
@@ -60,14 +60,14 @@ public static class SwaggerTestHelper
     }
 
     /// <summary>
-    /// Verifies that the Swagger UI endpoint returns HTML.
+    /// Verifies that the Scalar API Reference endpoint returns HTML.
     /// </summary>
     /// <typeparam name="TEntryPoint">The Program class of the service under test.</typeparam>
     /// <param name="factory">The WebApplicationFactory for the service.</param>
-    /// <param name="swaggerUiPath">Path to Swagger UI. Defaults to /swagger/index.html.</param>
+    /// <param name="swaggerUiPath">Path to Scalar API Reference. Defaults to /scalar/v1.</param>
     public static async Task VerifySwaggerUiAsync<TEntryPoint>(
         WebApplicationFactory<TEntryPoint> factory,
-        string swaggerUiPath = "/swagger/index.html")
+        string swaggerUiPath = "/scalar/v1")
         where TEntryPoint : class
     {
         // Arrange
@@ -81,20 +81,20 @@ public static class SwaggerTestHelper
         Assert.Contains("text/html", response.Content.Headers.ContentType?.MediaType ?? "", StringComparison.Ordinal);
 
         var content = await response.Content.ReadAsStringAsync();
-        Assert.Contains("swagger", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("scalar", content, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
-    /// Verifies that the swagger.json contains expected paths.
+    /// Verifies that the OpenAPI spec contains expected paths.
     /// </summary>
     /// <typeparam name="TEntryPoint">The Program class of the service under test.</typeparam>
     /// <param name="factory">The WebApplicationFactory for the service.</param>
     /// <param name="expectedPaths">Paths that should exist in the OpenAPI spec.</param>
-    /// <param name="swaggerPath">Path to swagger.json. Defaults to /swagger/v1/swagger.json.</param>
+    /// <param name="swaggerPath">Path to OpenAPI JSON. Defaults to /openapi/v1.json.</param>
     public static async Task VerifySwaggerContainsPathsAsync<TEntryPoint>(
         WebApplicationFactory<TEntryPoint> factory,
         string[] expectedPaths,
-        string swaggerPath = "/swagger/v1/swagger.json")
+        string swaggerPath = "/openapi/v1.json")
         where TEntryPoint : class
     {
         // Arrange
@@ -110,22 +110,22 @@ public static class SwaggerTestHelper
         // Assert - All expected paths exist
         foreach (var path in expectedPaths)
         {
-            Assert.True(paths.TryGetProperty(path, out _), $"Expected path '{path}' not found in swagger.json");
+            Assert.True(paths.TryGetProperty(path, out _), $"Expected path '{path}' not found in OpenAPI spec");
         }
     }
 
     /// <summary>
-    /// Verifies basic service endpoints are documented in swagger.
+    /// Verifies basic service endpoints are documented in OpenAPI.
     /// Most services should have / and /hello endpoints.
     /// Note: Health check endpoints (/healthz, /livez, /readyz) use MapHealthChecks which
-    /// does not integrate with OpenAPI, so they are not included in swagger.json.
+    /// does not integrate with OpenAPI, so they are not included in the spec.
     /// </summary>
     /// <typeparam name="TEntryPoint">The Program class of the service under test.</typeparam>
     /// <param name="factory">The WebApplicationFactory for the service.</param>
-    /// <param name="swaggerPath">Path to swagger.json. Defaults to /swagger/v1/swagger.json.</param>
+    /// <param name="swaggerPath">Path to OpenAPI JSON. Defaults to /openapi/v1.json.</param>
     public static async Task VerifyHealthEndpointsDocumentedAsync<TEntryPoint>(
         WebApplicationFactory<TEntryPoint> factory,
-        string swaggerPath = "/swagger/v1/swagger.json")
+        string swaggerPath = "/openapi/v1.json")
         where TEntryPoint : class
     {
         await VerifySwaggerContainsPathsAsync(factory, ["/", "/hello"], swaggerPath);

@@ -35,14 +35,18 @@
   <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
   <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
   <PackageReference Include="OpenTelemetry.Instrumentation.Process" />
+  <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" />
   <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
 </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
     <!-- Security analyzer for authentication service -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
+    <!-- Validation -->
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
   </ItemGroup>
 </Project>
 

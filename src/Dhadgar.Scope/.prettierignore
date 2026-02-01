@@ -1,0 +1,9 @@
+# NuGet lock files (auto-generated, not meant for Prettier)
+packages.lock.json
+
+# Build outputs
+dist/
+.astro/
+
+# Dependencies
+node_modules/

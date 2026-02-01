@@ -21,7 +21,8 @@ namespace Dhadgar.Identity.Tests.Integration;
 /// Integration tests for end-to-end authentication flows:
 /// Better Auth → Token Exchange → JWT → Gateway header injection
 /// </summary>
-public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityWebApplicationFactory>, IAsyncLifetime
+[Collection("Identity Integration")]
+public sealed class AuthenticationFlowIntegrationTests : IAsyncLifetime
 {
     private readonly IdentityWebApplicationFactory _factory;
     private readonly HttpClient _client;
@@ -101,10 +102,10 @@ public sealed class AuthenticationFlowIntegrationTests : IClassFixture<IdentityW
         Assert.Equal(email, user.Email);
         Assert.False(user.EmailVerified);
 
-        // Verify Better Auth login was created
+        // Verify OAuth provider login was created
         var login = await db.UserLogins.FirstOrDefaultAsync(l => l.UserId == user.Id);
         Assert.NotNull(login);
-        Assert.Equal("betterauth", login.LoginProvider);
+        Assert.Equal("discord", login.LoginProvider);
         Assert.Equal(userId, login.ProviderKey);
 
         // Verify organization membership
