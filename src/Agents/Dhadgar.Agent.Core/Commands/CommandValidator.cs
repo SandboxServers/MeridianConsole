@@ -121,6 +121,12 @@ public sealed class CommandValidator : ICommandValidator
             return Fail($"Signature exceeds maximum length of {CommandEnvelope.MaxSignatureLength}", "SignatureTooLong");
         }
 
+        // Validate correlation ID size if present
+        if (envelope.CorrelationId is not null && envelope.CorrelationId.Length > CommandEnvelope.MaxCorrelationIdLength)
+        {
+            return Fail($"CorrelationId exceeds maximum length of {CommandEnvelope.MaxCorrelationIdLength}", "CorrelationIdTooLong");
+        }
+
         return Result<CommandEnvelope>.Success(envelope);
     }
 

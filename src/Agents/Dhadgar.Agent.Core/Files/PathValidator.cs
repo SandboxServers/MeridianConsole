@@ -28,58 +28,88 @@ public sealed class PathValidator : IPathValidator
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(allowedBasePaths);
 
-        // Normalize the path
-        var normalizedPath = NormalizePath(path);
-
-        // Check for path safety
-        if (!IsSafePath(normalizedPath))
+        try
         {
-            _logger.LogWarning("Path validation failed: unsafe path characters in {Path}", path);
-            return Result<string>.Failure(
-                "[Path.Unsafe] Path contains unsafe characters or traversal patterns");
-        }
+            // Normalize the path
+            var normalizedPath = NormalizePath(path);
 
-        // Convert to absolute path
-        var fullPath = Path.GetFullPath(normalizedPath);
-
-        // Check if the path is within any of the allowed base paths
-        var allowedBases = allowedBasePaths.ToList();
-        var isAllowed = false;
-
-        foreach (var basePath in allowedBases)
-        {
-            var normalizedBase = Path.GetFullPath(NormalizePath(basePath));
-
-            // Ensure the base path ends with a separator to prevent partial matches
-            // e.g., prevent "/allowed/path" from matching "/allowed/pathmalicious"
-            if (!normalizedBase.EndsWith(Path.DirectorySeparatorChar))
+            // Check for path safety
+            if (!IsSafePath(normalizedPath))
             {
-                normalizedBase += Path.DirectorySeparatorChar;
+                _logger.LogWarning("Path validation failed: unsafe path characters in {Path}", path);
+                return Result<string>.Failure(
+                    "[Path.Unsafe] Path contains unsafe characters or traversal patterns");
             }
 
-            // Use case-insensitive comparison on Windows, case-sensitive on Unix
-            var comparison = OperatingSystem.IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-
-            if (fullPath.StartsWith(normalizedBase, comparison) ||
-                fullPath.Equals(normalizedBase.TrimEnd(Path.DirectorySeparatorChar), comparison))
+            // Convert to absolute path
+            string fullPath;
+            try
             {
-                isAllowed = true;
-                break;
+                fullPath = Path.GetFullPath(normalizedPath);
             }
-        }
+            catch (PathTooLongException)
+            {
+                _logger.LogWarning("Path validation failed: path too long for {Path}", path);
+                return Result<string>.Failure("[Path.TooLong] Path exceeds maximum length");
+            }
 
-        if (!isAllowed)
+            // Check if the path is within any of the allowed base paths
+            var isAllowed = false;
+
+            foreach (var basePath in allowedBasePaths)
+            {
+                if (string.IsNullOrWhiteSpace(basePath))
+                {
+                    continue; // Skip invalid base paths
+                }
+
+                string normalizedBase;
+                try
+                {
+                    normalizedBase = Path.GetFullPath(NormalizePath(basePath));
+                }
+                catch (Exception ex) when (ex is ArgumentException or PathTooLongException or System.Security.SecurityException)
+                {
+                    _logger.LogWarning(ex, "Skipping invalid base path during validation");
+                    continue; // Skip malformed base paths
+                }
+
+                // Ensure the base path ends with a separator to prevent partial matches
+                // e.g., prevent "/allowed/path" from matching "/allowed/pathmalicious"
+                if (!normalizedBase.EndsWith(Path.DirectorySeparatorChar))
+                {
+                    normalizedBase += Path.DirectorySeparatorChar;
+                }
+
+                // Use case-insensitive comparison on Windows, case-sensitive on Unix
+                var comparison = OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+
+                if (fullPath.StartsWith(normalizedBase, comparison) ||
+                    fullPath.Equals(normalizedBase.TrimEnd(Path.DirectorySeparatorChar), comparison))
+                {
+                    isAllowed = true;
+                    break;
+                }
+            }
+
+            if (!isAllowed)
+            {
+                _logger.LogWarning(
+                    "Path validation failed: {Path} is not within allowed directories",
+                    path);
+                return Result<string>.Failure(
+                    "[Path.NotAllowed] Path is not within allowed directories");
+            }
+
+            return Result<string>.Success(fullPath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.Security.SecurityException)
         {
-            _logger.LogWarning(
-                "Path validation failed: {Path} is not within allowed directories",
-                path);
-            return Result<string>.Failure(
-                "[Path.NotAllowed] Path is not within allowed directories");
+            _logger.LogWarning(ex, "Path validation failed for {Path}", path);
+            return Result<string>.Failure("[Path.Invalid] Path validation failed");
         }
-
-        return Result<string>.Success(fullPath);
     }
 
     public bool IsSafePath(string path)

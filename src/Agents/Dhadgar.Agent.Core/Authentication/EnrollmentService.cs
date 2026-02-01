@@ -158,9 +158,26 @@ public sealed class EnrollmentService : IEnrollmentService
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Network error during enrollment");
-            // Return sanitized error message without exception details
             return Result<EnrollmentResult>.Failure(
                 "[Enrollment.NetworkError] Network error during enrollment");
+        }
+        catch (FormatException ex)
+        {
+            _logger.LogError(ex, "Invalid base64 data in enrollment response");
+            return Result<EnrollmentResult>.Failure(
+                "[Enrollment.InvalidFormat] Invalid certificate data format");
+        }
+        catch (System.Security.Cryptography.CryptographicException ex)
+        {
+            _logger.LogError(ex, "Cryptographic error during enrollment");
+            return Result<EnrollmentResult>.Failure(
+                "[Enrollment.CryptoError] Certificate processing failed");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            _logger.LogError(ex, "Invalid JSON in enrollment response");
+            return Result<EnrollmentResult>.Failure(
+                "[Enrollment.InvalidResponse] Invalid enrollment response format");
         }
     }
 
@@ -201,6 +218,22 @@ public sealed class EnrollmentService : IEnrollmentService
 
             // Use mTLS client for renewal (includes current certificate)
             using var client = _httpClientFactory.CreateClient("ControlPlaneMtls");
+
+            // Enforce HTTPS for renewal - certificate material should never traverse plain HTTP
+            if (client.BaseAddress is null)
+            {
+                return Result<CertificateRenewalResult>.Failure(
+                    "[Renewal.ConfigError] Control plane base address not configured");
+            }
+
+            if (!string.Equals(client.BaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError("Certificate renewal rejected: control plane must use HTTPS. Configured: {Scheme}",
+                    client.BaseAddress.Scheme);
+                return Result<CertificateRenewalResult>.Failure(
+                    "[Renewal.InsecureTransport] Certificate renewal requires HTTPS");
+            }
+
             var response = await client.PostAsJsonAsync(
                 $"api/v1/agents/{_options.NodeId}/certificates/renew",
                 request,
@@ -267,9 +300,26 @@ public sealed class EnrollmentService : IEnrollmentService
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Network error during certificate renewal");
-            // Return sanitized error message without exception details
             return Result<CertificateRenewalResult>.Failure(
                 "[Renewal.NetworkError] Network error during renewal");
+        }
+        catch (FormatException ex)
+        {
+            _logger.LogError(ex, "Invalid base64 data in renewal response");
+            return Result<CertificateRenewalResult>.Failure(
+                "[Renewal.InvalidFormat] Invalid certificate data format");
+        }
+        catch (System.Security.Cryptography.CryptographicException ex)
+        {
+            _logger.LogError(ex, "Cryptographic error during certificate renewal");
+            return Result<CertificateRenewalResult>.Failure(
+                "[Renewal.CryptoError] Certificate processing failed");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            _logger.LogError(ex, "Invalid JSON in renewal response");
+            return Result<CertificateRenewalResult>.Failure(
+                "[Renewal.InvalidResponse] Invalid renewal response format");
         }
     }
 

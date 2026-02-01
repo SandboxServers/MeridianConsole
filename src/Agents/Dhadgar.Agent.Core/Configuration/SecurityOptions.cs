@@ -68,16 +68,13 @@ public sealed class SecurityOptions : IValidatableObject
         var hasCertPath = !string.IsNullOrEmpty(CertificatePath);
         var hasKeyPath = !string.IsNullOrEmpty(PrivateKeyPath);
 
-        // Check if neither certificate option is configured
-        if (!hasThumbprint && !hasCertPath && !hasKeyPath)
-        {
-            yield return new ValidationResult(
-                $"Either {nameof(CertificateThumbprint)} or both {nameof(CertificatePath)} and {nameof(PrivateKeyPath)} must be specified for mTLS authentication",
-                [nameof(CertificateThumbprint), nameof(CertificatePath), nameof(PrivateKeyPath)]);
-            yield break;
-        }
+        // NOTE: We do NOT require certificate configuration at startup.
+        // Unenrolled agents start without certificates and obtain them via enrollment.
+        // Certificate requirements are enforced at runtime by:
+        // 1. EnrollmentService - requires successful enrollment before mTLS operations
+        // 2. AgentOptions.Validate - checks certificate config only when NodeId is set
 
-        // Check if thumbprint is used together with file-based paths
+        // Check if thumbprint is used together with file-based paths (mutually exclusive)
         if (hasThumbprint && (hasCertPath || hasKeyPath))
         {
             yield return new ValidationResult(
@@ -86,7 +83,7 @@ public sealed class SecurityOptions : IValidatableObject
             yield break;
         }
 
-        // Check if only one of CertificatePath/PrivateKeyPath is provided
+        // Check if only one of CertificatePath/PrivateKeyPath is provided (must be together)
         if (hasCertPath != hasKeyPath)
         {
             yield return new ValidationResult(

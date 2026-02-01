@@ -111,7 +111,7 @@ reviews:
 
   # Enable relevant analysis tools
   tools:
-    # .NET security analysis
+    # Integrates GitHub Actions/CI check run results
     github-checks:
       enabled: true
 
