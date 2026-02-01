@@ -35,7 +35,7 @@ This plan migrates Meridian Console from Docker Compose-based local development 
 
 ### Target Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           Dhadgar.AppHost                                   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -67,7 +67,7 @@ This plan migrates Meridian Console from Docker Compose-based local development 
 
 ### Project Dependencies
 
-```
+```text
 Dhadgar.AppHost
 ├─ References all service projects (Projects.Dhadgar_Gateway, etc.)
 ├─ Aspire.Hosting.PostgreSQL
@@ -140,7 +140,7 @@ Create `src/Dhadgar.AppHost/Dhadgar.AppHost.csproj`:
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Sdk Name="Aspire.AppHost.Sdk" Version="9.2.0" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.1.0" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -290,14 +290,14 @@ builder.Build().Run();
 
 ```xml
 <!-- Aspire Hosting -->
-<PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="9.2.0" />
-<PackageVersion Include="Aspire.Hosting.Redis" Version="9.2.0" />
-<PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="9.2.0" />
+<PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
+<PackageVersion Include="Aspire.Hosting.Redis" Version="13.1.0" />
+<PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
 
 <!-- Aspire Service Integrations -->
-<PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.2.0" />
-<PackageVersion Include="Aspire.StackExchange.Redis" Version="9.2.0" />
-<PackageVersion Include="Aspire.RabbitMQ.Client" Version="9.2.0" />
+<PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
+<PackageVersion Include="Aspire.StackExchange.Redis" Version="13.1.0" />
+<PackageVersion Include="Aspire.RabbitMQ.Client" Version="13.1.0" />
 ```
 
 ### Deliverables
@@ -1063,9 +1063,9 @@ Add to `Directory.Packages.props`:
 
 ```xml
 <!-- Aspire Service Integrations -->
-<PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.2.0" />
-<PackageVersion Include="Aspire.StackExchange.Redis" Version="9.2.0" />
-<PackageVersion Include="Aspire.RabbitMQ.Client" Version="9.2.0" />
+<PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
+<PackageVersion Include="Aspire.StackExchange.Redis" Version="13.1.0" />
+<PackageVersion Include="Aspire.RabbitMQ.Client" Version="13.1.0" />
 ```
 
 ### Deliverables

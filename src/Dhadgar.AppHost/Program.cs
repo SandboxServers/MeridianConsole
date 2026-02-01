@@ -10,7 +10,7 @@ var postgres = builder.AddPostgres("postgres")
     .WithDataVolume("dhadgar-postgres-data")
     .WithPgAdmin();
 
-// Create databases for each service (database-per-service pattern)
+// Create databases (platformDb is shared by most services; identityDb and billingDb are service-specific)
 var platformDb = postgres.AddDatabase("dhadgar-platform");
 var identityDb = postgres.AddDatabase("dhadgar-identity");
 var billingDb = postgres.AddDatabase("dhadgar-billing");

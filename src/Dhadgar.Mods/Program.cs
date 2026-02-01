@@ -2,13 +2,15 @@ using Dhadgar.Mods;
 using Dhadgar.Mods.Data;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
+using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add Dhadgar service defaults with Aspire-compatible patterns
-builder.AddDhadgarServiceDefaults();
+// Include Postgres health check for readiness
+builder.AddDhadgarServiceDefaults(HealthCheckDependencies.Postgres);
 
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Mods API",
