@@ -194,6 +194,10 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
             preliminaryLog.Status = NotificationStatus.Failed;
             preliminaryLog.ErrorMessage = Truncate(ex.Message, 1000);
             await _db.SaveChangesAsync(context.CancellationToken);
+
+            // Rethrow to allow MassTransit to apply retry policies
+            // The idempotency pattern will handle the Failed status on retry
+            throw;
         }
     }
 

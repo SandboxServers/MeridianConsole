@@ -146,9 +146,26 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
                 // Return generic message to avoid leaking internal API details
                 return new EmailSendResult(false, "Email delivery failed. Please contact support if the issue persists.");
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                throw; // Rethrow cancellation
+                // User-initiated cancellation - rethrow to propagate cancellation
+                throw;
+            }
+            catch (OperationCanceledException ex)
+            {
+                // HttpClient timeout (IsCancellationRequested is false) - treat as transient
+                var delay = GetExponentialBackoff(attempt);
+                _logger.LogWarning(
+                    ex,
+                    "HTTP timeout sending email. Subject: {Subject}, Attempt: {Attempt}/{MaxAttempts}",
+                    subject, attempt, MaxRetryAttempts);
+
+                if (attempt >= MaxRetryAttempts)
+                {
+                    return new EmailSendResult(false, "Email delivery timed out. Please try again later.");
+                }
+
+                await Task.Delay(delay, ct);
             }
             catch (Exception ex)
             {

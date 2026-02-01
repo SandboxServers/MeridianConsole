@@ -135,6 +135,41 @@ public abstract class FaultConsumer<TMessage> : IConsumer<Fault<TMessage>>
     /// <summary>
     /// Logs detailed information about the exceptions that caused the message to fault.
     /// </summary>
+    /// <param name="fault">The fault containing exception information.</param>
+    /// <param name="messageType">The name of the message type that faulted.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>Security Warning:</strong> This method logs full exception messages, inner exception
+    /// details, and stack traces. Exception content may inadvertently contain sensitive data such as:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>PII (personally identifiable information)</description></item>
+    ///   <item><description>Credentials or connection strings</description></item>
+    ///   <item><description>API keys or tokens</description></item>
+    ///   <item><description>Internal system paths or infrastructure details</description></item>
+    /// </list>
+    /// <para>
+    /// <strong>Recommendations:</strong>
+    /// </para>
+    /// <list type="number">
+    ///   <item><description>
+    ///     Ensure production log sinks have appropriate redaction or sanitization configured
+    ///     (e.g., Serilog destructuring policies, log scrubbing middleware).
+    ///   </description></item>
+    ///   <item><description>
+    ///     Consider using structured logging with sensitive data masking for fields that
+    ///     may contain credentials or tokens.
+    ///   </description></item>
+    ///   <item><description>
+    ///     Review log retention policies to ensure sensitive data is not retained longer
+    ///     than necessary.
+    ///   </description></item>
+    ///   <item><description>
+    ///     Implement access controls on log storage to restrict who can view detailed
+    ///     exception information.
+    ///   </description></item>
+    /// </list>
+    /// </remarks>
     private void LogFaultExceptions(Fault<TMessage> fault, string messageType)
     {
         if (fault.Exceptions is null || fault.Exceptions.Length == 0)
