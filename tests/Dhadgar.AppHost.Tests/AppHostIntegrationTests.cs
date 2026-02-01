@@ -50,10 +50,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Gateway_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("gateway");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("gateway");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -63,10 +61,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Gateway_RootEndpoint_ReturnsOk()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("gateway");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("gateway");
         var response = await httpClient.GetAsync("/");
 
         // Assert
@@ -76,10 +72,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Identity_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("identity");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("identity");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -89,10 +83,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Nodes_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("nodes");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("nodes");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -102,10 +94,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Secrets_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("secrets");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("secrets");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -115,10 +105,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Notifications_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("notifications");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("notifications");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -128,10 +116,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Discord_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("discord");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("discord");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -141,10 +127,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Billing_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("billing");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("billing");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -154,10 +138,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Servers_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("servers");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("servers");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -167,10 +149,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Tasks_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("tasks");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("tasks");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -180,10 +160,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Console_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("console");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("console");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
@@ -193,10 +171,8 @@ public class AppHostIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Mods_HealthCheck_ReturnsHealthy()
     {
-        // Arrange
-        var httpClient = _app!.CreateHttpClient("mods");
-
-        // Act
+        // Arrange & Act
+        using var httpClient = _app!.CreateHttpClient("mods");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert
