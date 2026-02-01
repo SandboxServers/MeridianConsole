@@ -130,7 +130,8 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
 
                 if (attempt >= MaxRetryAttempts)
                 {
-                    return new EmailSendResult(false, $"Failed after {MaxRetryAttempts} attempts: {ex.Message}");
+                    // Return generic message to avoid leaking internal error details
+                    return new EmailSendResult(false, "Email delivery failed due to a temporary service issue. Please try again later.");
                 }
 
                 await Task.Delay(delay, ct);
@@ -142,7 +143,8 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
                     ex,
                     "Graph API error (non-retryable). Subject: {Subject}, Status: {StatusCode}, Code: {ErrorCode}",
                     subject, ex.ResponseStatusCode, ex.Error?.Code);
-                return new EmailSendResult(false, $"Graph API error: {ex.Error?.Message ?? ex.Message}");
+                // Return generic message to avoid leaking internal API details
+                return new EmailSendResult(false, "Email delivery failed. Please contact support if the issue persists.");
             }
             catch (OperationCanceledException)
             {
@@ -154,7 +156,8 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
                     ex,
                     "Unexpected error sending email. Subject: {Subject}, ExceptionType: {ExceptionType}",
                     subject, ex.GetType().Name);
-                return new EmailSendResult(false, $"Unexpected error: {ex.Message}");
+                // Return generic message to avoid leaking internal error details
+                return new EmailSendResult(false, "An unexpected error occurred while sending email. Please try again later.");
             }
         }
 

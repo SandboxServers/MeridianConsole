@@ -39,6 +39,13 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
     {
         var message = context.Message;
 
+        // Validate NotificationId to prevent collisions in idempotency check
+        if (message.NotificationId == Guid.Empty)
+        {
+            _logger.LogError("Invalid notification received: NotificationId is empty. EventType: {EventType}", message.EventType);
+            throw new ArgumentException("NotificationId cannot be empty", nameof(message));
+        }
+
         _logger.LogInformation(
             "Processing notification {NotificationId} for event {EventType}: {Title}",
             message.NotificationId, message.EventType, message.Title);
