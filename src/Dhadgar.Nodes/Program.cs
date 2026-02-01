@@ -9,23 +9,24 @@ using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
-using Dhadgar.ServiceDefaults.Health;
-using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults(
-    builder.Configuration,
-    HealthCheckDependencies.Postgres);
+// Add Dhadgar service defaults with Aspire-compatible patterns
+builder.AddDhadgarServiceDefaults();
+
+// Add custom Nodes metrics
+builder.Services.ConfigureOpenTelemetryMeterProvider(metrics =>
+{
+    metrics.AddMeter(NodesMetrics.MeterName);
+});
+
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Nodes API",
     description: "Node inventory, health, and capacity management for Meridian Console");
@@ -144,68 +145,12 @@ builder.Services.AddAuthorizationBuilder()
         policy.RequireAuthenticatedUser();
     });
 
-// OpenTelemetry configuration
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-Uri? otlpUri = null;
-if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-{
-    if (Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out var parsedUri))
-    {
-        otlpUri = parsedUri;
-    }
-}
-var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Nodes");
-
-builder.Logging.AddOpenTelemetry(options =>
-{
-    options.SetResourceBuilder(resourceBuilder);
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
-    options.ParseStateValues = true;
-
-    if (otlpUri is not null)
-    {
-        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
-    }
-});
-
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation()
-            .AddMeter(NodesMetrics.MeterName); // Custom Nodes service metrics
-
-        if (otlpUri is not null)
-        {
-            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    });
-
 var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
+// Dhadgar middleware pipeline (correlation, tenant enrichment, problem details, request logging)
+app.UseDhadgarMiddleware();
 
 // Authentication and authorization
 app.UseAuthentication();

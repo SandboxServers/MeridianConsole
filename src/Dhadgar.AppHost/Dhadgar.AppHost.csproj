@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.1.0" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAspireHost>true</IsAspireHost>
+    <UserSecretsId>dhadgar-apphost</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Aspire Hosting Packages -->
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+    <PackageReference Include="Aspire.Hosting.Redis" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Core Service Projects -->
+    <ProjectReference Include="..\Dhadgar.Gateway\Dhadgar.Gateway.csproj" />
+    <ProjectReference Include="..\Dhadgar.Identity\Dhadgar.Identity.csproj" />
+    <ProjectReference Include="..\Dhadgar.Nodes\Dhadgar.Nodes.csproj" />
+    <ProjectReference Include="..\Dhadgar.Secrets\Dhadgar.Secrets.csproj" />
+    <!-- BetterAuth is a Node.js project, not an Aspire resource -->
+    <ProjectReference Include="..\Dhadgar.BetterAuth\Dhadgar.BetterAuth.csproj" IsAspireProjectResource="false" />
+    <ProjectReference Include="..\Dhadgar.Notifications\Dhadgar.Notifications.csproj" />
+    <ProjectReference Include="..\Dhadgar.Discord\Dhadgar.Discord.csproj" />
+
+    <!-- Stub Service Projects -->
+    <ProjectReference Include="..\Dhadgar.Billing\Dhadgar.Billing.csproj" />
+    <ProjectReference Include="..\Dhadgar.Servers\Dhadgar.Servers.csproj" />
+    <ProjectReference Include="..\Dhadgar.Tasks\Dhadgar.Tasks.csproj" />
+    <ProjectReference Include="..\Dhadgar.Console\Dhadgar.Console.csproj" />
+    <ProjectReference Include="..\Dhadgar.Mods\Dhadgar.Mods.csproj" />
+  </ItemGroup>
+
+</Project>

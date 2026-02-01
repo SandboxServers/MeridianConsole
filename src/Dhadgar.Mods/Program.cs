@@ -3,15 +3,15 @@ using Dhadgar.Mods.Data;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
-using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults(
-    builder.Configuration,
-    HealthCheckDependencies.Postgres);
+// Add Dhadgar service defaults with Aspire-compatible patterns
+// Include Postgres health check for readiness
+builder.AddDhadgarServiceDefaults(HealthCheckDependencies.Postgres);
+
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Mods API",
     description: "Mod registry and versioning for Meridian Console");
@@ -23,10 +23,8 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
+// Dhadgar middleware pipeline (correlation, tenant enrichment, problem details, request logging)
+app.UseDhadgarMiddleware();
 
 // Auto-migrate database in development
 await app.AutoMigrateDatabaseAsync<ModsDbContext>();
