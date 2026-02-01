@@ -17,12 +17,22 @@ public static class AgentServiceCollectionExtensions
 {
     /// <summary>
     /// Adds all agent core services to the service collection.
-    /// Platform-specific implementations (ICertificateStore, IProcessManager)
-    /// must be registered separately by the Windows or Linux agent.
+    /// <para>
+    /// <strong>Platform-specific services that must be registered by the host:</strong>
+    /// <list type="bullet">
+    ///   <item><see cref="ICertificateStore"/> - Windows uses X509Store, Linux uses file-based storage</item>
+    ///   <item><see cref="IProcessManager"/> - Windows uses Job Objects, Linux uses cgroups</item>
+    /// </list>
+    /// <see cref="IEnrollmentService"/> depends on <see cref="ICertificateStore"/>, so enrollment
+    /// will not function until the platform-specific certificate store is registered.
+    /// </para>
     /// </summary>
     public static IServiceCollection AddAgentCore(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // Authentication - IEnrollmentService requires ICertificateStore from platform-specific host
+        services.AddSingleton<IEnrollmentService, EnrollmentService>();
 
         // Communication
         services.AddSingleton<IControlPlaneClient, ControlPlaneClient>();

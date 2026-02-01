@@ -135,7 +135,15 @@ public sealed class EnrollmentService : IEnrollmentService
 
             var privateKeyBytes = ecdsa.ExportECPrivateKey();
 
-            await _certificateStore.StoreCertificateAsync(cert, privateKeyBytes, cancellationToken);
+            try
+            {
+                await _certificateStore.StoreCertificateAsync(cert, privateKeyBytes, cancellationToken);
+            }
+            finally
+            {
+                // SECURITY: Zero sensitive key material immediately after use
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
+            }
 
             // Store CA certificate if provided
             if (!string.IsNullOrEmpty(enrollmentResponse.CaCertificate))
@@ -281,7 +289,15 @@ public sealed class EnrollmentService : IEnrollmentService
 
             var privateKeyBytes = ecdsa.ExportECPrivateKey();
 
-            await _certificateStore.StoreCertificateAsync(newCert, privateKeyBytes, cancellationToken);
+            try
+            {
+                await _certificateStore.StoreCertificateAsync(newCert, privateKeyBytes, cancellationToken);
+            }
+            finally
+            {
+                // SECURITY: Zero sensitive key material immediately after use
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
+            }
 
             _logger.LogInformation("Certificate renewal completed. New expiry: {Expiry:O}",
                 newCert.NotAfter);

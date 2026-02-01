@@ -12,7 +12,7 @@ namespace Dhadgar.Agent.Core.Health;
 /// </summary>
 public sealed class HealthReporter : IHealthReporter
 {
-    private readonly AgentOptions _options;
+    private readonly IOptionsMonitor<AgentOptions> _optionsMonitor;
     private readonly ISystemMetricsCollector _metricsCollector;
     private readonly IProcessManager? _processManager;
     private readonly ILogger<HealthReporter> _logger;
@@ -33,6 +33,11 @@ public sealed class HealthReporter : IHealthReporter
         .Version?
         .ToString() ?? "0.0.0";
 
+    /// <summary>
+    /// Gets the current agent options (supports runtime changes like enrollment setting NodeId).
+    /// </summary>
+    private AgentOptions Options => _optionsMonitor.CurrentValue;
+
     public NodeStatus Status
     {
         get
@@ -45,12 +50,12 @@ public sealed class HealthReporter : IHealthReporter
     }
 
     public HealthReporter(
-        IOptions<AgentOptions> options,
+        IOptionsMonitor<AgentOptions> optionsMonitor,
         ISystemMetricsCollector metricsCollector,
         IProcessManager? processManager,
         ILogger<HealthReporter> logger)
     {
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _optionsMonitor = optionsMonitor ?? throw new ArgumentNullException(nameof(optionsMonitor));
         _metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
         _processManager = processManager; // Can be null during startup
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -104,7 +109,8 @@ public sealed class HealthReporter : IHealthReporter
 
     public async Task<Result<HeartbeatPayload>> GetHeartbeatPayloadAsync(CancellationToken cancellationToken = default)
     {
-        if (!_options.NodeId.HasValue)
+        var options = Options;
+        if (!options.NodeId.HasValue)
         {
             return Result<HeartbeatPayload>.Failure("Cannot create heartbeat: agent is not enrolled");
         }
@@ -135,7 +141,7 @@ public sealed class HealthReporter : IHealthReporter
 
         return Result<HeartbeatPayload>.Success(new HeartbeatPayload
         {
-            NodeId = _options.NodeId.Value,
+            NodeId = options.NodeId.Value,
             AgentVersion = AgentVersion,
             Timestamp = DateTimeOffset.UtcNow,
             Status = status,

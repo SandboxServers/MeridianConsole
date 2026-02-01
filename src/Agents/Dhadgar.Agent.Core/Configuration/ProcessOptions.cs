@@ -37,9 +37,14 @@ public sealed class ProcessOptions : IValidatableObject
     public int DefaultCpuLimitPercent { get; set; }
 
     /// <summary>
+    /// Maximum memory limit in MB (1 TB).
+    /// </summary>
+    public const int MaxMemoryLimitMb = 1_048_576;
+
+    /// <summary>
     /// Default memory limit in megabytes (0 = no limit).
     /// </summary>
-    [Range(0, int.MaxValue)]
+    [Range(0, MaxMemoryLimitMb)]
     public int DefaultMemoryLimitMb { get; set; }
 
     /// <summary>

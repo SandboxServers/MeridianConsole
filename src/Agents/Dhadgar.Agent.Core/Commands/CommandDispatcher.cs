@@ -171,6 +171,14 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
 {
     private readonly ILogger _logger;
 
+    /// <summary>
+    /// JSON deserialization options with depth limit to prevent DoS via deeply nested payloads.
+    /// </summary>
+    private static readonly JsonSerializerOptions DeserializerOptions = new()
+    {
+        MaxDepth = 64
+    };
+
     protected CommandHandlerBase(ILogger logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -182,20 +190,23 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
         CommandEnvelope envelope,
         CancellationToken cancellationToken = default)
     {
-        // Deserialize payload
+        // Deserialize payload with depth limit to prevent DoS
         TPayload? payload;
         try
         {
-            payload = JsonSerializer.Deserialize<TPayload>(envelope.PayloadJson);
+            payload = JsonSerializer.Deserialize<TPayload>(envelope.PayloadJson, DeserializerOptions);
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Failed to deserialize payload for command {CommandId}", envelope.CommandId);
+            var isDepthError = ex.Message.Contains("depth", StringComparison.OrdinalIgnoreCase);
+            var errorCode = isDepthError ? "PayloadTooDeep" : "InvalidPayload";
+            _logger.LogError(ex, "Failed to deserialize payload for command {CommandId} (depth limit exceeded: {IsDepthError})",
+                envelope.CommandId, isDepthError);
             return CommandResult.Rejected(
                 envelope.CommandId,
                 envelope.NodeId,
-                $"Invalid payload format: {ex.Message}",
-                "InvalidPayload",
+                isDepthError ? "Payload exceeds maximum nesting depth" : $"Invalid payload format: {ex.Message}",
+                errorCode,
                 envelope.CorrelationId);
         }
 

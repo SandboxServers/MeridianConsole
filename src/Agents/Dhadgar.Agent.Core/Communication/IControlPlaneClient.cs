@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Dhadgar.Agent.Core.Commands;
 using Dhadgar.Agent.Core.Health;
 
@@ -5,6 +6,17 @@ namespace Dhadgar.Agent.Core.Communication;
 
 /// <summary>
 /// Interface for communication with the control plane via SignalR.
+/// <para>
+/// <strong>SECURITY REQUIREMENT:</strong> All implementations of IControlPlaneClient MUST use mutual TLS (mTLS).
+/// Implementations must:
+/// <list type="bullet">
+///   <item>Present a valid client certificate during TLS handshake</item>
+///   <item>Validate the server certificate chain against trusted CA</item>
+///   <item>Enforce hostname verification</item>
+///   <item>Refuse any non-mTLS connections</item>
+/// </list>
+/// This is a hard security requirement and not optional.
+/// </para>
 /// </summary>
 public interface IControlPlaneClient
 {
@@ -82,8 +94,17 @@ public sealed class CommandReceivedEventArgs : EventArgs
 /// <summary>
 /// Telemetry payload for sending metrics and events.
 /// </summary>
-public sealed class TelemetryPayload
+public sealed class TelemetryPayload : IValidatableObject
 {
+    /// <summary>Maximum number of metrics per payload.</summary>
+    public const int MaxMetrics = 500;
+
+    /// <summary>Maximum number of events per payload.</summary>
+    public const int MaxEvents = 100;
+
+    /// <summary>Maximum length for metric/property keys.</summary>
+    public const int MaxKeyLength = 256;
+
     /// <summary>
     /// Node identifier.
     /// </summary>
@@ -103,6 +124,45 @@ public sealed class TelemetryPayload
     /// Events that occurred since last telemetry submission.
     /// </summary>
     public IList<TelemetryEvent> Events { get; init; } = [];
+
+    /// <summary>
+    /// Validates the telemetry payload to prevent resource exhaustion.
+    /// </summary>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Metrics.Count > MaxMetrics)
+        {
+            yield return new ValidationResult(
+                $"Metrics count ({Metrics.Count}) exceeds maximum ({MaxMetrics})",
+                [nameof(Metrics)]);
+        }
+
+        if (Events.Count > MaxEvents)
+        {
+            yield return new ValidationResult(
+                $"Events count ({Events.Count}) exceeds maximum ({MaxEvents})",
+                [nameof(Events)]);
+        }
+
+        foreach (var key in Metrics.Keys)
+        {
+            if (key.Length > MaxKeyLength)
+            {
+                yield return new ValidationResult(
+                    $"Metric key length ({key.Length}) exceeds maximum ({MaxKeyLength})",
+                    [nameof(Metrics)]);
+                break;
+            }
+        }
+
+        foreach (var evt in Events)
+        {
+            foreach (var result in evt.Validate())
+            {
+                yield return result;
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -110,9 +170,16 @@ public sealed class TelemetryPayload
 /// </summary>
 public sealed class TelemetryEvent
 {
+    /// <summary>Maximum number of properties per event.</summary>
+    public const int MaxProperties = 50;
+
+    /// <summary>Maximum length for string property values.</summary>
+    public const int MaxStringValueLength = 1024;
+
     /// <summary>
     /// Event name/type.
     /// </summary>
+    [MaxLength(TelemetryPayload.MaxKeyLength)]
     public required string Name { get; init; }
 
     /// <summary>
@@ -129,6 +196,45 @@ public sealed class TelemetryEvent
     /// Event properties/data.
     /// </summary>
     public Dictionary<string, object?> Properties { get; init; } = [];
+
+    /// <summary>
+    /// Validates the telemetry event.
+    /// </summary>
+    internal IEnumerable<ValidationResult> Validate()
+    {
+        if (Name.Length > TelemetryPayload.MaxKeyLength)
+        {
+            yield return new ValidationResult(
+                $"Event name length ({Name.Length}) exceeds maximum ({TelemetryPayload.MaxKeyLength})",
+                [nameof(Name)]);
+        }
+
+        if (Properties.Count > MaxProperties)
+        {
+            yield return new ValidationResult(
+                $"Event properties count ({Properties.Count}) exceeds maximum ({MaxProperties})",
+                [nameof(Properties)]);
+        }
+
+        foreach (var (key, value) in Properties)
+        {
+            if (key.Length > TelemetryPayload.MaxKeyLength)
+            {
+                yield return new ValidationResult(
+                    $"Property key length ({key.Length}) exceeds maximum ({TelemetryPayload.MaxKeyLength})",
+                    [nameof(Properties)]);
+                break;
+            }
+
+            if (value is string strValue && strValue.Length > MaxStringValueLength)
+            {
+                yield return new ValidationResult(
+                    $"Property value length ({strValue.Length}) exceeds maximum ({MaxStringValueLength})",
+                    [nameof(Properties)]);
+                break;
+            }
+        }
+    }
 }
 
 /// <summary>
