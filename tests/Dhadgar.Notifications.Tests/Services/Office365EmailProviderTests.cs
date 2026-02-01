@@ -25,7 +25,7 @@ public sealed class Office365EmailProviderTests
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>
             new Office365EmailProvider(config, logger));
-        Assert.Contains("TenantId", ex.Message);
+        Assert.Contains("TenantId", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class Office365EmailProviderTests
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>
             new Office365EmailProvider(config, logger));
-        Assert.Contains("ClientId", ex.Message);
+        Assert.Contains("ClientId", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class Office365EmailProviderTests
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>
             new Office365EmailProvider(config, logger));
-        Assert.Contains("ClientSecret", ex.Message);
+        Assert.Contains("ClientSecret", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public sealed class Office365EmailProviderTests
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>
             new Office365EmailProvider(config, logger));
-        Assert.Contains("SenderEmail", ex.Message);
+        Assert.Contains("SenderEmail", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public sealed class Office365EmailProviderTests
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("No recipients", result.ErrorMessage);
+        Assert.Contains("No recipients", result.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]

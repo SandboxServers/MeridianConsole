@@ -44,9 +44,9 @@ public class NotificationsWebApplicationFactory : WebApplicationFactory<Program>
             // Keep other hosted services (health checks, etc.) intact
             var massTransitHostedServices = services
                 .Where(d => d.ServiceType == typeof(IHostedService) &&
-                    (d.ImplementationType?.FullName?.Contains("MassTransit") == true ||
-                     d.ImplementationFactory?.Method.DeclaringType?.FullName?.Contains("MassTransit") == true ||
-                     d.ImplementationInstance?.GetType().FullName?.Contains("MassTransit") == true))
+                    (d.ImplementationType?.FullName?.Contains("MassTransit", StringComparison.Ordinal) == true ||
+                     d.ImplementationFactory?.Method.DeclaringType?.FullName?.Contains("MassTransit", StringComparison.Ordinal) == true ||
+                     d.ImplementationInstance?.GetType().FullName?.Contains("MassTransit", StringComparison.Ordinal) == true))
                 .ToList();
             foreach (var descriptor in massTransitHostedServices)
             {

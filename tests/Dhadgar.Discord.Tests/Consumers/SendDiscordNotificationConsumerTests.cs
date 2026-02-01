@@ -9,6 +9,10 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
 
+// Suppress CA2000 for HttpClient from mocked IHttpClientFactory - the mock returns the same
+// instance we're managing with using statements, but the analyzer can't track this.
+#pragma warning disable CA2000
+
 namespace Dhadgar.Discord.Tests.Consumers;
 
 public sealed class SendDiscordNotificationConsumerTests : IDisposable
@@ -74,7 +78,8 @@ public sealed class SendDiscordNotificationConsumerTests : IDisposable
         _configuration["Discord:WebhookUrl"].Returns("https://discord.com/api/webhooks/test");
 
         // Mock HTTP client that returns success
-        var mockHttpClient = new HttpClient(new MockHttpMessageHandler(System.Net.HttpStatusCode.NoContent));
+        using var mockHandler = new MockHttpMessageHandler(System.Net.HttpStatusCode.NoContent);
+        using var mockHttpClient = new HttpClient(mockHandler);
         _httpClientFactory.CreateClient().Returns(mockHttpClient);
 
         var consumer = new SendDiscordNotificationConsumer(
@@ -113,7 +118,8 @@ public sealed class SendDiscordNotificationConsumerTests : IDisposable
         _configuration["Discord:WebhookUrl"].Returns("https://discord.com/api/webhooks/test");
 
         // Mock HTTP client that returns error
-        var mockHttpClient = new HttpClient(new MockHttpMessageHandler(System.Net.HttpStatusCode.BadRequest));
+        using var mockHandler = new MockHttpMessageHandler(System.Net.HttpStatusCode.BadRequest);
+        using var mockHttpClient = new HttpClient(mockHandler);
         _httpClientFactory.CreateClient().Returns(mockHttpClient);
 
         var consumer = new SendDiscordNotificationConsumer(
@@ -150,7 +156,8 @@ public sealed class SendDiscordNotificationConsumerTests : IDisposable
         // Arrange
         _configuration["Discord:WebhookUrl"].Returns("https://discord.com/api/webhooks/test");
 
-        var mockHttpClient = new HttpClient(new MockHttpMessageHandler(System.Net.HttpStatusCode.NoContent));
+        using var mockHandler = new MockHttpMessageHandler(System.Net.HttpStatusCode.NoContent);
+        using var mockHttpClient = new HttpClient(mockHandler);
         _httpClientFactory.CreateClient().Returns(mockHttpClient);
 
         var consumer = new SendDiscordNotificationConsumer(

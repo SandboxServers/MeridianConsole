@@ -103,7 +103,8 @@ public sealed class DiscordApiEndpointTests : IClassFixture<DiscordWebApplicatio
         Assert.Equal(0, content.UnhealthyCount);
     }
 
-    private record HealthCheckResponse(string Service, string Status, string BotStatus);
-    private record DiscordChannelsResponse(bool Connected, int GuildCount);
-    private record PlatformHealthResponse(int HealthyCount, int UnhealthyCount);
+    // Response DTOs for JSON deserialization - must be public records for System.Text.Json
+    public sealed record HealthCheckResponse(string Service, string Status, string BotStatus);
+    public sealed record DiscordChannelsResponse(bool Connected, int GuildCount);
+    public sealed record PlatformHealthResponse(int HealthyCount, int UnhealthyCount);
 }
