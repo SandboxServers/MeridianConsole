@@ -60,7 +60,7 @@ store.Add(certificate);
 
 ## Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      Dhadgar.Agent.Windows                          │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -142,6 +142,12 @@ Create `Installation/ServiceInstaller.cs`:
 ```csharp
 public static class ServiceInstaller
 {
+    // Service name is hardcoded to prevent command injection.
+    // If this becomes parameterized in the future, add strict validation:
+    // - Allow only alphanumeric characters, hyphens, and underscores
+    // - Reject any shell metacharacters (quotes, semicolons, pipes, etc.)
+    private const string ServiceName = "DhadgarAgent";
+
     public static void ConfigureRecovery()
     {
         // Configure service to restart on failure
@@ -151,7 +157,7 @@ public static class ServiceInstaller
         var process = Process.Start(new ProcessStartInfo
         {
             FileName = "sc.exe",
-            Arguments = "failure DhadgarAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000",
+            Arguments = $"failure {ServiceName} reset= 86400 actions= restart/5000/restart/10000/restart/30000",
             UseShellExecute = false,
             CreateNoWindow = true
         });
@@ -648,8 +654,18 @@ public sealed class FirewallManager
 {
     private readonly ILogger<FirewallManager> _logger;
 
+    // Regex for validating firewall rule names: alphanumeric, spaces, hyphens, underscores only
+    private static readonly Regex ValidRuleNamePattern = new(
+        @"^[a-zA-Z0-9\s\-_]+$",
+        RegexOptions.Compiled);
+
     public void AllowPort(int port, string ruleName, string protocol = "TCP")
     {
+        // Input validation to prevent command injection
+        ValidatePort(port);
+        ValidateRuleName(ruleName);
+        ValidateProtocol(protocol);
+
         var args = $"advfirewall firewall add rule name=\"{ruleName}\" " +
                    $"dir=in action=allow protocol={protocol} localport={port}";
 
@@ -660,9 +676,49 @@ public sealed class FirewallManager
 
     public void RemoveRule(string ruleName)
     {
+        // Input validation to prevent command injection
+        ValidateRuleName(ruleName);
+
         var args = $"advfirewall firewall delete rule name=\"{ruleName}\"";
         ExecuteNetsh(args);
         _logger.LogInformation("Removed firewall rule: {RuleName}", ruleName);
+    }
+
+    private static void ValidatePort(int port)
+    {
+        if (port is < 1 or > 65535)
+        {
+            throw new ArgumentOutOfRangeException(nameof(port), port,
+                "Port must be between 1 and 65535.");
+        }
+    }
+
+    private static void ValidateProtocol(string protocol)
+    {
+        if (!protocol.Equals("TCP", StringComparison.OrdinalIgnoreCase) &&
+            !protocol.Equals("UDP", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Protocol must be either 'TCP' or 'UDP'.", nameof(protocol));
+        }
+    }
+
+    private static void ValidateRuleName(string ruleName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleName);
+
+        if (!ValidRuleNamePattern.IsMatch(ruleName))
+        {
+            throw new ArgumentException(
+                "Rule name contains invalid characters. Only alphanumeric characters, spaces, hyphens, and underscores are allowed.",
+                nameof(ruleName));
+        }
+
+        if (ruleName.Length > 256)
+        {
+            throw new ArgumentException(
+                "Rule name must not exceed 256 characters.", nameof(ruleName));
+        }
     }
 
     private static void ExecuteNetsh(string arguments)

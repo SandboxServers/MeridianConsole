@@ -82,7 +82,14 @@ public sealed class HeartbeatService : BackgroundService
             return;
         }
 
-        var payload = await _healthReporter.GetHeartbeatPayloadAsync(cancellationToken);
+        var payloadResult = await _healthReporter.GetHeartbeatPayloadAsync(cancellationToken);
+        if (payloadResult.IsFailure)
+        {
+            _logger.LogWarning("Skipping heartbeat: {Error}", payloadResult.Error);
+            return;
+        }
+
+        var payload = payloadResult.Value;
         await _controlPlaneClient.SendHeartbeatAsync(payload, cancellationToken);
 
         _logger.LogDebug(

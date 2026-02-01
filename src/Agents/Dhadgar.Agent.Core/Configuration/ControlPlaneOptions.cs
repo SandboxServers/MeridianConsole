@@ -59,5 +59,12 @@ public sealed class ControlPlaneOptions : IValidatableObject
                 $"{nameof(MaxReconnectDelaySeconds)} ({MaxReconnectDelaySeconds}) must be greater than or equal to {nameof(ReconnectDelaySeconds)} ({ReconnectDelaySeconds})",
                 [nameof(MaxReconnectDelaySeconds), nameof(ReconnectDelaySeconds)]);
         }
+
+        if (ServerTimeoutSeconds <= KeepAliveIntervalSeconds)
+        {
+            yield return new ValidationResult(
+                $"{nameof(ServerTimeoutSeconds)} ({ServerTimeoutSeconds}) must be greater than {nameof(KeepAliveIntervalSeconds)} ({KeepAliveIntervalSeconds})",
+                [nameof(ServerTimeoutSeconds), nameof(KeepAliveIntervalSeconds)]);
+        }
     }
 }

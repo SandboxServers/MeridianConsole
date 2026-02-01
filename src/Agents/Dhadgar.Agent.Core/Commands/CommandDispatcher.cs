@@ -183,11 +183,10 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
         CancellationToken cancellationToken = default)
     {
         // Deserialize payload
-        TPayload payload;
+        TPayload? payload;
         try
         {
-            payload = JsonSerializer.Deserialize<TPayload>(envelope.PayloadJson)
-                ?? throw new InvalidOperationException("Payload deserialized to null");
+            payload = JsonSerializer.Deserialize<TPayload>(envelope.PayloadJson);
         }
         catch (JsonException ex)
         {
@@ -197,6 +196,17 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
                 envelope.NodeId,
                 $"Invalid payload format: {ex.Message}",
                 "InvalidPayload",
+                envelope.CorrelationId);
+        }
+
+        if (payload is null)
+        {
+            _logger.LogWarning("Payload deserialized to null for command {CommandId}", envelope.CommandId);
+            return CommandResult.Rejected(
+                envelope.CommandId,
+                envelope.NodeId,
+                "Payload deserialized to null",
+                "NullPayload",
                 envelope.CorrelationId);
         }
 

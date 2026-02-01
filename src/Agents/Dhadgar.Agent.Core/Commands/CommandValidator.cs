@@ -21,9 +21,12 @@ public sealed class CommandValidator : ICommandValidator
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public Result<CommandEnvelope> Validate(CommandEnvelope envelope)
+    public Result<CommandEnvelope> Validate(CommandEnvelope? envelope)
     {
-        ArgumentNullException.ThrowIfNull(envelope);
+        if (envelope is null)
+        {
+            return Fail("Envelope cannot be null", "NullEnvelope");
+        }
 
         // Validate command ID
         if (envelope.CommandId == Guid.Empty)

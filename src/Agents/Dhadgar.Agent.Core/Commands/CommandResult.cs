@@ -53,6 +53,7 @@ public sealed class CommandResult
     /// <summary>
     /// Creates a successful result.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when commandId or nodeId is empty.</exception>
     public static CommandResult Success(
         Guid commandId,
         Guid nodeId,
@@ -60,13 +61,29 @@ public sealed class CommandResult
         string? resultJson = null,
         string? correlationId = null)
     {
+        if (commandId == Guid.Empty)
+        {
+            throw new ArgumentException("CommandId cannot be empty", nameof(commandId));
+        }
+
+        if (nodeId == Guid.Empty)
+        {
+            throw new ArgumentException("NodeId cannot be empty", nameof(nodeId));
+        }
+
+        var completedAt = DateTimeOffset.UtcNow;
+        if (completedAt < startedAt)
+        {
+            completedAt = startedAt;
+        }
+
         return new CommandResult
         {
             CommandId = commandId,
             NodeId = nodeId,
             Status = CommandResultStatus.Succeeded,
             StartedAt = startedAt,
-            CompletedAt = DateTimeOffset.UtcNow,
+            CompletedAt = completedAt,
             ResultJson = resultJson,
             CorrelationId = correlationId
         };
@@ -75,6 +92,7 @@ public sealed class CommandResult
     /// <summary>
     /// Creates a failed result.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when commandId or nodeId is empty.</exception>
     public static CommandResult Failure(
         Guid commandId,
         Guid nodeId,
@@ -83,13 +101,29 @@ public sealed class CommandResult
         string? errorCode = null,
         string? correlationId = null)
     {
+        if (commandId == Guid.Empty)
+        {
+            throw new ArgumentException("CommandId cannot be empty", nameof(commandId));
+        }
+
+        if (nodeId == Guid.Empty)
+        {
+            throw new ArgumentException("NodeId cannot be empty", nameof(nodeId));
+        }
+
+        var completedAt = DateTimeOffset.UtcNow;
+        if (completedAt < startedAt)
+        {
+            completedAt = startedAt;
+        }
+
         return new CommandResult
         {
             CommandId = commandId,
             NodeId = nodeId,
             Status = CommandResultStatus.Failed,
             StartedAt = startedAt,
-            CompletedAt = DateTimeOffset.UtcNow,
+            CompletedAt = completedAt,
             ErrorMessage = errorMessage,
             ErrorCode = errorCode,
             CorrelationId = correlationId
@@ -99,6 +133,7 @@ public sealed class CommandResult
     /// <summary>
     /// Creates a rejected result (validation failed).
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when commandId or nodeId is empty.</exception>
     public static CommandResult Rejected(
         Guid commandId,
         Guid nodeId,
@@ -106,6 +141,16 @@ public sealed class CommandResult
         string? errorCode = null,
         string? correlationId = null)
     {
+        if (commandId == Guid.Empty)
+        {
+            throw new ArgumentException("CommandId cannot be empty", nameof(commandId));
+        }
+
+        if (nodeId == Guid.Empty)
+        {
+            throw new ArgumentException("NodeId cannot be empty", nameof(nodeId));
+        }
+
         var now = DateTimeOffset.UtcNow;
         return new CommandResult
         {

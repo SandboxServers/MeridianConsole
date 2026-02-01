@@ -12,5 +12,5 @@ public interface ICommandValidator
     /// </summary>
     /// <param name="envelope">Command envelope to validate.</param>
     /// <returns>Validation result.</returns>
-    Result<CommandEnvelope> Validate(CommandEnvelope envelope);
+    Result<CommandEnvelope> Validate(CommandEnvelope? envelope);
 }

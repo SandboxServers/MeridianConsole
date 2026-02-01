@@ -1,6 +1,7 @@
 using System.Reflection;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Process;
+using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -89,11 +90,11 @@ public sealed class HealthReporter : IHealthReporter
         }
     }
 
-    public async Task<HeartbeatPayload> GetHeartbeatPayloadAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<HeartbeatPayload>> GetHeartbeatPayloadAsync(CancellationToken cancellationToken = default)
     {
         if (!_options.NodeId.HasValue)
         {
-            throw new InvalidOperationException("Cannot create heartbeat: agent is not enrolled");
+            return Result<HeartbeatPayload>.Failure("Cannot create heartbeat: agent is not enrolled");
         }
 
         var metrics = await _metricsCollector.CollectAsync(cancellationToken);
@@ -120,7 +121,7 @@ public sealed class HealthReporter : IHealthReporter
             warnings = [.. _warnings];
         }
 
-        return new HeartbeatPayload
+        return Result<HeartbeatPayload>.Success(new HeartbeatPayload
         {
             NodeId = _options.NodeId.Value,
             AgentVersion = AgentVersion,
@@ -129,6 +130,6 @@ public sealed class HealthReporter : IHealthReporter
             Metrics = metrics,
             ActiveProcesses = activeProcesses,
             Warnings = warnings
-        };
+        });
     }
 }

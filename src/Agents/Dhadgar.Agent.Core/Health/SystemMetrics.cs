@@ -23,13 +23,13 @@ public sealed class SystemMetrics
     /// <summary>
     /// Used memory in bytes.
     /// </summary>
-    public long UsedMemoryBytes => TotalMemoryBytes - AvailableMemoryBytes;
+    public long UsedMemoryBytes => Math.Max(0, TotalMemoryBytes - AvailableMemoryBytes);
 
     /// <summary>
     /// Memory usage percentage (0-100).
     /// </summary>
     public double MemoryUsagePercent =>
-        TotalMemoryBytes > 0 ? (double)UsedMemoryBytes / TotalMemoryBytes * 100 : 0;
+        TotalMemoryBytes > 0 ? Math.Clamp((double)UsedMemoryBytes / TotalMemoryBytes * 100, 0, 100) : 0;
 
     /// <summary>
     /// Disk space information for relevant volumes.
@@ -80,13 +80,13 @@ public sealed class DiskMetrics
     /// <summary>
     /// Used space in bytes.
     /// </summary>
-    public long UsedBytes => TotalBytes - AvailableBytes;
+    public long UsedBytes => Math.Max(0, TotalBytes - AvailableBytes);
 
     /// <summary>
     /// Usage percentage (0-100).
     /// </summary>
     public double UsagePercent =>
-        TotalBytes > 0 ? (double)UsedBytes / TotalBytes * 100 : 0;
+        TotalBytes > 0 ? Math.Clamp((double)UsedBytes / TotalBytes * 100, 0, 100) : 0;
 }
 
 /// <summary>

@@ -56,23 +56,49 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
 
             SetState(ConnectionState.Connecting);
 
-            var endpoint = new Uri(new Uri(_options.ControlPlane.Endpoint), "/hubs/agent");
+            var baseUri = new Uri(_options.ControlPlane.Endpoint);
+
+            // Security: Require HTTPS for control plane communication
+            if (baseUri.Scheme != Uri.UriSchemeHttps)
+            {
+                throw new InvalidOperationException(
+                    $"Control plane endpoint must use HTTPS. Current scheme: {baseUri.Scheme}");
+            }
+
+            var endpoint = new Uri(baseUri, "/hubs/agent");
             _logger.LogInformation("Connecting to control plane at {Endpoint}", endpoint);
+
+            // Dispose existing connection before creating new one
+            if (_hubConnection is not null)
+            {
+                _hubConnection.Closed -= OnConnectionClosed;
+                _hubConnection.Reconnecting -= OnReconnecting;
+                _hubConnection.Reconnected -= OnReconnected;
+                await _hubConnection.DisposeAsync();
+                _hubConnection = null;
+            }
 
             var builder = new HubConnectionBuilder()
                 .WithUrl(endpoint, options =>
                 {
                     // Configure mTLS if certificate is available
                     var clientCert = _certificateStore.GetClientCertificate();
-                    if (clientCert is not null)
-                    {
-                        options.ClientCertificates = [clientCert];
-                    }
 
-                    // Add node ID header if enrolled
+                    // Security: Require client certificate when NodeId is set (enrolled agent)
                     if (_options.NodeId.HasValue)
                     {
+                        if (clientCert is null)
+                        {
+                            throw new InvalidOperationException(
+                                "Client certificate is required for enrolled agents (NodeId is set)");
+                        }
+                        options.ClientCertificates = [clientCert];
                         options.Headers["X-Node-Id"] = _options.NodeId.Value.ToString();
+                    }
+                    else if (clientCert is not null)
+                    {
+                        // Not enrolled yet, but have a cert (e.g., during enrollment)
+                        options.ClientCertificates = [clientCert];
                     }
                 })
                 .WithAutomaticReconnect(new RetryPolicy(_options.ControlPlane))
@@ -82,6 +108,10 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                 });
 
             _hubConnection = builder.Build();
+
+            // Configure keep-alive and server timeout from options
+            _hubConnection.KeepAliveInterval = TimeSpan.FromSeconds(_options.ControlPlane.KeepAliveIntervalSeconds);
+            _hubConnection.ServerTimeout = TimeSpan.FromSeconds(_options.ControlPlane.ServerTimeoutSeconds);
 
             // Set up event handlers
             _hubConnection.Closed += OnConnectionClosed;
@@ -208,18 +238,62 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Maximum allowed payload size for incoming commands (256 KB).
+    /// </summary>
+    private const int MaxCommandPayloadSize = 256 * 1024;
+
+    /// <summary>
+    /// JSON serializer options with security constraints.
+    /// </summary>
+    private static readonly JsonSerializerOptions CommandJsonOptions = new()
+    {
+        MaxDepth = 64,
+        PropertyNameCaseInsensitive = true
+    };
+
     private void OnCommandReceived(string commandJson)
     {
         try
         {
-            var envelope = JsonSerializer.Deserialize<CommandEnvelope>(commandJson);
-            if (envelope is not null)
+            // Security: Enforce payload size limit to prevent resource exhaustion
+            if (commandJson.Length > MaxCommandPayloadSize)
             {
-                _meter.RecordCommandReceived(envelope.CommandType);
-                _logger.LogInformation("Received command {CommandType} with ID {CommandId}",
-                    envelope.CommandType, envelope.CommandId);
-                CommandReceived?.Invoke(this, new CommandReceivedEventArgs(envelope));
+                _logger.LogWarning(
+                    "Rejected command: payload size {Size} exceeds maximum {MaxSize}",
+                    commandJson.Length, MaxCommandPayloadSize);
+                return;
             }
+
+            var envelope = JsonSerializer.Deserialize<CommandEnvelope>(commandJson, CommandJsonOptions);
+            if (envelope is null)
+            {
+                _logger.LogWarning("Rejected command: deserialization returned null");
+                return;
+            }
+
+            // Security: Validate NodeId matches this agent's NodeId
+            if (_options.NodeId.HasValue && envelope.NodeId != _options.NodeId.Value)
+            {
+                _logger.LogWarning(
+                    "Rejected command {CommandId}: NodeId mismatch (expected {ExpectedNodeId}, received {ReceivedNodeId})",
+                    envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
+                return;
+            }
+
+            // Security: Reject expired commands
+            if (envelope.ExpiresAt.HasValue && envelope.ExpiresAt.Value < DateTimeOffset.UtcNow)
+            {
+                _logger.LogWarning(
+                    "Rejected command {CommandId}: expired at {ExpiresAt}",
+                    envelope.CommandId, envelope.ExpiresAt.Value);
+                return;
+            }
+
+            _meter.RecordCommandReceived(envelope.CommandType);
+            _logger.LogInformation("Received command {CommandType} with ID {CommandId}",
+                envelope.CommandType, envelope.CommandId);
+            CommandReceived?.Invoke(this, new CommandReceivedEventArgs(envelope));
         }
         catch (JsonException ex)
         {

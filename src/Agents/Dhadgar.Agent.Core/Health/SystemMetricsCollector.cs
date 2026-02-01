@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using Dhadgar.Agent.Core.Telemetry;
 using Microsoft.Extensions.Logging;
@@ -164,15 +165,30 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
                     continue;
                 }
 
-                var stats = iface.GetIPv4Statistics();
-
-                networks.Add(new NetworkMetrics
+                // Some interfaces don't support IPv4 statistics (e.g., certain virtual adapters)
+                if (!iface.Supports(System.Net.NetworkInformation.NetworkInterfaceComponent.IPv4))
                 {
-                    InterfaceName = iface.Name,
-                    BytesReceived = stats.BytesReceived,
-                    BytesSent = stats.BytesSent,
-                    IsOperational = iface.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
-                });
+                    continue;
+                }
+
+                try
+                {
+                    var stats = iface.GetIPv4Statistics();
+
+                    networks.Add(new NetworkMetrics
+                    {
+                        InterfaceName = iface.Name,
+                        BytesReceived = stats.BytesReceived,
+                        BytesSent = stats.BytesSent,
+                        IsOperational = iface.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
+                    });
+                }
+                catch (NetworkInformationException)
+                {
+                    // Some interfaces may throw even if they claim to support IPv4
+                    // (e.g., disconnected adapters on certain platforms)
+                    continue;
+                }
             }
         }
         catch (Exception ex)

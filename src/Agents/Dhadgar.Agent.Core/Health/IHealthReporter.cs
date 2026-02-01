@@ -1,3 +1,5 @@
+using Dhadgar.Shared.Results;
+
 namespace Dhadgar.Agent.Core.Health;
 
 /// <summary>
@@ -31,6 +33,6 @@ public interface IHealthReporter
     /// <summary>
     /// Get the current heartbeat payload.
     /// </summary>
-    /// <returns>Heartbeat payload with current status and metrics.</returns>
-    Task<HeartbeatPayload> GetHeartbeatPayloadAsync(CancellationToken cancellationToken = default);
+    /// <returns>A Result containing the heartbeat payload, or failure if the agent is not enrolled.</returns>
+    Task<Result<HeartbeatPayload>> GetHeartbeatPayloadAsync(CancellationToken cancellationToken = default);
 }

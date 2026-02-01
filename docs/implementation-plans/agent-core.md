@@ -593,11 +593,11 @@ public sealed class EnrollmentService
         string enrollmentToken,
         CancellationToken cancellationToken = default)
     {
-        // 1. Generate key pair
-        using var rsa = RSA.Create(4096);
+        // 1. Generate key pair (ECDSA P-384 for modern security and smaller key size)
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
 
         // 2. Create CSR
-        var csr = CreateCertificateSigningRequest(rsa);
+        var csr = CreateCertificateSigningRequest(ecdsa);
 
         // 3. Submit to control plane
         var client = _httpClientFactory.CreateClient("Enrollment");

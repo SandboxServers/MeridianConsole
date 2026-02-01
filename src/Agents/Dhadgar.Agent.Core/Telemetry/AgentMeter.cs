@@ -20,10 +20,12 @@ public sealed class AgentMeter : IDisposable
     private readonly Counter<long> _filesTransferred;
     private readonly Counter<long> _bytesTransferred;
 
-    // Gauges (observable)
+    // Gauges (observable) - fields are used by the meter's observable callbacks
+#pragma warning disable CA1823 // Avoid unused private fields
     private readonly ObservableGauge<int> _activeProcessCount;
     private readonly ObservableGauge<double> _cpuUsage;
     private readonly ObservableGauge<long> _memoryUsage;
+#pragma warning restore CA1823
 
     private int _processCount;
     private double _cpuPercent;
@@ -125,8 +127,8 @@ public sealed class AgentMeter : IDisposable
 
     public void UpdateSystemMetrics(double cpuPercent, long memoryBytes)
     {
-        _cpuPercent = cpuPercent;
-        _memoryBytes = memoryBytes;
+        Volatile.Write(ref _cpuPercent, cpuPercent);
+        Volatile.Write(ref _memoryBytes, memoryBytes);
     }
 
     public void Dispose()

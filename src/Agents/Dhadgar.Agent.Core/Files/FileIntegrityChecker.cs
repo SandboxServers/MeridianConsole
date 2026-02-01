@@ -77,6 +77,24 @@ public sealed class FileIntegrityChecker : IFileIntegrityChecker
             return Result<bool>.Failure(
                 $"[File.HashMismatch] Hash mismatch. Expected: {normalizedExpected}, Actual: {actualHash}");
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(ex, "Access denied during hash verification for {FilePath}", filePath);
+            return Result<bool>.Failure(
+                $"[File.AccessDenied] Access denied: {ex.Message}");
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            _logger.LogError(ex, "Security exception during hash verification for {FilePath}", filePath);
+            return Result<bool>.Failure(
+                $"[File.SecurityError] Security error: {ex.Message}");
+        }
+        catch (PathTooLongException ex)
+        {
+            _logger.LogError(ex, "Path too long during hash verification for {FilePath}", filePath);
+            return Result<bool>.Failure(
+                $"[File.PathTooLong] Path exceeds maximum length: {ex.Message}");
+        }
         catch (IOException ex)
         {
             _logger.LogError(ex, "IO error during hash verification for {FilePath}", filePath);

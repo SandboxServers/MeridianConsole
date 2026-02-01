@@ -33,7 +33,8 @@ public interface IProcessManager
     /// Kill a process immediately.
     /// </summary>
     /// <param name="processId">Process identifier.</param>
-    Task<Result<bool>> KillProcessAsync(Guid processId);
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<Result<bool>> KillProcessAsync(Guid processId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get status of a managed process.
@@ -52,9 +53,11 @@ public interface IProcessManager
     /// </summary>
     /// <param name="processId">Process identifier.</param>
     /// <param name="limits">New resource limits.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     Task<Result<bool>> UpdateResourceLimitsAsync(
         Guid processId,
-        ResourceLimits limits);
+        ResourceLimits limits,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Event raised when a process exits.

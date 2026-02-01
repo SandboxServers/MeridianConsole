@@ -92,22 +92,22 @@ public sealed class CertificateValidator
     {
         ArgumentNullException.ThrowIfNull(certificate);
 
-        var subject = certificate.Subject;
-        const string prefix = "CN=node-";
+        // Use GetNameInfo to properly parse the CN, handling edge cases like
+        // escaped characters, multi-value RDNs, and non-standard encodings
+        var commonName = certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
 
-        if (!subject.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(commonName))
         {
             return null;
         }
 
-        var guidPart = subject[prefix.Length..];
-        // Handle cases where there might be additional fields after the CN
-        var commaIndex = guidPart.IndexOf(',', StringComparison.Ordinal);
-        if (commaIndex >= 0)
+        const string prefix = "node-";
+        if (!commonName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
-            guidPart = guidPart[..commaIndex];
+            return null;
         }
 
+        var guidPart = commonName[prefix.Length..];
         return Guid.TryParse(guidPart, out var nodeId) ? nodeId : null;
     }
 }

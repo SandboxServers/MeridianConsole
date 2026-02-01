@@ -18,9 +18,9 @@ public sealed class ManagedProcess
     public required Guid ServerId { get; init; }
 
     /// <summary>
-    /// OS process ID.
+    /// OS process ID. Null when process has not been started.
     /// </summary>
-    public int OsPid { get; set; }
+    public int? OsPid { get; set; }
 
     /// <summary>
     /// Current process state.
@@ -63,12 +63,22 @@ public sealed class ManagedProcess
     public int RestartCount { get; set; }
 
     /// <summary>
-    /// Process uptime.
+    /// Process uptime. Returns TimeSpan.Zero if process has not been started.
     /// </summary>
-    public TimeSpan Uptime =>
-        State == ProcessState.Running
-            ? DateTimeOffset.UtcNow - StartedAt
-            : (ExitedAt ?? DateTimeOffset.UtcNow) - StartedAt;
+    public TimeSpan Uptime
+    {
+        get
+        {
+            if (StartedAt == default)
+            {
+                return TimeSpan.Zero;
+            }
+
+            return State == ProcessState.Running
+                ? DateTimeOffset.UtcNow - StartedAt
+                : (ExitedAt ?? DateTimeOffset.UtcNow) - StartedAt;
+        }
+    }
 
     /// <summary>
     /// Convert to status for heartbeat.

@@ -57,8 +57,13 @@ public sealed class PathValidator : IPathValidator
                 normalizedBase += Path.DirectorySeparatorChar;
             }
 
-            if (fullPath.StartsWith(normalizedBase, StringComparison.OrdinalIgnoreCase) ||
-                fullPath.Equals(normalizedBase.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            // Use case-insensitive comparison on Windows, case-sensitive on Unix
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            if (fullPath.StartsWith(normalizedBase, comparison) ||
+                fullPath.Equals(normalizedBase.TrimEnd(Path.DirectorySeparatorChar), comparison))
             {
                 isAllowed = true;
                 break;
@@ -84,8 +89,15 @@ public sealed class PathValidator : IPathValidator
             return false;
         }
 
-        // Check for invalid characters
-        if (path.AsSpan().IndexOfAny(InvalidPathChars) >= 0)
+        // Check for invalid characters, but allow colons for Windows drive letters (e.g., C:\)
+        var spanToCheck = path.AsSpan();
+        if (OperatingSystem.IsWindows() && path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':')
+        {
+            // Skip the drive letter portion (e.g., "C:") when checking for invalid chars
+            spanToCheck = spanToCheck.Slice(2);
+        }
+
+        if (spanToCheck.IndexOfAny(InvalidPathChars) >= 0)
         {
             return false;
         }

@@ -36,11 +36,18 @@ public sealed class ResourceLimits
     /// <summary>
     /// Creates limits from configuration percentages.
     /// </summary>
+    /// <param name="cpuPercent">CPU percentage (clamped to 1-100 range if positive).</param>
+    /// <param name="memoryMb">Memory limit in megabytes.</param>
     public static ResourceLimits FromConfig(int cpuPercent, int memoryMb)
     {
+        // Clamp CPU percent to valid 1-100 range if positive
+        int? clampedCpuPercent = cpuPercent > 0
+            ? Math.Clamp(cpuPercent, 1, 100)
+            : null;
+
         return new ResourceLimits
         {
-            CpuPercent = cpuPercent > 0 ? cpuPercent : null,
+            CpuPercent = clampedCpuPercent,
             MemoryMb = memoryMb > 0 ? memoryMb : null
         };
     }

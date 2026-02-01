@@ -23,7 +23,7 @@ The `Dhadgar.Agent.Linux` project provides the Linux-specific implementation of 
 All Linux-specific approaches validated against official documentation:
 
 | Component | Validated Source | Key Details |
-|-----------|-----------------|-------------|
+| --------- | ---------------- | ----------- |
 | systemd Hosting | [MS Learn](https://learn.microsoft.com/en-us/dotnet/core/extensions/linux-service) | `Microsoft.Extensions.Hosting.Systemd` v10.0.1, `UseSystemd()` |
 | cgroups v2 | [Kernel Docs](https://docs.kernel.org/admin-guide/cgroup-v2.html) | File-based API, `cpu.max`, `memory.max`, `memory.high` |
 | .NET cgroups awareness | [MS Learn](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/environment-processorcount-on-windows) | `Environment.ProcessorCount` respects cgroups since .NET 6 |
@@ -126,8 +126,10 @@ await host.RunAsync();
 
 #### 1.2 Add Package Reference
 
+> **Note**: This project uses Central Package Management. Package versions are defined in `Directory.Packages.props` at the solution root - do not specify versions in `.csproj` files.
+
 ```xml
-<PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.1" />
+<PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
 ```
 
 #### 1.3 Create systemd Unit File
@@ -952,16 +954,23 @@ public sealed class NamespaceManager
             args.Add(arg);
         }
 
-        return new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = "unshare",
             WorkingDirectory = original.WorkingDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = original.RedirectStandardOutput,
             RedirectStandardError = original.RedirectStandardError,
-            RedirectStandardInput = original.RedirectStandardInput,
-            ArgumentList = { string.Join(" ", args) }
+            RedirectStandardInput = original.RedirectStandardInput
         };
+
+        // Add each argument individually to avoid shell interpretation issues
+        foreach (var arg in args)
+        {
+            startInfo.ArgumentList.Add(arg);
+        }
+
+        return startInfo;
     }
 }
 

@@ -40,8 +40,8 @@ public static class AgentHostBuilderExtensions
             .AddJsonFile("appsettings.platform.json", optional: true, reloadOnChange: true)
             // Environment variables with DHADGAR_ prefix
             .AddEnvironmentVariables("DHADGAR_")
-            // Command line overrides
-            .AddCommandLine(Environment.GetCommandLineArgs());
+            // Command line overrides (skip first arg which is the executable path)
+            .AddCommandLine(Environment.GetCommandLineArgs().Skip(1).ToArray());
     }
 
     private static void ConfigureServices(HostBuilderContext context, IServiceCollection services)

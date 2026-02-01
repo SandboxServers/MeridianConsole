@@ -86,7 +86,7 @@ public sealed class FileTransferService : IFileTransferService
             transferState.State = FileTransferState.Connecting;
 
             // Download the file
-            using var client = _httpClientFactory.CreateClient("ControlPlane");
+            using var client = _httpClientFactory.CreateClient("ControlPlaneMtls");
             using var response = await client.GetAsync(
                 request.SourceUrl,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -95,6 +95,13 @@ public sealed class FileTransferService : IFileTransferService
             response.EnsureSuccessStatusCode();
 
             var totalBytes = response.Content.Headers.ContentLength ?? request.ExpectedSizeBytes ?? 0;
+
+            // Enforce max file size before starting download
+            if (totalBytes > _fileOptions.MaxFileSizeBytes)
+            {
+                return Result<FileTransferResult>.Failure(
+                    $"[File.TooLarge] File exceeds maximum size of {_fileOptions.MaxFileSizeBytes} bytes");
+            }
 
             transferState.State = FileTransferState.Transferring;
 
@@ -117,6 +124,25 @@ public sealed class FileTransferService : IFileTransferService
             {
                 await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), transferState.CancellationSource.Token);
                 bytesTransferred += bytesRead;
+
+                // Enforce max file size during download (in case Content-Length was missing or incorrect)
+                if (bytesTransferred > _fileOptions.MaxFileSizeBytes)
+                {
+                    // Clean up partial download
+                    await fileStream.DisposeAsync();
+                    try
+                    {
+                        File.Delete(destinationPath);
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        _logger.LogDebug(cleanupEx,
+                            "Failed to clean up oversized download for {TransferId}: {Path}",
+                            request.TransferId, destinationPath);
+                    }
+                    return Result<FileTransferResult>.Failure(
+                        $"[File.TooLarge] File exceeds maximum size of {_fileOptions.MaxFileSizeBytes} bytes");
+                }
 
                 var elapsed = DateTimeOffset.UtcNow - startTime;
                 var bytesPerSecond = elapsed.TotalSeconds > 0
@@ -273,7 +299,7 @@ public sealed class FileTransferService : IFileTransferService
 
             transferState.State = FileTransferState.Transferring;
 
-            using var client = _httpClientFactory.CreateClient("ControlPlane");
+            using var client = _httpClientFactory.CreateClient("ControlPlaneMtls");
             await using var fileStream = new FileStream(
                 sourcePath,
                 FileMode.Open,
