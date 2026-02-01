@@ -68,15 +68,36 @@ public sealed class ProcessOptions : IValidatableObject
             else
             {
                 // Ensure path is normalized (no .. or . components)
-                var normalizedPath = Path.GetFullPath(ServerBasePath);
-                if (!ServerBasePath.Equals(normalizedPath, StringComparison.Ordinal) &&
-                    !ServerBasePath.Equals(normalizedPath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
+                var (normalizedPath, isValid) = TryGetFullPath(ServerBasePath);
+                if (!isValid)
+                {
+                    yield return new ValidationResult(
+                        $"{nameof(ServerBasePath)} is not a valid path",
+                        [nameof(ServerBasePath)]);
+                }
+                else if (!ServerBasePath.Equals(normalizedPath, StringComparison.Ordinal) &&
+                    !ServerBasePath.Equals(normalizedPath!.TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
                 {
                     yield return new ValidationResult(
                         $"{nameof(ServerBasePath)} must be a normalized absolute path (use '{normalizedPath}' instead)",
                         [nameof(ServerBasePath)]);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Attempts to get the full path, returning success/failure without throwing.
+    /// </summary>
+    private static (string? NormalizedPath, bool IsValid) TryGetFullPath(string path)
+    {
+        try
+        {
+            return (Path.GetFullPath(path), true);
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException)
+        {
+            return (null, false);
         }
     }
 }

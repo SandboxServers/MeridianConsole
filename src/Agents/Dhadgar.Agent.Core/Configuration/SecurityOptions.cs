@@ -104,26 +104,79 @@ public sealed partial class SecurityOptions : IValidatableObject
                 [nameof(CertificateThumbprint)]);
         }
 
-        // Validate certificate paths are absolute (prevent relative path attacks)
-        if (hasCertPath && !Path.IsPathRooted(CertificatePath!))
+        // Validate certificate paths are absolute and normalized (prevent path traversal attacks)
+        foreach (var result in ValidateCertificatePath(CertificatePath, nameof(CertificatePath), hasCertPath))
         {
-            yield return new ValidationResult(
-                $"{nameof(CertificatePath)} must be an absolute path",
-                [nameof(CertificatePath)]);
+            yield return result;
         }
 
-        if (hasKeyPath && !Path.IsPathRooted(PrivateKeyPath!))
+        foreach (var result in ValidateCertificatePath(PrivateKeyPath, nameof(PrivateKeyPath), hasKeyPath))
         {
-            yield return new ValidationResult(
-                $"{nameof(PrivateKeyPath)} must be an absolute path",
-                [nameof(PrivateKeyPath)]);
+            yield return result;
         }
 
-        if (!string.IsNullOrEmpty(CaCertificatePath) && !Path.IsPathRooted(CaCertificatePath))
+        foreach (var result in ValidateCertificatePath(CaCertificatePath, nameof(CaCertificatePath), !string.IsNullOrEmpty(CaCertificatePath)))
+        {
+            yield return result;
+        }
+    }
+
+    /// <summary>
+    /// Validates that a certificate path is absolute and normalized (no traversal sequences).
+    /// </summary>
+    private static IEnumerable<ValidationResult> ValidateCertificatePath(string? path, string propertyName, bool shouldValidate)
+    {
+        if (!shouldValidate || string.IsNullOrEmpty(path))
+        {
+            yield break;
+        }
+
+        if (!Path.IsPathRooted(path))
         {
             yield return new ValidationResult(
-                $"{nameof(CaCertificatePath)} must be an absolute path",
-                [nameof(CaCertificatePath)]);
+                $"{propertyName} must be an absolute path",
+                [propertyName]);
+            yield break;
+        }
+
+        // Check for path traversal sequences
+        if (path.Contains("..", StringComparison.Ordinal))
+        {
+            yield return new ValidationResult(
+                $"{propertyName} must not contain path traversal sequences (..)",
+                [propertyName]);
+            yield break;
+        }
+
+        // Verify path is normalized - use helper to avoid yield in catch
+        var (normalizedPath, isValid) = TryGetFullPath(path);
+        if (!isValid)
+        {
+            yield return new ValidationResult(
+                $"{propertyName} is not a valid path",
+                [propertyName]);
+        }
+        else if (!path.Equals(normalizedPath, StringComparison.Ordinal) &&
+            !path.Equals(normalizedPath!.TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
+        {
+            yield return new ValidationResult(
+                $"{propertyName} must be a normalized absolute path (use '{normalizedPath}' instead)",
+                [propertyName]);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to get the full path, returning success/failure without throwing.
+    /// </summary>
+    private static (string? NormalizedPath, bool IsValid) TryGetFullPath(string path)
+    {
+        try
+        {
+            return (Path.GetFullPath(path), true);
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
+        {
+            return (null, false);
         }
     }
 }

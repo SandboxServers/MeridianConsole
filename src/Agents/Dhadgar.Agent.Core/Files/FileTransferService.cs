@@ -96,6 +96,13 @@ public sealed class FileTransferService : IFileTransferService
                     "[Transfer.InsecureTransport] File transfers require HTTPS");
             }
 
+            // Validate source URL - must be absolute if no base address configured
+            if (client.BaseAddress is null && !Uri.IsWellFormedUriString(request.SourceUrl, UriKind.Absolute))
+            {
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.InvalidUrl] Source URL must be absolute when no base address is configured");
+            }
+
             // Validate source URL scheme if it's an absolute URL
             if (Uri.TryCreate(request.SourceUrl, UriKind.Absolute, out var sourceUri) &&
                 !string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))

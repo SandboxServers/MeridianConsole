@@ -112,37 +112,42 @@ public sealed class EnrollmentService : IEnrollmentService
 
             // Store the certificate (use X509CertificateLoader for security)
             var certBytes = Convert.FromBase64String(enrollmentResponse.Certificate);
-            var cert = X509CertificateLoader.LoadCertificate(certBytes);
+            DateTime certExpiry;
 
-            // Validate that the certificate's public key matches our locally generated keypair
-            // This prevents the server from issuing a certificate for a different key
-            using var certEcdsa = cert.GetECDsaPublicKey();
-            if (certEcdsa is null)
+            // Use using to guarantee certificate disposal on all paths
+            using (var cert = X509CertificateLoader.LoadCertificate(certBytes))
             {
-                cert.Dispose();
-                return Result<EnrollmentResult>.Failure(
-                    "[Enrollment.InvalidCertificate] Certificate does not contain an ECDSA public key");
-            }
+                // Validate that the certificate's public key matches our locally generated keypair
+                // This prevents the server from issuing a certificate for a different key
+                using var certEcdsa = cert.GetECDsaPublicKey();
+                if (certEcdsa is null)
+                {
+                    return Result<EnrollmentResult>.Failure(
+                        "[Enrollment.InvalidCertificate] Certificate does not contain an ECDSA public key");
+                }
 
-            var certPublicKeyBytes = certEcdsa.ExportSubjectPublicKeyInfo();
-            var localPublicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
-            if (!certPublicKeyBytes.AsSpan().SequenceEqual(localPublicKeyBytes))
-            {
-                cert.Dispose();
-                return Result<EnrollmentResult>.Failure(
-                    "[Enrollment.KeyMismatch] Certificate public key does not match locally generated keypair");
-            }
+                var certPublicKeyBytes = certEcdsa.ExportSubjectPublicKeyInfo();
+                var localPublicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
+                if (!certPublicKeyBytes.AsSpan().SequenceEqual(localPublicKeyBytes))
+                {
+                    return Result<EnrollmentResult>.Failure(
+                        "[Enrollment.KeyMismatch] Certificate public key does not match locally generated keypair");
+                }
 
-            var privateKeyBytes = ecdsa.ExportECPrivateKey();
+                // Capture expiry before cert is disposed
+                certExpiry = cert.NotAfter;
 
-            try
-            {
-                await _certificateStore.StoreCertificateAsync(cert, privateKeyBytes, cancellationToken);
-            }
-            finally
-            {
-                // SECURITY: Zero sensitive key material immediately after use
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
+                var privateKeyBytes = ecdsa.ExportECPrivateKey();
+
+                try
+                {
+                    await _certificateStore.StoreCertificateAsync(cert, privateKeyBytes, cancellationToken);
+                }
+                finally
+                {
+                    // SECURITY: Zero sensitive key material immediately after use
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
+                }
             }
 
             // Store CA certificate if provided
@@ -160,7 +165,7 @@ public sealed class EnrollmentService : IEnrollmentService
             {
                 NodeId = enrollmentResponse.NodeId,
                 OrganizationId = enrollmentResponse.OrganizationId,
-                CertificateExpiry = cert.NotAfter
+                CertificateExpiry = certExpiry
             });
         }
         catch (HttpRequestException ex)
@@ -266,45 +271,49 @@ public sealed class EnrollmentService : IEnrollmentService
 
             // Store the new certificate (use X509CertificateLoader for security)
             var certBytes = Convert.FromBase64String(renewalResponse.Certificate);
-            var newCert = X509CertificateLoader.LoadCertificate(certBytes);
+            DateTime newExpiry;
 
-            // Validate that the certificate's public key matches our locally generated keypair
-            // This prevents the server from issuing a certificate for a different key
-            using var certEcdsa = newCert.GetECDsaPublicKey();
-            if (certEcdsa is null)
+            // Use using to guarantee certificate disposal on all paths
+            using (var newCert = X509CertificateLoader.LoadCertificate(certBytes))
             {
-                newCert.Dispose();
-                return Result<CertificateRenewalResult>.Failure(
-                    "[Renewal.InvalidCertificate] Certificate does not contain an ECDSA public key");
+                // Validate that the certificate's public key matches our locally generated keypair
+                // This prevents the server from issuing a certificate for a different key
+                using var certEcdsa = newCert.GetECDsaPublicKey();
+                if (certEcdsa is null)
+                {
+                    return Result<CertificateRenewalResult>.Failure(
+                        "[Renewal.InvalidCertificate] Certificate does not contain an ECDSA public key");
+                }
+
+                var certPublicKeyBytes = certEcdsa.ExportSubjectPublicKeyInfo();
+                var localPublicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
+                if (!certPublicKeyBytes.AsSpan().SequenceEqual(localPublicKeyBytes))
+                {
+                    return Result<CertificateRenewalResult>.Failure(
+                        "[Renewal.KeyMismatch] Certificate public key does not match locally generated keypair");
+                }
+
+                // Capture expiry before cert is disposed
+                newExpiry = newCert.NotAfter;
+
+                var privateKeyBytes = ecdsa.ExportECPrivateKey();
+
+                try
+                {
+                    await _certificateStore.StoreCertificateAsync(newCert, privateKeyBytes, cancellationToken);
+                }
+                finally
+                {
+                    // SECURITY: Zero sensitive key material immediately after use
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
+                }
             }
 
-            var certPublicKeyBytes = certEcdsa.ExportSubjectPublicKeyInfo();
-            var localPublicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
-            if (!certPublicKeyBytes.AsSpan().SequenceEqual(localPublicKeyBytes))
-            {
-                newCert.Dispose();
-                return Result<CertificateRenewalResult>.Failure(
-                    "[Renewal.KeyMismatch] Certificate public key does not match locally generated keypair");
-            }
-
-            var privateKeyBytes = ecdsa.ExportECPrivateKey();
-
-            try
-            {
-                await _certificateStore.StoreCertificateAsync(newCert, privateKeyBytes, cancellationToken);
-            }
-            finally
-            {
-                // SECURITY: Zero sensitive key material immediately after use
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
-            }
-
-            _logger.LogInformation("Certificate renewal completed. New expiry: {Expiry:O}",
-                newCert.NotAfter);
+            _logger.LogInformation("Certificate renewal completed. New expiry: {Expiry:O}", newExpiry);
 
             return Result<CertificateRenewalResult>.Success(new CertificateRenewalResult
             {
-                NewExpiry = newCert.NotAfter,
+                NewExpiry = newExpiry,
                 OldExpiry = currentCert.NotAfter
             });
         }

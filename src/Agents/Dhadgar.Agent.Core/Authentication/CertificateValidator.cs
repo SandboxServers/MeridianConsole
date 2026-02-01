@@ -27,10 +27,14 @@ public sealed class CertificateValidator
     /// <param name="chain">Certificate chain.</param>
     /// <returns>Validation result.</returns>
     public Result<bool> ValidateServerCertificate(
-        X509Certificate2 certificate,
+        X509Certificate2? certificate,
         X509Chain? chain)
     {
-        ArgumentNullException.ThrowIfNull(certificate);
+        // Return Result failure instead of throwing for railway-oriented flow
+        if (certificate is null)
+        {
+            return Result<bool>.Failure("[Certificate.Null] Certificate cannot be null");
+        }
 
         // Check expiration (normalize to UTC for correct comparison)
         var notAfterUtc = certificate.NotAfter.ToUniversalTime();

@@ -233,7 +233,7 @@ public sealed class PathValidator : IPathValidator
 
             return Result<string>.Success(normalized);
         }
-        catch (Exception ex) when (ex is ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
         {
             return Result<string>.Failure("[Path.NormalizationFailed] Path normalization failed");
         }

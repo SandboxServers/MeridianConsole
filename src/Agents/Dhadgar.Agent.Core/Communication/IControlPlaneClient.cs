@@ -130,6 +130,14 @@ public sealed class TelemetryPayload : IValidatableObject
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // Validate NodeId is set
+        if (NodeId == Guid.Empty)
+        {
+            yield return new ValidationResult(
+                "NodeId cannot be empty",
+                [nameof(NodeId)]);
+        }
+
         if (Metrics.Count > MaxMetrics)
         {
             yield return new ValidationResult(
@@ -177,6 +185,23 @@ public sealed class TelemetryEvent
     public const int MaxStringValueLength = 1024;
 
     /// <summary>
+    /// Allowed primitive types for property values.
+    /// Complex types are rejected to prevent payload bloat and deserialization issues.
+    /// </summary>
+    private static readonly HashSet<Type> AllowedPropertyTypes =
+    [
+        typeof(string),
+        typeof(bool),
+        typeof(byte), typeof(sbyte),
+        typeof(short), typeof(ushort),
+        typeof(int), typeof(uint),
+        typeof(long), typeof(ulong),
+        typeof(float), typeof(double), typeof(decimal),
+        typeof(DateTime), typeof(DateTimeOffset), typeof(TimeSpan),
+        typeof(Guid)
+    ];
+
+    /// <summary>
     /// Event name/type.
     /// </summary>
     [MaxLength(TelemetryPayload.MaxKeyLength)]
@@ -194,6 +219,7 @@ public sealed class TelemetryEvent
 
     /// <summary>
     /// Event properties/data.
+    /// Only primitive types are allowed (string, bool, numeric types, DateTime, Guid, enums).
     /// </summary>
     public Dictionary<string, object?> Properties { get; init; } = [];
 
@@ -232,6 +258,24 @@ public sealed class TelemetryEvent
                     $"Property value length ({strValue.Length}) exceeds maximum ({MaxStringValueLength})",
                     [nameof(Properties)]);
                 break;
+            }
+
+            // Validate property value types - only allow primitives
+            if (value is not null)
+            {
+                var valueType = value.GetType();
+                var isAllowedType = AllowedPropertyTypes.Contains(valueType) ||
+                                    valueType.IsEnum ||
+                                    Nullable.GetUnderlyingType(valueType) is { } underlying &&
+                                    (AllowedPropertyTypes.Contains(underlying) || underlying.IsEnum);
+
+                if (!isAllowedType)
+                {
+                    yield return new ValidationResult(
+                        $"Property '{key}' has disallowed type '{valueType.Name}'. Only primitive types are allowed.",
+                        [nameof(Properties)]);
+                    break;
+                }
             }
         }
     }

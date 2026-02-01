@@ -151,11 +151,12 @@ public sealed class CommandDispatcher : ICommandDispatcher
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
 
+            // SECURITY: Return generic error message to caller, keep details in logs
             return CommandResult.Failure(
                 envelope.CommandId,
                 _options.NodeId ?? Guid.Empty,
                 startedAt,
-                ex.Message,
+                "Internal execution error",
                 "ExecutionException",
                 envelope.CorrelationId);
         }
@@ -202,10 +203,11 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
             var errorCode = isDepthError ? "PayloadTooDeep" : "InvalidPayload";
             _logger.LogError(ex, "Failed to deserialize payload for command {CommandId} (depth limit exceeded: {IsDepthError})",
                 envelope.CommandId, isDepthError);
+            // SECURITY: Return generic error message to caller, keep details in logs
             return CommandResult.Rejected(
                 envelope.CommandId,
                 envelope.NodeId,
-                isDepthError ? "Payload exceeds maximum nesting depth" : $"Invalid payload format: {ex.Message}",
+                isDepthError ? "Payload exceeds maximum nesting depth" : "Invalid payload format",
                 errorCode,
                 envelope.CorrelationId);
         }

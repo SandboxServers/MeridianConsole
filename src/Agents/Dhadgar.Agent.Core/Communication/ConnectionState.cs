@@ -76,6 +76,16 @@ public sealed class ConnectionStateChangedEventArgs : EventArgs
     }
 
     /// <summary>
+    /// Maximum length of error messages to process (prevents ReDoS).
+    /// </summary>
+    private const int MaxErrorLength = 4096;
+
+    /// <summary>
+    /// Regex timeout to prevent excessive backtracking.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
     /// Sanitizes error messages to remove sensitive data such as connection strings,
     /// tokens, and certificate information.
     /// </summary>
@@ -86,34 +96,54 @@ public sealed class ConnectionStateChangedEventArgs : EventArgs
             return error;
         }
 
-        var sanitized = error;
+        // Truncate to prevent ReDoS from large/adversarial inputs
+        var sanitized = error.Length > MaxErrorLength
+            ? error[..MaxErrorLength] + "...[truncated]"
+            : error;
 
-        // Remove connection strings (various formats)
-        sanitized = System.Text.RegularExpressions.Regex.Replace(
-            sanitized,
-            @"(Server|Host|Data Source|Initial Catalog|Database|User Id|Password|Pwd)=[^;]*",
-            "$1=[REDACTED]",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        const System.Text.RegularExpressions.RegexOptions options =
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+            System.Text.RegularExpressions.RegexOptions.NonBacktracking;
 
-        // Remove bearer tokens
-        sanitized = System.Text.RegularExpressions.Regex.Replace(
-            sanitized,
-            @"Bearer\s+[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]*",
-            "Bearer [REDACTED]",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        try
+        {
+            // Remove connection strings (various formats)
+            sanitized = System.Text.RegularExpressions.Regex.Replace(
+                sanitized,
+                @"(Server|Host|Data Source|Initial Catalog|Database|User Id|Password|Pwd)=[^;]*",
+                "$1=[REDACTED]",
+                options,
+                RegexTimeout);
 
-        // Remove certificate data (PEM format)
-        sanitized = System.Text.RegularExpressions.Regex.Replace(
-            sanitized,
-            @"-----BEGIN[^-]+-----[\s\S]*?-----END[^-]+-----",
-            "[CERTIFICATE REDACTED]",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            // Remove bearer tokens
+            sanitized = System.Text.RegularExpressions.Regex.Replace(
+                sanitized,
+                @"Bearer\s+[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]*",
+                "Bearer [REDACTED]",
+                options,
+                RegexTimeout);
 
-        // Remove base64-encoded data that looks like keys/secrets (long base64 strings)
-        sanitized = System.Text.RegularExpressions.Regex.Replace(
-            sanitized,
-            @"[A-Za-z0-9+/]{64,}={0,2}",
-            "[REDACTED]");
+            // Remove certificate data (PEM format) - simplified pattern to avoid backtracking
+            sanitized = System.Text.RegularExpressions.Regex.Replace(
+                sanitized,
+                @"-----BEGIN[^-]+-----[^-]+-----END[^-]+-----",
+                "[CERTIFICATE REDACTED]",
+                options,
+                RegexTimeout);
+
+            // Remove base64-encoded data that looks like keys/secrets (long base64 strings)
+            sanitized = System.Text.RegularExpressions.Regex.Replace(
+                sanitized,
+                @"[A-Za-z0-9+/]{64,}={0,2}",
+                "[REDACTED]",
+                options,
+                RegexTimeout);
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            // If regex times out, return a safe fallback
+            return "[Error message redacted due to processing timeout]";
+        }
 
         return sanitized;
     }

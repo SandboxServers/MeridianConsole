@@ -154,39 +154,46 @@ When asked to "open a PR" or "create a PR", run this autonomous review loop:
 Based on analysis of CodeRabbit/qodo feedback across 20 PRs, these items are frequently missed during initial development:
 
 ### HTTP Status Codes
+
 - `NotFound` (404) for missing resources (UserNotFound, MemberNotFound, NodeNotFound)
 - `Forbidden` (403) for permission denied, system role restrictions
 - `Conflict` (409) for business rule violations (role has active members, duplicate name)
 - `BadRequest` (400) for input validation failures only - NOT for "not found" scenarios
 
 ### Security
+
 - No credentials in `appsettings.json` - use user-secrets or environment variables
 - No full tokens/secrets in log messages - redact (`token[..8]..`) or hash
 - Always pass `organizationId` to service layer for tenant isolation validation
 - Path validation for file operations in Agent code
 
 ### Validation
+
 - Create FluentValidation validator for each request DTO (`{RequestName}Validator`)
 - Pagination: validate `page >= 1`, `limit >= 1 and <= 100`
 - `NotEmpty()` allows whitespace - add `.Must(v => !string.IsNullOrWhiteSpace(v))` for required strings
 
 ### Resource Management
+
 - Use `using` for HttpClient, ServiceProvider, IDisposable resources
 - Use `TimeProvider` instead of `DateTime.UtcNow` for testability
 - Dispose `ServiceProvider` in tests
 
 ### Code Quality
+
 - Specify `StringComparison` on string operations (CA1307)
 - Use `CultureInfo.InvariantCulture` for numeric formatting (CA1305)
 - Seal private/internal classes without inheritors (CA1852)
 - Null guards on collections before accessing `.Count`: `items is { Count: > 0 }`
 
 ### Tests
+
 - Test method name must match assertion (don't name it `ReturnsForbidden` if asserting `NotFound`)
 - Use `TimeProvider`/`FakeTimeProvider` consistently, not `DateTime.UtcNow`
 - Extract duplicate test helpers to shared utilities
 
 ### Event Publishing
+
 - Use MassTransit outbox pattern for reliable event publishing after database writes
 - Don't publish events after `SaveChangesAsync` without outbox (creates reliability gap)
 
