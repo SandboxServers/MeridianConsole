@@ -165,15 +165,28 @@ public abstract class FaultConsumer<TMessage> : IConsumer<Fault<TMessage>>
                     messageType, fault.FaultId, exceptionInfo.StackTrace);
             }
 
-            // Log inner exception if present
-            if (exceptionInfo.InnerException is not null)
+            // Recursively log all inner exceptions
+            var inner = exceptionInfo.InnerException;
+            var level = 1;
+            while (inner is not null)
             {
                 Logger.LogError(
-                    "Inner exception for {MessageType} fault {FaultId}: {InnerExceptionType} - {InnerMessage}",
+                    "Inner exception (level {Level}) for {MessageType} fault {FaultId}: {InnerExceptionType} - {InnerMessage}",
+                    level,
                     messageType,
                     fault.FaultId,
-                    exceptionInfo.InnerException.ExceptionType,
-                    exceptionInfo.InnerException.Message);
+                    inner.ExceptionType,
+                    inner.Message);
+
+                if (!string.IsNullOrEmpty(inner.StackTrace))
+                {
+                    Logger.LogDebug(
+                        "Inner exception (level {Level}) stack trace for {MessageType} fault {FaultId}:\n{StackTrace}",
+                        level, messageType, fault.FaultId, inner.StackTrace);
+                }
+
+                inner = inner.InnerException;
+                level++;
             }
         }
     }
