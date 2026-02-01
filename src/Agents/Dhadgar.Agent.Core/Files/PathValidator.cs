@@ -173,11 +173,7 @@ public sealed class PathValidator : IPathValidator
             }
         }
 
-        // Check for null bytes (potential injection)
-        if (path.Contains('\0', StringComparison.Ordinal))
-        {
-            return false;
-        }
+        // Note: Null byte check removed - already handled by InvalidPathChars which includes '\0'
 
         // Check for control characters
         foreach (var c in path)

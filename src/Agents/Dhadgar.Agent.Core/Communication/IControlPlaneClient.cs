@@ -17,6 +17,12 @@ namespace Dhadgar.Agent.Core.Communication;
 /// </list>
 /// This is a hard security requirement and not optional.
 /// </para>
+/// <para>
+/// <strong>CONNECTION MODEL:</strong> Agents MUST only initiate outbound connections to the control plane.
+/// The control plane MUST NOT initiate inbound connections to agents. Implementations MUST NOT open any
+/// listening ports or accept incoming connections. This outbound-only model eliminates the need for
+/// customers to open firewall ports and reduces the agent's attack surface.
+/// </para>
 /// </summary>
 public interface IControlPlaneClient
 {

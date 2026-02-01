@@ -110,6 +110,25 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Enrollment.InvalidResponse] Invalid enrollment response from control plane");
             }
 
+            // Validate required fields in enrollment response
+            if (enrollmentResponse.NodeId == Guid.Empty)
+            {
+                return Result<EnrollmentResult>.Failure(
+                    "[Enrollment.InvalidNodeId] Enrollment response contains empty NodeId");
+            }
+
+            if (enrollmentResponse.OrganizationId == Guid.Empty)
+            {
+                return Result<EnrollmentResult>.Failure(
+                    "[Enrollment.InvalidOrganizationId] Enrollment response contains empty OrganizationId");
+            }
+
+            if (string.IsNullOrWhiteSpace(enrollmentResponse.Certificate))
+            {
+                return Result<EnrollmentResult>.Failure(
+                    "[Enrollment.InvalidCertificate] Enrollment response contains empty certificate");
+            }
+
             // Store the certificate (use X509CertificateLoader for security)
             var certBytes = Convert.FromBase64String(enrollmentResponse.Certificate);
             DateTime certExpiry;

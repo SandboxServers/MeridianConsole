@@ -174,7 +174,7 @@ public sealed partial class SecurityOptions : IValidatableObject
         {
             return (Path.GetFullPath(path), true);
         }
-        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException)
         {
             return (null, false);
         }

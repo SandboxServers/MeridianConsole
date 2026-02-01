@@ -98,13 +98,22 @@ public sealed class CertificateValidator
     /// </summary>
     /// <param name="certificate">Certificate to check.</param>
     /// <param name="thresholdDays">Days before expiry.</param>
-    /// <returns>True if within threshold.</returns>
-    public static bool IsNearingExpiration(X509Certificate2 certificate, int thresholdDays)
+    /// <returns>Result containing true if within threshold, false otherwise, or failure for invalid inputs.</returns>
+    public static Result<bool> IsNearingExpiration(X509Certificate2? certificate, int thresholdDays)
     {
-        ArgumentNullException.ThrowIfNull(certificate);
-        ArgumentOutOfRangeException.ThrowIfNegative(thresholdDays);
+        if (certificate is null)
+        {
+            return Result<bool>.Failure("[Certificate.Null] Certificate cannot be null");
+        }
+
+        if (thresholdDays < 0)
+        {
+            return Result<bool>.Failure("[Certificate.InvalidThreshold] Threshold days cannot be negative");
+        }
+
         // Normalize to UTC for correct comparison
-        return certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow.AddDays(thresholdDays);
+        var isNearing = certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow.AddDays(thresholdDays);
+        return Result<bool>.Success(isNearing);
     }
 
     /// <summary>
@@ -112,10 +121,13 @@ public sealed class CertificateValidator
     /// Expects format: CN=node-{guid}
     /// </summary>
     /// <param name="certificate">Certificate to extract from.</param>
-    /// <returns>Node ID if found.</returns>
-    public static Guid? ExtractNodeId(X509Certificate2 certificate)
+    /// <returns>Result containing the node ID if found, null if not in expected format, or failure for errors.</returns>
+    public static Result<Guid?> ExtractNodeId(X509Certificate2? certificate)
     {
-        ArgumentNullException.ThrowIfNull(certificate);
+        if (certificate is null)
+        {
+            return Result<Guid?>.Failure("[Certificate.Null] Certificate cannot be null");
+        }
 
         // Use GetNameInfo to properly parse the CN, handling edge cases like
         // escaped characters, multi-value RDNs, and non-standard encodings
@@ -123,16 +135,21 @@ public sealed class CertificateValidator
 
         if (string.IsNullOrEmpty(commonName))
         {
-            return null;
+            return Result<Guid?>.Failure("[Certificate.MissingCN] Certificate has no common name");
         }
 
         const string prefix = "node-";
         if (!commonName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            return Result<Guid?>.Failure("[Certificate.InvalidCNFormat] Common name does not start with 'node-'");
         }
 
         var guidPart = commonName[prefix.Length..];
-        return Guid.TryParse(guidPart, out var nodeId) ? nodeId : null;
+        if (!Guid.TryParse(guidPart, out var nodeId))
+        {
+            return Result<Guid?>.Failure("[Certificate.InvalidNodeId] Common name does not contain a valid GUID");
+        }
+
+        return Result<Guid?>.Success(nodeId);
     }
 }

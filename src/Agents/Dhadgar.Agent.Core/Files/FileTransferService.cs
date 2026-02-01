@@ -342,9 +342,15 @@ public sealed class FileTransferService : IFileTransferService
 
             using var client = _httpClientFactory.CreateClient("ControlPlaneMtls");
 
+            // SECURITY: Require BaseAddress for uploads (uses relative URL)
+            if (client.BaseAddress is null)
+            {
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.ConfigError] Control plane base address not configured for uploads");
+            }
+
             // SECURITY: Enforce HTTPS for all file transfers
-            if (client.BaseAddress is not null &&
-                !string.Equals(client.BaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(client.BaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             {
                 return Result<FileTransferResult>.Failure(
                     "[Transfer.InsecureTransport] File transfers require HTTPS");

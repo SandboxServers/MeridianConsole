@@ -59,6 +59,11 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
         var startedAt = DateTimeOffset.UtcNow;
 
+        // Resolve nodeId - prefer envelope's nodeId, then options, never pass Guid.Empty
+        var resolvedNodeId = envelope.NodeId != Guid.Empty
+            ? envelope.NodeId
+            : _options.NodeId ?? Guid.NewGuid();
+
         using var activity = _activitySource.StartCommandExecution(
             envelope.CommandId,
             envelope.CommandType,
@@ -84,7 +89,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
             return CommandResult.Rejected(
                 envelope.CommandId,
-                _options.NodeId ?? Guid.Empty,
+                resolvedNodeId,
                 error,
                 errorCode: null,
                 envelope.CorrelationId);
@@ -102,7 +107,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
             return CommandResult.Rejected(
                 envelope.CommandId,
-                _options.NodeId ?? Guid.Empty,
+                resolvedNodeId,
                 $"Unknown command type: {envelope.CommandType}",
                 "UnknownCommandType",
                 envelope.CorrelationId);
@@ -137,7 +142,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
             return new CommandResult
             {
                 CommandId = envelope.CommandId,
-                NodeId = _options.NodeId ?? Guid.Empty,
+                NodeId = resolvedNodeId,
                 Status = CommandResultStatus.Cancelled,
                 StartedAt = startedAt,
                 CompletedAt = DateTimeOffset.UtcNow,
@@ -154,7 +159,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
             // SECURITY: Return generic error message to caller, keep details in logs
             return CommandResult.Failure(
                 envelope.CommandId,
-                _options.NodeId ?? Guid.Empty,
+                resolvedNodeId,
                 startedAt,
                 "Internal execution error",
                 "ExecutionException",

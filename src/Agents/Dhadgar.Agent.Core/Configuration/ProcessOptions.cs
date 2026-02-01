@@ -75,12 +75,20 @@ public sealed class ProcessOptions : IValidatableObject
                         $"{nameof(ServerBasePath)} is not a valid path",
                         [nameof(ServerBasePath)]);
                 }
-                else if (!ServerBasePath.Equals(normalizedPath, StringComparison.Ordinal) &&
-                    !ServerBasePath.Equals(normalizedPath!.TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
+                else
                 {
-                    yield return new ValidationResult(
-                        $"{nameof(ServerBasePath)} must be a normalized absolute path (use '{normalizedPath}' instead)",
-                        [nameof(ServerBasePath)]);
+                    // Use OS-aware comparison: case-insensitive on Windows, case-sensitive on Unix
+                    var comparison = OperatingSystem.IsWindows()
+                        ? StringComparison.OrdinalIgnoreCase
+                        : StringComparison.Ordinal;
+
+                    if (!ServerBasePath.Equals(normalizedPath, comparison) &&
+                        !ServerBasePath.Equals(normalizedPath!.TrimEnd(Path.DirectorySeparatorChar), comparison))
+                    {
+                        yield return new ValidationResult(
+                            $"{nameof(ServerBasePath)} must be a normalized absolute path (use '{normalizedPath}' instead)",
+                            [nameof(ServerBasePath)]);
+                    }
                 }
             }
         }
