@@ -9,7 +9,9 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "DOTNET_ENVIRONMENT": "Development",
-        "DOTNET_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21178"
+        "DOTNET_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21178",
+        "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:17179",
+        "ASPIRE_ALLOW_UNSECURED_TRANSPORT": "true"
       }
     },
     "http": {
@@ -19,7 +21,8 @@
       "applicationUrl": "http://localhost:15178",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DOTNET_ENVIRONMENT": "Development"
+        "DOTNET_ENVIRONMENT": "Development",
+        "ASPIRE_ALLOW_UNSECURED_TRANSPORT": "true"
       }
     }
   }
