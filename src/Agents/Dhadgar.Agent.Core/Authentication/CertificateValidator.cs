@@ -1,0 +1,102 @@
+using System.Security.Cryptography.X509Certificates;
+using Dhadgar.Shared.Results;
+
+namespace Dhadgar.Agent.Core.Authentication;
+
+/// <summary>
+/// Validates certificates for mTLS communication.
+/// </summary>
+public sealed class CertificateValidator
+{
+    private readonly X509Certificate2? _caCertificate;
+
+    public CertificateValidator(X509Certificate2? caCertificate = null)
+    {
+        _caCertificate = caCertificate;
+    }
+
+    /// <summary>
+    /// Validate a server certificate.
+    /// </summary>
+    /// <param name="certificate">Certificate to validate.</param>
+    /// <param name="chain">Certificate chain.</param>
+    /// <returns>Validation result.</returns>
+    public Result<bool> ValidateServerCertificate(
+        X509Certificate2 certificate,
+        X509Chain? chain)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        // Check expiration
+        if (certificate.NotAfter < DateTime.UtcNow)
+        {
+            return Result<bool>.Failure(
+                $"[Certificate.Expired] Certificate expired on {certificate.NotAfter:O}");
+        }
+
+        if (certificate.NotBefore > DateTime.UtcNow)
+        {
+            return Result<bool>.Failure(
+                $"[Certificate.NotYetValid] Certificate not valid until {certificate.NotBefore:O}");
+        }
+
+        // If we have a CA certificate, validate the chain
+        if (_caCertificate is not null && chain is not null)
+        {
+            chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            chain.ChainPolicy.CustomTrustStore.Add(_caCertificate);
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+
+            if (!chain.Build(certificate))
+            {
+                var errors = string.Join(", ",
+                    chain.ChainStatus.Select(s => s.StatusInformation));
+                return Result<bool>.Failure(
+                    $"[Certificate.ChainValidationFailed] Chain validation failed: {errors}");
+            }
+        }
+
+        return Result<bool>.Success(true);
+    }
+
+    /// <summary>
+    /// Check if a certificate is nearing expiration.
+    /// </summary>
+    /// <param name="certificate">Certificate to check.</param>
+    /// <param name="thresholdDays">Days before expiry.</param>
+    /// <returns>True if within threshold.</returns>
+    public static bool IsNearingExpiration(X509Certificate2 certificate, int thresholdDays)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+        return certificate.NotAfter <= DateTime.UtcNow.AddDays(thresholdDays);
+    }
+
+    /// <summary>
+    /// Extract the node ID from a certificate's subject.
+    /// Expects format: CN=node-{guid}
+    /// </summary>
+    /// <param name="certificate">Certificate to extract from.</param>
+    /// <returns>Node ID if found.</returns>
+    public static Guid? ExtractNodeId(X509Certificate2 certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        var subject = certificate.Subject;
+        const string prefix = "CN=node-";
+
+        if (!subject.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var guidPart = subject[prefix.Length..];
+        // Handle cases where there might be additional fields after the CN
+        var commaIndex = guidPart.IndexOf(',', StringComparison.Ordinal);
+        if (commaIndex >= 0)
+        {
+            guidPart = guidPart[..commaIndex];
+        }
+
+        return Guid.TryParse(guidPart, out var nodeId) ? nodeId : null;
+    }
+}

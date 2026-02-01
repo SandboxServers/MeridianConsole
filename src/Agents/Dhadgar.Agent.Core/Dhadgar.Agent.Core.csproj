@@ -22,4 +22,23 @@
     <!-- Security analyzers - critical for customer-hosted code -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Hosting and configuration -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+
+    <!-- SignalR client for control plane communication -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+
+    <!-- Observability -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Process" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+
+    <!-- P2P file transfer -->
+    <PackageReference Include="SIPSorcery" />
+  </ItemGroup>
 </Project>
