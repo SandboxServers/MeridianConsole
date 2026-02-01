@@ -109,7 +109,7 @@ When asked to "open a PR" or "create a PR", run this autonomous review loop:
 
 ### Timing Rules
 
-- **15 min minimum between pushes** - CodeRabbit rate limits; PR creation counts as first "push"
+- **15 min minimum between pushes** - CodeRabbit rate limits; use timestamp of most recent `git push` to PR branch
 - **Check every 5 min** - Use `sleep 300` then poll for new comments
 - **Max 10 iterations** - If still failing, stop and summarize blockers in PR comment
 
