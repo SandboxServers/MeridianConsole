@@ -178,12 +178,12 @@ public sealed class ServerService : IServerService
             AutoRestartOnCrash = request.AutoRestartOnCrash
         };
 
-        // Create ports
+        // Create ports with validation
         if (request.Ports != null)
         {
             foreach (var port in request.Ports)
             {
-                server.Ports.Add(new ServerPort
+                var serverPort = new ServerPort
                 {
                     ServerId = server.Id,
                     Name = port.Name,
@@ -191,7 +191,15 @@ public sealed class ServerService : IServerService
                     InternalPort = port.InternalPort,
                     ExternalPort = port.ExternalPort ?? port.InternalPort,
                     IsPrimary = port.IsPrimary
-                });
+                };
+
+                if (!serverPort.HasValidPorts())
+                {
+                    return ServiceResult.Fail<ServerDetail>(
+                        $"invalid_port_range: port '{port.Name}' has invalid port numbers (must be {ServerPort.MinPort}-{ServerPort.MaxPort})");
+                }
+
+                server.Ports.Add(serverPort);
             }
         }
 

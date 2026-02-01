@@ -61,10 +61,10 @@ public sealed class ServerTemplateConfiguration : IEntityTypeConfiguration<Serve
             .HasFilter("\"DeletedAt\" IS NULL")
             .HasDatabaseName("ix_server_templates_org_name_unique");
 
-        // Unique name for system templates (org-less templates with IsSystem flag)
+        // Unique name for system templates (templates without organization)
         builder.HasIndex(t => t.Name)
             .IsUnique()
-            .HasFilter("\"IsSystem\" = true AND \"DeletedAt\" IS NULL")
+            .HasFilter("\"OrganizationId\" IS NULL AND \"DeletedAt\" IS NULL")
             .HasDatabaseName("ix_server_templates_system_name_unique");
 
         // Global query filter for soft delete

@@ -58,10 +58,27 @@ public static class ConsoleEndpoints
         Guid serverId,
         SearchConsoleHistoryRequest request,
         IConsoleHistoryService historyService,
+        HttpContext httpContext,
         CancellationToken ct = default)
     {
-        // Ensure the request has the correct server ID
-        var searchRequest = request with { ServerId = serverId };
+        // Validate tenant access
+        var userOrgId = httpContext.User?.FindFirst("org_id")?.Value;
+        if (!Guid.TryParse(userOrgId, out var claimOrgId) || claimOrgId != organizationId)
+        {
+            return Results.Forbid();
+        }
+
+        // Clamp pagination to valid ranges
+        var clampedPage = Math.Max(1, request.Page);
+        var clampedPageSize = Math.Clamp(request.PageSize, 1, 100);
+
+        // Ensure the request has the correct server ID and clamped pagination
+        var searchRequest = request with
+        {
+            ServerId = serverId,
+            Page = clampedPage,
+            PageSize = clampedPageSize
+        };
         var result = await historyService.SearchHistoryAsync(searchRequest, ct);
         return Results.Ok(result);
     }

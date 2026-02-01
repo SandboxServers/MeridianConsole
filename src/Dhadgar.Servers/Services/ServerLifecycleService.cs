@@ -241,6 +241,8 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             {
                 var uptime = (DateTime.UtcNow - server.LastStartedAt.Value).TotalSeconds;
                 server.TotalUptimeSeconds += (long)uptime;
+                // Clear LastStartedAt to prevent double-counting on repeated stops
+                server.LastStartedAt = null;
             }
         }
 

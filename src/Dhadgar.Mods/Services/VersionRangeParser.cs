@@ -127,13 +127,23 @@ public static class VersionRangeParser
         if (constraint.Contains('*'))
         {
             var wildcardParts = constraint.Split('.');
-            if (wildcardParts.Length >= 1 && int.TryParse(wildcardParts[0], out var major))
+            if (wildcardParts.Length >= 1)
             {
-                if (version.Major != major) return false;
+                if (wildcardParts[0] != "*")
+                {
+                    if (!int.TryParse(wildcardParts[0], out var major))
+                        return false; // Invalid non-wildcard, non-numeric segment
+                    if (version.Major != major) return false;
+                }
             }
-            if (wildcardParts.Length >= 2 && wildcardParts[1] != "*" && int.TryParse(wildcardParts[1], out var minor))
+            if (wildcardParts.Length >= 2)
             {
-                if (version.Minor != minor) return false;
+                if (wildcardParts[1] != "*")
+                {
+                    if (!int.TryParse(wildcardParts[1], out var minor))
+                        return false; // Invalid non-wildcard, non-numeric segment
+                    if (version.Minor != minor) return false;
+                }
             }
             return true;
         }

@@ -42,9 +42,16 @@ public sealed partial class SemanticVersion : IComparable<SemanticVersion>
         if (!match.Success)
             return false;
 
-        var major = int.Parse(match.Groups["major"].Value);
-        var minor = int.Parse(match.Groups["minor"].Value);
-        var patch = match.Groups["patch"].Success ? int.Parse(match.Groups["patch"].Value) : 0;
+        // Use TryParse to avoid OverflowException on large version numbers
+        if (!int.TryParse(match.Groups["major"].Value, out var major))
+            return false;
+        if (!int.TryParse(match.Groups["minor"].Value, out var minor))
+            return false;
+
+        var patch = 0;
+        if (match.Groups["patch"].Success && !int.TryParse(match.Groups["patch"].Value, out patch))
+            return false;
+
         var prerelease = match.Groups["prerelease"].Success ? match.Groups["prerelease"].Value : null;
         var buildMetadata = match.Groups["buildmetadata"].Success ? match.Groups["buildmetadata"].Value : null;
 

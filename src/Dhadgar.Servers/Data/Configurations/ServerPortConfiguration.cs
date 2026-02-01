@@ -28,9 +28,10 @@ public sealed class ServerPortConfiguration : IEntityTypeConfiguration<ServerPor
         builder.HasIndex(p => p.ServerId)
             .HasDatabaseName("ix_server_ports_server");
 
-        // Unique port name per server
+        // Unique port name per server (for active ports only)
         builder.HasIndex(p => new { p.ServerId, p.Name })
             .IsUnique()
+            .HasFilter("\"DeletedAt\" IS NULL")
             .HasDatabaseName("ix_server_ports_server_name_unique");
 
         // Unique external port per server (prevent port conflicts)
