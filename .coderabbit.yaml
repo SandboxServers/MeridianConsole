@@ -24,13 +24,12 @@ reviews:
   collapse_walkthrough: true
 
   # Path filters - exclude files we don't need reviewed
+  # NOTE: Only use exclusions (!) here. Adding include patterns causes CodeRabbit
+  # to ONLY review files matching those includes, skipping everything else.
   path_filters:
-    # Documentation - handled manually (except security-critical guideline files)
+    # Documentation - handled manually
+    # Security guideline files (CLAUDE.md, GEMINI.md) are reviewed via path_instructions
     - "!docs/**"
-    - "!**/*.md"
-    - "CLAUDE.md"
-    - "GEMINI.md"
-    - "**/CLAUDE.md"
 
     # Lock files - auto-generated
     - "!**/packages.lock.json"
