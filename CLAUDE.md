@@ -86,6 +86,47 @@ Note: Core services have working foundations but contain scaffolded endpoints an
 - NEVER force push to main/master
 - NEVER skip pre-commit hooks unless user explicitly requests
 
+## CodeRabbit PR Reviews
+
+CodeRabbit automatically reviews all PRs. Here's how to handle its feedback effectively:
+
+### Addressing Feedback
+
+1. **Read the full review first** - CodeRabbit posts a summary comment plus inline suggestions. Read everything before acting.
+2. **Use agents for bulk fixes** - When CodeRabbit identifies patterns across multiple files, use specialized agents to fix them consistently.
+3. **Push fixes in batches** - CodeRabbit re-reviews on each push. Group related fixes into single commits to reduce noise.
+
+### Common CodeRabbit Findings
+
+| Category | Example | Action |
+| -------- | ------- | ------ |
+| **CA analyzer rules** | CA1054 (Uri vs string), CA2208 (ArgumentException params) | Fix the code - these are real issues |
+| **Security (SCS)** | SQL injection, hardcoded secrets | Fix immediately - blocking issues |
+| **Nullability** | Missing null checks, nullable warnings | Fix - nullable is enabled project-wide |
+| **Documentation** | Missing XML docs on public APIs | Add if public API, skip for internal |
+| **Style** | Naming conventions, formatting | Follow existing patterns in codebase |
+
+### Responding to CodeRabbit
+
+- **Agree**: Just fix it and push. No comment needed.
+- **Disagree**: Reply to the comment explaining why. CodeRabbit learns from feedback.
+- **False positive**: Comment `@coderabbitai ignore` on the specific suggestion.
+- **Need clarification**: Ask CodeRabbit directly in the comment thread - it responds.
+
+### CI Integration
+
+CodeRabbit findings flow into CI checks:
+- **Lint .NET (Security SAST)** - Fails on CA/SCS analyzer errors
+- **Code Quality Summary** - Aggregates all quality check results
+
+If CI fails after CodeRabbit review, check the workflow logs for specific analyzer errors.
+
+### Tips
+
+- CodeRabbit respects `.editorconfig` and analyzer settings in the repo
+- Large PRs (85+ files) may get incomplete reviews - split them
+- CodeRabbit can miss context across files - use your judgment on architectural feedback
+
 ## Testing
 
 - 1:1 test project mapping (e.g., `Dhadgar.Gateway` → `Dhadgar.Gateway.Tests`)
