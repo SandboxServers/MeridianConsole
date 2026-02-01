@@ -55,17 +55,20 @@ const icons = {
 };
 
 export function Alert({ severity = "info", dense = false, className, children }: AlertProps) {
+  // Runtime guard: ensure severity is a valid key to prevent object injection
+  const severityKey = severity in severityClasses ? (severity as keyof typeof severityClasses) : "info";
+
   return (
     <div
       role="alert"
       className={clsx(
         "flex items-start gap-3 rounded-xl border",
-        severityClasses[severity],
+        severityClasses[severityKey],
         dense ? "px-3 py-2 text-sm" : "px-4 py-3",
         className
       )}
     >
-      <span className="flex-shrink-0 mt-0.5">{icons[severity]}</span>
+      <span className="flex-shrink-0 mt-0.5">{icons[severityKey]}</span>
       <div>{children}</div>
     </div>
   );

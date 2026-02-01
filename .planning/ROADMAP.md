@@ -26,7 +26,7 @@ Address all CodeRabbit review feedback for the Discord and Notifications service
   1. Discord.Net package version is 3.18.0 in Directory.Packages.props
   2. Dhadgar.Scope package.json has engines.node field requiring 20+
   3. sections.json shows "RabbitMQ" and "MVP" with correct capitalization
-**Plans**: TBD
+**Plans**:
 
 Plans:
 - [x] 01-01: Package and configuration updates
@@ -42,7 +42,7 @@ Plans:
   3. DiscordDbContextFactory loads connection string from configuration (no hardcoded strings)
   4. Discord migration files have nullable annotations enabled
   5. SendDiscordNotificationConsumer truncates fields to EF max-length constraints before save
-**Plans**: TBD
+**Plans**:
 
 Plans:
 - [x] 02-01: Separate database configuration
@@ -58,7 +58,7 @@ Plans:
   2. TaskCanceledException when !ct.IsCancellationRequested returns timeout error (not cancelled)
   3. OperationCanceledException rethrown when cancellation was requested
   4. MassTransit Entity Framework Outbox is enabled for NotificationDispatcher
-**Plans**: TBD
+**Plans**:
 
 Plans:
 - [x] 03-01: HTTP handling and MassTransit outbox
@@ -71,7 +71,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. SendPushNotification.ActionUrl property is Uri? type (not string?)
   2. All usages of ActionUrl compile and work with Uri type
-**Plans**: TBD
+**Plans**:
 
 Plans:
 - [x] 04-01: ActionUrl type change

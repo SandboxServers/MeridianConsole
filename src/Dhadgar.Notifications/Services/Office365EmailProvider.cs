@@ -11,7 +11,7 @@ namespace Dhadgar.Notifications.Services;
 /// </summary>
 public sealed class Office365EmailProvider : IEmailProvider, IDisposable
 {
-    private readonly GraphServiceClient _graphClient;
+    private GraphServiceClient? _graphClient;
     private readonly string _senderEmail;
     private readonly ILogger<Office365EmailProvider> _logger;
 
@@ -61,6 +61,8 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
 
         try
         {
+            ObjectDisposedException.ThrowIf(_graphClient is null, this);
+
             // Use htmlBody if available, otherwise fall back to textBody
             var useHtml = !string.IsNullOrWhiteSpace(htmlBody);
             var bodyContent = useHtml ? htmlBody : textBody ?? string.Empty;
@@ -103,7 +105,10 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
 
     public void Dispose()
     {
-        // GraphServiceClient in v5.x manages its own HttpClient lifecycle
-        // No explicit disposal needed
+        if (_graphClient is not null)
+        {
+            _graphClient.Dispose();
+            _graphClient = null;
+        }
     }
 }

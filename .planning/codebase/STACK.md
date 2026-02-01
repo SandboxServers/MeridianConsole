@@ -139,4 +139,4 @@
 
 ---
 
-*Stack analysis: 2025-01-19*
+Stack analysis: 2025-01-19
