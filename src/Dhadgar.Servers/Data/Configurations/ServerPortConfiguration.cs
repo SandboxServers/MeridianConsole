@@ -33,6 +33,12 @@ public sealed class ServerPortConfiguration : IEntityTypeConfiguration<ServerPor
             .IsUnique()
             .HasDatabaseName("ix_server_ports_server_name_unique");
 
+        // Unique external port per server (prevent port conflicts)
+        builder.HasIndex(p => new { p.ServerId, p.ExternalPort })
+            .IsUnique()
+            .HasFilter("\"DeletedAt\" IS NULL")
+            .HasDatabaseName("ix_server_ports_server_externalport_unique");
+
         // Global query filter for soft delete
         builder.HasQueryFilter(p => p.DeletedAt == null);
     }

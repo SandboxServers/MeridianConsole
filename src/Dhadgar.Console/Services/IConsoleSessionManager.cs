@@ -31,4 +31,9 @@ public interface IConsoleSessionManager
     /// Gets all servers a connection is connected to.
     /// </summary>
     Task<IReadOnlyList<Guid>> GetConnectionServersAsync(string connectionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets the connection metadata for a specific connection and server.
+    /// </summary>
+    Task<(Guid OrganizationId, Guid? UserId, DateTime ConnectedAt)?> GetConnectionMetadataAsync(string connectionId, Guid serverId, CancellationToken ct = default);
 }

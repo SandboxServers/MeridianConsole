@@ -14,6 +14,7 @@ using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -94,8 +95,9 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-// Configure authorization
+// Configure authentication and authorization
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddAuthentication();
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("TenantScoped", policy =>
     {
@@ -129,6 +131,20 @@ builder.Logging.AddOpenTelemetry(options =>
 });
 
 builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation()
+            .AddSource("MassTransit");
+
+        if (otlpUri is not null)
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
+        }
+    })
     .WithMetrics(metrics =>
     {
         metrics

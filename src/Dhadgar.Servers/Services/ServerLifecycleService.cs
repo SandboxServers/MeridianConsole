@@ -66,7 +66,7 @@ public sealed class ServerLifecycleService : IServerLifecycleService
         var oldStatus = server.Status.ToString();
         server.Status = ServerStatus.Starting;
         server.PowerState = ServerPowerState.Starting;
-        server.LastStartedAt = DateTime.UtcNow;
+        // Note: LastStartedAt is set when transitioning to Running, not Starting
 
         await _db.SaveChangesAsync(ct);
 
@@ -229,8 +229,9 @@ public sealed class ServerLifecycleService : IServerLifecycleService
         };
 
         // Update timestamps
-        if (newStatus == ServerStatus.Running && !server.LastStartedAt.HasValue)
+        if (newStatus == ServerStatus.Running)
         {
+            // Set start time when entering Running state
             server.LastStartedAt = DateTime.UtcNow;
         }
         else if (newStatus == ServerStatus.Stopped || newStatus == ServerStatus.Crashed)

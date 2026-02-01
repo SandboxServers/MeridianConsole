@@ -8,7 +8,10 @@ public static class ServiceResult
         => new(false, error, default);
 
     public static ServiceResult<T> Ok<T>(T value)
-        => new(true, null, value);
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return new(true, null, value);
+    }
 }
 
 /// <summary>

@@ -90,10 +90,13 @@ public sealed class CommandDispatcher : ICommandDispatcher
             return (false, $"Command exceeds maximum length of {_options.MaxCommandLength}");
         }
 
+        // Normalize command before pattern matching to prevent bypass via leading whitespace
+        var normalizedCommand = command.TrimStart();
+
         // Check for dangerous patterns
         foreach (var pattern in _dangerousPatterns)
         {
-            if (pattern.IsMatch(command))
+            if (pattern.IsMatch(normalizedCommand))
             {
                 return (false, "Command contains potentially dangerous pattern");
             }

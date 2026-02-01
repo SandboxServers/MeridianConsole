@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Configuration;
 
 namespace Dhadgar.Console.Data;
 
@@ -10,8 +11,18 @@ public sealed class ConsoleDbContextFactory : IDesignTimeDbContextFactory<Consol
 {
     public ConsoleDbContext CreateDbContext(string[] args)
     {
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile("appsettings.Development.json", optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+
+        var connectionString = configuration.GetConnectionString("Postgres")
+            ?? "Host=localhost;Database=dhadgar_console;Username=dhadgar;Password=dhadgar";
+
         var optionsBuilder = new DbContextOptionsBuilder<ConsoleDbContext>();
-        optionsBuilder.UseNpgsql("Host=localhost;Database=dhadgar_console;Username=dhadgar;Password=dhadgar");
+        optionsBuilder.UseNpgsql(connectionString);
 
         return new ConsoleDbContext(optionsBuilder.Options);
     }

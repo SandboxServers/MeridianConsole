@@ -35,6 +35,10 @@ public sealed class ModCategoryConfiguration : IEntityTypeConfiguration<ModCateg
         builder.HasIndex(c => c.SortOrder)
             .HasDatabaseName("ix_mod_categories_sort");
 
+        // Index for parent category queries
+        builder.HasIndex(c => c.ParentId)
+            .HasDatabaseName("ix_mod_categories_parent");
+
         // Parent category relationship
         builder.HasOne(c => c.Parent)
             .WithMany(c => c.Children)

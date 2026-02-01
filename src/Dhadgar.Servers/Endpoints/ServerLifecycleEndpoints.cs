@@ -4,6 +4,18 @@ namespace Dhadgar.Servers.Endpoints;
 
 public static class ServerLifecycleEndpoints
 {
+    private static IResult HandleLifecycleResult(ServiceResult<bool> result, string defaultError)
+    {
+        if (!result.Success)
+        {
+            return result.Error == "server_not_found"
+                ? ProblemDetailsHelper.NotFound(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? defaultError);
+        }
+
+        return Results.NoContent();
+    }
+
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/organizations/{organizationId:guid}/servers/{serverId:guid}")
@@ -50,15 +62,7 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.StartServerAsync(organizationId, serverId, ct);
-
-        if (!result.Success)
-        {
-            if (result.Error == "server_not_found")
-                return ProblemDetailsHelper.NotFound(result.Error);
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "start_failed");
-        }
-
-        return Results.NoContent();
+        return HandleLifecycleResult(result, "start_failed");
     }
 
     private static async Task<IResult> StopServer(
@@ -68,15 +72,7 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.StopServerAsync(organizationId, serverId, ct);
-
-        if (!result.Success)
-        {
-            if (result.Error == "server_not_found")
-                return ProblemDetailsHelper.NotFound(result.Error);
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "stop_failed");
-        }
-
-        return Results.NoContent();
+        return HandleLifecycleResult(result, "stop_failed");
     }
 
     private static async Task<IResult> RestartServer(
@@ -86,15 +82,7 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.RestartServerAsync(organizationId, serverId, ct);
-
-        if (!result.Success)
-        {
-            if (result.Error == "server_not_found")
-                return ProblemDetailsHelper.NotFound(result.Error);
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "restart_failed");
-        }
-
-        return Results.NoContent();
+        return HandleLifecycleResult(result, "restart_failed");
     }
 
     private static async Task<IResult> KillServer(
@@ -104,14 +92,6 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.KillServerAsync(organizationId, serverId, ct);
-
-        if (!result.Success)
-        {
-            if (result.Error == "server_not_found")
-                return ProblemDetailsHelper.NotFound(result.Error);
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "kill_failed");
-        }
-
-        return Results.NoContent();
+        return HandleLifecycleResult(result, "kill_failed");
     }
 }

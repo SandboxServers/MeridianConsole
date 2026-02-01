@@ -13,14 +13,11 @@ public sealed class ConsoleHistoryEntryConfiguration : IEntityTypeConfiguration<
         builder.HasKey(e => e.Id);
 
         builder.Property(e => e.Content)
-            .IsRequired();
+            .IsRequired()
+            .HasMaxLength(65535);
 
         builder.Property(e => e.OutputType)
             .HasConversion<int>();
-
-        // Index for server queries
-        builder.HasIndex(e => e.ServerId)
-            .HasDatabaseName("ix_console_history_server");
 
         // Index for time-based queries
         builder.HasIndex(e => e.Timestamp)

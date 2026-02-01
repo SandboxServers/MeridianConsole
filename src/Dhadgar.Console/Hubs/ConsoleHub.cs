@@ -42,7 +42,15 @@ public sealed class ConsoleHub : Hub
             return;
         }
 
-        // TODO: Validate user has access to this server
+        // Validate user's organization matches the requested server's organization
+        // The client must pass the correct organization ID for the server
+        if (request.OrganizationId != organizationId.Value)
+        {
+            _logger.LogWarning("User from org {UserOrg} tried to join server in org {ServerOrg}",
+                organizationId.Value, request.OrganizationId);
+            await Clients.Caller.SendAsync("error", "Access denied");
+            return;
+        }
 
         // Add to session
         await _sessionManager.AddConnectionAsync(connectionId, request.ServerId, organizationId.Value, userId);
@@ -95,7 +103,7 @@ public sealed class ConsoleHub : Hub
             return;
         }
 
-        // Check if connected to this server
+        // Check if connected to this server and validate tenant access
         var isConnected = await _sessionManager.IsConnectedToServerAsync(connectionId, request.ServerId);
         if (!isConnected)
         {
@@ -103,7 +111,15 @@ public sealed class ConsoleHub : Hub
             return;
         }
 
-        // TODO: Validate user has permission to execute commands
+        // Validate user's organization matches the server's organization
+        var metadata = await _sessionManager.GetConnectionMetadataAsync(connectionId, request.ServerId);
+        if (metadata == null || metadata.Value.OrganizationId != organizationId.Value)
+        {
+            _logger.LogWarning("User from org {UserOrg} tried to send command to server they don't own",
+                organizationId.Value);
+            await Clients.Caller.SendAsync("error", "Access denied");
+            return;
+        }
 
         var result = await _commandDispatcher.DispatchCommandAsync(
             request.ServerId,

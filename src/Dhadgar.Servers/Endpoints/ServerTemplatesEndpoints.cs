@@ -67,6 +67,10 @@ public static class ServerTemplatesEndpoints
         int pageSize = 20,
         CancellationToken ct = default)
     {
+        // Clamp page and pageSize to valid ranges
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var result = await templateService.GetTemplatesAsync(
             organizationId, includePublic, gameType, page, pageSize, ct);
         return Results.Ok(result);
@@ -79,6 +83,10 @@ public static class ServerTemplatesEndpoints
         int pageSize = 20,
         CancellationToken ct = default)
     {
+        // Clamp page and pageSize to valid ranges
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var result = await templateService.GetTemplatesAsync(
             null, true, gameType, page, pageSize, ct);
         return Results.Ok(result);

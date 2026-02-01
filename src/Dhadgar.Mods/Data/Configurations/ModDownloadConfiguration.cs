@@ -13,7 +13,7 @@ public sealed class ModDownloadConfiguration : IEntityTypeConfiguration<ModDownl
         builder.HasKey(d => d.Id);
 
         builder.Property(d => d.IpAddressHash)
-            .HasMaxLength(64);
+            .HasMaxLength(ModDownload.IpAddressHashMaxLength);
 
         // Index for version analytics
         builder.HasIndex(d => d.ModVersionId)

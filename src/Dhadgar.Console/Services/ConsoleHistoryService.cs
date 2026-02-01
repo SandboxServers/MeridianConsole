@@ -99,7 +99,7 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
             totalCount > request.Page * request.PageSize);
     }
 
-    public async Task ArchiveOldEntriesAsync(Guid serverId, CancellationToken ct = default)
+    public async Task ArchiveOldEntriesAsync(Guid serverId, Guid organizationId, CancellationToken ct = default)
     {
         var lines = await GetHotStorageLinesAsync(serverId, ct);
         if (lines.Count == 0) return;
@@ -108,19 +108,13 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         var entriesToArchive = lines.Skip(MaxHotStorageLines / 2).ToList();
         if (entriesToArchive.Count == 0) return;
 
-        // Get organization ID from the first entry we have
-        var existingEntry = await _db.ConsoleHistory
-            .Where(h => h.ServerId == serverId)
-            .Select(h => h.OrganizationId)
-            .FirstOrDefaultAsync(ct);
-
         // Insert into PostgreSQL
         foreach (var line in entriesToArchive)
         {
             _db.ConsoleHistory.Add(new ConsoleHistoryEntry
             {
                 ServerId = serverId,
-                OrganizationId = existingEntry,
+                OrganizationId = organizationId,
                 OutputType = (EntityOutputType)(int)line.OutputType,
                 Content = line.Content,
                 Timestamp = line.Timestamp,

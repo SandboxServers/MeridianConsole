@@ -1,14 +1,11 @@
-using System.Text.RegularExpressions;
-
 namespace Dhadgar.Mods.Services;
 
 /// <summary>
 /// Parses and evaluates version range expressions.
 /// Supports: ^1.2.3, ~1.2.3, >=1.0.0, <=2.0.0, >1.0.0, <2.0.0, 1.2.3, >=1.0.0 <2.0.0
 /// </summary>
-public static partial class VersionRangeParser
+public static class VersionRangeParser
 {
-    private static readonly Regex RangePattern = RangeRegex();
 
     public static bool Satisfies(SemanticVersion version, string constraint)
     {
@@ -49,10 +46,19 @@ public static partial class VersionRangeParser
                 return false;
 
             // For 0.x.y, caret means >=0.x.y <0.(x+1).0
+            // For 0.0.y, caret means >=0.0.y <0.0.(y+1) (patch-level only)
             if (minVersion.Major == 0)
             {
-                if (version.Minor > minVersion.Minor)
+                if (minVersion.Minor == 0)
+                {
+                    // ^0.0.x allows only patch-level changes
+                    if (version.Minor != 0 || version.Patch > minVersion.Patch)
+                        return false;
+                }
+                else if (version.Minor > minVersion.Minor)
+                {
                     return false;
+                }
             }
 
             return true;
@@ -134,7 +140,4 @@ public static partial class VersionRangeParser
 
         return false;
     }
-
-    [GeneratedRegex(@"^([<>=~^]*)(.+)$")]
-    private static partial Regex RangeRegex();
 }

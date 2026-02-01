@@ -107,17 +107,29 @@ public sealed partial class SemanticVersion : IComparable<SemanticVersion>
     public static bool operator !=(SemanticVersion? left, SemanticVersion? right) =>
         !(left == right);
 
-    public static bool operator <(SemanticVersion left, SemanticVersion right) =>
-        left.CompareTo(right) < 0;
+    public static bool operator <(SemanticVersion? left, SemanticVersion? right)
+    {
+        if (left is null) return right is not null;
+        return left.CompareTo(right) < 0;
+    }
 
-    public static bool operator >(SemanticVersion left, SemanticVersion right) =>
-        left.CompareTo(right) > 0;
+    public static bool operator >(SemanticVersion? left, SemanticVersion? right)
+    {
+        if (left is null) return false;
+        return left.CompareTo(right) > 0;
+    }
 
-    public static bool operator <=(SemanticVersion left, SemanticVersion right) =>
-        left.CompareTo(right) <= 0;
+    public static bool operator <=(SemanticVersion? left, SemanticVersion? right)
+    {
+        if (left is null) return true;
+        return left.CompareTo(right) <= 0;
+    }
 
-    public static bool operator >=(SemanticVersion left, SemanticVersion right) =>
-        left.CompareTo(right) >= 0;
+    public static bool operator >=(SemanticVersion? left, SemanticVersion? right)
+    {
+        if (left is null) return right is null;
+        return left.CompareTo(right) >= 0;
+    }
 
     [GeneratedRegex(@"^(?<major>\d+)\.(?<minor>\d+)(\.(?<patch>\d+))?(-(?<prerelease>[0-9A-Za-z\-\.]+))?(\+(?<buildmetadata>[0-9A-Za-z\-\.]+))?$")]
     private static partial Regex SemverRegex();

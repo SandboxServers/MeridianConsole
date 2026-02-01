@@ -55,11 +55,10 @@ public sealed class ServersDbContext : DhadgarDbContext, IAuditDbContext
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                 v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>());
 
-            // Server tags
+            // Server tags: For test providers, use value converter and empty list default
             modelBuilder.Entity<Server>()
                 .Property(s => s.Tags)
                 .HasConversion(tagsConverter)
-                .HasDefaultValueSql(null)
                 .HasDefaultValue(new List<string>());
 
             // Clear JSONB column types for test providers

@@ -22,7 +22,7 @@ public interface IConsoleHistoryService
     /// <summary>
     /// Archives old entries from Redis to PostgreSQL.
     /// </summary>
-    Task ArchiveOldEntriesAsync(Guid serverId, CancellationToken ct = default);
+    Task ArchiveOldEntriesAsync(Guid serverId, Guid organizationId, CancellationToken ct = default);
 
     /// <summary>
     /// Purges old entries from PostgreSQL.

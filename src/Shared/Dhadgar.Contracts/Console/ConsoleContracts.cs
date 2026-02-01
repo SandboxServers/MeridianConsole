@@ -18,6 +18,7 @@ public enum ConsoleOutputType
 
 public record JoinServerRequest(
     Guid ServerId,
+    Guid OrganizationId,
     int HistoryLines = 100);
 
 public record LeaveServerRequest(

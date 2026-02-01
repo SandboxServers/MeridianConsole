@@ -28,9 +28,20 @@ public static class ConsoleEndpoints
         Guid organizationId,
         Guid serverId,
         IConsoleHistoryService historyService,
+        HttpContext httpContext,
         int lineCount = 100,
         CancellationToken ct = default)
     {
+        // Validate tenant access
+        var userOrgId = httpContext.User?.FindFirst("org_id")?.Value;
+        if (!Guid.TryParse(userOrgId, out var claimOrgId) || claimOrgId != organizationId)
+        {
+            return Results.Forbid();
+        }
+
+        // Clamp lineCount to valid range
+        lineCount = Math.Clamp(lineCount, 1, 1000);
+
         var lines = await historyService.GetRecentHistoryAsync(serverId, lineCount, ct);
 
         var result = new ConsoleHistoryDto(

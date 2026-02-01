@@ -55,10 +55,10 @@ public sealed class ServerService : IServerService
 
         if (!string.IsNullOrEmpty(query.Search))
         {
-            var search = query.Search.ToLowerInvariant();
+            var searchPattern = $"%{query.Search}%";
             queryable = queryable.Where(s =>
-                s.Name.ToLower().Contains(search) ||
-                (s.DisplayName != null && s.DisplayName.ToLower().Contains(search)));
+                EF.Functions.ILike(s.Name, searchPattern) ||
+                (s.DisplayName != null && EF.Functions.ILike(s.DisplayName, searchPattern)));
         }
 
         if (!string.IsNullOrEmpty(query.Tags))
@@ -72,19 +72,21 @@ public sealed class ServerService : IServerService
 
         var totalCount = await queryable.CountAsync(ct);
 
-        // Apply sorting
-        queryable = query.SortBy.ToLowerInvariant() switch
+        // Apply sorting (handle null sortBy/sortOrder safely)
+        var sortBy = query.SortBy?.ToLowerInvariant() ?? "name";
+        var sortOrder = query.SortOrder?.ToLowerInvariant() ?? "asc";
+        queryable = sortBy switch
         {
-            "name" => query.SortOrder.ToLowerInvariant() == "desc"
+            "name" => sortOrder == "desc"
                 ? queryable.OrderByDescending(s => s.Name)
                 : queryable.OrderBy(s => s.Name),
-            "status" => query.SortOrder.ToLowerInvariant() == "desc"
+            "status" => sortOrder == "desc"
                 ? queryable.OrderByDescending(s => s.Status)
                 : queryable.OrderBy(s => s.Status),
-            "gametype" => query.SortOrder.ToLowerInvariant() == "desc"
+            "gametype" => sortOrder == "desc"
                 ? queryable.OrderByDescending(s => s.GameType)
                 : queryable.OrderBy(s => s.GameType),
-            "createdat" => query.SortOrder.ToLowerInvariant() == "desc"
+            "createdat" => sortOrder == "desc"
                 ? queryable.OrderByDescending(s => s.CreatedAt)
                 : queryable.OrderBy(s => s.CreatedAt),
             _ => queryable.OrderBy(s => s.Name)

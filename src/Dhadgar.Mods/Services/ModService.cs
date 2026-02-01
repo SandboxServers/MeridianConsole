@@ -61,11 +61,11 @@ public sealed class ModService : IModService
 
         if (!string.IsNullOrEmpty(query.Query))
         {
-            var search = query.Query.ToLowerInvariant();
+            var searchPattern = $"%{query.Query}%";
             queryable = queryable.Where(m =>
-                m.Name.ToLower().Contains(search) ||
-                (m.Description != null && m.Description.ToLower().Contains(search)) ||
-                (m.Author != null && m.Author.ToLower().Contains(search)));
+                EF.Functions.ILike(m.Name, searchPattern) ||
+                (m.Description != null && EF.Functions.ILike(m.Description, searchPattern)) ||
+                (m.Author != null && EF.Functions.ILike(m.Author, searchPattern)));
         }
 
         if (!string.IsNullOrEmpty(query.Tags))
@@ -79,19 +79,21 @@ public sealed class ModService : IModService
 
         var totalCount = await queryable.CountAsync(ct);
 
-        // Apply sorting
-        queryable = query.SortBy.ToLowerInvariant() switch
+        // Apply sorting (handle null sortBy/sortOrder safely)
+        var sortBy = query.SortBy?.ToLowerInvariant() ?? "downloads";
+        var sortOrder = query.SortOrder?.ToLowerInvariant() ?? "desc";
+        queryable = sortBy switch
         {
-            "name" => query.SortOrder.ToLowerInvariant() == "desc"
+            "name" => sortOrder == "desc"
                 ? queryable.OrderByDescending(m => m.Name)
                 : queryable.OrderBy(m => m.Name),
-            "downloads" => query.SortOrder.ToLowerInvariant() == "asc"
+            "downloads" => sortOrder == "asc"
                 ? queryable.OrderBy(m => m.TotalDownloads)
                 : queryable.OrderByDescending(m => m.TotalDownloads),
-            "createdat" => query.SortOrder.ToLowerInvariant() == "desc"
+            "createdat" => sortOrder == "desc"
                 ? queryable.OrderByDescending(m => m.CreatedAt)
                 : queryable.OrderBy(m => m.CreatedAt),
-            "updatedat" => query.SortOrder.ToLowerInvariant() == "asc"
+            "updatedat" => sortOrder == "asc"
                 ? queryable.OrderBy(m => m.UpdatedAt)
                 : queryable.OrderByDescending(m => m.UpdatedAt),
             _ => queryable.OrderByDescending(m => m.TotalDownloads)

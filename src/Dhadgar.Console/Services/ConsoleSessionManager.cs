@@ -97,6 +97,25 @@ public sealed class ConsoleSessionManager : IConsoleSessionManager
         return servers.ToList();
     }
 
+    public async Task<(Guid OrganizationId, Guid? UserId, DateTime ConnectedAt)?> GetConnectionMetadataAsync(string connectionId, Guid serverId, CancellationToken ct = default)
+    {
+        var metadataKey = GetConnectionMetadataKey(connectionId, serverId);
+        var data = await _cache.GetStringAsync(metadataKey, ct);
+
+        if (string.IsNullOrEmpty(data))
+        {
+            return null;
+        }
+
+        var metadata = JsonSerializer.Deserialize<ConnectionMetadata>(data);
+        if (metadata == null)
+        {
+            return null;
+        }
+
+        return (metadata.OrganizationId, metadata.UserId, metadata.ConnectedAt);
+    }
+
     private static string GetServerConnectionsKey(Guid serverId) => $"console:server:{serverId}:connections";
     private static string GetConnectionServersKey(string connectionId) => $"console:connection:{connectionId}:servers";
     private static string GetConnectionMetadataKey(string connectionId, Guid serverId) => $"console:metadata:{connectionId}:{serverId}";

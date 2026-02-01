@@ -25,4 +25,6 @@ public sealed class ModDownload
 
     /// <summary>IP address hash (for abuse detection, not tracking).</summary>
     public string? IpAddressHash { get; set; }
+
+    public const int IpAddressHashMaxLength = 64;
 }
