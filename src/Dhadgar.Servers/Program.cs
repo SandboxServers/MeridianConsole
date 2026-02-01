@@ -8,10 +8,11 @@ using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Swagger;
 using Dhadgar.ServiceDefaults.Tracing;
+using FluentValidation;
 using MassTransit;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
@@ -50,6 +51,9 @@ builder.Services.AddScoped<IServerTemplateService, ServerTemplateService>();
 
 // Register TimeProvider for testability
 builder.Services.AddSingleton(TimeProvider.System);
+
+// FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 // Configure RabbitMQ options with validation
 builder.Services.AddOptions<RabbitMqOptions>()
@@ -91,14 +95,8 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-// Configure authorization
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("TenantScoped", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("org_id");
-    });
+// Configure authorization with tenant-scoped validation
+builder.Services.AddTenantScopedAuthorization();
 
 // OpenTelemetry configuration
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];

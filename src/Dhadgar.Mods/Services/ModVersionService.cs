@@ -56,19 +56,33 @@ public sealed class ModVersionService : IModVersionService
             query = query.Where(v => !v.IsPrerelease);
         }
 
-        var version = await query
-            .OrderByDescending(v => v.Major)
-            .ThenByDescending(v => v.Minor)
-            .ThenByDescending(v => v.Patch)
-            .ThenBy(v => v.Prerelease) // Stable before prerelease
-            .FirstOrDefaultAsync(ct);
+        // Fetch all versions and sort in memory using proper SemVer comparison
+        var versions = await query.ToListAsync(ct);
 
-        if (version is null)
+        if (versions.Count == 0)
         {
             return ServiceResult.Fail<ModVersionDetail>("no_versions_found");
         }
 
-        return ServiceResult.Ok(MapToDetail(version));
+        // Sort using SemanticVersion for proper prerelease ordering
+        var latest = versions
+            .Select(v => (Version: v, SemVer: SemanticVersion.TryParse(v.Version, out var sv) ? sv : null))
+            .Where(x => x.SemVer is not null)
+            .OrderByDescending(x => x.SemVer)
+            .Select(x => x.Version)
+            .FirstOrDefault();
+
+        if (latest is null)
+        {
+            // Fallback to database ordering if all versions fail to parse
+            latest = versions
+                .OrderByDescending(v => v.Major)
+                .ThenByDescending(v => v.Minor)
+                .ThenByDescending(v => v.Patch)
+                .First();
+        }
+
+        return ServiceResult.Ok(MapToDetail(latest));
     }
 
     public async Task<ServiceResult<ModVersionDetail>> PublishVersionAsync(
@@ -100,10 +114,23 @@ public sealed class ModVersionService : IModVersionService
             return ServiceResult.Fail<ModVersionDetail>("version_already_exists");
         }
 
-        // Unmark current latest
+        // Get current latest to compare versions
         var currentLatest = await _db.ModVersions
             .Where(v => v.ModId == modId && v.IsLatest && !v.IsPrerelease)
             .FirstOrDefaultAsync(ct);
+
+        // Determine if this version should be marked as latest
+        // Only stable releases can be latest, and only if they're newer than current latest
+        var shouldBeLatest = !request.IsPrerelease;
+        if (shouldBeLatest && currentLatest != null)
+        {
+            // Parse current latest version and compare
+            if (SemanticVersion.TryParse(currentLatest.Version, out var currentLatestSemver))
+            {
+                // Only mark as latest if new version is greater than current
+                shouldBeLatest = semver > currentLatestSemver;
+            }
+        }
 
         var version = new ModVersion
         {
@@ -121,7 +148,7 @@ public sealed class ModVersionService : IModVersionService
             MinGameVersion = request.MinGameVersion,
             MaxGameVersion = request.MaxGameVersion,
             IsPrerelease = request.IsPrerelease,
-            IsLatest = !request.IsPrerelease, // Only mark stable releases as latest
+            IsLatest = shouldBeLatest,
             PublishedAt = DateTime.UtcNow
         };
 
@@ -141,7 +168,7 @@ public sealed class ModVersionService : IModVersionService
             }
         }
 
-        // Update latest flag
+        // Update latest flag - only demote current latest if new version is newer
         if (version.IsLatest && currentLatest != null)
         {
             currentLatest.IsLatest = false;
@@ -195,17 +222,21 @@ public sealed class ModVersionService : IModVersionService
         version.IsDeprecated = true;
         version.DeprecationReason = request.Reason;
 
-        // If this was the latest, find new latest
+        // If this was the latest, find new latest using proper SemVer comparison
         if (version.IsLatest)
         {
             version.IsLatest = false;
 
-            var newLatest = await _db.ModVersions
+            var candidates = await _db.ModVersions
                 .Where(v => v.ModId == modId && !v.IsDeprecated && !v.IsPrerelease && v.Id != versionId)
-                .OrderByDescending(v => v.Major)
-                .ThenByDescending(v => v.Minor)
-                .ThenByDescending(v => v.Patch)
-                .FirstOrDefaultAsync(ct);
+                .ToListAsync(ct);
+
+            var newLatest = candidates
+                .Select(v => (Version: v, SemVer: SemanticVersion.TryParse(v.Version, out var sv) ? sv : null))
+                .Where(x => x.SemVer is not null)
+                .OrderByDescending(x => x.SemVer)
+                .Select(x => x.Version)
+                .FirstOrDefault();
 
             if (newLatest != null)
             {

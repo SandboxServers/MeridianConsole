@@ -7,6 +7,7 @@ using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,8 +37,13 @@ builder.Services.AddOptions<ConsoleOptions>()
 builder.Services.AddDbContext<ConsoleDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-// Redis for distributed caching and SignalR backplane
+// Redis for distributed caching, SignalR backplane, and atomic set operations
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+
+// Register IConnectionMultiplexer for atomic Redis operations (SADD/SREM)
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(redisConnectionString));
+
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = redisConnectionString;
@@ -47,7 +54,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 builder.Services.AddSignalR()
     .AddStackExchangeRedis(redisConnectionString, options =>
     {
-        options.Configuration.ChannelPrefix = "console";
+        options.Configuration.ChannelPrefix = RedisChannel.Literal("console");
     });
 
 // Register services
@@ -95,15 +102,9 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-// Configure authentication and authorization
-builder.Services.AddHttpContextAccessor();
+// Configure authentication and authorization with tenant-scoped validation
 builder.Services.AddAuthentication();
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("TenantScoped", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("org_id");
-    });
+builder.Services.AddTenantScopedAuthorization();
 
 // OpenTelemetry configuration
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
@@ -182,7 +183,8 @@ app.MapGet("/", () => Results.Ok(new { service = "Dhadgar.Console", message = Dh
 app.MapGet("/hello", () => Results.Text(Dhadgar.Console.Hello.Message))
     .WithTags("Health").WithName("ConsoleHello");
 
-app.MapHub<ConsoleHub>("/hubs/console");
+app.MapHub<ConsoleHub>("/hubs/console")
+    .RequireAuthorization();
 app.MapDhadgarDefaultEndpoints();
 ConsoleEndpoints.Map(app);
 

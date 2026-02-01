@@ -6,6 +6,7 @@ using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Swagger;
 using FluentValidation;
 using MassTransit;
@@ -82,15 +83,9 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-// Configure authentication and authorization
-builder.Services.AddHttpContextAccessor();
+// Configure authentication and authorization with tenant-scoped validation
 builder.Services.AddAuthentication();
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("TenantScoped", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("org_id");
-    });
+builder.Services.AddTenantScopedAuthorization();
 
 // OpenTelemetry configuration
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
