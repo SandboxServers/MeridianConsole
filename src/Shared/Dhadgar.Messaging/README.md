@@ -528,71 +528,133 @@ builder.Services.AddDhadgarMessaging(builder.Configuration, x =>
 
 ## Error Handling and Reliability
 
-### Current State
+### Production-Ready Resilience
 
-The current implementation provides basic MassTransit configuration. Advanced error handling features are planned but not yet implemented:
+The messaging infrastructure includes comprehensive error handling and reliability features:
 
-- Retry policies with exponential backoff
-- Circuit breaker integration
-- Dead letter queue (DLQ) handling
-- Outbox pattern for transactional reliability
-- Saga state machines for complex workflows
+- ✅ **Retry policies** with exponential backoff (5 retries, 200ms-5s)
+- ✅ **Delayed redelivery** for transient failures (5min, 15min, 1hr)
+- ✅ **Circuit breaker** to prevent cascade failures (15% threshold)
+- ✅ **In-memory outbox** to prevent duplicate sends on retry
+- ✅ **Dead letter queue consumer pattern** for handling permanently failed messages
+- ✅ **Publisher confirms** for guaranteed message delivery
+- ✅ **Connection resilience** with heartbeat and timeout settings
 
-### Planned: Retry Policies
+### Retry Configuration
+
+Messages are automatically retried with exponential backoff:
 
 ```csharp
-// Future implementation in MessagingExtensions.cs
-cfg.UseMessageRetry(retry =>
+// Configured in MessagingExtensions.cs
+cfg.UseMessageRetry(r =>
 {
-    retry.Exponential(
-        retryLimit: 5,
-        minInterval: TimeSpan.FromSeconds(1),
-        maxInterval: TimeSpan.FromMinutes(1),
-        intervalDelta: TimeSpan.FromSeconds(2));
+    // Exponential backoff: 200ms, 400ms, 800ms, 1.6s, 3.2s (capped at 5s)
+    r.Exponential(5,
+        TimeSpan.FromMilliseconds(200),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromMilliseconds(200));
 
-    // Don't retry on validation errors
-    retry.Ignore<ValidationException>();
+    // Don't retry validation errors - they won't succeed on retry
+    r.Ignore<ArgumentNullException>();
+    r.Ignore<ArgumentException>();
 });
 ```
 
-### Planned: Dead Letter Queues
+### Delayed Redelivery
 
-MassTransit automatically creates error queues (`_error` suffix) for messages that fail all retries. Configuration for custom DLQ handling will be added:
+After immediate retries fail, messages are scheduled for redelivery:
 
 ```csharp
-// Future: Custom error handling
-cfg.ConfigureEndpoints(ctx, e =>
+cfg.UseDelayedRedelivery(r =>
 {
-    e.UseDeadLetterQueue(q =>
+    // Redelivery intervals: 5min, 15min, 1hr (3 attempts)
+    r.Intervals(
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMinutes(15),
+        TimeSpan.FromHours(1));
+});
+```
+
+**Note:** Requires the `rabbitmq_delayed_message_exchange` plugin on RabbitMQ.
+
+### Circuit Breaker
+
+Prevents cascade failures when downstream services are unhealthy:
+
+```csharp
+cfg.UseCircuitBreaker(cb =>
+{
+    cb.TrackingPeriod = TimeSpan.FromMinutes(1);
+    cb.TripThreshold = 15;       // Trip when failure rate exceeds 15%
+    cb.ActiveThreshold = 10;     // Start tracking after 10 messages
+    cb.ResetInterval = TimeSpan.FromMinutes(5);  // Try again after 5 minutes
+});
+```
+
+### Dead Letter Queue Consumer Pattern
+
+When messages exhaust all retries and redelivery attempts, they are sent to error queues. Use the `FaultConsumer<T>` base class to handle these permanently failed messages:
+
+```csharp
+// 1. Create a fault consumer for your message type
+public sealed class SendEmailNotificationFaultConsumer
+    : FaultConsumer<SendEmailNotification>
+{
+    private readonly IAlertService _alerts;
+
+    public SendEmailNotificationFaultConsumer(
+        ILogger<SendEmailNotificationFaultConsumer> logger,
+        IAlertService alerts) : base(logger)
     {
-        q.QueueName = "meridian_dead_letter";
-    });
+        _alerts = alerts;
+    }
+
+    protected override async Task HandleFaultAsync(
+        ConsumeContext<Fault<SendEmailNotification>> context,
+        CancellationToken ct)
+    {
+        var fault = context.Message;
+
+        // Alert operations team about the permanent failure
+        await _alerts.SendAsync(
+            $"Email notification {fault.Message.NotificationId} failed permanently",
+            severity: AlertSeverity.High);
+    }
+}
+
+// 2. Register the fault consumer
+services.AddDhadgarMessaging(config, x =>
+{
+    x.AddConsumer<SendEmailNotificationConsumer>();
+    x.AddFaultConsumer<SendEmailNotification, SendEmailNotificationFaultConsumer>();
 });
 ```
 
-### Current: Exception Handling in Consumers
+The `FaultConsumer<T>` base class provides:
+- Detailed exception logging with stack traces
+- Correlation ID tracking
+- Timing metrics
+- Structured logging context
 
-For now, handle exceptions carefully in consumers:
+### Exception Handling in Consumers
+
+The retry pipeline handles most exceptions automatically. Design your consumers accordingly:
 
 ```csharp
 public async Task Consume(ConsumeContext<MyMessage> context)
 {
-    try
+    // Transient exceptions (network, timeout) are retried automatically
+    // Just let them propagate
+
+    // For validation/business rule violations that won't succeed on retry,
+    // consider throwing a specific exception type and ignoring it in retry config:
+    if (!IsValid(context.Message))
     {
-        // Business logic
+        throw new ValidationException("Invalid message");
     }
-    catch (TransientException ex)
-    {
-        // Re-throw for MassTransit to retry
-        _logger.LogWarning(ex, "Transient failure, will retry");
-        throw;
-    }
-    catch (PermanentException ex)
-    {
-        // Log and don't re-throw (message goes to error queue)
-        _logger.LogError(ex, "Permanent failure, moving to error queue");
-        // Don't throw - message will be discarded or moved to error queue
-    }
+
+    // Normal processing - exceptions will trigger retry
+    await ProcessMessageAsync(context.Message);
 }
 ```
 

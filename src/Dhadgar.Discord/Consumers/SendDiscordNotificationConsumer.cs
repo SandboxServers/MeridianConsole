@@ -38,8 +38,30 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
         var message = context.Message;
 
         _logger.LogInformation(
-            "Processing notification for event {EventType}: {Title}",
-            message.EventType, message.Title);
+            "Processing notification {NotificationId} for event {EventType}: {Title}",
+            message.NotificationId, message.EventType, message.Title);
+
+        // Idempotency check: Skip if we've already processed this notification
+        var existingLog = await _db.NotificationLogs.FindAsync(
+            [message.NotificationId],
+            context.CancellationToken);
+
+        if (existingLog is not null)
+        {
+            if (existingLog.Status == NotificationStatus.Sent)
+            {
+                _logger.LogInformation(
+                    "Notification {NotificationId} already sent, skipping duplicate",
+                    message.NotificationId);
+                return;
+            }
+
+            // If it failed before, we'll retry - remove the failed log entry
+            _logger.LogInformation(
+                "Retrying previously failed notification {NotificationId}",
+                message.NotificationId);
+            _db.NotificationLogs.Remove(existingLog);
+        }
 
         // Get the admin webhook URL from config
         var webhookUrl = _configuration["Discord:WebhookUrl"];
@@ -75,7 +97,7 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
             {
                 var logEntry = new DiscordNotificationLog
                 {
-                    Id = Guid.NewGuid(),
+                    Id = message.NotificationId, // Use NotificationId for idempotency
                     OrganizationId = message.OrgId,
                     EventType = Truncate(message.EventType, 100),
                     Channel = Truncate(channel, 100),
@@ -118,7 +140,7 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
 
             _db.NotificationLogs.Add(new DiscordNotificationLog
             {
-                Id = Guid.NewGuid(),
+                Id = message.NotificationId, // Use NotificationId for idempotency
                 OrganizationId = message.OrgId,
                 EventType = Truncate(message.EventType, 100),
                 Channel = Truncate(channel, 100),

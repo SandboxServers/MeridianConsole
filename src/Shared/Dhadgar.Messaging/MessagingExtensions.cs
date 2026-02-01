@@ -78,7 +78,24 @@ public static class MessagingExtensions
                 {
                     h.Username(user);
                     h.Password(pass);
+
+                    // Connection resilience settings for production stability
+                    // Heartbeat keeps connection alive and detects stale connections
+                    h.Heartbeat(TimeSpan.FromSeconds(30));
+
+                    // Connection timeout for initial connection - fail fast if unreachable
+                    h.RequestedConnectionTimeout(TimeSpan.FromSeconds(15));
+
+                    // Max channels per connection - prevents resource exhaustion
+                    h.RequestedChannelMax(100);
+
+                    // Publisher confirms ensure messages are confirmed by broker
+                    h.PublisherConfirmation = true;
                 });
+
+                // Consumer concurrency settings
+                // PrefetchCount controls how many messages are buffered per consumer
+                cfg.PrefetchCount = 16;
 
                 // Enable delayed message scheduler
                 cfg.UseDelayedMessageScheduler();
