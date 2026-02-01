@@ -242,11 +242,15 @@ public static class ServiceDefaultsExtensions
     /// </remarks>
     public static WebApplication MapDhadgarDefaults(this WebApplication app, DhadgarServiceOptions? options = null)
     {
-        // Map Aspire-compatible health endpoints (/health, /alive)
-        app.MapHealthChecks("/health");
+        // Map Aspire-compatible health endpoints (/health, /alive) with consistent JSON format
+        app.MapHealthChecks("/health", new HealthCheckOptions
+        {
+            ResponseWriter = WriteHealthResponseAsync
+        });
         app.MapHealthChecks("/alive", new HealthCheckOptions
         {
-            Predicate = check => check.Tags.Contains("live")
+            Predicate = check => check.Tags.Contains("live"),
+            ResponseWriter = WriteHealthResponseAsync
         });
 
         // Map Kubernetes-style health endpoints
@@ -573,20 +577,21 @@ public static class ServiceDefaultsExtensions
             app.UseMiddleware<TenantEnrichmentMiddleware>();
         }
 
-        // 3. ProblemDetailsMiddleware - Always enabled for RFC 9457 error responses
-        app.UseMiddleware<ProblemDetailsMiddleware>();
-
-        // 4. RequestLoggingMiddleware - Most services
+        // 3. RequestLoggingMiddleware - Most services (logs requests even when exceptions occur)
         if (options.EnableRequestLogging)
         {
             app.UseMiddleware<RequestLoggingMiddleware>();
         }
 
-        // 5. AuditMiddleware - Services that track changes
+        // 4. AuditMiddleware - Services that track changes (audits requests even when exceptions occur)
         if (options.EnableAuditMiddleware)
         {
             app.UseMiddleware<AuditMiddleware>();
         }
+
+        // 5. ProblemDetailsMiddleware - Always enabled for RFC 9457 error responses
+        // Placed after logging/audit so exceptions are properly logged before being converted to ProblemDetails
+        app.UseMiddleware<ProblemDetailsMiddleware>();
 
         return app;
     }

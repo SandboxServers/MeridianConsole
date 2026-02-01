@@ -65,14 +65,14 @@ builder.Services.AddCircuitBreaker(builder.Configuration);
 builder.Services.AddProblemDetails();
 
 // Health checks: add Gateway-specific readiness checks (self/liveness already added by AddDhadgarServiceDefaults)
-builder.Services.AddHealthChecks()
+var healthChecksBuilder = builder.Services.AddHealthChecks()
     .AddCheck<YarpReadinessCheck>("yarp_ready", tags: ["ready"]);
 
 // Add Redis health check for rate limiting cache
 var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
 if (!string.IsNullOrEmpty(redisConnectionString))
 {
-    builder.Services.AddHealthChecks().AddRedis(
+    healthChecksBuilder.AddRedis(
         redisConnectionString,
         name: "redis",
         timeout: TimeSpan.FromSeconds(2),

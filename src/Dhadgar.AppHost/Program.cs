@@ -32,31 +32,25 @@ var rabbitmq = builder.AddRabbitMQ("messaging")
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Gateway - API entry point (YARP reverse proxy)
+// Note: WithReference already implies WaitFor for the referenced resource
 var gateway = builder.AddProject<Projects.Dhadgar_Gateway>("gateway")
     .WithReference(redis)
-    .WithExternalHttpEndpoints()
-    .WaitFor(redis);
+    .WithExternalHttpEndpoints();
 
 // Identity - User/org/role management
 var identity = builder.AddProject<Projects.Dhadgar_Identity>("identity")
     .WithReference(identityDb)
     .WithReference(redis)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(redis)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 // Nodes - Agent enrollment, mTLS CA, heartbeats
 var nodes = builder.AddProject<Projects.Dhadgar_Nodes>("nodes")
     .WithReference(platformDb)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 // Secrets - Azure Key Vault integration (no database)
 var secrets = builder.AddProject<Projects.Dhadgar_Secrets>("secrets")
-    .WithReference(rabbitmq)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 // Note: BetterAuth is a Node.js project and not orchestrated via Aspire
 // It runs separately via npm start
@@ -64,16 +58,12 @@ var secrets = builder.AddProject<Projects.Dhadgar_Secrets>("secrets")
 // Notifications - Email, webhook delivery
 var notifications = builder.AddProject<Projects.Dhadgar_Notifications>("notifications")
     .WithReference(platformDb)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 // Discord - Discord webhook integration
 var discord = builder.AddProject<Projects.Dhadgar_Discord>("discord")
     .WithReference(platformDb)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Stub Services (Scaffolding)
@@ -81,32 +71,22 @@ var discord = builder.AddProject<Projects.Dhadgar_Discord>("discord")
 
 var billing = builder.AddProject<Projects.Dhadgar_Billing>("billing")
     .WithReference(billingDb)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 var servers = builder.AddProject<Projects.Dhadgar_Servers>("servers")
     .WithReference(platformDb)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 var tasks = builder.AddProject<Projects.Dhadgar_Tasks>("tasks")
     .WithReference(platformDb)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 var console = builder.AddProject<Projects.Dhadgar_Console>("console")
     .WithReference(redis)
-    .WithReference(rabbitmq)
-    .WaitFor(redis)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 var mods = builder.AddProject<Projects.Dhadgar_Mods>("mods")
     .WithReference(platformDb)
-    .WithReference(rabbitmq)
-    .WaitFor(postgres)
-    .WaitFor(rabbitmq);
+    .WithReference(rabbitmq);
 
 builder.Build().Run();
