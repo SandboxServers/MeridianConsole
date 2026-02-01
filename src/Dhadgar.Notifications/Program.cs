@@ -5,19 +5,16 @@ using Dhadgar.Notifications.Consumers;
 using Dhadgar.Notifications.Data;
 using Dhadgar.Notifications.Services;
 using Dhadgar.ServiceDefaults;
-using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults();
+// Add Dhadgar service defaults with Aspire-compatible patterns
+builder.AddDhadgarServiceDefaults();
+
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Notifications API",
     description: "Email, Discord, and webhook notifications for Meridian Console");
@@ -25,59 +22,6 @@ builder.Services.AddMeridianSwagger(
 // Database
 builder.Services.AddDbContext<NotificationsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
-
-// OpenTelemetry configuration
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-Uri? otlpUri = null;
-if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-{
-    if (Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out var parsedUri))
-    {
-        otlpUri = parsedUri;
-    }
-}
-var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Notifications");
-
-builder.Logging.AddOpenTelemetry(options =>
-{
-    options.SetResourceBuilder(resourceBuilder);
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
-    options.ParseStateValues = true;
-
-    if (otlpUri is not null)
-    {
-        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
-    }
-});
-
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    });
 
 // Services
 builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
@@ -106,10 +50,8 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
+// Dhadgar middleware pipeline (correlation, tenant enrichment, problem details, request logging)
+app.UseDhadgarMiddleware();
 
 // Authentication and authorization
 app.UseAuthentication();

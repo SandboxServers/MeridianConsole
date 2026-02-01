@@ -34,13 +34,7 @@ using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Audit;
 using Dhadgar.ServiceDefaults.Errors;
 using Dhadgar.ServiceDefaults.Extensions;
-using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
-using Dhadgar.ServiceDefaults.MultiTenancy;
-using Dhadgar.ServiceDefaults.Tracing;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
 using IdentityHello = Dhadgar.Identity.Hello;
@@ -49,6 +43,11 @@ using Dhadgar.Identity.Validators;
 using FluentValidation;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Dhadgar service defaults with Aspire-compatible patterns
+// Note: Identity uses custom middleware pipeline, so we only use AddDhadgarServiceDefaults
+// for OpenTelemetry, health checks, and other core services
+builder.AddDhadgarServiceDefaults();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi("v1", options =>
@@ -377,12 +376,6 @@ else
 
 builder.Services.AddScoped<IIdentityEventPublisher, IdentityEventPublisher>();
 builder.Services.AddSecurityEventLogger();
-
-// Add Dhadgar logging infrastructure with PII redaction
-builder.Services.AddDhadgarLogging();
-builder.Services.AddOrganizationContext();
-builder.Services.AddSingleton<RequestLoggingMessages>();
-builder.Logging.AddDhadgarLogging("Dhadgar.Identity", builder.Configuration);
 
 // API audit infrastructure for compliance logging (separate from domain AuditEvents)
 builder.Services.AddAuditInfrastructure<IdentityDbContext>();
@@ -760,49 +753,12 @@ builder.Services.AddAuthorizationBuilder()
             return string.Equals(verified, "true", StringComparison.OrdinalIgnoreCase);
         }));
 
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
-var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Identity");
-
-builder.Logging.AddOpenTelemetry(options =>
+// Add Identity-specific OpenTelemetry instrumentation
+// Note: Base OTel configured by AddDhadgarServiceDefaults; here we extend with Redis
+builder.Services.ConfigureOpenTelemetryTracerProvider(tracing =>
 {
-    options.SetResourceBuilder(resourceBuilder);
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
-    options.ParseStateValues = true;
-
-    if (otlpUri is not null)
-    {
-        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
-    }
+    tracing.AddRedisInstrumentation(); // Redis instrumentation for token storage
 });
-
-// Tracing (centralized with EF Core and Redis instrumentation)
-builder.Services.AddDhadgarTracing(
-    builder.Configuration,
-    "Dhadgar.Identity",
-    tracing =>
-    {
-        // Add Redis instrumentation - resolves IConnectionMultiplexer from DI
-        tracing.AddRedisInstrumentation();
-    });
-
-// Metrics
-builder.Services.AddOpenTelemetry()
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    });
 
 var app = builder.Build();
 
@@ -816,6 +772,9 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 // SECURITY: Handle request size limit exceptions with proper JSON responses
 app.UseRequestLimitsMiddleware();
 
+// Custom middleware pipeline for Identity service
+// Note: UseRequestLimitsMiddleware must run before CorrelationMiddleware
+// so we don't use UseDhadgarMiddleware() here
 app.UseMiddleware<CorrelationMiddleware>();
 app.UseMiddleware<TenantEnrichmentMiddleware>();
 app.UseDhadgarErrorHandling();  // RFC 9457 Problem Details with trace context
