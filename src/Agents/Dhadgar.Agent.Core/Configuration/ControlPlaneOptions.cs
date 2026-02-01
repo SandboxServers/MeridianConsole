@@ -5,7 +5,7 @@ namespace Dhadgar.Agent.Core.Configuration;
 /// <summary>
 /// Configuration for control plane connectivity.
 /// </summary>
-public sealed class ControlPlaneOptions
+public sealed class ControlPlaneOptions : IValidatableObject
 {
     /// <summary>
     /// Control plane endpoint URL.
@@ -49,4 +49,15 @@ public sealed class ControlPlaneOptions
     /// </summary>
     [Range(30, 300)]
     public int ServerTimeoutSeconds { get; set; } = 60;
+
+    /// <inheritdoc />
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (MaxReconnectDelaySeconds < ReconnectDelaySeconds)
+        {
+            yield return new ValidationResult(
+                $"{nameof(MaxReconnectDelaySeconds)} ({MaxReconnectDelaySeconds}) must be greater than or equal to {nameof(ReconnectDelaySeconds)} ({ReconnectDelaySeconds})",
+                [nameof(MaxReconnectDelaySeconds), nameof(ReconnectDelaySeconds)]);
+        }
+    }
 }

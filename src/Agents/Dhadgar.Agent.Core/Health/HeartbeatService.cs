@@ -13,18 +13,18 @@ public sealed class HeartbeatService : BackgroundService
 {
     private readonly IControlPlaneClient _controlPlaneClient;
     private readonly IHealthReporter _healthReporter;
-    private readonly AgentOptions _options;
+    private readonly IOptionsMonitor<AgentOptions> _optionsMonitor;
     private readonly ILogger<HeartbeatService> _logger;
 
     public HeartbeatService(
         IControlPlaneClient controlPlaneClient,
         IHealthReporter healthReporter,
-        IOptions<AgentOptions> options,
+        IOptionsMonitor<AgentOptions> optionsMonitor,
         ILogger<HeartbeatService> logger)
     {
         _controlPlaneClient = controlPlaneClient ?? throw new ArgumentNullException(nameof(controlPlaneClient));
         _healthReporter = healthReporter ?? throw new ArgumentNullException(nameof(healthReporter));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _optionsMonitor = optionsMonitor ?? throw new ArgumentNullException(nameof(optionsMonitor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -32,14 +32,14 @@ public sealed class HeartbeatService : BackgroundService
     {
         _logger.LogInformation("Heartbeat service started");
 
-        // Wait for enrollment
-        while (!_options.NodeId.HasValue && !stoppingToken.IsCancellationRequested)
+        // Wait for enrollment - use CurrentValue to detect runtime changes
+        while (!_optionsMonitor.CurrentValue.NodeId.HasValue && !stoppingToken.IsCancellationRequested)
         {
             _logger.LogDebug("Waiting for agent enrollment before starting heartbeat...");
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
 
-        var interval = TimeSpan.FromSeconds(_options.ControlPlane.HeartbeatIntervalSeconds);
+        var interval = TimeSpan.FromSeconds(_optionsMonitor.CurrentValue.ControlPlane.HeartbeatIntervalSeconds);
 
         // Initial delay to let other services start
         await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);

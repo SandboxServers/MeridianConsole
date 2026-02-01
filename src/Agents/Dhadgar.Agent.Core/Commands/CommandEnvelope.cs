@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Dhadgar.Agent.Core.Commands;
 
 /// <summary>
@@ -7,6 +9,20 @@ namespace Dhadgar.Agent.Core.Commands;
 public sealed class CommandEnvelope
 {
     /// <summary>
+    /// Maximum length for command type identifier.
+    /// </summary>
+    public const int MaxCommandTypeLength = 128;
+
+    /// <summary>
+    /// Maximum payload size (256 KB).
+    /// </summary>
+    public const int MaxPayloadLength = 256 * 1024;
+
+    /// <summary>
+    /// Maximum signature length.
+    /// </summary>
+    public const int MaxSignatureLength = 2048;
+    /// <summary>
     /// Unique identifier for this command instance.
     /// </summary>
     public required Guid CommandId { get; init; }
@@ -14,6 +30,7 @@ public sealed class CommandEnvelope
     /// <summary>
     /// Type of command to execute.
     /// </summary>
+    [MaxLength(MaxCommandTypeLength)]
     public required string CommandType { get; init; }
 
     /// <summary>
@@ -44,11 +61,13 @@ public sealed class CommandEnvelope
     /// <summary>
     /// Command payload as JSON.
     /// </summary>
+    [MaxLength(MaxPayloadLength)]
     public required string PayloadJson { get; init; }
 
     /// <summary>
     /// Cryptographic signature of the command for verification.
     /// </summary>
+    [MaxLength(MaxSignatureLength)]
     public string? Signature { get; init; }
 
     /// <summary>

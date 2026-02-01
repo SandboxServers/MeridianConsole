@@ -1,3 +1,4 @@
+using System.Buffers;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
 
@@ -10,8 +11,9 @@ public sealed class PathValidator : IPathValidator
 {
     private readonly ILogger<PathValidator> _logger;
 
-    // Characters that are not allowed in path components
-    private static readonly char[] InvalidPathChars = ['<', '>', ':', '"', '|', '?', '*', '\0'];
+    // Characters that are not allowed in path components (cached for performance)
+    private static readonly SearchValues<char> InvalidPathChars =
+        SearchValues.Create(['<', '>', ':', '"', '|', '?', '*', '\0']);
 
     // Patterns that indicate path traversal attempts
     private static readonly string[] TraversalPatterns = ["..", "..\\", "../"];
@@ -83,7 +85,7 @@ public sealed class PathValidator : IPathValidator
         }
 
         // Check for invalid characters
-        if (path.IndexOfAny(InvalidPathChars) >= 0)
+        if (path.AsSpan().IndexOfAny(InvalidPathChars) >= 0)
         {
             return false;
         }
@@ -98,7 +100,7 @@ public sealed class PathValidator : IPathValidator
         }
 
         // Check for null bytes (potential injection)
-        if (path.Contains('\0'))
+        if (path.Contains('\0', StringComparison.Ordinal))
         {
             return false;
         }
@@ -125,11 +127,13 @@ public sealed class PathValidator : IPathValidator
             Path.DirectorySeparatorChar);
 
         // Remove duplicate separators
-        while (normalized.Contains($"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}"))
+        var doubleSeparator = $"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}";
+        while (normalized.Contains(doubleSeparator, StringComparison.Ordinal))
         {
             normalized = normalized.Replace(
-                $"{Path.DirectorySeparatorChar}{Path.DirectorySeparatorChar}",
-                $"{Path.DirectorySeparatorChar}");
+                doubleSeparator,
+                $"{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal);
         }
 
         // Trim trailing separators (except for root)

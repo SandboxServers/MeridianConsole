@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Dhadgar.Agent.Core.Process;
 
 /// <summary>
@@ -53,6 +55,7 @@ public sealed class ProcessConfig
     /// <summary>
     /// Maximum restart attempts before giving up.
     /// </summary>
+    [Range(0, int.MaxValue)]
     public int MaxRestartAttempts { get; init; } = 3;
 
     /// <summary>

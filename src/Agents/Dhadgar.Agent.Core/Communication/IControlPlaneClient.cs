@@ -102,7 +102,7 @@ public sealed class TelemetryPayload
     /// <summary>
     /// Events that occurred since last telemetry submission.
     /// </summary>
-    public List<TelemetryEvent> Events { get; init; } = [];
+    public IList<TelemetryEvent> Events { get; init; } = [];
 }
 
 /// <summary>

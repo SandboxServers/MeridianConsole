@@ -57,7 +57,12 @@ public sealed class FileTransferService : IFileTransferService
             CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
         };
 
-        _activeTransfers[request.TransferId] = transferState;
+        if (!_activeTransfers.TryAdd(request.TransferId, transferState))
+        {
+            transferState.CancellationSource.Dispose();
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Duplicate] A transfer with this ID is already in progress");
+        }
 
         try
         {
@@ -145,7 +150,16 @@ public sealed class FileTransferService : IFileTransferService
                 if (!hashResult.IsSuccess)
                 {
                     // Clean up failed download
-                    try { File.Delete(destinationPath); } catch { }
+                    try
+                    {
+                        File.Delete(destinationPath);
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        _logger.LogDebug(cleanupEx,
+                            "Failed to clean up partial download for {TransferId}: {Path}",
+                            request.TransferId, destinationPath);
+                    }
                     return Result<FileTransferResult>.Failure(hashResult.Error!);
                 }
             }
@@ -161,7 +175,8 @@ public sealed class FileTransferService : IFileTransferService
 
             _meter.RecordFileTransfer(bytesTransferred, isUpload: false);
             _logger.LogInformation(
-                "Download completed: {Path}, {Bytes} bytes in {Duration}",
+                "Download completed: {TransferId} to {Path}, {Bytes} bytes in {Duration}",
+                request.TransferId,
                 destinationPath,
                 bytesTransferred,
                 duration);
@@ -186,9 +201,11 @@ public sealed class FileTransferService : IFileTransferService
         {
             transferState.State = FileTransferState.Failed;
             transferState.ErrorMessage = ex.Message;
-            _logger.LogError(ex, "Download failed for {TransferId}", request.TransferId);
+            _logger.LogError(ex, "Download failed for {TransferId}: {Path}",
+                request.TransferId, request.DestinationPath);
+            // Return sanitized error message without exception details
             return Result<FileTransferResult>.Failure(
-                $"[Transfer.Failed] Download failed: {ex.Message}");
+                "[Transfer.Failed] Download failed due to an unexpected error");
         }
         finally
         {
@@ -213,17 +230,32 @@ public sealed class FileTransferService : IFileTransferService
             CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
         };
 
-        _activeTransfers[request.TransferId] = transferState;
+        if (!_activeTransfers.TryAdd(request.TransferId, transferState))
+        {
+            transferState.CancellationSource.Dispose();
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Duplicate] A transfer with this ID is already in progress");
+        }
 
         try
         {
-            if (!File.Exists(request.SourcePath))
+            // Validate source path to prevent path traversal attacks
+            var allowedPaths = new[] { _fileOptions.TempDirectory, _agentOptions.Process.ServerBasePath };
+            var pathResult = _pathValidator.ValidatePath(request.SourcePath, allowedPaths);
+            if (!pathResult.IsSuccess)
             {
-                return Result<FileTransferResult>.Failure(
-                    $"[File.NotFound] Source file not found: {request.SourcePath}");
+                return Result<FileTransferResult>.Failure(pathResult.Error!);
             }
 
-            var fileInfo = new FileInfo(request.SourcePath);
+            var sourcePath = pathResult.Value!;
+
+            if (!File.Exists(sourcePath))
+            {
+                return Result<FileTransferResult>.Failure(
+                    "[File.NotFound] Source file not found");
+            }
+
+            var fileInfo = new FileInfo(sourcePath);
             if (fileInfo.Length > _fileOptions.MaxFileSizeBytes)
             {
                 return Result<FileTransferResult>.Failure(
@@ -236,14 +268,14 @@ public sealed class FileTransferService : IFileTransferService
 
             // Compute hash before upload
             var fileHash = await _integrityChecker.ComputeHashAsync(
-                request.SourcePath,
+                sourcePath,
                 transferState.CancellationSource.Token);
 
             transferState.State = FileTransferState.Transferring;
 
             using var client = _httpClientFactory.CreateClient("ControlPlane");
             await using var fileStream = new FileStream(
-                request.SourcePath,
+                sourcePath,
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.Read,
@@ -272,8 +304,9 @@ public sealed class FileTransferService : IFileTransferService
 
             _meter.RecordFileTransfer(fileInfo.Length, isUpload: true);
             _logger.LogInformation(
-                "Upload completed: {Path}, {Bytes} bytes in {Duration}",
-                request.SourcePath,
+                "Upload completed: {TransferId} from {Path}, {Bytes} bytes in {Duration}",
+                request.TransferId,
+                sourcePath,
                 fileInfo.Length,
                 duration);
 
@@ -298,8 +331,9 @@ public sealed class FileTransferService : IFileTransferService
             transferState.State = FileTransferState.Failed;
             transferState.ErrorMessage = ex.Message;
             _logger.LogError(ex, "Upload failed for {TransferId}", request.TransferId);
+            // Return sanitized error message without exception details
             return Result<FileTransferResult>.Failure(
-                $"[Transfer.Failed] Upload failed: {ex.Message}");
+                "[Transfer.Failed] Upload failed due to an unexpected error");
         }
         finally
         {
@@ -332,7 +366,15 @@ public sealed class FileTransferService : IFileTransferService
         if (_activeTransfers.TryGetValue(transferId, out var state))
         {
             _logger.LogInformation("Cancelling transfer {TransferId}", transferId);
-            await state.CancellationSource.CancelAsync();
+            try
+            {
+                await state.CancellationSource.CancelAsync();
+            }
+            catch (ObjectDisposedException)
+            {
+                // CTS was disposed because transfer completed concurrently - safe to ignore
+                _logger.LogDebug("Transfer {TransferId} already completed before cancellation", transferId);
+            }
         }
     }
 

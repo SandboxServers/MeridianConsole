@@ -34,12 +34,12 @@ public sealed class SystemMetrics
     /// <summary>
     /// Disk space information for relevant volumes.
     /// </summary>
-    public List<DiskMetrics> Disks { get; init; } = [];
+    public IList<DiskMetrics> Disks { get; init; } = [];
 
     /// <summary>
     /// Network interface metrics.
     /// </summary>
-    public List<NetworkMetrics> Networks { get; init; } = [];
+    public IList<NetworkMetrics> Networks { get; init; } = [];
 
     /// <summary>
     /// System uptime.

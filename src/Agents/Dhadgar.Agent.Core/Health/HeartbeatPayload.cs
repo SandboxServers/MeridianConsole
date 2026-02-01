@@ -33,12 +33,12 @@ public sealed class HeartbeatPayload
     /// <summary>
     /// Active game server processes.
     /// </summary>
-    public List<ProcessStatus> ActiveProcesses { get; init; } = [];
+    public IList<ProcessStatus> ActiveProcesses { get; init; } = [];
 
     /// <summary>
     /// Any warnings or issues to report.
     /// </summary>
-    public List<string> Warnings { get; init; } = [];
+    public IList<string> Warnings { get; init; } = [];
 }
 
 /// <summary>

@@ -75,8 +75,12 @@ public sealed class EnrollmentService
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                // Truncate error content to avoid logging sensitive data
+                var truncatedError = errorContent.Length > 200
+                    ? errorContent[..200] + "..."
+                    : errorContent;
                 _logger.LogError("Enrollment failed with status {Status}: {Error}",
-                    response.StatusCode, errorContent);
+                    response.StatusCode, truncatedError);
                 return Result<EnrollmentResult>.Failure(
                     $"[Enrollment.Failed] Enrollment failed: {response.StatusCode}");
             }
@@ -101,7 +105,7 @@ public sealed class EnrollmentService
             if (!string.IsNullOrEmpty(enrollmentResponse.CaCertificate))
             {
                 var caBytes = Convert.FromBase64String(enrollmentResponse.CaCertificate);
-                var caCert = new X509Certificate2(caBytes);
+                using var caCert = new X509Certificate2(caBytes);
                 await _certificateStore.StoreCaCertificateAsync(caCert, cancellationToken);
             }
 
@@ -118,8 +122,9 @@ public sealed class EnrollmentService
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Network error during enrollment");
+            // Return sanitized error message without exception details
             return Result<EnrollmentResult>.Failure(
-                $"[Enrollment.NetworkError] Network error during enrollment: {ex.Message}");
+                "[Enrollment.NetworkError] Network error during enrollment");
         }
     }
 
@@ -168,8 +173,12 @@ public sealed class EnrollmentService
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                // Truncate error content to avoid logging sensitive data
+                var truncatedError = errorContent.Length > 200
+                    ? errorContent[..200] + "..."
+                    : errorContent;
                 _logger.LogError("Certificate renewal failed with status {Status}: {Error}",
-                    response.StatusCode, errorContent);
+                    response.StatusCode, truncatedError);
                 return Result<CertificateRenewalResult>.Failure(
                     $"[Renewal.Failed] Certificate renewal failed: {response.StatusCode}");
             }
@@ -202,8 +211,9 @@ public sealed class EnrollmentService
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Network error during certificate renewal");
+            // Return sanitized error message without exception details
             return Result<CertificateRenewalResult>.Failure(
-                $"[Renewal.NetworkError] Network error during renewal: {ex.Message}");
+                "[Renewal.NetworkError] Network error during renewal");
         }
     }
 

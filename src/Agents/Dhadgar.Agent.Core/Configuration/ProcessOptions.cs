@@ -10,7 +10,7 @@ public sealed class ProcessOptions
     /// <summary>
     /// Base directory for game server files.
     /// </summary>
-    [Required]
+    [Required(AllowEmptyStrings = false)]
     public string ServerBasePath { get; set; } = string.Empty;
 
     /// <summary>

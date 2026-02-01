@@ -37,6 +37,11 @@ public sealed class CommandValidator : ICommandValidator
             return Fail("CommandType is required", "MissingCommandType");
         }
 
+        if (envelope.CommandType.Length > CommandEnvelope.MaxCommandTypeLength)
+        {
+            return Fail($"CommandType exceeds maximum length of {CommandEnvelope.MaxCommandTypeLength}", "CommandTypeTooLong");
+        }
+
         // Validate node ID matches
         if (_options.NodeId.HasValue && envelope.NodeId != _options.NodeId.Value)
         {
@@ -86,15 +91,31 @@ public sealed class CommandValidator : ICommandValidator
                 return Fail("Command signature is required", "MissingSignature");
             }
 
-            // TODO: Implement actual signature verification when control plane
-            // implements command signing. For now, just verify signature exists.
-            // This will be implemented when the control plane adds signing support.
+            // SECURITY: Signature verification not yet implemented.
+            // Reject all commands when signing is required to prevent
+            // false sense of security from presence-only checks.
+            _logger.LogError(
+                "Command {CommandId} rejected: signature verification not implemented. " +
+                "Disable RequireSignedCommands until control plane implements signing.",
+                envelope.CommandId);
+            return Fail("Signature verification not yet implemented", "SignatureVerificationUnavailable");
         }
 
-        // Validate payload exists
+        // Validate payload exists and size
         if (string.IsNullOrWhiteSpace(envelope.PayloadJson))
         {
             return Fail("Command payload is required", "MissingPayload");
+        }
+
+        if (envelope.PayloadJson.Length > CommandEnvelope.MaxPayloadLength)
+        {
+            return Fail($"Payload exceeds maximum size of {CommandEnvelope.MaxPayloadLength} bytes", "PayloadTooLarge");
+        }
+
+        // Validate signature size if present
+        if (envelope.Signature is not null && envelope.Signature.Length > CommandEnvelope.MaxSignatureLength)
+        {
+            return Fail($"Signature exceeds maximum length of {CommandEnvelope.MaxSignatureLength}", "SignatureTooLong");
         }
 
         return Result<CommandEnvelope>.Success(envelope);

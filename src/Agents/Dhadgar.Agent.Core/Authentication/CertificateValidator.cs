@@ -40,20 +40,30 @@ public sealed class CertificateValidator
                 $"[Certificate.NotYetValid] Certificate not valid until {certificate.NotBefore:O}");
         }
 
-        // If we have a CA certificate, validate the chain
-        if (_caCertificate is not null && chain is not null)
+        // Chain validation is required for mTLS security
+        if (chain is null)
+        {
+            return Result<bool>.Failure(
+                "[Certificate.ChainMissing] Certificate chain is required for validation");
+        }
+
+        // Configure revocation checking
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+        chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
+
+        // If we have a CA certificate, validate against custom trust; otherwise use system trust
+        if (_caCertificate is not null)
         {
             chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
             chain.ChainPolicy.CustomTrustStore.Add(_caCertificate);
-            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        }
 
-            if (!chain.Build(certificate))
-            {
-                var errors = string.Join(", ",
-                    chain.ChainStatus.Select(s => s.StatusInformation));
-                return Result<bool>.Failure(
-                    $"[Certificate.ChainValidationFailed] Chain validation failed: {errors}");
-            }
+        if (!chain.Build(certificate))
+        {
+            var errors = string.Join(", ",
+                chain.ChainStatus.Select(s => s.StatusInformation));
+            return Result<bool>.Failure(
+                $"[Certificate.ChainValidationFailed] Chain validation failed: {errors}");
         }
 
         return Result<bool>.Success(true);
@@ -68,6 +78,7 @@ public sealed class CertificateValidator
     public static bool IsNearingExpiration(X509Certificate2 certificate, int thresholdDays)
     {
         ArgumentNullException.ThrowIfNull(certificate);
+        ArgumentOutOfRangeException.ThrowIfNegative(thresholdDays);
         return certificate.NotAfter <= DateTime.UtcNow.AddDays(thresholdDays);
     }
 
