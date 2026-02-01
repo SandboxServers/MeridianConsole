@@ -25,9 +25,12 @@ reviews:
 
   # Path filters - exclude files we don't need reviewed
   path_filters:
-    # Documentation - handled manually
-    - "!**/*.md"
+    # Documentation - handled manually (except security-critical guideline files)
     - "!docs/**"
+    - "!**/*.md"
+    - "CLAUDE.md"
+    - "GEMINI.md"
+    - "**/CLAUDE.md"
 
     # Lock files - auto-generated
     - "!**/packages.lock.json"

@@ -56,6 +56,17 @@ public sealed class CommandValidator : ICommandValidator
             return Fail("Command is not intended for this node", "NodeIdMismatch");
         }
 
+        // Validate organization ID matches (multi-tenant isolation)
+        if (_options.OrganizationId.HasValue && envelope.OrganizationId != _options.OrganizationId.Value)
+        {
+            _logger.LogWarning(
+                "Command {CommandId} has mismatched OrganizationId. Expected: {Expected}, Got: {Got}",
+                envelope.CommandId,
+                _options.OrganizationId.Value,
+                envelope.OrganizationId);
+            return Fail("Command is not for this organization", "OrganizationIdMismatch");
+        }
+
         // Validate expiration
         if (envelope.ExpiresAt.HasValue && envelope.ExpiresAt.Value < DateTimeOffset.UtcNow)
         {
@@ -104,13 +115,14 @@ public sealed class CommandValidator : ICommandValidator
             return Fail("Signature verification not yet implemented", "SignatureVerificationUnavailable");
         }
 
-        // Validate payload exists and size
+        // Validate payload exists and size (use byte count for accurate size check)
         if (string.IsNullOrWhiteSpace(envelope.PayloadJson))
         {
             return Fail("Command payload is required", "MissingPayload");
         }
 
-        if (envelope.PayloadJson.Length > CommandEnvelope.MaxPayloadLength)
+        var payloadByteCount = System.Text.Encoding.UTF8.GetByteCount(envelope.PayloadJson);
+        if (payloadByteCount > CommandEnvelope.MaxPayloadLength)
         {
             return Fail($"Payload exceeds maximum size of {CommandEnvelope.MaxPayloadLength} bytes", "PayloadTooLarge");
         }

@@ -90,13 +90,8 @@ public sealed class EnrollmentService : IEnrollmentService
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                // Truncate error content to avoid logging sensitive data
-                var truncatedError = errorContent.Length > 200
-                    ? errorContent[..200] + "..."
-                    : errorContent;
-                _logger.LogError("Enrollment failed with status {Status}: {Error}",
-                    response.StatusCode, truncatedError);
+                // SECURITY: Do not log response body - may contain secrets or sensitive error details
+                _logger.LogError("Enrollment failed with status {Status}", response.StatusCode);
                 return Result<EnrollmentResult>.Failure(
                     $"[Enrollment.Failed] Enrollment failed: {response.StatusCode}");
             }
@@ -241,13 +236,8 @@ public sealed class EnrollmentService : IEnrollmentService
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                // Truncate error content to avoid logging sensitive data
-                var truncatedError = errorContent.Length > 200
-                    ? errorContent[..200] + "..."
-                    : errorContent;
-                _logger.LogError("Certificate renewal failed with status {Status}: {Error}",
-                    response.StatusCode, truncatedError);
+                // SECURITY: Do not log response body - may contain secrets or sensitive error details
+                _logger.LogError("Certificate renewal failed with status {Status}", response.StatusCode);
                 return Result<CertificateRenewalResult>.Failure(
                     $"[Renewal.Failed] Certificate renewal failed: {response.StatusCode}");
             }

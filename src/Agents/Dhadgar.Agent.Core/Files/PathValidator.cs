@@ -18,6 +18,9 @@ public sealed class PathValidator : IPathValidator
     // Patterns that indicate path traversal attempts
     private static readonly string[] TraversalPatterns = ["..", "..\\", "../"];
 
+    // Maximum number of allowed base paths to process (prevent DoS via excessive iteration)
+    private const int MaxAllowedBasePaths = 100;
+
     public PathValidator(ILogger<PathValidator> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -25,8 +28,16 @@ public sealed class PathValidator : IPathValidator
 
     public Result<string> ValidatePath(string path, IEnumerable<string> allowedBasePaths)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentNullException.ThrowIfNull(allowedBasePaths);
+        // Validate inputs without throwing to prevent exception-based DoS
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return Result<string>.Failure("[Path.Empty] Path cannot be null or empty");
+        }
+
+        if (allowedBasePaths is null)
+        {
+            return Result<string>.Failure("[Path.InvalidConfig] Allowed base paths not configured");
+        }
 
         try
         {
@@ -36,7 +47,8 @@ public sealed class PathValidator : IPathValidator
             // Check for path safety
             if (!IsSafePath(normalizedPath))
             {
-                _logger.LogWarning("Path validation failed: unsafe path characters in {Path}", path);
+                // SECURITY: Log sanitized path info (length only) to prevent log injection
+                _logger.LogWarning("Path validation failed: unsafe path characters (length: {PathLength})", path.Length);
                 return Result<string>.Failure(
                     "[Path.Unsafe] Path contains unsafe characters or traversal patterns");
             }
@@ -49,15 +61,23 @@ public sealed class PathValidator : IPathValidator
             }
             catch (PathTooLongException)
             {
-                _logger.LogWarning("Path validation failed: path too long for {Path}", path);
+                _logger.LogWarning("Path validation failed: path too long (length: {PathLength})", path.Length);
                 return Result<string>.Failure("[Path.TooLong] Path exceeds maximum length");
             }
 
             // Check if the path is within any of the allowed base paths
             var isAllowed = false;
+            var processedCount = 0;
 
             foreach (var basePath in allowedBasePaths)
             {
+                // Cap iterations to prevent DoS via excessive allowedBasePaths
+                if (++processedCount > MaxAllowedBasePaths)
+                {
+                    _logger.LogWarning("Exceeded maximum allowed base paths limit ({Limit})", MaxAllowedBasePaths);
+                    break;
+                }
+
                 if (string.IsNullOrWhiteSpace(basePath))
                 {
                     continue; // Skip invalid base paths
@@ -96,9 +116,10 @@ public sealed class PathValidator : IPathValidator
 
             if (!isAllowed)
             {
+                // SECURITY: Log sanitized path info only
                 _logger.LogWarning(
-                    "Path validation failed: {Path} is not within allowed directories",
-                    path);
+                    "Path validation failed: path (length: {PathLength}) is not within allowed directories",
+                    path.Length);
                 return Result<string>.Failure(
                     "[Path.NotAllowed] Path is not within allowed directories");
             }
@@ -107,7 +128,7 @@ public sealed class PathValidator : IPathValidator
         }
         catch (Exception ex) when (ex is ArgumentException or System.Security.SecurityException)
         {
-            _logger.LogWarning(ex, "Path validation failed for {Path}", path);
+            _logger.LogWarning(ex, "Path validation failed (length: {PathLength})", path.Length);
             return Result<string>.Failure("[Path.Invalid] Path validation failed");
         }
     }

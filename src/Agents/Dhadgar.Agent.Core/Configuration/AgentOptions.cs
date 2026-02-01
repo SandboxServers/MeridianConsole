@@ -18,6 +18,11 @@ public sealed class AgentOptions : IValidatableObject
     public Guid? NodeId { get; set; }
 
     /// <summary>
+    /// Organization ID assigned during enrollment. Null until enrolled.
+    /// </summary>
+    public Guid? OrganizationId { get; set; }
+
+    /// <summary>
     /// Human-readable name for this node.
     /// </summary>
     [MaxLength(256)]

@@ -1,12 +1,17 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.RegularExpressions;
 
 namespace Dhadgar.Agent.Core.Configuration;
 
 /// <summary>
 /// Security configuration for the agent.
 /// </summary>
-public sealed class SecurityOptions : IValidatableObject
+public sealed partial class SecurityOptions : IValidatableObject
 {
+    // SHA-1 thumbprint: 40 hex characters
+    [GeneratedRegex("^[0-9A-Fa-f]{40}$", RegexOptions.Compiled)]
+    private static partial Regex CertificateThumbprintRegex();
+
     /// <summary>
     /// Require all commands to be cryptographically signed.
     /// </summary>
@@ -89,6 +94,36 @@ public sealed class SecurityOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Both {nameof(CertificatePath)} and {nameof(PrivateKeyPath)} must be specified together for file-based certificate configuration",
                 [nameof(CertificatePath), nameof(PrivateKeyPath)]);
+        }
+
+        // Validate thumbprint format (SHA-1: 40 hex characters)
+        if (hasThumbprint && !CertificateThumbprintRegex().IsMatch(CertificateThumbprint!))
+        {
+            yield return new ValidationResult(
+                $"{nameof(CertificateThumbprint)} must be a valid SHA-1 thumbprint (40 hexadecimal characters)",
+                [nameof(CertificateThumbprint)]);
+        }
+
+        // Validate certificate paths are absolute (prevent relative path attacks)
+        if (hasCertPath && !Path.IsPathRooted(CertificatePath!))
+        {
+            yield return new ValidationResult(
+                $"{nameof(CertificatePath)} must be an absolute path",
+                [nameof(CertificatePath)]);
+        }
+
+        if (hasKeyPath && !Path.IsPathRooted(PrivateKeyPath!))
+        {
+            yield return new ValidationResult(
+                $"{nameof(PrivateKeyPath)} must be an absolute path",
+                [nameof(PrivateKeyPath)]);
+        }
+
+        if (!string.IsNullOrEmpty(CaCertificatePath) && !Path.IsPathRooted(CaCertificatePath))
+        {
+            yield return new ValidationResult(
+                $"{nameof(CaCertificatePath)} must be an absolute path",
+                [nameof(CaCertificatePath)]);
         }
     }
 }
