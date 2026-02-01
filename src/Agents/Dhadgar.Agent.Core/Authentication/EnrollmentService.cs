@@ -40,7 +40,20 @@ public sealed class EnrollmentService : IEnrollmentService
     /// <summary>
     /// Check if the agent is enrolled.
     /// </summary>
-    public bool IsEnrolled => _options.NodeId.HasValue && _certificateStore.GetClientCertificate() != null;
+    public bool IsEnrolled
+    {
+        get
+        {
+            if (!_options.NodeId.HasValue)
+            {
+                return false;
+            }
+
+            // SECURITY: Dispose certificate after checking to avoid handle leaks
+            using var cert = _certificateStore.GetClientCertificate();
+            return cert != null;
+        }
+    }
 
     /// <summary>
     /// Enroll the agent with the control plane using a one-time token.
@@ -252,7 +265,8 @@ public sealed class EnrollmentService : IEnrollmentService
                 "[Renewal.NotEnrolled] Agent is not enrolled");
         }
 
-        var currentCert = _certificateStore.GetClientCertificate();
+        // SECURITY: Use 'using' to ensure certificate is disposed after use
+        using var currentCert = _certificateStore.GetClientCertificate();
         if (currentCert is null)
         {
             return Result<CertificateRenewalResult>.Failure(

@@ -65,6 +65,13 @@ public sealed partial class FileOptions : IValidatableObject
     [Range(1, 60)]
     public int TransferRetryDelaySeconds { get; set; } = 5;
 
+    /// <summary>
+    /// Maximum number of concurrent file transfers.
+    /// Prevents resource exhaustion from unbounded parallel transfers.
+    /// </summary>
+    [Range(1, 100)]
+    public int MaxConcurrentTransfers { get; set; } = 10;
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

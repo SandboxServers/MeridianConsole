@@ -52,6 +52,16 @@ public sealed class FileTransferService : IFileTransferService
                 "[Transfer.InvalidRequest] Download request cannot be null");
         }
 
+        // SECURITY: Enforce concurrent transfer limit to prevent resource exhaustion
+        if (_activeTransfers.Count >= _fileOptions.MaxConcurrentTransfers)
+        {
+            _logger.LogWarning(
+                "Transfer limit reached ({Count}/{Max}), rejecting download {TransferId}",
+                _activeTransfers.Count, _fileOptions.MaxConcurrentTransfers, request.TransferId);
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.LimitReached] Maximum concurrent transfer limit reached");
+        }
+
         var transferState = new TransferState
         {
             TransferId = request.TransferId,
@@ -294,6 +304,16 @@ public sealed class FileTransferService : IFileTransferService
         {
             return Result<FileTransferResult>.Failure(
                 "[Transfer.InvalidRequest] Upload request cannot be null");
+        }
+
+        // SECURITY: Enforce concurrent transfer limit to prevent resource exhaustion
+        if (_activeTransfers.Count >= _fileOptions.MaxConcurrentTransfers)
+        {
+            _logger.LogWarning(
+                "Transfer limit reached ({Count}/{Max}), rejecting upload {TransferId}",
+                _activeTransfers.Count, _fileOptions.MaxConcurrentTransfers, request.TransferId);
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.LimitReached] Maximum concurrent transfer limit reached");
         }
 
         var transferState = new TransferState

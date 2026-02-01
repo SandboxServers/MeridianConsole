@@ -63,10 +63,30 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
         var startedAt = DateTimeOffset.UtcNow;
 
-        // Resolve nodeId - prefer envelope's nodeId, then options, never pass Guid.Empty
-        var resolvedNodeId = envelope.NodeId != Guid.Empty
-            ? envelope.NodeId
-            : _options.NodeId ?? Guid.NewGuid();
+        // Resolve nodeId - prefer envelope's nodeId, then options
+        // SECURITY: Reject commands without a valid NodeId instead of generating one
+        Guid resolvedNodeId;
+        if (envelope.NodeId != Guid.Empty)
+        {
+            resolvedNodeId = envelope.NodeId;
+        }
+        else if (_options.NodeId.HasValue)
+        {
+            resolvedNodeId = _options.NodeId.Value;
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Command {CommandId} rejected: no NodeId in envelope and agent not enrolled",
+                envelope.CommandId);
+            _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+            return CommandResult.Rejected(
+                envelope.CommandId,
+                Guid.Empty,
+                "Agent is not enrolled - cannot execute commands without NodeId",
+                "NotEnrolled",
+                envelope.CorrelationId);
+        }
 
         using var activity = _activitySource.StartCommandExecution(
             envelope.CommandId,
@@ -189,6 +209,12 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
         MaxDepth = 64
     };
 
+    /// <summary>
+    /// Maximum allowed payload size in bytes (1MB).
+    /// Prevents memory exhaustion from oversized command payloads.
+    /// </summary>
+    private const int MaxPayloadSizeBytes = 1024 * 1024;
+
     protected CommandHandlerBase(ILogger logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -200,6 +226,19 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
         CommandEnvelope envelope,
         CancellationToken cancellationToken = default)
     {
+        // SECURITY: Check payload size before deserialization to prevent memory exhaustion
+        if (envelope.PayloadJson.Length > MaxPayloadSizeBytes)
+        {
+            _logger.LogWarning("Payload too large for command {CommandId}: {Size} bytes (max: {Max})",
+                envelope.CommandId, envelope.PayloadJson.Length, MaxPayloadSizeBytes);
+            return CommandResult.Rejected(
+                envelope.CommandId,
+                envelope.NodeId,
+                "Payload exceeds maximum allowed size",
+                "PayloadTooLarge",
+                envelope.CorrelationId);
+        }
+
         // Deserialize payload with depth limit to prevent DoS
         TPayload? payload;
         try
