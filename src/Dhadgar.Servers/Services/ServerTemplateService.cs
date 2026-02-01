@@ -1,0 +1,225 @@
+using Dhadgar.Contracts;
+using Dhadgar.Contracts.Servers;
+using Dhadgar.Servers.Data;
+using Dhadgar.Servers.Data.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace Dhadgar.Servers.Services;
+
+public sealed class ServerTemplateService : IServerTemplateService
+{
+    private readonly ServersDbContext _db;
+    private readonly ILogger<ServerTemplateService> _logger;
+
+    public ServerTemplateService(
+        ServersDbContext db,
+        ILogger<ServerTemplateService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    public async Task<PagedResponse<ServerTemplateListItem>> GetTemplatesAsync(
+        Guid? organizationId,
+        bool includePublic,
+        string? gameType,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.ServerTemplates.Where(t => !t.IsArchived);
+
+        if (organizationId.HasValue)
+        {
+            if (includePublic)
+            {
+                query = query.Where(t => t.OrganizationId == organizationId.Value || t.IsPublic);
+            }
+            else
+            {
+                query = query.Where(t => t.OrganizationId == organizationId.Value);
+            }
+        }
+        else if (includePublic)
+        {
+            query = query.Where(t => t.IsPublic);
+        }
+
+        if (!string.IsNullOrEmpty(gameType))
+        {
+            query = query.Where(t => t.GameType == gameType);
+        }
+
+        var totalCount = await query.CountAsync(ct);
+
+        var templates = await query
+            .OrderBy(t => t.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(t => new ServerTemplateListItem(
+                t.Id,
+                t.Name,
+                t.Description,
+                t.GameType,
+                t.IsPublic,
+                t.IsArchived,
+                t.UsageCount,
+                t.CreatedAt))
+            .ToListAsync(ct);
+
+        return new PagedResponse<ServerTemplateListItem>
+        {
+            Items = templates,
+            Page = page,
+            PageSize = pageSize,
+            Total = totalCount
+        };
+    }
+
+    public async Task<ServiceResult<ServerTemplateDetail>> GetTemplateAsync(
+        Guid templateId,
+        Guid? organizationId,
+        CancellationToken ct = default)
+    {
+        var template = await _db.ServerTemplates
+            .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+
+        if (template is null)
+        {
+            return ServiceResult.Fail<ServerTemplateDetail>("template_not_found");
+        }
+
+        // Check access
+        if (!template.IsPublic && template.OrganizationId != organizationId)
+        {
+            return ServiceResult.Fail<ServerTemplateDetail>("template_not_found");
+        }
+
+        return ServiceResult.Ok(MapToDetail(template));
+    }
+
+    public async Task<ServiceResult<ServerTemplateDetail>> CreateTemplateAsync(
+        Guid organizationId,
+        CreateServerTemplateRequest request,
+        CancellationToken ct = default)
+    {
+        // Check for duplicate name
+        var exists = await _db.ServerTemplates.AnyAsync(
+            t => t.OrganizationId == organizationId && t.Name == request.Name, ct);
+
+        if (exists)
+        {
+            return ServiceResult.Fail<ServerTemplateDetail>("template_name_exists");
+        }
+
+        var template = new ServerTemplate
+        {
+            OrganizationId = organizationId,
+            Name = request.Name,
+            Description = request.Description,
+            GameType = request.GameType,
+            IsPublic = request.IsPublic,
+            DefaultCpuLimitMillicores = request.DefaultCpuLimitMillicores,
+            DefaultMemoryLimitMb = request.DefaultMemoryLimitMb,
+            DefaultDiskLimitMb = request.DefaultDiskLimitMb,
+            DefaultStartupCommand = request.DefaultStartupCommand,
+            DefaultJavaFlags = request.DefaultJavaFlags
+        };
+
+        _db.ServerTemplates.Add(template);
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Created template {TemplateId} '{TemplateName}' for org {OrgId}",
+            template.Id, template.Name, organizationId);
+
+        return ServiceResult.Ok(MapToDetail(template));
+    }
+
+    public async Task<ServiceResult<ServerTemplateDetail>> UpdateTemplateAsync(
+        Guid organizationId,
+        Guid templateId,
+        UpdateServerTemplateRequest request,
+        CancellationToken ct = default)
+    {
+        var template = await _db.ServerTemplates
+            .FirstOrDefaultAsync(t => t.Id == templateId && t.OrganizationId == organizationId, ct);
+
+        if (template is null)
+        {
+            return ServiceResult.Fail<ServerTemplateDetail>("template_not_found");
+        }
+
+        if (request.Name != null && request.Name != template.Name)
+        {
+            var exists = await _db.ServerTemplates.AnyAsync(
+                t => t.OrganizationId == organizationId && t.Name == request.Name && t.Id != templateId, ct);
+
+            if (exists)
+            {
+                return ServiceResult.Fail<ServerTemplateDetail>("template_name_exists");
+            }
+
+            template.Name = request.Name;
+        }
+
+        if (request.Description != null) template.Description = request.Description;
+        if (request.IsPublic.HasValue) template.IsPublic = request.IsPublic.Value;
+        if (request.IsArchived.HasValue) template.IsArchived = request.IsArchived.Value;
+        if (request.DefaultCpuLimitMillicores.HasValue) template.DefaultCpuLimitMillicores = request.DefaultCpuLimitMillicores.Value;
+        if (request.DefaultMemoryLimitMb.HasValue) template.DefaultMemoryLimitMb = request.DefaultMemoryLimitMb.Value;
+        if (request.DefaultDiskLimitMb.HasValue) template.DefaultDiskLimitMb = request.DefaultDiskLimitMb.Value;
+        if (request.DefaultStartupCommand != null) template.DefaultStartupCommand = request.DefaultStartupCommand;
+        if (request.DefaultJavaFlags != null) template.DefaultJavaFlags = request.DefaultJavaFlags;
+
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Updated template {TemplateId} for org {OrgId}", templateId, organizationId);
+
+        return ServiceResult.Ok(MapToDetail(template));
+    }
+
+    public async Task<ServiceResult<bool>> DeleteTemplateAsync(
+        Guid organizationId,
+        Guid templateId,
+        CancellationToken ct = default)
+    {
+        var template = await _db.ServerTemplates
+            .FirstOrDefaultAsync(t => t.Id == templateId && t.OrganizationId == organizationId, ct);
+
+        if (template is null)
+        {
+            return ServiceResult.Fail<bool>("template_not_found");
+        }
+
+        template.DeletedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Deleted template {TemplateId} for org {OrgId}", templateId, organizationId);
+
+        return ServiceResult.Ok(true);
+    }
+
+    private static ServerTemplateDetail MapToDetail(ServerTemplate template)
+    {
+        return new ServerTemplateDetail(
+            template.Id,
+            template.OrganizationId,
+            template.Name,
+            template.Description,
+            template.GameType,
+            template.IsPublic,
+            template.IsArchived,
+            template.DefaultCpuLimitMillicores,
+            template.DefaultMemoryLimitMb,
+            template.DefaultDiskLimitMb,
+            template.DefaultStartupCommand,
+            null, // DefaultGameSettings would need JSON parsing
+            null, // DefaultEnvironmentVariables would need JSON parsing
+            template.DefaultJavaFlags,
+            null, // DefaultPorts would need JSON parsing
+            template.UsageCount,
+            template.CreatedAt,
+            template.UpdatedAt);
+    }
+}

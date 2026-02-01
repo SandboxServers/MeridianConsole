@@ -1,9 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Dhadgar.Nodes;
+namespace Dhadgar.ServiceDefaults;
 
 /// <summary>
 /// Configuration options for RabbitMQ connection.
+/// Shared across all services that use MassTransit messaging.
 /// </summary>
 public sealed class RabbitMqOptions
 {

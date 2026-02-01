@@ -1,14 +1,20 @@
 using Dhadgar.Servers;
 using Dhadgar.Servers.Data;
+using Dhadgar.Servers.Endpoints;
+using Dhadgar.Servers.Services;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Audit;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
+using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Swagger;
 using Dhadgar.ServiceDefaults.Tracing;
+using FluentValidation;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -29,8 +35,68 @@ builder.Logging.AddDhadgarLogging("Dhadgar.Servers", builder.Configuration);
 // Audit infrastructure for compliance logging
 builder.Services.AddAuditInfrastructure<ServersDbContext>();
 
+// Configure Servers service options with validation
+builder.Services.AddOptions<ServersOptions>()
+    .Bind(builder.Configuration.GetSection(ServersOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddDbContext<ServersDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+
+// Register services
+builder.Services.AddScoped<IServerService, ServerService>();
+builder.Services.AddScoped<IServerLifecycleService, ServerLifecycleService>();
+builder.Services.AddScoped<IServerTemplateService, ServerTemplateService>();
+
+// Register TimeProvider for testability
+builder.Services.AddSingleton(TimeProvider.System);
+
+// FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+// Configure RabbitMQ options with validation
+builder.Services.AddOptions<RabbitMqOptions>()
+    .Bind(builder.Configuration.GetSection(RabbitMqOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// Configure MassTransit
+builder.Services.AddMassTransit(x =>
+{
+    x.SetKebabCaseEndpointNameFormatter();
+
+    // Configure MassTransit health checks
+    x.ConfigureHealthCheckOptions(options =>
+    {
+        options.Name = "masstransit";
+        options.Tags.Add("ready");
+        options.Tags.Add("messaging");
+    });
+
+    // Configure Entity Framework Core outbox for transactional messaging
+    x.AddEntityFrameworkOutbox<ServersDbContext>(o =>
+    {
+        o.UsePostgres();
+        o.DisableInboxCleanupService();
+        o.QueryDelay = TimeSpan.FromSeconds(1);
+    });
+
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var rabbitOptions = context.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
+        cfg.Host(rabbitOptions.Host, rabbitOptions.VirtualHost, h =>
+        {
+            h.Username(rabbitOptions.Username);
+            h.Password(rabbitOptions.Password);
+        });
+
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+// Configure authorization with tenant-scoped validation
+builder.Services.AddTenantScopedAuthorization();
 
 // OpenTelemetry configuration
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
@@ -85,15 +151,23 @@ app.UseMeridianSwagger();
 app.UseDhadgarMiddleware();
 app.UseMiddleware<ProblemDetailsMiddleware>();
 
-// Audit middleware - MUST run after authentication
-// Currently skips all requests (no auth configured yet); will capture authenticated requests once auth is added
+// Audit middleware
 app.UseAuditMiddleware();
+
+// Authentication and authorization
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Auto-migrate database in development
 await app.AutoMigrateDatabaseAsync<ServersDbContext>();
 
+// Map endpoints
 app.MapServiceInfoEndpoints("Dhadgar.Servers", Dhadgar.Servers.Hello.Message);
 app.MapDhadgarDefaultEndpoints();
+
+ServersEndpoints.Map(app);
+ServerLifecycleEndpoints.Map(app);
+ServerTemplatesEndpoints.Map(app);
 
 await app.RunAsync();
 

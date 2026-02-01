@@ -863,11 +863,15 @@
           "Dhadgar.Messaging": "[1.0.0, )",
           "Dhadgar.ServiceDefaults": "[1.0.0, )",
           "Dhadgar.Shared": "[1.0.0, )",
+          "FluentValidation": "[12.1.1, )",
+          "FluentValidation.DependencyInjectionExtensions": "[12.1.1, )",
           "MassTransit": "[8.3.6, )",
+          "MassTransit.EntityFrameworkCore": "[8.3.6, )",
           "MassTransit.RabbitMQ": "[8.3.6, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore.Design": "[10.0.0, )",
+          "Microsoft.Extensions.Caching.StackExchangeRedis": "[10.0.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.0, )",
           "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.14.0, )",
           "OpenTelemetry.Extensions.Hosting": "[1.14.0, )",
@@ -960,6 +964,22 @@
         "resolved": "8.3.0",
         "contentHash": "iri1druxHPUAvaFqTUKJG7NOHwnOLmWwfDorgezZWpeBWBJmk2o8niI7jL7zW9TEFGnUpMJi/JLG6FXgr3cM3A=="
       },
+      "FluentValidation": {
+        "type": "CentralTransitive",
+        "requested": "[12.1.1, )",
+        "resolved": "12.1.1",
+        "contentHash": "EPpkIe1yh1a0OXyC100oOA8WMbZvqUu5plwhvYcb7oSELfyUZzfxV48BLhvs3kKo4NwG7MGLNgy1RJiYtT8Dpw=="
+      },
+      "FluentValidation.DependencyInjectionExtensions": {
+        "type": "CentralTransitive",
+        "requested": "[12.1.1, )",
+        "resolved": "12.1.1",
+        "contentHash": "D0VXh4dtjjX2aQizuaa0g6R8X3U1JaVqJPfGCvLwZX9t/O2h7tkpbitbadQMfwcgSPdDbI2vDxuwRMv/Uf9dHA==",
+        "dependencies": {
+          "FluentValidation": "12.1.1",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "2.1.0"
+        }
+      },
       "MassTransit": {
         "type": "CentralTransitive",
         "requested": "[8.3.6, )",
@@ -972,6 +992,17 @@
           "Microsoft.Extensions.Hosting.Abstractions": "9.0.0",
           "Microsoft.Extensions.Logging.Abstractions": "9.0.0",
           "Microsoft.Extensions.Options": "9.0.0"
+        }
+      },
+      "MassTransit.EntityFrameworkCore": {
+        "type": "CentralTransitive",
+        "requested": "[8.3.6, )",
+        "resolved": "8.3.6",
+        "contentHash": "qZtWIzd/cFosHiL5eKsk3DUZUH6w0/PBrRxjjyDK4SKUWE9WrdCvz59ocJVCQ8QQHeJYATLnFlEJ1Oshw1AbCw==",
+        "dependencies": {
+          "MassTransit": "8.3.6",
+          "Microsoft.EntityFrameworkCore.Relational": "9.0.0",
+          "Microsoft.Extensions.Caching.Memory": "9.0.0"
         }
       },
       "MassTransit.RabbitMQ": {
@@ -1052,6 +1083,18 @@
           "Microsoft.Extensions.Logging": "10.0.0",
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.11",
           "SQLitePCLRaw.core": "2.1.11"
+        }
+      },
+      "Microsoft.Extensions.Caching.StackExchangeRedis": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.0, )",
+        "resolved": "10.0.0",
+        "contentHash": "LTduPLaoP8T8I/SEKTEks7a7ZCnqlGmX6/7Y4k/nFlbKFsv8oLxhLQ44ktF9ve0lAmEGkLuuvRhunG/LQuhP7Q==",
+        "dependencies": {
+          "Microsoft.Extensions.Caching.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Options": "10.0.0",
+          "StackExchange.Redis": "2.7.27"
         }
       },
       "Microsoft.Extensions.Compliance.Redaction": {
@@ -1222,8 +1265,8 @@
       "StackExchange.Redis": {
         "type": "CentralTransitive",
         "requested": "[2.7.27, )",
-        "resolved": "2.7.4",
-        "contentHash": "lD6a0lGOCyV9iuvObnzStL74EDWAyK31w6lS+Md9gIz1eP4U6KChDIflzTdtrktxlvVkeOvPtkaYOcm4qjbHSw==",
+        "resolved": "2.7.27",
+        "contentHash": "Uqc2OQHglqj9/FfGQ6RkKFkZfHySfZlfmbCl+hc+u2I/IqunfelQ7QJi7ZhvAJxUtu80pildVX6NPLdDaUffOw==",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "6.0.0",
           "Pipelines.Sockets.Unofficial": "2.2.8"
