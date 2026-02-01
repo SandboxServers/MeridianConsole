@@ -115,6 +115,7 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
                 await _db.SaveChangesAsync(context.CancellationToken);
 
                 // Re-add the preliminary log for this attempt
+                // Guard against race condition where another consumer inserts between our delete and insert
                 preliminaryLog = new DiscordNotificationLog
                 {
                     Id = message.NotificationId,
@@ -126,7 +127,20 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
                     CreatedAtUtc = DateTimeOffset.UtcNow
                 };
                 _db.NotificationLogs.Add(preliminaryLog);
-                await _db.SaveChangesAsync(context.CancellationToken);
+
+                try
+                {
+                    await _db.SaveChangesAsync(context.CancellationToken);
+                }
+                catch (DbUpdateException reinsertEx) when (reinsertEx.InnerException is PostgresException { SqlState: "23505" })
+                {
+                    // Another consumer inserted between our delete and insert - they win
+                    _db.ChangeTracker.Clear();
+                    _logger.LogInformation(
+                        "Notification {NotificationId} was claimed by another consumer during retry, will retry later",
+                        message.NotificationId);
+                    throw; // Let MassTransit redeliver
+                }
             }
         }
 
