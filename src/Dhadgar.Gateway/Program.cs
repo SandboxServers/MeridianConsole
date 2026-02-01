@@ -306,11 +306,11 @@ app.UseMiddleware<CorrelationMiddleware>();
 // 4. Tenant enrichment (adds TenantId, ServiceName, etc. to logging scope)
 app.UseMiddleware<TenantEnrichmentMiddleware>();
 
-// 5. Problem Details exception handler (catch exceptions early)
-app.UseMiddleware<ProblemDetailsMiddleware>();
-
-// 6. Request logging (wraps downstream pipeline with full context)
+// 5. Request logging (wraps downstream pipeline - logs requests even when exceptions occur)
 app.UseMiddleware<RequestLoggingMiddleware>();
+
+// 6. Problem Details exception handler (after logging so exceptions are logged first)
+app.UseMiddleware<ProblemDetailsMiddleware>();
 
 // 6. CORS (for non-preflight requests)
 app.UseCors(CorsConfiguration.PolicyName);

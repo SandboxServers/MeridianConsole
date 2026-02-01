@@ -544,9 +544,9 @@ public static class ServiceDefaultsExtensions
     /// <list type="number">
     ///   <item><see cref="CorrelationMiddleware"/> - Sets CorrelationId and RequestId for distributed tracing (always enabled)</item>
     ///   <item><see cref="TenantEnrichmentMiddleware"/> - Adds TenantId, ServiceName, ServiceVersion, Hostname to logging scope (if enabled)</item>
-    ///   <item><see cref="ProblemDetailsMiddleware"/> - Transforms exceptions into RFC 9457 Problem Details responses (always enabled)</item>
     ///   <item><see cref="RequestLoggingMiddleware"/> - Logs HTTP requests/responses with full context (if enabled)</item>
     ///   <item><see cref="AuditMiddleware"/> - Tracks changes for auditable operations (if enabled)</item>
+    ///   <item><see cref="ProblemDetailsMiddleware"/> - Transforms exceptions into RFC 9457 Problem Details responses (always enabled)</item>
     /// </list>
     /// </para>
     /// <para>
@@ -554,9 +554,9 @@ public static class ServiceDefaultsExtensions
     /// <list type="bullet">
     ///   <item><see cref="CorrelationMiddleware"/> MUST run first to establish correlation IDs</item>
     ///   <item><see cref="TenantEnrichmentMiddleware"/> MUST run second to create the logging scope with all context</item>
-    ///   <item><see cref="ProblemDetailsMiddleware"/> wraps downstream to catch exceptions</item>
-    ///   <item><see cref="RequestLoggingMiddleware"/> logs within the established scope</item>
-    ///   <item><see cref="AuditMiddleware"/> runs last to capture request/response for auditing</item>
+    ///   <item><see cref="RequestLoggingMiddleware"/> logs within the established scope, capturing requests even when exceptions occur</item>
+    ///   <item><see cref="AuditMiddleware"/> captures request/response for auditing before exception conversion</item>
+    ///   <item><see cref="ProblemDetailsMiddleware"/> runs last to catch exceptions after they've been logged/audited</item>
     /// </list>
     /// </para>
     /// <para>
