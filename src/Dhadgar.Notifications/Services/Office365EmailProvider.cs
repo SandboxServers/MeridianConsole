@@ -158,7 +158,8 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
             }
         }
 
-        return new EmailSendResult(false, "Max retry attempts exceeded");
+        // All paths return within the loop, but compiler needs this for type safety
+        throw new InvalidOperationException("Retry loop exited unexpectedly");
     }
 
     public void Dispose()

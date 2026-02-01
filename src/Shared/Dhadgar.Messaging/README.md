@@ -577,6 +577,14 @@ cfg.UseDelayedRedelivery(r =>
 
 **Note:** Requires the `rabbitmq_delayed_message_exchange` plugin on RabbitMQ.
 
+To verify the plugin is enabled, run:
+```bash
+rabbitmq-plugins list | grep delayed
+# Expected output: [E*] rabbitmq_delayed_message_exchange
+```
+
+See: https://github.com/rabbitmq/rabbitmq-delayed-message-exchange
+
 ### Circuit Breaker
 
 Prevents cascade failures when downstream services are unhealthy:
