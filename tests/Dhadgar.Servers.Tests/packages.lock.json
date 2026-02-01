@@ -876,6 +876,7 @@
           "Dhadgar.ServiceDefaults": "[1.0.0, )",
           "Dhadgar.Shared": "[1.0.0, )",
           "MassTransit": "[8.3.6, )",
+          "MassTransit.EntityFrameworkCore": "[8.3.6, )",
           "MassTransit.RabbitMQ": "[8.3.6, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.0, )",
@@ -978,6 +979,17 @@
           "Microsoft.Extensions.Hosting.Abstractions": "9.0.0",
           "Microsoft.Extensions.Logging.Abstractions": "9.0.0",
           "Microsoft.Extensions.Options": "9.0.0"
+        }
+      },
+      "MassTransit.EntityFrameworkCore": {
+        "type": "CentralTransitive",
+        "requested": "[8.3.6, )",
+        "resolved": "8.3.6",
+        "contentHash": "qZtWIzd/cFosHiL5eKsk3DUZUH6w0/PBrRxjjyDK4SKUWE9WrdCvz59ocJVCQ8QQHeJYATLnFlEJ1Oshw1AbCw==",
+        "dependencies": {
+          "MassTransit": "8.3.6",
+          "Microsoft.EntityFrameworkCore.Relational": "9.0.0",
+          "Microsoft.Extensions.Caching.Memory": "9.0.0"
         }
       },
       "MassTransit.RabbitMQ": {

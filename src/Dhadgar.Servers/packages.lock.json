@@ -11,6 +11,16 @@
           "MassTransit.Abstractions": "8.3.6"
         }
       },
+      "MassTransit.EntityFrameworkCore": {
+        "type": "Direct",
+        "requested": "[8.3.6, )",
+        "resolved": "8.3.6",
+        "contentHash": "qZtWIzd/cFosHiL5eKsk3DUZUH6w0/PBrRxjjyDK4SKUWE9WrdCvz59ocJVCQ8QQHeJYATLnFlEJ1Oshw1AbCw==",
+        "dependencies": {
+          "MassTransit": "8.3.6",
+          "Microsoft.EntityFrameworkCore.Relational": "9.0.0"
+        }
+      },
       "MassTransit.RabbitMQ": {
         "type": "Direct",
         "requested": "[8.3.6, )",
