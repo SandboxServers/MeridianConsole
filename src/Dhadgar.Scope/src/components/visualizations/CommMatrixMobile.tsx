@@ -5,18 +5,31 @@ export function CommMatrixMobile() {
   const [data, setData] = useState<CommMatrixData | null>(null);
   const [selectedSource, setSelectedSource] = useState<string>("");
   const [protocolFilter, setProtocolFilter] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/content/comm-matrix.v1.json")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP error ${res.status}`);
+        }
+        return res.json();
+      })
       .then((d: CommMatrixData) => {
         setData(d);
         if (d.rows.length > 0) {
           setSelectedSource(d.rows[0].from);
         }
       })
-      .catch((err) => console.error("Failed to load communication matrix:", err));
+      .catch((err) => {
+        console.error("Failed to load communication matrix:", err);
+        setError("Failed to load communication matrix. Please try again later.");
+      });
   }, []);
+
+  if (error) {
+    return <div className="p-4 text-red-400">{error}</div>;
+  }
 
   if (!data) {
     return <div className="p-4 text-white/60">Loading communication matrix...</div>;

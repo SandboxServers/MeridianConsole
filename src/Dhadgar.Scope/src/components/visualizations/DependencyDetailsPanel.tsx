@@ -21,6 +21,7 @@ export function DependencyDetailsPanel({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -64,8 +65,9 @@ export function DependencyDetailsPanel({
           onClick={onClear}
           className="rounded-lg border border-white/10 bg-white/5 p-1.5 transition-colors hover:bg-white/10"
           title="Clear selection"
+          aria-label="Clear selection"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

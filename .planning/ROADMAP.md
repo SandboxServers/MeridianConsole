@@ -18,6 +18,7 @@ Address all CodeRabbit review feedback for the Discord and Notifications service
 ## Phase Details
 
 ### Phase 1: Quick Wins
+
 **Goal**: Simple fixes that don't affect runtime behavior or other code
 **Depends on**: Nothing (first phase)
 **Requirements**: PKG-01, FE-01, DOC-01
@@ -31,6 +32,7 @@ Plans:
 - [x] 01-01: Package and configuration updates
 
 ### Phase 2: Database Configuration
+
 **Goal**: Services use separate databases with proper configuration
 **Depends on**: Phase 1
 **Requirements**: DB-01, DB-02, DB-03, DB-04
@@ -47,6 +49,7 @@ Plans:
 - [x] 02-02: Migration regeneration and field truncation
 
 ### Phase 3: Service Code
+
 **Goal**: Proper resource disposal and messaging patterns
 **Depends on**: Phase 2
 **Requirements**: HTTP-01, HTTP-02, MSG-01
@@ -61,6 +64,7 @@ Plans:
 - [x] 03-01: HTTP handling and MassTransit outbox
 
 ### Phase 4: API Contract
+
 **Goal**: Type-safe URL handling in message contracts
 **Depends on**: Phase 3
 **Requirements**: API-01
@@ -85,5 +89,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 4. API Contract | 1/1 | Complete | 2026-01-19 |
 
 ---
-*Roadmap created: 2025-01-19*
+*Roadmap created: 2026-01-19*
 *Completed: 2026-01-19*

@@ -59,7 +59,7 @@
 - Npgsql.EntityFrameworkCore.PostgreSQL 10.0.0 - PostgreSQL driver
 - MassTransit.RabbitMQ 8.3.6 - RabbitMQ transport
 - StackExchange.Redis 2.7.27 - Redis client
-- Discord.Net 3.13.0 - Discord bot (`src/Dhadgar.Discord/`)
+- Discord.Net 3.18.0 - Discord bot (`src/Dhadgar.Discord/`)
 - SendGrid 9.29.3 - Email delivery (`src/Dhadgar.Notifications/`)
 - Microsoft.Graph 5.78.0 - Office 365 integration (`src/Dhadgar.Notifications/`)
 

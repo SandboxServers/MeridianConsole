@@ -61,13 +61,18 @@ public sealed class Office365EmailProvider : IEmailProvider, IDisposable
 
         try
         {
+            // Use htmlBody if available, otherwise fall back to textBody
+            var useHtml = !string.IsNullOrWhiteSpace(htmlBody);
+            var bodyContent = useHtml ? htmlBody : textBody ?? string.Empty;
+            var bodyType = useHtml ? BodyType.Html : BodyType.Text;
+
             var message = new Message
             {
                 Subject = subject,
                 Body = new ItemBody
                 {
-                    ContentType = BodyType.Html,
-                    Content = htmlBody
+                    ContentType = bodyType,
+                    Content = bodyContent
                 },
                 ToRecipients = recipients.Select(email => new Recipient
                 {

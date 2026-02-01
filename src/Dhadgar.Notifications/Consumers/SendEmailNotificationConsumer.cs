@@ -36,21 +36,43 @@ public sealed class SendEmailNotificationConsumer : IConsumer<SendEmailNotificat
             "Processing email notification {NotificationId} for {Recipient}",
             msg.NotificationId, msg.RecipientEmail);
 
-        // Log the notification attempt
-        var log = new NotificationLog
+        // Check for existing log to handle retries idempotently
+        var log = await _db.Logs.FindAsync([msg.NotificationId], context.CancellationToken);
+
+        if (log is not null)
         {
-            Id = msg.NotificationId,
-            OrganizationId = msg.OrgId,
-            UserId = msg.UserId,
-            EventType = msg.EventType,
-            Channel = NotificationChannels.Email,
-            Title = msg.Subject,
-            Message = msg.HtmlBody,
-            Status = NotificationStatus.Pending,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-        };
-        _db.Logs.Add(log);
-        await _db.SaveChangesAsync(context.CancellationToken);
+            // Already sent - skip to avoid duplicate delivery
+            if (log.Status == NotificationStatus.Sent)
+            {
+                _logger.LogInformation(
+                    "Email notification {NotificationId} already sent, skipping",
+                    msg.NotificationId);
+                return;
+            }
+
+            // Retry scenario - update existing log
+            _logger.LogInformation(
+                "Retrying email notification {NotificationId}, previous status: {Status}",
+                msg.NotificationId, log.Status);
+        }
+        else
+        {
+            // First attempt - create new log
+            log = new NotificationLog
+            {
+                Id = msg.NotificationId,
+                OrganizationId = msg.OrgId,
+                UserId = msg.UserId,
+                EventType = msg.EventType,
+                Channel = NotificationChannels.Email,
+                Title = msg.Subject,
+                Message = msg.HtmlBody,
+                Status = NotificationStatus.Pending,
+                CreatedAtUtc = DateTimeOffset.UtcNow,
+            };
+            _db.Logs.Add(log);
+            await _db.SaveChangesAsync(context.CancellationToken);
+        }
 
         var result = await _emailProvider.SendEmailAsync(
             msg.RecipientEmail,

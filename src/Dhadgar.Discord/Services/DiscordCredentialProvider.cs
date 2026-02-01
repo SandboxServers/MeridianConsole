@@ -38,7 +38,7 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
 
         // Try config first (user-secrets for local dev)
         var configToken = _configuration["Discord:BotToken"];
-        if (!string.IsNullOrEmpty(configToken))
+        if (!string.IsNullOrWhiteSpace(configToken))
         {
             _logger.LogDebug("Using Discord bot token from configuration");
             _botToken = new CachedCredential(configToken, ConfigCacheDuration);
@@ -57,7 +57,7 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
             return _clientId.Value;
 
         var configId = _configuration["Discord:ClientId"];
-        if (!string.IsNullOrEmpty(configId))
+        if (!string.IsNullOrWhiteSpace(configId))
         {
             _logger.LogDebug("Using Discord client ID from configuration");
             _clientId = new CachedCredential(configId, ConfigCacheDuration);
@@ -75,7 +75,7 @@ public sealed class DiscordCredentialProvider : IDiscordCredentialProvider
             return _clientSecret.Value;
 
         var configSecret = _configuration["Discord:ClientSecret"];
-        if (!string.IsNullOrEmpty(configSecret))
+        if (!string.IsNullOrWhiteSpace(configSecret))
         {
             _logger.LogDebug("Using Discord client secret from configuration");
             _clientSecret = new CachedCredential(configSecret, ConfigCacheDuration);

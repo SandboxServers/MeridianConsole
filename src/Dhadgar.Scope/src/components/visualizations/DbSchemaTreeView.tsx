@@ -7,17 +7,31 @@ export function DbSchemaTreeView() {
   const [expandedKinds, setExpandedKinds] = useState<Set<string>>(new Set(["table"]));
   const [selectedItem, setSelectedItem] = useState<DbSchemaItem | null>(null);
   const [filter, setFilter] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/content/db-schemas.v1.json")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP error ${res.status}`);
+        }
+        return res.json();
+      })
       .then((d: DbSchemaCatalog) => {
         setData(d);
         if (d.services.length > 0) {
           setSelectedService(d.services[0].key);
         }
+      })
+      .catch((err) => {
+        console.error("Failed to load schema data:", err);
+        setError("Failed to load schema data. Please try again later.");
       });
   }, []);
+
+  if (error) {
+    return <div className="p-4 text-red-400">{error}</div>;
+  }
 
   if (!data) {
     return <div className="p-4 text-white/60">Loading schema data...</div>;
@@ -142,6 +156,7 @@ export function DbSchemaTreeView() {
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <svg
+                aria-hidden="true"
                 className="h-12 w-12 text-white/20"
                 fill="none"
                 stroke="currentColor"
