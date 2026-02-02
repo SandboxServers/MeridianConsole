@@ -21,7 +21,7 @@
     <DefaultCompressionLevel>high</DefaultCompressionLevel>
 
     <!-- Suppress ICE validation during development (enable for release) -->
-    <SuppressIces>ICE61</SuppressIces>
+    <SuppressIces Condition="'$(Configuration)' == 'Debug'">ICE61</SuppressIces>
   </PropertyGroup>
 
   <!-- WiX extensions (versions managed in Directory.Packages.props) -->

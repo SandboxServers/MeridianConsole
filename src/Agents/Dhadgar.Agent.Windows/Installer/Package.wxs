@@ -57,7 +57,7 @@
             Message="[ProductName] requires a 64-bit version of Windows." />
 
     <!-- Prevent running on Windows older than Windows 10 -->
-    <Launch Condition="VersionNT &gt;= 603"
+    <Launch Condition="VersionNT &gt;= 1000"
             Message="[ProductName] requires Windows 10 or later." />
 
     <!-- Check for administrator privileges -->

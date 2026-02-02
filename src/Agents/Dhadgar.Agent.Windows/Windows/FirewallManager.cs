@@ -244,12 +244,19 @@ internal sealed partial class FirewallManager
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = "netsh.exe",
-                Arguments = arguments,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+
+            // SECURITY: Use ArgumentList instead of Arguments for defense-in-depth.
+            // Even though inputs are validated, ArgumentList provides additional protection
+            // against command injection by passing arguments as discrete values.
+            foreach (var arg in ParseNetshArguments(arguments))
+            {
+                process.StartInfo.ArgumentList.Add(arg);
+            }
 
             process.Start();
 
@@ -290,5 +297,46 @@ internal sealed partial class FirewallManager
             _logger.LogError(ex, "Exception executing netsh command");
             return (-1, string.Empty, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Parses a netsh command string into individual arguments.
+    /// Handles quoted strings correctly (e.g., name="My Rule Name").
+    /// </summary>
+    /// <param name="commandLine">The netsh command arguments as a single string.</param>
+    /// <returns>A list of individual arguments.</returns>
+    private static List<string> ParseNetshArguments(string commandLine)
+    {
+        var args = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inQuotes = false;
+
+        foreach (var c in commandLine)
+        {
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+                current.Append(c);
+            }
+            else if (char.IsWhiteSpace(c) && !inQuotes)
+            {
+                if (current.Length > 0)
+                {
+                    args.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+
+        if (current.Length > 0)
+        {
+            args.Add(current.ToString());
+        }
+
+        return args;
     }
 }

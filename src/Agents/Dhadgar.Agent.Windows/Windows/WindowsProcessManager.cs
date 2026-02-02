@@ -35,7 +35,7 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     private readonly ConcurrentDictionary<Guid, ProcessEntry> _processes = new();
     private readonly CancellationTokenSource _disposalCts = new();
     private readonly object _disposalLock = new();
-    private bool _disposed;
+    private volatile bool _disposed;
 
     /// <summary>
     /// Maximum allowed output line length (64KB) to prevent memory exhaustion.
@@ -429,6 +429,12 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             // Update memory limits
             if (limits.MemoryMb.HasValue)
             {
+                if (limits.MemoryMb.Value <= 0)
+                {
+                    return Result<bool>.Failure(
+                        "[Process.InvalidResourceLimits] MemoryMb must be greater than 0");
+                }
+
                 var memoryResult = SetMemoryLimits(entry.JobHandle, limits.MemoryMb.Value, limits.KillOnMemoryExceeded);
                 if (memoryResult.IsFailure)
                 {
@@ -439,6 +445,12 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             // Update CPU limits
             if (limits.CpuPercent.HasValue)
             {
+                if (limits.CpuPercent.Value <= 0)
+                {
+                    return Result<bool>.Failure(
+                        "[Process.InvalidResourceLimits] CpuPercent must be greater than 0");
+                }
+
                 var cpuResult = SetCpuLimits(entry.JobHandle, limits.CpuPercent.Value);
                 if (cpuResult.IsFailure)
                 {
@@ -643,9 +655,12 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         }
 
         // Set environment variables
-        foreach (var (key, value) in config.EnvironmentVariables)
+        if (config.EnvironmentVariables is not null)
         {
-            startInfo.Environment[key] = value;
+            foreach (var (key, value) in config.EnvironmentVariables)
+            {
+                startInfo.Environment[key] = value;
+            }
         }
 
         return startInfo;
@@ -958,6 +973,22 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         {
             _ = HandleAutoRestartAsync(processId, entry);
         }
+        else
+        {
+            // Clean up exited process resources when not auto-restarting
+            if (_processes.TryRemove(processId, out var removedEntry))
+            {
+                try
+                {
+                    removedEntry.JobHandle.Dispose();
+                    removedEntry.OsProcess.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already disposed
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -1079,6 +1110,8 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             _logger.LogWarning(
                 "Potential path traversal detected. Original: {Original}, Resolved: {Resolved}",
                 executablePath, fullPath);
+            return Result<bool>.Failure(
+                "[Process.PathTraversal] Path traversal attempt detected in executable path");
         }
 
         // Verify the file exists

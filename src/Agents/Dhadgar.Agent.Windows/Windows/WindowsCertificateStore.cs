@@ -23,14 +23,15 @@ namespace Dhadgar.Agent.Windows.Windows;
 public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 {
     private readonly ILogger<WindowsCertificateStore> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly object _storeLock = new();
-    private bool _disposed;
+    private volatile bool _disposed;
 
     /// <summary>
     /// Maximum allowed size for certificate or key data (16KB).
     /// Prevents memory exhaustion from malicious or malformed input.
     /// </summary>
-    private const int MaxCertificateSize = 16 * 1024;
+    internal const int MaxCertificateSize = 16 * 1024;
 
     /// <summary>
     /// Friendly name used to identify Meridian Console Agent certificates.
@@ -47,9 +48,12 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     /// </summary>
     private const string CaSubjectName = "CN=Meridian Console CA";
 
-    public WindowsCertificateStore(ILogger<WindowsCertificateStore> logger)
+    public WindowsCertificateStore(
+        ILogger<WindowsCertificateStore> logger,
+        TimeProvider? timeProvider = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -65,7 +69,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             {
                 store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
 
-                var now = DateTime.UtcNow;
+                var now = _timeProvider.GetUtcNow().UtcDateTime;
                 X509Certificate2? bestCert = null;
 
                 foreach (var cert in store.Certificates)
@@ -230,7 +234,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             {
                 store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
 
-                var now = DateTime.UtcNow;
+                var now = _timeProvider.GetUtcNow().UtcDateTime;
                 X509Certificate2? bestCert = null;
 
                 foreach (var cert in store.Certificates)
@@ -360,7 +364,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             return true;
         }
 
-        var renewalThreshold = DateTime.UtcNow.AddDays(thresholdDays);
+        var renewalThreshold = _timeProvider.GetUtcNow().UtcDateTime.AddDays(thresholdDays);
         var notAfterUtc = certificate.NotAfter.ToUniversalTime();
         var needsRenewal = notAfterUtc <= renewalThreshold;
 
@@ -392,6 +396,9 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // NOTE: This creates an immutable string containing the private key.
+        // Managed strings cannot be securely cleared. This is a known limitation
+        // of .NET crypto APIs when dealing with PEM-formatted keys.
         var keyString = System.Text.Encoding.UTF8.GetString(privateKeyBytes);
         var isPem = keyString.Contains("-----BEGIN", StringComparison.Ordinal);
 
@@ -414,17 +421,22 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
         var pfxBytes = certWithKey!.Export(X509ContentType.Pfx);
         certWithKey.Dispose();
 
-        var finalCert = new X509Certificate2(
-            pfxBytes,
-            (string?)null,
-            X509KeyStorageFlags.MachineKeySet |
-            X509KeyStorageFlags.PersistKeySet |
-            X509KeyStorageFlags.Exportable);
+        try
+        {
+            var finalCert = new X509Certificate2(
+                pfxBytes,
+                (string?)null,
+                X509KeyStorageFlags.MachineKeySet |
+                X509KeyStorageFlags.PersistKeySet |
+                X509KeyStorageFlags.Exportable);
 
-        // Clear the PFX bytes from memory
-        Array.Clear(pfxBytes, 0, pfxBytes.Length);
-
-        return Task.FromResult(finalCert);
+            return Task.FromResult(finalCert);
+        }
+        finally
+        {
+            // SECURITY: Clear the PFX bytes from memory even on exception
+            Array.Clear(pfxBytes, 0, pfxBytes.Length);
+        }
     }
 
     /// <summary>

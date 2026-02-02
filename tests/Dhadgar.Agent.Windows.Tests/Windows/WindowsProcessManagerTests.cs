@@ -109,10 +109,14 @@ public sealed class WindowsProcessManagerTests
         // Arrange
         using var manager = new WindowsProcessManager(_logger, _timeProvider);
 
+        // Use a path that is absolute and fully-qualified on the current platform
+        // but doesn't exist
+        var nonExistentPath = Path.Combine(Path.GetTempPath(), "NonExistent_" + Guid.NewGuid().ToString("N"), "executable.exe");
+
         var config = new ProcessConfig
         {
             ServerId = Guid.NewGuid(),
-            ExecutablePath = @"C:\NonExistent\Path\executable.exe"
+            ExecutablePath = nonExistentPath
         };
 
         // Act
@@ -134,11 +138,15 @@ public sealed class WindowsProcessManagerTests
 
         try
         {
+            // Use a path that is absolute and fully-qualified on the current platform
+            // but doesn't exist
+            var nonExistentWorkDir = Path.Combine(Path.GetTempPath(), "NonExistent_" + Guid.NewGuid().ToString("N"));
+
             var config = new ProcessConfig
             {
                 ServerId = Guid.NewGuid(),
                 ExecutablePath = tempExe,
-                WorkingDirectory = @"C:\NonExistent\WorkDir"
+                WorkingDirectory = nonExistentWorkDir
             };
 
             // Act
@@ -436,10 +444,17 @@ public sealed class WindowsProcessManagerTests
 
     private static ProcessConfig CreateValidProcessConfig()
     {
+        // Use a cross-platform path for testing
+        // Note: This is for creating config only, the executable may not actually exist
+        // on all platforms - tests using this config should handle that appropriately
+        var execPath = OperatingSystem.IsWindows()
+            ? @"C:\Windows\System32\notepad.exe"
+            : "/bin/echo";
+
         return new ProcessConfig
         {
             ServerId = Guid.NewGuid(),
-            ExecutablePath = @"C:\Windows\System32\notepad.exe",
+            ExecutablePath = execPath,
             CaptureStdout = false,
             CaptureStderr = false
         };
