@@ -11,8 +11,9 @@ namespace Dhadgar.Agent.Core.Files;
 /// <summary>
 /// Manages file transfers between agent and control plane.
 /// </summary>
-public sealed class FileTransferService : IFileTransferService
+public sealed class FileTransferService : IFileTransferService, IDisposable
 {
+    private bool _disposed;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IPathValidator _pathValidator;
     private readonly IFileIntegrityChecker _integrityChecker;
@@ -22,6 +23,12 @@ public sealed class FileTransferService : IFileTransferService
     private readonly ILogger<FileTransferService> _logger;
 
     private readonly ConcurrentDictionary<Guid, TransferState> _activeTransfers = new();
+
+    /// <summary>
+    /// Semaphore to atomically enforce concurrent transfer limit.
+    /// Prevents race conditions where multiple concurrent calls could exceed the limit.
+    /// </summary>
+    private readonly SemaphoreSlim _transferSemaphore;
 
     public FileTransferService(
         IHttpClientFactory httpClientFactory,
@@ -39,6 +46,9 @@ public sealed class FileTransferService : IFileTransferService
         _agentOptions = agentOptions?.Value ?? throw new ArgumentNullException(nameof(agentOptions));
         _meter = meter ?? throw new ArgumentNullException(nameof(meter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        // Initialize semaphore with configured max concurrent transfers
+        _transferSemaphore = new SemaphoreSlim(_fileOptions.MaxConcurrentTransfers, _fileOptions.MaxConcurrentTransfers);
     }
 
     public async Task<Result<FileTransferResult>> DownloadAsync(
@@ -52,34 +62,41 @@ public sealed class FileTransferService : IFileTransferService
                 "[Transfer.InvalidRequest] Download request cannot be null");
         }
 
-        // SECURITY: Enforce concurrent transfer limit to prevent resource exhaustion
-        if (_activeTransfers.Count >= _fileOptions.MaxConcurrentTransfers)
+        // SECURITY: Atomically enforce concurrent transfer limit using semaphore
+        // This prevents race conditions where multiple concurrent calls could exceed the limit
+        if (!await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken))
         {
             _logger.LogWarning(
-                "Transfer limit reached ({Count}/{Max}), rejecting download {TransferId}",
-                _activeTransfers.Count, _fileOptions.MaxConcurrentTransfers, request.TransferId);
+                "Transfer limit reached ({Max}), rejecting download {TransferId}",
+                _fileOptions.MaxConcurrentTransfers, request.TransferId);
             return Result<FileTransferResult>.Failure(
                 "[Transfer.LimitReached] Maximum concurrent transfer limit reached");
         }
 
-        var transferState = new TransferState
-        {
-            TransferId = request.TransferId,
-            Direction = FileTransferDirection.Download,
-            State = FileTransferState.Pending,
-            StartedAt = DateTimeOffset.UtcNow,
-            CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
-        };
-
-        if (!_activeTransfers.TryAdd(request.TransferId, transferState))
-        {
-            transferState.CancellationSource.Dispose();
-            return Result<FileTransferResult>.Failure(
-                "[Transfer.Duplicate] A transfer with this ID is already in progress");
-        }
-
+        // Semaphore acquired - must release on all exit paths
+        var semaphoreReleased = false;
         try
         {
+            var transferState = new TransferState
+            {
+                TransferId = request.TransferId,
+                Direction = FileTransferDirection.Download,
+                State = FileTransferState.Pending,
+                StartedAt = DateTimeOffset.UtcNow,
+                CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            };
+
+            if (!_activeTransfers.TryAdd(request.TransferId, transferState))
+            {
+                transferState.CancellationSource.Dispose();
+                _transferSemaphore.Release();
+                semaphoreReleased = true;
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.Duplicate] A transfer with this ID is already in progress");
+            }
+
+            try
+            {
             // Validate destination path
             var allowedPaths = new[] { _fileOptions.TempDirectory, _agentOptions.Process.ServerBasePath };
             var pathResult = _pathValidator.ValidatePath(request.DestinationPath, allowedPaths);
@@ -110,19 +127,36 @@ public sealed class FileTransferService : IFileTransferService
                     "[Transfer.InsecureTransport] File transfers require HTTPS");
             }
 
-            // Validate source URL - must be absolute if no base address configured
-            if (client.BaseAddress is null && !Uri.IsWellFormedUriString(request.SourceUrl, UriKind.Absolute))
+            // SECURITY: SSRF protection - validate source URL against trusted hosts
+            if (Uri.TryCreate(request.SourceUrl, UriKind.Absolute, out var sourceUri))
             {
-                return Result<FileTransferResult>.Failure(
-                    "[Transfer.InvalidUrl] Source URL must be absolute when no base address is configured");
-            }
+                // Absolute URL provided
+                if (!string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<FileTransferResult>.Failure(
+                        "[Transfer.InsecureTransport] Source URL must use HTTPS");
+                }
 
-            // Validate source URL scheme if it's an absolute URL
-            if (Uri.TryCreate(request.SourceUrl, UriKind.Absolute, out var sourceUri) &&
-                !string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                // When BaseAddress is configured, absolute URLs must match the trusted host
+                if (client.BaseAddress is not null &&
+                    !string.Equals(sourceUri.Host, client.BaseAddress.Host, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "SSRF blocked: source URL host {SourceHost} does not match trusted host {TrustedHost}",
+                        sourceUri.Host, client.BaseAddress.Host);
+                    return Result<FileTransferResult>.Failure(
+                        "[Transfer.UntrustedHost] Source URL host does not match configured control plane");
+                }
+            }
+            else
             {
-                return Result<FileTransferResult>.Failure(
-                    "[Transfer.InsecureTransport] Source URL must use HTTPS");
+                // Relative URL - requires BaseAddress
+                if (client.BaseAddress is null)
+                {
+                    return Result<FileTransferResult>.Failure(
+                        "[Transfer.InvalidUrl] Source URL must be absolute when no base address is configured");
+                }
+                // Relative URLs are safe - they'll resolve against the trusted BaseAddress
             }
 
             using var response = await client.GetAsync(
@@ -288,10 +322,19 @@ public sealed class FileTransferService : IFileTransferService
             return Result<FileTransferResult>.Failure(
                 "[Transfer.Failed] Download failed due to an unexpected error");
         }
+            finally
+            {
+                _activeTransfers.TryRemove(request.TransferId, out _);
+                transferState.CancellationSource.Dispose();
+            }
+        }
         finally
         {
-            _activeTransfers.TryRemove(request.TransferId, out _);
-            transferState.CancellationSource.Dispose();
+            // Always release semaphore unless already released
+            if (!semaphoreReleased)
+            {
+                _transferSemaphore.Release();
+            }
         }
     }
 
@@ -306,35 +349,41 @@ public sealed class FileTransferService : IFileTransferService
                 "[Transfer.InvalidRequest] Upload request cannot be null");
         }
 
-        // SECURITY: Enforce concurrent transfer limit to prevent resource exhaustion
-        if (_activeTransfers.Count >= _fileOptions.MaxConcurrentTransfers)
+        // SECURITY: Atomically enforce concurrent transfer limit using semaphore
+        if (!await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken))
         {
             _logger.LogWarning(
-                "Transfer limit reached ({Count}/{Max}), rejecting upload {TransferId}",
-                _activeTransfers.Count, _fileOptions.MaxConcurrentTransfers, request.TransferId);
+                "Transfer limit reached ({Max}), rejecting upload {TransferId}",
+                _fileOptions.MaxConcurrentTransfers, request.TransferId);
             return Result<FileTransferResult>.Failure(
                 "[Transfer.LimitReached] Maximum concurrent transfer limit reached");
         }
 
-        var transferState = new TransferState
-        {
-            TransferId = request.TransferId,
-            Direction = FileTransferDirection.Upload,
-            State = FileTransferState.Pending,
-            StartedAt = DateTimeOffset.UtcNow,
-            CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
-        };
-
-        if (!_activeTransfers.TryAdd(request.TransferId, transferState))
-        {
-            transferState.CancellationSource.Dispose();
-            return Result<FileTransferResult>.Failure(
-                "[Transfer.Duplicate] A transfer with this ID is already in progress");
-        }
-
+        // Semaphore acquired - must release on all exit paths
+        var semaphoreReleased = false;
         try
         {
-            // Validate source path to prevent path traversal attacks
+            var transferState = new TransferState
+            {
+                TransferId = request.TransferId,
+                Direction = FileTransferDirection.Upload,
+                State = FileTransferState.Pending,
+                StartedAt = DateTimeOffset.UtcNow,
+                CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            };
+
+            if (!_activeTransfers.TryAdd(request.TransferId, transferState))
+            {
+                transferState.CancellationSource.Dispose();
+                _transferSemaphore.Release();
+                semaphoreReleased = true;
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.Duplicate] A transfer with this ID is already in progress");
+            }
+
+            try
+            {
+                // Validate source path to prevent path traversal attacks
             var allowedPaths = new[] { _fileOptions.TempDirectory, _agentOptions.Process.ServerBasePath };
             var pathResult = _pathValidator.ValidatePath(request.SourcePath, allowedPaths);
             if (!pathResult.IsSuccess)
@@ -421,35 +470,44 @@ public sealed class FileTransferService : IFileTransferService
                 fileInfo.Length,
                 duration);
 
-            return Result<FileTransferResult>.Success(new FileTransferResult
+                return Result<FileTransferResult>.Success(new FileTransferResult
+                {
+                    TransferId = request.TransferId,
+                    RemoteId = request.DestinationId,
+                    FileHash = fileHash,
+                    FileSizeBytes = fileInfo.Length,
+                    Duration = duration,
+                    UsedP2P = false // P2P not yet implemented
+                });
+            }
+            catch (OperationCanceledException)
             {
-                TransferId = request.TransferId,
-                RemoteId = request.DestinationId,
-                FileHash = fileHash,
-                FileSizeBytes = fileInfo.Length,
-                Duration = duration,
-                UsedP2P = false // P2P not yet implemented
-            });
-        }
-        catch (OperationCanceledException)
-        {
-            transferState.State = FileTransferState.Cancelled;
-            return Result<FileTransferResult>.Failure(
-                "[Transfer.Cancelled] File transfer was cancelled");
-        }
-        catch (Exception ex)
-        {
-            transferState.State = FileTransferState.Failed;
-            transferState.ErrorMessage = ex.Message;
-            _logger.LogError(ex, "Upload failed for {TransferId}", request.TransferId);
-            // Return sanitized error message without exception details
-            return Result<FileTransferResult>.Failure(
-                "[Transfer.Failed] Upload failed due to an unexpected error");
+                transferState.State = FileTransferState.Cancelled;
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.Cancelled] File transfer was cancelled");
+            }
+            catch (Exception ex)
+            {
+                transferState.State = FileTransferState.Failed;
+                transferState.ErrorMessage = ex.Message;
+                _logger.LogError(ex, "Upload failed for {TransferId}", request.TransferId);
+                // Return sanitized error message without exception details
+                return Result<FileTransferResult>.Failure(
+                    "[Transfer.Failed] Upload failed due to an unexpected error");
+            }
+            finally
+            {
+                _activeTransfers.TryRemove(request.TransferId, out _);
+                transferState.CancellationSource.Dispose();
+            }
         }
         finally
         {
-            _activeTransfers.TryRemove(request.TransferId, out _);
-            transferState.CancellationSource.Dispose();
+            // Always release semaphore unless already released
+            if (!semaphoreReleased)
+            {
+                _transferSemaphore.Release();
+            }
         }
     }
 
@@ -503,6 +561,18 @@ public sealed class FileTransferService : IFileTransferService
                 UsingP2P = false
             })
             .ToList();
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _transferSemaphore.Dispose();
+        _disposed = true;
     }
 
     private sealed class TransferState

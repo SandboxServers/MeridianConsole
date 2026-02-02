@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,12 @@ public sealed class EnrollmentService : IEnrollmentService
     /// while preventing memory exhaustion from malicious payloads.
     /// </summary>
     private const int MaxCertificateBase64Length = 8192;
+
+    /// <summary>
+    /// Maximum allowed response body size (1 MB).
+    /// Prevents memory exhaustion from malicious control plane responses.
+    /// </summary>
+    private const int MaxResponseBodySize = 1024 * 1024;
 
     private readonly ICertificateStore _certificateStore;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -108,9 +115,15 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Enrollment.InsecureTransport] Enrollment requires HTTPS");
             }
 
-            var response = await client.PostAsJsonAsync(
-                "api/v1/agents/enroll",
-                request,
+            // SECURITY: Use ResponseHeadersRead to check Content-Length before buffering entire body
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "api/v1/agents/enroll")
+            {
+                Content = JsonContent.Create(request)
+            };
+
+            var response = await client.SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -121,8 +134,25 @@ public sealed class EnrollmentService : IEnrollmentService
                     $"[Enrollment.Failed] Enrollment failed: {response.StatusCode}");
             }
 
-            var enrollmentResponse = await response.Content.ReadFromJsonAsync<EnrollmentResponse>(
-                cancellationToken: cancellationToken);
+            // SECURITY: Validate Content-Length before reading body to prevent memory exhaustion
+            var contentLength = response.Content.Headers.ContentLength;
+            if (contentLength.HasValue && contentLength.Value > MaxResponseBodySize)
+            {
+                _logger.LogWarning("Enrollment response too large: {Length} bytes (max: {Max})",
+                    contentLength.Value, MaxResponseBodySize);
+                return Result<EnrollmentResult>.Failure(
+                    "[Enrollment.ResponseTooLarge] Response exceeds maximum allowed size");
+            }
+
+            // Read with size-limited stream if Content-Length is missing or needs verification
+            EnrollmentResponse? enrollmentResponse;
+            await using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var limitedStream = new SizeLimitedStream(responseStream, MaxResponseBodySize))
+            {
+                enrollmentResponse = await JsonSerializer.DeserializeAsync<EnrollmentResponse>(
+                    limitedStream,
+                    cancellationToken: cancellationToken);
+            }
 
             if (enrollmentResponse is null)
             {
@@ -305,9 +335,15 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Renewal.InsecureTransport] Certificate renewal requires HTTPS");
             }
 
-            var response = await client.PostAsJsonAsync(
-                $"api/v1/agents/{_options.NodeId}/certificates/renew",
-                request,
+            // SECURITY: Use ResponseHeadersRead to check Content-Length before buffering entire body
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"api/v1/agents/{_options.NodeId}/certificates/renew")
+            {
+                Content = JsonContent.Create(request)
+            };
+
+            var response = await client.SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -318,8 +354,25 @@ public sealed class EnrollmentService : IEnrollmentService
                     $"[Renewal.Failed] Certificate renewal failed: {response.StatusCode}");
             }
 
-            var renewalResponse = await response.Content.ReadFromJsonAsync<CertificateRenewalResponse>(
-                cancellationToken: cancellationToken);
+            // SECURITY: Validate Content-Length before reading body to prevent memory exhaustion
+            var contentLength = response.Content.Headers.ContentLength;
+            if (contentLength.HasValue && contentLength.Value > MaxResponseBodySize)
+            {
+                _logger.LogWarning("Renewal response too large: {Length} bytes (max: {Max})",
+                    contentLength.Value, MaxResponseBodySize);
+                return Result<CertificateRenewalResult>.Failure(
+                    "[Renewal.ResponseTooLarge] Response exceeds maximum allowed size");
+            }
+
+            // Read with size-limited stream if Content-Length is missing or needs verification
+            CertificateRenewalResponse? renewalResponse;
+            await using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var limitedStream = new SizeLimitedStream(responseStream, MaxResponseBodySize))
+            {
+                renewalResponse = await JsonSerializer.DeserializeAsync<CertificateRenewalResponse>(
+                    limitedStream,
+                    cancellationToken: cancellationToken);
+            }
 
             if (renewalResponse is null)
             {
@@ -490,4 +543,93 @@ public sealed class CertificateRenewalResult
 {
     public required DateTime NewExpiry { get; init; }
     public required DateTime OldExpiry { get; init; }
+}
+
+/// <summary>
+/// A stream wrapper that enforces a maximum read limit.
+/// Throws <see cref="InvalidOperationException"/> if the underlying stream exceeds the limit.
+/// </summary>
+internal sealed class SizeLimitedStream : Stream
+{
+    private readonly Stream _innerStream;
+    private readonly long _maxSize;
+    private long _totalBytesRead;
+
+    public SizeLimitedStream(Stream innerStream, long maxSize)
+    {
+        _innerStream = innerStream ?? throw new ArgumentNullException(nameof(innerStream));
+        _maxSize = maxSize;
+    }
+
+    public override bool CanRead => _innerStream.CanRead;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position
+    {
+        get => _totalBytesRead;
+        set => throw new NotSupportedException();
+    }
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        var bytesRead = _innerStream.Read(buffer, offset, count);
+        _totalBytesRead += bytesRead;
+
+        if (_totalBytesRead > _maxSize)
+        {
+            throw new InvalidOperationException(
+                $"Stream exceeded maximum size of {_maxSize} bytes");
+        }
+
+        return bytesRead;
+    }
+
+    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+    {
+        var bytesRead = await _innerStream.ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
+        _totalBytesRead += bytesRead;
+
+        if (_totalBytesRead > _maxSize)
+        {
+            throw new InvalidOperationException(
+                $"Stream exceeded maximum size of {_maxSize} bytes");
+        }
+
+        return bytesRead;
+    }
+
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        var bytesRead = await _innerStream.ReadAsync(buffer, cancellationToken);
+        _totalBytesRead += bytesRead;
+
+        if (_totalBytesRead > _maxSize)
+        {
+            throw new InvalidOperationException(
+                $"Stream exceeded maximum size of {_maxSize} bytes");
+        }
+
+        return bytesRead;
+    }
+
+    public override void Flush() => _innerStream.Flush();
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _innerStream.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        await _innerStream.DisposeAsync();
+        await base.DisposeAsync();
+    }
 }

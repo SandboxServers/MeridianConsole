@@ -41,6 +41,14 @@ public sealed class CommandDispatcher : ICommandDispatcher
     {
         ArgumentNullException.ThrowIfNull(handler);
 
+        // Validate CommandType before registration to fail fast on invalid handlers
+        if (string.IsNullOrWhiteSpace(handler.CommandType))
+        {
+            throw new ArgumentException(
+                "Handler CommandType cannot be null, empty, or whitespace",
+                $"{nameof(handler)}.{nameof(handler.CommandType)}");
+        }
+
         if (!_handlers.TryAdd(handler.CommandType, handler))
         {
             throw new InvalidOperationException(
@@ -227,10 +235,12 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
         CancellationToken cancellationToken = default)
     {
         // SECURITY: Check payload size before deserialization to prevent memory exhaustion
-        if (envelope.PayloadJson.Length > MaxPayloadSizeBytes)
+        // Use UTF-8 byte count, not character count, since multi-byte characters inflate actual size
+        var payloadByteCount = System.Text.Encoding.UTF8.GetByteCount(envelope.PayloadJson);
+        if (payloadByteCount > MaxPayloadSizeBytes)
         {
             _logger.LogWarning("Payload too large for command {CommandId}: {Size} bytes (max: {Max})",
-                envelope.CommandId, envelope.PayloadJson.Length, MaxPayloadSizeBytes);
+                envelope.CommandId, payloadByteCount, MaxPayloadSizeBytes);
             return CommandResult.Rejected(
                 envelope.CommandId,
                 envelope.NodeId,

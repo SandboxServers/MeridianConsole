@@ -100,13 +100,21 @@ public sealed class NetworkMetrics
     public required string InterfaceName { get; init; }
 
     /// <summary>
-    /// Bytes received since last collection.
+    /// Cumulative bytes received since system boot.
     /// </summary>
+    /// <remarks>
+    /// This is a cumulative counter from the OS, not a delta since last collection.
+    /// To calculate throughput, track values across collection intervals.
+    /// </remarks>
     public long BytesReceived { get; init; }
 
     /// <summary>
-    /// Bytes sent since last collection.
+    /// Cumulative bytes sent since system boot.
     /// </summary>
+    /// <remarks>
+    /// This is a cumulative counter from the OS, not a delta since last collection.
+    /// To calculate throughput, track values across collection intervals.
+    /// </remarks>
     public long BytesSent { get; init; }
 
     /// <summary>

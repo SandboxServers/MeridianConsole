@@ -84,6 +84,11 @@ public sealed class ProcessExitedEventArgs : EventArgs
 /// <summary>
 /// Event args for process output.
 /// </summary>
+/// <remarks>
+/// Implementations should limit the size of <see cref="Data"/> to prevent memory exhaustion
+/// (e.g., truncate or chunk output lines exceeding 64KB). Large output should be buffered
+/// and delivered in multiple events rather than accumulated in memory.
+/// </remarks>
 public sealed class ProcessOutputEventArgs : EventArgs
 {
     public required Guid ProcessId { get; init; }

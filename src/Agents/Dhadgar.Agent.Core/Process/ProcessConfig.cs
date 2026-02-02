@@ -5,8 +5,17 @@ namespace Dhadgar.Agent.Core.Process;
 /// <summary>
 /// Configuration for starting a new process.
 /// </summary>
-public sealed class ProcessConfig
+public sealed class ProcessConfig : IValidatableObject
 {
+    /// <summary>
+    /// Minimum allowed restart delay (1 second).
+    /// </summary>
+    public static readonly TimeSpan MinRestartDelay = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Maximum allowed restart delay (10 minutes).
+    /// </summary>
+    public static readonly TimeSpan MaxRestartDelay = TimeSpan.FromMinutes(10);
     /// <summary>
     /// Server identifier from control plane.
     /// </summary>
@@ -60,6 +69,25 @@ public sealed class ProcessConfig
 
     /// <summary>
     /// Delay between restart attempts.
+    /// Must be between 1 second and 10 minutes.
     /// </summary>
     public TimeSpan RestartDelay { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <inheritdoc />
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        // Validate RestartDelay bounds to prevent rapid restart loops or excessive delays
+        if (RestartDelay < MinRestartDelay)
+        {
+            yield return new ValidationResult(
+                $"{nameof(RestartDelay)} must be at least {MinRestartDelay.TotalSeconds} second(s)",
+                [nameof(RestartDelay)]);
+        }
+        else if (RestartDelay > MaxRestartDelay)
+        {
+            yield return new ValidationResult(
+                $"{nameof(RestartDelay)} must not exceed {MaxRestartDelay.TotalMinutes} minute(s)",
+                [nameof(RestartDelay)]);
+        }
+    }
 }

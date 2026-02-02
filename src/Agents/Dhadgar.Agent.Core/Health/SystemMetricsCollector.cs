@@ -116,7 +116,8 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
         {
             var gcInfo = GC.GetGCMemoryInfo();
             // Available = Total - (Heap + unmanaged used)
-            return gcInfo.TotalAvailableMemoryBytes - gcInfo.MemoryLoadBytes;
+            // Clamp to non-negative to handle edge cases where MemoryLoadBytes > TotalAvailableMemoryBytes
+            return Math.Max(0, gcInfo.TotalAvailableMemoryBytes - gcInfo.MemoryLoadBytes);
         }
         catch
         {

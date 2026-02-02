@@ -257,11 +257,13 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         try
         {
             // Security: Enforce payload size limit to prevent resource exhaustion
-            if (commandJson.Length > MaxCommandPayloadSize)
+            // Use UTF-8 byte count, not character count, since multi-byte characters inflate actual size
+            var payloadByteCount = System.Text.Encoding.UTF8.GetByteCount(commandJson);
+            if (payloadByteCount > MaxCommandPayloadSize)
             {
                 _logger.LogWarning(
-                    "Rejected command: payload size {Size} exceeds maximum {MaxSize}",
-                    commandJson.Length, MaxCommandPayloadSize);
+                    "Rejected command: payload size {Size} bytes exceeds maximum {MaxSize}",
+                    payloadByteCount, MaxCommandPayloadSize);
                 return;
             }
 
