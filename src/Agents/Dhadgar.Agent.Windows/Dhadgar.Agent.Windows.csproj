@@ -20,7 +20,7 @@
     <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
     <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
 
-    <!-- Enable unsafe code for P/Invoke operations -->
+    <!-- Required for LibraryImport source generator which produces unsafe code -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!--

@@ -30,7 +30,7 @@ public static class ServiceInstaller
     public static Result ConfigureRecovery()
     {
         // SECURITY: Service name is intentionally hardcoded to prevent command injection
-        var process = Process.Start(new ProcessStartInfo
+        using var process = Process.Start(new ProcessStartInfo
         {
             FileName = "sc.exe",
             Arguments = $"failure {Program.ServiceName} reset= 86400 actions= restart/5000/restart/10000/restart/30000",
@@ -79,12 +79,15 @@ public static class ServiceInstaller
     /// <returns>A result indicating success or failure with an error message.</returns>
     public static Result SetDescription(string description)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return Result.Failure("Description is required and cannot be empty.");
+        }
 
         // SECURITY: Escape quotes in description to prevent command injection
         var escapedDescription = description.Replace("\"", "\\\"", StringComparison.Ordinal);
 
-        var process = Process.Start(new ProcessStartInfo
+        using var process = Process.Start(new ProcessStartInfo
         {
             FileName = "sc.exe",
             Arguments = $"description {Program.ServiceName} \"{escapedDescription}\"",
@@ -132,7 +135,7 @@ public static class ServiceInstaller
     /// <returns>A result indicating success or failure with an error message.</returns>
     public static Result ConfigureDelayedAutoStart()
     {
-        var process = Process.Start(new ProcessStartInfo
+        using var process = Process.Start(new ProcessStartInfo
         {
             FileName = "sc.exe",
             Arguments = $"config {Program.ServiceName} start= delayed-auto",

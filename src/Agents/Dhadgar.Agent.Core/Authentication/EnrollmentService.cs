@@ -253,7 +253,15 @@ public sealed class EnrollmentService : IEnrollmentService
 
             // SECURITY: Clean up the enrollment token from platform-specific storage
             // This prevents token reuse attacks and exposure via registry/file inspection
-            _enrollmentTokenCleanup?.CleanupEnrollmentToken();
+            // Best-effort: cleanup failure should not turn successful enrollment into failure
+            try
+            {
+                _enrollmentTokenCleanup?.CleanupEnrollmentToken();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to clean up enrollment token after successful enrollment");
+            }
 
             return Result<EnrollmentResult>.Success(new EnrollmentResult
             {

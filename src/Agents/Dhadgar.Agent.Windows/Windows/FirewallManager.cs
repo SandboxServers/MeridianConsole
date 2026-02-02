@@ -97,7 +97,7 @@ internal sealed partial class FirewallManager : IDisposable
     private readonly ILogger<FirewallManager> _logger;
     private readonly object? _firewallPolicy;
     private readonly dynamic? _rules;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FirewallManager"/> class.
@@ -138,9 +138,10 @@ internal sealed partial class FirewallManager : IDisposable
     /// </summary>
     /// <remarks>
     /// SECURITY: This pattern prevents injection by rejecting any special characters
-    /// that could be interpreted maliciously.
+    /// that could be interpreted maliciously. Uses literal space instead of \s to
+    /// prevent tabs/newlines/control characters.
     /// </remarks>
-    [GeneratedRegex(@"^[a-zA-Z0-9\s\-_]+$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^[a-zA-Z0-9 \-_]+$", RegexOptions.Compiled)]
     private static partial Regex RuleNamePattern();
 
     /// <summary>
@@ -393,7 +394,7 @@ internal sealed partial class FirewallManager : IDisposable
     {
         if (port < MinPort || port > MaxPort)
         {
-            return Result.Failure($"Port must be between {MinPort} and {MaxPort}. Provided: {port}");
+            return Result.Failure(FormattableString.Invariant($"Port must be between {MinPort} and {MaxPort}. Provided: {port}"));
         }
 
         return Result.Success();
@@ -439,6 +440,12 @@ internal sealed partial class FirewallManager : IDisposable
         if (string.IsNullOrWhiteSpace(ruleName))
         {
             return Result.Failure("Rule name cannot be null or empty.");
+        }
+
+        // SECURITY: Reject "all" keyword to prevent accidental deletion of all firewall rules
+        if (string.Equals(ruleName, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure("Rule name 'all' is reserved and cannot be used.");
         }
 
         if (ruleName.Length > MaxRuleNameLength)

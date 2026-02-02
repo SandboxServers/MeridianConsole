@@ -455,47 +455,51 @@ internal static partial class NativeMethods
     /// <summary>
     /// Contains CPU rate control information for a job object.
     /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
+    /// <remarks>
+    /// This struct uses explicit layout to match the Win32 union definition:
+    /// - ControlFlags at offset 0 (4 bytes)
+    /// - Union at offset 4 (4 bytes): CpuRate, Weight, or MinRate+MaxRate share the same space
+    /// Total size: 8 bytes.
+    /// </remarks>
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
     public struct JOBOBJECT_CPU_RATE_CONTROL_INFORMATION
     {
         /// <summary>
         /// The scheduling policy and flags.
         /// </summary>
+        [FieldOffset(0)]
         public CpuRateControlFlags ControlFlags;
 
         /// <summary>
-        /// CPU rate or weight, depending on ControlFlags.
-        /// When HardCap or no weight flag: percentage of CPU cycles (1-10000, where 10000 = 100%).
-        /// When WeightBased: scheduling weight (1-9).
-        /// When MinMaxRate: use MinRate and MaxRate fields instead.
+        /// CPU rate as percentage of CPU cycles (1-10000, where 10000 = 100%).
+        /// Used when HardCap flag is set without WeightBased or MinMaxRate flags.
         /// </summary>
+        [FieldOffset(4)]
         public uint CpuRate;
-
-        /// <summary>
-        /// Minimum CPU rate percentage (when MinMaxRate flag is set).
-        /// Value from 0-10000, where 10000 = 100%.
-        /// </summary>
-        public uint MinRate
-        {
-            readonly get => CpuRate;
-            set => CpuRate = value;
-        }
-
-        /// <summary>
-        /// Maximum CPU rate percentage (when MinMaxRate flag is set).
-        /// Value from 0-10000, where 10000 = 100%.
-        /// </summary>
-        public uint MaxRate;
 
         /// <summary>
         /// Scheduling weight when using WeightBased flag.
         /// Value from 1-9.
         /// </summary>
-        public uint Weight
-        {
-            readonly get => CpuRate;
-            set => CpuRate = value;
-        }
+        /// <remarks>Shares memory with CpuRate (union member).</remarks>
+        [FieldOffset(4)]
+        public uint Weight;
+
+        /// <summary>
+        /// Minimum CPU rate percentage (when MinMaxRate flag is set).
+        /// Value from 0-10000, where 10000 = 100%.
+        /// </summary>
+        /// <remarks>Shares memory with CpuRate/Weight (union member).</remarks>
+        [FieldOffset(4)]
+        public ushort MinRate;
+
+        /// <summary>
+        /// Maximum CPU rate percentage (when MinMaxRate flag is set).
+        /// Value from 0-10000, where 10000 = 100%.
+        /// </summary>
+        /// <remarks>Part of the MinRate/MaxRate struct within the union.</remarks>
+        [FieldOffset(6)]
+        public ushort MaxRate;
     }
 
     #endregion

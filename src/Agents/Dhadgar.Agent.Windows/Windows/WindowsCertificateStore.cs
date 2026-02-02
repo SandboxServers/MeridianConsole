@@ -607,18 +607,19 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 
         try
         {
-            // Note: We only track certificates that match our subject.
-            // Non-matching certificates are not disposed here as they remain
-            // in the store and may be used by other applications.
+            // store.Certificates creates new X509Certificate2 objects that must be disposed.
+            // Disposing only releases the managed wrapper; it does NOT remove certs from the store.
             foreach (var cert in store.Certificates)
             {
                 if (MatchesSubject(cert, subjectName))
                 {
                     certsToRemove.Add(cert);
                 }
-                // Non-matching certificates are intentionally not disposed here
-                // as disposing them doesn't remove them from the store and could
-                // cause issues if other code holds references to them.
+                else
+                {
+                    // Dispose non-matching certificates to avoid memory leaks
+                    cert.Dispose();
+                }
             }
 
             foreach (var cert in certsToRemove)
@@ -655,22 +656,24 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     /// <summary>
     /// Sets the friendly name on a certificate in the store.
     /// </summary>
+    /// <remarks>
+    /// We must dispose all certificates from store.Certificates except the matched one,
+    /// as it needs to remain valid while we set FriendlyName.
+    /// </remarks>
     private static void SetFriendlyName(X509Store store, string thumbprint, string friendlyName)
     {
         foreach (var cert in store.Certificates)
         {
-            try
+            if (string.Equals(cert.Thumbprint, thumbprint, StringComparison.OrdinalIgnoreCase))
             {
-                if (string.Equals(cert.Thumbprint, thumbprint, StringComparison.OrdinalIgnoreCase))
-                {
-                    cert.FriendlyName = friendlyName;
-                    break;
-                }
+                // Found matching certificate - set friendly name and return
+                // Don't dispose this cert as we just modified it
+                cert.FriendlyName = friendlyName;
+                return;
             }
-            finally
-            {
-                cert.Dispose();
-            }
+
+            // Not a match - dispose to prevent handle leak
+            cert.Dispose();
         }
     }
 
