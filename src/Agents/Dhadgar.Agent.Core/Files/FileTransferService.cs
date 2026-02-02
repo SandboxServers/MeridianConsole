@@ -30,6 +30,11 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     /// </summary>
     private readonly SemaphoreSlim _transferSemaphore;
 
+    /// <summary>
+    /// Cancellation token source for disposal. Cancelled on dispose to stop in-flight transfers.
+    /// </summary>
+    private readonly CancellationTokenSource _disposeCts = new();
+
     public FileTransferService(
         IHttpClientFactory httpClientFactory,
         IPathValidator pathValidator,
@@ -94,7 +99,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Direction = FileTransferDirection.Download,
                 State = FileTransferState.Pending,
                 StartedAt = DateTimeOffset.UtcNow,
-                CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+                // Link to both caller's token and disposal token for proper cleanup
+                CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token)
             };
 
             if (!_activeTransfers.TryAdd(request.TransferId, transferState))
@@ -106,6 +112,9 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                     "[Transfer.Duplicate] A transfer with this ID is already in progress");
             }
 
+            // Hoist destinationPath to outer scope for use in catch block
+            string? destinationPath = null;
+
             try
             {
                 // Validate destination path
@@ -116,7 +125,7 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                     return Result<FileTransferResult>.Failure(pathResult.Error!);
                 }
 
-                var destinationPath = pathResult.Value!;
+                destinationPath = pathResult.Value!;
 
                 // Ensure directory exists
                 var directory = Path.GetDirectoryName(destinationPath);
@@ -219,9 +228,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                         }
                         catch (Exception cleanupEx)
                         {
+                            // SECURITY: Log only filename, not full path
                             _logger.LogDebug(cleanupEx,
-                                "Failed to clean up oversized download for {TransferId}: {Path}",
-                                request.TransferId, destinationPath);
+                                "Failed to clean up oversized download for {TransferId}: {FileName}",
+                                request.TransferId, Path.GetFileName(destinationPath));
                         }
                         return Result<FileTransferResult>.Failure(
                             $"[File.TooLarge] File exceeds maximum size of {_fileOptions.MaxFileSizeBytes} bytes");
@@ -265,9 +275,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                         }
                         catch (Exception cleanupEx)
                         {
+                            // SECURITY: Log only filename, not full path
                             _logger.LogDebug(cleanupEx,
-                                "Failed to clean up partial download for {TransferId}: {Path}",
-                                request.TransferId, destinationPath);
+                                "Failed to clean up partial download for {TransferId}: {FileName}",
+                                request.TransferId, Path.GetFileName(destinationPath));
                         }
                         return Result<FileTransferResult>.Failure(hashResult.Error!);
                     }
@@ -305,12 +316,13 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             transferState.State = FileTransferState.Cancelled;
 
-            // Clean up partial download file
+            // Clean up partial download file using validated path (if available)
+            var cleanupPath = destinationPath ?? request.DestinationPath;
             try
             {
-                if (File.Exists(request.DestinationPath))
+                if (!string.IsNullOrEmpty(cleanupPath) && File.Exists(cleanupPath))
                 {
-                    File.Delete(request.DestinationPath);
+                    File.Delete(cleanupPath);
                     _logger.LogDebug("Cleaned up partial download for cancelled transfer {TransferId}", request.TransferId);
                 }
             }
@@ -391,7 +403,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 Direction = FileTransferDirection.Upload,
                 State = FileTransferState.Pending,
                 StartedAt = DateTimeOffset.UtcNow,
-                CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+                // Link to both caller's token and disposal token for proper cleanup
+                CancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token)
             };
 
             if (!_activeTransfers.TryAdd(request.TransferId, transferState))
@@ -593,6 +606,18 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             return;
         }
 
+        // Cancel in-flight transfers before disposing semaphore
+        // This prevents SemaphoreSlim.Release on a disposed semaphore
+        try
+        {
+            _disposeCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed, ignore
+        }
+
+        _disposeCts.Dispose();
         _transferSemaphore.Dispose();
         _disposed = true;
     }
