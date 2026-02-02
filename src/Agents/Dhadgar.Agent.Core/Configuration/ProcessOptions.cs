@@ -53,9 +53,47 @@ public sealed class ProcessOptions : IValidatableObject
     [Range(5, 60)]
     public int MetricsCollectionIntervalSeconds { get; set; } = 15;
 
+    /// <summary>
+    /// Enable Windows Service-based isolation for game servers (Windows only).
+    /// When enabled, each game server runs as a separate Windows Service with
+    /// its own Virtual Service Account and file ACL isolation.
+    /// Default is false (uses Job Object-based isolation instead).
+    /// </summary>
+    /// <remarks>
+    /// Service isolation provides stronger security boundaries:
+    /// - Each server runs under its own NT SERVICE\MeridianGS_{id} account
+    /// - File ACLs restrict each server to its own directory
+    /// - Processes are managed via Windows Service Control Manager
+    /// - Requires the GameServerWrapper executable to be deployed
+    /// </remarks>
+    public bool UseServiceIsolation { get; set; }
+
+    /// <summary>
+    /// Path to the GameServerWrapper executable (required when UseServiceIsolation is true).
+    /// Must be an absolute path. Only applicable on Windows.
+    /// </summary>
+    public string? GameServerWrapperPath { get; set; }
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // Validate GameServerWrapperPath when service isolation is enabled
+        if (UseServiceIsolation && OperatingSystem.IsWindows())
+        {
+            if (string.IsNullOrWhiteSpace(GameServerWrapperPath))
+            {
+                yield return new ValidationResult(
+                    $"{nameof(GameServerWrapperPath)} is required when {nameof(UseServiceIsolation)} is enabled",
+                    [nameof(GameServerWrapperPath)]);
+            }
+            else if (!Path.IsPathRooted(GameServerWrapperPath))
+            {
+                yield return new ValidationResult(
+                    $"{nameof(GameServerWrapperPath)} must be an absolute path",
+                    [nameof(GameServerWrapperPath)]);
+            }
+        }
+
         // ServerBasePath must be an absolute, normalized path to prevent path traversal
         if (!string.IsNullOrEmpty(ServerBasePath))
         {

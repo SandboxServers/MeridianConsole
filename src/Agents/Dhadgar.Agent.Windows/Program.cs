@@ -3,6 +3,9 @@ using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Hosting;
 using Dhadgar.Agent.Core.Process;
 using Dhadgar.Agent.Windows.Installation;
+using Dhadgar.Agent.Windows.IPC;
+using Dhadgar.Agent.Windows.Security;
+using Dhadgar.Agent.Windows.Services;
 using Dhadgar.Agent.Windows.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -55,6 +58,24 @@ public static class Program
 
             // Add Windows Firewall manager
             builder.Services.AddSingleton<FirewallManager>();
+
+            // Add service isolation components (used when Process.UseServiceIsolation is true)
+            builder.Services.AddSingleton<IWindowsServiceManager, WindowsServiceManager>();
+            builder.Services.AddSingleton<IDirectoryAclManager, DirectoryAclManager>();
+
+            // Register AgentPipeServer factory - requires NodeId which may not be known until enrollment
+            builder.Services.AddSingleton<IAgentPipeServer>(sp =>
+            {
+                var agentOptions = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
+                var logger = sp.GetRequiredService<ILogger<AgentPipeServer>>();
+                var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
+
+                // Use NodeId if enrolled, otherwise use a placeholder GUID
+                // (pipe server won't be started until after enrollment anyway)
+                var nodeId = agentOptions.NodeId ?? Guid.Empty;
+
+                return new AgentPipeServer(nodeId, logger, timeProvider);
+            });
 
             // Add Windows Event Log logging
             builder.Logging.AddEventLog(settings =>
