@@ -4,10 +4,20 @@
     <RootNamespace>Dhadgar.Agent.Windows</RootNamespace>
     <OutputType>Exe</OutputType>
 
+    <!-- Windows-specific runtime identifiers -->
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
     <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
+
+    <!-- Publish settings for deployment -->
+    <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
+
+    <!-- Enable unsafe code for P/Invoke operations -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!-- CA1303: Agents don't need localization for console output -->
     <NoWarn>$(NoWarn);CA1303</NoWarn>
@@ -20,6 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Windows Service hosting -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Logging.EventLog" />
+
     <!-- Security analyzers - critical for customer-hosted code -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>
