@@ -15,6 +15,38 @@ internal static partial class NativeMethods
 {
     private const string Kernel32 = "kernel32.dll";
 
+    private const string Shell32 = "shell32.dll";
+
+    #region Command Line Parsing APIs
+
+    /// <summary>
+    /// Parses a Unicode command line string and returns an array of pointers to the command line arguments.
+    /// </summary>
+    /// <param name="lpCmdLine">Pointer to a null-terminated Unicode string that contains the full command line.</param>
+    /// <param name="pNumArgs">Pointer to an int that receives the number of array elements returned.</param>
+    /// <returns>A pointer to an array of LPWSTR values, or NULL if the function fails.</returns>
+    /// <remarks>
+    /// SECURITY: This is the proper Windows API for parsing command lines. It handles all edge cases
+    /// including quoted strings, escaped characters, and special characters correctly.
+    /// The returned pointer must be freed using LocalFree.
+    /// </remarks>
+    [LibraryImport(Shell32, EntryPoint = "CommandLineToArgvW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    public static partial nint CommandLineToArgvW(
+        string lpCmdLine,
+        out int pNumArgs);
+
+    /// <summary>
+    /// Frees the specified local memory object and invalidates its handle.
+    /// </summary>
+    /// <param name="hMem">A handle to the local memory object.</param>
+    /// <returns>If the function succeeds, the return value is NULL. If the function fails, the return value equals hMem.</returns>
+    [LibraryImport(Kernel32, EntryPoint = "LocalFree", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    public static partial nint LocalFree(nint hMem);
+
+    #endregion
+
     #region Job Object APIs
 
     /// <summary>

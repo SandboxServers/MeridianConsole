@@ -44,11 +44,26 @@ public static class ServiceInstaller
             throw new InvalidOperationException("Failed to start sc.exe");
         }
 
-        process.WaitForExit(TimeSpan.FromSeconds(30));
+        // Read output before WaitForExit to avoid buffer deadlock
+        var error = process.StandardError.ReadToEnd();
+        var output = process.StandardOutput.ReadToEnd();
+
+        if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
+        {
+            try
+            {
+                process.Kill();
+            }
+            catch (InvalidOperationException)
+            {
+                // Process already exited
+            }
+
+            throw new InvalidOperationException("sc.exe command timed out.");
+        }
 
         if (process.ExitCode != 0)
         {
-            var error = process.StandardError.ReadToEnd();
             throw new InvalidOperationException(
                 $"Failed to configure service recovery. Exit code: {process.ExitCode}. Error: {error}");
         }
@@ -81,11 +96,26 @@ public static class ServiceInstaller
             throw new InvalidOperationException("Failed to start sc.exe");
         }
 
-        process.WaitForExit(TimeSpan.FromSeconds(30));
+        // Read output before WaitForExit to avoid buffer deadlock
+        var error = process.StandardError.ReadToEnd();
+        var output = process.StandardOutput.ReadToEnd();
+
+        if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
+        {
+            try
+            {
+                process.Kill();
+            }
+            catch (InvalidOperationException)
+            {
+                // Process already exited
+            }
+
+            throw new InvalidOperationException("sc.exe command timed out.");
+        }
 
         if (process.ExitCode != 0)
         {
-            var error = process.StandardError.ReadToEnd();
             throw new InvalidOperationException(
                 $"Failed to set service description. Exit code: {process.ExitCode}. Error: {error}");
         }
@@ -112,11 +142,26 @@ public static class ServiceInstaller
             throw new InvalidOperationException("Failed to start sc.exe");
         }
 
-        process.WaitForExit(TimeSpan.FromSeconds(30));
+        // Read output before WaitForExit to avoid buffer deadlock
+        var error = process.StandardError.ReadToEnd();
+        var output = process.StandardOutput.ReadToEnd();
+
+        if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
+        {
+            try
+            {
+                process.Kill();
+            }
+            catch (InvalidOperationException)
+            {
+                // Process already exited
+            }
+
+            throw new InvalidOperationException("sc.exe command timed out.");
+        }
 
         if (process.ExitCode != 0)
         {
-            var error = process.StandardError.ReadToEnd();
             throw new InvalidOperationException(
                 $"Failed to configure delayed auto-start. Exit code: {process.ExitCode}. Error: {error}");
         }

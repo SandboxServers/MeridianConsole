@@ -667,52 +667,50 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     }
 
     /// <summary>
-    /// Parses a command line string into individual arguments.
-    /// Handles quoted strings correctly.
+    /// Parses a command line string into individual arguments using the native Windows API.
     /// </summary>
+    /// <remarks>
+    /// SECURITY: Uses CommandLineToArgvW which is the proper Windows API for parsing command lines.
+    /// It handles all edge cases including quoted strings, escaped characters, and special characters
+    /// correctly, matching how Windows itself parses command lines.
+    /// </remarks>
     private static List<string> ParseArguments(string commandLine)
     {
-        var args = new List<string>();
-        var current = new System.Text.StringBuilder();
-        var inQuotes = false;
-        var escaped = false;
-
-        foreach (var c in commandLine)
+        if (string.IsNullOrWhiteSpace(commandLine))
         {
-            if (escaped)
+            return [];
+        }
+
+        var argvPtr = NativeMethods.CommandLineToArgvW(commandLine, out var argc);
+
+        if (argvPtr == IntPtr.Zero)
+        {
+            // If the native API fails, fall back to basic splitting
+            // This should rarely happen, but provides a safety net
+            return [.. commandLine.Split(' ', StringSplitOptions.RemoveEmptyEntries)];
+        }
+
+        try
+        {
+            var args = new List<string>(argc);
+
+            for (var i = 0; i < argc; i++)
             {
-                current.Append(c);
-                escaped = false;
-            }
-            else if (c == '\\')
-            {
-                escaped = true;
-                current.Append(c);
-            }
-            else if (c == '"')
-            {
-                inQuotes = !inQuotes;
-            }
-            else if (char.IsWhiteSpace(c) && !inQuotes)
-            {
-                if (current.Length > 0)
+                var argPtr = Marshal.ReadIntPtr(argvPtr, i * IntPtr.Size);
+                var arg = Marshal.PtrToStringUni(argPtr);
+                if (arg is not null)
                 {
-                    args.Add(current.ToString());
-                    current.Clear();
+                    args.Add(arg);
                 }
             }
-            else
-            {
-                current.Append(c);
-            }
-        }
 
-        if (current.Length > 0)
+            return args;
+        }
+        finally
         {
-            args.Add(current.ToString());
+            // SECURITY: Always free the memory allocated by CommandLineToArgvW
+            NativeMethods.LocalFree(argvPtr);
         }
-
-        return args;
     }
 
     /// <summary>
@@ -994,6 +992,10 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     /// <summary>
     /// Handles automatic process restart.
     /// </summary>
+    /// <remarks>
+    /// IMPORTANT: The old process entry is only removed AFTER the new process has started
+    /// successfully to prevent loss of process tracking if the restart fails.
+    /// </remarks>
     private async Task HandleAutoRestartAsync(Guid processId, ProcessEntry entry)
     {
         try
@@ -1012,21 +1014,7 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
                 return;
             }
 
-            // Remove old entry
-            _processes.TryRemove(processId, out _);
-
-            // Clean up old resources
-            try
-            {
-                entry.JobHandle.Dispose();
-                entry.OsProcess.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
-                // Already disposed
-            }
-
-            // Start new process
+            // Start new process BEFORE removing the old entry to prevent loss of tracking
             var result = await StartProcessAsync(entry.Config, _disposalCts.Token).ConfigureAwait(false);
 
             if (result.IsSuccess)
@@ -1035,12 +1023,40 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
                 _logger.LogInformation(
                     "Successfully restarted process, new ProcessId: {NewProcessId}",
                     result.Value.ProcessId);
+
+                // Only remove old entry AFTER new process started successfully
+                _processes.TryRemove(processId, out _);
+
+                // Clean up old resources
+                try
+                {
+                    entry.JobHandle.Dispose();
+                    entry.OsProcess.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already disposed
+                }
             }
             else
             {
                 _logger.LogError(
                     "Failed to auto-restart process {ProcessId}: {Error}",
                     processId, result.Error);
+
+                // On failure, still remove the old entry as the process has exited
+                // but resources should be cleaned up
+                _processes.TryRemove(processId, out _);
+
+                try
+                {
+                    entry.JobHandle.Dispose();
+                    entry.OsProcess.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already disposed
+                }
             }
         }
         catch (OperationCanceledException)

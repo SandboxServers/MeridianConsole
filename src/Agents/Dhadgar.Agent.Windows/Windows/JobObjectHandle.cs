@@ -17,7 +17,17 @@ internal sealed class JobObjectHandle : SafeHandleZeroOrMinusOneIsInvalid
     /// <summary>
     /// Initializes a new instance of the <see cref="JobObjectHandle"/> class.
     /// </summary>
-    public JobObjectHandle() : base(ownsHandle: true)
+    /// <remarks>
+    /// SECURITY: This constructor is private to prevent misuse. All JobObjectHandle instances
+    /// must be created with a valid handle via the constructor that takes an existingHandle parameter.
+    /// CA1419 is suppressed because this handle is only used internally and is never marshaled
+    /// from native code where a parameterless constructor would be required.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Interoperability",
+        "CA1419:Provide a parameterless constructor that is as visible as the containing type for concrete types derived from 'System.Runtime.InteropServices.SafeHandle'",
+        Justification = "This SafeHandle is only used internally and is never marshaled from native code. Making the constructor private prevents misuse.")]
+    private JobObjectHandle() : base(ownsHandle: true)
     {
     }
 

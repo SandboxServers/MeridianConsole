@@ -1,16 +1,77 @@
-using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+
+using Dhadgar.Shared.Results;
 
 using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.Agent.Windows.Windows;
 
+#region Windows Firewall COM Enums
+
 /// <summary>
-/// Manages Windows Firewall rules for game server ports.
+/// Specifies the IP protocol used by a firewall rule.
+/// </summary>
+internal enum NetFwIpProtocol
+{
+    /// <summary>TCP protocol.</summary>
+    Tcp = 6,
+
+    /// <summary>UDP protocol.</summary>
+    Udp = 17,
+}
+
+/// <summary>
+/// Specifies the direction of network traffic for a firewall rule.
+/// </summary>
+internal enum NetFwRuleDirection
+{
+    /// <summary>Inbound traffic.</summary>
+    In = 1,
+
+    /// <summary>Outbound traffic.</summary>
+    Out = 2,
+}
+
+/// <summary>
+/// Specifies the action taken by a firewall rule.
+/// </summary>
+internal enum NetFwAction
+{
+    /// <summary>Block the connection.</summary>
+    Block = 0,
+
+    /// <summary>Allow the connection.</summary>
+    Allow = 1,
+}
+
+/// <summary>
+/// Specifies the firewall profile types.
+/// </summary>
+[Flags]
+internal enum NetFwProfileType2
+{
+    /// <summary>Domain profile.</summary>
+    Domain = 0x0001,
+
+    /// <summary>Private profile.</summary>
+    Private = 0x0002,
+
+    /// <summary>Public profile.</summary>
+    Public = 0x0004,
+
+    /// <summary>All profiles.</summary>
+    All = 0x7FFFFFFF,
+}
+
+#endregion
+
+/// <summary>
+/// Manages Windows Firewall rules for game server ports using the native COM API.
 /// </summary>
 /// <remarks>
-/// SECURITY CRITICAL: This class executes netsh.exe commands to manage firewall rules.
-/// All inputs are strictly validated before command execution to prevent command injection.
+/// SECURITY CRITICAL: This class manages firewall rules via the Windows Firewall COM API (INetFwPolicy2).
+/// All inputs are strictly validated before any operations to prevent injection attacks.
 ///
 /// Validation requirements:
 /// - Rule names: alphanumeric, spaces, hyphens, underscores only (max 256 chars)
@@ -18,27 +79,57 @@ namespace Dhadgar.Agent.Windows.Windows;
 /// - Protocols: TCP or UDP only
 ///
 /// This code runs on customer hardware with elevated privileges - all changes require security review.
+///
+/// Benefits of COM API over netsh.exe:
+/// - No command-line parsing issues
+/// - No localization/language issues with netsh output
+/// - Direct API access is more reliable
+/// - Better error information from COM exceptions
 /// </remarks>
-internal sealed partial class FirewallManager
+internal sealed partial class FirewallManager : IDisposable
 {
     private const int MaxRuleNameLength = 256;
     private const int MinPort = 1;
     private const int MaxPort = 65535;
-    private const int CommandTimeoutSeconds = 30;
 
     private static readonly string[] AllowedProtocols = ["TCP", "UDP"];
 
     private readonly ILogger<FirewallManager> _logger;
+    private readonly object? _firewallPolicy;
+    private readonly dynamic? _rules;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FirewallManager"/> class.
     /// </summary>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when logger is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when Windows Firewall policy is not available.</exception>
     public FirewallManager(ILogger<FirewallManager> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
+
+        // Initialize COM firewall policy on Windows only
+        if (OperatingSystem.IsWindows())
+        {
+            var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+            if (policyType is null)
+            {
+                _logger.LogWarning("Windows Firewall policy COM type not available");
+                return;
+            }
+
+            _firewallPolicy = Activator.CreateInstance(policyType);
+            if (_firewallPolicy is null)
+            {
+                _logger.LogWarning("Failed to create Windows Firewall policy instance");
+                return;
+            }
+
+            // Get the Rules collection
+            _rules = ((dynamic)_firewallPolicy).Rules;
+        }
     }
 
     /// <summary>
@@ -46,8 +137,8 @@ internal sealed partial class FirewallManager
     /// Only allows alphanumeric characters, spaces, hyphens, and underscores.
     /// </summary>
     /// <remarks>
-    /// SECURITY: This pattern prevents command injection by rejecting any special characters
-    /// that could be interpreted by the shell (quotes, semicolons, pipes, backticks, etc.).
+    /// SECURITY: This pattern prevents injection by rejecting any special characters
+    /// that could be interpreted maliciously.
     /// </remarks>
     [GeneratedRegex(@"^[a-zA-Z0-9\s\-_]+$", RegexOptions.Compiled)]
     private static partial Regex RuleNamePattern();
@@ -58,14 +149,19 @@ internal sealed partial class FirewallManager
     /// <param name="port">The port number to allow (1-65535).</param>
     /// <param name="ruleName">The name for the firewall rule.</param>
     /// <param name="protocol">The protocol (TCP or UDP). Defaults to TCP.</param>
-    /// <returns>True if the rule was created successfully; false otherwise.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when port is outside valid range.</exception>
-    /// <exception cref="ArgumentException">Thrown when ruleName or protocol is invalid.</exception>
-    public bool AllowInboundPort(int port, string ruleName, string protocol = "TCP")
+    /// <returns>A result indicating success or failure with an error message.</returns>
+    public Result<bool> AllowInboundPort(int port, string ruleName, string protocol = "TCP")
     {
-        ValidatePort(port);
-        ValidateRuleName(ruleName);
-        ValidateProtocol(protocol);
+        var validationResult = ValidateInputs(port, ruleName, protocol);
+        if (validationResult.IsFailure)
+        {
+            return Result<bool>.Failure(validationResult.Error);
+        }
+
+        if (!OperatingSystem.IsWindows() || _firewallPolicy is null || _rules is null)
+        {
+            return Result<bool>.Failure("Windows Firewall API is not available on this system.");
+        }
 
         _logger.LogInformation(
             "Creating inbound firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}",
@@ -73,270 +169,325 @@ internal sealed partial class FirewallManager
             port,
             protocol);
 
-        // SECURITY: All parameters have been validated above before command construction
-        var arguments = $"advfirewall firewall add rule name=\"{ruleName}\" dir=in action=allow protocol={protocol} localport={port}";
-
-        var result = ExecuteNetshCommand(arguments);
-
-        if (result)
+        try
         {
-            _logger.LogInformation(
-                "Successfully created firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}",
-                ruleName,
-                port,
-                protocol);
+            // Create new firewall rule via COM
+            var ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
+            if (ruleType is null)
+            {
+                return Result<bool>.Failure("Windows Firewall rule COM type not available.");
+            }
+
+            var rule = Activator.CreateInstance(ruleType);
+            if (rule is null)
+            {
+                return Result<bool>.Failure("Failed to create firewall rule instance.");
+            }
+
+            try
+            {
+                dynamic dynamicRule = rule;
+
+                // Configure the rule
+                dynamicRule.Name = ruleName;
+                dynamicRule.Description = $"Meridian Console managed rule for port {port}/{protocol}";
+                dynamicRule.Protocol = protocol.Equals("TCP", StringComparison.OrdinalIgnoreCase)
+                    ? (int)NetFwIpProtocol.Tcp
+                    : (int)NetFwIpProtocol.Udp;
+                dynamicRule.LocalPorts = port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                dynamicRule.Action = (int)NetFwAction.Allow;
+                dynamicRule.Direction = (int)NetFwRuleDirection.In;
+                dynamicRule.Enabled = true;
+                dynamicRule.Profiles = (int)NetFwProfileType2.All;
+
+                // Add the rule to the firewall
+                _rules.Add(rule);
+
+                _logger.LogInformation(
+                    "Successfully created firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}",
+                    ruleName,
+                    port,
+                    protocol);
+
+                return Result<bool>.Success(true);
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(rule);
+            }
         }
-        else
+        catch (COMException ex)
         {
             _logger.LogError(
-                "Failed to create firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}",
+                ex,
+                "COM error creating firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}, HResult={HResult}",
                 ruleName,
                 port,
-                protocol);
-        }
+                protocol,
+                ex.HResult);
 
-        return result;
+            return Result<bool>.Failure($"Failed to create firewall rule: {ex.Message} (0x{ex.HResult:X8})");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Access denied creating firewall rule: Name={RuleName}. Ensure the agent runs with administrator privileges.",
+                ruleName);
+
+            return Result<bool>.Failure("Access denied. Administrator privileges are required to modify firewall rules.");
+        }
     }
 
     /// <summary>
     /// Removes a firewall rule by name.
     /// </summary>
     /// <param name="ruleName">The name of the firewall rule to remove.</param>
-    /// <returns>True if the rule was removed successfully; false otherwise.</returns>
-    /// <exception cref="ArgumentException">Thrown when ruleName is invalid.</exception>
-    public bool RemoveRule(string ruleName)
+    /// <returns>A result indicating success or failure with an error message.</returns>
+    public Result<bool> RemoveRule(string ruleName)
     {
-        ValidateRuleName(ruleName);
+        var validationResult = ValidateRuleNameInput(ruleName);
+        if (validationResult.IsFailure)
+        {
+            return Result<bool>.Failure(validationResult.Error);
+        }
+
+        if (!OperatingSystem.IsWindows() || _firewallPolicy is null || _rules is null)
+        {
+            return Result<bool>.Failure("Windows Firewall API is not available on this system.");
+        }
 
         _logger.LogInformation("Removing firewall rule: Name={RuleName}", ruleName);
 
-        // SECURITY: ruleName has been validated above before command construction
-        var arguments = $"advfirewall firewall delete rule name=\"{ruleName}\"";
-
-        var result = ExecuteNetshCommand(arguments);
-
-        if (result)
+        try
         {
+            _rules.Remove(ruleName);
+
             _logger.LogInformation("Successfully removed firewall rule: Name={RuleName}", ruleName);
-        }
-        else
-        {
-            _logger.LogWarning("Failed to remove firewall rule (may not exist): Name={RuleName}", ruleName);
-        }
 
-        return result;
+            return Result<bool>.Success(true);
+        }
+        catch (COMException ex) when (IsRuleNotFoundError(ex))
+        {
+            _logger.LogWarning("Firewall rule not found: Name={RuleName}", ruleName);
+            return Result<bool>.Failure($"Firewall rule '{ruleName}' not found.");
+        }
+        catch (COMException ex)
+        {
+            _logger.LogError(
+                ex,
+                "COM error removing firewall rule: Name={RuleName}, HResult={HResult}",
+                ruleName,
+                ex.HResult);
+
+            return Result<bool>.Failure($"Failed to remove firewall rule: {ex.Message} (0x{ex.HResult:X8})");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Access denied removing firewall rule: Name={RuleName}. Ensure the agent runs with administrator privileges.",
+                ruleName);
+
+            return Result<bool>.Failure("Access denied. Administrator privileges are required to modify firewall rules.");
+        }
     }
 
     /// <summary>
     /// Checks if a firewall rule with the specified name exists.
     /// </summary>
     /// <param name="ruleName">The name of the firewall rule to check.</param>
-    /// <returns>True if the rule exists; false otherwise.</returns>
-    /// <exception cref="ArgumentException">Thrown when ruleName is invalid.</exception>
-    public bool RuleExists(string ruleName)
+    /// <returns>A result containing true if the rule exists, false if not, or a failure with an error message.</returns>
+    public Result<bool> RuleExists(string ruleName)
     {
-        ValidateRuleName(ruleName);
+        var validationResult = ValidateRuleNameInput(ruleName);
+        if (validationResult.IsFailure)
+        {
+            return Result<bool>.Failure(validationResult.Error);
+        }
+
+        if (!OperatingSystem.IsWindows() || _firewallPolicy is null || _rules is null)
+        {
+            return Result<bool>.Failure("Windows Firewall API is not available on this system.");
+        }
 
         _logger.LogDebug("Checking if firewall rule exists: Name={RuleName}", ruleName);
 
-        // SECURITY: ruleName has been validated above before command construction
-        var arguments = $"advfirewall firewall show rule name=\"{ruleName}\"";
+        try
+        {
+            // Try to get the rule by name - throws if not found
+            _ = _rules.Item(ruleName);
 
-        var (exitCode, output, _) = ExecuteNetshCommandWithOutput(arguments);
+            _logger.LogDebug("Firewall rule exists: Name={RuleName}, Exists=True", ruleName);
+            return Result<bool>.Success(true);
+        }
+        catch (COMException ex) when (IsRuleNotFoundError(ex))
+        {
+            _logger.LogDebug("Firewall rule exists: Name={RuleName}, Exists=False", ruleName);
+            return Result<bool>.Success(false);
+        }
+        catch (COMException ex)
+        {
+            _logger.LogError(
+                ex,
+                "COM error checking firewall rule: Name={RuleName}, HResult={HResult}",
+                ruleName,
+                ex.HResult);
 
-        // netsh returns 0 when rule exists and outputs rule details
-        // netsh returns 1 when rule doesn't exist with message "No rules match the specified criteria"
-        var exists = exitCode == 0 && !output.Contains("No rules match", StringComparison.OrdinalIgnoreCase);
+            return Result<bool>.Failure($"Failed to check firewall rule: {ex.Message} (0x{ex.HResult:X8})");
+        }
+    }
 
-        _logger.LogDebug("Firewall rule exists check: Name={RuleName}, Exists={Exists}", ruleName, exists);
+    /// <summary>
+    /// Determines if a COM exception indicates the rule was not found.
+    /// </summary>
+    /// <param name="ex">The COM exception to check.</param>
+    /// <returns>True if the error indicates rule not found; otherwise, false.</returns>
+    private static bool IsRuleNotFoundError(COMException ex)
+    {
+        // HRESULT 0x80070002 = ERROR_FILE_NOT_FOUND (rule not found)
+        // HRESULT 0x80004005 = E_FAIL (sometimes returned for missing rules)
+        return ex.HResult is unchecked((int)0x80070002) or unchecked((int)0x80004005);
+    }
 
-        return exists;
+    /// <summary>
+    /// Validates all inputs for AllowInboundPort.
+    /// </summary>
+    /// <param name="port">The port to validate.</param>
+    /// <param name="ruleName">The rule name to validate.</param>
+    /// <param name="protocol">The protocol to validate.</param>
+    /// <returns>A result indicating validation success or failure.</returns>
+    private static Result ValidateInputs(int port, string ruleName, string protocol)
+    {
+        var portResult = ValidatePort(port);
+        if (portResult.IsFailure)
+        {
+            return portResult;
+        }
+
+        var ruleNameResult = ValidateRuleName(ruleName);
+        if (ruleNameResult.IsFailure)
+        {
+            return ruleNameResult;
+        }
+
+        return ValidateProtocol(protocol);
+    }
+
+    /// <summary>
+    /// Validates the rule name only (for RemoveRule and RuleExists).
+    /// </summary>
+    /// <param name="ruleName">The rule name to validate.</param>
+    /// <returns>A result indicating validation success or failure.</returns>
+    private static Result ValidateRuleNameInput(string ruleName)
+    {
+        return ValidateRuleName(ruleName);
     }
 
     /// <summary>
     /// Validates that the port number is within the valid range (1-65535).
     /// </summary>
     /// <param name="port">The port number to validate.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when port is outside valid range.</exception>
-    private static void ValidatePort(int port)
+    /// <returns>A result indicating validation success or failure.</returns>
+    private static Result ValidatePort(int port)
     {
         if (port < MinPort || port > MaxPort)
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(port),
-                port,
-                $"Port must be between {MinPort} and {MaxPort}.");
+            return Result.Failure($"Port must be between {MinPort} and {MaxPort}. Provided: {port}");
         }
+
+        return Result.Success();
     }
 
     /// <summary>
     /// Validates that the protocol is either TCP or UDP.
     /// </summary>
     /// <param name="protocol">The protocol to validate.</param>
-    /// <exception cref="ArgumentException">Thrown when protocol is not TCP or UDP.</exception>
-    private static void ValidateProtocol(string protocol)
+    /// <returns>A result indicating validation success or failure.</returns>
+    private static Result ValidateProtocol(string protocol)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(protocol, nameof(protocol));
+        if (string.IsNullOrWhiteSpace(protocol))
+        {
+            return Result.Failure("Protocol cannot be null or empty.");
+        }
 
         if (!AllowedProtocols.Contains(protocol, StringComparer.OrdinalIgnoreCase))
         {
-            throw new ArgumentException(
-                $"Protocol must be one of: {string.Join(", ", AllowedProtocols)}.",
-                nameof(protocol));
+            return Result.Failure($"Protocol must be one of: {string.Join(", ", AllowedProtocols)}. Provided: {protocol}");
         }
+
+        return Result.Success();
     }
 
     /// <summary>
-    /// Validates that the rule name is safe for use in netsh commands.
+    /// Validates that the rule name is safe for use with the firewall API.
     /// </summary>
     /// <param name="ruleName">The rule name to validate.</param>
-    /// <exception cref="ArgumentException">Thrown when ruleName is null, empty, too long, or contains invalid characters.</exception>
+    /// <returns>A result indicating validation success or failure.</returns>
     /// <remarks>
-    /// SECURITY: This validation is critical to prevent command injection attacks.
+    /// SECURITY: This validation is critical to prevent injection attacks.
     /// The regex pattern ensures only safe characters are allowed:
     /// - Alphanumeric characters (a-z, A-Z, 0-9)
     /// - Spaces
     /// - Hyphens (-)
     /// - Underscores (_)
     ///
-    /// Any shell metacharacters (quotes, semicolons, pipes, backticks, etc.) will cause validation to fail.
+    /// Any shell metacharacters or special characters will cause validation to fail.
     /// </remarks>
-    private static void ValidateRuleName(string ruleName)
+    private static Result ValidateRuleName(string ruleName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ruleName, nameof(ruleName));
+        if (string.IsNullOrWhiteSpace(ruleName))
+        {
+            return Result.Failure("Rule name cannot be null or empty.");
+        }
 
         if (ruleName.Length > MaxRuleNameLength)
         {
-            throw new ArgumentException(
-                $"Rule name must not exceed {MaxRuleNameLength} characters.",
-                nameof(ruleName));
+            return Result.Failure($"Rule name must not exceed {MaxRuleNameLength} characters. Provided length: {ruleName.Length}");
         }
 
         if (!RuleNamePattern().IsMatch(ruleName))
         {
-            throw new ArgumentException(
-                "Rule name contains invalid characters. Only alphanumeric characters, spaces, hyphens, and underscores are allowed.",
-                nameof(ruleName));
+            return Result.Failure("Rule name contains invalid characters. Only alphanumeric characters, spaces, hyphens, and underscores are allowed.");
         }
+
+        return Result.Success();
     }
 
     /// <summary>
-    /// Executes a netsh command and returns whether it succeeded.
+    /// Disposes of COM resources.
     /// </summary>
-    /// <param name="arguments">The netsh command arguments.</param>
-    /// <returns>True if the command exited with code 0; false otherwise.</returns>
-    private bool ExecuteNetshCommand(string arguments)
+    public void Dispose()
     {
-        var (exitCode, _, _) = ExecuteNetshCommandWithOutput(arguments);
-        return exitCode == 0;
-    }
-
-    /// <summary>
-    /// Executes a netsh command and returns the exit code and output.
-    /// </summary>
-    /// <param name="arguments">The netsh command arguments.</param>
-    /// <returns>A tuple containing (exitCode, standardOutput, standardError).</returns>
-    private (int ExitCode, string Output, string Error) ExecuteNetshCommandWithOutput(string arguments)
-    {
-        try
+        if (_disposed)
         {
-            using var process = new Process();
-            process.StartInfo = new ProcessStartInfo
-            {
-                FileName = "netsh.exe",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-
-            // SECURITY: Use ArgumentList instead of Arguments for defense-in-depth.
-            // Even though inputs are validated, ArgumentList provides additional protection
-            // against command injection by passing arguments as discrete values.
-            foreach (var arg in ParseNetshArguments(arguments))
-            {
-                process.StartInfo.ArgumentList.Add(arg);
-            }
-
-            process.Start();
-
-            // Read output before waiting to avoid deadlock on full buffers
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-
-            var completed = process.WaitForExit(TimeSpan.FromSeconds(CommandTimeoutSeconds));
-
-            if (!completed)
-            {
-                _logger.LogError("netsh command timed out after {Timeout} seconds", CommandTimeoutSeconds);
-                try
-                {
-                    process.Kill();
-                }
-                catch (InvalidOperationException)
-                {
-                    // Process already exited
-                }
-
-                return (-1, string.Empty, "Command timed out");
-            }
-
-            if (process.ExitCode != 0)
-            {
-                _logger.LogDebug(
-                    "netsh command failed with exit code {ExitCode}. Output: {Output}, Error: {Error}",
-                    process.ExitCode,
-                    output,
-                    error);
-            }
-
-            return (process.ExitCode, output, error);
+            return;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Exception executing netsh command");
-            return (-1, string.Empty, ex.Message);
-        }
-    }
 
-    /// <summary>
-    /// Parses a netsh command string into individual arguments.
-    /// Handles quoted strings correctly (e.g., name="My Rule Name").
-    /// </summary>
-    /// <param name="commandLine">The netsh command arguments as a single string.</param>
-    /// <returns>A list of individual arguments.</returns>
-    private static List<string> ParseNetshArguments(string commandLine)
-    {
-        var args = new List<string>();
-        var current = new System.Text.StringBuilder();
-        var inQuotes = false;
-
-        foreach (var c in commandLine)
+        if (_rules is not null)
         {
-            if (c == '"')
+            try
             {
-                inQuotes = !inQuotes;
-                current.Append(c);
+                Marshal.ReleaseComObject(_rules);
             }
-            else if (char.IsWhiteSpace(c) && !inQuotes)
+            catch (InvalidComObjectException)
             {
-                if (current.Length > 0)
-                {
-                    args.Add(current.ToString());
-                    current.Clear();
-                }
-            }
-            else
-            {
-                current.Append(c);
+                // Object may have already been released
             }
         }
 
-        if (current.Length > 0)
+        if (_firewallPolicy is not null)
         {
-            args.Add(current.ToString());
+            try
+            {
+                Marshal.ReleaseComObject(_firewallPolicy);
+            }
+            catch (InvalidComObjectException)
+            {
+                // Object may have already been released
+            }
         }
 
-        return args;
+        _disposed = true;
     }
 }

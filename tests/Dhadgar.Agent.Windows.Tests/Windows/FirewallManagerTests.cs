@@ -14,14 +14,24 @@ namespace Dhadgar.Agent.Windows.Tests.Windows;
 /// <remarks>
 /// Tests validation logic through public method interfaces since validation methods are private.
 /// Focuses on input validation and security-critical path validation.
+///
+/// The FirewallManager uses Result&lt;T&gt; for railway-oriented error handling.
+/// On non-Windows systems, methods return failures instead of throwing exceptions.
 /// </remarks>
-public sealed class FirewallManagerTests
+public sealed class FirewallManagerTests : IDisposable
 {
     private readonly ILogger<FirewallManager> _logger;
+    private readonly FirewallManager _manager;
 
     public FirewallManagerTests()
     {
         _logger = Substitute.For<ILogger<FirewallManager>>();
+        _manager = new FirewallManager(_logger);
+    }
+
+    public void Dispose()
+    {
+        _manager.Dispose();
     }
 
     #region Constructor Tests
@@ -38,7 +48,7 @@ public sealed class FirewallManagerTests
     public void Constructor_ValidLogger_CreatesInstance()
     {
         // Act
-        var manager = new FirewallManager(_logger);
+        using var manager = new FirewallManager(_logger);
 
         // Assert
         Assert.NotNull(manager);
@@ -49,74 +59,67 @@ public sealed class FirewallManagerTests
     #region Port Validation Tests (via AllowInboundPort)
 
     [Fact]
-    public void AllowInboundPort_Port0_ThrowsArgumentOutOfRangeException()
+    public void AllowInboundPort_Port0_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(0, "ValidRuleName", "TCP");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
-            manager.AllowInboundPort(0, "ValidRuleName", "TCP"));
-
-        Assert.Equal("port", exception.ParamName);
-        Assert.Contains("Port must be between 1 and 65535", exception.Message);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Port must be between 1 and 65535", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_Port65536_ThrowsArgumentOutOfRangeException()
+    public void AllowInboundPort_Port65536_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(65536, "ValidRuleName", "TCP");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
-            manager.AllowInboundPort(65536, "ValidRuleName", "TCP"));
-
-        Assert.Equal("port", exception.ParamName);
-        Assert.Contains("Port must be between 1 and 65535", exception.Message);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Port must be between 1 and 65535", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_Port1_DoesNotThrow()
+    public void AllowInboundPort_Port1_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(1, "ValidRuleName", "TCP");
 
-        // Act & Assert - We expect this to not throw during validation (may fail during execution on non-Windows)
-        // The validation should pass, execution failure is acceptable for this test
-        try
+        // Assert - On non-Windows, expect failure due to API unavailability, not validation failure
+        // On Windows, expect success (unless running without admin privileges)
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(1, "ValidRuleName", "TCP");
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            Assert.Fail("Port 1 should be valid and not throw ArgumentOutOfRangeException");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "port")
-        {
-            Assert.Fail("Port 1 should be valid and not throw ArgumentException for port parameter");
+            Assert.DoesNotContain("Port must be between", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_Port65535_DoesNotThrow()
+    public void AllowInboundPort_Port65535_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(65535, "ValidRuleName", "TCP");
 
-        // Act & Assert - Validation should pass
-        try
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(65535, "ValidRuleName", "TCP");
+            Assert.DoesNotContain("Port must be between", result.Error);
         }
-        catch (ArgumentOutOfRangeException)
-        {
-            Assert.Fail("Port 65535 should be valid and not throw ArgumentOutOfRangeException");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "port")
-        {
-            Assert.Fail("Port 65535 should be valid and not throw ArgumentException for port parameter");
-        }
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-100)]
+    [InlineData(65537)]
+    [InlineData(100000)]
+    public void AllowInboundPort_InvalidPorts_ReturnsFailure(int port)
+    {
+        // Act
+        var result = _manager.AllowInboundPort(port, "ValidRuleName", "TCP");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Port must be between 1 and 65535", result.Error);
     }
 
     #endregion
@@ -124,90 +127,89 @@ public sealed class FirewallManagerTests
     #region Protocol Validation Tests (via AllowInboundPort)
 
     [Fact]
-    public void AllowInboundPort_ProtocolTCP_DoesNotThrow()
+    public void AllowInboundPort_ProtocolTCP_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "TCP");
 
-        // Act & Assert - TCP should be valid
-        try
+        // Assert - TCP should be valid
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "ValidRuleName", "TCP");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "protocol")
-        {
-            Assert.Fail("Protocol 'TCP' should be valid and not throw ArgumentException");
+            Assert.DoesNotContain("Protocol must be one of", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_ProtocolUDP_DoesNotThrow()
+    public void AllowInboundPort_ProtocolUDP_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "UDP");
 
-        // Act & Assert - UDP should be valid
-        try
+        // Assert - UDP should be valid
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "ValidRuleName", "UDP");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "protocol")
-        {
-            Assert.Fail("Protocol 'UDP' should be valid and not throw ArgumentException");
+            Assert.DoesNotContain("Protocol must be one of", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_ProtocolICMP_ThrowsArgumentException()
+    public void AllowInboundPort_ProtocolICMP_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "ICMP");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "ValidRuleName", "ICMP"));
-
-        Assert.Equal("protocol", exception.ParamName);
-        Assert.Contains("Protocol must be one of: TCP, UDP", exception.Message);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Protocol must be one of: TCP, UDP", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_ProtocolNull_ThrowsArgumentNullException()
+    public void AllowInboundPort_ProtocolNull_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", null!);
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            manager.AllowInboundPort(8080, "ValidRuleName", null!));
-
-        Assert.Equal("protocol", exception.ParamName);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Protocol cannot be null or empty", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_ProtocolEmpty_ThrowsArgumentException()
+    public void AllowInboundPort_ProtocolEmpty_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "ValidRuleName", ""));
-
-        Assert.Equal("protocol", exception.ParamName);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Protocol cannot be null or empty", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_ProtocolWhitespace_ThrowsArgumentException()
+    public void AllowInboundPort_ProtocolWhitespace_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "   ");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "ValidRuleName", "   "));
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Protocol cannot be null or empty", result.Error);
+    }
 
-        Assert.Equal("protocol", exception.ParamName);
+    [Theory]
+    [InlineData("HTTP")]
+    [InlineData("HTTPS")]
+    [InlineData("SSH")]
+    [InlineData("FTP")]
+    [InlineData("ANY")]
+    public void AllowInboundPort_UnsupportedProtocols_ReturnsFailure(string protocol)
+    {
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", protocol);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Protocol must be one of: TCP, UDP", result.Error);
     }
 
     #endregion
@@ -215,312 +217,236 @@ public sealed class FirewallManagerTests
     #region Rule Name Validation Tests (via AllowInboundPort, RemoveRule, RuleExists)
 
     [Fact]
-    public void AllowInboundPort_RuleNameNull_ThrowsArgumentNullException()
+    public void AllowInboundPort_RuleNameNull_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, null!, "TCP");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            manager.AllowInboundPort(8080, null!, "TCP"));
-
-        Assert.Equal("ruleName", exception.ParamName);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name cannot be null or empty", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameEmpty_ThrowsArgumentException()
+    public void AllowInboundPort_RuleNameEmpty_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "", "TCP");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "", "TCP"));
-
-        Assert.Equal("ruleName", exception.ParamName);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name cannot be null or empty", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameWhitespace_ThrowsArgumentException()
+    public void AllowInboundPort_RuleNameWhitespace_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "   ", "TCP");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "   ", "TCP"));
-
-        Assert.Equal("ruleName", exception.ParamName);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name cannot be null or empty", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameExceedsMaxLength_ThrowsArgumentException()
+    public void AllowInboundPort_RuleNameExceedsMaxLength_ReturnsFailure()
     {
         // Arrange
-        var manager = new FirewallManager(_logger);
         var longRuleName = new string('a', 257); // MaxRuleNameLength is 256
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, longRuleName, "TCP"));
+        // Act
+        var result = _manager.AllowInboundPort(8080, longRuleName, "TCP");
 
-        Assert.Equal("ruleName", exception.ParamName);
-        Assert.Contains("Rule name must not exceed 256 characters", exception.Message);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name must not exceed 256 characters", result.Error);
+    }
+
+    [Theory]
+    [InlineData("Invalid;Rule")]
+    [InlineData("Invalid|Rule")]
+    [InlineData("Invalid&Rule")]
+    [InlineData("Invalid`Rule")]
+    [InlineData("Invalid$Rule")]
+    [InlineData("Invalid\"Rule")]
+    [InlineData("Invalid'Rule")]
+    [InlineData("Invalid<Rule>")]
+    [InlineData("Invalid(Rule)")]
+    [InlineData("Invalid{Rule}")]
+    [InlineData("Invalid!Rule")]
+    [InlineData("Invalid@Rule")]
+    [InlineData("Invalid#Rule")]
+    [InlineData("Invalid%Rule")]
+    [InlineData("Invalid^Rule")]
+    [InlineData("Invalid*Rule")]
+    public void AllowInboundPort_RuleNameContainsSpecialCharacters_ReturnsFailure(string ruleName)
+    {
+        // Act
+        var result = _manager.AllowInboundPort(8080, ruleName, "TCP");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name contains invalid characters", result.Error);
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameContainsSemicolon_ThrowsArgumentException()
+    public void AllowInboundPort_RuleNameValidAlphanumeric_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRule123", "TCP");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "Invalid;Rule", "TCP"));
-
-        Assert.Equal("ruleName", exception.ParamName);
-        Assert.Contains("Rule name contains invalid characters", exception.Message);
-    }
-
-    [Fact]
-    public void AllowInboundPort_RuleNameContainsPipe_ThrowsArgumentException()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "Invalid|Rule", "TCP"));
-
-        Assert.Equal("ruleName", exception.ParamName);
-        Assert.Contains("Rule name contains invalid characters", exception.Message);
-    }
-
-    [Fact]
-    public void AllowInboundPort_RuleNameContainsAmpersand_ThrowsArgumentException()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "Invalid&Rule", "TCP"));
-
-        Assert.Equal("ruleName", exception.ParamName);
-        Assert.Contains("Rule name contains invalid characters", exception.Message);
-    }
-
-    [Fact]
-    public void AllowInboundPort_RuleNameContainsBacktick_ThrowsArgumentException()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.AllowInboundPort(8080, "Invalid`Rule", "TCP"));
-
-        Assert.Equal("ruleName", exception.ParamName);
-        Assert.Contains("Rule name contains invalid characters", exception.Message);
-    }
-
-    [Fact]
-    public void AllowInboundPort_RuleNameValidAlphanumeric_DoesNotThrow()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        try
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "ValidRule123", "TCP");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "ruleName")
-        {
-            Assert.Fail("Valid alphanumeric rule name should not throw ArgumentException");
+            Assert.DoesNotContain("Rule name", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameWithSpaces_DoesNotThrow()
+    public void AllowInboundPort_RuleNameWithSpaces_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "Valid Rule Name", "TCP");
 
-        // Act & Assert
-        try
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "Valid Rule Name", "TCP");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "ruleName")
-        {
-            Assert.Fail("Rule name with spaces should not throw ArgumentException");
+            Assert.DoesNotContain("Rule name", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameWithHyphens_DoesNotThrow()
+    public void AllowInboundPort_RuleNameWithHyphens_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "Valid-Rule-Name", "TCP");
 
-        // Act & Assert
-        try
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "Valid-Rule-Name", "TCP");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "ruleName")
-        {
-            Assert.Fail("Rule name with hyphens should not throw ArgumentException");
+            Assert.DoesNotContain("Rule name", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameWithUnderscores_DoesNotThrow()
+    public void AllowInboundPort_RuleNameWithUnderscores_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "Valid_Rule_Name", "TCP");
 
-        // Act & Assert
-        try
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "Valid_Rule_Name", "TCP");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "ruleName")
-        {
-            Assert.Fail("Rule name with underscores should not throw ArgumentException");
+            Assert.DoesNotContain("Rule name", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_RuleNameAtMaxLength_DoesNotThrow()
+    public void AllowInboundPort_RuleNameAtMaxLength_PassesValidation()
     {
         // Arrange
-        var manager = new FirewallManager(_logger);
         var maxLengthRuleName = new string('a', 256); // MaxRuleNameLength is 256
 
-        // Act & Assert
-        try
+        // Act
+        var result = _manager.AllowInboundPort(8080, maxLengthRuleName, "TCP");
+
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, maxLengthRuleName, "TCP");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "ruleName")
-        {
-            Assert.Fail("Rule name at max length (256) should not throw ArgumentException");
-        }
-    }
-
-    [Fact]
-    public void RemoveRule_RuleNameNull_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            manager.RemoveRule(null!));
-
-        Assert.Equal("ruleName", exception.ParamName);
-    }
-
-    [Fact]
-    public void RemoveRule_RuleNameEmpty_ThrowsArgumentException()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.RemoveRule(""));
-
-        Assert.Equal("ruleName", exception.ParamName);
-    }
-
-    [Fact]
-    public void RemoveRule_RuleNameContainsSpecialCharacters_ThrowsArgumentException()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.RemoveRule("Invalid;Rule"));
-
-        Assert.Equal("ruleName", exception.ParamName);
-        Assert.Contains("Rule name contains invalid characters", exception.Message);
-    }
-
-    [Fact]
-    public void RemoveRule_ValidRuleName_DoesNotThrow()
-    {
-        // Arrange
-        var manager = new FirewallManager(_logger);
-
-        // Act & Assert
-        try
-        {
-            manager.RemoveRule("Valid-Rule_Name 123");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "ruleName")
-        {
-            Assert.Fail("Valid rule name should not throw ArgumentException");
+            Assert.DoesNotContain("Rule name must not exceed", result.Error);
         }
     }
 
     [Fact]
-    public void RuleExists_RuleNameNull_ThrowsArgumentNullException()
+    public void RemoveRule_RuleNameNull_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.RemoveRule(null!);
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(() =>
-            manager.RuleExists(null!));
-
-        Assert.Equal("ruleName", exception.ParamName);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name cannot be null or empty", result.Error);
     }
 
     [Fact]
-    public void RuleExists_RuleNameEmpty_ThrowsArgumentException()
+    public void RemoveRule_RuleNameEmpty_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.RemoveRule("");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.RuleExists(""));
-
-        Assert.Equal("ruleName", exception.ParamName);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name cannot be null or empty", result.Error);
     }
 
     [Fact]
-    public void RuleExists_RuleNameContainsSpecialCharacters_ThrowsArgumentException()
+    public void RemoveRule_RuleNameContainsSpecialCharacters_ReturnsFailure()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.RemoveRule("Invalid;Rule");
 
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() =>
-            manager.RuleExists("Invalid|Rule"));
-
-        Assert.Equal("ruleName", exception.ParamName);
-        Assert.Contains("Rule name contains invalid characters", exception.Message);
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name contains invalid characters", result.Error);
     }
 
     [Fact]
-    public void RuleExists_ValidRuleName_DoesNotThrow()
+    public void RemoveRule_ValidRuleName_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.RemoveRule("Valid-Rule_Name 123");
 
-        // Act & Assert
-        try
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            manager.RuleExists("Valid-Rule_Name 123");
+            Assert.DoesNotContain("Rule name", result.Error);
         }
-        catch (ArgumentException ex) when (ex.ParamName == "ruleName")
+    }
+
+    [Fact]
+    public void RuleExists_RuleNameNull_ReturnsFailure()
+    {
+        // Act
+        var result = _manager.RuleExists(null!);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name cannot be null or empty", result.Error);
+    }
+
+    [Fact]
+    public void RuleExists_RuleNameEmpty_ReturnsFailure()
+    {
+        // Act
+        var result = _manager.RuleExists("");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name cannot be null or empty", result.Error);
+    }
+
+    [Fact]
+    public void RuleExists_RuleNameContainsSpecialCharacters_ReturnsFailure()
+    {
+        // Act
+        var result = _manager.RuleExists("Invalid|Rule");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("Rule name contains invalid characters", result.Error);
+    }
+
+    [Fact]
+    public void RuleExists_ValidRuleName_PassesValidation()
+    {
+        // Act
+        var result = _manager.RuleExists("Valid-Rule_Name 123");
+
+        // Assert - Validation should pass
+        if (result.IsFailure)
         {
-            Assert.Fail("Valid rule name should not throw ArgumentException");
+            Assert.DoesNotContain("Rule name", result.Error);
         }
     }
 
@@ -529,53 +455,171 @@ public sealed class FirewallManagerTests
     #region Protocol Case Sensitivity Tests
 
     [Fact]
-    public void AllowInboundPort_ProtocolTcpLowercase_DoesNotThrow()
+    public void AllowInboundPort_ProtocolTcpLowercase_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "tcp");
 
-        // Act & Assert - Protocol validation is case-insensitive
-        try
+        // Assert - Protocol validation is case-insensitive
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "ValidRuleName", "tcp");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "protocol")
-        {
-            Assert.Fail("Protocol 'tcp' (lowercase) should be valid and not throw ArgumentException");
+            Assert.DoesNotContain("Protocol must be one of", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_ProtocolUdpLowercase_DoesNotThrow()
+    public void AllowInboundPort_ProtocolUdpLowercase_PassesValidation()
     {
-        // Arrange
-        var manager = new FirewallManager(_logger);
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "udp");
 
-        // Act & Assert - Protocol validation is case-insensitive
-        try
+        // Assert - Protocol validation is case-insensitive
+        if (result.IsFailure)
         {
-            manager.AllowInboundPort(8080, "ValidRuleName", "udp");
-        }
-        catch (ArgumentException ex) when (ex.ParamName == "protocol")
-        {
-            Assert.Fail("Protocol 'udp' (lowercase) should be valid and not throw ArgumentException");
+            Assert.DoesNotContain("Protocol must be one of", result.Error);
         }
     }
 
     [Fact]
-    public void AllowInboundPort_ProtocolMixedCase_DoesNotThrow()
+    public void AllowInboundPort_ProtocolMixedCase_PassesValidation()
+    {
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", "Tcp");
+
+        // Assert - Protocol validation is case-insensitive
+        if (result.IsFailure)
+        {
+            Assert.DoesNotContain("Protocol must be one of", result.Error);
+        }
+    }
+
+    [Theory]
+    [InlineData("tcp")]
+    [InlineData("TCP")]
+    [InlineData("Tcp")]
+    [InlineData("tCp")]
+    [InlineData("udp")]
+    [InlineData("UDP")]
+    [InlineData("Udp")]
+    [InlineData("uDp")]
+    public void AllowInboundPort_ProtocolCaseVariations_PassesValidation(string protocol)
+    {
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRuleName", protocol);
+
+        // Assert - Protocol validation is case-insensitive
+        if (result.IsFailure)
+        {
+            Assert.DoesNotContain("Protocol must be one of", result.Error);
+        }
+    }
+
+    #endregion
+
+    #region Result Type Tests
+
+    [Fact]
+    public void AllowInboundPort_InvalidInput_ReturnsResultWithIsFailureTrue()
+    {
+        // Act
+        var result = _manager.AllowInboundPort(-1, "ValidRule", "TCP");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.False(result.IsSuccess);
+        Assert.False(string.IsNullOrEmpty(result.Error));
+    }
+
+    [Fact]
+    public void RemoveRule_InvalidInput_ReturnsResultWithIsFailureTrue()
+    {
+        // Act
+        var result = _manager.RemoveRule("");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.False(result.IsSuccess);
+        Assert.False(string.IsNullOrEmpty(result.Error));
+    }
+
+    [Fact]
+    public void RuleExists_InvalidInput_ReturnsResultWithIsFailureTrue()
+    {
+        // Act
+        var result = _manager.RuleExists("Invalid|Rule");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.False(result.IsSuccess);
+        Assert.False(string.IsNullOrEmpty(result.Error));
+    }
+
+    #endregion
+
+    #region Dispose Tests
+
+    [Fact]
+    public void Dispose_MultipleCalls_DoesNotThrow()
     {
         // Arrange
-        var manager = new FirewallManager(_logger);
+        using var manager = new FirewallManager(_logger);
 
-        // Act & Assert - Protocol validation is case-insensitive
-        try
+        // Act & Assert - Multiple dispose calls should not throw
+        manager.Dispose();
+        manager.Dispose();
+        manager.Dispose();
+    }
+
+    [Fact]
+    public void Dispose_ImplementsIDisposable()
+    {
+        // Assert
+        Assert.True(typeof(IDisposable).IsAssignableFrom(typeof(FirewallManager)));
+    }
+
+    #endregion
+
+    #region Non-Windows Behavior Tests
+
+    [Fact]
+    public void AllowInboundPort_OnNonWindows_ReturnsAppropriateError()
+    {
+        // Act
+        var result = _manager.AllowInboundPort(8080, "ValidRule", "TCP");
+
+        // Assert - On non-Windows systems, should indicate API unavailability
+        if (!OperatingSystem.IsWindows())
         {
-            manager.AllowInboundPort(8080, "ValidRuleName", "Tcp");
+            Assert.True(result.IsFailure);
+            Assert.Contains("not available", result.Error);
         }
-        catch (ArgumentException ex) when (ex.ParamName == "protocol")
+    }
+
+    [Fact]
+    public void RemoveRule_OnNonWindows_ReturnsAppropriateError()
+    {
+        // Act
+        var result = _manager.RemoveRule("ValidRule");
+
+        // Assert - On non-Windows systems, should indicate API unavailability
+        if (!OperatingSystem.IsWindows())
         {
-            Assert.Fail("Protocol 'Tcp' (mixed case) should be valid and not throw ArgumentException");
+            Assert.True(result.IsFailure);
+            Assert.Contains("not available", result.Error);
+        }
+    }
+
+    [Fact]
+    public void RuleExists_OnNonWindows_ReturnsAppropriateError()
+    {
+        // Act
+        var result = _manager.RuleExists("ValidRule");
+
+        // Assert - On non-Windows systems, should indicate API unavailability
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.True(result.IsFailure);
+            Assert.Contains("not available", result.Error);
         }
     }
 

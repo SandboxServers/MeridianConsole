@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Dhadgar.Agent.Core.Authentication;
 using Microsoft.Extensions.Logging;
 
@@ -389,6 +391,10 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     /// <summary>
     /// Imports a certificate with its private key from PEM or PKCS#8 format.
     /// </summary>
+    /// <remarks>
+    /// SECURITY: This method uses ArrayPool and Span to avoid creating immutable strings
+    /// containing private key data. All temporary buffers are cleared before returning.
+    /// </remarks>
     private static Task<X509Certificate2> ImportCertificateWithKeyAsync(
         X509Certificate2 certificate,
         byte[] privateKeyBytes,
@@ -396,33 +402,87 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // NOTE: This creates an immutable string containing the private key.
-        // Managed strings cannot be securely cleared. This is a known limitation
-        // of .NET crypto APIs when dealing with PEM-formatted keys.
-        var keyString = System.Text.Encoding.UTF8.GetString(privateKeyBytes);
-        var isPem = keyString.Contains("-----BEGIN", StringComparison.Ordinal);
+        // SECURITY: Check for PEM format using byte comparison instead of string conversion
+        // This avoids creating an immutable string containing private key data
+        ReadOnlySpan<byte> pemHeader = "-----BEGIN"u8;
+        var isPem = privateKeyBytes.AsSpan().IndexOf(pemHeader) >= 0;
 
-        // Try RSA first
-        var (certWithKey, rsaSuccess) = TryImportWithRsa(certificate, privateKeyBytes, keyString, isPem);
-
-        if (!rsaSuccess)
-        {
-            // Try ECDSA if RSA failed
-            (certWithKey, var ecdsaSuccess) = TryImportWithEcdsa(certificate, privateKeyBytes, keyString, isPem);
-
-            if (!ecdsaSuccess)
-            {
-                throw new CryptographicException("Failed to import private key - unsupported key type or invalid format");
-            }
-        }
-
-        // Export and re-import to ensure the certificate is exportable and persisted properly
-        // This is necessary for Windows certificate store operations
-        var pfxBytes = certWithKey!.Export(X509ContentType.Pfx);
-        certWithKey.Dispose();
+        char[]? charBuffer = null;
 
         try
         {
+            // For PEM parsing, we need characters but use a pooled buffer that can be cleared
+            ReadOnlySpan<char> keyChars = ReadOnlySpan<char>.Empty;
+
+            if (isPem)
+            {
+                // SECURITY: Use ArrayPool for char buffer so we can clear it after use
+                charBuffer = ArrayPool<char>.Shared.Rent(privateKeyBytes.Length);
+                var charCount = Encoding.UTF8.GetChars(privateKeyBytes, charBuffer);
+                keyChars = charBuffer.AsSpan(0, charCount);
+            }
+
+            // Try RSA first, then ECDSA
+            var certWithKey = TryImportWithRsaOrEcdsa(certificate, privateKeyBytes, keyChars, isPem);
+
+            // Export and re-import to ensure the certificate is persisted properly
+            // This is necessary for Windows certificate store operations
+            return ExportAndReimportCertificate(certWithKey);
+        }
+        finally
+        {
+            // SECURITY: Clear and return the char buffer to the pool
+            if (charBuffer is not null)
+            {
+                CryptographicOperations.ZeroMemory(
+                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(charBuffer.AsSpan()));
+                ArrayPool<char>.Shared.Return(charBuffer);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tries to import a private key as RSA or ECDSA and combine with certificate.
+    /// </summary>
+    private static X509Certificate2 TryImportWithRsaOrEcdsa(
+        X509Certificate2 certificate,
+        byte[] privateKeyBytes,
+        ReadOnlySpan<char> keyChars,
+        bool isPem)
+    {
+        // Try RSA first
+        var (rsaCert, rsaSuccess) = TryImportWithRsa(certificate, privateKeyBytes, keyChars, isPem);
+        if (rsaSuccess)
+        {
+            return rsaCert!;
+        }
+
+        // Try ECDSA if RSA failed
+        var (ecdsaCert, ecdsaSuccess) = TryImportWithEcdsa(certificate, privateKeyBytes, keyChars, isPem);
+        if (ecdsaSuccess)
+        {
+            return ecdsaCert!;
+        }
+
+        throw new CryptographicException("Failed to import private key - unsupported key type or invalid format");
+    }
+
+    /// <summary>
+    /// Exports the certificate to PFX and re-imports with proper storage flags.
+    /// </summary>
+    /// <remarks>
+    /// SECURITY: The Exportable flag is intentional here - the Windows certificate
+    /// store requires it to persist the private key properly for mTLS operations.
+    /// The key is protected by Windows DPAPI and machine-level ACLs.
+    /// </remarks>
+    private static Task<X509Certificate2> ExportAndReimportCertificate(X509Certificate2 certWithKey)
+    {
+        byte[]? pfxBytes = null;
+        try
+        {
+            pfxBytes = certWithKey.Export(X509ContentType.Pfx);
+            certWithKey.Dispose();
+
             var finalCert = new X509Certificate2(
                 pfxBytes,
                 (string?)null,
@@ -434,18 +494,26 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
         }
         finally
         {
-            // SECURITY: Clear the PFX bytes from memory even on exception
-            Array.Clear(pfxBytes, 0, pfxBytes.Length);
+            // SECURITY: Clear the PFX bytes from memory
+            if (pfxBytes is not null)
+            {
+                CryptographicOperations.ZeroMemory(pfxBytes);
+            }
         }
     }
 
     /// <summary>
     /// Attempts to import a private key as RSA and combine with certificate.
     /// </summary>
+    /// <param name="certificate">The certificate to combine with the key.</param>
+    /// <param name="privateKeyBytes">The raw private key bytes (used for PKCS#8).</param>
+    /// <param name="keyChars">The key as characters (used for PEM). Can be empty if not PEM.</param>
+    /// <param name="isPem">True if the key is in PEM format.</param>
+    /// <returns>A tuple containing the certificate with key (if successful) and a success flag.</returns>
     private static (X509Certificate2? Certificate, bool Success) TryImportWithRsa(
         X509Certificate2 certificate,
         byte[] privateKeyBytes,
-        string keyString,
+        ReadOnlySpan<char> keyChars,
         bool isPem)
     {
         using var rsaKey = RSA.Create();
@@ -454,7 +522,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
         {
             if (isPem)
             {
-                rsaKey.ImportFromPem(keyString);
+                rsaKey.ImportFromPem(keyChars);
             }
             else
             {
@@ -472,10 +540,15 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     /// <summary>
     /// Attempts to import a private key as ECDSA and combine with certificate.
     /// </summary>
+    /// <param name="certificate">The certificate to combine with the key.</param>
+    /// <param name="privateKeyBytes">The raw private key bytes (used for PKCS#8).</param>
+    /// <param name="keyChars">The key as characters (used for PEM). Can be empty if not PEM.</param>
+    /// <param name="isPem">True if the key is in PEM format.</param>
+    /// <returns>A tuple containing the certificate with key (if successful) and a success flag.</returns>
     private static (X509Certificate2? Certificate, bool Success) TryImportWithEcdsa(
         X509Certificate2 certificate,
         byte[] privateKeyBytes,
-        string keyString,
+        ReadOnlySpan<char> keyChars,
         bool isPem)
     {
         using var ecdsaKey = ECDsa.Create();
@@ -484,7 +557,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
         {
             if (isPem)
             {
-                ecdsaKey.ImportFromPem(keyString);
+                ecdsaKey.ImportFromPem(keyChars);
             }
             else
             {
