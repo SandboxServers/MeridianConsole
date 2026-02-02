@@ -123,7 +123,9 @@ public sealed class NativeMethodsTests
     public void JOBOBJECT_CPU_RATE_CONTROL_INFORMATION_HasExpectedSize()
     {
         // Arrange
-        const int expectedSize = 12; // CpuRateControlFlags (4) + CpuRate (4) + MaxRate (4) = 12 bytes
+        // Win32 union: ControlFlags (4 bytes) + union of CpuRate/Weight/MinRate+MaxRate (4 bytes) = 8 bytes
+        // The union members share the same 4 bytes at offset 4
+        const int expectedSize = 8;
 
         // Act
         var actualSize = Marshal.SizeOf<NativeMethods.JOBOBJECT_CPU_RATE_CONTROL_INFORMATION>();
@@ -252,9 +254,9 @@ public sealed class NativeMethodsTests
         var maxRateOffset = Marshal.OffsetOf(type, nameof(NativeMethods.JOBOBJECT_CPU_RATE_CONTROL_INFORMATION.MaxRate));
 
         // Assert
-        Assert.Equal(0, controlFlagsOffset.ToInt32()); // First field at offset 0
-        Assert.Equal(4, cpuRateOffset.ToInt32());      // Second field at offset 4
-        Assert.Equal(8, maxRateOffset.ToInt32());      // Third field at offset 8
+        Assert.Equal(0, controlFlagsOffset.ToInt32()); // ControlFlags at offset 0
+        Assert.Equal(4, cpuRateOffset.ToInt32());      // Union starts at offset 4
+        Assert.Equal(6, maxRateOffset.ToInt32());      // MaxRate is second ushort in MinRate/MaxRate struct (offset 4 + 2 = 6)
     }
 
     #endregion
