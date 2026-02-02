@@ -109,6 +109,11 @@
     <PackageVersion Include="Aspire.RabbitMQ.Client" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.1.0" />
 
+    <!-- WiX Installer -->
+    <PackageVersion Include="WixToolset.Sdk" Version="5.0.2" />
+    <PackageVersion Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageVersion Include="WixToolset.Util.wixext" Version="5.0.2" />
+
     <!-- Tests -->
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />

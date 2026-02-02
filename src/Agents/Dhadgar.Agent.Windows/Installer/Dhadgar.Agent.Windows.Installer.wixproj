@@ -1,0 +1,65 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <!--
+    WiX v5 SDK-style project for Meridian Console Agent MSI installer.
+
+    Build commands:
+      dotnet build                           - Build MSI (requires agent to be published first)
+      dotnet build -c Release                - Build Release MSI
+
+    IMPORTANT: Before building the installer, publish the agent:
+      dotnet publish ../Dhadgar.Agent.Windows.csproj -c Release -r win-x64 /publish
+
+    The MSI will be output to: bin\$(Configuration)\en-US\
+  -->
+
+  <PropertyGroup>
+    <!-- Output Configuration -->
+    <OutputName>MeridianConsoleAgent</OutputName>
+    <OutputType>Package</OutputType>
+
+    <!-- Compression -->
+    <DefaultCompressionLevel>high</DefaultCompressionLevel>
+
+    <!-- Suppress ICE validation during development (enable for release) -->
+    <SuppressIces>ICE61</SuppressIces>
+  </PropertyGroup>
+
+  <!-- WiX extensions -->
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+  <!--
+    Bind paths for finding published files.
+    The agent must be published before building the installer.
+
+    Build sequence:
+    1. dotnet publish ../Dhadgar.Agent.Windows.csproj -c Release -r win-x64
+    2. dotnet build -c Release (this project)
+  -->
+  <ItemGroup>
+    <!-- Look for files in the publish output directory -->
+    <BindPath Include="..\bin\Release\net10.0\win-x64\publish" Condition="'$(Configuration)' == 'Release'" />
+    <BindPath Include="..\bin\Debug\net10.0\win-x64\publish" Condition="'$(Configuration)' == 'Debug'" />
+
+    <!-- Also look in the direct output directory for appsettings -->
+    <BindPath Include="..\bin\Release\net10.0\win-x64" Condition="'$(Configuration)' == 'Release'" />
+    <BindPath Include="..\bin\Debug\net10.0\win-x64" Condition="'$(Configuration)' == 'Debug'" />
+
+    <!-- Local installer directory for License.rtf -->
+    <BindPath Include="." />
+  </ItemGroup>
+
+  <!--
+    Build dependency on the agent project.
+    Note: This builds but doesn't automatically publish.
+    You must publish the agent separately before building the installer.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Dhadgar.Agent.Windows.csproj">
+      <DoNotHarvest>true</DoNotHarvest>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>
