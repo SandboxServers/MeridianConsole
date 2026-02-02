@@ -13,6 +13,11 @@ namespace Dhadgar.Agent.GameServerWrapper;
 public sealed class ServerConfig
 {
     /// <summary>
+    /// Maximum configuration file size (1 MB).
+    /// </summary>
+    public const int MaxConfigFileSizeBytes = 1 * 1024 * 1024;
+
+    /// <summary>
     /// Path to the game server executable.
     /// </summary>
     [JsonPropertyName("executablePath")]
@@ -106,9 +111,22 @@ public sealed class ServerConfig
         {
             errors.Add("ExecutablePath must be an absolute path");
         }
-        else if (!File.Exists(ExecutablePath))
+        else
         {
-            errors.Add($"Executable not found: {ExecutablePath}");
+            // Path traversal validation using normalization
+            var (normalizedPath, isValid) = TryGetFullPath(ExecutablePath);
+            if (!isValid)
+            {
+                errors.Add("ExecutablePath is not a valid path");
+            }
+            else if (!NormalizedPathsMatch(ExecutablePath, normalizedPath!))
+            {
+                errors.Add("ExecutablePath contains path traversal sequences");
+            }
+            else if (!File.Exists(ExecutablePath))
+            {
+                errors.Add($"Executable not found: {ExecutablePath}");
+            }
         }
 
         if (!string.IsNullOrEmpty(WorkingDirectory))
@@ -117,9 +135,22 @@ public sealed class ServerConfig
             {
                 errors.Add("WorkingDirectory must be an absolute path");
             }
-            else if (!Directory.Exists(WorkingDirectory))
+            else
             {
-                errors.Add($"Working directory not found: {WorkingDirectory}");
+                // Path traversal validation using normalization
+                var (normalizedPath, isValid) = TryGetFullPath(WorkingDirectory);
+                if (!isValid)
+                {
+                    errors.Add("WorkingDirectory is not a valid path");
+                }
+                else if (!NormalizedPathsMatch(WorkingDirectory, normalizedPath!))
+                {
+                    errors.Add("WorkingDirectory contains path traversal sequences");
+                }
+                else if (!Directory.Exists(WorkingDirectory))
+                {
+                    errors.Add($"Working directory not found: {WorkingDirectory}");
+                }
             }
         }
 
@@ -171,6 +202,13 @@ public sealed class ServerConfig
                 return (null, $"Configuration file not found: {path}");
             }
 
+            // Check file size before reading to prevent DoS
+            var fileInfo = new FileInfo(path);
+            if (fileInfo.Length > MaxConfigFileSizeBytes)
+            {
+                return (null, $"Configuration file exceeds maximum size of {MaxConfigFileSizeBytes / 1024}KB");
+            }
+
             var json = File.ReadAllText(path);
             var config = JsonSerializer.Deserialize<ServerConfig>(json, JsonOptions);
 
@@ -205,5 +243,36 @@ public sealed class ServerConfig
     {
         var json = JsonSerializer.Serialize(this, JsonOptions);
         File.WriteAllText(path, json);
+    }
+
+    /// <summary>
+    /// Attempts to get the full path, returning success/failure without throwing.
+    /// </summary>
+    private static (string? NormalizedPath, bool IsValid) TryGetFullPath(string path)
+    {
+        try
+        {
+            return (Path.GetFullPath(path), true);
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException)
+        {
+            return (null, false);
+        }
+    }
+
+    /// <summary>
+    /// Compares paths accounting for trailing separators and OS case sensitivity.
+    /// </summary>
+    private static bool NormalizedPathsMatch(string original, string normalized)
+    {
+        // Use OS-aware comparison: case-insensitive on Windows, case-sensitive on Unix
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        var originalTrimmed = original.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedTrimmed = normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return originalTrimmed.Equals(normalizedTrimmed, comparison);
     }
 }

@@ -30,6 +30,13 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
     private static partial Regex ServerIdPattern();
 
     /// <summary>
+    /// Pattern for valid pipe names: MeridianAgent_{agentId}\{serverId}
+    /// Agent ID must be a 32-char hex GUID without hyphens, server ID alphanumeric.
+    /// </summary>
+    [GeneratedRegex(@"^MeridianAgent_[a-f0-9]{32}\\[a-zA-Z0-9\-_]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
+    private static partial Regex PipeNamePattern();
+
+    /// <summary>
     /// The unique server identifier from the control plane.
     /// Must be alphanumeric with hyphens/underscores only.
     /// </summary>
@@ -120,7 +127,7 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
             }
         }
 
-        // Validate WrapperExecutablePath is absolute
+        // Validate WrapperExecutablePath is absolute and normalized
         if (!string.IsNullOrEmpty(WrapperExecutablePath))
         {
             if (!Path.IsPathRooted(WrapperExecutablePath))
@@ -129,9 +136,15 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
                     "WrapperExecutablePath must be an absolute path",
                     [nameof(WrapperExecutablePath)]);
             }
+            else if (!IsNormalizedPath(WrapperExecutablePath))
+            {
+                yield return new ValidationResult(
+                    "WrapperExecutablePath contains path traversal sequences",
+                    [nameof(WrapperExecutablePath)]);
+            }
         }
 
-        // Validate ServerDirectory is absolute
+        // Validate ServerDirectory is absolute and normalized
         if (!string.IsNullOrEmpty(ServerDirectory))
         {
             if (!Path.IsPathRooted(ServerDirectory))
@@ -140,9 +153,15 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
                     "ServerDirectory must be an absolute path",
                     [nameof(ServerDirectory)]);
             }
+            else if (!IsNormalizedPath(ServerDirectory))
+            {
+                yield return new ValidationResult(
+                    "ServerDirectory contains path traversal sequences",
+                    [nameof(ServerDirectory)]);
+            }
         }
 
-        // Validate ConfigFilePath is absolute
+        // Validate ConfigFilePath is absolute and normalized
         if (!string.IsNullOrEmpty(ConfigFilePath))
         {
             if (!Path.IsPathRooted(ConfigFilePath))
@@ -151,17 +170,46 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
                     "ConfigFilePath must be an absolute path",
                     [nameof(ConfigFilePath)]);
             }
-        }
-
-        // Validate PipeName format
-        if (!string.IsNullOrEmpty(PipeName))
-        {
-            if (!PipeName.StartsWith("MeridianAgent_", StringComparison.Ordinal))
+            else if (!IsNormalizedPath(ConfigFilePath))
             {
                 yield return new ValidationResult(
-                    "PipeName must start with 'MeridianAgent_'",
+                    "ConfigFilePath contains path traversal sequences",
+                    [nameof(ConfigFilePath)]);
+            }
+        }
+
+        // Validate PipeName format with strict regex
+        if (!string.IsNullOrEmpty(PipeName))
+        {
+            if (!PipeNamePattern().IsMatch(PipeName))
+            {
+                yield return new ValidationResult(
+                    "PipeName must match format 'MeridianAgent_{guid}\\{serverId}' with alphanumeric IDs",
                     [nameof(PipeName)]);
             }
+        }
+    }
+
+    /// <summary>
+    /// Checks if a path is normalized (no traversal sequences).
+    /// </summary>
+    private static bool IsNormalizedPath(string path)
+    {
+        try
+        {
+            var normalized = Path.GetFullPath(path);
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            var originalTrimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var normalizedTrimmed = normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            return originalTrimmed.Equals(normalizedTrimmed, comparison);
+        }
+        catch
+        {
+            return false;
         }
     }
 

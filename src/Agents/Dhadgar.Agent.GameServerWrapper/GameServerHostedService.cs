@@ -429,10 +429,15 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
 
         try
         {
+            // Compute working directory - Path.GetDirectoryName can return null for root paths
+            var workingDir = config.WorkingDirectory
+                ?? Path.GetDirectoryName(config.ExecutablePath)
+                ?? Environment.CurrentDirectory;
+
             var startInfo = new ProcessStartInfo
             {
                 FileName = config.ExecutablePath,
-                WorkingDirectory = config.WorkingDirectory ?? Path.GetDirectoryName(config.ExecutablePath),
+                WorkingDirectory = workingDir,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = config.CaptureStdout,
@@ -604,7 +609,27 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
 
         _currentState = exitCode == 0 ? GameServerState.Stopped : GameServerState.Failed;
 
-        _ = SendStatusAsync(_currentState, exitCode: exitCode);
+        // Fire-and-forget with exception handling to prevent lost exceptions
+        _ = SendStatusWithExceptionHandlingAsync(_currentState, exitCode: exitCode);
+    }
+
+    /// <summary>
+    /// Sends status with exception handling for fire-and-forget scenarios.
+    /// </summary>
+    private async Task SendStatusWithExceptionHandlingAsync(
+        GameServerState state,
+        int? osPid = null,
+        int? exitCode = null,
+        string? message = null)
+    {
+        try
+        {
+            await SendStatusAsync(state, osPid, exitCode, message).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send status update for state {State}", state);
+        }
     }
 
     /// <summary>
@@ -623,7 +648,23 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             data = data[..MaxOutputLineLength] + "... [TRUNCATED]";
         }
 
-        _ = SendOutputAsync(data, isError);
+        // Fire-and-forget with exception handling to prevent lost exceptions
+        _ = SendOutputWithExceptionHandlingAsync(data, isError);
+    }
+
+    /// <summary>
+    /// Sends output with exception handling for fire-and-forget scenarios.
+    /// </summary>
+    private async Task SendOutputWithExceptionHandlingAsync(string data, bool isError)
+    {
+        try
+        {
+            await SendOutputAsync(data, isError).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to send output to agent");
+        }
     }
 
     #region Pipe Communication
@@ -777,6 +818,9 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
         }
 
         _gameServerProcess?.Dispose();
+
+        // Call base class cleanup (BackgroundService implements IDisposable)
+        Dispose();
     }
 }
 

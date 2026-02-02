@@ -109,6 +109,13 @@ public sealed partial class WindowsServiceManager : IWindowsServiceManager
     private static readonly TimeSpan ScCommandTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
+    /// Gets the absolute path to sc.exe in System32 to prevent PATH hijacking.
+    /// </summary>
+    private static readonly string ScExePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.System),
+        "sc.exe");
+
+    /// <summary>
     /// Default timeout for service start/stop operations.
     /// </summary>
     private static readonly TimeSpan DefaultServiceTimeout = TimeSpan.FromSeconds(60);
@@ -655,7 +662,7 @@ public sealed partial class WindowsServiceManager : IWindowsServiceManager
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "sc.exe",
+                    FileName = ScExePath,
                     Arguments = arguments,
                     UseShellExecute = false,
                     CreateNoWindow = true,

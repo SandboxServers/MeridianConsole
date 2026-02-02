@@ -378,7 +378,14 @@ public static class PipeProtocolSerializer
     /// <returns>The deserialized message, or null if deserialization fails.</returns>
     public static PipeMessage? Deserialize(string json)
     {
-        if (string.IsNullOrEmpty(json) || json.Length > PipeMessage.MaxMessageSize)
+        if (string.IsNullOrEmpty(json))
+        {
+            return null;
+        }
+
+        // Check byte length, not character count, since UTF-8 can have multi-byte chars
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(json);
+        if (byteCount > PipeMessage.MaxMessageSize)
         {
             return null;
         }

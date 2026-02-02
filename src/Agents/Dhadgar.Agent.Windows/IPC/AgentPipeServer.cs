@@ -153,10 +153,10 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
 
         _logger.LogInformation("Agent pipe server started for agent {AgentId}", _agentId);
 
-        // Start listening for registered servers
+        // Start listening for registered servers with exception handling
         foreach (var (serverId, _) in _registrations)
         {
-            _ = StartListeningForServerAsync(serverId, _serverCts.Token);
+            _ = StartListeningWithExceptionHandlingAsync(serverId, _serverCts.Token);
         }
 
         return Task.CompletedTask;
@@ -218,10 +218,10 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             "Registered server {ServerId} for pipe communication on {PipeName}",
             serverId, pipeName);
 
-        // If already started, begin listening for this server
+        // If already started, begin listening for this server with exception handling
         if (_started)
         {
-            _ = StartListeningForServerAsync(serverId, _serverCts.Token);
+            _ = StartListeningWithExceptionHandlingAsync(serverId, _serverCts.Token);
         }
     }
 
@@ -312,6 +312,21 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     }
 
     #region Private Methods
+
+    /// <summary>
+    /// Starts listening for a server with exception handling for fire-and-forget scenarios.
+    /// </summary>
+    private async Task StartListeningWithExceptionHandlingAsync(string serverId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await StartListeningForServerAsync(serverId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in listener for server {ServerId}", serverId);
+        }
+    }
 
     /// <summary>
     /// Disposes a connection asynchronously (helper to avoid CA2012).
@@ -458,24 +473,14 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             AccessControlType.Allow));
 
         // Grant the specific game server's service account read/write access
-        try
-        {
-            var serviceAccount = new NTAccount(serviceAccountSid);
-            security.AddAccessRule(new PipeAccessRule(
-                serviceAccount,
-                PipeAccessRights.ReadWrite,
-                AccessControlType.Allow));
-        }
-        catch (IdentityNotMappedException)
-        {
-            // Service account doesn't exist yet (Virtual Service Accounts are created on service start)
-            // Grant LOCAL SERVICE as fallback - will be refined when service starts
-            var localServiceSid = new SecurityIdentifier(WellKnownSidType.LocalServiceSid, null);
-            security.AddAccessRule(new PipeAccessRule(
-                localServiceSid,
-                PipeAccessRights.ReadWrite,
-                AccessControlType.Allow));
-        }
+        // SECURITY: We use NTAccount which validates the account exists.
+        // If the account doesn't exist yet, we still add the rule - Windows will
+        // resolve it when the service starts and the VSA is created.
+        var serviceAccount = new NTAccount(serviceAccountSid);
+        security.AddAccessRule(new PipeAccessRule(
+            serviceAccount,
+            PipeAccessRights.ReadWrite,
+            AccessControlType.Allow));
 
         // Grant BUILTIN\Administrators read/write for debugging
         var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);

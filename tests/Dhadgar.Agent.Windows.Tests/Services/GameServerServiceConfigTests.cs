@@ -75,13 +75,21 @@ public sealed class GameServerServiceConfigTests
     [InlineData("test!server")] // exclamation
     public void Validate_InvalidServerId_ReturnsError(string serverId)
     {
-        // Arrange
-        var config = CreateValidConfig(serverId);
+        // Arrange - Use a fixed valid PipeName to isolate the ServerId validation
+        var config = new GameServerServiceConfig
+        {
+            ServerId = serverId,
+            ProcessId = Guid.NewGuid(),
+            WrapperExecutablePath = TestWrapperPath,
+            ServerDirectory = TestServerDir,
+            ConfigFilePath = TestConfigPath,
+            PipeName = @"MeridianAgent_12345678901234567890123456789012\valid-server"
+        };
 
         // Act
         var results = ValidateConfig(config);
 
-        // Assert
+        // Assert - Check that exactly the ServerId error is present
         var error = Assert.Single(results);
         Assert.Contains(nameof(GameServerServiceConfig.ServerId), error.MemberNames);
         Assert.Contains("alphanumeric", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
@@ -91,8 +99,17 @@ public sealed class GameServerServiceConfigTests
     public void Validate_ServerIdTooLong_ReturnsError()
     {
         // Arrange - 201 characters exceeds the 200 char limit
+        // Use a fixed valid PipeName to isolate the ServerId validation
         var longServerId = new string('a', 201);
-        var config = CreateValidConfig(longServerId);
+        var config = new GameServerServiceConfig
+        {
+            ServerId = longServerId,
+            ProcessId = Guid.NewGuid(),
+            WrapperExecutablePath = TestWrapperPath,
+            ServerDirectory = TestServerDir,
+            ConfigFilePath = TestConfigPath,
+            PipeName = @"MeridianAgent_12345678901234567890123456789012\valid-server"
+        };
 
         // Act
         var results = ValidateConfig(config);
@@ -114,7 +131,7 @@ public sealed class GameServerServiceConfigTests
             WrapperExecutablePath = "relative/path/wrapper.exe", // Not absolute
             ServerDirectory = TestServerDir,
             ConfigFilePath = TestConfigPath,
-            PipeName = @"MeridianAgent_12345678\test-server"
+            PipeName = @"MeridianAgent_12345678901234567890123456789012\test-server"
         };
 
         // Act
@@ -137,7 +154,7 @@ public sealed class GameServerServiceConfigTests
             WrapperExecutablePath = TestWrapperPath,
             ServerDirectory = "relative/servers/test", // Not absolute
             ConfigFilePath = TestConfigPath,
-            PipeName = @"MeridianAgent_12345678\test-server"
+            PipeName = @"MeridianAgent_12345678901234567890123456789012\test-server"
         };
 
         // Act
@@ -160,7 +177,7 @@ public sealed class GameServerServiceConfigTests
             WrapperExecutablePath = TestWrapperPath,
             ServerDirectory = TestServerDir,
             ConfigFilePath = TestConfigPath,
-            PipeName = @"InvalidPrefix_12345678\test-server" // Wrong prefix
+            PipeName = @"InvalidPrefix_12345678901234567890123456789012\test-server" // Wrong prefix
         };
 
         // Act

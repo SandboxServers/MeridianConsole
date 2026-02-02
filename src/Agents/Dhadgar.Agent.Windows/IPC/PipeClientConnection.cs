@@ -18,6 +18,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
     private readonly NamedPipeServerStream _pipeStream;
     private readonly string _serverId;
     private readonly ILogger _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly CancellationTokenSource _connectionCts = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private volatile bool _disposed;
@@ -74,8 +75,9 @@ internal sealed class PipeClientConnection : IAsyncDisposable
         _pipeStream = pipeStream ?? throw new ArgumentNullException(nameof(pipeStream));
         _serverId = serverId ?? throw new ArgumentNullException(nameof(serverId));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
-        ConnectedAt = timeProvider.GetUtcNow();
+        ConnectedAt = _timeProvider.GetUtcNow();
         LastMessageAt = ConnectedAt;
     }
 
@@ -161,7 +163,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
                     }
 
                     // Update last message time
-                    LastMessageAt = DateTimeOffset.UtcNow;
+                    LastMessageAt = _timeProvider.GetUtcNow();
 
                     // Raise event
                     try
@@ -361,7 +363,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
             Disconnected?.Invoke(this, new PipeDisconnectedEventArgs
             {
                 ServerId = _serverId,
-                DisconnectedAt = DateTimeOffset.UtcNow
+                DisconnectedAt = _timeProvider.GetUtcNow()
             });
         }
         catch (Exception ex)

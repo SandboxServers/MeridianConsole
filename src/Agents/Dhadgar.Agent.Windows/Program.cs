@@ -136,7 +136,8 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Fatal error: {ex.Message}");
+            // Output full exception for diagnostics, not just Message
+            Console.Error.WriteLine($"Fatal error: {ex}");
             return 1;
         }
     }

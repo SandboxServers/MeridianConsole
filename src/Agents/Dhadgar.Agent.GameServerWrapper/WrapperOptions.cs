@@ -17,6 +17,13 @@ public sealed partial class WrapperOptions
     private static partial Regex ValidServerIdPattern();
 
     /// <summary>
+    /// Pattern for valid pipe names: MeridianAgent_{agentId}\{serverId}
+    /// Agent ID and server ID must be alphanumeric with hyphens/underscores.
+    /// </summary>
+    [GeneratedRegex(@"^MeridianAgent_[a-zA-Z0-9\-_]+\\[a-zA-Z0-9\-_]+$", RegexOptions.Compiled)]
+    private static partial Regex ValidPipeNamePattern();
+
+    /// <summary>
     /// The server identifier from the control plane.
     /// </summary>
     public required string ServerId { get; init; }
@@ -49,14 +56,14 @@ public sealed partial class WrapperOptions
             errors.Add("--server-id contains invalid characters");
         }
 
-        // Validate PipeName
+        // Validate PipeName with regex for strict format enforcement
         if (string.IsNullOrWhiteSpace(PipeName))
         {
             errors.Add("--pipe is required");
         }
-        else if (!PipeName.StartsWith("MeridianAgent_", StringComparison.Ordinal))
+        else if (!ValidPipeNamePattern().IsMatch(PipeName))
         {
-            errors.Add("--pipe must start with 'MeridianAgent_'");
+            errors.Add("--pipe must match format 'MeridianAgent_{agentId}\\{serverId}' with alphanumeric IDs");
         }
 
         // Validate ConfigPath
@@ -68,9 +75,22 @@ public sealed partial class WrapperOptions
         {
             errors.Add("--config must be an absolute path");
         }
-        else if (!File.Exists(ConfigPath))
+        else
         {
-            errors.Add($"Configuration file not found: {ConfigPath}");
+            // Path traversal validation using normalization
+            var (normalizedPath, isValid) = TryGetFullPath(ConfigPath);
+            if (!isValid)
+            {
+                errors.Add("--config is not a valid path");
+            }
+            else if (!NormalizedPathsMatch(ConfigPath, normalizedPath!))
+            {
+                errors.Add("--config contains path traversal sequences");
+            }
+            else if (!File.Exists(ConfigPath))
+            {
+                errors.Add($"Configuration file not found: {ConfigPath}");
+            }
         }
 
         return errors;
@@ -154,5 +174,36 @@ public sealed partial class WrapperOptions
         }
 
         return (options, errors);
+    }
+
+    /// <summary>
+    /// Attempts to get the full path, returning success/failure without throwing.
+    /// </summary>
+    private static (string? NormalizedPath, bool IsValid) TryGetFullPath(string path)
+    {
+        try
+        {
+            return (Path.GetFullPath(path), true);
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException)
+        {
+            return (null, false);
+        }
+    }
+
+    /// <summary>
+    /// Compares paths accounting for trailing separators and OS case sensitivity.
+    /// </summary>
+    private static bool NormalizedPathsMatch(string original, string normalized)
+    {
+        // Use OS-aware comparison: case-insensitive on Windows, case-sensitive on Unix
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        var originalTrimmed = original.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedTrimmed = normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return originalTrimmed.Equals(normalizedTrimmed, comparison);
     }
 }

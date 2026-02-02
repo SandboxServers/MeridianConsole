@@ -77,7 +77,15 @@ public sealed class ProcessOptions : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        // Validate GameServerWrapperPath when service isolation is enabled
+        // Service isolation is only supported on Windows - fail fast with clear message
+        if (UseServiceIsolation && !OperatingSystem.IsWindows())
+        {
+            yield return new ValidationResult(
+                $"{nameof(UseServiceIsolation)} is only supported on Windows",
+                [nameof(UseServiceIsolation)]);
+        }
+
+        // Validate GameServerWrapperPath when service isolation is enabled on Windows
         if (UseServiceIsolation && OperatingSystem.IsWindows())
         {
             if (string.IsNullOrWhiteSpace(GameServerWrapperPath))
@@ -86,11 +94,36 @@ public sealed class ProcessOptions : IValidatableObject
                     $"{nameof(GameServerWrapperPath)} is required when {nameof(UseServiceIsolation)} is enabled",
                     [nameof(GameServerWrapperPath)]);
             }
-            else if (!Path.IsPathRooted(GameServerWrapperPath))
+            else
             {
-                yield return new ValidationResult(
-                    $"{nameof(GameServerWrapperPath)} must be an absolute path",
-                    [nameof(GameServerWrapperPath)]);
+                // Validate path is absolute and normalized (no traversal)
+                var (normalizedPath, isValid) = TryGetFullPath(GameServerWrapperPath);
+                if (!isValid)
+                {
+                    yield return new ValidationResult(
+                        $"{nameof(GameServerWrapperPath)} is not a valid path",
+                        [nameof(GameServerWrapperPath)]);
+                }
+                else if (!Path.IsPathRooted(GameServerWrapperPath))
+                {
+                    yield return new ValidationResult(
+                        $"{nameof(GameServerWrapperPath)} must be an absolute path",
+                        [nameof(GameServerWrapperPath)]);
+                }
+                else
+                {
+                    // Reject path traversal sequences
+                    var comparison = StringComparison.OrdinalIgnoreCase; // Windows is case-insensitive
+                    var normalizedTrimmed = normalizedPath!.TrimEnd(Path.DirectorySeparatorChar);
+                    var originalTrimmed = GameServerWrapperPath.TrimEnd(Path.DirectorySeparatorChar);
+
+                    if (!originalTrimmed.Equals(normalizedTrimmed, comparison))
+                    {
+                        yield return new ValidationResult(
+                            $"{nameof(GameServerWrapperPath)} contains path traversal sequences",
+                            [nameof(GameServerWrapperPath)]);
+                    }
+                }
             }
         }
 

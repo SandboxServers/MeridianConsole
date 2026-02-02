@@ -19,6 +19,13 @@ public static class ServiceInstaller
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
+    /// Gets the absolute path to sc.exe in System32 to prevent PATH hijacking.
+    /// </summary>
+    private static readonly string ScExePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.System),
+        "sc.exe");
+
+    /// <summary>
     /// Configures the Windows Service recovery options.
     /// Must be run after service installation with administrator privileges.
     /// </summary>
@@ -53,11 +60,19 @@ public static class ServiceInstaller
             return Result.Failure("Description is required and cannot be empty.");
         }
 
-        // SECURITY: Escape quotes in description to prevent command injection
-        var escapedDescription = description.Replace("\"", "\\\"", StringComparison.Ordinal);
+        // SECURITY: Reject descriptions with potentially dangerous characters
+        // that could enable command injection via sc.exe argument parsing
+        foreach (var c in description)
+        {
+            if (c is '"' or '\'' or '`' or '$' or '&' or '|' or ';' or '\r' or '\n')
+            {
+                return Result.Failure($"Description contains disallowed character: '{c}'");
+            }
+        }
 
+        // Double-quote the description (no escaping needed since we rejected quotes)
         return await RunScCommandAsync(
-            $"description {Program.ServiceName} \"{escapedDescription}\"",
+            $"description {Program.ServiceName} \"{description}\"",
             "set service description",
             cancellationToken).ConfigureAwait(false);
     }
@@ -89,7 +104,7 @@ public static class ServiceInstaller
     {
         using var process = Process.Start(new ProcessStartInfo
         {
-            FileName = "sc.exe",
+            FileName = ScExePath,
             Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true,
