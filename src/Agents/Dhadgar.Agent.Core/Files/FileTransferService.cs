@@ -338,13 +338,13 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         {
             transferState.State = FileTransferState.Cancelled;
 
-            // Clean up partial download file using validated path (if available)
-            var cleanupPath = destinationPath ?? request.DestinationPath;
+            // SECURITY: Only cleanup using validated path - never use unvalidated request.DestinationPath
+            // to prevent path traversal attacks via arbitrary file deletion
             try
             {
-                if (!string.IsNullOrEmpty(cleanupPath) && File.Exists(cleanupPath))
+                if (!string.IsNullOrEmpty(destinationPath) && File.Exists(destinationPath))
                 {
-                    File.Delete(cleanupPath);
+                    File.Delete(destinationPath);
                     _logger.LogDebug("Cleaned up partial download for cancelled transfer {TransferId}", request.TransferId);
                 }
             }
