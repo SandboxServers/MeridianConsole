@@ -1,0 +1,128 @@
+# CodeRabbit configuration
+# https://docs.coderabbit.ai/reference/configuration
+
+# Use English for all reviews
+language: en-US
+
+# Assertive profile for thorough security-conscious reviews
+tone_instructions: >
+  Be direct and security-focused. Flag potential vulnerabilities immediately.
+  For Agent code, assume hostile environments and untrusted inputs.
+
+early_access: true
+
+reviews:
+  # Assertive for detailed feedback on security-critical codebase
+  profile: assertive
+
+  # Automatic review on every PR
+  auto_review:
+    enabled: true
+    drafts: false
+
+  # Keep summaries compact
+  collapse_walkthrough: true
+
+  # Path filters - exclude files we don't need reviewed
+  # NOTE: Only use exclusions (!) here. Adding include patterns causes CodeRabbit
+  # to ONLY review files matching those includes, skipping everything else.
+  path_filters:
+    # Documentation - handled manually
+    # Security guideline files (CLAUDE.md, GEMINI.md) are reviewed via path_instructions
+    - "!docs/**"
+
+    # Lock files - auto-generated
+    - "!**/packages.lock.json"
+    - "!**/package-lock.json"
+    - "!**/pnpm-lock.yaml"
+    - "!**/yarn.lock"
+
+    # IDE and editor configs
+    - "!.vscode/**"
+    - "!.idea/**"
+    - "!**/*.DotSettings"
+    - "!.editorconfig"
+
+    # Build artifacts and generated files
+    - "!**/bin/**"
+    - "!**/obj/**"
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/.output/**"
+
+    # Infrastructure configs (review manually when needed)
+    - "!deploy/compose/**/*.yml"
+    - "!deploy/compose/**/*.yaml"
+
+    # Test snapshots
+    - "!**/__snapshots__/**"
+    - "!**/*.snap"
+
+    # Migration files (review manually, auto-generated)
+    - "!**/Migrations/*.Designer.cs"
+
+  # Path-specific review instructions
+  path_instructions:
+    # Agent code requires security-focused review
+    - path: "src/Agents/**"
+      instructions: |
+        SECURITY CRITICAL: This code runs on customer hardware with elevated privileges.
+
+        Review for:
+        1. Command injection vulnerabilities in process spawning
+        2. Path traversal attacks in file operations
+        3. Resource exhaustion (unbounded allocations, missing timeouts)
+        4. Proper mTLS enforcement for control plane communication
+        5. Input validation on all data from control plane
+        6. No secrets or sensitive data in logs
+        7. Fail-safe defaults (deny by default)
+
+        Assume hostile game server processes and potentially compromised networks.
+
+    # Shared libraries need careful API design review
+    - path: "src/Shared/**"
+      instructions: |
+        Shared library code - changes affect multiple services.
+        Review for:
+        1. Breaking API changes
+        2. Proper use of Result<T> pattern
+        3. No service-specific logic (keep generic)
+        4. Performance implications (used in hot paths)
+
+    # Gateway is the public entry point
+    - path: "src/Dhadgar.Gateway/**"
+      instructions: |
+        Gateway is the public-facing entry point.
+        Review for:
+        1. Rate limiting bypass opportunities
+        2. CORS misconfiguration
+        3. Header injection
+        4. Proper authentication enforcement
+        5. No sensitive data exposure in error responses
+
+    # Identity service handles auth
+    - path: "src/Dhadgar.Identity/**"
+      instructions: |
+        Identity service handles authentication and authorization.
+        Review for:
+        1. Authentication bypass vulnerabilities
+        2. Session management issues
+        3. OAuth/OIDC implementation correctness
+        4. Proper password/credential handling
+        5. Multi-tenant isolation
+
+  # Enable relevant analysis tools
+  tools:
+    # Integrates GitHub Actions/CI check run results
+    github-checks:
+      enabled: true
+
+# Chat configuration
+chat:
+  auto_reply: true
+
+# Knowledge base - learn from repo patterns
+knowledge_base:
+  learnings:
+    scope: local
+  opt_out: false
