@@ -163,6 +163,23 @@ public sealed class CommandDispatcher : ICommandDispatcher
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, error);
 
+            // SECURITY: Handle empty CommandId to prevent ArgumentException from CommandResult.Rejected
+            if (envelope.CommandId == Guid.Empty)
+            {
+                var now = DateTimeOffset.UtcNow;
+                return Result<CommandResult>.Success(new CommandResult
+                {
+                    CommandId = Guid.Empty,
+                    NodeId = resolvedNodeId,
+                    Status = CommandResultStatus.Rejected,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    ErrorMessage = error,
+                    ErrorCode = "MissingCommandId",
+                    CorrelationId = envelope.CorrelationId
+                });
+            }
+
             return Result<CommandResult>.Success(CommandResult.Rejected(
                 envelope.CommandId,
                 resolvedNodeId,

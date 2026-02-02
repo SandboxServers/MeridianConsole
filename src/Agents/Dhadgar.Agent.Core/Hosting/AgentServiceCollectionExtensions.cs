@@ -1,12 +1,15 @@
+using System.Net.Http;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Commands;
 using Dhadgar.Agent.Core.Communication;
+using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Agent.Core.Health;
 using Dhadgar.Agent.Core.Process;
 using Dhadgar.Agent.Core.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Dhadgar.Agent.Core.Hosting;
 
@@ -53,6 +56,75 @@ public static class AgentServiceCollectionExtensions
 
         // Telemetry
         services.AddAgentTelemetry();
+
+        // HttpClient registrations for control plane communication
+        services.AddAgentHttpClients();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers named HttpClients for control plane communication.
+    /// <para>
+    /// <strong>ControlPlane</strong>: Used for initial enrollment (no mTLS, agent not yet enrolled).
+    /// <strong>ControlPlaneMtls</strong>: Used for authenticated communication (mTLS with client certificate).
+    /// </para>
+    /// <para>
+    /// SECURITY: Both clients disable automatic redirects to prevent SSRF attacks where a hostile
+    /// control plane could redirect requests to internal hosts. All redirect URLs must be explicitly
+    /// validated against the trusted control plane host before following.
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddAgentHttpClients(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        // ControlPlane: For initial enrollment (no mTLS)
+        // SECURITY: Disable auto-redirects to prevent SSRF via hostile control plane
+        services.AddHttpClient("ControlPlane")
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+            {
+                var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
+                return new HttpClientHandler
+                {
+                    AllowAutoRedirect = false
+                };
+            })
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
+                client.BaseAddress = new Uri(options.ControlPlane.Endpoint);
+                client.Timeout = TimeSpan.FromSeconds(options.ControlPlane.ConnectionTimeoutSeconds);
+            });
+
+        // ControlPlaneMtls: For authenticated communication (with client certificate)
+        // SECURITY: Disable auto-redirects to prevent SSRF via hostile control plane
+        services.AddHttpClient("ControlPlaneMtls")
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+            {
+                var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
+                var certificateStore = sp.GetRequiredService<ICertificateStore>();
+
+                var handler = new HttpClientHandler
+                {
+                    AllowAutoRedirect = false
+                };
+
+                // Add client certificate for mTLS if available
+                var clientCert = certificateStore.GetClientCertificate();
+                if (clientCert is not null)
+                {
+                    handler.ClientCertificates.Add(clientCert);
+                }
+
+                return handler;
+            })
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
+                client.BaseAddress = new Uri(options.ControlPlane.Endpoint);
+                client.Timeout = TimeSpan.FromSeconds(options.ControlPlane.ConnectionTimeoutSeconds);
+            });
 
         return services;
     }

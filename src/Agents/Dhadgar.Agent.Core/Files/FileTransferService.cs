@@ -67,12 +67,27 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 "[Transfer.InvalidRequest] Download request cannot be null");
         }
 
+        // SECURITY: Check disposed state before semaphore acquisition to prevent ObjectDisposedException
+        if (_disposed)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Disposed] File transfer service is shut down");
+        }
+
         // SECURITY: Atomically enforce concurrent transfer limit using semaphore
         // This prevents race conditions where multiple concurrent calls could exceed the limit
         bool semaphoreAcquired;
         try
         {
-            semaphoreAcquired = await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken);
+            // Link to disposal token so disposal triggers graceful cancellation
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _disposeCts.Token);
+            semaphoreAcquired = await _transferSemaphore.WaitAsync(TimeSpan.Zero, linkedCts.Token);
+        }
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Disposed] File transfer service is shut down");
         }
         catch (OperationCanceledException)
         {
@@ -372,11 +387,26 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 "[Transfer.InvalidRequest] Upload request cannot be null");
         }
 
+        // SECURITY: Check disposed state before semaphore acquisition to prevent ObjectDisposedException
+        if (_disposed)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Disposed] File transfer service is shut down");
+        }
+
         // SECURITY: Atomically enforce concurrent transfer limit using semaphore
         bool semaphoreAcquired;
         try
         {
-            semaphoreAcquired = await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken);
+            // Link to disposal token so disposal triggers graceful cancellation
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _disposeCts.Token);
+            semaphoreAcquired = await _transferSemaphore.WaitAsync(TimeSpan.Zero, linkedCts.Token);
+        }
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Disposed] File transfer service is shut down");
         }
         catch (OperationCanceledException)
         {

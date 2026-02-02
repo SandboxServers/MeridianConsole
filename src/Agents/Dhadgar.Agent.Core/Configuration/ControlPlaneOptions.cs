@@ -50,6 +50,13 @@ public sealed class ControlPlaneOptions : IValidatableObject
     [Range(30, 300)]
     public int ServerTimeoutSeconds { get; set; } = 60;
 
+    /// <summary>
+    /// Invocation timeout in seconds for individual SignalR hub method calls.
+    /// Prevents hanging on slow or unresponsive server methods.
+    /// </summary>
+    [Range(5, 120)]
+    public int InvocationTimeoutSeconds { get; set; } = 30;
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

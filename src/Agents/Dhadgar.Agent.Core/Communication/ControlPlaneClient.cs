@@ -191,9 +191,19 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         try
         {
             var json = JsonSerializer.Serialize(payload);
-            await _hubConnection.InvokeAsync("Heartbeat", json, cancellationToken);
+            // SECURITY: Use explicit invocation timeout to prevent hanging on slow/unresponsive server
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(_options.ControlPlane.InvocationTimeoutSeconds));
+            await _hubConnection.InvokeAsync("Heartbeat", json, cts.Token);
             _meter.RecordHeartbeatSent();
             _logger.LogDebug("Heartbeat sent for node {NodeId}", payload.NodeId);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Invocation timeout");
+            _logger.LogWarning("Heartbeat invocation timed out after {Timeout}s",
+                _options.ControlPlane.InvocationTimeoutSeconds);
+            throw;
         }
         catch (Exception ex)
         {
@@ -216,9 +226,18 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         try
         {
             var json = JsonSerializer.Serialize(result);
-            await _hubConnection.InvokeAsync("CommandResult", json, cancellationToken);
+            // SECURITY: Use explicit invocation timeout to prevent hanging on slow/unresponsive server
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(_options.ControlPlane.InvocationTimeoutSeconds));
+            await _hubConnection.InvokeAsync("CommandResult", json, cts.Token);
             _logger.LogDebug("Command result sent for command {CommandId}", result.CommandId);
             return true;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Command result invocation timed out for {CommandId} after {Timeout}s",
+                result.CommandId, _options.ControlPlane.InvocationTimeoutSeconds);
+            return false;
         }
         catch (Exception ex)
         {
@@ -239,12 +258,15 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         try
         {
             var json = JsonSerializer.Serialize(payload);
-            await _hubConnection.InvokeAsync("Telemetry", json, cancellationToken);
+            // SECURITY: Use explicit invocation timeout to prevent hanging on slow/unresponsive server
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(_options.ControlPlane.InvocationTimeoutSeconds));
+            await _hubConnection.InvokeAsync("Telemetry", json, cts.Token);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to send telemetry");
-            // Telemetry failures are not critical
+            // Telemetry failures are not critical (includes timeouts)
         }
     }
 
@@ -254,6 +276,35 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
     private const int MaxCommandPayloadSize = 256 * 1024;
 
     /// <summary>
+    /// Maximum length for command type in metrics to prevent cardinality explosion.
+    /// </summary>
+    private const int MaxCommandTypeLength = 64;
+
+    /// <summary>
+    /// Allowlist of known command types for metrics.
+    /// Unknown types are recorded as "Unknown" to prevent metric cardinality explosion.
+    /// </summary>
+    private static readonly HashSet<string> KnownCommandTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Ping",
+        "StartServer",
+        "StopServer",
+        "RestartServer",
+        "UpdateServer",
+        "InstallMod",
+        "UninstallMod",
+        "UpdateMod",
+        "FileDownload",
+        "FileUpload",
+        "ExecuteCommand",
+        "GetStatus",
+        "GetLogs",
+        "ConfigureServer",
+        "Backup",
+        "Restore"
+    };
+
+    /// <summary>
     /// JSON serializer options with security constraints.
     /// </summary>
     private static readonly JsonSerializerOptions CommandJsonOptions = new()
@@ -261,6 +312,20 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         MaxDepth = 64,
         PropertyNameCaseInsensitive = true
     };
+
+    /// <summary>
+    /// Sanitizes a command type for use in metrics to prevent cardinality explosion.
+    /// Returns "Unknown" for null, empty, too-long, or unrecognized command types.
+    /// </summary>
+    private static string SanitizeCommandTypeForMetrics(string? commandType)
+    {
+        if (string.IsNullOrEmpty(commandType) || commandType.Length > MaxCommandTypeLength)
+        {
+            return "Unknown";
+        }
+
+        return KnownCommandTypes.Contains(commandType) ? commandType : "Unknown";
+    }
 
     private void OnCommandReceived(string commandJson)
     {
@@ -314,7 +379,10 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                 return;
             }
 
-            _meter.RecordCommandReceived(envelope.CommandType);
+            // SECURITY: Sanitize CommandType for metrics to prevent cardinality explosion
+            // Untrusted input could flood metrics with unique values, causing memory exhaustion
+            var metricCommandType = SanitizeCommandTypeForMetrics(envelope.CommandType);
+            _meter.RecordCommandReceived(metricCommandType);
             _logger.LogInformation("Received command {CommandType} with ID {CommandId}",
                 envelope.CommandType, envelope.CommandId);
             CommandReceived?.Invoke(this, new CommandReceivedEventArgs(envelope));
