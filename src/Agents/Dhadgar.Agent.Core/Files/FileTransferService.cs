@@ -64,7 +64,18 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         // SECURITY: Atomically enforce concurrent transfer limit using semaphore
         // This prevents race conditions where multiple concurrent calls could exceed the limit
-        if (!await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken))
+        bool semaphoreAcquired;
+        try
+        {
+            semaphoreAcquired = await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Cancelled] Download was cancelled while waiting for transfer slot");
+        }
+
+        if (!semaphoreAcquired)
         {
             _logger.LogWarning(
                 "Transfer limit reached ({Max}), rejecting download {TransferId}",
@@ -350,7 +361,18 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
         }
 
         // SECURITY: Atomically enforce concurrent transfer limit using semaphore
-        if (!await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken))
+        bool semaphoreAcquired;
+        try
+        {
+            semaphoreAcquired = await _transferSemaphore.WaitAsync(TimeSpan.Zero, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Cancelled] Upload was cancelled while waiting for transfer slot");
+        }
+
+        if (!semaphoreAcquired)
         {
             _logger.LogWarning(
                 "Transfer limit reached ({Max}), rejecting upload {TransferId}",

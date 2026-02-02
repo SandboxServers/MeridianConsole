@@ -285,12 +285,14 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             }
 
             // Security: Validate OrganizationId matches this agent's OrganizationId (multi-tenant isolation)
-            if (_options.OrganizationId.HasValue && envelope.OrganizationId != Guid.Empty &&
-                envelope.OrganizationId != _options.OrganizationId.Value)
+            // SECURITY: Reject Guid.Empty as invalid - prevents bypass via empty OrganizationId
+            if (_options.OrganizationId.HasValue &&
+                (envelope.OrganizationId == Guid.Empty || envelope.OrganizationId != _options.OrganizationId.Value))
             {
                 _logger.LogWarning(
-                    "Rejected command {CommandId}: OrganizationId mismatch (expected {ExpectedOrgId}, received {ReceivedOrgId})",
-                    envelope.CommandId, _options.OrganizationId.Value, envelope.OrganizationId);
+                    "Rejected command {CommandId}: OrganizationId invalid or mismatch (expected {ExpectedOrgId}, received {ReceivedOrgId})",
+                    envelope.CommandId, _options.OrganizationId.Value,
+                    envelope.OrganizationId == Guid.Empty ? "(empty)" : envelope.OrganizationId.ToString());
                 return;
             }
 

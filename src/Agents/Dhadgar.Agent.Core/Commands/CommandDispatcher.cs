@@ -71,24 +71,60 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
         var startedAt = DateTimeOffset.UtcNow;
 
-        // Resolve nodeId - prefer envelope's nodeId, then options
-        // SECURITY: Reject commands without a valid NodeId instead of generating one
+        // Resolve nodeId - SECURITY: fail-closed, require enrollment and matching NodeId
         Guid resolvedNodeId;
-        if (envelope.NodeId != Guid.Empty)
+        if (_options.NodeId.HasValue)
         {
-            resolvedNodeId = envelope.NodeId;
-        }
-        else if (_options.NodeId.HasValue)
-        {
+            // Agent is enrolled - require envelope.NodeId to match
+            if (envelope.NodeId == Guid.Empty)
+            {
+                _logger.LogWarning(
+                    "Command {CommandId} rejected: envelope has empty NodeId but agent is enrolled as {EnrolledNodeId}",
+                    envelope.CommandId, _options.NodeId.Value);
+                _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+                var now = DateTimeOffset.UtcNow;
+                return new CommandResult
+                {
+                    CommandId = envelope.CommandId,
+                    NodeId = _options.NodeId.Value,
+                    Status = CommandResultStatus.Rejected,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    ErrorMessage = "Agent is not enrolled or NodeId mismatch",
+                    ErrorCode = "NotEnrolled",
+                    CorrelationId = envelope.CorrelationId
+                };
+            }
+
+            if (envelope.NodeId != _options.NodeId.Value)
+            {
+                _logger.LogWarning(
+                    "Command {CommandId} rejected: NodeId mismatch (expected {ExpectedNodeId}, received {ReceivedNodeId})",
+                    envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
+                _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+                var now = DateTimeOffset.UtcNow;
+                return new CommandResult
+                {
+                    CommandId = envelope.CommandId,
+                    NodeId = _options.NodeId.Value,
+                    Status = CommandResultStatus.Rejected,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    ErrorMessage = "Agent is not enrolled or NodeId mismatch",
+                    ErrorCode = "NotEnrolled",
+                    CorrelationId = envelope.CorrelationId
+                };
+            }
+
             resolvedNodeId = _options.NodeId.Value;
         }
         else
         {
+            // Agent is not enrolled - reject all commands
             _logger.LogWarning(
-                "Command {CommandId} rejected: no NodeId in envelope and agent not enrolled",
+                "Command {CommandId} rejected: agent not enrolled (no NodeId configured)",
                 envelope.CommandId);
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
-            // Use direct object initialization to avoid ArgumentException from factory (Guid.Empty guard)
             var now = DateTimeOffset.UtcNow;
             return new CommandResult
             {
@@ -97,7 +133,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 Status = CommandResultStatus.Rejected,
                 StartedAt = now,
                 CompletedAt = now,
-                ErrorMessage = "Agent is not enrolled - cannot execute commands without NodeId",
+                ErrorMessage = "Agent is not enrolled or NodeId mismatch",
                 ErrorCode = "NotEnrolled",
                 CorrelationId = envelope.CorrelationId
             };

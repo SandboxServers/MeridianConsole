@@ -121,7 +121,7 @@ public sealed class EnrollmentService : IEnrollmentService
                 Content = JsonContent.Create(request)
             };
 
-            var response = await client.SendAsync(
+            using var response = await client.SendAsync(
                 requestMessage,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
@@ -347,7 +347,7 @@ public sealed class EnrollmentService : IEnrollmentService
                 Content = JsonContent.Create(request)
             };
 
-            var response = await client.SendAsync(
+            using var response = await client.SendAsync(
                 requestMessage,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
