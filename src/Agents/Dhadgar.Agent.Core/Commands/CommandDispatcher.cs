@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Telemetry;
+using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -63,7 +64,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
         return _handlers.ContainsKey(commandType);
     }
 
-    public async Task<CommandResult> DispatchAsync(
+    public async Task<Result<CommandResult>> DispatchAsync(
         CommandEnvelope envelope,
         CancellationToken cancellationToken = default)
     {
@@ -83,7 +84,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                     envelope.CommandId, _options.NodeId.Value);
                 _meter.RecordCommandExecuted(envelope.CommandType, success: false);
                 var now = DateTimeOffset.UtcNow;
-                return new CommandResult
+                return Result<CommandResult>.Success(new CommandResult
                 {
                     CommandId = envelope.CommandId,
                     NodeId = _options.NodeId.Value,
@@ -93,7 +94,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                     ErrorMessage = "Agent is not enrolled or NodeId mismatch",
                     ErrorCode = "NotEnrolled",
                     CorrelationId = envelope.CorrelationId
-                };
+                });
             }
 
             if (envelope.NodeId != _options.NodeId.Value)
@@ -103,7 +104,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                     envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
                 _meter.RecordCommandExecuted(envelope.CommandType, success: false);
                 var now = DateTimeOffset.UtcNow;
-                return new CommandResult
+                return Result<CommandResult>.Success(new CommandResult
                 {
                     CommandId = envelope.CommandId,
                     NodeId = _options.NodeId.Value,
@@ -113,7 +114,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                     ErrorMessage = "Agent is not enrolled or NodeId mismatch",
                     ErrorCode = "NotEnrolled",
                     CorrelationId = envelope.CorrelationId
-                };
+                });
             }
 
             resolvedNodeId = _options.NodeId.Value;
@@ -126,7 +127,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 envelope.CommandId);
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
             var now = DateTimeOffset.UtcNow;
-            return new CommandResult
+            return Result<CommandResult>.Success(new CommandResult
             {
                 CommandId = envelope.CommandId,
                 NodeId = Guid.Empty,
@@ -136,7 +137,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 ErrorMessage = "Agent is not enrolled or NodeId mismatch",
                 ErrorCode = "NotEnrolled",
                 CorrelationId = envelope.CorrelationId
-            };
+            });
         }
 
         using var activity = _activitySource.StartCommandExecution(
@@ -162,12 +163,12 @@ public sealed class CommandDispatcher : ICommandDispatcher
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, error);
 
-            return CommandResult.Rejected(
+            return Result<CommandResult>.Success(CommandResult.Rejected(
                 envelope.CommandId,
                 resolvedNodeId,
                 error,
                 errorCode: null,
-                envelope.CorrelationId);
+                envelope.CorrelationId));
         }
 
         // Find handler
@@ -180,19 +181,26 @@ public sealed class CommandDispatcher : ICommandDispatcher
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Unknown command type");
 
-            return CommandResult.Rejected(
+            return Result<CommandResult>.Success(CommandResult.Rejected(
                 envelope.CommandId,
                 resolvedNodeId,
                 $"Unknown command type: {envelope.CommandType}",
                 "UnknownCommandType",
-                envelope.CorrelationId);
+                envelope.CorrelationId));
         }
 
         // Execute command
         try
         {
-            var result = await handler.ExecuteAsync(envelope, cancellationToken);
+            var handlerResult = await handler.ExecuteAsync(envelope, cancellationToken);
+            if (!handlerResult.IsSuccess)
+            {
+                _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+                activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, handlerResult.Error);
+                return handlerResult;
+            }
 
+            var result = handlerResult.Value!;
             var success = result.Status == CommandResultStatus.Succeeded;
             _meter.RecordCommandExecuted(envelope.CommandType, success);
 
@@ -206,7 +214,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 envelope.CommandId,
                 result.Status);
 
-            return result;
+            return handlerResult;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -214,7 +222,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Cancelled");
 
-            return new CommandResult
+            return Result<CommandResult>.Success(new CommandResult
             {
                 CommandId = envelope.CommandId,
                 NodeId = resolvedNodeId,
@@ -223,7 +231,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 CompletedAt = DateTimeOffset.UtcNow,
                 ErrorMessage = "Command was cancelled",
                 CorrelationId = envelope.CorrelationId
-            };
+            });
         }
         catch (Exception ex)
         {
@@ -232,13 +240,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
 
             // SECURITY: Return generic error message to caller, keep details in logs
-            return CommandResult.Failure(
-                envelope.CommandId,
-                resolvedNodeId,
-                startedAt,
-                "Internal execution error",
-                "ExecutionException",
-                envelope.CorrelationId);
+            return Result<CommandResult>.Failure(
+                "[Command.ExecutionError] Internal execution error");
         }
     }
 }
@@ -273,7 +276,7 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
 
     public abstract string CommandType { get; }
 
-    public async Task<CommandResult> ExecuteAsync(
+    public async Task<Result<CommandResult>> ExecuteAsync(
         CommandEnvelope envelope,
         CancellationToken cancellationToken = default)
     {
@@ -284,12 +287,12 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
         {
             _logger.LogWarning("Payload too large for command {CommandId}: {Size} bytes (max: {Max})",
                 envelope.CommandId, payloadByteCount, MaxPayloadSizeBytes);
-            return CommandResult.Rejected(
+            return Result<CommandResult>.Success(CommandResult.Rejected(
                 envelope.CommandId,
                 envelope.NodeId,
                 "Payload exceeds maximum allowed size",
                 "PayloadTooLarge",
-                envelope.CorrelationId);
+                envelope.CorrelationId));
         }
 
         // Deserialize payload with depth limit to prevent DoS
@@ -305,29 +308,29 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
             _logger.LogError(ex, "Failed to deserialize payload for command {CommandId} (depth limit exceeded: {IsDepthError})",
                 envelope.CommandId, isDepthError);
             // SECURITY: Return generic error message to caller, keep details in logs
-            return CommandResult.Rejected(
+            return Result<CommandResult>.Success(CommandResult.Rejected(
                 envelope.CommandId,
                 envelope.NodeId,
                 isDepthError ? "Payload exceeds maximum nesting depth" : "Invalid payload format",
                 errorCode,
-                envelope.CorrelationId);
+                envelope.CorrelationId));
         }
 
         if (payload is null)
         {
             _logger.LogWarning("Payload deserialized to null for command {CommandId}", envelope.CommandId);
-            return CommandResult.Rejected(
+            return Result<CommandResult>.Success(CommandResult.Rejected(
                 envelope.CommandId,
                 envelope.NodeId,
                 "Payload deserialized to null",
                 "NullPayload",
-                envelope.CorrelationId);
+                envelope.CorrelationId));
         }
 
         return await ExecuteAsync(envelope, payload, cancellationToken);
     }
 
-    public abstract Task<CommandResult> ExecuteAsync(
+    public abstract Task<Result<CommandResult>> ExecuteAsync(
         CommandEnvelope envelope,
         TPayload payload,
         CancellationToken cancellationToken = default);

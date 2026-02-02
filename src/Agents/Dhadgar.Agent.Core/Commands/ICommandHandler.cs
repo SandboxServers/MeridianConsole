@@ -1,3 +1,5 @@
+using Dhadgar.Shared.Results;
+
 namespace Dhadgar.Agent.Core.Commands;
 
 /// <summary>
@@ -15,8 +17,8 @@ public interface ICommandHandler
     /// </summary>
     /// <param name="envelope">Command envelope containing metadata and payload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Command execution result.</returns>
-    Task<CommandResult> ExecuteAsync(CommandEnvelope envelope, CancellationToken cancellationToken = default);
+    /// <returns>Result containing command execution result on success.</returns>
+    Task<Result<CommandResult>> ExecuteAsync(CommandEnvelope envelope, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -32,6 +34,6 @@ public interface ICommandHandler<TPayload> : ICommandHandler
     /// <param name="envelope">Command envelope containing metadata.</param>
     /// <param name="payload">Deserialized command payload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Command execution result.</returns>
-    Task<CommandResult> ExecuteAsync(CommandEnvelope envelope, TPayload payload, CancellationToken cancellationToken = default);
+    /// <returns>Result containing command execution result on success.</returns>
+    Task<Result<CommandResult>> ExecuteAsync(CommandEnvelope envelope, TPayload payload, CancellationToken cancellationToken = default);
 }

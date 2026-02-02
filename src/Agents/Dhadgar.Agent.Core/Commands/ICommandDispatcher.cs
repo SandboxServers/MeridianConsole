@@ -1,3 +1,5 @@
+using Dhadgar.Shared.Results;
+
 namespace Dhadgar.Agent.Core.Commands;
 
 /// <summary>
@@ -10,8 +12,8 @@ public interface ICommandDispatcher
     /// </summary>
     /// <param name="envelope">Command envelope to dispatch.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Command execution result.</returns>
-    Task<CommandResult> DispatchAsync(CommandEnvelope envelope, CancellationToken cancellationToken = default);
+    /// <returns>Result containing command execution result on success.</returns>
+    Task<Result<CommandResult>> DispatchAsync(CommandEnvelope envelope, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Register a command handler.

@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Commands;
@@ -24,6 +25,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
     private HubConnection? _hubConnection;
     private ConnectionState _state = ConnectionState.Disconnected;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
+    private X509Certificate2? _clientCertificate;
 
     public ConnectionState State => _state;
 
@@ -68,7 +70,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             var endpoint = new Uri(baseUri, "/hubs/agent");
             _logger.LogInformation("Connecting to control plane at {Endpoint}", endpoint);
 
-            // Dispose existing connection before creating new one
+            // Dispose existing connection and certificate before creating new one
             if (_hubConnection is not null)
             {
                 _hubConnection.Closed -= OnConnectionClosed;
@@ -78,11 +80,18 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                 _hubConnection = null;
             }
 
+            // Dispose previous certificate to prevent handle leaks
+            _clientCertificate?.Dispose();
+            _clientCertificate = null;
+
+            // Get client certificate and track it for disposal
+            _clientCertificate = _certificateStore.GetClientCertificate();
+
             var builder = new HubConnectionBuilder()
                 .WithUrl(endpoint, options =>
                 {
                     // Configure mTLS if certificate is available
-                    var clientCert = _certificateStore.GetClientCertificate();
+                    var clientCert = _clientCertificate;
 
                     // Security: Require client certificate when NodeId is set (enrolled agent)
                     if (_options.NodeId.HasValue)
@@ -373,6 +382,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         {
             await _hubConnection.DisposeAsync();
         }
+        _clientCertificate?.Dispose();
         _connectionLock.Dispose();
     }
 
