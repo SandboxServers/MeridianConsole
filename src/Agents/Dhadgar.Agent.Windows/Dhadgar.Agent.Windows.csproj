@@ -4,8 +4,11 @@
     <RootNamespace>Dhadgar.Agent.Windows</RootNamespace>
     <OutputType>Exe</OutputType>
 
-    <!-- Windows-specific runtime identifiers -->
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!--
+      Windows-only agent. Runtime identifiers specified at publish time.
+      Build for cross-platform analysis: dotnet build
+      Publish for Windows deployment: dotnet publish -r win-x64
+    -->
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
