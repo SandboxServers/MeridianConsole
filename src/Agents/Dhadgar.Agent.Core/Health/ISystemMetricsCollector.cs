@@ -1,3 +1,5 @@
+using Dhadgar.Shared.Results;
+
 namespace Dhadgar.Agent.Core.Health;
 
 /// <summary>
@@ -9,6 +11,6 @@ public interface ISystemMetricsCollector
     /// Collect current system metrics.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Current system metrics.</returns>
-    Task<SystemMetrics> CollectAsync(CancellationToken cancellationToken = default);
+    /// <returns>Result containing current system metrics on success, or error on failure.</returns>
+    Task<Result<SystemMetrics>> CollectAsync(CancellationToken cancellationToken = default);
 }

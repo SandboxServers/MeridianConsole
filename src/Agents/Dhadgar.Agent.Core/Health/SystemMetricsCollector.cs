@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using Dhadgar.Agent.Core.Telemetry;
+using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.Agent.Core.Health;
@@ -28,24 +29,38 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public Task<SystemMetrics> CollectAsync(CancellationToken cancellationToken = default)
+    public Task<Result<SystemMetrics>> CollectAsync(CancellationToken cancellationToken = default)
     {
-        var metrics = new SystemMetrics
+        // Respect cancellation token
+        if (cancellationToken.IsCancellationRequested)
         {
-            CpuUsagePercent = GetCpuUsage(),
-            TotalMemoryBytes = GetTotalMemory(),
-            AvailableMemoryBytes = GetAvailableMemory(),
-            Disks = GetDiskMetrics(),
-            Networks = GetNetworkMetrics(),
-            SystemUptime = GetSystemUptime(),
-            ProcessorCount = Environment.ProcessorCount,
-            OsDescription = RuntimeInformation.OSDescription
-        };
+            return Task.FromResult(Result<SystemMetrics>.Failure("[Metrics.Cancelled] Collection was cancelled"));
+        }
 
-        // Update telemetry meter
-        _meter.UpdateSystemMetrics(metrics.CpuUsagePercent, metrics.UsedMemoryBytes);
+        try
+        {
+            var metrics = new SystemMetrics
+            {
+                CpuUsagePercent = GetCpuUsage(),
+                TotalMemoryBytes = GetTotalMemory(),
+                AvailableMemoryBytes = GetAvailableMemory(),
+                Disks = GetDiskMetrics(),
+                Networks = GetNetworkMetrics(),
+                SystemUptime = GetSystemUptime(),
+                ProcessorCount = Environment.ProcessorCount,
+                OsDescription = RuntimeInformation.OSDescription
+            };
 
-        return Task.FromResult(metrics);
+            // Update telemetry meter
+            _meter.UpdateSystemMetrics(metrics.CpuUsagePercent, metrics.UsedMemoryBytes);
+
+            return Task.FromResult(Result<SystemMetrics>.Success(metrics));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to collect system metrics");
+            return Task.FromResult(Result<SystemMetrics>.Failure("[Metrics.CollectionFailed] Failed to collect system metrics"));
+        }
     }
 
     private double GetCpuUsage()
@@ -129,9 +144,20 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
     {
         var disks = new List<DiskMetrics>();
 
+        DriveInfo[] drives;
         try
         {
-            foreach (var drive in DriveInfo.GetDrives())
+            drives = DriveInfo.GetDrives();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to enumerate drives");
+            return disks;
+        }
+
+        foreach (var drive in drives)
+        {
+            try
             {
                 if (!drive.IsReady)
                 {
@@ -151,10 +177,11 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
                     AvailableBytes = drive.AvailableFreeSpace
                 });
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to get disk metrics");
+            catch (Exception ex)
+            {
+                // Per-drive error handling: log and continue to other drives
+                _logger.LogDebug(ex, "Failed to get metrics for drive {DriveName}", drive.Name);
+            }
         }
 
         return disks;

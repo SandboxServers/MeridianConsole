@@ -115,7 +115,12 @@ public sealed class HealthReporter : IHealthReporter
             return Result<HeartbeatPayload>.Failure("Cannot create heartbeat: agent is not enrolled");
         }
 
-        var metrics = await _metricsCollector.CollectAsync(cancellationToken);
+        var metricsResult = await _metricsCollector.CollectAsync(cancellationToken);
+        if (!metricsResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to collect system metrics for heartbeat: {Error}", metricsResult.Error);
+            return Result<HeartbeatPayload>.Failure(metricsResult.Error!);
+        }
 
         List<ProcessStatus> activeProcesses;
         if (_processManager is not null)
@@ -145,7 +150,7 @@ public sealed class HealthReporter : IHealthReporter
             AgentVersion = AgentVersion,
             Timestamp = DateTimeOffset.UtcNow,
             Status = status,
-            Metrics = metrics,
+            Metrics = metricsResult.Value!,
             ActiveProcesses = activeProcesses,
             Warnings = warnings
         });

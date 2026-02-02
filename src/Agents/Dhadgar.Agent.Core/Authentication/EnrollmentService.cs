@@ -279,6 +279,12 @@ public sealed class EnrollmentService : IEnrollmentService
             return Result<EnrollmentResult>.Failure(
                 "[Enrollment.InvalidResponse] Invalid enrollment response format");
         }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("exceeded maximum size", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogError(ex, "Enrollment response exceeded maximum allowed size");
+            return Result<EnrollmentResult>.Failure(
+                "[Enrollment.ResponseTooLarge] Response body exceeded maximum allowed size");
+        }
     }
 
     /// <summary>
@@ -467,6 +473,12 @@ public sealed class EnrollmentService : IEnrollmentService
             _logger.LogError(ex, "Invalid JSON in renewal response");
             return Result<CertificateRenewalResult>.Failure(
                 "[Renewal.InvalidResponse] Invalid renewal response format");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("exceeded maximum size", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogError(ex, "Renewal response exceeded maximum allowed size");
+            return Result<CertificateRenewalResult>.Failure(
+                "[Renewal.ResponseTooLarge] Response body exceeded maximum allowed size");
         }
     }
 

@@ -88,12 +88,19 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 "Command {CommandId} rejected: no NodeId in envelope and agent not enrolled",
                 envelope.CommandId);
             _meter.RecordCommandExecuted(envelope.CommandType, success: false);
-            return CommandResult.Rejected(
-                envelope.CommandId,
-                Guid.Empty,
-                "Agent is not enrolled - cannot execute commands without NodeId",
-                "NotEnrolled",
-                envelope.CorrelationId);
+            // Use direct object initialization to avoid ArgumentException from factory (Guid.Empty guard)
+            var now = DateTimeOffset.UtcNow;
+            return new CommandResult
+            {
+                CommandId = envelope.CommandId,
+                NodeId = Guid.Empty,
+                Status = CommandResultStatus.Rejected,
+                StartedAt = now,
+                CompletedAt = now,
+                ErrorMessage = "Agent is not enrolled - cannot execute commands without NodeId",
+                ErrorCode = "NotEnrolled",
+                CorrelationId = envelope.CorrelationId
+            };
         }
 
         using var activity = _activitySource.StartCommandExecution(
@@ -218,10 +225,10 @@ public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
     };
 
     /// <summary>
-    /// Maximum allowed payload size in bytes (1MB).
-    /// Prevents memory exhaustion from oversized command payloads.
+    /// Maximum allowed payload size in bytes (256 KB).
+    /// Aligned with CommandEnvelope.MaxPayloadLength for defense-in-depth.
     /// </summary>
-    private const int MaxPayloadSizeBytes = 1024 * 1024;
+    private const int MaxPayloadSizeBytes = CommandEnvelope.MaxPayloadLength;
 
     protected CommandHandlerBase(ILogger logger)
     {

@@ -194,14 +194,14 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         }
     }
 
-    public async Task SendCommandResultAsync(CommandResult result, CancellationToken cancellationToken = default)
+    public async Task<bool> SendCommandResultAsync(CommandResult result, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(result);
 
         if (_hubConnection?.State != HubConnectionState.Connected)
         {
             _logger.LogWarning("Cannot send command result: not connected");
-            return;
+            return false;
         }
 
         try
@@ -209,11 +209,12 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             var json = JsonSerializer.Serialize(result);
             await _hubConnection.InvokeAsync("CommandResult", json, cancellationToken);
             _logger.LogDebug("Command result sent for command {CommandId}", result.CommandId);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send command result for {CommandId}", result.CommandId);
-            throw;
+            return false;
         }
     }
 
@@ -280,6 +281,16 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                 _logger.LogWarning(
                     "Rejected command {CommandId}: NodeId mismatch (expected {ExpectedNodeId}, received {ReceivedNodeId})",
                     envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
+                return;
+            }
+
+            // Security: Validate OrganizationId matches this agent's OrganizationId (multi-tenant isolation)
+            if (_options.OrganizationId.HasValue && envelope.OrganizationId != Guid.Empty &&
+                envelope.OrganizationId != _options.OrganizationId.Value)
+            {
+                _logger.LogWarning(
+                    "Rejected command {CommandId}: OrganizationId mismatch (expected {ExpectedOrgId}, received {ReceivedOrgId})",
+                    envelope.CommandId, _options.OrganizationId.Value, envelope.OrganizationId);
                 return;
             }
 

@@ -65,7 +65,8 @@ public interface IControlPlaneClient
     /// </summary>
     /// <param name="result">Command execution result.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendCommandResultAsync(CommandResult result, CancellationToken cancellationToken = default);
+    /// <returns>True if the result was sent successfully, false if not connected or send failed.</returns>
+    Task<bool> SendCommandResultAsync(CommandResult result, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Send telemetry data to the control plane.
