@@ -5,10 +5,11 @@
     <OutputType>Exe</OutputType>
 
     <!--
-      Windows-only agent. Runtime identifiers specified at publish time.
-      Build for cross-platform analysis: dotnet build
-      Publish for Windows deployment: dotnet publish -r win-x64
+      Windows-only agent targeting Windows runtimes.
+      linux-x64 included to allow build/analysis on Linux CI runners.
+      Actual deployment always uses win-x64 or win-arm64.
     -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64</RuntimeIdentifiers>
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
@@ -22,8 +23,12 @@
     <!-- Enable unsafe code for P/Invoke operations -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <!-- CA1303: Agents don't need localization for console output -->
-    <NoWarn>$(NoWarn);CA1303</NoWarn>
+    <!--
+      CA1303: Agents don't need localization for console output
+      CA1416: This is a Windows-only project; all Windows APIs are intentional
+      CA1849: Console.Error.WriteLine is acceptable in startup/shutdown paths
+    -->
+    <NoWarn>$(NoWarn);CA1303;CA1416;CA1849</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
