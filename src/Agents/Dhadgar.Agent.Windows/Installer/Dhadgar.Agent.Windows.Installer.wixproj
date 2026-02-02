@@ -10,6 +10,9 @@
       dotnet publish ../Dhadgar.Agent.Windows.csproj -c Release -r win-x64 /publish
 
     The MSI will be output to: bin\$(Configuration)\en-US\
+
+    NOTE: This project only builds on Windows and is excluded from solution build.
+    Build explicitly on Windows: dotnet build src/Agents/Dhadgar.Agent.Windows/Installer
   -->
 
   <PropertyGroup>
