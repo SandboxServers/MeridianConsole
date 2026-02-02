@@ -60,6 +60,15 @@ public sealed class ControlPlaneOptions : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // SECURITY: Enforce HTTPS at configuration time to fail fast on insecure endpoints
+        if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var endpointUri) ||
+            !string.Equals(endpointUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new ValidationResult(
+                $"{nameof(Endpoint)} must be an absolute HTTPS URL",
+                [nameof(Endpoint)]);
+        }
+
         if (MaxReconnectDelaySeconds < ReconnectDelaySeconds)
         {
             yield return new ValidationResult(

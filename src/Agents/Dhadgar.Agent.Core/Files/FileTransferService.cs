@@ -89,6 +89,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             return Result<FileTransferResult>.Failure(
                 "[Transfer.Disposed] File transfer service is shut down");
         }
+        catch (ObjectDisposedException)
+        {
+            // Race condition: semaphore was disposed between _disposed check and WaitAsync
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Disposed] File transfer service is shut down");
+        }
         catch (OperationCanceledException)
         {
             return Result<FileTransferResult>.Failure(
@@ -121,7 +127,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             if (!_activeTransfers.TryAdd(request.TransferId, transferState))
             {
                 transferState.CancellationSource.Dispose();
-                _transferSemaphore.Release();
+                try { _transferSemaphore.Release(); }
+                catch (ObjectDisposedException) { /* Disposed during shutdown, safe to ignore */ }
                 semaphoreReleased = true;
                 return Result<FileTransferResult>.Failure(
                     "[Transfer.Duplicate] A transfer with this ID is already in progress");
@@ -371,7 +378,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             // Always release semaphore unless already released
             if (!semaphoreReleased)
             {
-                _transferSemaphore.Release();
+                try { _transferSemaphore.Release(); }
+                catch (ObjectDisposedException) { /* Disposed during shutdown, safe to ignore */ }
             }
         }
     }
@@ -408,6 +416,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             return Result<FileTransferResult>.Failure(
                 "[Transfer.Disposed] File transfer service is shut down");
         }
+        catch (ObjectDisposedException)
+        {
+            // Race condition: semaphore was disposed between _disposed check and WaitAsync
+            return Result<FileTransferResult>.Failure(
+                "[Transfer.Disposed] File transfer service is shut down");
+        }
         catch (OperationCanceledException)
         {
             return Result<FileTransferResult>.Failure(
@@ -440,7 +454,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             if (!_activeTransfers.TryAdd(request.TransferId, transferState))
             {
                 transferState.CancellationSource.Dispose();
-                _transferSemaphore.Release();
+                try { _transferSemaphore.Release(); }
+                catch (ObjectDisposedException) { /* Disposed during shutdown, safe to ignore */ }
                 semaphoreReleased = true;
                 return Result<FileTransferResult>.Failure(
                     "[Transfer.Duplicate] A transfer with this ID is already in progress");
@@ -571,7 +586,8 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             // Always release semaphore unless already released
             if (!semaphoreReleased)
             {
-                _transferSemaphore.Release();
+                try { _transferSemaphore.Release(); }
+                catch (ObjectDisposedException) { /* Disposed during shutdown, safe to ignore */ }
             }
         }
     }
@@ -636,6 +652,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             return;
         }
 
+        // SECURITY: Set disposed flag FIRST to prevent new operations from starting
+        // This closes the race window where WaitAsync could be called after Cancel but before Dispose
+        _disposed = true;
+
         // Cancel in-flight transfers before disposing semaphore
         // This prevents SemaphoreSlim.Release on a disposed semaphore
         try
@@ -649,7 +669,6 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
         _disposeCts.Dispose();
         _transferSemaphore.Dispose();
-        _disposed = true;
     }
 
     private sealed class TransferState

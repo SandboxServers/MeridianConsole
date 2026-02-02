@@ -17,6 +17,35 @@ namespace Dhadgar.Agent.Core.Commands;
 /// </summary>
 public sealed class CommandDispatcher : ICommandDispatcher
 {
+    /// <summary>
+    /// Maximum length for command type in metrics to prevent cardinality explosion.
+    /// </summary>
+    private const int MaxCommandTypeLength = 64;
+
+    /// <summary>
+    /// Allowlist of known command types for metrics.
+    /// Unknown types are recorded as "Unknown" to prevent metric cardinality explosion.
+    /// </summary>
+    private static readonly HashSet<string> KnownCommandTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Ping",
+        "StartServer",
+        "StopServer",
+        "RestartServer",
+        "UpdateServer",
+        "InstallMod",
+        "UninstallMod",
+        "UpdateMod",
+        "FileDownload",
+        "FileUpload",
+        "ExecuteCommand",
+        "GetStatus",
+        "GetLogs",
+        "ConfigureServer",
+        "Backup",
+        "Restore"
+    };
+
     private readonly ConcurrentDictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ICommandValidator _validator;
     private readonly AgentOptions _options;
@@ -64,6 +93,20 @@ public sealed class CommandDispatcher : ICommandDispatcher
         return _handlers.ContainsKey(commandType);
     }
 
+    /// <summary>
+    /// Sanitizes a command type for use in metrics and logging to prevent cardinality explosion.
+    /// Returns "Unknown" for null, empty, too-long, or unrecognized command types.
+    /// </summary>
+    private static string SanitizeCommandTypeForMetrics(string? commandType)
+    {
+        if (string.IsNullOrEmpty(commandType) || commandType.Length > MaxCommandTypeLength)
+        {
+            return "Unknown";
+        }
+
+        return KnownCommandTypes.Contains(commandType) ? commandType : "Unknown";
+    }
+
     public async Task<Result<CommandResult>> DispatchAsync(
         CommandEnvelope envelope,
         CancellationToken cancellationToken = default)
@@ -71,6 +114,10 @@ public sealed class CommandDispatcher : ICommandDispatcher
         ArgumentNullException.ThrowIfNull(envelope);
 
         var startedAt = DateTimeOffset.UtcNow;
+
+        // SECURITY: Sanitize CommandType early to prevent metric cardinality explosion and log injection
+        // Use sanitized value for all metrics and logging throughout the method
+        var metricCommandType = SanitizeCommandTypeForMetrics(envelope.CommandType);
 
         // Resolve nodeId - SECURITY: fail-closed, require enrollment and matching NodeId
         Guid resolvedNodeId;
@@ -82,7 +129,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 _logger.LogWarning(
                     "Command {CommandId} rejected: envelope has empty NodeId but agent is enrolled as {EnrolledNodeId}",
                     envelope.CommandId, _options.NodeId.Value);
-                _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+                _meter.RecordCommandExecuted(metricCommandType, success: false);
                 var now = DateTimeOffset.UtcNow;
                 return Result<CommandResult>.Success(new CommandResult
                 {
@@ -102,7 +149,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 _logger.LogWarning(
                     "Command {CommandId} rejected: NodeId mismatch (expected {ExpectedNodeId}, received {ReceivedNodeId})",
                     envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
-                _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+                _meter.RecordCommandExecuted(metricCommandType, success: false);
                 var now = DateTimeOffset.UtcNow;
                 return Result<CommandResult>.Success(new CommandResult
                 {
@@ -125,7 +172,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
             _logger.LogWarning(
                 "Command {CommandId} rejected: agent not enrolled (no NodeId configured)",
                 envelope.CommandId);
-            _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
             var now = DateTimeOffset.UtcNow;
             return Result<CommandResult>.Success(new CommandResult
             {
@@ -142,12 +189,12 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
         using var activity = _activitySource.StartCommandExecution(
             envelope.CommandId,
-            envelope.CommandType,
+            metricCommandType,
             envelope.CorrelationId);
 
         _logger.LogInformation(
             "Dispatching command {CommandType} with ID {CommandId}",
-            envelope.CommandType,
+            metricCommandType,
             envelope.CommandId);
 
         // Validate the command
@@ -160,7 +207,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 envelope.CommandId,
                 error);
 
-            _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, error);
 
             // SECURITY: Handle empty CommandId to prevent ArgumentException from CommandResult.Rejected
@@ -188,20 +235,20 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 envelope.CorrelationId));
         }
 
-        // Find handler
+        // Find handler (use original CommandType for lookup, sanitized for metrics/logging)
         if (!_handlers.TryGetValue(envelope.CommandType, out var handler))
         {
             _logger.LogWarning(
                 "No handler registered for command type: {CommandType}",
-                envelope.CommandType);
+                metricCommandType);
 
-            _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Unknown command type");
 
             return Result<CommandResult>.Success(CommandResult.Rejected(
                 envelope.CommandId,
                 resolvedNodeId,
-                $"Unknown command type: {envelope.CommandType}",
+                $"Unknown command type: {metricCommandType}",
                 "UnknownCommandType",
                 envelope.CorrelationId));
         }
@@ -212,14 +259,14 @@ public sealed class CommandDispatcher : ICommandDispatcher
             var handlerResult = await handler.ExecuteAsync(envelope, cancellationToken);
             if (!handlerResult.IsSuccess)
             {
-                _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+                _meter.RecordCommandExecuted(metricCommandType, success: false);
                 activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, handlerResult.Error);
                 return handlerResult;
             }
 
             var result = handlerResult.Value!;
             var success = result.Status == CommandResultStatus.Succeeded;
-            _meter.RecordCommandExecuted(envelope.CommandType, success);
+            _meter.RecordCommandExecuted(metricCommandType, success);
 
             if (!success)
             {
@@ -236,7 +283,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("Command {CommandId} was cancelled", envelope.CommandId);
-            _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Cancelled");
 
             return Result<CommandResult>.Success(new CommandResult
@@ -253,7 +300,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
         catch (Exception ex)
         {
             _logger.LogError(ex, "Command {CommandId} failed with exception", envelope.CommandId);
-            _meter.RecordCommandExecuted(envelope.CommandType, success: false);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
 
             // SECURITY: Return generic error message to caller, keep details in logs

@@ -112,6 +112,14 @@ public static class AgentServiceCollectionExtensions
 
                 // Add client certificate for mTLS if available
                 var clientCert = certificateStore.GetClientCertificate();
+
+                // SECURITY: Enrolled agents MUST have a client certificate for mTLS
+                if (options.NodeId.HasValue && clientCert is null)
+                {
+                    throw new InvalidOperationException(
+                        "Client certificate is required for enrolled agents (NodeId is set)");
+                }
+
                 if (clientCert is not null)
                 {
                     handler.ClientCertificates.Add(clientCert);
