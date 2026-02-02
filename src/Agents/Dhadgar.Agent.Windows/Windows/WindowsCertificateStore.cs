@@ -523,16 +523,18 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 
         try
         {
+            // Note: We only track certificates that match our subject.
+            // Non-matching certificates are not disposed here as they remain
+            // in the store and may be used by other applications.
             foreach (var cert in store.Certificates)
             {
                 if (MatchesSubject(cert, subjectName))
                 {
                     certsToRemove.Add(cert);
                 }
-                else
-                {
-                    cert.Dispose();
-                }
+                // Non-matching certificates are intentionally not disposed here
+                // as disposing them doesn't remove them from the store and could
+                // cause issues if other code holds references to them.
             }
 
             foreach (var cert in certsToRemove)

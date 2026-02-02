@@ -24,10 +24,10 @@
     <SuppressIces>ICE61</SuppressIces>
   </PropertyGroup>
 
-  <!-- WiX extensions -->
+  <!-- WiX extensions (versions managed in Directory.Packages.props) -->
   <ItemGroup>
-    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
-    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.UI.wixext" />
+    <PackageReference Include="WixToolset.Util.wixext" />
   </ItemGroup>
 
   <!--
