@@ -90,7 +90,7 @@ public static class Program
                 // Configure service recovery with progressive delays (5s/10s/30s).
                 // This overrides WiX's uniform delay to set proper progression via sc.exe.
                 // Runs on every startup to ensure correct config even after service reinstall.
-                var recoveryResult = ServiceInstaller.ConfigureRecovery();
+                var recoveryResult = await ServiceInstaller.ConfigureRecoveryAsync();
                 if (recoveryResult.IsFailure)
                 {
                     // Log warning but don't fail startup - service will still work with WiX baseline delays

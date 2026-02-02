@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Installation;
@@ -15,6 +16,8 @@ namespace Dhadgar.Agent.Windows.Installation;
 /// </remarks>
 public static class ServiceInstaller
 {
+    private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(30);
+
     /// <summary>
     /// Configures the Windows Service recovery options.
     /// Must be run after service installation with administrator privileges.
@@ -26,58 +29,24 @@ public static class ServiceInstaller
     /// - Subsequent failures: restart after 30 seconds
     /// - Reset failure count after 24 hours (86400 seconds)
     /// </remarks>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A result indicating success or failure with an error message.</returns>
-    public static Result ConfigureRecovery()
+    public static async Task<Result> ConfigureRecoveryAsync(CancellationToken cancellationToken = default)
     {
         // SECURITY: Service name is intentionally hardcoded to prevent command injection
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = "sc.exe",
-            Arguments = $"failure {Program.ServiceName} reset= 86400 actions= restart/5000/restart/10000/restart/30000",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true
-        });
-
-        if (process is null)
-        {
-            return Result.Failure("Failed to start sc.exe");
-        }
-
-        // Read output before WaitForExit to avoid buffer deadlock
-        var error = process.StandardError.ReadToEnd();
-        var output = process.StandardOutput.ReadToEnd();
-
-        if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
-        {
-            try
-            {
-                process.Kill();
-            }
-            catch (InvalidOperationException)
-            {
-                // Process already exited
-            }
-
-            return Result.Failure("sc.exe command timed out.");
-        }
-
-        if (process.ExitCode != 0)
-        {
-            return Result.Failure(
-                $"Failed to configure service recovery. Exit code: {process.ExitCode}. Error: {error}");
-        }
-
-        return Result.Success();
+        return await RunScCommandAsync(
+            $"failure {Program.ServiceName} reset= 86400 actions= restart/5000/restart/10000/restart/30000",
+            "configure service recovery",
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Sets the service description.
     /// </summary>
     /// <param name="description">The service description text.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A result indicating success or failure with an error message.</returns>
-    public static Result SetDescription(string description)
+    public static async Task<Result> SetDescriptionAsync(string description, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(description))
         {
@@ -87,58 +56,41 @@ public static class ServiceInstaller
         // SECURITY: Escape quotes in description to prevent command injection
         var escapedDescription = description.Replace("\"", "\\\"", StringComparison.Ordinal);
 
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = "sc.exe",
-            Arguments = $"description {Program.ServiceName} \"{escapedDescription}\"",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true
-        });
-
-        if (process is null)
-        {
-            return Result.Failure("Failed to start sc.exe");
-        }
-
-        // Read output before WaitForExit to avoid buffer deadlock
-        var error = process.StandardError.ReadToEnd();
-        var output = process.StandardOutput.ReadToEnd();
-
-        if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
-        {
-            try
-            {
-                process.Kill();
-            }
-            catch (InvalidOperationException)
-            {
-                // Process already exited
-            }
-
-            return Result.Failure("sc.exe command timed out.");
-        }
-
-        if (process.ExitCode != 0)
-        {
-            return Result.Failure(
-                $"Failed to set service description. Exit code: {process.ExitCode}. Error: {error}");
-        }
-
-        return Result.Success();
+        return await RunScCommandAsync(
+            $"description {Program.ServiceName} \"{escapedDescription}\"",
+            "set service description",
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Configures the service to start automatically with delayed start.
     /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A result indicating success or failure with an error message.</returns>
-    public static Result ConfigureDelayedAutoStart()
+    public static async Task<Result> ConfigureDelayedAutoStartAsync(CancellationToken cancellationToken = default)
+    {
+        return await RunScCommandAsync(
+            $"config {Program.ServiceName} start= delayed-auto",
+            "configure delayed auto-start",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs an sc.exe command with proper async output handling and timeout.
+    /// </summary>
+    /// <param name="arguments">The arguments to pass to sc.exe.</param>
+    /// <param name="operationDescription">Description of the operation for error messages.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A result indicating success or failure.</returns>
+    private static async Task<Result> RunScCommandAsync(
+        string arguments,
+        string operationDescription,
+        CancellationToken cancellationToken)
     {
         using var process = Process.Start(new ProcessStartInfo
         {
             FileName = "sc.exe",
-            Arguments = $"config {Program.ServiceName} start= delayed-auto",
+            Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardError = true,
@@ -150,12 +102,22 @@ public static class ServiceInstaller
             return Result.Failure("Failed to start sc.exe");
         }
 
-        // Read output before WaitForExit to avoid buffer deadlock
-        var error = process.StandardError.ReadToEnd();
-        var output = process.StandardOutput.ReadToEnd();
+        // Start async reads immediately to avoid buffer deadlock
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
 
-        if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
+        // Create a combined cancellation token for the timeout
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(ProcessTimeout);
+
+        try
         {
+            // Wait for process exit with timeout
+            await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Timeout occurred (not user cancellation)
             try
             {
                 process.Kill();
@@ -165,13 +127,39 @@ public static class ServiceInstaller
                 // Process already exited
             }
 
+            // Still await the output tasks to completion (they should complete quickly after kill)
+            try
+            {
+                await Task.WhenAll(errorTask, outputTask).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Output reads may also be cancelled
+            }
+
             return Result.Failure("sc.exe command timed out.");
+        }
+
+        // Process exited normally, get the output
+        string error;
+        try
+        {
+            error = await errorTask.ConfigureAwait(false);
+            _ = await outputTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return Result.Failure("Operation was cancelled.");
         }
 
         if (process.ExitCode != 0)
         {
-            return Result.Failure(
-                $"Failed to configure delayed auto-start. Exit code: {process.ExitCode}. Error: {error}");
+            return Result.Failure(string.Format(
+                CultureInfo.InvariantCulture,
+                "Failed to {0}. Exit code: {1}. Error: {2}",
+                operationDescription,
+                process.ExitCode,
+                error));
         }
 
         return Result.Success();

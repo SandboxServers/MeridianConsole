@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 using Dhadgar.Shared.Results;
 
+using Microsoft.CSharp.RuntimeBinder;
 using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.Agent.Windows.Windows;
@@ -104,7 +106,6 @@ internal sealed partial class FirewallManager : IDisposable
     /// </summary>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when logger is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when Windows Firewall policy is not available.</exception>
     public FirewallManager(ILogger<FirewallManager> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -113,22 +114,51 @@ internal sealed partial class FirewallManager : IDisposable
         // Initialize COM firewall policy on Windows only
         if (OperatingSystem.IsWindows())
         {
-            var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
-            if (policyType is null)
+            try
             {
-                _logger.LogWarning("Windows Firewall policy COM type not available");
-                return;
-            }
+                // Use local variables until all steps succeed to ensure atomic initialization
+                var policyTypeLocal = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+                if (policyTypeLocal is null)
+                {
+                    _logger.LogWarning("Windows Firewall policy COM type not available");
+                    return;
+                }
 
-            _firewallPolicy = Activator.CreateInstance(policyType);
-            if (_firewallPolicy is null)
+                var firewallPolicyLocal = Activator.CreateInstance(policyTypeLocal);
+                if (firewallPolicyLocal is null)
+                {
+                    _logger.LogWarning("Failed to create Windows Firewall policy instance");
+                    return;
+                }
+
+                // Get the Rules collection - this can throw RuntimeBinderException or COMException
+                var rulesLocal = ((dynamic)firewallPolicyLocal).Rules;
+
+                // All steps succeeded - assign to fields
+                _firewallPolicy = firewallPolicyLocal;
+                _rules = rulesLocal;
+            }
+            catch (COMException ex)
             {
-                _logger.LogWarning("Failed to create Windows Firewall policy instance");
-                return;
+                _logger.LogWarning(
+                    ex,
+                    "Failed to initialize Windows Firewall COM API: {Message} (0x{HResult:X8})",
+                    ex.Message,
+                    ex.HResult);
             }
-
-            // Get the Rules collection
-            _rules = ((dynamic)_firewallPolicy).Rules;
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Access denied initializing Windows Firewall COM API. Ensure the agent runs with administrator privileges.");
+            }
+            catch (RuntimeBinderException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to access Windows Firewall Rules collection: {Message}",
+                    ex.Message);
+            }
         }
     }
 
@@ -191,7 +221,11 @@ internal sealed partial class FirewallManager : IDisposable
 
                 // Configure the rule
                 dynamicRule.Name = ruleName;
-                dynamicRule.Description = $"Meridian Console managed rule for port {port}/{protocol}";
+                dynamicRule.Description = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Meridian Console managed rule for port {0}/{1}",
+                    port,
+                    protocol);
                 dynamicRule.Protocol = protocol.Equals("TCP", StringComparison.OrdinalIgnoreCase)
                     ? (int)NetFwIpProtocol.Tcp
                     : (int)NetFwIpProtocol.Udp;
@@ -314,10 +348,11 @@ internal sealed partial class FirewallManager : IDisposable
 
         _logger.LogDebug("Checking if firewall rule exists: Name={RuleName}", ruleName);
 
+        object? rule = null;
         try
         {
             // Try to get the rule by name - throws if not found
-            _ = _rules.Item(ruleName);
+            rule = _rules.Item(ruleName);
 
             _logger.LogDebug("Firewall rule exists: Name={RuleName}, Exists=True", ruleName);
             return Result<bool>.Success(true);
@@ -336,6 +371,21 @@ internal sealed partial class FirewallManager : IDisposable
                 ex.HResult);
 
             return Result<bool>.Failure($"Failed to check firewall rule: {ex.Message} (0x{ex.HResult:X8})");
+        }
+        finally
+        {
+            // Release the COM object to avoid RCW accumulation
+            if (rule is not null)
+            {
+                try
+                {
+                    Marshal.ReleaseComObject(rule);
+                }
+                catch (InvalidComObjectException)
+                {
+                    // Object may have already been released
+                }
+            }
         }
     }
 
@@ -450,7 +500,11 @@ internal sealed partial class FirewallManager : IDisposable
 
         if (ruleName.Length > MaxRuleNameLength)
         {
-            return Result.Failure($"Rule name must not exceed {MaxRuleNameLength} characters. Provided length: {ruleName.Length}");
+            return Result.Failure(string.Format(
+                CultureInfo.InvariantCulture,
+                "Rule name must not exceed {0} characters. Provided length: {1}",
+                MaxRuleNameLength,
+                ruleName.Length));
         }
 
         if (!RuleNamePattern().IsMatch(ruleName))
