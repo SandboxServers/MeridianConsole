@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Installation;
 
@@ -25,8 +26,8 @@ public static class ServiceInstaller
     /// - Subsequent failures: restart after 30 seconds
     /// - Reset failure count after 24 hours (86400 seconds)
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when sc.exe fails to configure recovery.</exception>
-    public static void ConfigureRecovery()
+    /// <returns>A result indicating success or failure with an error message.</returns>
+    public static Result ConfigureRecovery()
     {
         // SECURITY: Service name is intentionally hardcoded to prevent command injection
         var process = Process.Start(new ProcessStartInfo
@@ -41,7 +42,7 @@ public static class ServiceInstaller
 
         if (process is null)
         {
-            throw new InvalidOperationException("Failed to start sc.exe");
+            return Result.Failure("Failed to start sc.exe");
         }
 
         // Read output before WaitForExit to avoid buffer deadlock
@@ -59,22 +60,24 @@ public static class ServiceInstaller
                 // Process already exited
             }
 
-            throw new InvalidOperationException("sc.exe command timed out.");
+            return Result.Failure("sc.exe command timed out.");
         }
 
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException(
+            return Result.Failure(
                 $"Failed to configure service recovery. Exit code: {process.ExitCode}. Error: {error}");
         }
+
+        return Result.Success();
     }
 
     /// <summary>
     /// Sets the service description.
     /// </summary>
     /// <param name="description">The service description text.</param>
-    /// <exception cref="InvalidOperationException">Thrown when sc.exe fails.</exception>
-    public static void SetDescription(string description)
+    /// <returns>A result indicating success or failure with an error message.</returns>
+    public static Result SetDescription(string description)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
 
@@ -93,7 +96,7 @@ public static class ServiceInstaller
 
         if (process is null)
         {
-            throw new InvalidOperationException("Failed to start sc.exe");
+            return Result.Failure("Failed to start sc.exe");
         }
 
         // Read output before WaitForExit to avoid buffer deadlock
@@ -111,21 +114,23 @@ public static class ServiceInstaller
                 // Process already exited
             }
 
-            throw new InvalidOperationException("sc.exe command timed out.");
+            return Result.Failure("sc.exe command timed out.");
         }
 
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException(
+            return Result.Failure(
                 $"Failed to set service description. Exit code: {process.ExitCode}. Error: {error}");
         }
+
+        return Result.Success();
     }
 
     /// <summary>
     /// Configures the service to start automatically with delayed start.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when sc.exe fails.</exception>
-    public static void ConfigureDelayedAutoStart()
+    /// <returns>A result indicating success or failure with an error message.</returns>
+    public static Result ConfigureDelayedAutoStart()
     {
         var process = Process.Start(new ProcessStartInfo
         {
@@ -139,7 +144,7 @@ public static class ServiceInstaller
 
         if (process is null)
         {
-            throw new InvalidOperationException("Failed to start sc.exe");
+            return Result.Failure("Failed to start sc.exe");
         }
 
         // Read output before WaitForExit to avoid buffer deadlock
@@ -157,13 +162,15 @@ public static class ServiceInstaller
                 // Process already exited
             }
 
-            throw new InvalidOperationException("sc.exe command timed out.");
+            return Result.Failure("sc.exe command timed out.");
         }
 
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException(
+            return Result.Failure(
                 $"Failed to configure delayed auto-start. Exit code: {process.ExitCode}. Error: {error}");
         }
+
+        return Result.Success();
     }
 }

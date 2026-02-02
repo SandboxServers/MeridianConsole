@@ -16,7 +16,6 @@ namespace Dhadgar.Agent.Windows.Tests.Windows;
 public sealed class WindowsCertificateStoreTests : IDisposable
 {
     private readonly ILogger<WindowsCertificateStore> _logger;
-    private const int MaxCertificateSize = 16 * 1024;
 
     public WindowsCertificateStoreTests()
     {
@@ -84,14 +83,14 @@ public sealed class WindowsCertificateStoreTests : IDisposable
         // Arrange
         using var store = new WindowsCertificateStore(_logger);
         using var cert = CreateSelfSignedCertificate("CN=Test");
-        var oversizedPrivateKey = new byte[MaxCertificateSize + 1];
+        var oversizedPrivateKey = new byte[WindowsCertificateStore.MaxCertificateSize + 1];
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<ArgumentException>(
             () => store.StoreCertificateAsync(cert, oversizedPrivateKey));
         Assert.Equal("privateKey", exception.ParamName);
         Assert.Contains("exceeds maximum allowed size", exception.Message, StringComparison.Ordinal);
-        Assert.Contains($"{MaxCertificateSize} bytes", exception.Message, StringComparison.Ordinal);
+        Assert.Contains($"{WindowsCertificateStore.MaxCertificateSize} bytes", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -100,7 +99,7 @@ public sealed class WindowsCertificateStoreTests : IDisposable
         // Arrange
         using var store = new WindowsCertificateStore(_logger);
         using var cert = CreateSelfSignedCertificate("CN=Test");
-        var maxSizePrivateKey = new byte[MaxCertificateSize];
+        var maxSizePrivateKey = new byte[WindowsCertificateStore.MaxCertificateSize];
 
         // Act & Assert
         // This will likely fail because the key isn't valid, but it should pass the size validation
@@ -122,7 +121,7 @@ public sealed class WindowsCertificateStoreTests : IDisposable
         using var normalCert = CreateSelfSignedCertificate("CN=Test");
 
         // Assert that normal certificate size is acceptable
-        Assert.True(normalCert.RawData.Length <= MaxCertificateSize);
+        Assert.True(normalCert.RawData.Length <= WindowsCertificateStore.MaxCertificateSize);
 
         // The actual test for oversized certs would require a mock, which isn't possible
         // with sealed X509Certificate2. This test documents the expected behavior.
@@ -154,7 +153,7 @@ public sealed class WindowsCertificateStoreTests : IDisposable
         using var normalCert = CreateSelfSignedCertificate("CN=Meridian Console CA");
 
         // Assert that normal certificate size is acceptable
-        Assert.True(normalCert.RawData.Length <= MaxCertificateSize);
+        Assert.True(normalCert.RawData.Length <= WindowsCertificateStore.MaxCertificateSize);
 
         // The actual test for oversized certs would require a mock, which isn't possible
         // with sealed X509Certificate2. This test documents the expected behavior.
@@ -277,32 +276,6 @@ public sealed class WindowsCertificateStoreTests : IDisposable
 
         // Act & Assert
         Assert.Throws<ObjectDisposedException>(() => store.NeedsRenewal(30));
-    }
-
-    #endregion
-
-    #region Input Validation Tests
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(1024)]
-    [InlineData(8192)]
-    [InlineData(16384)] // Max size
-    public void PrivateKeySize_ValidSizes_AreAccepted(int size)
-    {
-        // This test documents that sizes up to MaxCertificateSize should be accepted
-        Assert.True(size <= MaxCertificateSize);
-    }
-
-    [Theory]
-    [InlineData(16385)]
-    [InlineData(20000)]
-    [InlineData(100000)]
-    public void PrivateKeySize_OversizedValues_ExceedMaximum(int size)
-    {
-        // This test documents that sizes over MaxCertificateSize should be rejected
-        Assert.True(size > MaxCertificateSize);
     }
 
     #endregion

@@ -4,11 +4,28 @@ using Xunit;
 namespace Dhadgar.Agent.Windows.Tests.Installation;
 
 /// <summary>
-/// Tests for <see cref="ServiceInstaller"/>.
+/// Tests for <see cref="ServiceInstaller"/> command construction patterns and security properties.
 /// </summary>
 /// <remarks>
-/// These tests focus on verifying command construction and security properties
-/// rather than actual sc.exe execution, which requires administrator privileges.
+/// <para>
+/// <strong>Important:</strong> These are property-based documentation tests, not traditional unit tests.
+/// They verify command construction patterns, string manipulation logic, and security invariants
+/// rather than exercising the actual <see cref="ServiceInstaller"/> methods directly.
+/// </para>
+/// <para>
+/// The <see cref="ServiceInstaller"/> class executes sc.exe which requires administrator privileges
+/// and cannot be meaningfully unit tested without elevated permissions. These tests instead:
+/// </para>
+/// <list type="bullet">
+/// <item>Document expected security properties (no shell metacharacters in service name)</item>
+/// <item>Verify command argument patterns match documentation</item>
+/// <item>Test string escaping logic that mirrors production behavior</item>
+/// <item>Ensure hardcoded values meet Windows service requirements</item>
+/// </list>
+/// <para>
+/// Integration tests with actual sc.exe execution would require a Windows environment
+/// with administrator privileges and are out of scope for this test suite.
+/// </para>
 /// </remarks>
 public sealed class ServiceInstallerTests
 {

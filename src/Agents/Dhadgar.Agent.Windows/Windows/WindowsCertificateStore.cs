@@ -130,7 +130,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task StoreCertificateAsync(
+    public Task StoreCertificateAsync(
         X509Certificate2 certificate,
         byte[] privateKey,
         CancellationToken cancellationToken = default)
@@ -156,7 +156,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
         }
 
         // Import the private key and combine with certificate
-        using var certWithKey = await ImportCertificateWithKeyAsync(certificate, privateKey, cancellationToken);
+        using var certWithKey = ImportCertificateWithKey(certificate, privateKey);
 
         lock (_storeLock)
         {
@@ -187,6 +187,8 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
                 throw;
             }
         }
+
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -395,13 +397,10 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     /// SECURITY: This method uses ArrayPool and Span to avoid creating immutable strings
     /// containing private key data. All temporary buffers are cleared before returning.
     /// </remarks>
-    private static Task<X509Certificate2> ImportCertificateWithKeyAsync(
+    private static X509Certificate2 ImportCertificateWithKey(
         X509Certificate2 certificate,
-        byte[] privateKeyBytes,
-        CancellationToken cancellationToken)
+        byte[] privateKeyBytes)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
         // SECURITY: Check for PEM format using byte comparison instead of string conversion
         // This avoids creating an immutable string containing private key data
         ReadOnlySpan<byte> pemHeader = "-----BEGIN"u8;
@@ -475,7 +474,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     /// store requires it to persist the private key properly for mTLS operations.
     /// The key is protected by Windows DPAPI and machine-level ACLs.
     /// </remarks>
-    private static Task<X509Certificate2> ExportAndReimportCertificate(X509Certificate2 certWithKey)
+    private static X509Certificate2 ExportAndReimportCertificate(X509Certificate2 certWithKey)
     {
         byte[]? pfxBytes = null;
         try
@@ -490,7 +489,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
                 X509KeyStorageFlags.PersistKeySet |
                 X509KeyStorageFlags.Exportable);
 
-            return Task.FromResult(finalCert);
+            return finalCert;
         }
         finally
         {

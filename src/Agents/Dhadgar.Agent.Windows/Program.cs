@@ -2,6 +2,7 @@ using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Hosting;
 using Dhadgar.Agent.Core.Process;
+using Dhadgar.Agent.Windows.Installation;
 using Dhadgar.Agent.Windows.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -50,6 +51,7 @@ public static class Program
             // Add Windows-specific implementations (required by Agent.Core)
             builder.Services.AddSingleton<ICertificateStore, WindowsCertificateStore>();
             builder.Services.AddSingleton<IProcessManager, WindowsProcessManager>();
+            builder.Services.AddSingleton<IEnrollmentTokenCleanup, EnrollmentTokenCleanup>();
 
             // Add Windows Firewall manager
             builder.Services.AddSingleton<FirewallManager>();
@@ -84,6 +86,23 @@ public static class Program
                     "Windows Agent starting. NodeId: {NodeId}, ControlPlane: {Endpoint}",
                     options.NodeId?.ToString() ?? "(not enrolled)",
                     uri.Host);
+
+                // Configure service recovery with progressive delays (5s/10s/30s).
+                // This overrides WiX's uniform delay to set proper progression via sc.exe.
+                // Runs on every startup to ensure correct config even after service reinstall.
+                var recoveryResult = ServiceInstaller.ConfigureRecovery();
+                if (recoveryResult.IsFailure)
+                {
+                    // Log warning but don't fail startup - service will still work with WiX baseline delays
+                    logger.LogWarning(
+                        "Failed to configure service recovery delays: {Error}. " +
+                        "Service will use uniform 5-second delays instead of 5s/10s/30s progression.",
+                        recoveryResult.Error);
+                }
+                else
+                {
+                    logger.LogDebug("Service recovery configured with progressive delays (5s/10s/30s)");
+                }
             }
 
             await host.RunAsync();

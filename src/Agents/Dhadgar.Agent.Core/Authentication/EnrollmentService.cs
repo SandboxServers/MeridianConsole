@@ -31,17 +31,20 @@ public sealed class EnrollmentService : IEnrollmentService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AgentOptions _options;
     private readonly ILogger<EnrollmentService> _logger;
+    private readonly IEnrollmentTokenCleanup? _enrollmentTokenCleanup;
 
     public EnrollmentService(
         ICertificateStore certificateStore,
         IHttpClientFactory httpClientFactory,
         IOptions<AgentOptions> options,
-        ILogger<EnrollmentService> logger)
+        ILogger<EnrollmentService> logger,
+        IEnrollmentTokenCleanup? enrollmentTokenCleanup = null)
     {
         _certificateStore = certificateStore ?? throw new ArgumentNullException(nameof(certificateStore));
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _enrollmentTokenCleanup = enrollmentTokenCleanup;
     }
 
     /// <summary>
@@ -247,6 +250,10 @@ public sealed class EnrollmentService : IEnrollmentService
 
             _logger.LogInformation("Enrollment completed successfully. Node ID: {NodeId}",
                 enrollmentResponse.NodeId);
+
+            // SECURITY: Clean up the enrollment token from platform-specific storage
+            // This prevents token reuse attacks and exposure via registry/file inspection
+            _enrollmentTokenCleanup?.CleanupEnrollmentToken();
 
             return Result<EnrollmentResult>.Success(new EnrollmentResult
             {

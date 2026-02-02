@@ -47,7 +47,7 @@
     <Media Id="1" Cabinet="agent.cab" EmbedCab="yes" CompressionLevel="high" />
 
     <!-- Define properties -->
-    <Property Id="ENROLLMENT_TOKEN" Secure="yes" />
+    <Property Id="ENROLLMENT_TOKEN" Secure="yes" Hidden="yes" />
     <Property Id="ARPURLINFOABOUT" Value="https://www.meridianconsole.com" />
     <Property Id="ARPURLUPDATEINFO" Value="https://www.meridianconsole.com/downloads" />
     <Property Id="ARPHELPLINK" Value="https://docs.meridianconsole.com" />
@@ -194,11 +194,22 @@
                       Vital="yes">
 
         <!--
-          Service recovery configuration:
+          Service recovery configuration.
+
+          WIX LIMITATION: The util:ServiceConfig element only supports a single
+          RestartServiceDelayInSeconds value applied to all failure actions.
+          It cannot specify different delays per failure (5s/10s/30s progression).
+
+          RESOLUTION: The agent calls ServiceInstaller.ConfigureRecovery() on startup,
+          which uses sc.exe to configure proper progressive delays:
           - First failure: restart after 5 seconds
           - Second failure: restart after 10 seconds
           - Third failure: restart after 30 seconds
-          - Reset failure count after 1 day
+          - Reset failure count after 1 day (86400 seconds)
+
+          The WiX config below sets initial uniform 5-second delays as a baseline.
+          The agent's startup reconfiguration ensures correct progressive delays.
+          See: src/Agents/Dhadgar.Agent.Windows/Installation/ServiceInstaller.cs
         -->
         <util:ServiceConfig FirstFailureActionType="restart"
                             SecondFailureActionType="restart"
