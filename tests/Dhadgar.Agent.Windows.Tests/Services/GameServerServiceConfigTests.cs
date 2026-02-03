@@ -140,7 +140,7 @@ public sealed class GameServerServiceConfigTests
         // Assert
         var error = Assert.Single(results);
         Assert.Contains(nameof(GameServerServiceConfig.WrapperExecutablePath), error.MemberNames);
-        Assert.Contains("absolute path", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fully qualified", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class GameServerServiceConfigTests
         // Assert
         var error = Assert.Single(results);
         Assert.Contains(nameof(GameServerServiceConfig.ServerDirectory), error.MemberNames);
-        Assert.Contains("absolute path", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fully qualified", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

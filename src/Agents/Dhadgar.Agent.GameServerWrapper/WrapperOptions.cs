@@ -73,9 +73,9 @@ public sealed partial class WrapperOptions
         {
             errors.Add("--config is required");
         }
-        else if (!Path.IsPathRooted(ConfigPath))
+        else if (!Path.IsPathFullyQualified(ConfigPath))
         {
-            errors.Add("--config must be an absolute path");
+            errors.Add("--config must be a fully qualified absolute path");
         }
         else
         {

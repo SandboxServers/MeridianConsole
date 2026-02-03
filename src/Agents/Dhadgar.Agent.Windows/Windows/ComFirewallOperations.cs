@@ -90,7 +90,7 @@ internal sealed class ComFirewallOperations : IFirewallOperations, IDisposable
     }
 
     /// <inheritdoc/>
-    public bool IsAvailable => OperatingSystem.IsWindows() && _firewallPolicy is not null && _rules is not null;
+    public bool IsAvailable => OperatingSystem.IsWindows() && !_disposed && _firewallPolicy is not null && _rules is not null;
 
     /// <inheritdoc/>
     public Result<bool> AddRule(string ruleName, string description, string protocol, int port)
@@ -294,6 +294,9 @@ internal sealed class ComFirewallOperations : IFirewallOperations, IDisposable
             return;
         }
 
+        // Set disposed flag early to fail fast on concurrent access
+        _disposed = true;
+
         if (_rules is not null)
         {
             try
@@ -317,7 +320,5 @@ internal sealed class ComFirewallOperations : IFirewallOperations, IDisposable
                 // Object may have already been released
             }
         }
-
-        _disposed = true;
     }
 }

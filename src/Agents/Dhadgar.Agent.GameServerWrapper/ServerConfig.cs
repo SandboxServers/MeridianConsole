@@ -110,9 +110,9 @@ public sealed class ServerConfig
         {
             errors.Add("ExecutablePath is required");
         }
-        else if (!Path.IsPathRooted(ExecutablePath))
+        else if (!Path.IsPathFullyQualified(ExecutablePath))
         {
-            errors.Add("ExecutablePath must be an absolute path");
+            errors.Add("ExecutablePath must be a fully qualified absolute path");
         }
         else
         {
@@ -134,9 +134,9 @@ public sealed class ServerConfig
 
         if (!string.IsNullOrEmpty(WorkingDirectory))
         {
-            if (!Path.IsPathRooted(WorkingDirectory))
+            if (!Path.IsPathFullyQualified(WorkingDirectory))
             {
-                errors.Add("WorkingDirectory must be an absolute path");
+                errors.Add("WorkingDirectory must be a fully qualified absolute path");
             }
             else
             {

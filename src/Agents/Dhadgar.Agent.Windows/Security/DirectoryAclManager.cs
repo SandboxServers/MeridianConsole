@@ -91,14 +91,10 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        if (allowedRoots is null)
+        // Combined null and count check using required guard pattern (fail-closed security)
+        if (allowedRoots is not { Count: > 0 })
         {
-            throw new ArgumentNullException(nameof(allowedRoots), "Allowed roots must be specified (fail-closed security)");
-        }
-
-        if (allowedRoots.Count == 0)
-        {
-            throw new ArgumentException("Allowed roots must contain at least one entry (fail-closed security)", nameof(allowedRoots));
+            throw new ArgumentException("Allowed roots must be specified and contain at least one entry (fail-closed security)", nameof(allowedRoots));
         }
 
         _allowedRoots = allowedRoots;
@@ -132,9 +128,33 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             var directoryInfo = new DirectoryInfo(directoryPath);
             var security = directoryInfo.GetAccessControl();
 
-            // Break inheritance from parent directory to ensure isolation
-            // Copy inherited rules as explicit rules, then disable inheritance
-            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: true);
+            // Break inheritance from parent directory to ensure complete isolation
+            // isProtected: true = block inheritance, preserveInheritance: false = remove inherited ACEs
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+
+            // Define inheritance flags for rules that apply to this folder, subfolders, and files
+            const InheritanceFlags inheritanceFlags = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+            const PropagationFlags propagationFlags = PropagationFlags.None;
+
+            // Add FullControl for SYSTEM account (required for Windows services)
+            var systemAccount = new NTAccount("NT AUTHORITY", "SYSTEM");
+            var systemRule = new FileSystemAccessRule(
+                systemAccount,
+                FileSystemRights.FullControl,
+                inheritanceFlags,
+                propagationFlags,
+                AccessControlType.Allow);
+            security.AddAccessRule(systemRule);
+
+            // Add FullControl for Administrators group (required for management)
+            var administratorsAccount = new NTAccount("BUILTIN", "Administrators");
+            var administratorsRule = new FileSystemAccessRule(
+                administratorsAccount,
+                FileSystemRights.FullControl,
+                inheritanceFlags,
+                propagationFlags,
+                AccessControlType.Allow);
+            security.AddAccessRule(administratorsRule);
 
             // Create the service account identity
             // Virtual Service Accounts use the format "NT SERVICE\{ServiceName}"
@@ -148,14 +168,13 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
                 return Result.Failure($"[ACL.InvalidAccount] Invalid service account name: {ex.Message}");
             }
 
-            // Add full control for the service account with inheritance
+            // Add FullControl for the game server's service account
             var accessRule = new FileSystemAccessRule(
                 serviceAccount,
                 FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
+                inheritanceFlags,
+                propagationFlags,
                 AccessControlType.Allow);
-
             security.AddAccessRule(accessRule);
 
             // Apply the modified security settings
@@ -430,41 +449,57 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             var directoryInfo = new DirectoryInfo(directoryPath);
             var security = directoryInfo.GetAccessControl();
 
-            // Compute the Virtual Service Account SID
-            // Format: S-1-5-80-{five 32-bit words from SHA1 of uppercase service name}
-            var vsaSid = ComputeVirtualServiceAccountSid(serviceName);
-            if (vsaSid is not null)
-            {
-                var vsaRule = new FileSystemAccessRule(
-                    vsaSid,
-                    FileSystemRights.FullControl,
-                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                    PropagationFlags.None,
-                    AccessControlType.Allow);
+            // Break inheritance from parent directory to ensure complete isolation
+            // isProtected: true = block inheritance, preserveInheritance: false = remove inherited ACEs
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
 
-                security.AddAccessRule(vsaRule);
-
-                _logger.LogDebug(
-                    "Added ACL for computed VSA SID {Sid} for service {ServiceName}",
-                    vsaSid.Value, serviceName);
-            }
-            else
-            {
-                _logger.LogWarning(
-                    "Could not compute VSA SID for service {ServiceName}",
-                    serviceName);
-            }
+            // Define inheritance flags for rules that apply to this folder, subfolders, and files
+            const InheritanceFlags inheritanceFlags = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+            const PropagationFlags propagationFlags = PropagationFlags.None;
 
             // Grant SYSTEM full control (needed for service management)
             var systemAccount = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
             var systemRule = new FileSystemAccessRule(
                 systemAccount,
                 FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
+                inheritanceFlags,
+                propagationFlags,
+                AccessControlType.Allow);
+            security.AddAccessRule(systemRule);
+
+            // Grant Administrators full control (needed for management)
+            var administratorsAccount = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            var administratorsRule = new FileSystemAccessRule(
+                administratorsAccount,
+                FileSystemRights.FullControl,
+                inheritanceFlags,
+                propagationFlags,
+                AccessControlType.Allow);
+            security.AddAccessRule(administratorsRule);
+
+            // Compute the Virtual Service Account SID
+            // Format: S-1-5-80-{five 32-bit words from SHA1 of uppercase service name}
+            var vsaSid = ComputeVirtualServiceAccountSid(serviceName);
+            if (vsaSid is null)
+            {
+                _logger.LogWarning(
+                    "Could not compute VSA SID for service {ServiceName} - cannot set ACLs without service account SID",
+                    serviceName);
+                return Result.Failure($"[ACL.SidComputeFailed] Could not compute Virtual Service Account SID for service: {serviceName}");
+            }
+
+            var vsaRule = new FileSystemAccessRule(
+                vsaSid,
+                FileSystemRights.FullControl,
+                inheritanceFlags,
+                propagationFlags,
                 AccessControlType.Allow);
 
-            security.AddAccessRule(systemRule);
+            security.AddAccessRule(vsaRule);
+
+            _logger.LogDebug(
+                "Added ACL for computed VSA SID {Sid} for service {ServiceName}",
+                vsaSid.Value, serviceName);
 
             directoryInfo.SetAccessControl(security);
 
@@ -535,10 +570,10 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             return Result.Failure("[ACL.InvalidPath] Directory path is required");
         }
 
-        // Must be absolute path
-        if (!Path.IsPathRooted(directoryPath))
+        // Must be fully qualified path (rejects drive-relative paths like "C:foo")
+        if (!Path.IsPathFullyQualified(directoryPath))
         {
-            return Result.Failure("[ACL.InvalidPath] Directory path must be absolute");
+            return Result.Failure("[ACL.InvalidPath] Directory path must be a fully qualified absolute path");
         }
 
         // Normalize and check for traversal

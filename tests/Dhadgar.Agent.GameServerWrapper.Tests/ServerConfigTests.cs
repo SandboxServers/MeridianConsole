@@ -88,7 +88,7 @@ public sealed class ServerConfigTests
         var errors = config.Validate();
 
         // Assert
-        Assert.Contains(errors, e => e.Contains("absolute path", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(errors, e => e.Contains("fully qualified", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

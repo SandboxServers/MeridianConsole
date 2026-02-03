@@ -163,7 +163,31 @@ public static class ServiceInstaller
             // Wait for process exit with timeout
             await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // User/caller requested cancellation
+            try
+            {
+                process.Kill();
+            }
+            catch (InvalidOperationException)
+            {
+                // Process already exited
+            }
+
+            // Await output tasks to completion to avoid leaking
+            try
+            {
+                await Task.WhenAll(errorTask, outputTask).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Output reads may also be cancelled
+            }
+
+            return Result.Failure("Operation was cancelled by the caller.");
+        }
+        catch (OperationCanceledException)
         {
             // Timeout occurred (not user cancellation)
             try

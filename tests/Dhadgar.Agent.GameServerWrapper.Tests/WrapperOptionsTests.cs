@@ -269,7 +269,7 @@ public sealed class WrapperOptionsTests
         var errors = options.Validate();
 
         // Assert
-        Assert.Contains(errors, e => e.Contains("absolute path", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(errors, e => e.Contains("fully qualified", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -288,6 +288,28 @@ public sealed class WrapperOptionsTests
 
         // Assert
         Assert.Contains(errors, e => e.Contains("not found", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Validate_PathTraversal_ReturnsError()
+    {
+        // Arrange - Use platform-appropriate path with traversal sequences
+        var traversalPath = IsWindows
+            ? @"C:\allowed\..\..\..\sensitive\config.json"
+            : "/allowed/../../../sensitive/config.json";
+
+        var options = new WrapperOptions
+        {
+            ServerId = "test-server",
+            PipeName = "MeridianAgent_00000000000000000000000000012345\\test",
+            ConfigPath = traversalPath
+        };
+
+        // Act
+        var errors = options.Validate();
+
+        // Assert - Validate detects path traversal sequences
+        Assert.Contains(errors, e => e.Contains("traversal", StringComparison.OrdinalIgnoreCase));
     }
 
     #endregion

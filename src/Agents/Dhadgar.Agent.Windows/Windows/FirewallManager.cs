@@ -147,6 +147,11 @@ internal sealed partial class FirewallManager : IDisposable
     /// <returns>A result indicating success or failure with an error message.</returns>
     public Result<bool> AllowInboundPort(int port, string ruleName, string protocol = "TCP")
     {
+        if (_disposed)
+        {
+            return Result<bool>.Failure("FirewallManager has been disposed.");
+        }
+
         var validationResult = ValidateInputs(port, ruleName, protocol);
         if (validationResult.IsFailure)
         {
@@ -174,6 +179,11 @@ internal sealed partial class FirewallManager : IDisposable
     /// <returns>A result indicating success or failure with an error message.</returns>
     public Result<bool> RemoveRule(string ruleName)
     {
+        if (_disposed)
+        {
+            return Result<bool>.Failure("FirewallManager has been disposed.");
+        }
+
         var validationResult = ValidateRuleNameInput(ruleName);
         if (validationResult.IsFailure)
         {
@@ -195,6 +205,11 @@ internal sealed partial class FirewallManager : IDisposable
     /// <returns>A result containing true if the rule exists, false if not, or a failure with an error message.</returns>
     public Result<bool> RuleExists(string ruleName)
     {
+        if (_disposed)
+        {
+            return Result<bool>.Failure("FirewallManager has been disposed.");
+        }
+
         var validationResult = ValidateRuleNameInput(ruleName);
         if (validationResult.IsFailure)
         {

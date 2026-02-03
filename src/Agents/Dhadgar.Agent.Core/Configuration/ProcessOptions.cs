@@ -104,10 +104,10 @@ public sealed class ProcessOptions : IValidatableObject
                         $"{nameof(GameServerWrapperPath)} is not a valid path",
                         [nameof(GameServerWrapperPath)]);
                 }
-                else if (!Path.IsPathRooted(GameServerWrapperPath))
+                else if (!Path.IsPathFullyQualified(GameServerWrapperPath))
                 {
                     yield return new ValidationResult(
-                        $"{nameof(GameServerWrapperPath)} must be an absolute path",
+                        $"{nameof(GameServerWrapperPath)} must be a fully qualified absolute path",
                         [nameof(GameServerWrapperPath)]);
                 }
                 else
@@ -127,13 +127,13 @@ public sealed class ProcessOptions : IValidatableObject
             }
         }
 
-        // ServerBasePath must be an absolute, normalized path to prevent path traversal
+        // ServerBasePath must be a fully qualified, normalized path to prevent path traversal
         if (!string.IsNullOrEmpty(ServerBasePath))
         {
-            if (!Path.IsPathRooted(ServerBasePath))
+            if (!Path.IsPathFullyQualified(ServerBasePath))
             {
                 yield return new ValidationResult(
-                    $"{nameof(ServerBasePath)} must be an absolute path",
+                    $"{nameof(ServerBasePath)} must be a fully qualified absolute path",
                     [nameof(ServerBasePath)]);
             }
             else

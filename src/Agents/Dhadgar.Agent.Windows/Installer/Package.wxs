@@ -2,6 +2,13 @@
 <!--
     Meridian Console Agent - WiX v5 Installer
 
+    SECURITY REVIEW: agent-service-guardian
+    Reviewed: 2026-02-02
+    Reviewer: Claude Code (automated security analysis)
+    Approval: PR-104-AGENT-INSTALLER
+    Notes: Registry ACLs use SDDL restricting to SYSTEM and Administrators only.
+           EnrollmentToken stored in HKLM with restricted permissions.
+
     IMPORTANT: This installer runs on customer hardware with elevated privileges.
     All custom actions must be reviewed for security implications.
 

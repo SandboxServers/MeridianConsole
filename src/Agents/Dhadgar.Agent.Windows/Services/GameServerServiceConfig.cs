@@ -127,13 +127,13 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
             }
         }
 
-        // Validate WrapperExecutablePath is absolute and normalized
+        // Validate WrapperExecutablePath is fully qualified and normalized
         if (!string.IsNullOrEmpty(WrapperExecutablePath))
         {
-            if (!Path.IsPathRooted(WrapperExecutablePath))
+            if (!Path.IsPathFullyQualified(WrapperExecutablePath))
             {
                 yield return new ValidationResult(
-                    "WrapperExecutablePath must be an absolute path",
+                    "WrapperExecutablePath must be a fully qualified absolute path",
                     [nameof(WrapperExecutablePath)]);
             }
             else if (!IsNormalizedPath(WrapperExecutablePath))
@@ -144,13 +144,13 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
             }
         }
 
-        // Validate ServerDirectory is absolute and normalized
+        // Validate ServerDirectory is fully qualified and normalized
         if (!string.IsNullOrEmpty(ServerDirectory))
         {
-            if (!Path.IsPathRooted(ServerDirectory))
+            if (!Path.IsPathFullyQualified(ServerDirectory))
             {
                 yield return new ValidationResult(
-                    "ServerDirectory must be an absolute path",
+                    "ServerDirectory must be a fully qualified absolute path",
                     [nameof(ServerDirectory)]);
             }
             else if (!IsNormalizedPath(ServerDirectory))
@@ -161,13 +161,13 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
             }
         }
 
-        // Validate ConfigFilePath is absolute and normalized
+        // Validate ConfigFilePath is fully qualified and normalized
         if (!string.IsNullOrEmpty(ConfigFilePath))
         {
-            if (!Path.IsPathRooted(ConfigFilePath))
+            if (!Path.IsPathFullyQualified(ConfigFilePath))
             {
                 yield return new ValidationResult(
-                    "ConfigFilePath must be an absolute path",
+                    "ConfigFilePath must be a fully qualified absolute path",
                     [nameof(ConfigFilePath)]);
             }
             else if (!IsNormalizedPath(ConfigFilePath))

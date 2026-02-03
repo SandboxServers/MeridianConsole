@@ -66,7 +66,8 @@ public interface IAgentPipeServer : IAsyncDisposable
     /// </summary>
     /// <param name="serverId">The server identifier.</param>
     /// <param name="serviceAccountName">The service account name for access control (e.g., "NT SERVICE\MeridianGS_abc123").</param>
-    void RegisterServer(string serverId, string serviceAccountName);
+    /// <returns>Result indicating success or failure with error message.</returns>
+    Result RegisterServer(string serverId, string serviceAccountName);
 
     /// <summary>
     /// Unregisters a game server.
@@ -200,13 +201,26 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     }
 
     /// <inheritdoc />
-    public void RegisterServer(string serverId, string serviceAccountName)
+    public Result RegisterServer(string serverId, string serviceAccountName)
     {
-        ObjectDisposedException.ThrowIf(_disposed, nameof(AgentPipeServer));
+        if (_disposed)
+        {
+            return Result.Failure("[Pipe.Disposed] Agent pipe server has been disposed");
+        }
+
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            return Result.Failure("[Pipe.InvalidServerId] Server ID is required");
+        }
 
         if (!ValidServerIdPattern().IsMatch(serverId))
         {
-            throw new ArgumentException("Invalid server ID format", nameof(serverId));
+            return Result.Failure("[Pipe.InvalidServerId] Invalid server ID format - must be alphanumeric with hyphens/underscores");
+        }
+
+        if (string.IsNullOrWhiteSpace(serviceAccountName))
+        {
+            return Result.Failure("[Pipe.InvalidServiceAccount] Service account name is required");
         }
 
         var pipeName = GetPipeName(serverId);
@@ -223,6 +237,8 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         {
             _ = StartListeningWithExceptionHandlingAsync(serverId, _serverCts.Token);
         }
+
+        return Result.Success();
     }
 
     /// <inheritdoc />

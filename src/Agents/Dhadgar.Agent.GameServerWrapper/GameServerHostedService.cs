@@ -807,17 +807,37 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
     {
         if (string.IsNullOrWhiteSpace(commandLine))
         {
-            return [];
+            return new List<string>();
         }
 
-        // Simple argument parsing that respects quotes
+        // Argument parsing that respects quotes and escape sequences (\\ and \")
         var args = new List<string>();
         var current = new StringBuilder();
         var inQuotes = false;
+        var escaped = false;
 
         foreach (var c in commandLine)
         {
-            if (c == '"')
+            if (escaped)
+            {
+                // Handle escape sequences: \" becomes ", \\ becomes \
+                if (c == '"' || c == '\\')
+                {
+                    current.Append(c);
+                }
+                else
+                {
+                    // Invalid escape sequence - keep the backslash and current char
+                    current.Append('\\');
+                    current.Append(c);
+                }
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == '"')
             {
                 inQuotes = !inQuotes;
             }
@@ -833,6 +853,12 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             {
                 current.Append(c);
             }
+        }
+
+        // Handle trailing backslash at end of string
+        if (escaped)
+        {
+            current.Append('\\');
         }
 
         if (current.Length > 0)
@@ -855,7 +881,12 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             await _pipeClient.DisposeAsync().ConfigureAwait(false);
         }
 
-        _gameServerProcess?.Dispose();
+        // Unregister event handler before disposing to prevent ObjectDisposedException
+        if (_gameServerProcess is not null)
+        {
+            _gameServerProcess.Exited -= OnProcessExited;
+            _gameServerProcess.Dispose();
+        }
 
         // Call base class cleanup (BackgroundService implements IDisposable)
         Dispose();

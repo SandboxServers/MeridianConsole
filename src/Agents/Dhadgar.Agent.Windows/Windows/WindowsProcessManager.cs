@@ -1176,14 +1176,18 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         try
         {
             exitCode = entry.OsProcess.ExitCode;
-            wasKilled = exitCode == (int)ForcedTerminationExitCode;
+            // Treat both forced termination (0xDEAD) and memory limit exceeded (0xDEAE) as killed
+            wasKilled = exitCode == (int)ForcedTerminationExitCode || exitCode == (int)MemoryLimitExceededExitCode;
         }
         catch (InvalidOperationException)
         {
             // Process info no longer available
         }
 
-        entry.ManagedProcess.State = wasKilled ? ProcessState.Failed : ProcessState.Stopped;
+        // Preserve existing Failed state (e.g., from memory limit kill) or set based on wasKilled
+        entry.ManagedProcess.State = entry.ManagedProcess.State == ProcessState.Failed || wasKilled
+            ? ProcessState.Failed
+            : ProcessState.Stopped;
         entry.ManagedProcess.ExitedAt = exitTime;
         entry.ManagedProcess.ExitCode = exitCode;
 
@@ -1412,10 +1416,10 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             return Result<string>.Failure("[Process.InvalidWorkingDir] Working directory cannot be empty");
         }
 
-        // SECURITY: Require absolute paths to prevent path traversal attacks
-        if (!Path.IsPathRooted(workingDirectory))
+        // SECURITY: Require fully qualified paths to reject drive-relative paths (e.g., "C:foo")
+        if (!Path.IsPathFullyQualified(workingDirectory))
         {
-            return Result<string>.Failure("[Process.InvalidWorkingDir] Working directory must be an absolute path");
+            return Result<string>.Failure("[Process.InvalidWorkingDir] Working directory must be a fully qualified absolute path");
         }
 
         string fullPath;
@@ -1426,6 +1430,16 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         catch (Exception ex)
         {
             return Result<string>.Failure($"[Process.InvalidWorkingDir] Invalid working directory: {ex.Message}");
+        }
+
+        // SECURITY: Detect path mutations (traversal sequences, normalization differences)
+        var inputNormalized = workingDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullPathNormalized = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        if (!inputNormalized.Equals(fullPathNormalized, comparison))
+        {
+            return Result<string>.Failure("[Process.InvalidWorkingDir] Working directory contains path traversal sequences");
         }
 
         if (!Directory.Exists(fullPath))
@@ -1483,7 +1497,7 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         /// </summary>
         public Task? MonitoringTask { get; set; }
 
-        private bool _disposed;
+        private volatile bool _disposed;
 
         public ProcessEntry(
             ManagedProcess managedProcess,

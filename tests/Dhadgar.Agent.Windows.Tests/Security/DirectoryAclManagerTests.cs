@@ -46,10 +46,10 @@ public sealed class DirectoryAclManagerTests
     }
 
     [Fact]
-    public void Constructor_WithNullAllowedRoots_ThrowsArgumentNullException()
+    public void Constructor_WithNullAllowedRoots_ThrowsArgumentException()
     {
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentNullException>(
+        // Act & Assert - Combined null/empty check throws ArgumentException
+        var exception = Assert.Throws<ArgumentException>(
             () => new DirectoryAclManager(_logger, null!));
         Assert.Equal("allowedRoots", exception.ParamName);
         Assert.Contains("fail-closed", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -108,7 +108,7 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("absolute", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fully qualified", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -193,15 +193,21 @@ public sealed class DirectoryAclManagerTests
         var tempPath = Path.Combine(Path.GetTempPath(), $"MeridianTest_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempPath);
 
+        // Create a custom ACL manager that includes the temp directory root in allowed roots
+        // so we can reach service account validation instead of failing path validation
+        var tempRoot = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+        var allowedRootsWithTemp = new List<string>(TestAllowedRoots) { tempRoot };
+        var aclManagerWithTempRoot = new DirectoryAclManager(_logger, allowedRootsWithTemp);
+
         try
         {
             // Act
-            var result = _aclManager.SetupServerDirectory(tempPath, serviceAccount);
+            var result = aclManagerWithTempRoot.SetupServerDirectory(tempPath, serviceAccount);
 
             // Assert - Either succeeds or fails with ACL error (not validation error)
             if (result.IsFailure)
             {
-                // Should not be a validation error
+                // Should not be a validation error about service account format
                 Assert.DoesNotContain("Service account name is required", result.Error);
                 Assert.DoesNotContain("NT SERVICE\\MeridianGS_", result.Error);
             }
