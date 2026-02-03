@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
     <AssemblyName>GameServerWrapper</AssemblyName>
     <RootNamespace>Dhadgar.Agent.GameServerWrapper</RootNamespace>
     <OutputType>Exe</OutputType>
@@ -7,8 +9,9 @@
     <!--
       Windows-only game server wrapper targeting Windows runtimes.
       This executable runs as a Windows Service to host individual game servers.
+      linux-x64 is included for build/test on Linux CI runners (the app itself is Windows-only).
     -->
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64</RuntimeIdentifiers>
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>

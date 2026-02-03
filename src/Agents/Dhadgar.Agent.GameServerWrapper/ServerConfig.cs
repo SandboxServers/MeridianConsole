@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.GameServerWrapper;
 
@@ -154,6 +157,11 @@ public sealed class ServerConfig
             }
         }
 
+        if (MaxRestartAttempts < 0)
+        {
+            errors.Add("MaxRestartAttempts must be non-negative");
+        }
+
         if (RestartDelaySeconds < 1)
         {
             errors.Add("RestartDelaySeconds must be at least 1");
@@ -192,21 +200,22 @@ public sealed class ServerConfig
     /// Loads configuration from a file.
     /// </summary>
     /// <param name="path">Path to the configuration file.</param>
-    /// <returns>Loaded configuration or null if loading failed.</returns>
-    public static (ServerConfig? Config, string? Error) LoadFromFile(string path)
+    /// <returns>Result containing loaded configuration or error.</returns>
+    public static Result<ServerConfig> LoadFromFile(string path)
     {
         try
         {
             if (!File.Exists(path))
             {
-                return (null, $"Configuration file not found: {path}");
+                return Result<ServerConfig>.Failure($"Configuration file not found: {path}");
             }
 
             // Check file size before reading to prevent DoS
             var fileInfo = new FileInfo(path);
             if (fileInfo.Length > MaxConfigFileSizeBytes)
             {
-                return (null, $"Configuration file exceeds maximum size of {MaxConfigFileSizeBytes / 1024}KB");
+                var maxSizeKb = (MaxConfigFileSizeBytes / 1024).ToString(CultureInfo.InvariantCulture);
+                return Result<ServerConfig>.Failure($"Configuration file exceeds maximum size of {maxSizeKb}KB");
             }
 
             var json = File.ReadAllText(path);
@@ -214,24 +223,24 @@ public sealed class ServerConfig
 
             if (config is null)
             {
-                return (null, "Failed to deserialize configuration");
+                return Result<ServerConfig>.Failure("Failed to deserialize configuration");
             }
 
             var errors = config.Validate();
             if (errors.Count > 0)
             {
-                return (null, string.Join("; ", errors));
+                return Result<ServerConfig>.Failure(string.Join("; ", errors));
             }
 
-            return (config, null);
+            return Result<ServerConfig>.Success(config);
         }
         catch (JsonException ex)
         {
-            return (null, $"Invalid JSON in configuration file: {ex.Message}");
+            return Result<ServerConfig>.Failure($"Invalid JSON in configuration file: {ex.Message}");
         }
         catch (IOException ex)
         {
-            return (null, $"Failed to read configuration file: {ex.Message}");
+            return Result<ServerConfig>.Failure($"Failed to read configuration file: {ex.Message}");
         }
     }
 

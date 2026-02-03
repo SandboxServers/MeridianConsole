@@ -153,6 +153,16 @@ public sealed partial class WindowsServiceManager : IWindowsServiceManager
             return Result<ServiceInfo>.Failure(validationResult.Error);
         }
 
+        // Validate all config fields using IValidatableObject
+        var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(config);
+        var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
+            config, validationContext, validationResults, validateAllProperties: true))
+        {
+            var errors = string.Join("; ", validationResults.Select(r => r.ErrorMessage));
+            return Result<ServiceInfo>.Failure($"[Service.InvalidConfig] Configuration validation failed: {errors}");
+        }
+
         var serviceName = config.ServiceName;
 
         // Check if service already exists
@@ -484,7 +494,8 @@ public sealed partial class WindowsServiceManager : IWindowsServiceManager
     /// <inheritdoc />
     public bool ServiceExists(string serverId)
     {
-        if (!ValidServerIdPattern().IsMatch(serverId))
+        var validationResult = ValidateServerId(serverId);
+        if (validationResult.IsFailure)
         {
             return false;
         }
@@ -500,6 +511,11 @@ public sealed partial class WindowsServiceManager : IWindowsServiceManager
         }
         catch (InvalidOperationException)
         {
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            // Invalid service name
             return false;
         }
         catch (Win32Exception)
@@ -726,7 +742,7 @@ public sealed partial class WindowsServiceManager : IWindowsServiceManager
                     "sc.exe command failed with exit code {ExitCode}: {Error}",
                     exitCode, errorMessage);
 
-                return Result.Failure($"sc.exe failed (exit code {exitCode}): {errorMessage.Trim()}");
+                return Result.Failure(FormattableString.Invariant($"sc.exe failed (exit code {exitCode}): {errorMessage.Trim()}"));
             }
 
             _logger.LogDebug("sc.exe command succeeded: {Output}", output.Trim());

@@ -64,7 +64,7 @@ public static class ServiceInstaller
         // that could enable command injection via sc.exe argument parsing
         foreach (var c in description)
         {
-            if (c is '"' or '\'' or '`' or '$' or '&' or '|' or ';' or '\r' or '\n')
+            if (c is '"' or '\'' or '`' or '$' or '&' or '|' or ';' or '\\' or '\r' or '\n')
             {
                 return Result.Failure($"Description contains disallowed character: '{c}'");
             }

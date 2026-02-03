@@ -142,8 +142,9 @@ public sealed class DirectoryAclManagerTests
         // Note: This test only verifies validation passes. The actual ACL operation
         // may fail due to permissions or the service not existing yet.
 
-        // Arrange - Use temp directory that exists
+        // Arrange - Create temp directory first
         var tempPath = Path.Combine(Path.GetTempPath(), $"MeridianTest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempPath);
 
         try
         {

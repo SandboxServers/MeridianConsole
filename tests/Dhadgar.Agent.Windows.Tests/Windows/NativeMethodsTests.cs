@@ -12,64 +12,45 @@ public sealed class NativeMethodsTests
 {
     #region Enum Value Tests
 
-    [Fact]
-    public void JobObjectInfoType_ExtendedLimitInformation_EqualsNine()
+    [Theory]
+    [InlineData(nameof(NativeMethods.JobObjectInfoType.BasicLimitInformation), 2)]
+    [InlineData(nameof(NativeMethods.JobObjectInfoType.ExtendedLimitInformation), 9)]
+    [InlineData(nameof(NativeMethods.JobObjectInfoType.CpuRateControlInformation), 15)]
+    public void JobObjectInfoType_HasExpectedValue(string memberName, int expectedValue)
     {
         // Arrange & Act
-        var value = NativeMethods.JobObjectInfoType.ExtendedLimitInformation;
+        var value = Enum.Parse<NativeMethods.JobObjectInfoType>(memberName);
 
         // Assert
-        Assert.Equal(9, (int)value);
+        Assert.Equal(expectedValue, (int)value);
     }
 
-    [Fact]
-    public void JobObjectInfoType_CpuRateControlInformation_EqualsFifteen()
+    [Theory]
+    [InlineData(nameof(NativeMethods.JobObjectLimit.None), 0x00000000u)]
+    [InlineData(nameof(NativeMethods.JobObjectLimit.ProcessMemory), 0x00000100u)]
+    [InlineData(nameof(NativeMethods.JobObjectLimit.JobMemory), 0x00000200u)]
+    [InlineData(nameof(NativeMethods.JobObjectLimit.KillOnJobClose), 0x00002000u)]
+    public void JobObjectLimit_HasExpectedValue(string memberName, uint expectedValue)
     {
         // Arrange & Act
-        var value = NativeMethods.JobObjectInfoType.CpuRateControlInformation;
+        var value = Enum.Parse<NativeMethods.JobObjectLimit>(memberName);
 
         // Assert
-        Assert.Equal(15, (int)value);
+        Assert.Equal(expectedValue, (uint)value);
     }
 
-    [Fact]
-    public void JobObjectLimit_KillOnJobClose_Equals0x00002000()
+    [Theory]
+    [InlineData(nameof(NativeMethods.CpuRateControlFlags.None), 0x00000000u)]
+    [InlineData(nameof(NativeMethods.CpuRateControlFlags.Enable), 0x00000001u)]
+    [InlineData(nameof(NativeMethods.CpuRateControlFlags.HardCap), 0x00000004u)]
+    [InlineData(nameof(NativeMethods.CpuRateControlFlags.WeightBased), 0x00000008u)]
+    public void CpuRateControlFlags_HasExpectedValue(string memberName, uint expectedValue)
     {
         // Arrange & Act
-        var value = NativeMethods.JobObjectLimit.KillOnJobClose;
+        var value = Enum.Parse<NativeMethods.CpuRateControlFlags>(memberName);
 
         // Assert
-        Assert.Equal(0x00002000u, (uint)value);
-    }
-
-    [Fact]
-    public void JobObjectLimit_JobMemory_Equals0x00000200()
-    {
-        // Arrange & Act
-        var value = NativeMethods.JobObjectLimit.JobMemory;
-
-        // Assert
-        Assert.Equal(0x00000200u, (uint)value);
-    }
-
-    [Fact]
-    public void CpuRateControlFlags_Enable_Equals0x00000001()
-    {
-        // Arrange & Act
-        var value = NativeMethods.CpuRateControlFlags.Enable;
-
-        // Assert
-        Assert.Equal(0x00000001u, (uint)value);
-    }
-
-    [Fact]
-    public void CpuRateControlFlags_HardCap_Equals0x00000004()
-    {
-        // Arrange & Act
-        var value = NativeMethods.CpuRateControlFlags.HardCap;
-
-        // Assert
-        Assert.Equal(0x00000004u, (uint)value);
+        Assert.Equal(expectedValue, (uint)value);
     }
 
     #endregion
@@ -132,60 +113,6 @@ public sealed class NativeMethodsTests
 
         // Assert
         Assert.Equal(expectedSize, actualSize);
-    }
-
-    #endregion
-
-    #region Additional Enum Value Tests (for completeness)
-
-    [Fact]
-    public void JobObjectInfoType_BasicLimitInformation_EqualsTwo()
-    {
-        // Arrange & Act
-        var value = NativeMethods.JobObjectInfoType.BasicLimitInformation;
-
-        // Assert
-        Assert.Equal(2, (int)value);
-    }
-
-    [Fact]
-    public void JobObjectLimit_None_EqualsZero()
-    {
-        // Arrange & Act
-        var value = NativeMethods.JobObjectLimit.None;
-
-        // Assert
-        Assert.Equal(0u, (uint)value);
-    }
-
-    [Fact]
-    public void JobObjectLimit_ProcessMemory_Equals0x00000100()
-    {
-        // Arrange & Act
-        var value = NativeMethods.JobObjectLimit.ProcessMemory;
-
-        // Assert
-        Assert.Equal(0x00000100u, (uint)value);
-    }
-
-    [Fact]
-    public void CpuRateControlFlags_None_EqualsZero()
-    {
-        // Arrange & Act
-        var value = NativeMethods.CpuRateControlFlags.None;
-
-        // Assert
-        Assert.Equal(0u, (uint)value);
-    }
-
-    [Fact]
-    public void CpuRateControlFlags_WeightBased_Equals0x00000008()
-    {
-        // Arrange & Act
-        var value = NativeMethods.CpuRateControlFlags.WeightBased;
-
-        // Assert
-        Assert.Equal(0x00000008u, (uint)value);
     }
 
     #endregion

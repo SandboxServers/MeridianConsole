@@ -1,5 +1,7 @@
 using System.Security.AccessControl;
+using System.Security.Cryptography;
 using System.Security.Principal;
+using System.Text;
 using System.Text.RegularExpressions;
 
 using Dhadgar.Shared.Results;
@@ -68,6 +70,7 @@ public interface IDirectoryAclManager
 public sealed partial class DirectoryAclManager : IDirectoryAclManager
 {
     private readonly ILogger<DirectoryAclManager> _logger;
+    private readonly IReadOnlyList<string> _allowedRoots;
 
     /// <summary>
     /// Pattern for valid service account names.
@@ -80,9 +83,11 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
     /// Initializes a new instance of the <see cref="DirectoryAclManager"/> class.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
-    public DirectoryAclManager(ILogger<DirectoryAclManager> logger)
+    /// <param name="allowedRoots">Optional list of allowed root directories. If null or empty, all paths are allowed.</param>
+    public DirectoryAclManager(ILogger<DirectoryAclManager> logger, IReadOnlyList<string>? allowedRoots = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _allowedRoots = allowedRoots ?? [];
     }
 
     /// <inheritdoc />
@@ -112,6 +117,10 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
 
             var directoryInfo = new DirectoryInfo(directoryPath);
             var security = directoryInfo.GetAccessControl();
+
+            // Break inheritance from parent directory to ensure isolation
+            // Copy inherited rules as explicit rules, then disable inheritance
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: true);
 
             // Create the service account identity
             // Virtual Service Accounts use the format "NT SERVICE\{ServiceName}"
@@ -275,6 +284,19 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
                 includeInherited: false,
                 targetType: typeof(NTAccount));
 
+            // Check Deny ACEs first - they take precedence over Allow
+            foreach (FileSystemAccessRule rule in rules)
+            {
+                if (rule.IdentityReference.Value.Equals(serviceAccountName, StringComparison.OrdinalIgnoreCase) &&
+                    rule.AccessControlType == AccessControlType.Deny &&
+                    rule.FileSystemRights.HasFlag(FileSystemRights.FullControl))
+                {
+                    // Explicit deny - access is not properly configured
+                    return Result<bool>.Success(false);
+                }
+            }
+
+            // Now check for Allow ACEs
             foreach (FileSystemAccessRule rule in rules)
             {
                 if (rule.IdentityReference.Value.Equals(serviceAccountName, StringComparison.OrdinalIgnoreCase) &&
@@ -394,22 +416,30 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             var directoryInfo = new DirectoryInfo(directoryPath);
             var security = directoryInfo.GetAccessControl();
 
-            // For Virtual Service Accounts, we can use the well-known SID prefix
-            // S-1-5-80-{SHA1 of uppercase service name}
-            // However, this is complex to compute. Instead, we'll grant access to
-            // the SYSTEM and LOCAL SERVICE accounts which can be used as fallback.
+            // Compute the Virtual Service Account SID
+            // Format: S-1-5-80-{five 32-bit words from SHA1 of uppercase service name}
+            var vsaSid = ComputeVirtualServiceAccountSid(serviceName);
+            if (vsaSid is not null)
+            {
+                var vsaRule = new FileSystemAccessRule(
+                    vsaSid,
+                    FileSystemRights.FullControl,
+                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                    PropagationFlags.None,
+                    AccessControlType.Allow);
 
-            // Grant LOCAL SERVICE access as a fallback
-            // Note: The actual Virtual Service Account will get access when the service starts
-            var localServiceAccount = new SecurityIdentifier(WellKnownSidType.LocalServiceSid, null);
-            var localServiceRule = new FileSystemAccessRule(
-                localServiceAccount,
-                FileSystemRights.ReadAndExecute | FileSystemRights.ListDirectory,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
-                AccessControlType.Allow);
+                security.AddAccessRule(vsaRule);
 
-            security.AddAccessRule(localServiceRule);
+                _logger.LogDebug(
+                    "Added ACL for computed VSA SID {Sid} for service {ServiceName}",
+                    vsaSid.Value, serviceName);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Could not compute VSA SID for service {ServiceName}",
+                    serviceName);
+            }
 
             // Grant SYSTEM full control (needed for service management)
             var systemAccount = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
@@ -425,23 +455,66 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             directoryInfo.SetAccessControl(security);
 
             _logger.LogInformation(
-                "Set fallback ACLs on directory {Path}. " +
-                "Full ACLs will be applied when service {ServiceName} starts.",
+                "Set ACLs on directory {Path} for service {ServiceName}.",
                 directoryPath, serviceName);
 
             return Result.Success();
         }
         catch (Exception ex) when (ex is IOException or System.Security.SecurityException or UnauthorizedAccessException)
         {
-            _logger.LogError(ex, "Failed to set fallback ACLs on {Path}", directoryPath);
-            return Result.Failure($"[ACL.FallbackFailed] Failed to set fallback directory ACLs: {ex.Message}");
+            _logger.LogError(ex, "Failed to set ACLs on {Path}", directoryPath);
+            return Result.Failure($"[ACL.FallbackFailed] Failed to set directory ACLs: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Computes the Security Identifier (SID) for a Virtual Service Account.
+    /// </summary>
+    /// <remarks>
+    /// Virtual Service Account SIDs are in the format: S-1-5-80-{five 32-bit words from SHA1 of uppercase service name}
+    /// Reference: https://docs.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights
+    /// Note: SHA1 is mandated by Windows for VSA SID computation; this is not a security concern
+    /// as it's used for identity derivation, not cryptographic security.
+    /// </remarks>
+    /// <param name="serviceName">The service name (without NT SERVICE\ prefix).</param>
+    /// <returns>The SID, or null if computation fails.</returns>
+    private static SecurityIdentifier? ComputeVirtualServiceAccountSid(string serviceName)
+    {
+        try
+        {
+            // Convert service name to uppercase and get UTF-16LE bytes
+            var upperName = serviceName.ToUpperInvariant();
+            var nameBytes = Encoding.Unicode.GetBytes(upperName);
+
+            // Compute SHA1 hash - SHA1 is mandated by Windows for VSA SID computation;
+            // this is not a security concern as it's used for identity derivation
+#pragma warning disable CA5350 // SHA1 is required by Windows for VSA SID computation
+            var hashBytes = SHA1.HashData(nameBytes);
+#pragma warning restore CA5350
+
+            // Convert first 20 bytes of hash to 5 32-bit integers (little-endian)
+            var subAuth1 = BitConverter.ToUInt32(hashBytes, 0);
+            var subAuth2 = BitConverter.ToUInt32(hashBytes, 4);
+            var subAuth3 = BitConverter.ToUInt32(hashBytes, 8);
+            var subAuth4 = BitConverter.ToUInt32(hashBytes, 12);
+            var subAuth5 = BitConverter.ToUInt32(hashBytes, 16);
+
+            // Build the SID string: S-1-5-80-{subAuth1}-{subAuth2}-{subAuth3}-{subAuth4}-{subAuth5}
+            var sidString = FormattableString.Invariant(
+                $"S-1-5-80-{subAuth1}-{subAuth2}-{subAuth3}-{subAuth4}-{subAuth5}");
+
+            return new SecurityIdentifier(sidString);
+        }
+        catch
+        {
+            return null;
         }
     }
 
     /// <summary>
     /// Validates a directory path for security.
     /// </summary>
-    private static Result ValidateDirectoryPath(string directoryPath)
+    private Result ValidateDirectoryPath(string directoryPath)
     {
         if (string.IsNullOrWhiteSpace(directoryPath))
         {
@@ -476,6 +549,30 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             if (!normalizedWithoutTrailing.Equals(inputWithoutTrailing, StringComparison.OrdinalIgnoreCase))
             {
                 return Result.Failure("[ACL.PathTraversal] Path traversal detected in directory path");
+            }
+        }
+
+        // Check against allowed roots if configured
+        if (_allowedRoots.Count > 0)
+        {
+            var isWithinAllowedRoot = false;
+            foreach (var root in _allowedRoots)
+            {
+                var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+                if (normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    isWithinAllowedRoot = true;
+                    break;
+                }
+            }
+
+            if (!isWithinAllowedRoot)
+            {
+                _logger.LogWarning(
+                    "Path {Path} is not within any allowed root directories",
+                    directoryPath);
+                return Result.Failure("[ACL.PathNotAllowed] Directory path is not within allowed root directories");
             }
         }
 

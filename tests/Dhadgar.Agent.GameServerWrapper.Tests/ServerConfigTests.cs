@@ -16,6 +16,9 @@ public sealed class ServerConfigTests
     private static readonly string NonExistentDirectory = IsWindows
         ? @"C:\NonExistent\Path"
         : "/nonexistent/path";
+    private static readonly string NonExistentConfigPath = IsWindows
+        ? @"C:\NonExistent\config.json"
+        : "/nonexistent/config.json";
     #region Validation Tests
 
     [Fact]
@@ -235,6 +238,31 @@ public sealed class ServerConfigTests
         }
     }
 
+    [Fact]
+    public void Validate_NegativeMaxRestartAttempts_ReturnsError()
+    {
+        // Arrange
+        var tempExe = Path.GetTempFileName();
+        try
+        {
+            var config = new ServerConfig
+            {
+                ExecutablePath = tempExe,
+                MaxRestartAttempts = -1
+            };
+
+            // Act
+            var errors = config.Validate();
+
+            // Assert
+            Assert.Contains(errors, e => e.Contains("MaxRestartAttempts", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            File.Delete(tempExe);
+        }
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
@@ -269,15 +297,12 @@ public sealed class ServerConfigTests
     [Fact]
     public void LoadFromFile_NonExistentFile_ReturnsError()
     {
-        // Arrange
-        var nonExistentPath = @"C:\NonExistent\config.json";
-
-        // Act
-        var (config, error) = ServerConfig.LoadFromFile(nonExistentPath);
+        // Arrange & Act
+        var result = ServerConfig.LoadFromFile(NonExistentConfigPath);
 
         // Assert
-        Assert.Null(config);
-        Assert.Contains("not found", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(result.IsSuccess);
+        Assert.Contains("not found", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -290,11 +315,11 @@ public sealed class ServerConfigTests
             File.WriteAllText(tempFile, "{ invalid json }");
 
             // Act
-            var (config, error) = ServerConfig.LoadFromFile(tempFile);
+            var result = ServerConfig.LoadFromFile(tempFile);
 
             // Assert
-            Assert.Null(config);
-            Assert.Contains("Invalid JSON", error, StringComparison.OrdinalIgnoreCase);
+            Assert.False(result.IsSuccess);
+            Assert.Contains("Invalid JSON", result.Error, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -327,11 +352,11 @@ public sealed class ServerConfigTests
             File.WriteAllText(tempConfig, json);
 
             // Act
-            var (config, error) = ServerConfig.LoadFromFile(tempConfig);
+            var result = ServerConfig.LoadFromFile(tempConfig);
 
             // Assert
-            Assert.NotNull(config);
-            Assert.Null(error);
+            Assert.True(result.IsSuccess);
+            var config = result.Value;
             Assert.Equal(tempExe, config.ExecutablePath);
             Assert.Equal("-port 27015", config.Arguments);
             Assert.True(config.CaptureStdout);
@@ -367,11 +392,11 @@ public sealed class ServerConfigTests
             File.WriteAllText(tempConfig, json);
 
             // Act
-            var (config, error) = ServerConfig.LoadFromFile(tempConfig);
+            var result = ServerConfig.LoadFromFile(tempConfig);
 
             // Assert
-            Assert.Null(config);
-            Assert.Contains("not found", error, StringComparison.OrdinalIgnoreCase);
+            Assert.False(result.IsSuccess);
+            Assert.Contains("not found", result.Error, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

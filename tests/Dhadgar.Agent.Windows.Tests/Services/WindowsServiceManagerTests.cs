@@ -29,10 +29,15 @@ public sealed class WindowsServiceManagerTests
     private readonly FakeTimeProvider _timeProvider;
     private readonly WindowsServiceManager _serviceManager;
 
+    /// <summary>
+    /// Fixed timestamp for deterministic testing.
+    /// </summary>
+    private static readonly DateTimeOffset FixedTimestamp = new(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     public WindowsServiceManagerTests()
     {
         _logger = Substitute.For<ILogger<WindowsServiceManager>>();
-        _timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        _timeProvider = new FakeTimeProvider(FixedTimestamp);
         _serviceManager = new WindowsServiceManager(_logger, _timeProvider);
     }
 

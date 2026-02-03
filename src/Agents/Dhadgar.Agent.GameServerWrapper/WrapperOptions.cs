@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 
+using Dhadgar.Shared.Results;
+
 namespace Dhadgar.Agent.GameServerWrapper;
 
 /// <summary>
@@ -100,8 +102,8 @@ public sealed partial class WrapperOptions
     /// Parses command-line arguments into options.
     /// </summary>
     /// <param name="args">Command-line arguments.</param>
-    /// <returns>Parsed options or null if parsing failed.</returns>
-    public static (WrapperOptions? Options, IReadOnlyList<string> Errors) Parse(string[] args)
+    /// <returns>Result containing parsed options or error.</returns>
+    public static Result<WrapperOptions> Parse(string[] args)
     {
         string? serverId = null;
         string? pipeName = null;
@@ -130,15 +132,15 @@ public sealed partial class WrapperOptions
                 }
                 configPath = value;
             }
-            else if (arg == "--server-id" && i + 1 < args.Length)
+            else if (arg.Equals("--server-id", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 serverId = args[++i];
             }
-            else if (arg == "--pipe" && i + 1 < args.Length)
+            else if (arg.Equals("--pipe", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 pipeName = args[++i];
             }
-            else if (arg == "--config" && i + 1 < args.Length)
+            else if (arg.Equals("--config", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 configPath = args[++i];
             }
@@ -157,7 +159,7 @@ public sealed partial class WrapperOptions
             if (serverId is null) errors.Add("Missing required argument: --server-id");
             if (pipeName is null) errors.Add("Missing required argument: --pipe");
             if (configPath is null) errors.Add("Missing required argument: --config");
-            return (null, errors);
+            return Result<WrapperOptions>.Failure(string.Join("; ", errors));
         }
 
         var options = new WrapperOptions
@@ -170,10 +172,10 @@ public sealed partial class WrapperOptions
         var validationErrors = options.Validate();
         if (validationErrors.Count > 0)
         {
-            return (null, validationErrors);
+            return Result<WrapperOptions>.Failure(string.Join("; ", validationErrors));
         }
 
-        return (options, errors);
+        return Result<WrapperOptions>.Success(options);
     }
 
     /// <summary>

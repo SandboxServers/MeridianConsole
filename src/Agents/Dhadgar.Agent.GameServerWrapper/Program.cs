@@ -17,19 +17,18 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         // Parse command-line arguments
-        var (options, errors) = WrapperOptions.Parse(args);
+        var parseResult = WrapperOptions.Parse(args);
 
-        if (options is null || errors.Count > 0)
+        if (!parseResult.IsSuccess)
         {
             Console.Error.WriteLine("GameServerWrapper: Invalid arguments");
-            foreach (var error in errors)
-            {
-                Console.Error.WriteLine($"  {error}");
-            }
+            Console.Error.WriteLine($"  {parseResult.Error}");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Usage: GameServerWrapper.exe --server-id=<id> --pipe=<pipename> --config=<path>");
             return 1;
         }
+
+        var options = parseResult.Value;
 
         try
         {
@@ -58,7 +57,7 @@ public static class Program
                 settings.LogName = "Application";
             });
 
-            var host = builder.Build();
+            using var host = builder.Build();
 
             // Log startup
             var logger = host.Services.GetRequiredService<ILogger<GameServerHostedService>>();

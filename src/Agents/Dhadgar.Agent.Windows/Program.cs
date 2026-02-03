@@ -1,4 +1,5 @@
 using Dhadgar.Agent.Core.Authentication;
+using Dhadgar.Shared.Results;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Hosting;
 using Dhadgar.Agent.Core.Process;
@@ -87,43 +88,11 @@ public static class Program
             var host = builder.Build();
 
             // Perform startup validation
-            using (var scope = host.Services.CreateScope())
+            var startupResult = await ValidateAndConfigureAsync(host);
+            if (startupResult.IsFailure)
             {
-                var logger = scope.ServiceProvider.GetRequiredService<ILogger<AgentOptions>>();
-                var options = scope.ServiceProvider.GetRequiredService<IOptions<AgentOptions>>().Value;
-
-                // SECURITY: Validate HTTPS enforcement at startup
-                if (!Uri.TryCreate(options.ControlPlane.Endpoint, UriKind.Absolute, out var uri) ||
-                    !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-                {
-                    logger.LogCritical(
-                        "Control plane endpoint must use HTTPS. Current value: {Scheme}",
-                        uri?.Scheme ?? "invalid");
-                    Console.Error.WriteLine("FATAL: Control plane endpoint must use HTTPS");
-                    return 1;
-                }
-
-                logger.LogInformation(
-                    "Windows Agent starting. NodeId: {NodeId}, ControlPlane: {Endpoint}",
-                    options.NodeId?.ToString() ?? "(not enrolled)",
-                    uri.Host);
-
-                // Configure service recovery with progressive delays (5s/10s/30s).
-                // This overrides WiX's uniform delay to set proper progression via sc.exe.
-                // Runs on every startup to ensure correct config even after service reinstall.
-                var recoveryResult = await ServiceInstaller.ConfigureRecoveryAsync();
-                if (recoveryResult.IsFailure)
-                {
-                    // Log warning but don't fail startup - service will still work with WiX baseline delays
-                    logger.LogWarning(
-                        "Failed to configure service recovery delays: {Error}. " +
-                        "Service will use uniform 5-second delays instead of 5s/10s/30s progression.",
-                        recoveryResult.Error);
-                }
-                else
-                {
-                    logger.LogDebug("Service recovery configured with progressive delays (5s/10s/30s)");
-                }
+                Console.Error.WriteLine($"FATAL: {startupResult.Error}");
+                return 1;
             }
 
             await host.RunAsync();
@@ -140,5 +109,51 @@ public static class Program
             Console.Error.WriteLine($"Fatal error: {ex}");
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Validates startup configuration and performs initial setup.
+    /// </summary>
+    /// <param name="host">The built host.</param>
+    /// <returns>Success or failure result.</returns>
+    private static async Task<Result> ValidateAndConfigureAsync(IHost host)
+    {
+        using var scope = host.Services.CreateScope();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<AgentOptions>>();
+        var options = scope.ServiceProvider.GetRequiredService<IOptions<AgentOptions>>().Value;
+
+        // SECURITY: Validate HTTPS enforcement at startup
+        if (!Uri.TryCreate(options.ControlPlane.Endpoint, UriKind.Absolute, out var uri) ||
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogCritical(
+                "Control plane endpoint must use HTTPS. Current value: {Scheme}",
+                uri?.Scheme ?? "invalid");
+            return Result.Failure("Control plane endpoint must use HTTPS");
+        }
+
+        logger.LogInformation(
+            "Windows Agent starting. NodeId: {NodeId}, ControlPlane: {Endpoint}",
+            options.NodeId?.ToString() ?? "(not enrolled)",
+            uri.Host);
+
+        // Configure service recovery with progressive delays (5s/10s/30s).
+        // This overrides WiX's uniform delay to set proper progression via sc.exe.
+        // Runs on every startup to ensure correct config even after service reinstall.
+        var recoveryResult = await ServiceInstaller.ConfigureRecoveryAsync();
+        if (recoveryResult.IsFailure)
+        {
+            // Log warning but don't fail startup - service will still work with WiX baseline delays
+            logger.LogWarning(
+                "Failed to configure service recovery delays: {Error}. " +
+                "Service will use uniform 5-second delays instead of 5s/10s/30s progression.",
+                recoveryResult.Error);
+        }
+        else
+        {
+            logger.LogDebug("Service recovery configured with progressive delays (5s/10s/30s)");
+        }
+
+        return Result.Success();
     }
 }

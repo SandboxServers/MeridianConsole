@@ -33,11 +33,11 @@ public sealed class WrapperOptionsTests
             };
 
             // Act
-            var (options, errors) = WrapperOptions.Parse(args);
+            var result = WrapperOptions.Parse(args);
 
             // Assert
-            Assert.NotNull(options);
-            Assert.Empty(errors);
+            Assert.True(result.IsSuccess);
+            var options = result.Value;
             Assert.Equal("test-server", options.ServerId);
             Assert.Equal("MeridianAgent_12345\\test-server", options.PipeName);
             Assert.Equal(tempConfig, options.ConfigPath);
@@ -63,11 +63,10 @@ public sealed class WrapperOptionsTests
             };
 
             // Act
-            var (options, errors) = WrapperOptions.Parse(args);
+            var result = WrapperOptions.Parse(args);
 
             // Assert
-            Assert.NotNull(options);
-            Assert.Empty(errors);
+            Assert.True(result.IsSuccess);
         }
         finally
         {
@@ -86,11 +85,11 @@ public sealed class WrapperOptionsTests
         };
 
         // Act
-        var (options, errors) = WrapperOptions.Parse(args);
+        var result = WrapperOptions.Parse(args);
 
         // Assert
-        Assert.Null(options);
-        Assert.Contains(errors, e => e.Contains("--server-id", StringComparison.OrdinalIgnoreCase));
+        Assert.False(result.IsSuccess);
+        Assert.Contains("--server-id", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -104,11 +103,11 @@ public sealed class WrapperOptionsTests
         };
 
         // Act
-        var (options, errors) = WrapperOptions.Parse(args);
+        var result = WrapperOptions.Parse(args);
 
         // Assert
-        Assert.Null(options);
-        Assert.Contains(errors, e => e.Contains("--pipe", StringComparison.OrdinalIgnoreCase));
+        Assert.False(result.IsSuccess);
+        Assert.Contains("--pipe", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -122,11 +121,11 @@ public sealed class WrapperOptionsTests
         };
 
         // Act
-        var (options, errors) = WrapperOptions.Parse(args);
+        var result = WrapperOptions.Parse(args);
 
         // Assert
-        Assert.Null(options);
-        Assert.Contains(errors, e => e.Contains("--config", StringComparison.OrdinalIgnoreCase));
+        Assert.False(result.IsSuccess);
+        Assert.Contains("--config", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -144,11 +143,11 @@ public sealed class WrapperOptionsTests
             };
 
             // Act
-            var (options, errors) = WrapperOptions.Parse(args);
+            var result = WrapperOptions.Parse(args);
 
             // Assert
-            Assert.NotNull(options);
-            Assert.Equal(tempConfig, options.ConfigPath);
+            Assert.True(result.IsSuccess);
+            Assert.Equal(tempConfig, result.Value.ConfigPath);
         }
         finally
         {

@@ -248,6 +248,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
         var message = new CommandMessage
         {
             ServerId = _serverId,
+            Timestamp = _timeProvider.GetUtcNow(),
             Command = command,
             Payload = payload,
             TimeoutSeconds = timeoutSeconds,
@@ -267,6 +268,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
         var message = new InputMessage
         {
             ServerId = _serverId,
+            Timestamp = _timeProvider.GetUtcNow(),
             Input = input
         };
 
@@ -282,6 +284,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
         var message = new HeartbeatMessage
         {
             ServerId = _serverId,
+            Timestamp = _timeProvider.GetUtcNow(),
             Sequence = Interlocked.Increment(ref _heartbeatSequence)
         };
 
@@ -302,6 +305,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
         var message = new ShutdownMessage
         {
             ServerId = _serverId,
+            Timestamp = _timeProvider.GetUtcNow(),
             GracefulTimeoutSeconds = gracefulTimeoutSeconds,
             Reason = reason
         };
@@ -321,6 +325,7 @@ internal sealed class PipeClientConnection : IAsyncDisposable
         var message = new ErrorMessage
         {
             ServerId = _serverId,
+            Timestamp = _timeProvider.GetUtcNow(),
             ErrorCode = errorCode,
             Message = errorMessage,
             IsFatal = isFatal

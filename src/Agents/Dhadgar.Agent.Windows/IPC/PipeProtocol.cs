@@ -40,8 +40,12 @@ public abstract record PipeMessage
     /// <summary>
     /// Timestamp when the message was created.
     /// </summary>
+    /// <remarks>
+    /// This property must be explicitly set when creating messages.
+    /// Use TimeProvider.GetUtcNow() for testability rather than DateTimeOffset.UtcNow.
+    /// </remarks>
     [JsonPropertyName("timestamp")]
-    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    public required DateTimeOffset Timestamp { get; init; }
 
     /// <summary>
     /// Optional correlation ID for request/response tracking.

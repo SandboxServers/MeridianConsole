@@ -77,13 +77,15 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
         try
         {
             // Load server configuration
-            var (config, configError) = ServerConfig.LoadFromFile(_options.ConfigPath);
-            if (config is null)
+            var configResult = ServerConfig.LoadFromFile(_options.ConfigPath);
+            if (!configResult.IsSuccess)
             {
-                _logger.LogCritical("Failed to load configuration: {Error}", configError);
+                _logger.LogCritical("Failed to load configuration: {Error}", configResult.Error);
                 _lifetime.StopApplication();
                 return;
             }
+
+            var config = configResult.Value;
 
             // Connect to agent pipe
             var connected = await ConnectToPipeAsync(stoppingToken).ConfigureAwait(false);
@@ -208,8 +210,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
 
                     if (messageLength <= 0 || messageLength > MaxMessageSize)
                     {
-                        _logger.LogWarning("Invalid message length: {Length}", messageLength);
-                        continue;
+                        _logger.LogWarning(
+                            "Invalid message length: {Length}. Terminating read loop to prevent frame desynchronization.",
+                            messageLength);
+                        break;
                     }
 
                     // Read message body
@@ -304,6 +308,9 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
 
         _logger.LogDebug("Received command: {Command}", command);
 
+        var success = true;
+        string? errorMessage = null;
+
         try
         {
             switch (command)
@@ -325,22 +332,21 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
 
                 default:
                     _logger.LogWarning("Unknown command: {Command}", command);
+                    success = false;
+                    errorMessage = $"Unknown command: {command}";
                     break;
-            }
-
-            if (correlationId is not null)
-            {
-                await SendAckAsync(correlationId, success: true).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling command {Command}", command);
+            success = false;
+            errorMessage = ex.Message;
+        }
 
-            if (correlationId is not null)
-            {
-                await SendAckAsync(correlationId, success: false, ex.Message).ConfigureAwait(false);
-            }
+        if (correlationId is not null)
+        {
+            await SendAckAsync(correlationId, success, errorMessage).ConfigureAwait(false);
         }
     }
 
@@ -569,7 +575,15 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
         }
 
         _currentState = GameServerState.Stopped;
-        await SendStatusAsync(_currentState, exitCode: _gameServerProcess?.ExitCode).ConfigureAwait(false);
+
+        // Only access ExitCode when process has fully exited to avoid InvalidOperationException
+        int? exitCode = null;
+        if (_gameServerProcess is { HasExited: true })
+        {
+            exitCode = _gameServerProcess.ExitCode;
+        }
+
+        await SendStatusAsync(_currentState, exitCode: exitCode).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -719,15 +733,29 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             return;
         }
 
-        await _writeLock.WaitAsync().ConfigureAwait(false);
+        // Use a timeout to prevent holding the lock forever on a stalled pipe
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var lockTaken = false;
+
         try
         {
+            lockTaken = await _writeLock.WaitAsync(TimeSpan.FromSeconds(5), timeoutCts.Token).ConfigureAwait(false);
+            if (!lockTaken)
+            {
+                _logger.LogWarning("Timed out waiting for write lock in SendMessageAsync");
+                return;
+            }
+
             var json = JsonSerializer.SerializeToUtf8Bytes(message);
             var lengthPrefix = BitConverter.GetBytes(json.Length);
 
-            await _pipeClient.WriteAsync(lengthPrefix).ConfigureAwait(false);
-            await _pipeClient.WriteAsync(json).ConfigureAwait(false);
-            await _pipeClient.FlushAsync().ConfigureAwait(false);
+            await _pipeClient.WriteAsync(lengthPrefix, timeoutCts.Token).ConfigureAwait(false);
+            await _pipeClient.WriteAsync(json, timeoutCts.Token).ConfigureAwait(false);
+            await _pipeClient.FlushAsync(timeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("SendMessageAsync timed out while writing to pipe");
         }
         catch (Exception ex)
         {
@@ -735,7 +763,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
         }
         finally
         {
-            _writeLock.Release();
+            if (lockTaken)
+            {
+                _writeLock.Release();
+            }
         }
     }
 

@@ -9,6 +9,11 @@ namespace Dhadgar.Agent.Windows.Tests.IPC;
 
 public sealed class PipeProtocolTests
 {
+    /// <summary>
+    /// Fixed timestamp for deterministic testing.
+    /// </summary>
+    private static readonly DateTimeOffset FixedTimestamp = new(2024, 1, 15, 10, 30, 0, TimeSpan.Zero);
+
     #region Serialization Tests
 
     [Fact]
@@ -18,6 +23,7 @@ public sealed class PipeProtocolTests
         var message = new OutputMessage
         {
             ServerId = "test-server",
+            Timestamp = FixedTimestamp,
             Data = "Server started successfully",
             IsError = false,
             CorrelationId = "corr-123"
@@ -41,6 +47,7 @@ public sealed class PipeProtocolTests
         var message = new StatusMessage
         {
             ServerId = "test-server",
+            Timestamp = FixedTimestamp,
             State = GameServerState.Running,
             OsPid = 12345,
             CpuPercent = 25.5,
@@ -64,6 +71,7 @@ public sealed class PipeProtocolTests
         var message = new CommandMessage
         {
             ServerId = "test-server",
+            Timestamp = FixedTimestamp,
             Command = GameServerCommand.Stop,
             Payload = "graceful",
             TimeoutSeconds = 60
@@ -87,6 +95,7 @@ public sealed class PipeProtocolTests
         var message = new HeartbeatMessage
         {
             ServerId = "test-server",
+            Timestamp = FixedTimestamp,
             Sequence = 42
         };
 
@@ -106,6 +115,7 @@ public sealed class PipeProtocolTests
         var message = new ShutdownMessage
         {
             ServerId = "test-server",
+            Timestamp = FixedTimestamp,
             GracefulTimeoutSeconds = 45,
             Reason = "Manual shutdown requested"
         };
@@ -118,6 +128,29 @@ public sealed class PipeProtocolTests
         Assert.Contains("\"type\":\"shutdown\"", json);
         Assert.Contains("\"gracefulTimeoutSeconds\":45", json);
         Assert.Contains("\"reason\":\"Manual shutdown requested\"", json);
+    }
+
+    [Fact]
+    public void Serialize_InputMessage_ProducesValidJson()
+    {
+        // Arrange
+        var message = new InputMessage
+        {
+            ServerId = "test-server",
+            Timestamp = FixedTimestamp,
+            Input = "say Hello World",
+            CorrelationId = "input-123"
+        };
+
+        // Act
+        var bytes = PipeProtocolSerializer.Serialize(message);
+        var json = Encoding.UTF8.GetString(bytes);
+
+        // Assert
+        Assert.Contains("\"type\":\"input\"", json);
+        Assert.Contains("\"serverId\":\"test-server\"", json);
+        Assert.Contains("\"input\":\"say Hello World\"", json);
+        Assert.Contains("\"correlationId\":\"input-123\"", json);
     }
 
     #endregion
@@ -159,7 +192,8 @@ public sealed class PipeProtocolTests
                 "state": "Running",
                 "osPid": 9999,
                 "cpuPercent": 50.0,
-                "memoryBytes": 268435456
+                "memoryBytes": 268435456,
+                "timestamp": "2024-01-15T10:30:00Z"
             }
             """;
 
@@ -185,7 +219,8 @@ public sealed class PipeProtocolTests
                 "serverId": "test-server",
                 "command": "Start",
                 "payload": null,
-                "timeoutSeconds": 30
+                "timeoutSeconds": 30,
+                "timestamp": "2024-01-15T10:30:00Z"
             }
             """;
 
@@ -210,7 +245,8 @@ public sealed class PipeProtocolTests
                 "serverId": "test-server",
                 "acknowledgedId": "cmd-456",
                 "success": true,
-                "errorMessage": null
+                "errorMessage": null,
+                "timestamp": "2024-01-15T10:30:00Z"
             }
             """;
 
@@ -235,7 +271,8 @@ public sealed class PipeProtocolTests
                 "serverId": "test-server",
                 "errorCode": "PROCESS_FAILED",
                 "message": "Game server crashed",
-                "isFatal": true
+                "isFatal": true,
+                "timestamp": "2024-01-15T10:30:00Z"
             }
             """;
 
@@ -248,6 +285,28 @@ public sealed class PipeProtocolTests
         Assert.Equal("PROCESS_FAILED", error.ErrorCode);
         Assert.Equal("Game server crashed", error.Message);
         Assert.True(error.IsFatal);
+    }
+
+    [Fact]
+    public void Deserialize_InputMessage_ReturnsCorrectType()
+    {
+        // Arrange
+        var json = """
+            {
+                "type": "input",
+                "serverId": "test-server",
+                "input": "say Hello World",
+                "timestamp": "2024-01-15T10:30:00Z"
+            }
+            """;
+
+        // Act
+        var message = PipeProtocolSerializer.Deserialize(json);
+
+        // Assert
+        var input = Assert.IsType<InputMessage>(message);
+        Assert.Equal("test-server", input.ServerId);
+        Assert.Equal("say Hello World", input.Input);
     }
 
     #endregion
@@ -325,6 +384,7 @@ public sealed class PipeProtocolTests
         var original = new StatusMessage
         {
             ServerId = "my-server",
+            Timestamp = FixedTimestamp,
             State = GameServerState.Running,
             OsPid = 54321,
             ExitCode = null,
@@ -341,6 +401,7 @@ public sealed class PipeProtocolTests
         // Assert
         var roundTripped = Assert.IsType<StatusMessage>(deserialized);
         Assert.Equal(original.ServerId, roundTripped.ServerId);
+        Assert.Equal(original.Timestamp, roundTripped.Timestamp);
         Assert.Equal(original.State, roundTripped.State);
         Assert.Equal(original.OsPid, roundTripped.OsPid);
         Assert.Equal(original.ExitCode, roundTripped.ExitCode);
@@ -364,6 +425,7 @@ public sealed class PipeProtocolTests
         var message = new StatusMessage
         {
             ServerId = "test",
+            Timestamp = FixedTimestamp,
             State = state
         };
 
@@ -388,6 +450,7 @@ public sealed class PipeProtocolTests
         var message = new CommandMessage
         {
             ServerId = "test",
+            Timestamp = FixedTimestamp,
             Command = command
         };
 

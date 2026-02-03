@@ -65,8 +65,8 @@ public interface IAgentPipeServer : IAsyncDisposable
     /// Registers a game server for pipe communication.
     /// </summary>
     /// <param name="serverId">The server identifier.</param>
-    /// <param name="serviceAccountSid">The service account SID for access control.</param>
-    void RegisterServer(string serverId, string serviceAccountSid);
+    /// <param name="serviceAccountName">The service account name for access control (e.g., "NT SERVICE\MeridianGS_abc123").</param>
+    void RegisterServer(string serverId, string serviceAccountName);
 
     /// <summary>
     /// Unregisters a game server.
@@ -200,7 +200,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     }
 
     /// <inheritdoc />
-    public void RegisterServer(string serverId, string serviceAccountSid)
+    public void RegisterServer(string serverId, string serviceAccountName)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(AgentPipeServer));
 
@@ -210,7 +210,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         }
 
         var pipeName = GetPipeName(serverId);
-        var registration = new ServerRegistration(serverId, serviceAccountSid, pipeName);
+        var registration = new ServerRegistration(serverId, serviceAccountName, pipeName);
 
         _registrations[serverId] = registration;
 
@@ -377,7 +377,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             try
             {
                 // Create pipe with security
-                var pipeSecurity = CreatePipeSecurity(registration.ServiceAccountSid);
+                var pipeSecurity = CreatePipeSecurity(registration.ServiceAccountName);
 
                 pipeStream = NamedPipeServerStreamAcl.Create(
                     registration.PipeName,
@@ -461,7 +461,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <summary>
     /// Creates pipe security settings.
     /// </summary>
-    private static PipeSecurity CreatePipeSecurity(string serviceAccountSid)
+    private static PipeSecurity CreatePipeSecurity(string serviceAccountName)
     {
         var security = new PipeSecurity();
 
@@ -476,7 +476,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         // SECURITY: We use NTAccount which validates the account exists.
         // If the account doesn't exist yet, we still add the rule - Windows will
         // resolve it when the service starts and the VSA is created.
-        var serviceAccount = new NTAccount(serviceAccountSid);
+        var serviceAccount = new NTAccount(serviceAccountName);
         security.AddAccessRule(new PipeAccessRule(
             serviceAccount,
             PipeAccessRights.ReadWrite,
@@ -661,7 +661,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// </summary>
     private sealed record ServerRegistration(
         string ServerId,
-        string ServiceAccountSid,
+        string ServiceAccountName,
         string PipeName);
 
     #endregion

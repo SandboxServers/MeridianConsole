@@ -122,7 +122,7 @@ public sealed partial class GameServerServiceConfig : IValidatableObject
             if (ServiceName.Length > MaxServiceNameLength)
             {
                 yield return new ValidationResult(
-                    $"Combined service name '{ServiceName}' exceeds maximum length of {MaxServiceNameLength}",
+                    FormattableString.Invariant($"Combined service name '{ServiceName}' exceeds maximum length of {MaxServiceNameLength}"),
                     [nameof(ServerId)]);
             }
         }
