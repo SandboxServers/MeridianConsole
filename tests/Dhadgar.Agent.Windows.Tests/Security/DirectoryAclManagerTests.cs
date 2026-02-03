@@ -17,9 +17,13 @@ public sealed class DirectoryAclManagerTests
     private static readonly string TestAbsolutePath = IsWindows
         ? @"C:\Servers\test"
         : "/var/servers/test";
+    // Non-existent path MUST be within allowed roots (C:\Servers or /var/servers)
     private static readonly string TestNonExistentPath = IsWindows
-        ? @"C:\NonExistent\Path\That\Does\Not\Exist"
-        : "/nonexistent/path/that/does/not/exist";
+        ? @"C:\Servers\nonexistent\path\that\does\not\exist"
+        : "/var/servers/nonexistent/path/that/does/not/exist";
+    private static readonly IReadOnlyList<string> TestAllowedRoots = IsWindows
+        ? [@"C:\Servers", @"C:\GameServers"]
+        : ["/var/servers", "/var/gameservers"];
 
     private readonly ILogger<DirectoryAclManager> _logger;
     private readonly DirectoryAclManager _aclManager;
@@ -27,8 +31,51 @@ public sealed class DirectoryAclManagerTests
     public DirectoryAclManagerTests()
     {
         _logger = Substitute.For<ILogger<DirectoryAclManager>>();
-        _aclManager = new DirectoryAclManager(_logger);
+        _aclManager = new DirectoryAclManager(_logger, TestAllowedRoots);
     }
+
+    #region Constructor Tests
+
+    [Fact]
+    public void Constructor_WithNullLogger_ThrowsArgumentNullException()
+    {
+        // Act & Assert
+        var exception = Assert.Throws<ArgumentNullException>(
+            () => new DirectoryAclManager(null!, TestAllowedRoots));
+        Assert.Equal("logger", exception.ParamName);
+    }
+
+    [Fact]
+    public void Constructor_WithNullAllowedRoots_ThrowsArgumentNullException()
+    {
+        // Act & Assert
+        var exception = Assert.Throws<ArgumentNullException>(
+            () => new DirectoryAclManager(_logger, null!));
+        Assert.Equal("allowedRoots", exception.ParamName);
+        Assert.Contains("fail-closed", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Constructor_WithEmptyAllowedRoots_ThrowsArgumentException()
+    {
+        // Act & Assert
+        var exception = Assert.Throws<ArgumentException>(
+            () => new DirectoryAclManager(_logger, []));
+        Assert.Equal("allowedRoots", exception.ParamName);
+        Assert.Contains("fail-closed", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Constructor_WithValidAllowedRoots_CreatesInstance()
+    {
+        // Act
+        var manager = new DirectoryAclManager(_logger, TestAllowedRoots);
+
+        // Assert
+        Assert.NotNull(manager);
+    }
+
+    #endregion
 
     #region Path Validation Tests
 

@@ -1,3 +1,4 @@
+using System.Security;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -83,11 +84,24 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
     /// Initializes a new instance of the <see cref="DirectoryAclManager"/> class.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="allowedRoots">Optional list of allowed root directories. If null or empty, all paths are allowed.</param>
-    public DirectoryAclManager(ILogger<DirectoryAclManager> logger, IReadOnlyList<string>? allowedRoots = null)
+    /// <param name="allowedRoots">List of allowed root directories. Must contain at least one entry (fail-closed security).</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="logger"/> or <paramref name="allowedRoots"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="allowedRoots"/> is empty.</exception>
+    public DirectoryAclManager(ILogger<DirectoryAclManager> logger, IReadOnlyList<string> allowedRoots)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _allowedRoots = allowedRoots ?? [];
+
+        if (allowedRoots is null)
+        {
+            throw new ArgumentNullException(nameof(allowedRoots), "Allowed roots must be specified (fail-closed security)");
+        }
+
+        if (allowedRoots.Count == 0)
+        {
+            throw new ArgumentException("Allowed roots must contain at least one entry (fail-closed security)", nameof(allowedRoots));
+        }
+
+        _allowedRoots = allowedRoots;
     }
 
     /// <inheritdoc />
@@ -552,28 +566,36 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             }
         }
 
-        // Check against allowed roots if configured
-        if (_allowedRoots.Count > 0)
+        // Check against allowed roots (required - fail-closed security)
+        var isWithinAllowedRoot = false;
+        foreach (var root in _allowedRoots)
         {
-            var isWithinAllowedRoot = false;
-            foreach (var root in _allowedRoots)
+            // Safely normalize each root path
+            string normalizedRoot;
+            try
             {
-                var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
-                if (normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-                    normalizedPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase))
-                {
-                    isWithinAllowedRoot = true;
-                    break;
-                }
+                normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+            }
+            catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException or SecurityException)
+            {
+                _logger.LogWarning(ex, "Failed to normalize allowed root path: {Root}", root);
+                return Result.Failure($"[ACL.InvalidRoot] Failed to normalize allowed root path: {root}");
             }
 
-            if (!isWithinAllowedRoot)
+            if (normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogWarning(
-                    "Path {Path} is not within any allowed root directories",
-                    directoryPath);
-                return Result.Failure("[ACL.PathNotAllowed] Directory path is not within allowed root directories");
+                isWithinAllowedRoot = true;
+                break;
             }
+        }
+
+        if (!isWithinAllowedRoot)
+        {
+            _logger.LogWarning(
+                "Path {Path} is not within any allowed root directories",
+                directoryPath);
+            return Result.Failure("[ACL.PathNotAllowed] Directory path is not within allowed root directories");
         }
 
         return Result.Success();

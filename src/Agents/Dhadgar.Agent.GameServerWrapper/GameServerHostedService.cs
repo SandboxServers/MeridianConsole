@@ -372,6 +372,13 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             return;
         }
 
+        // Check if stdin was redirected before attempting to write
+        if (!_gameServerProcess.StartInfo.RedirectStandardInput)
+        {
+            _logger.LogWarning("Cannot send input - stdin was not redirected for this game server");
+            return;
+        }
+
         try
         {
             await _gameServerProcess.StandardInput.WriteLineAsync(input).ConfigureAwait(false);

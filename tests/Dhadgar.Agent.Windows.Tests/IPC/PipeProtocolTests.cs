@@ -360,6 +360,38 @@ public sealed class PipeProtocolTests
     }
 
     [Fact]
+    public void Deserialize_OversizedStringWithMultiByteChars_ReturnsNull()
+    {
+        // Arrange - Create a JSON string whose UTF-8 encoded byte length exceeds MaxMessageSize
+        // Use multi-byte characters (日 = 3 bytes in UTF-8) to push the byte count over the limit
+        // We need enough characters so that the UTF-8 byte count exceeds MaxMessageSize
+        var repeatCount = (PipeMessage.MaxMessageSize / 3) + 1; // Each '日' is 3 bytes
+        var oversizedPayload = new string('日', repeatCount);
+
+        // Wrap in valid JSON structure (the payload itself will cause the size limit to be exceeded)
+        var json = $$"""
+            {
+                "type": "output",
+                "serverId": "test-server",
+                "payload": {
+                    "data": "{{oversizedPayload}}"
+                }
+            }
+            """;
+
+        // Verify our test setup - the string should encode to more bytes than MaxMessageSize
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(json);
+        Assert.True(byteCount > PipeMessage.MaxMessageSize,
+            $"Test setup error: UTF-8 byte count ({byteCount}) should exceed MaxMessageSize ({PipeMessage.MaxMessageSize})");
+
+        // Act - Call the string overload which should check UTF-8 byte length
+        var result = PipeProtocolSerializer.Deserialize(json);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
     public void Deserialize_UnknownType_ReturnsNull()
     {
         // Arrange

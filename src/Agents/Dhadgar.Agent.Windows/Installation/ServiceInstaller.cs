@@ -55,9 +55,46 @@ public static class ServiceInstaller
     /// <returns>A result indicating success or failure with an error message.</returns>
     public static async Task<Result> SetDescriptionAsync(string description, CancellationToken cancellationToken = default)
     {
+        var validationResult = ValidateAndSanitizeDescription(description);
+        if (validationResult.IsFailure)
+        {
+            return Result.Failure(validationResult.Error);
+        }
+
+        // Double-quote the description (no escaping needed since we rejected quotes)
+        return await RunScCommandAsync(
+            $"description {Program.ServiceName} \"{validationResult.Value}\"",
+            "set service description",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Validates and sanitizes a service description for use with sc.exe.
+    /// </summary>
+    /// <param name="description">The description to validate.</param>
+    /// <returns>
+    /// A result containing the validated description on success,
+    /// or a failure with an error message if validation fails.
+    /// </returns>
+    /// <remarks>
+    /// SECURITY: This method rejects descriptions containing characters that could
+    /// enable command injection via sc.exe argument parsing:
+    /// - Double quotes (")
+    /// - Single quotes (')
+    /// - Backticks (`)
+    /// - Dollar signs ($)
+    /// - Ampersands (&amp;)
+    /// - Pipes (|)
+    /// - Semicolons (;)
+    /// - Backslashes (\)
+    /// - Carriage returns (\r)
+    /// - Newlines (\n)
+    /// </remarks>
+    internal static Result<string> ValidateAndSanitizeDescription(string description)
+    {
         if (string.IsNullOrWhiteSpace(description))
         {
-            return Result.Failure("Description is required and cannot be empty.");
+            return Result<string>.Failure("Description is required and cannot be empty.");
         }
 
         // SECURITY: Reject descriptions with potentially dangerous characters
@@ -66,15 +103,11 @@ public static class ServiceInstaller
         {
             if (c is '"' or '\'' or '`' or '$' or '&' or '|' or ';' or '\\' or '\r' or '\n')
             {
-                return Result.Failure($"Description contains disallowed character: '{c}'");
+                return Result<string>.Failure($"Description contains disallowed character: '{c}'");
             }
         }
 
-        // Double-quote the description (no escaping needed since we rejected quotes)
-        return await RunScCommandAsync(
-            $"description {Program.ServiceName} \"{description}\"",
-            "set service description",
-            cancellationToken).ConfigureAwait(false);
+        return Result<string>.Success(description);
     }
 
     /// <summary>

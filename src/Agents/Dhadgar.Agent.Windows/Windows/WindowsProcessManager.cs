@@ -49,6 +49,11 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     private const uint ForcedTerminationExitCode = 0xDEAD;
 
     /// <summary>
+    /// Exit code used when terminating due to memory limit exceeded.
+    /// </summary>
+    private const uint MemoryLimitExceededExitCode = 0xDEAE;
+
+    /// <summary>
     /// Default graceful shutdown timeout if not specified.
     /// </summary>
     private static readonly TimeSpan DefaultGracefulTimeout = TimeSpan.FromSeconds(30);
@@ -101,7 +106,8 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             return Result<ManagedProcess>.Failure(pathValidation.Error);
         }
 
-        // SECURITY: Validate working directory if specified
+        // SECURITY: Validate working directory if specified, get normalized path
+        string? validatedWorkingDirectory = null;
         if (!string.IsNullOrEmpty(config.WorkingDirectory))
         {
             var workDirValidation = ValidateWorkingDirectory(config.WorkingDirectory);
@@ -109,6 +115,7 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             {
                 return Result<ManagedProcess>.Failure(workDirValidation.Error);
             }
+            validatedWorkingDirectory = workDirValidation.Value;
         }
 
         // Link the cancellation token with disposal
@@ -133,8 +140,8 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
                     $"[Process.JobObjectCreationFailed] Failed to create Job Object. Win32 error: {error}");
             }
 
-            // Configure process start info
-            var startInfo = CreateProcessStartInfo(config);
+            // Configure process start info (use validated working directory)
+            var startInfo = CreateProcessStartInfo(config, validatedWorkingDirectory);
 
             // Create and start the process
             osProcess = new System.Diagnostics.Process
@@ -216,6 +223,19 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
 
                 return Result<ManagedProcess>.Failure(
                     $"[Process.JobAssignmentFailed] Failed to assign process to Job Object. Win32 error: {error}");
+            }
+
+            // Set up memory limit monitoring if KillOnMemoryExceeded is enabled
+            // This must be done after the process is assigned to the job
+            if (config.Limits?.MemoryMb > 0 && config.Limits.KillOnMemoryExceeded)
+            {
+                if (!SetupMemoryLimitMonitoring(entry, processId))
+                {
+                    _logger.LogWarning(
+                        "Memory limit monitoring could not be set up for process {ProcessId}. " +
+                        "Memory limits are still enforced, but processes will not be automatically terminated on violation.",
+                        processId);
+                }
             }
 
             // Update process info
@@ -509,9 +529,8 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
                         ForcedTerminationExitCode);
                 }
 
-                // Dispose resources
-                entry.JobHandle.Dispose();
-                entry.OsProcess.Dispose();
+                // Dispose resources (including monitoring task, completion port, job handle, and process)
+                entry.Dispose();
             }
             catch (Exception ex)
             {
@@ -538,6 +557,12 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     /// <summary>
     /// Creates and configures a Job Object with the specified limits.
     /// </summary>
+    /// <remarks>
+    /// When KillOnMemoryExceeded is true, this method sets up memory limits
+    /// but does NOT set up the IO completion port monitoring. That must be
+    /// done separately via <see cref="SetupMemoryLimitMonitoringAsync"/> after
+    /// the process entry is created and tracked.
+    /// </remarks>
     private JobObjectHandle? CreateConfiguredJobObject(ProcessConfig config, Guid processId)
     {
         // Create an anonymous Job Object
@@ -561,16 +586,13 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             };
 
             // Configure memory limits if specified
+            // Note: KillOnMemoryExceeded is handled via IO completion port monitoring,
+            // not via DieOnUnhandledException (which doesn't actually enforce memory termination)
             if (config.Limits?.MemoryMb > 0)
             {
                 var memoryBytes = (nuint)(config.Limits.MemoryMb.Value * 1024L * 1024L);
                 extendedInfo.BasicLimitInformation.LimitFlags |= NativeMethods.JobObjectLimit.ProcessMemory;
                 extendedInfo.ProcessMemoryLimit = memoryBytes;
-
-                if (config.Limits.KillOnMemoryExceeded)
-                {
-                    extendedInfo.BasicLimitInformation.LimitFlags |= NativeMethods.JobObjectLimit.DieOnUnhandledException;
-                }
             }
 
             // Configure max active processes if specified
@@ -629,12 +651,14 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     /// <summary>
     /// Creates a ProcessStartInfo with security-safe configuration.
     /// </summary>
-    private static ProcessStartInfo CreateProcessStartInfo(ProcessConfig config)
+    /// <param name="config">The process configuration.</param>
+    /// <param name="validatedWorkingDirectory">The validated, normalized working directory path (or null to use executable's directory).</param>
+    private static ProcessStartInfo CreateProcessStartInfo(ProcessConfig config, string? validatedWorkingDirectory)
     {
         var startInfo = new ProcessStartInfo
         {
             FileName = config.ExecutablePath,
-            WorkingDirectory = config.WorkingDirectory ?? Path.GetDirectoryName(config.ExecutablePath),
+            WorkingDirectory = validatedWorkingDirectory ?? Path.GetDirectoryName(config.ExecutablePath),
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = config.CaptureStdout,
@@ -716,8 +740,18 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     /// <summary>
     /// Sets memory limits on a Job Object.
     /// </summary>
+    /// <remarks>
+    /// Note: The killOnExceeded parameter is no longer used here. Memory limit enforcement
+    /// with termination is handled via IO completion port monitoring in SetupMemoryLimitMonitoring.
+    /// This method only sets the memory limit on the job object, which will cause allocation
+    /// failures when exceeded (but not automatic termination).
+    /// </remarks>
     private static Result<bool> SetMemoryLimits(JobObjectHandle jobHandle, int memoryMb, bool killOnExceeded)
     {
+        // Note: killOnExceeded is handled separately via IO completion port monitoring
+        // The DieOnUnhandledException flag was previously used here incorrectly -
+        // it controls error dialogs, not memory enforcement
+
         var extendedInfo = new NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
         {
             BasicLimitInformation = new NativeMethods.JOBOBJECT_BASIC_LIMIT_INFORMATION
@@ -727,11 +761,6 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             },
             ProcessMemoryLimit = (nuint)(memoryMb * 1024L * 1024L)
         };
-
-        if (killOnExceeded)
-        {
-            extendedInfo.BasicLimitInformation.LimitFlags |= NativeMethods.JobObjectLimit.DieOnUnhandledException;
-        }
 
         var infoSize = (uint)Marshal.SizeOf<NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
         var infoPtr = Marshal.AllocHGlobal((int)infoSize);
@@ -797,6 +826,217 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         finally
         {
             Marshal.FreeHGlobal(infoPtr);
+        }
+    }
+
+    /// <summary>
+    /// Sets up IO completion port monitoring for memory limit enforcement.
+    /// </summary>
+    /// <param name="entry">The process entry to monitor.</param>
+    /// <param name="processId">The process ID for logging.</param>
+    /// <returns>True if monitoring was set up successfully, false otherwise.</returns>
+    /// <remarks>
+    /// SECURITY: This method creates an IO completion port associated with the job object
+    /// to receive notifications when the memory limit is exceeded. When a
+    /// JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT message is received, the job is terminated.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of IoCompletionPortHandle is transferred to ProcessEntry.CompletionPortHandle on success, or disposed on failure paths")]
+    private bool SetupMemoryLimitMonitoring(ProcessEntry entry, Guid processId)
+    {
+        // Create the IO completion port
+        var completionPortHandle = NativeMethods.CreateIoCompletionPort(
+            NativeMethods.InvalidHandleValue,
+            IntPtr.Zero,
+            (nuint)processId.GetHashCode(), // Use process ID hash as completion key
+            1); // Single thread for monitoring
+
+        if (completionPortHandle == IntPtr.Zero)
+        {
+            var error = Marshal.GetLastWin32Error();
+            _logger.LogWarning(
+                "Failed to create IO completion port for memory monitoring on process {ProcessId}. Win32 error: {Error}",
+                processId, error);
+            return false;
+        }
+
+        var ioCompletionPort = new IoCompletionPortHandle(completionPortHandle, ownsHandle: true);
+
+        try
+        {
+            // Associate the completion port with the job object
+            var associateInfo = new NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT
+            {
+                CompletionKey = (nuint)processId.GetHashCode(),
+                CompletionPort = ioCompletionPort.DangerousGetHandle()
+            };
+
+            var infoSize = (uint)Marshal.SizeOf<NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT>();
+            var infoPtr = Marshal.AllocHGlobal((int)infoSize);
+
+            try
+            {
+                Marshal.StructureToPtr(associateInfo, infoPtr, fDeleteOld: false);
+
+                if (!NativeMethods.SetInformationJobObject(
+                    entry.JobHandle.DangerousGetHandle(),
+                    NativeMethods.JobObjectInfoType.AssociateCompletionPortInformation,
+                    infoPtr,
+                    infoSize))
+                {
+                    var error = Marshal.GetLastWin32Error();
+                    _logger.LogWarning(
+                        "Failed to associate completion port with job for process {ProcessId}. Win32 error: {Error}",
+                        processId, error);
+                    ioCompletionPort.Dispose();
+                    return false;
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(infoPtr);
+            }
+
+            // Store the completion port handle in the entry
+            entry.CompletionPortHandle = ioCompletionPort;
+
+            // Create cancellation token source for the monitoring task
+            entry.MonitoringCts = new CancellationTokenSource();
+
+            // Start the background monitoring task
+            entry.MonitoringTask = Task.Run(
+                () => MonitorMemoryLimitAsync(entry, processId, entry.MonitoringCts.Token),
+                entry.MonitoringCts.Token);
+
+            _logger.LogDebug(
+                "Memory limit monitoring started for process {ProcessId}",
+                processId);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Exception setting up memory limit monitoring for process {ProcessId}",
+                processId);
+            ioCompletionPort.Dispose();
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Background task that monitors the IO completion port for memory limit violations.
+    /// </summary>
+    /// <param name="entry">The process entry being monitored.</param>
+    /// <param name="processId">The process ID for logging.</param>
+    /// <param name="cancellationToken">Token to signal monitoring should stop.</param>
+    private async Task MonitorMemoryLimitAsync(
+        ProcessEntry entry,
+        Guid processId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                // Use Task.Run to avoid blocking the thread pool on the P/Invoke call
+                var result = await Task.Run(() =>
+                {
+                    if (entry.CompletionPortHandle is null ||
+                        entry.CompletionPortHandle.IsInvalid ||
+                        entry.CompletionPortHandle.IsClosed)
+                    {
+                        return (Success: false, MessageType: 0u, OverlappedValue: IntPtr.Zero);
+                    }
+
+                    // Wait for completion port notification with 1 second timeout
+                    // This allows periodic checking of the cancellation token
+                    var success = NativeMethods.GetQueuedCompletionStatus(
+                        entry.CompletionPortHandle.DangerousGetHandle(),
+                        out var messageType,
+                        out _,
+                        out var overlapped,
+                        1000); // 1 second timeout
+
+                    return (Success: success, MessageType: messageType, OverlappedValue: overlapped);
+                }, cancellationToken).ConfigureAwait(false);
+
+                if (!result.Success)
+                {
+                    // Timeout or error - continue loop to check cancellation
+                    continue;
+                }
+
+                // Check for shutdown message
+                if (result.MessageType == NativeMethods.JobObjectMsg.ShutdownMonitor)
+                {
+                    _logger.LogDebug(
+                        "Memory limit monitor received shutdown signal for process {ProcessId}",
+                        processId);
+                    break;
+                }
+
+                // Check for memory limit exceeded
+                if (result.MessageType == NativeMethods.JobObjectMsg.ProcessMemoryLimit ||
+                    result.MessageType == NativeMethods.JobObjectMsg.JobMemoryLimit)
+                {
+                    var affectedPid = result.OverlappedValue.ToInt64();
+                    _logger.LogWarning(
+                        "Memory limit exceeded for process {ProcessId} (affected PID: {AffectedPid}). Terminating job.",
+                        processId, affectedPid);
+
+                    // Terminate the job
+                    if (!entry.JobHandle.IsInvalid && !entry.JobHandle.IsClosed)
+                    {
+                        NativeMethods.TerminateJobObject(
+                            entry.JobHandle.DangerousGetHandle(),
+                            MemoryLimitExceededExitCode);
+
+                        // Update the process state
+                        entry.ManagedProcess.State = ProcessState.Failed;
+                        entry.ManagedProcess.ExitedAt = _timeProvider.GetUtcNow();
+                        entry.ManagedProcess.ExitCode = (int)MemoryLimitExceededExitCode;
+
+                        _logger.LogInformation(
+                            "Process {ProcessId} terminated due to memory limit violation",
+                            processId);
+                    }
+
+                    break;
+                }
+
+                // Log other job object messages for debugging
+                if (result.MessageType == NativeMethods.JobObjectMsg.NewProcess)
+                {
+                    _logger.LogDebug(
+                        "New process assigned to job for {ProcessId}: PID {Pid}",
+                        processId, result.OverlappedValue.ToInt64());
+                }
+                else if (result.MessageType == NativeMethods.JobObjectMsg.ExitProcess ||
+                         result.MessageType == NativeMethods.JobObjectMsg.AbnormalExitProcess)
+                {
+                    _logger.LogDebug(
+                        "Process exited from job {ProcessId}: PID {Pid}, Abnormal: {Abnormal}",
+                        processId,
+                        result.OverlappedValue.ToInt64(),
+                        result.MessageType == NativeMethods.JobObjectMsg.AbnormalExitProcess);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when cancellation is requested
+            _logger.LogDebug(
+                "Memory limit monitoring cancelled for process {ProcessId}",
+                processId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error in memory limit monitoring for process {ProcessId}",
+                processId);
         }
     }
 
@@ -974,16 +1214,30 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         else
         {
             // Clean up exited process resources when not auto-restarting
-            if (_processes.TryRemove(processId, out var removedEntry))
+            // Use try-finally pattern to ensure disposal on all paths (CA2000)
+            ProcessEntry? removedEntry = null;
+            try
             {
-                try
+                if (_processes.TryRemove(processId, out var removed))
                 {
-                    removedEntry.JobHandle.Dispose();
-                    removedEntry.OsProcess.Dispose();
+                    removedEntry = removed;
+                    removedEntry.Dispose();
+                    removedEntry = null; // Indicate successful disposal
                 }
-                catch (ObjectDisposedException)
+            }
+            finally
+            {
+                // Dispose if not already disposed in try block
+                if (removedEntry is not null)
                 {
-                    // Already disposed
+                    try
+                    {
+                        removedEntry.Dispose();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Already disposed
+                    }
                 }
             }
         }
@@ -1030,8 +1284,7 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
                 // Clean up old resources
                 try
                 {
-                    entry.JobHandle.Dispose();
-                    entry.OsProcess.Dispose();
+                    entry.Dispose();
                 }
                 catch (ObjectDisposedException)
                 {
@@ -1050,8 +1303,7 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
 
                 try
                 {
-                    entry.JobHandle.Dispose();
-                    entry.OsProcess.Dispose();
+                    entry.Dispose();
                 }
                 catch (ObjectDisposedException)
                 {
@@ -1149,12 +1401,21 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
 
     /// <summary>
     /// Validates that the working directory exists and is accessible.
+    /// Returns the normalized absolute path on success.
     /// </summary>
-    private static Result<bool> ValidateWorkingDirectory(string workingDirectory)
+    /// <param name="workingDirectory">The working directory to validate.</param>
+    /// <returns>Result containing the normalized absolute path on success, or failure with error message.</returns>
+    private static Result<string> ValidateWorkingDirectory(string workingDirectory)
     {
         if (string.IsNullOrWhiteSpace(workingDirectory))
         {
-            return Result<bool>.Success(true);
+            return Result<string>.Failure("[Process.InvalidWorkingDir] Working directory cannot be empty");
+        }
+
+        // SECURITY: Require absolute paths to prevent path traversal attacks
+        if (!Path.IsPathRooted(workingDirectory))
+        {
+            return Result<string>.Failure("[Process.InvalidWorkingDir] Working directory must be an absolute path");
         }
 
         string fullPath;
@@ -1164,15 +1425,15 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         }
         catch (Exception ex)
         {
-            return Result<bool>.Failure($"[Process.InvalidWorkingDir] Invalid working directory: {ex.Message}");
+            return Result<string>.Failure($"[Process.InvalidWorkingDir] Invalid working directory: {ex.Message}");
         }
 
         if (!Directory.Exists(fullPath))
         {
-            return Result<bool>.Failure($"[Process.WorkingDirNotFound] Working directory not found: {fullPath}");
+            return Result<string>.Failure($"[Process.WorkingDirNotFound] Working directory not found: {fullPath}");
         }
 
-        return Result<bool>.Success(true);
+        return Result<string>.Success(fullPath);
     }
 
     /// <summary>
@@ -1199,12 +1460,30 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
     /// <summary>
     /// Internal tracking entry for a managed process.
     /// </summary>
-    private sealed class ProcessEntry
+    private sealed class ProcessEntry : IDisposable
     {
         public ManagedProcess ManagedProcess { get; }
         public System.Diagnostics.Process OsProcess { get; }
         public JobObjectHandle JobHandle { get; }
         public ProcessConfig Config { get; }
+
+        /// <summary>
+        /// IO completion port handle for memory limit monitoring.
+        /// Null if memory limit monitoring is not enabled.
+        /// </summary>
+        public IoCompletionPortHandle? CompletionPortHandle { get; set; }
+
+        /// <summary>
+        /// Cancellation token source to stop the memory monitoring task.
+        /// </summary>
+        public CancellationTokenSource? MonitoringCts { get; set; }
+
+        /// <summary>
+        /// Task running the memory limit monitor loop.
+        /// </summary>
+        public Task? MonitoringTask { get; set; }
+
+        private bool _disposed;
 
         public ProcessEntry(
             ManagedProcess managedProcess,
@@ -1216,6 +1495,54 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             OsProcess = osProcess;
             JobHandle = jobHandle;
             Config = config;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+
+            // Signal the monitoring task to stop
+            try
+            {
+                if (MonitoringCts is not null && !MonitoringCts.IsCancellationRequested)
+                {
+                    // Post a shutdown message to wake up the monitoring thread
+                    if (CompletionPortHandle is not null && !CompletionPortHandle.IsInvalid && !CompletionPortHandle.IsClosed)
+                    {
+                        NativeMethods.PostQueuedCompletionStatus(
+                            CompletionPortHandle.DangerousGetHandle(),
+                            NativeMethods.JobObjectMsg.ShutdownMonitor,
+                            0,
+                            IntPtr.Zero);
+                    }
+
+                    MonitoringCts.Cancel();
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed
+            }
+
+            // Wait briefly for the monitoring task to complete
+            try
+            {
+                MonitoringTask?.Wait(TimeSpan.FromMilliseconds(500));
+            }
+            catch
+            {
+                // Ignore exceptions from the monitoring task
+            }
+
+            // Dispose resources in order
+            try { MonitoringCts?.Dispose(); } catch (ObjectDisposedException) { }
+            try { CompletionPortHandle?.Dispose(); } catch (ObjectDisposedException) { }
+            try { JobHandle.Dispose(); } catch (ObjectDisposedException) { }
+            try { OsProcess.Dispose(); } catch (ObjectDisposedException) { }
         }
     }
 

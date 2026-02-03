@@ -265,6 +265,8 @@
       <Condition>ENROLLMENT_TOKEN</Condition>
       <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
         <RegistryValue Name="EnrollmentToken" Type="string" Value="[ENROLLMENT_TOKEN]" KeyPath="yes" />
+        <!-- ACL: SYSTEM and Administrators only, protected from inheritance -->
+        <util:PermissionEx Sddl="D:P(A;OICI;KA;;;SY)(A;OICI;KA;;;BA)" />
       </RegistryKey>
     </Component>
   </Fragment>

@@ -8,18 +8,18 @@ namespace Dhadgar.Agent.Windows.Tests.Installation;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Important:</strong> These are property-based documentation tests, not traditional unit tests.
-/// They verify command construction patterns, string manipulation logic, and security invariants
-/// rather than exercising the actual <see cref="ServiceInstaller"/> methods directly.
+/// This test class verifies both the validation logic and security properties of the ServiceInstaller.
+/// The <see cref="ServiceInstaller.ValidateAndSanitizeDescription"/> method is tested directly,
+/// while other aspects are documented through property-based tests.
 /// </para>
 /// <para>
 /// The <see cref="ServiceInstaller"/> class executes sc.exe which requires administrator privileges
-/// and cannot be meaningfully unit tested without elevated permissions. These tests instead:
+/// and cannot be meaningfully unit tested without elevated permissions. These tests:
 /// </para>
 /// <list type="bullet">
+/// <item>Test the <see cref="ServiceInstaller.ValidateAndSanitizeDescription"/> helper method directly</item>
 /// <item>Document expected security properties (no shell metacharacters in service name)</item>
 /// <item>Verify command argument patterns match documentation</item>
-/// <item>Test string escaping logic that mirrors production behavior</item>
 /// <item>Ensure hardcoded values meet Windows service requirements</item>
 /// </list>
 /// <para>
@@ -83,98 +83,101 @@ public sealed class ServiceInstallerTests
     [InlineData("Description with spaces")]
     [InlineData("Description-with-hyphens")]
     [InlineData("Description_with_underscores")]
-    public void SetDescription_WithValidInput_ShouldNotThrow(string description)
+    [InlineData("Description with numbers 12345")]
+    [InlineData("Simple")]
+    public void ValidateAndSanitizeDescription_WithValidInput_ReturnsSuccess(string description)
     {
-        // This test verifies that the method accepts valid input without throwing ArgumentException
-        // We cannot test actual sc.exe execution without admin privileges
+        // Act
+        var result = ServiceInstaller.ValidateAndSanitizeDescription(description);
 
-        // Act & Assert
-        // We're testing that ArgumentException.ThrowIfNullOrWhiteSpace doesn't throw
-        var exception = Record.Exception(() =>
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(description);
-        });
-
-        Assert.Null(exception);
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(description, result.Value);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void SetDescription_WithInvalidInput_ShouldThrow(string? description)
+    [InlineData("\t")]
+    [InlineData("\n")]
+    public void ValidateAndSanitizeDescription_WithWhitespaceInput_ReturnsFailure(string? description)
     {
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() =>
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(description);
-        });
-    }
-
-    [Fact]
-    public void SetDescription_WithNullInput_ShouldThrow()
-    {
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() =>
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(null);
-        });
-    }
-
-    [Fact]
-    public void SetDescription_ShouldEscapeQuotesInDescription()
-    {
-        // Arrange
-        const string inputDescription = "Test \"quoted\" description";
-        const string expectedEscaped = "Test \\\"quoted\\\" description";
-
         // Act
-        var actualEscaped = inputDescription.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var result = ServiceInstaller.ValidateAndSanitizeDescription(description!);
 
         // Assert
-        Assert.Equal(expectedEscaped, actualEscaped);
+        Assert.True(result.IsFailure);
+        Assert.Equal("Description is required and cannot be empty.", result.Error);
     }
 
     [Fact]
-    public void SetDescription_ShouldHandleMultipleQuotes()
+    public void ValidateAndSanitizeDescription_WithNullInput_ReturnsFailure()
     {
-        // Arrange
-        const string inputDescription = "\"Multiple\" \"quotes\" \"here\"";
-        const string expectedEscaped = "\\\"Multiple\\\" \\\"quotes\\\" \\\"here\\\"";
-
         // Act
-        var actualEscaped = inputDescription.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var result = ServiceInstaller.ValidateAndSanitizeDescription(null!);
 
         // Assert
-        Assert.Equal(expectedEscaped, actualEscaped);
+        Assert.True(result.IsFailure);
+        Assert.Equal("Description is required and cannot be empty.", result.Error);
+    }
+
+    [Theory]
+    [InlineData("Test \"quoted\" description", '"')]
+    [InlineData("Test 'single quoted' description", '\'')]
+    [InlineData("Test `backtick` description", '`')]
+    [InlineData("Test $variable description", '$')]
+    [InlineData("Test & ampersand description", '&')]
+    [InlineData("Test | pipe description", '|')]
+    [InlineData("Test ; semicolon description", ';')]
+    [InlineData("Test \\ backslash description", '\\')]
+    [InlineData("Test \r carriage return description", '\r')]
+    [InlineData("Test \n newline description", '\n')]
+    public void ValidateAndSanitizeDescription_WithDisallowedCharacter_ReturnsFailure(string description, char disallowedChar)
+    {
+        // Act
+        var result = ServiceInstaller.ValidateAndSanitizeDescription(description);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal($"Description contains disallowed character: '{disallowedChar}'", result.Error);
     }
 
     [Fact]
-    public void SetDescription_ShouldNotIntroduceCommandInjection()
+    public void ValidateAndSanitizeDescription_WithMultipleDisallowedCharacters_ReturnsFailureForFirst()
     {
-        // Arrange - Try various injection attempts
+        // Arrange - Description with multiple disallowed characters
+        const string description = "Test \"quoted\" and 'single' description";
+
+        // Act
+        var result = ServiceInstaller.ValidateAndSanitizeDescription(description);
+
+        // Assert - Should fail on the first disallowed character (double quote)
+        Assert.True(result.IsFailure);
+        Assert.Equal("Description contains disallowed character: '\"'", result.Error);
+    }
+
+    [Fact]
+    public void ValidateAndSanitizeDescription_WithCommandInjectionAttempts_ReturnsFailure()
+    {
+        // Arrange - Various command injection attempts
         var injectionAttempts = new[]
         {
-            "Description & net stop DhadgarAgent",
-            "Description; net stop DhadgarAgent",
-            "Description | net stop DhadgarAgent",
-            "Description && net stop DhadgarAgent",
-            "Description || net stop DhadgarAgent",
-            "Description `whoami`",
-            "Description $(whoami)",
+            ("Description & net stop DhadgarAgent", '&'),
+            ("Description; net stop DhadgarAgent", ';'),
+            ("Description | net stop DhadgarAgent", '|'),
+            ("Description && net stop DhadgarAgent", '&'),
+            ("Description || net stop DhadgarAgent", '|'),
+            ("Description `whoami`", '`'),
+            ("Description $(whoami)", '$'),
         };
 
         // Act & Assert
-        foreach (var attempt in injectionAttempts)
+        foreach (var (attempt, expectedChar) in injectionAttempts)
         {
-            // The method should escape quotes, but these attempts don't contain quotes
-            // The key security property is that the description is wrapped in quotes in sc.exe arguments
-            // Even with shell metacharacters, they will be treated as literal text within quotes
-            var escaped = attempt.Replace("\"", "\\\"", StringComparison.Ordinal);
+            var result = ServiceInstaller.ValidateAndSanitizeDescription(attempt);
 
-            // Verify that the escaped version would be safe when wrapped in quotes
-            // The pattern should be: sc.exe description DhadgarAgent "{escaped}"
-            // This ensures metacharacters are literal text
-            Assert.DoesNotContain("\"", escaped, StringComparison.Ordinal);
+            Assert.True(result.IsFailure, $"Expected failure for: {attempt}");
+            Assert.Equal($"Description contains disallowed character: '{expectedChar}'", result.Error);
         }
     }
 
@@ -321,38 +324,54 @@ public sealed class ServiceInstallerTests
         Assert.True(timeout <= TimeSpan.FromMinutes(1));
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("Simple description")]
-    [InlineData("Description with 'single quotes'")]
-    [InlineData("Description with `backticks`")]
-    [InlineData("Description with $variables")]
-    [InlineData("Description with\nnewlines")]
-    public void QuoteEscaping_ShouldOnlyEscapeDoubleQuotes(string description)
+    [Fact]
+    public void ValidateAndSanitizeDescription_RejectsAllDangerousCharacters()
     {
-        // This test verifies that the escaping logic ONLY escapes double quotes
-        // and doesn't modify other characters. This is correct because the description
-        // is wrapped in double quotes in the sc.exe command, so double quotes are the
-        // only character that needs escaping.
+        // SECURITY: Verify that all potentially dangerous characters are rejected
+        // These characters could enable command injection via sc.exe argument parsing
+        char[] dangerousChars = ['"', '\'', '`', '$', '&', '|', ';', '\\', '\r', '\n'];
 
-        // Arrange
-        var originalDescription = description;
-
-        // Act
-        var escapedDescription = description.Replace("\"", "\\\"", StringComparison.Ordinal);
-
-        // Assert
-        // If there are no double quotes, the string should be unchanged
-        if (!description.Contains('"'))
+        foreach (var dangerousChar in dangerousChars)
         {
-            Assert.Equal(originalDescription, escapedDescription);
-        }
+            var description = $"Test{dangerousChar}description";
+            var result = ServiceInstaller.ValidateAndSanitizeDescription(description);
 
-        // Single quotes, backticks, $, newlines, etc. should NOT be modified
-        // They are safe within double-quoted strings in sc.exe arguments
-        Assert.Equal(
-            description.Replace("\"", "\\\"", StringComparison.Ordinal),
-            escapedDescription);
+            Assert.True(result.IsFailure, $"Expected failure for character: '{dangerousChar}'");
+            Assert.Contains("disallowed character", result.Error, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ValidateAndSanitizeDescription_AllowsSafeSpecialCharacters()
+    {
+        // Verify that common safe special characters are allowed
+        var safeDescriptions = new[]
+        {
+            "Description with (parentheses)",
+            "Description with [brackets]",
+            "Description with {braces}",
+            "Description with <angle brackets>",
+            "Description with !exclamation",
+            "Description with @at sign",
+            "Description with #hash",
+            "Description with %percent",
+            "Description with ^caret",
+            "Description with *asterisk",
+            "Description with =equals",
+            "Description with +plus",
+            "Description with comma, and period.",
+            "Description with question?",
+            "Description with /forward slash",
+            "Description with :colon",
+        };
+
+        foreach (var description in safeDescriptions)
+        {
+            var result = ServiceInstaller.ValidateAndSanitizeDescription(description);
+
+            Assert.True(result.IsSuccess, $"Expected success for: {description}");
+            Assert.Equal(description, result.Value);
+        }
     }
 
     [Fact]

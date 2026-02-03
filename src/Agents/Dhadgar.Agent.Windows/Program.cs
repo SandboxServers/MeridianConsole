@@ -62,7 +62,28 @@ public static class Program
 
             // Add service isolation components (used when Process.UseServiceIsolation is true)
             builder.Services.AddSingleton<IWindowsServiceManager, WindowsServiceManager>();
-            builder.Services.AddSingleton<IDirectoryAclManager, DirectoryAclManager>();
+            builder.Services.AddSingleton<IDirectoryAclManager>(sp =>
+            {
+                var agentOptions = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
+                var logger = sp.GetRequiredService<ILogger<DirectoryAclManager>>();
+
+                // Use ServerBasePath as the allowed root (fail-closed security)
+                var allowedRoots = new List<string>();
+                if (!string.IsNullOrEmpty(agentOptions.Process.ServerBasePath))
+                {
+                    allowedRoots.Add(agentOptions.Process.ServerBasePath);
+                }
+
+                // If no ServerBasePath is configured, fail during DI resolution
+                // This ensures fail-closed behavior at application startup
+                if (allowedRoots.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Process.ServerBasePath must be configured for DirectoryAclManager (fail-closed security)");
+                }
+
+                return new DirectoryAclManager(logger, allowedRoots);
+            });
 
             // Register AgentPipeServer factory - requires NodeId which may not be known until enrollment
             builder.Services.AddSingleton<IAgentPipeServer>(sp =>

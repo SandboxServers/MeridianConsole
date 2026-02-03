@@ -337,7 +337,7 @@ public sealed class ServerConfigTests
         {
             var json = $$"""
                 {
-                    "executablePath": "{{tempExe.Replace("\\", "\\\\")}}",
+                    "executablePath": "{{tempExe.Replace("\\", "\\\\", StringComparison.Ordinal)}}",
                     "arguments": "-port 27015",
                     "captureStdout": true,
                     "captureStderr": false,
@@ -428,10 +428,10 @@ public sealed class ServerConfigTests
             var json = File.ReadAllText(tempConfig);
 
             // Assert
-            Assert.Contains("executablePath", json);
-            Assert.Contains(tempExe.Replace("\\", "\\\\"), json);
-            Assert.Contains("-test", json);
-            Assert.Contains("75", json);
+            Assert.Contains("executablePath", json, StringComparison.Ordinal);
+            Assert.Contains(tempExe.Replace("\\", "\\\\", StringComparison.Ordinal), json, StringComparison.Ordinal);
+            Assert.Contains("-test", json, StringComparison.Ordinal);
+            Assert.Contains("75", json, StringComparison.Ordinal);
         }
         finally
         {

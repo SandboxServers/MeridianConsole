@@ -1,4 +1,5 @@
 using Dhadgar.Agent.Windows.Windows;
+using Dhadgar.Shared.Results;
 
 using Microsoft.Extensions.Logging;
 
@@ -12,21 +13,22 @@ namespace Dhadgar.Agent.Windows.Tests.Windows;
 /// Unit tests for <see cref="FirewallManager"/>.
 /// </summary>
 /// <remarks>
-/// Tests validation logic through public method interfaces since validation methods are private.
-/// Focuses on input validation and security-critical path validation.
+/// Tests validation logic and command formation using a mock firewall operations implementation.
+/// The mock prevents execution of real firewall commands while verifying correct argument formation.
 ///
 /// The FirewallManager uses Result&lt;T&gt; for railway-oriented error handling.
-/// On non-Windows systems, methods return failures instead of throwing exceptions.
 /// </remarks>
 public sealed class FirewallManagerTests : IDisposable
 {
     private readonly ILogger<FirewallManager> _logger;
+    private readonly MockFirewallOperations _mockOperations;
     private readonly FirewallManager _manager;
 
     public FirewallManagerTests()
     {
         _logger = Substitute.For<ILogger<FirewallManager>>();
-        _manager = new FirewallManager(_logger);
+        _mockOperations = new MockFirewallOperations();
+        _manager = new FirewallManager(_logger, _mockOperations);
     }
 
     public void Dispose()
@@ -54,6 +56,16 @@ public sealed class FirewallManagerTests : IDisposable
         Assert.NotNull(manager);
     }
 
+    [Fact]
+    public void Constructor_WithMockOperations_CreatesInstance()
+    {
+        // Act
+        using var manager = new FirewallManager(_logger, _mockOperations);
+
+        // Assert
+        Assert.NotNull(manager);
+    }
+
     #endregion
 
     #region Port Validation Tests (via AllowInboundPort)
@@ -67,6 +79,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Port must be between 1 and 65535", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -78,6 +91,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Port must be between 1 and 65535", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -86,12 +100,10 @@ public sealed class FirewallManagerTests : IDisposable
         // Act
         var result = _manager.AllowInboundPort(1, "ValidRuleName", "TCP");
 
-        // Assert - On non-Windows, expect failure due to API unavailability, not validation failure
-        // On Windows, expect success (unless running without admin privileges)
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Port must be between", result.Error);
-        }
+        // Assert - validation passes, mock is called
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal(1, _mockOperations.AddedRules[0].Port);
     }
 
     [Fact]
@@ -100,11 +112,10 @@ public sealed class FirewallManagerTests : IDisposable
         // Act
         var result = _manager.AllowInboundPort(65535, "ValidRuleName", "TCP");
 
-        // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Port must be between", result.Error);
-        }
+        // Assert - validation passes
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal(65535, _mockOperations.AddedRules[0].Port);
     }
 
     [Theory]
@@ -120,6 +131,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Port must be between 1 and 65535", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     #endregion
@@ -133,10 +145,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "ValidRuleName", "TCP");
 
         // Assert - TCP should be valid
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Protocol must be one of", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("TCP", _mockOperations.AddedRules[0].Protocol);
     }
 
     [Fact]
@@ -146,10 +157,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "ValidRuleName", "UDP");
 
         // Assert - UDP should be valid
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Protocol must be one of", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("UDP", _mockOperations.AddedRules[0].Protocol);
     }
 
     [Fact]
@@ -161,6 +171,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Protocol must be one of: TCP, UDP", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -172,6 +183,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Protocol cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -183,6 +195,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Protocol cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -194,6 +207,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Protocol cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Theory]
@@ -210,6 +224,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Protocol must be one of: TCP, UDP", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     #endregion
@@ -225,6 +240,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -236,6 +252,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -247,6 +264,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -261,6 +279,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name must not exceed 256 characters", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Theory]
@@ -288,6 +307,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name contains invalid characters", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
     }
 
     [Fact]
@@ -297,10 +317,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "ValidRule123", "TCP");
 
         // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Rule name", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("ValidRule123", _mockOperations.AddedRules[0].RuleName);
     }
 
     [Fact]
@@ -310,10 +329,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "Valid Rule Name", "TCP");
 
         // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Rule name", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("Valid Rule Name", _mockOperations.AddedRules[0].RuleName);
     }
 
     [Fact]
@@ -323,10 +341,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "Valid-Rule-Name", "TCP");
 
         // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Rule name", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("Valid-Rule-Name", _mockOperations.AddedRules[0].RuleName);
     }
 
     [Fact]
@@ -336,10 +353,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "Valid_Rule_Name", "TCP");
 
         // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Rule name", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("Valid_Rule_Name", _mockOperations.AddedRules[0].RuleName);
     }
 
     [Fact]
@@ -352,10 +368,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, maxLengthRuleName, "TCP");
 
         // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Rule name must not exceed", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal(maxLengthRuleName, _mockOperations.AddedRules[0].RuleName);
     }
 
     [Fact]
@@ -367,6 +382,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.RemovedRules);
     }
 
     [Fact]
@@ -378,6 +394,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.RemovedRules);
     }
 
     [Fact]
@@ -389,6 +406,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name contains invalid characters", result.Error);
+        Assert.Empty(_mockOperations.RemovedRules);
     }
 
     [Fact]
@@ -397,11 +415,10 @@ public sealed class FirewallManagerTests : IDisposable
         // Act
         var result = _manager.RemoveRule("Valid-Rule_Name 123");
 
-        // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Rule name", result.Error);
-        }
+        // Assert - Validation should pass and mock is called
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.RemovedRules);
+        Assert.Equal("Valid-Rule_Name 123", _mockOperations.RemovedRules[0]);
     }
 
     [Fact]
@@ -413,6 +430,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.CheckedRules);
     }
 
     [Fact]
@@ -424,6 +442,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Empty(_mockOperations.CheckedRules);
     }
 
     [Fact]
@@ -435,6 +454,7 @@ public sealed class FirewallManagerTests : IDisposable
         // Assert
         Assert.True(result.IsFailure);
         Assert.Contains("Rule name contains invalid characters", result.Error);
+        Assert.Empty(_mockOperations.CheckedRules);
     }
 
     [Fact]
@@ -443,11 +463,10 @@ public sealed class FirewallManagerTests : IDisposable
         // Act
         var result = _manager.RuleExists("Valid-Rule_Name 123");
 
-        // Assert - Validation should pass
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Rule name", result.Error);
-        }
+        // Assert - Validation should pass and mock is called
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.CheckedRules);
+        Assert.Equal("Valid-Rule_Name 123", _mockOperations.CheckedRules[0]);
     }
 
     #endregion
@@ -461,10 +480,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "ValidRuleName", "tcp");
 
         // Assert - Protocol validation is case-insensitive
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Protocol must be one of", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("tcp", _mockOperations.AddedRules[0].Protocol);
     }
 
     [Fact]
@@ -474,10 +492,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "ValidRuleName", "udp");
 
         // Assert - Protocol validation is case-insensitive
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Protocol must be one of", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("udp", _mockOperations.AddedRules[0].Protocol);
     }
 
     [Fact]
@@ -487,10 +504,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "ValidRuleName", "Tcp");
 
         // Assert - Protocol validation is case-insensitive
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Protocol must be one of", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal("Tcp", _mockOperations.AddedRules[0].Protocol);
     }
 
     [Theory]
@@ -508,10 +524,9 @@ public sealed class FirewallManagerTests : IDisposable
         var result = _manager.AllowInboundPort(8080, "ValidRuleName", protocol);
 
         // Assert - Protocol validation is case-insensitive
-        if (result.IsFailure)
-        {
-            Assert.DoesNotContain("Protocol must be one of", result.Error);
-        }
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+        Assert.Equal(protocol, _mockOperations.AddedRules[0].Protocol);
     }
 
     #endregion
@@ -579,49 +594,259 @@ public sealed class FirewallManagerTests : IDisposable
 
     #endregion
 
-    #region Non-Windows Behavior Tests
+    #region Command Formation Tests
 
     [Fact]
-    public void AllowInboundPort_OnNonWindows_ReturnsAppropriateError()
+    public void AllowInboundPort_ValidInput_CallsOperationsWithCorrectArguments()
     {
+        // Arrange
+        const int expectedPort = 25565;
+        const string expectedRuleName = "Minecraft Server";
+        const string expectedProtocol = "TCP";
+
+        // Act
+        var result = _manager.AllowInboundPort(expectedPort, expectedRuleName, expectedProtocol);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+
+        var addedRule = _mockOperations.AddedRules[0];
+        Assert.Equal(expectedRuleName, addedRule.RuleName);
+        Assert.Equal(expectedPort, addedRule.Port);
+        Assert.Equal(expectedProtocol, addedRule.Protocol);
+        Assert.Contains("Meridian Console managed rule", addedRule.Description);
+        Assert.Contains("25565/TCP", addedRule.Description);
+    }
+
+    [Fact]
+    public void AllowInboundPort_ValidInputUDP_CallsOperationsWithCorrectProtocol()
+    {
+        // Arrange
+        const int expectedPort = 27015;
+        const string expectedRuleName = "Game Server Query";
+        const string expectedProtocol = "UDP";
+
+        // Act
+        var result = _manager.AllowInboundPort(expectedPort, expectedRuleName, expectedProtocol);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.AddedRules);
+
+        var addedRule = _mockOperations.AddedRules[0];
+        Assert.Equal(expectedRuleName, addedRule.RuleName);
+        Assert.Equal(expectedPort, addedRule.Port);
+        Assert.Equal(expectedProtocol, addedRule.Protocol);
+        Assert.Contains("27015/UDP", addedRule.Description);
+    }
+
+    [Fact]
+    public void RemoveRule_ValidInput_CallsOperationsWithCorrectArguments()
+    {
+        // Arrange
+        const string expectedRuleName = "Test Rule To Remove";
+
+        // Act
+        var result = _manager.RemoveRule(expectedRuleName);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Single(_mockOperations.RemovedRules);
+        Assert.Equal(expectedRuleName, _mockOperations.RemovedRules[0]);
+    }
+
+    [Fact]
+    public void RuleExists_ValidInput_CallsOperationsWithCorrectArguments()
+    {
+        // Arrange
+        const string expectedRuleName = "Test Rule To Check";
+        _mockOperations.ExistingRules.Add(expectedRuleName);
+
+        // Act
+        var result = _manager.RuleExists(expectedRuleName);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value);
+        Assert.Single(_mockOperations.CheckedRules);
+        Assert.Equal(expectedRuleName, _mockOperations.CheckedRules[0]);
+    }
+
+    [Fact]
+    public void RuleExists_RuleDoesNotExist_ReturnsFalse()
+    {
+        // Arrange
+        const string ruleName = "NonExistent Rule";
+        // Don't add to ExistingRules
+
+        // Act
+        var result = _manager.RuleExists(ruleName);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value);
+        Assert.Single(_mockOperations.CheckedRules);
+    }
+
+    #endregion
+
+    #region Unavailable Operations Tests
+
+    [Fact]
+    public void AllowInboundPort_OperationsUnavailable_ReturnsFailure()
+    {
+        // Arrange
+        _mockOperations.SetAvailable(false);
+
         // Act
         var result = _manager.AllowInboundPort(8080, "ValidRule", "TCP");
 
-        // Assert - On non-Windows systems, should indicate API unavailability
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.True(result.IsFailure);
-            Assert.Contains("not available", result.Error);
-        }
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("not available", result.Error);
     }
 
     [Fact]
-    public void RemoveRule_OnNonWindows_ReturnsAppropriateError()
+    public void RemoveRule_OperationsUnavailable_ReturnsFailure()
     {
+        // Arrange
+        _mockOperations.SetAvailable(false);
+
         // Act
         var result = _manager.RemoveRule("ValidRule");
 
-        // Assert - On non-Windows systems, should indicate API unavailability
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.True(result.IsFailure);
-            Assert.Contains("not available", result.Error);
-        }
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("not available", result.Error);
     }
 
     [Fact]
-    public void RuleExists_OnNonWindows_ReturnsAppropriateError()
+    public void RuleExists_OperationsUnavailable_ReturnsFailure()
     {
+        // Arrange
+        _mockOperations.SetAvailable(false);
+
         // Act
         var result = _manager.RuleExists("ValidRule");
 
-        // Assert - On non-Windows systems, should indicate API unavailability
-        if (!OperatingSystem.IsWindows())
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("not available", result.Error);
+    }
+
+    #endregion
+
+    #region Reserved Rule Name Tests
+
+    [Fact]
+    public void AllowInboundPort_RuleNameAll_ReturnsFailure()
+    {
+        // Act
+        var result = _manager.AllowInboundPort(8080, "all", "TCP");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("reserved", result.Error);
+        Assert.Empty(_mockOperations.AddedRules);
+    }
+
+    [Fact]
+    public void RemoveRule_RuleNameAll_ReturnsFailure()
+    {
+        // Act
+        var result = _manager.RemoveRule("ALL");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("reserved", result.Error);
+        Assert.Empty(_mockOperations.RemovedRules);
+    }
+
+    [Fact]
+    public void RuleExists_RuleNameAll_ReturnsFailure()
+    {
+        // Act
+        var result = _manager.RuleExists("All");
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("reserved", result.Error);
+        Assert.Empty(_mockOperations.CheckedRules);
+    }
+
+    #endregion
+
+    #region Mock Firewall Operations
+
+    /// <summary>
+    /// Mock implementation of <see cref="IFirewallOperations"/> for testing.
+    /// </summary>
+    /// <remarks>
+    /// Tracks all operations without executing real firewall commands.
+    /// </remarks>
+    private sealed class MockFirewallOperations : IFirewallOperations
+    {
+        private bool _isAvailable = true;
+
+        public bool IsAvailable => _isAvailable;
+
+        /// <summary>
+        /// Gets the list of rules that were added.
+        /// </summary>
+        public List<AddRuleRequest> AddedRules { get; } = [];
+
+        /// <summary>
+        /// Gets the list of rule names that were removed.
+        /// </summary>
+        public List<string> RemovedRules { get; } = [];
+
+        /// <summary>
+        /// Gets the list of rule names that were checked for existence.
+        /// </summary>
+        public List<string> CheckedRules { get; } = [];
+
+        /// <summary>
+        /// Gets or sets the set of rules that exist (for RuleExists checks).
+        /// </summary>
+        public HashSet<string> ExistingRules { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Sets whether the operations are available.
+        /// </summary>
+        /// <param name="available">Whether operations should be available.</param>
+        public void SetAvailable(bool available)
         {
-            Assert.True(result.IsFailure);
-            Assert.Contains("not available", result.Error);
+            _isAvailable = available;
+        }
+
+        public Result<bool> AddRule(string ruleName, string description, string protocol, int port)
+        {
+            AddedRules.Add(new AddRuleRequest(ruleName, description, protocol, port));
+            return Result<bool>.Success(true);
+        }
+
+        public Result<bool> RemoveRule(string ruleName)
+        {
+            RemovedRules.Add(ruleName);
+            return Result<bool>.Success(true);
+        }
+
+        public Result<bool> RuleExists(string ruleName)
+        {
+            CheckedRules.Add(ruleName);
+            return Result<bool>.Success(ExistingRules.Contains(ruleName));
         }
     }
+
+    /// <summary>
+    /// Represents a request to add a firewall rule.
+    /// </summary>
+    /// <param name="RuleName">The rule name.</param>
+    /// <param name="Description">The rule description.</param>
+    /// <param name="Protocol">The protocol.</param>
+    /// <param name="Port">The port number.</param>
+    private sealed record AddRuleRequest(string RuleName, string Description, string Protocol, int Port);
 
     #endregion
 }

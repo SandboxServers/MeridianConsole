@@ -279,4 +279,130 @@ public sealed class NativeMethodsTests
     }
 
     #endregion
+
+    #region IO Completion Port Tests
+
+    [Fact]
+    public void JOBOBJECT_ASSOCIATE_COMPLETION_PORT_HasExpectedSize()
+    {
+        // Arrange
+        // On 64-bit: nuint (8 bytes) + nint (8 bytes) = 16 bytes
+        // On 32-bit: nuint (4 bytes) + nint (4 bytes) = 8 bytes
+        var expectedSize = Environment.Is64BitProcess ? 16 : 8;
+
+        // Act
+        var actualSize = Marshal.SizeOf<NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT>();
+
+        // Assert
+        Assert.Equal(expectedSize, actualSize);
+    }
+
+    [Fact]
+    public void JOBOBJECT_ASSOCIATE_COMPLETION_PORT_FieldOffsets_AreCorrect()
+    {
+        // Arrange
+        var type = typeof(NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT);
+
+        // Act
+        var completionKeyOffset = Marshal.OffsetOf(type, nameof(NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT.CompletionKey));
+        var completionPortOffset = Marshal.OffsetOf(type, nameof(NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT.CompletionPort));
+
+        // Assert
+        Assert.Equal(0, completionKeyOffset.ToInt32()); // CompletionKey at offset 0
+
+        // CompletionPort follows CompletionKey
+        var expectedPortOffset = Environment.Is64BitProcess ? 8 : 4;
+        Assert.Equal(expectedPortOffset, completionPortOffset.ToInt32());
+    }
+
+    [Fact]
+    public void JobObjectInfoType_AssociateCompletionPortInformation_HasExpectedValue()
+    {
+        // Arrange & Act
+        var value = NativeMethods.JobObjectInfoType.AssociateCompletionPortInformation;
+
+        // Assert
+        Assert.Equal(7, (int)value);
+    }
+
+    #endregion
+
+    #region Job Object Message Constants Tests
+
+    [Theory]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.EndOfJobTime), 1u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.EndOfProcessTime), 2u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.ActiveProcessLimit), 3u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.ActiveProcessZero), 4u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.NewProcess), 6u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.ExitProcess), 7u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.AbnormalExitProcess), 8u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.ProcessMemoryLimit), 9u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.JobMemoryLimit), 10u)]
+    [InlineData(nameof(NativeMethods.JobObjectMsg.NotificationLimit), 11u)]
+    public void JobObjectMsg_HasExpectedValue(string memberName, uint expectedValue)
+    {
+        // Arrange & Act
+        var field = typeof(NativeMethods.JobObjectMsg).GetField(memberName);
+        Assert.NotNull(field);
+        var value = (uint)field.GetValue(null)!;
+
+        // Assert
+        Assert.Equal(expectedValue, value);
+    }
+
+    [Fact]
+    public void JobObjectMsg_ProcessMemoryLimit_MatchesWindowsConstant()
+    {
+        // This test verifies that the ProcessMemoryLimit constant matches
+        // the Windows JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT value (9)
+        // This is critical for proper memory limit enforcement
+
+        // Assert
+        Assert.Equal(9u, NativeMethods.JobObjectMsg.ProcessMemoryLimit);
+    }
+
+    [Fact]
+    public void JobObjectMsg_ShutdownMonitor_IsDistinctFromWindowsConstants()
+    {
+        // Arrange - our custom shutdown message should not conflict with Windows constants
+        var shutdownMonitor = NativeMethods.JobObjectMsg.ShutdownMonitor;
+
+        // Assert - it should be distinct from all standard Windows job object messages
+        Assert.NotEqual(NativeMethods.JobObjectMsg.EndOfJobTime, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.EndOfProcessTime, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.ActiveProcessLimit, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.ActiveProcessZero, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.NewProcess, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.ExitProcess, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.AbnormalExitProcess, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.ProcessMemoryLimit, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.JobMemoryLimit, shutdownMonitor);
+        Assert.NotEqual(NativeMethods.JobObjectMsg.NotificationLimit, shutdownMonitor);
+
+        // Our custom value should be a recognizable magic number
+        Assert.Equal(0xDEADBEEFu, shutdownMonitor);
+    }
+
+    [Fact]
+    public void InvalidHandleValue_IsNegativeOne()
+    {
+        // Arrange & Act
+        var invalidHandle = NativeMethods.InvalidHandleValue;
+
+        // Assert
+        Assert.Equal(new IntPtr(-1), invalidHandle);
+    }
+
+    [Fact]
+    public void Infinite_IsMaxUint()
+    {
+        // Arrange & Act
+        var infinite = NativeMethods.Infinite;
+
+        // Assert
+        Assert.Equal(0xFFFFFFFFu, infinite);
+    }
+
+    #endregion
 }

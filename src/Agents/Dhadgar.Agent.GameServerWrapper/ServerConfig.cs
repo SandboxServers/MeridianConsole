@@ -205,20 +205,33 @@ public sealed class ServerConfig
     {
         try
         {
-            if (!File.Exists(path))
+            // Validate and normalize path before any I/O operations
+            var (normalizedPath, isValid) = TryGetFullPath(path);
+            if (!isValid || normalizedPath is null)
             {
-                return Result<ServerConfig>.Failure($"Configuration file not found: {path}");
+                return Result<ServerConfig>.Failure($"Invalid configuration file path: {path}");
+            }
+
+            // Reject paths with traversal sequences (comparing normalized to input)
+            if (!NormalizedPathsMatch(path, normalizedPath))
+            {
+                return Result<ServerConfig>.Failure("Path traversal detected in configuration file path");
+            }
+
+            if (!File.Exists(normalizedPath))
+            {
+                return Result<ServerConfig>.Failure($"Configuration file not found: {normalizedPath}");
             }
 
             // Check file size before reading to prevent DoS
-            var fileInfo = new FileInfo(path);
+            var fileInfo = new FileInfo(normalizedPath);
             if (fileInfo.Length > MaxConfigFileSizeBytes)
             {
                 var maxSizeKb = (MaxConfigFileSizeBytes / 1024).ToString(CultureInfo.InvariantCulture);
                 return Result<ServerConfig>.Failure($"Configuration file exceeds maximum size of {maxSizeKb}KB");
             }
 
-            var json = File.ReadAllText(path);
+            var json = File.ReadAllText(normalizedPath);
             var config = JsonSerializer.Deserialize<ServerConfig>(json, JsonOptions);
 
             if (config is null)
@@ -248,10 +261,32 @@ public sealed class ServerConfig
     /// Saves configuration to a file.
     /// </summary>
     /// <param name="path">Path to save to.</param>
-    public void SaveToFile(string path)
+    /// <returns>Result indicating success or failure.</returns>
+    public Result SaveToFile(string path)
     {
-        var json = JsonSerializer.Serialize(this, JsonOptions);
-        File.WriteAllText(path, json);
+        // Validate and normalize path before any I/O operations
+        var (normalizedPath, isValid) = TryGetFullPath(path);
+        if (!isValid || normalizedPath is null)
+        {
+            return Result.Failure($"Invalid configuration file path: {path}");
+        }
+
+        // Reject paths with traversal sequences (comparing normalized to input)
+        if (!NormalizedPathsMatch(path, normalizedPath))
+        {
+            return Result.Failure("Path traversal detected in configuration file path");
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(this, JsonOptions);
+            File.WriteAllText(normalizedPath, json);
+            return Result.Success();
+        }
+        catch (IOException ex)
+        {
+            return Result.Failure($"Failed to write configuration file: {ex.Message}");
+        }
     }
 
     /// <summary>

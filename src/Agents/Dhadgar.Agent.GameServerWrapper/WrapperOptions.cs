@@ -20,9 +20,9 @@ public sealed partial class WrapperOptions
 
     /// <summary>
     /// Pattern for valid pipe names: MeridianAgent_{agentId}\{serverId}
-    /// Agent ID and server ID must be alphanumeric with hyphens/underscores.
+    /// Agent ID must be a 32-char lowercase hex GUID (without hyphens), server ID alphanumeric.
     /// </summary>
-    [GeneratedRegex(@"^MeridianAgent_[a-zA-Z0-9\-_]+\\[a-zA-Z0-9\-_]+$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^MeridianAgent_[a-f0-9]{32}\\[a-zA-Z0-9\-_]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
     private static partial Regex ValidPipeNamePattern();
 
     /// <summary>
@@ -65,7 +65,7 @@ public sealed partial class WrapperOptions
         }
         else if (!ValidPipeNamePattern().IsMatch(PipeName))
         {
-            errors.Add("--pipe must match format 'MeridianAgent_{agentId}\\{serverId}' with alphanumeric IDs");
+            errors.Add("--pipe must match format 'MeridianAgent_{agentId}\\{serverId}' where agentId is a 32-char hex GUID");
         }
 
         // Validate ConfigPath

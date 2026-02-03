@@ -230,10 +230,42 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     {
         _registrations.TryRemove(serverId, out _);
 
-        if (_connections.TryRemove(serverId, out var connection))
+        // Dispose pattern: The connection is either transferred to DisposeConnectionAsync (fire-and-forget)
+        // or disposed in the finally block. The analyzer doesn't understand the ownership transfer pattern,
+        // so we suppress CA2000 for the TryRemove call while ensuring disposal in finally.
+        PipeClientConnection? connection = null;
+        try
         {
-            // Fire and forget disposal - no need to await
-            _ = DisposeConnectionAsync(connection);
+#pragma warning disable CA2000 // Dispose objects before losing scope - ownership transferred to DisposeConnectionAsync or disposed in finally
+            if (_connections.TryRemove(serverId, out var removed))
+            {
+                connection = removed;
+            }
+#pragma warning restore CA2000
+
+            if (connection is not null)
+            {
+                // Fire and forget disposal - transfers ownership to the async task
+                _ = DisposeConnectionAsync(connection);
+                // Null out to indicate ownership was transferred (prevents double dispose in finally)
+                connection = null;
+            }
+        }
+        finally
+        {
+            // Dispose if ownership wasn't successfully transferred to DisposeConnectionAsync
+            if (connection is not null)
+            {
+                try
+                {
+                    // PipeClientConnection implements IAsyncDisposable, so we must use DisposeAsync
+                    connection.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
+                catch (Exception disposeEx)
+                {
+                    _logger.LogError(disposeEx, "Failed to dispose connection for server {ServerId}", serverId);
+                }
+            }
         }
 
         _logger.LogInformation("Unregistered server {ServerId}", serverId);

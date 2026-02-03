@@ -135,6 +135,86 @@ internal static partial class NativeMethods
 
     #endregion
 
+    #region IO Completion Port APIs
+
+    /// <summary>
+    /// Creates an input/output (I/O) completion port and associates it with a specified file handle,
+    /// or creates an I/O completion port that is not yet associated with a file handle.
+    /// </summary>
+    /// <param name="fileHandle">An open file handle or INVALID_HANDLE_VALUE.</param>
+    /// <param name="existingCompletionPort">A handle to an existing completion port or IntPtr.Zero to create a new one.</param>
+    /// <param name="completionKey">The per-handle user-defined completion key.</param>
+    /// <param name="numberOfConcurrentThreads">Maximum number of threads allowed to concurrently process completions (0 = CPU count).</param>
+    /// <returns>Handle to the completion port, or IntPtr.Zero on failure.</returns>
+    /// <remarks>
+    /// SECURITY: IO completion ports are used to receive notifications from Job Objects
+    /// about resource limit violations (e.g., memory exceeded). The completionKey allows
+    /// identifying which job triggered the notification.
+    /// </remarks>
+    [LibraryImport(Kernel32, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    public static partial nint CreateIoCompletionPort(
+        nint fileHandle,
+        nint existingCompletionPort,
+        nuint completionKey,
+        uint numberOfConcurrentThreads);
+
+    /// <summary>
+    /// Attempts to dequeue an I/O completion packet from the specified I/O completion port.
+    /// </summary>
+    /// <param name="completionPort">A handle to the completion port.</param>
+    /// <param name="lpNumberOfBytesTransferred">Receives the number of bytes transferred.</param>
+    /// <param name="lpCompletionKey">Receives the completion key.</param>
+    /// <param name="lpOverlapped">Receives the address of the OVERLAPPED structure.</param>
+    /// <param name="dwMilliseconds">Timeout in milliseconds. INFINITE (-1) waits indefinitely.</param>
+    /// <returns>True if successful, false on failure or timeout.</returns>
+    /// <remarks>
+    /// For Job Object completion ports, lpNumberOfBytesTransferred contains the message type,
+    /// lpCompletionKey is the completion key, and lpOverlapped contains the process ID.
+    /// </remarks>
+    [LibraryImport(Kernel32, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetQueuedCompletionStatus(
+        nint completionPort,
+        out uint lpNumberOfBytesTransferred,
+        out nuint lpCompletionKey,
+        out nint lpOverlapped,
+        uint dwMilliseconds);
+
+    /// <summary>
+    /// Posts an I/O completion packet to an I/O completion port.
+    /// Used to wake up threads waiting on GetQueuedCompletionStatus.
+    /// </summary>
+    /// <param name="completionPort">A handle to the completion port.</param>
+    /// <param name="dwNumberOfBytesTransferred">The value to be returned for the number of bytes transferred.</param>
+    /// <param name="dwCompletionKey">The value to be returned for the completion key.</param>
+    /// <param name="lpOverlapped">The value to be returned for the OVERLAPPED structure pointer.</param>
+    /// <returns>True if successful, false otherwise.</returns>
+    /// <remarks>
+    /// This is used to signal the monitoring thread to exit when the job is being disposed.
+    /// </remarks>
+    [LibraryImport(Kernel32, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool PostQueuedCompletionStatus(
+        nint completionPort,
+        uint dwNumberOfBytesTransferred,
+        nuint dwCompletionKey,
+        nint lpOverlapped);
+
+    /// <summary>
+    /// Invalid handle value used when creating a new IO completion port.
+    /// </summary>
+    public static readonly nint InvalidHandleValue = new(-1);
+
+    /// <summary>
+    /// Infinite timeout value for GetQueuedCompletionStatus.
+    /// </summary>
+    public const uint Infinite = 0xFFFFFFFF;
+
+    #endregion
+
     #region Enums
 
     /// <summary>
@@ -500,6 +580,107 @@ internal static partial class NativeMethods
         /// <remarks>Part of the MinRate/MaxRate struct within the union.</remarks>
         [FieldOffset(6)]
         public ushort MaxRate;
+    }
+
+    /// <summary>
+    /// Associates an I/O completion port with a job object.
+    /// </summary>
+    /// <remarks>
+    /// Used with SetInformationJobObject and JobObjectAssociateCompletionPortInformation
+    /// to receive notifications about job object events (process creation, termination, memory limit violations).
+    /// </remarks>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct JOBOBJECT_ASSOCIATE_COMPLETION_PORT
+    {
+        /// <summary>
+        /// The completion key that will be returned from GetQueuedCompletionStatus
+        /// when a message is sent to the completion port.
+        /// </summary>
+        public nuint CompletionKey;
+
+        /// <summary>
+        /// Handle to the I/O completion port to associate with the job.
+        /// </summary>
+        public nint CompletionPort;
+    }
+
+    #endregion
+
+    #region Job Object Message Constants
+
+    /// <summary>
+    /// Job object notification message types received via IO completion port.
+    /// These are the dwNumberOfBytesTransferred values from GetQueuedCompletionStatus.
+    /// </summary>
+    public static class JobObjectMsg
+    {
+        /// <summary>
+        /// A new process has been assigned to the job.
+        /// The overlapped parameter contains the process ID.
+        /// </summary>
+        public const uint NewProcess = 6;
+
+        /// <summary>
+        /// A process has ended (exited on its own).
+        /// The overlapped parameter contains the process ID.
+        /// </summary>
+        public const uint ExitProcess = 7;
+
+        /// <summary>
+        /// A process has terminated abnormally.
+        /// The overlapped parameter contains the process ID.
+        /// </summary>
+        public const uint AbnormalExitProcess = 8;
+
+        /// <summary>
+        /// A process has exceeded its memory limit.
+        /// The overlapped parameter contains the process ID.
+        /// </summary>
+        /// <remarks>
+        /// This message is sent when a process attempts to allocate memory that would exceed
+        /// the per-process or per-job memory limit. The allocation fails, but the process
+        /// is not automatically terminated - that must be done by the monitoring code.
+        /// </remarks>
+        public const uint ProcessMemoryLimit = 9;
+
+        /// <summary>
+        /// The job has exceeded its memory limit.
+        /// The overlapped parameter contains the process ID that triggered the limit.
+        /// </summary>
+        public const uint JobMemoryLimit = 10;
+
+        /// <summary>
+        /// A notification limit has been exceeded (Windows 7+).
+        /// Used with JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION.
+        /// </summary>
+        public const uint NotificationLimit = 11;
+
+        /// <summary>
+        /// The job time limit has been exceeded.
+        /// </summary>
+        public const uint EndOfJobTime = 1;
+
+        /// <summary>
+        /// A process time limit has been exceeded.
+        /// The overlapped parameter contains the process ID.
+        /// </summary>
+        public const uint EndOfProcessTime = 2;
+
+        /// <summary>
+        /// The active process limit has been exceeded.
+        /// </summary>
+        public const uint ActiveProcessLimit = 3;
+
+        /// <summary>
+        /// The active process count has returned to below the limit.
+        /// </summary>
+        public const uint ActiveProcessZero = 4;
+
+        /// <summary>
+        /// Custom message used to signal the monitoring thread to exit.
+        /// This is not a Windows constant but our own sentinel value.
+        /// </summary>
+        public const uint ShutdownMonitor = 0xDEADBEEF;
     }
 
     #endregion

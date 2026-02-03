@@ -1,10 +1,8 @@
 using System.Globalization;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 using Dhadgar.Shared.Results;
 
-using Microsoft.CSharp.RuntimeBinder;
 using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.Agent.Windows.Windows;
@@ -69,10 +67,10 @@ internal enum NetFwProfileType2
 #endregion
 
 /// <summary>
-/// Manages Windows Firewall rules for game server ports using the native COM API.
+/// Manages Windows Firewall rules for game server ports.
 /// </summary>
 /// <remarks>
-/// SECURITY CRITICAL: This class manages firewall rules via the Windows Firewall COM API (INetFwPolicy2).
+/// SECURITY CRITICAL: This class manages firewall rules via an abstracted firewall operations interface.
 /// All inputs are strictly validated before any operations to prevent injection attacks.
 ///
 /// Validation requirements:
@@ -81,12 +79,6 @@ internal enum NetFwProfileType2
 /// - Protocols: TCP or UDP only
 ///
 /// This code runs on customer hardware with elevated privileges - all changes require security review.
-///
-/// Benefits of COM API over netsh.exe:
-/// - No command-line parsing issues
-/// - No localization/language issues with netsh output
-/// - Direct API access is more reliable
-/// - Better error information from COM exceptions
 /// </remarks>
 internal sealed partial class FirewallManager : IDisposable
 {
@@ -97,68 +89,40 @@ internal sealed partial class FirewallManager : IDisposable
     private static readonly string[] AllowedProtocols = ["TCP", "UDP"];
 
     private readonly ILogger<FirewallManager> _logger;
-    private readonly object? _firewallPolicy;
-    private readonly dynamic? _rules;
+    private readonly IFirewallOperations _firewallOperations;
+    private readonly bool _ownsFirewallOperations;
     private volatile bool _disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FirewallManager"/> class.
+    /// Initializes a new instance of the <see cref="FirewallManager"/> class using the default COM-based implementation.
     /// </summary>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when logger is null.</exception>
     public FirewallManager(ILogger<FirewallManager> logger)
+        : this(logger, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FirewallManager"/> class with a custom firewall operations implementation.
+    /// </summary>
+    /// <param name="logger">The logger instance.</param>
+    /// <param name="firewallOperations">The firewall operations implementation, or null to use the default COM-based implementation.</param>
+    /// <exception cref="ArgumentNullException">Thrown when logger is null.</exception>
+    public FirewallManager(ILogger<FirewallManager> logger, IFirewallOperations? firewallOperations)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
 
-        // Initialize COM firewall policy on Windows only
-        if (OperatingSystem.IsWindows())
+        if (firewallOperations is null)
         {
-            try
-            {
-                // Use local variables until all steps succeed to ensure atomic initialization
-                var policyTypeLocal = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
-                if (policyTypeLocal is null)
-                {
-                    _logger.LogWarning("Windows Firewall policy COM type not available");
-                    return;
-                }
-
-                var firewallPolicyLocal = Activator.CreateInstance(policyTypeLocal);
-                if (firewallPolicyLocal is null)
-                {
-                    _logger.LogWarning("Failed to create Windows Firewall policy instance");
-                    return;
-                }
-
-                // Get the Rules collection - this can throw RuntimeBinderException or COMException
-                var rulesLocal = ((dynamic)firewallPolicyLocal).Rules;
-
-                // All steps succeeded - assign to fields
-                _firewallPolicy = firewallPolicyLocal;
-                _rules = rulesLocal;
-            }
-            catch (COMException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to initialize Windows Firewall COM API: {Message} (0x{HResult:X8})",
-                    ex.Message,
-                    ex.HResult);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Access denied initializing Windows Firewall COM API. Ensure the agent runs with administrator privileges.");
-            }
-            catch (RuntimeBinderException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to access Windows Firewall Rules collection: {Message}",
-                    ex.Message);
-            }
+            _firewallOperations = new ComFirewallOperations(_logger);
+            _ownsFirewallOperations = true;
+        }
+        else
+        {
+            _firewallOperations = firewallOperations;
+            _ownsFirewallOperations = false;
         }
     }
 
@@ -189,89 +153,18 @@ internal sealed partial class FirewallManager : IDisposable
             return Result<bool>.Failure(validationResult.Error);
         }
 
-        if (!OperatingSystem.IsWindows() || _firewallPolicy is null || _rules is null)
+        if (!_firewallOperations.IsAvailable)
         {
             return Result<bool>.Failure("Windows Firewall API is not available on this system.");
         }
 
-        _logger.LogInformation(
-            "Creating inbound firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}",
-            ruleName,
+        var description = string.Format(
+            CultureInfo.InvariantCulture,
+            "Meridian Console managed rule for port {0}/{1}",
             port,
             protocol);
 
-        try
-        {
-            // Create new firewall rule via COM
-            var ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
-            if (ruleType is null)
-            {
-                return Result<bool>.Failure("Windows Firewall rule COM type not available.");
-            }
-
-            var rule = Activator.CreateInstance(ruleType);
-            if (rule is null)
-            {
-                return Result<bool>.Failure("Failed to create firewall rule instance.");
-            }
-
-            try
-            {
-                dynamic dynamicRule = rule;
-
-                // Configure the rule
-                dynamicRule.Name = ruleName;
-                dynamicRule.Description = string.Format(
-                    CultureInfo.InvariantCulture,
-                    "Meridian Console managed rule for port {0}/{1}",
-                    port,
-                    protocol);
-                dynamicRule.Protocol = protocol.Equals("TCP", StringComparison.OrdinalIgnoreCase)
-                    ? (int)NetFwIpProtocol.Tcp
-                    : (int)NetFwIpProtocol.Udp;
-                dynamicRule.LocalPorts = port.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                dynamicRule.Action = (int)NetFwAction.Allow;
-                dynamicRule.Direction = (int)NetFwRuleDirection.In;
-                dynamicRule.Enabled = true;
-                dynamicRule.Profiles = (int)NetFwProfileType2.All;
-
-                // Add the rule to the firewall
-                _rules.Add(rule);
-
-                _logger.LogInformation(
-                    "Successfully created firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}",
-                    ruleName,
-                    port,
-                    protocol);
-
-                return Result<bool>.Success(true);
-            }
-            finally
-            {
-                Marshal.ReleaseComObject(rule);
-            }
-        }
-        catch (COMException ex)
-        {
-            _logger.LogError(
-                ex,
-                "COM error creating firewall rule: Name={RuleName}, Port={Port}, Protocol={Protocol}, HResult={HResult}",
-                ruleName,
-                port,
-                protocol,
-                ex.HResult);
-
-            return Result<bool>.Failure($"Failed to create firewall rule: {ex.Message} (0x{ex.HResult:X8})");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.LogError(
-                ex,
-                "Access denied creating firewall rule: Name={RuleName}. Ensure the agent runs with administrator privileges.",
-                ruleName);
-
-            return Result<bool>.Failure("Access denied. Administrator privileges are required to modify firewall rules.");
-        }
+        return _firewallOperations.AddRule(ruleName, description, protocol, port);
     }
 
     /// <summary>
@@ -287,45 +180,12 @@ internal sealed partial class FirewallManager : IDisposable
             return Result<bool>.Failure(validationResult.Error);
         }
 
-        if (!OperatingSystem.IsWindows() || _firewallPolicy is null || _rules is null)
+        if (!_firewallOperations.IsAvailable)
         {
             return Result<bool>.Failure("Windows Firewall API is not available on this system.");
         }
 
-        _logger.LogInformation("Removing firewall rule: Name={RuleName}", ruleName);
-
-        try
-        {
-            _rules.Remove(ruleName);
-
-            _logger.LogInformation("Successfully removed firewall rule: Name={RuleName}", ruleName);
-
-            return Result<bool>.Success(true);
-        }
-        catch (COMException ex) when (IsRuleNotFoundError(ex))
-        {
-            _logger.LogWarning("Firewall rule not found: Name={RuleName}", ruleName);
-            return Result<bool>.Failure($"Firewall rule '{ruleName}' not found.");
-        }
-        catch (COMException ex)
-        {
-            _logger.LogError(
-                ex,
-                "COM error removing firewall rule: Name={RuleName}, HResult={HResult}",
-                ruleName,
-                ex.HResult);
-
-            return Result<bool>.Failure($"Failed to remove firewall rule: {ex.Message} (0x{ex.HResult:X8})");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.LogError(
-                ex,
-                "Access denied removing firewall rule: Name={RuleName}. Ensure the agent runs with administrator privileges.",
-                ruleName);
-
-            return Result<bool>.Failure("Access denied. Administrator privileges are required to modify firewall rules.");
-        }
+        return _firewallOperations.RemoveRule(ruleName);
     }
 
     /// <summary>
@@ -341,64 +201,12 @@ internal sealed partial class FirewallManager : IDisposable
             return Result<bool>.Failure(validationResult.Error);
         }
 
-        if (!OperatingSystem.IsWindows() || _firewallPolicy is null || _rules is null)
+        if (!_firewallOperations.IsAvailable)
         {
             return Result<bool>.Failure("Windows Firewall API is not available on this system.");
         }
 
-        _logger.LogDebug("Checking if firewall rule exists: Name={RuleName}", ruleName);
-
-        object? rule = null;
-        try
-        {
-            // Try to get the rule by name - throws if not found
-            rule = _rules.Item(ruleName);
-
-            _logger.LogDebug("Firewall rule exists: Name={RuleName}, Exists=True", ruleName);
-            return Result<bool>.Success(true);
-        }
-        catch (COMException ex) when (IsRuleNotFoundError(ex))
-        {
-            _logger.LogDebug("Firewall rule exists: Name={RuleName}, Exists=False", ruleName);
-            return Result<bool>.Success(false);
-        }
-        catch (COMException ex)
-        {
-            _logger.LogError(
-                ex,
-                "COM error checking firewall rule: Name={RuleName}, HResult={HResult}",
-                ruleName,
-                ex.HResult);
-
-            return Result<bool>.Failure($"Failed to check firewall rule: {ex.Message} (0x{ex.HResult:X8})");
-        }
-        finally
-        {
-            // Release the COM object to avoid RCW accumulation
-            if (rule is not null)
-            {
-                try
-                {
-                    Marshal.ReleaseComObject(rule);
-                }
-                catch (InvalidComObjectException)
-                {
-                    // Object may have already been released
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Determines if a COM exception indicates the rule was not found.
-    /// </summary>
-    /// <param name="ex">The COM exception to check.</param>
-    /// <returns>True if the error indicates rule not found; otherwise, false.</returns>
-    private static bool IsRuleNotFoundError(COMException ex)
-    {
-        // HRESULT 0x80070002 = ERROR_FILE_NOT_FOUND (rule not found)
-        // HRESULT 0x80004005 = E_FAIL (sometimes returned for missing rules)
-        return ex.HResult is unchecked((int)0x80070002) or unchecked((int)0x80004005);
+        return _firewallOperations.RuleExists(ruleName);
     }
 
     /// <summary>
@@ -516,7 +324,7 @@ internal sealed partial class FirewallManager : IDisposable
     }
 
     /// <summary>
-    /// Disposes of COM resources.
+    /// Disposes of resources.
     /// </summary>
     public void Dispose()
     {
@@ -525,28 +333,10 @@ internal sealed partial class FirewallManager : IDisposable
             return;
         }
 
-        if (_rules is not null)
+        // Only dispose the firewall operations if we own it (created it ourselves)
+        if (_ownsFirewallOperations && _firewallOperations is IDisposable disposable)
         {
-            try
-            {
-                Marshal.ReleaseComObject(_rules);
-            }
-            catch (InvalidComObjectException)
-            {
-                // Object may have already been released
-            }
-        }
-
-        if (_firewallPolicy is not null)
-        {
-            try
-            {
-                Marshal.ReleaseComObject(_firewallPolicy);
-            }
-            catch (InvalidComObjectException)
-            {
-                // Object may have already been released
-            }
+            disposable.Dispose();
         }
 
         _disposed = true;

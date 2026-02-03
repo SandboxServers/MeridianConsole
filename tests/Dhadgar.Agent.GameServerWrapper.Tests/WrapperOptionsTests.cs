@@ -28,7 +28,7 @@ public sealed class WrapperOptionsTests
             var args = new[]
             {
                 "--server-id=test-server",
-                "--pipe=MeridianAgent_12345\\test-server",
+                "--pipe=MeridianAgent_00000000000000000000000000012345\\test-server",
                 $"--config={tempConfig}"
             };
 
@@ -39,7 +39,7 @@ public sealed class WrapperOptionsTests
             Assert.True(result.IsSuccess);
             var options = result.Value;
             Assert.Equal("test-server", options.ServerId);
-            Assert.Equal("MeridianAgent_12345\\test-server", options.PipeName);
+            Assert.Equal("MeridianAgent_00000000000000000000000000012345\\test-server", options.PipeName);
             Assert.Equal(tempConfig, options.ConfigPath);
         }
         finally
@@ -58,7 +58,7 @@ public sealed class WrapperOptionsTests
             var args = new[]
             {
                 "--server-id", "test-server",
-                "--pipe", "MeridianAgent_12345\\test-server",
+                "--pipe", "MeridianAgent_00000000000000000000000000012345\\test-server",
                 "--config", tempConfig
             };
 
@@ -80,7 +80,7 @@ public sealed class WrapperOptionsTests
         // Arrange
         var args = new[]
         {
-            "--pipe=MeridianAgent_12345\\test",
+            "--pipe=MeridianAgent_00000000000000000000000000012345\\test",
             "--config=C:\\config.json"
         };
 
@@ -117,7 +117,7 @@ public sealed class WrapperOptionsTests
         var args = new[]
         {
             "--server-id=test",
-            "--pipe=MeridianAgent_12345\\test"
+            "--pipe=MeridianAgent_00000000000000000000000000012345\\test"
         };
 
         // Act
@@ -138,7 +138,7 @@ public sealed class WrapperOptionsTests
             var args = new[]
             {
                 "--server-id=test",
-                "--pipe=MeridianAgent_12345\\test",
+                "--pipe=MeridianAgent_00000000000000000000000000012345\\test",
                 $"--config=\"{tempConfig}\""
             };
 
@@ -169,7 +169,7 @@ public sealed class WrapperOptionsTests
             var options = new WrapperOptions
             {
                 ServerId = "test-server",
-                PipeName = "MeridianAgent_12345\\test-server",
+                PipeName = "MeridianAgent_00000000000000000000000000012345\\test-server",
                 ConfigPath = tempConfig
             };
 
@@ -194,7 +194,7 @@ public sealed class WrapperOptionsTests
         var options = new WrapperOptions
         {
             ServerId = serverId,
-            PipeName = "MeridianAgent_12345\\test",
+            PipeName = "MeridianAgent_00000000000000000000000000012345\\test",
             ConfigPath = TestConfigPath
         };
 
@@ -217,7 +217,7 @@ public sealed class WrapperOptionsTests
         var options = new WrapperOptions
         {
             ServerId = serverId,
-            PipeName = "MeridianAgent_12345\\test",
+            PipeName = "MeridianAgent_00000000000000000000000000012345\\test",
             ConfigPath = TestConfigPath
         };
 
@@ -261,7 +261,7 @@ public sealed class WrapperOptionsTests
         var options = new WrapperOptions
         {
             ServerId = "test-server",
-            PipeName = "MeridianAgent_12345\\test",
+            PipeName = "MeridianAgent_00000000000000000000000000012345\\test",
             ConfigPath = "relative/path/config.json"
         };
 
@@ -279,7 +279,7 @@ public sealed class WrapperOptionsTests
         var options = new WrapperOptions
         {
             ServerId = "test-server",
-            PipeName = "MeridianAgent_12345\\test",
+            PipeName = "MeridianAgent_00000000000000000000000000012345\\test",
             ConfigPath = NonExistentConfigPath
         };
 
