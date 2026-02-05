@@ -42,5 +42,5 @@ public sealed class ModsOptions
     /// <summary>
     /// Download milestones for notifications.
     /// </summary>
-    public List<long> DownloadMilestones { get; set; } = [100, 1000, 10000, 100000, 1000000];
+    public IList<long> DownloadMilestones { get; set; } = [100, 1000, 10000, 100000, 1000000];
 }

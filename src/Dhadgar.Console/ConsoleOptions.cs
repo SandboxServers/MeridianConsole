@@ -42,7 +42,7 @@ public sealed class ConsoleOptions
     /// <summary>
     /// Regex patterns for dangerous commands that should be blocked.
     /// </summary>
-    public List<string> DangerousCommandPatterns { get; set; } =
+    public IList<string> DangerousCommandPatterns { get; set; } =
     [
         @"^(rm|del|delete|format)\s+-rf?\s+[/\\]",
         @"^(shutdown|poweroff|reboot|halt)\s*",

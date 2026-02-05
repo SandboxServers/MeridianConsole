@@ -124,7 +124,7 @@ public static class VersionRangeParser
         }
 
         // Handle wildcard (1.2.* or 1.*)
-        if (constraint.Contains('*'))
+        if (constraint.Contains('*', StringComparison.Ordinal))
         {
             var wildcardParts = constraint.Split('.');
             if (wildcardParts.Length >= 1)

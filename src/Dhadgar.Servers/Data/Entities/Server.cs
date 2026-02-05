@@ -1,3 +1,8 @@
+// CA1724: Type name 'Server' conflicts with namespace 'Microsoft.SqlServer.Server'.
+// This is an intentional domain entity name - we don't reference SqlServer and the
+// conflict only exists in the .NET Framework (not .NET Core).
+#pragma warning disable CA1724
+
 using System.ComponentModel.DataAnnotations;
 using Dhadgar.Shared.Data;
 
