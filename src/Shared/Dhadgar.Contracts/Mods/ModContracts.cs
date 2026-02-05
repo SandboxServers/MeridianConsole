@@ -1,3 +1,8 @@
+// CA1054: URI parameters should be Uri, not string.
+// Suppressed for DTOs because JSON serialization works better with strings,
+// and API contracts commonly use string URLs for interoperability.
+#pragma warning disable CA1054
+
 namespace Dhadgar.Contracts.Mods;
 
 // Mods service contracts
