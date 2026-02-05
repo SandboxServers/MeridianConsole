@@ -6,7 +6,6 @@ using Dhadgar.Console.Services;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
-using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
@@ -20,9 +19,9 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults(
-    builder.Configuration,
-    HealthCheckDependencies.Postgres | HealthCheckDependencies.Redis);
+// Add Dhadgar service defaults with Aspire-compatible patterns
+builder.AddDhadgarServiceDefaults(HealthCheckDependencies.Postgres | HealthCheckDependencies.Redis);
+
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Console API",
     description: "Real-time console streaming via SignalR for Meridian Console");
@@ -165,10 +164,8 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
+// Dhadgar middleware pipeline (correlation, tenant enrichment, request logging)
+app.UseDhadgarMiddleware();
 
 // Authentication and authorization
 app.UseAuthentication();

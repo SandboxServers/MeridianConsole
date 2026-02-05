@@ -2,7 +2,29 @@
 
 This directory contains Docker Compose configurations for local development infrastructure.
 
-## Quick Start
+## Aspire vs Docker Compose
+
+The recommended approach for local development is **.NET Aspire** (see below). Docker Compose is maintained as an alternative for specific scenarios:
+
+| Use Case | Recommendation |
+|----------|----------------|
+| **Local development** | Aspire (`dotnet run --project src/Dhadgar.AppHost`) - better DX, Aspire Dashboard for traces/metrics/logs |
+| **CI/CD pipelines** | Docker Compose - portable, no .NET required on runner |
+| **Production simulation** | Docker Compose - matches production config more closely |
+| **Aspire unavailable** | Docker Compose - fallback when Aspire workload can't be installed |
+
+**Running with Aspire:**
+```bash
+# Start all services with infrastructure auto-wired
+dotnet run --project src/Dhadgar.AppHost
+
+# Opens Aspire Dashboard at https://localhost:17178
+# - All services start automatically with proper dependencies
+# - Connection strings injected automatically
+# - Integrated tracing, metrics, and logs
+```
+
+## Quick Start (Docker Compose)
 
 ```bash
 # Start all infrastructure services

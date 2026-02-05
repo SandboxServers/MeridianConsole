@@ -1,0 +1,401 @@
+// SECURITY REVIEW: This file is part of the Agent runtime code (Dhadgar.Agent.Core).
+// Changes must be reviewed by the agent-service-guardian team before merge.
+// Agent code runs on customer hardware with elevated privileges.
+
+using System.Collections.Concurrent;
+using System.Text.Json;
+using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Telemetry;
+using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Dhadgar.Agent.Core.Commands;
+
+/// <summary>
+/// Routes commands to appropriate handlers.
+/// </summary>
+public sealed class CommandDispatcher : ICommandDispatcher
+{
+    /// <summary>
+    /// Maximum length for command type in metrics to prevent cardinality explosion.
+    /// </summary>
+    private const int MaxCommandTypeLength = 64;
+
+    /// <summary>
+    /// Allowlist of known command types for metrics.
+    /// Unknown types are recorded as "Unknown" to prevent metric cardinality explosion.
+    /// </summary>
+    private static readonly HashSet<string> KnownCommandTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Ping",
+        "StartServer",
+        "StopServer",
+        "RestartServer",
+        "UpdateServer",
+        "InstallMod",
+        "UninstallMod",
+        "UpdateMod",
+        "FileDownload",
+        "FileUpload",
+        "ExecuteCommand",
+        "GetStatus",
+        "GetLogs",
+        "ConfigureServer",
+        "Backup",
+        "Restore"
+    };
+
+    private readonly ConcurrentDictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ICommandValidator _validator;
+    private readonly AgentOptions _options;
+    private readonly AgentMeter _meter;
+    private readonly AgentActivitySource _activitySource;
+    private readonly ILogger<CommandDispatcher> _logger;
+
+    public CommandDispatcher(
+        ICommandValidator validator,
+        IOptions<AgentOptions> options,
+        AgentMeter meter,
+        AgentActivitySource activitySource,
+        ILogger<CommandDispatcher> logger)
+    {
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _meter = meter ?? throw new ArgumentNullException(nameof(meter));
+        _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public void RegisterHandler(ICommandHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        // Validate CommandType before registration to fail fast on invalid handlers
+        if (string.IsNullOrWhiteSpace(handler.CommandType))
+        {
+            throw new ArgumentException(
+                "Handler CommandType cannot be null, empty, or whitespace",
+                $"{nameof(handler)}.{nameof(handler.CommandType)}");
+        }
+
+        if (!_handlers.TryAdd(handler.CommandType, handler))
+        {
+            throw new InvalidOperationException(
+                $"A handler for command type '{handler.CommandType}' is already registered");
+        }
+
+        _logger.LogDebug("Registered handler for command type: {CommandType}", handler.CommandType);
+    }
+
+    public bool HasHandler(string commandType)
+    {
+        return _handlers.ContainsKey(commandType);
+    }
+
+    /// <summary>
+    /// Sanitizes a command type for use in metrics and logging to prevent cardinality explosion.
+    /// Returns "Unknown" for null, empty, too-long, or unrecognized command types.
+    /// </summary>
+    private static string SanitizeCommandTypeForMetrics(string? commandType)
+    {
+        if (string.IsNullOrEmpty(commandType) || commandType.Length > MaxCommandTypeLength)
+        {
+            return "Unknown";
+        }
+
+        return KnownCommandTypes.Contains(commandType) ? commandType : "Unknown";
+    }
+
+    public async Task<Result<CommandResult>> DispatchAsync(
+        CommandEnvelope envelope,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+
+        var startedAt = DateTimeOffset.UtcNow;
+
+        // SECURITY: Sanitize CommandType early to prevent metric cardinality explosion and log injection
+        // Use sanitized value for all metrics and logging throughout the method
+        var metricCommandType = SanitizeCommandTypeForMetrics(envelope.CommandType);
+
+        // Resolve nodeId - SECURITY: fail-closed, require enrollment and matching NodeId
+        Guid resolvedNodeId;
+        if (_options.NodeId.HasValue)
+        {
+            // Agent is enrolled - require envelope.NodeId to match
+            if (envelope.NodeId == Guid.Empty)
+            {
+                _logger.LogWarning(
+                    "Command {CommandId} rejected: envelope has empty NodeId but agent is enrolled as {EnrolledNodeId}",
+                    envelope.CommandId, _options.NodeId.Value);
+                _meter.RecordCommandExecuted(metricCommandType, success: false);
+                var now = DateTimeOffset.UtcNow;
+                return Result<CommandResult>.Success(new CommandResult
+                {
+                    CommandId = envelope.CommandId,
+                    NodeId = _options.NodeId.Value,
+                    Status = CommandResultStatus.Rejected,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    ErrorMessage = "Agent is not enrolled or NodeId mismatch",
+                    ErrorCode = "NotEnrolled",
+                    CorrelationId = envelope.CorrelationId
+                });
+            }
+
+            if (envelope.NodeId != _options.NodeId.Value)
+            {
+                _logger.LogWarning(
+                    "Command {CommandId} rejected: NodeId mismatch (expected {ExpectedNodeId}, received {ReceivedNodeId})",
+                    envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
+                _meter.RecordCommandExecuted(metricCommandType, success: false);
+                var now = DateTimeOffset.UtcNow;
+                return Result<CommandResult>.Success(new CommandResult
+                {
+                    CommandId = envelope.CommandId,
+                    NodeId = _options.NodeId.Value,
+                    Status = CommandResultStatus.Rejected,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    ErrorMessage = "Agent is not enrolled or NodeId mismatch",
+                    ErrorCode = "NotEnrolled",
+                    CorrelationId = envelope.CorrelationId
+                });
+            }
+
+            resolvedNodeId = _options.NodeId.Value;
+        }
+        else
+        {
+            // Agent is not enrolled - reject all commands
+            _logger.LogWarning(
+                "Command {CommandId} rejected: agent not enrolled (no NodeId configured)",
+                envelope.CommandId);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
+            var now = DateTimeOffset.UtcNow;
+            return Result<CommandResult>.Success(new CommandResult
+            {
+                CommandId = envelope.CommandId,
+                NodeId = Guid.Empty,
+                Status = CommandResultStatus.Rejected,
+                StartedAt = now,
+                CompletedAt = now,
+                ErrorMessage = "Agent is not enrolled or NodeId mismatch",
+                ErrorCode = "NotEnrolled",
+                CorrelationId = envelope.CorrelationId
+            });
+        }
+
+        using var activity = _activitySource.StartCommandExecution(
+            envelope.CommandId,
+            metricCommandType,
+            envelope.CorrelationId);
+
+        _logger.LogInformation(
+            "Dispatching command {CommandType} with ID {CommandId}",
+            metricCommandType,
+            envelope.CommandId);
+
+        // Validate the command
+        var validationResult = _validator.Validate(envelope);
+        if (!validationResult.IsSuccess)
+        {
+            var error = validationResult.Error;
+            _logger.LogWarning(
+                "Command validation failed for {CommandId}: {Error}",
+                envelope.CommandId,
+                error);
+
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, error);
+
+            // SECURITY: Handle empty CommandId to prevent ArgumentException from CommandResult.Rejected
+            if (envelope.CommandId == Guid.Empty)
+            {
+                var now = DateTimeOffset.UtcNow;
+                return Result<CommandResult>.Success(new CommandResult
+                {
+                    CommandId = Guid.Empty,
+                    NodeId = resolvedNodeId,
+                    Status = CommandResultStatus.Rejected,
+                    StartedAt = now,
+                    CompletedAt = now,
+                    ErrorMessage = error,
+                    ErrorCode = "MissingCommandId",
+                    CorrelationId = envelope.CorrelationId
+                });
+            }
+
+            return Result<CommandResult>.Success(CommandResult.Rejected(
+                envelope.CommandId,
+                resolvedNodeId,
+                error,
+                errorCode: null,
+                envelope.CorrelationId));
+        }
+
+        // Find handler (use original CommandType for lookup, sanitized for metrics/logging)
+        if (!_handlers.TryGetValue(envelope.CommandType, out var handler))
+        {
+            _logger.LogWarning(
+                "No handler registered for command type: {CommandType}",
+                metricCommandType);
+
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Unknown command type");
+
+            return Result<CommandResult>.Success(CommandResult.Rejected(
+                envelope.CommandId,
+                resolvedNodeId,
+                $"Unknown command type: {metricCommandType}",
+                "UnknownCommandType",
+                envelope.CorrelationId));
+        }
+
+        // Execute command
+        try
+        {
+            var handlerResult = await handler.ExecuteAsync(envelope, cancellationToken);
+            if (!handlerResult.IsSuccess)
+            {
+                _meter.RecordCommandExecuted(metricCommandType, success: false);
+                activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, handlerResult.Error);
+                return handlerResult;
+            }
+
+            var result = handlerResult.Value!;
+            var success = result.Status == CommandResultStatus.Succeeded;
+            _meter.RecordCommandExecuted(metricCommandType, success);
+
+            if (!success)
+            {
+                activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, result.ErrorMessage);
+            }
+
+            _logger.LogInformation(
+                "Command {CommandId} completed with status {Status}",
+                envelope.CommandId,
+                result.Status);
+
+            return handlerResult;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Command {CommandId} was cancelled", envelope.CommandId);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Cancelled");
+
+            return Result<CommandResult>.Success(new CommandResult
+            {
+                CommandId = envelope.CommandId,
+                NodeId = resolvedNodeId,
+                Status = CommandResultStatus.Cancelled,
+                StartedAt = startedAt,
+                CompletedAt = DateTimeOffset.UtcNow,
+                ErrorMessage = "Command was cancelled",
+                CorrelationId = envelope.CorrelationId
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Command {CommandId} failed with exception", envelope.CommandId);
+            _meter.RecordCommandExecuted(metricCommandType, success: false);
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
+
+            // SECURITY: Return generic error message to caller, keep details in logs
+            return Result<CommandResult>.Failure(
+                "[Command.ExecutionError] Internal execution error");
+        }
+    }
+}
+
+/// <summary>
+/// Base class for strongly-typed command handlers.
+/// </summary>
+/// <typeparam name="TPayload">Payload type.</typeparam>
+public abstract class CommandHandlerBase<TPayload> : ICommandHandler<TPayload>
+    where TPayload : class
+{
+    private readonly ILogger _logger;
+
+    /// <summary>
+    /// JSON deserialization options with depth limit to prevent DoS via deeply nested payloads.
+    /// </summary>
+    private static readonly JsonSerializerOptions DeserializerOptions = new()
+    {
+        MaxDepth = 64
+    };
+
+    /// <summary>
+    /// Maximum allowed payload size in bytes (256 KB).
+    /// Aligned with CommandEnvelope.MaxPayloadLength for defense-in-depth.
+    /// </summary>
+    private const int MaxPayloadSizeBytes = CommandEnvelope.MaxPayloadLength;
+
+    protected CommandHandlerBase(ILogger logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public abstract string CommandType { get; }
+
+    public async Task<Result<CommandResult>> ExecuteAsync(
+        CommandEnvelope envelope,
+        CancellationToken cancellationToken = default)
+    {
+        // SECURITY: Check payload size before deserialization to prevent memory exhaustion
+        // Use UTF-8 byte count, not character count, since multi-byte characters inflate actual size
+        var payloadByteCount = System.Text.Encoding.UTF8.GetByteCount(envelope.PayloadJson);
+        if (payloadByteCount > MaxPayloadSizeBytes)
+        {
+            _logger.LogWarning("Payload too large for command {CommandId}: {Size} bytes (max: {Max})",
+                envelope.CommandId, payloadByteCount, MaxPayloadSizeBytes);
+            return Result<CommandResult>.Success(CommandResult.Rejected(
+                envelope.CommandId,
+                envelope.NodeId,
+                "Payload exceeds maximum allowed size",
+                "PayloadTooLarge",
+                envelope.CorrelationId));
+        }
+
+        // Deserialize payload with depth limit to prevent DoS
+        TPayload? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<TPayload>(envelope.PayloadJson, DeserializerOptions);
+        }
+        catch (JsonException ex)
+        {
+            var isDepthError = ex.Message.Contains("depth", StringComparison.OrdinalIgnoreCase);
+            var errorCode = isDepthError ? "PayloadTooDeep" : "InvalidPayload";
+            _logger.LogError(ex, "Failed to deserialize payload for command {CommandId} (depth limit exceeded: {IsDepthError})",
+                envelope.CommandId, isDepthError);
+            // SECURITY: Return generic error message to caller, keep details in logs
+            return Result<CommandResult>.Success(CommandResult.Rejected(
+                envelope.CommandId,
+                envelope.NodeId,
+                isDepthError ? "Payload exceeds maximum nesting depth" : "Invalid payload format",
+                errorCode,
+                envelope.CorrelationId));
+        }
+
+        if (payload is null)
+        {
+            _logger.LogWarning("Payload deserialized to null for command {CommandId}", envelope.CommandId);
+            return Result<CommandResult>.Success(CommandResult.Rejected(
+                envelope.CommandId,
+                envelope.NodeId,
+                "Payload deserialized to null",
+                "NullPayload",
+                envelope.CorrelationId));
+        }
+
+        return await ExecuteAsync(envelope, payload, cancellationToken);
+    }
+
+    public abstract Task<Result<CommandResult>> ExecuteAsync(
+        CommandEnvelope envelope,
+        TPayload payload,
+        CancellationToken cancellationToken = default);
+}

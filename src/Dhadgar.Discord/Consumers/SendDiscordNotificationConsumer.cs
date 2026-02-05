@@ -3,6 +3,8 @@ using System.Text.Json;
 using Dhadgar.Contracts.Notifications;
 using Dhadgar.Discord.Data;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Dhadgar.Discord.Consumers;
 
@@ -37,16 +39,109 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
     {
         var message = context.Message;
 
-        _logger.LogInformation(
-            "Processing notification for event {EventType}: {Title}",
-            message.EventType, message.Title);
+        // Validate NotificationId to prevent collisions in idempotency check
+        if (message.NotificationId == Guid.Empty)
+        {
+            _logger.LogError("Invalid notification received: NotificationId is empty. EventType: {EventType}", message.EventType);
+            throw new ArgumentException("Message.NotificationId cannot be empty", nameof(context));
+        }
 
-        // Get the admin webhook URL from config
+        _logger.LogInformation(
+            "Processing notification {NotificationId} for event {EventType}: {Title}",
+            message.NotificationId, message.EventType, message.Title);
+
+        // Check webhook configuration first - no point tracking if we can't send
         var webhookUrl = _configuration["Discord:WebhookUrl"];
         if (string.IsNullOrEmpty(webhookUrl))
         {
             _logger.LogWarning("Discord:WebhookUrl not configured, skipping notification");
             return;
+        }
+
+        // Idempotency check: Use "act-then-check" pattern to avoid race conditions
+        // Try to insert a Pending log entry atomically - if another consumer is already processing,
+        // the unique constraint on Id will cause a conflict
+        var preliminaryLog = new DiscordNotificationLog
+        {
+            Id = message.NotificationId,
+            OrganizationId = message.OrgId,
+            EventType = Truncate(message.EventType, 100),
+            Channel = "pending",
+            Title = Truncate(message.Title, 500),
+            Status = NotificationStatus.Pending,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+        _db.NotificationLogs.Add(preliminaryLog);
+
+        try
+        {
+            await _db.SaveChangesAsync(context.CancellationToken);
+            // Successfully inserted - we have the "lock" on this notification
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            // Unique constraint violation - another consumer already has this notification
+            _db.ChangeTracker.Clear(); // Detach the failed entity
+
+            var existingLog = await _db.NotificationLogs.FindAsync(
+                [message.NotificationId],
+                context.CancellationToken);
+
+            if (existingLog?.Status == NotificationStatus.Sent)
+            {
+                _logger.LogInformation(
+                    "Notification {NotificationId} already sent, skipping duplicate",
+                    message.NotificationId);
+                return;
+            }
+
+            if (existingLog?.Status == NotificationStatus.Pending)
+            {
+                // Another consumer is currently processing this notification
+                // Let MassTransit redeliver later
+                _logger.LogInformation(
+                    "Notification {NotificationId} is being processed by another consumer, will retry later",
+                    message.NotificationId);
+                throw; // Rethrow to trigger MassTransit retry
+            }
+
+            // If it failed before, we'll retry - remove the failed log entry
+            if (existingLog is not null)
+            {
+                _logger.LogInformation(
+                    "Retrying previously failed notification {NotificationId}",
+                    message.NotificationId);
+                _db.NotificationLogs.Remove(existingLog);
+                await _db.SaveChangesAsync(context.CancellationToken);
+
+                // Re-add the preliminary log for this attempt
+                // Guard against race condition where another consumer inserts between our delete and insert
+                preliminaryLog = new DiscordNotificationLog
+                {
+                    Id = message.NotificationId,
+                    OrganizationId = message.OrgId,
+                    EventType = Truncate(message.EventType, 100),
+                    Channel = "pending",
+                    Title = Truncate(message.Title, 500),
+                    Status = NotificationStatus.Pending,
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                };
+                _db.NotificationLogs.Add(preliminaryLog);
+
+                try
+                {
+                    await _db.SaveChangesAsync(context.CancellationToken);
+                }
+                catch (DbUpdateException reinsertEx) when (reinsertEx.InnerException is PostgresException { SqlState: "23505" })
+                {
+                    // Another consumer inserted between our delete and insert - they win
+                    _db.ChangeTracker.Clear();
+                    _logger.LogInformation(
+                        "Notification {NotificationId} was claimed by another consumer during retry, will retry later",
+                        message.NotificationId);
+                    throw; // Let MassTransit redeliver
+                }
+            }
         }
 
         // Determine which channel based on event type
@@ -73,19 +168,11 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
 
             try
             {
-                var logEntry = new DiscordNotificationLog
-                {
-                    Id = Guid.NewGuid(),
-                    OrganizationId = message.OrgId,
-                    EventType = Truncate(message.EventType, 100),
-                    Channel = Truncate(channel, 100),
-                    Title = Truncate(message.Title, 500),
-                    Status = response.IsSuccessStatusCode ? NotificationStatus.Sent : NotificationStatus.Failed,
-                    ErrorMessage = response.IsSuccessStatusCode ? null : Truncate($"HTTP {response.StatusCode} (attempt {attempt})", 1000),
-                    CreatedAtUtc = DateTimeOffset.UtcNow
-                };
+                // Update the preliminary log entry with final status
+                preliminaryLog.Channel = Truncate(channel, 100);
+                preliminaryLog.Status = response.IsSuccessStatusCode ? NotificationStatus.Sent : NotificationStatus.Failed;
+                preliminaryLog.ErrorMessage = response.IsSuccessStatusCode ? null : Truncate($"HTTP {response.StatusCode} (attempt {attempt})", 1000);
 
-                _db.NotificationLogs.Add(logEntry);
                 await _db.SaveChangesAsync(context.CancellationToken);
 
                 if (response.IsSuccessStatusCode)
@@ -116,18 +203,15 @@ public sealed class SendDiscordNotificationConsumer : IConsumer<SendDiscordNotif
         {
             _logger.LogError(ex, "Exception sending notification to Discord");
 
-            _db.NotificationLogs.Add(new DiscordNotificationLog
-            {
-                Id = Guid.NewGuid(),
-                OrganizationId = message.OrgId,
-                EventType = Truncate(message.EventType, 100),
-                Channel = Truncate(channel, 100),
-                Title = Truncate(message.Title, 500),
-                Status = NotificationStatus.Failed,
-                ErrorMessage = Truncate(ex.Message, 1000),
-                CreatedAtUtc = DateTimeOffset.UtcNow
-            });
+            // Update the preliminary log entry with failure status
+            preliminaryLog.Channel = Truncate(channel, 100);
+            preliminaryLog.Status = NotificationStatus.Failed;
+            preliminaryLog.ErrorMessage = Truncate(ex.Message, 1000);
             await _db.SaveChangesAsync(context.CancellationToken);
+
+            // Rethrow to allow MassTransit to apply retry policies
+            // The idempotency pattern will handle the Failed status on retry
+            throw;
         }
     }
 

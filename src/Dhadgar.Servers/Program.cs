@@ -6,8 +6,6 @@ using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Audit;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
-using Dhadgar.ServiceDefaults.Logging;
-using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Swagger;
 using Dhadgar.ServiceDefaults.Tracing;
@@ -21,16 +19,12 @@ using OpenTelemetry.Resources;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults(
-    builder.Configuration,
-    HealthCheckDependencies.Postgres);
+// Add Dhadgar service defaults with Aspire-compatible patterns
+builder.AddDhadgarServiceDefaults(HealthCheckDependencies.Postgres);
+
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Servers API",
     description: "Game server lifecycle management for Meridian Console");
-
-// Add Dhadgar logging infrastructure with PII redaction
-builder.Services.AddDhadgarLogging();
-builder.Logging.AddDhadgarLogging("Dhadgar.Servers", builder.Configuration);
 
 // Audit infrastructure for compliance logging
 builder.Services.AddAuditInfrastructure<ServersDbContext>();
@@ -147,12 +141,11 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware (includes Correlation, TenantEnrichment, and RequestLogging)
-app.UseDhadgarMiddleware();
-app.UseMiddleware<ProblemDetailsMiddleware>();
-
-// Audit middleware
-app.UseAuditMiddleware();
+// Dhadgar middleware pipeline with audit enabled for server lifecycle changes
+app.UseDhadgarMiddleware(new DhadgarServiceOptions
+{
+    EnableAuditMiddleware = true
+});
 
 // Authentication and authorization
 app.UseAuthentication();

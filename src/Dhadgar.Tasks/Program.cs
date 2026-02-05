@@ -2,17 +2,14 @@ using Dhadgar.Tasks;
 using Dhadgar.Tasks.Data;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
-using Dhadgar.ServiceDefaults.Health;
-using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Note: RabbitMq health check removed until MassTransit is configured
-builder.Services.AddDhadgarServiceDefaults(
-    builder.Configuration,
-    HealthCheckDependencies.Postgres);
+// Add Dhadgar service defaults with Aspire-compatible patterns
+builder.AddDhadgarServiceDefaults();
+
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Tasks API",
     description: "Orchestration and background job management for Meridian Console");
@@ -24,10 +21,8 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
+// Dhadgar middleware pipeline (correlation, tenant enrichment, problem details, request logging)
+app.UseDhadgarMiddleware();
 
 // Auto-migrate database in development
 await app.AutoMigrateDatabaseAsync<TasksDbContext>();

@@ -1,0 +1,158 @@
+using System.Reflection;
+using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Process;
+using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Dhadgar.Agent.Core.Health;
+
+/// <summary>
+/// Reports health status and builds heartbeat payloads.
+/// </summary>
+public sealed class HealthReporter : IHealthReporter
+{
+    private readonly IOptionsMonitor<AgentOptions> _optionsMonitor;
+    private readonly ISystemMetricsCollector _metricsCollector;
+    private readonly IProcessManager? _processManager;
+    private readonly ILogger<HealthReporter> _logger;
+
+    /// <summary>
+    /// Maximum number of warnings to retain to prevent unbounded memory growth.
+    /// </summary>
+    private const int MaxWarnings = 100;
+
+    private NodeStatus _status = NodeStatus.Starting;
+    private string? _statusReason;
+    private readonly List<string> _warnings = [];
+    private readonly object _lock = new();
+
+    private static readonly string AgentVersion = Assembly
+        .GetExecutingAssembly()
+        .GetName()
+        .Version?
+        .ToString() ?? "0.0.0";
+
+    /// <summary>
+    /// Gets the current agent options (supports runtime changes like enrollment setting NodeId).
+    /// </summary>
+    private AgentOptions Options => _optionsMonitor.CurrentValue;
+
+    public NodeStatus Status
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _status;
+            }
+        }
+    }
+
+    public HealthReporter(
+        IOptionsMonitor<AgentOptions> optionsMonitor,
+        ISystemMetricsCollector metricsCollector,
+        IProcessManager? processManager,
+        ILogger<HealthReporter> logger)
+    {
+        _optionsMonitor = optionsMonitor ?? throw new ArgumentNullException(nameof(optionsMonitor));
+        _metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
+        _processManager = processManager; // Can be null during startup
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public void SetStatus(NodeStatus status, string? reason = null)
+    {
+        lock (_lock)
+        {
+            if (_status != status)
+            {
+                _logger.LogInformation(
+                    "Node status changed from {OldStatus} to {NewStatus}. Reason: {Reason}",
+                    _status,
+                    status,
+                    reason ?? "unspecified");
+                _status = status;
+                _statusReason = reason;
+            }
+        }
+    }
+
+    public void AddWarning(string warning)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(warning);
+
+        lock (_lock)
+        {
+            if (!_warnings.Contains(warning))
+            {
+                // Cap warnings to prevent unbounded memory growth
+                if (_warnings.Count >= MaxWarnings)
+                {
+                    // Remove oldest warning to make room for new one
+                    _warnings.RemoveAt(0);
+                }
+
+                _warnings.Add(warning);
+                _logger.LogWarning("Health warning added: {Warning}", warning);
+            }
+        }
+    }
+
+    public void ClearWarnings()
+    {
+        lock (_lock)
+        {
+            _warnings.Clear();
+        }
+    }
+
+    public async Task<Result<HeartbeatPayload>> GetHeartbeatPayloadAsync(CancellationToken cancellationToken = default)
+    {
+        var options = Options;
+        if (!options.NodeId.HasValue)
+        {
+            return Result<HeartbeatPayload>.Failure("Cannot create heartbeat: agent is not enrolled");
+        }
+
+        var metricsResult = await _metricsCollector.CollectAsync(cancellationToken);
+        if (!metricsResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to collect system metrics for heartbeat: {Error}", metricsResult.Error);
+            return Result<HeartbeatPayload>.Failure(metricsResult.Error!);
+        }
+
+        List<ProcessStatus> activeProcesses;
+        if (_processManager is not null)
+        {
+            activeProcesses = _processManager
+                .GetAllProcesses()
+                .Where(p => p.State == ProcessState.Running || p.State == ProcessState.Starting)
+                .Select(p => p.ToStatus())
+                .ToList();
+        }
+        else
+        {
+            activeProcesses = [];
+        }
+
+        List<string> warnings;
+        NodeStatus status;
+        lock (_lock)
+        {
+            status = _status;
+            warnings = [.. _warnings];
+        }
+
+        return Result<HeartbeatPayload>.Success(new HeartbeatPayload
+        {
+            NodeId = options.NodeId.Value,
+            AgentVersion = AgentVersion,
+            Timestamp = DateTimeOffset.UtcNow,
+            Status = status,
+            Metrics = metricsResult.Value!,
+            ActiveProcesses = activeProcesses,
+            Warnings = warnings
+        });
+    }
+}

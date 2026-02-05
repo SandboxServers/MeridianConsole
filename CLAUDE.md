@@ -1,118 +1,172 @@
-# CLAUDE.md
+# MeridianConsole - Claude Instructions
 
-Meridian Console (codebase: **Dhadgar**) - A multi-tenant SaaS control plane for game servers on customer-owned hardware.
+Critical patterns, security requirements, and architectural decisions for this codebase.
 
-See @README.md for full project overview.
+---
 
-## Build Commands
+## Architecture
 
-```bash
-# Enable MSBuild Server for faster repeat builds (set this BEFORE running dotnet commands)
-# Add to .bashrc/.zshrc for persistence, or run in your shell before building
-export DOTNET_CLI_USE_MSBUILD_SERVER=1
+### Error Handling: Result<T> Pattern
 
-# Build & test
-dotnet build
-dotnet test
+**ALWAYS** use `Result<T>` for operations that can fail. Never throw for validation, IO, or network errors.
 
-# Run a service
-dotnet run --project src/Dhadgar.Gateway
-dotnet watch --project src/Dhadgar.Gateway  # with hot reload
-
-# EF Core migrations (example: Identity service)
-dotnet ef migrations add MigrationName --project src/Dhadgar.Identity --startup-project src/Dhadgar.Identity --output-dir Data/Migrations
-dotnet ef database update --project src/Dhadgar.Identity --startup-project src/Dhadgar.Identity
-
-# Local infrastructure
-docker compose -f deploy/compose/docker-compose.dev.yml up -d
+```csharp
+var result = await SomeOperationAsync();
+if (!result.IsSuccess) return Result<OtherType>.Failure(result.Error);
+return Result<OtherType>.Success(value);
 ```
 
-## Code Rules
+---
 
-- **.NET 10** with C# nullable enabled
-- **Microservices**: Services MUST NOT have `ProjectReference` to each other. Only reference shared libraries (Contracts, Shared, Messaging, ServiceDefaults).
-- **Central Package Management**: All package versions in `Directory.Packages.props` - never specify versions in `.csproj` files.
-- Don't create documentation files unless explicitly requested.
+## Security (Critical)
 
-## Shared Libraries
+### Path Validation
 
-What goes where (services can only reference these, not each other):
+**ALL** file operations must use `PathValidator` (or `WindowsPathValidator`/`LinuxPathValidator`):
 
-| Library           | Purpose                                                           | Can Depend On     |
-| ----------------- | ----------------------------------------------------------------- | ----------------- |
-| `Contracts`       | DTOs, message contracts, API models, events                       | Nothing           |
-| `Shared`          | Result<T>, Guard, EntityId<T>, BaseEntity, DhadgarDbContext       | EF Core           |
-| `Messaging`       | MassTransit config, StaticEntityNameFormatter (meridian.{type})   | Contracts         |
-| `ServiceDefaults` | Middleware, observability, exceptions, caching, audit, tracing    | Contracts, Shared |
-
-**Key Shared patterns:**
-- `Result<T>` - Railway-oriented programming for error handling
-- `BaseEntity` - Audit fields (CreatedAt, UpdatedAt, DeletedAt), RowVersion (xmin)
-- `DhadgarDbContext` - Soft-delete filters, auto-timestamps, provider-specific handling
-- `ITenantScoped` - Multi-tenant entity marker with OrganizationId
-
-## Service Categories
-
-**Core Services** (substantial implementation, TODOs remain):
-
-- `Gateway` - YARP reverse proxy, rate limiting, circuit breaker, Cloudflare integration (production-ready)
-- `Identity` - Users, orgs, roles, OAuth, sessions, search; MFA endpoints return 501 (PostgreSQL)
-- `Nodes` - Agent enrollment, mTLS CA, heartbeats, capacity reservations; notification TODOs (PostgreSQL)
-- `Secrets` - Azure Key Vault integration, claims-based auth, audit logging; Azure REST API TODOs
-- `CLI` - Global .NET tool (`dhadgar`) for platform management (functional)
-- `Servers` - Game server lifecycle with 13-state machine, templates (PostgreSQL)
-- `Console` - Real-time server console via SignalR, command dispatch (PostgreSQL + Redis)
-- `Mods` - Mod registry with semantic versioning, dependency resolution (PostgreSQL)
-- `BetterAuth` - Passwordless authentication via Better Auth SDK (PostgreSQL shared with Identity)
-
-Note: Core services have working foundations but contain scaffolded endpoints and incomplete features.
-
-**Stubs** (scaffolding only, functionality planned):
-
-- With Database: Billing, Tasks, Files, Notifications
-- Stateless: Discord
-
-**Frontend Apps** (Astro/React/Tailwind):
-
-- `Scope` - Documentation site with 19 sections (functional)
-- `Panel` - Control plane UI with OAuth (scaffolding)
-- `ShoppingCart` - Marketing/checkout (wireframe, OAuth flow only)
-
-## Git Workflow
-
-- Create feature branches from `main`
-- Conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`
-- **PR Size Limit**: Keep PRs under **85 files** (hard limit: 100). CodeRabbit cannot process PRs with 100+ files. If a feature requires more, split into multiple PRs.
-- NEVER force push to main/master
-- NEVER skip pre-commit hooks unless user explicitly requests
-
-## Testing
-
-- 1:1 test project mapping (e.g., `Dhadgar.Gateway` → `Dhadgar.Gateway.Tests`)
-- xUnit framework, 947 tests across 23 projects
-- Well-tested: Nodes (352), Identity (173), Gateway (74)
-- Run specific tests: `dotnet test --filter "FullyQualifiedName~TestName"`
-
-## Specialized Agents
-
-15 domain-expert agents in `.claude/agents/` for architecture review, security analysis, and technical decisions. Use 2-6 as a "tiger team" when needed. Names are self-descriptive (e.g., `security-architect`, `database-schema-architect`, `agent-service-guardian`).
-
-**IMPORTANT**: Always use `agent-service-guardian` after modifying code in `src/Agents/` - these run on customer hardware with elevated privileges.
-
-## Common Gotchas
-
-- Default credentials for local services: `dhadgar` / `dhadgar`
-- Services auto-apply migrations in Development mode
-- Gateway runs on port 5000, routes to backend services
-- **YARP routes**: `src/Dhadgar.Gateway/appsettings.json` under `ReverseProxy.Routes`
-- Agent code (`src/Agents/`) is security-critical - runs on customer hardware
-
-## Parallel Claude Sessions
-
-When running multiple Claude sessions simultaneously, each MUST use a separate git worktree:
-
-```bash
-git worktree add ../MeridianConsole-feature -b feature/name
-git worktree list
-git worktree remove ../MeridianConsole-feature
+```csharp
+var pathResult = _pathValidator.ValidatePath(userPath);
+if (!pathResult.IsSuccess) return Result<Unit>.Failure(pathResult.Error!);
 ```
+
+**Never trust user input.** Validator protects against: `..` traversal, null bytes, control chars, paths outside allowed directories.
+
+---
+
+### Command Injection Prevention
+
+**NEVER** concatenate command strings. Use `ArgumentList` tokenization:
+
+```csharp
+// Correct
+var startInfo = new ProcessStartInfo
+{
+    FileName = executablePath,
+    ArgumentList = { arg1, arg2, arg3 }  // Safe
+};
+
+// DANGEROUS
+var startInfo = new ProcessStartInfo
+{
+    FileName = "cmd.exe",
+    Arguments = $"/c {executablePath} {userArg}"  // Injection risk
+};
+```
+
+Same rule applies to WiX CustomActions - validate/encode before injection.
+
+---
+
+### SSRF Protection
+
+URLs must be validated against `TrustedHosts` allowlist before outbound requests:
+
+```csharp
+if (!_urlValidator.IsTrustedHost(url.Host))
+    return Result<Unit>.Failure(Error.Validation("Untrusted host", nameof(url)));
+```
+
+---
+
+### Sensitive Data
+
+Zero out sensitive data immediately after use:
+
+```csharp
+CryptographicOperations.ZeroMemory(privateKeyBytes);
+Array.Clear(passwordBuffer);
+```
+
+**WiX:** Mark sensitive properties with `Hidden="yes"` to prevent logging.
+
+---
+
+## Windows-Specific
+
+### Version Detection
+
+For WiX installers: Use `WindowsBuild >= 10240` for Windows 10+, NOT `VersionNT >= 603` (can't distinguish Win8.1).
+
+### Process Management
+
+See `WindowsProcessManager` for Job Objects reference. `DieOnUnhandledException` does NOT enforce memory limits.
+
+---
+
+## Dependencies
+
+### Central Package Management
+
+**RULE:** NEVER hardcode versions in `.csproj` files. All versions in `Directory.Packages.props` only.
+
+```xml
+<!-- Correct -->
+<PackageReference Include='Microsoft.Extensions.Logging' />
+
+<!-- Incorrect -->
+<PackageReference Include='Microsoft.Extensions.Logging' Version='8.0.0' />
+```
+
+### Package Notes
+
+- **SIPSorcery:** P2P file transfer. Maintenance uncertain. Avoid for new implementations unless P2P required. Track Issue #95.
+- **OpenTelemetry:** Use latest compatible beta (`1.15.0-beta.1`).
+
+---
+
+## Process Management
+
+Wrap `Process` objects in `using` statements:
+
+```csharp
+using var process = new Process { StartInfo = /* ... */ };
+if (!process.Start()) return Result<Unit>.Failure("Failed to start");
+await process.WaitForExitAsync(ct);
+```
+
+Return `Result<ProcessInfo>` containing: PID, exit code, duration, output.
+
+---
+
+## Documentation
+
+**Tables:** Spaces around pipes `| Option | Type |`
+
+**Code blocks:** Always specify language ` ```csharp `
+
+---
+
+## Code Review
+
+**Security review required** for changes to:
+- `IControlPlaneClient` interface
+- `CommandEnvelope` class
+- `WindowsProcessManager` / `LinuxProcessManager`
+- All agent projects (Core, Windows, Linux)
+
+Use `security-review` label on PRs.
+
+---
+
+## Open Issues
+
+- #94: Implement signature verification in `CommandValidator.Validate`
+- #95: Evaluate SIPSorcery replacement
+- #96: Update `ICertificateStore` to Result<T> pattern
+
+---
+
+## Pre-Commit Checklist
+
+- [ ] Paths validated with `PathValidator`
+- [ ] Commands use `ArgumentList`, not string concat
+- [ ] Errors return `Result<T>`, not exceptions
+- [ ] Sensitive data zeroed
+- [ ] No hardcoded package versions
+- [ ] `using` on all `IDisposable`
+- [ ] URLs validated against trusted hosts
+- [ ] `WindowsBuild` not `VersionNT` in WiX
+
+---
+
+Last updated: 2026-02-05

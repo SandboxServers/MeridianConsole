@@ -499,15 +499,6 @@
           "Microsoft.Extensions.Telemetry": "9.6.0"
         }
       },
-      "Microsoft.Extensions.Http.Resilience": {
-        "type": "Transitive",
-        "resolved": "9.6.0",
-        "contentHash": "Np2a8u0ttPzqSrfVlVNRavKNzrzrbLAEsd0gR0KX5jIVOp7SVlPQdAHBTBh8/Hd7Amni9STSBWE2hoxq2pu3XA==",
-        "dependencies": {
-          "Microsoft.Extensions.Http.Diagnostics": "9.6.0",
-          "Microsoft.Extensions.Resilience": "9.6.0"
-        }
-      },
       "Microsoft.Extensions.Resilience": {
         "type": "Transitive",
         "resolved": "9.6.0",
@@ -1026,6 +1017,16 @@
         "dependencies": {
           "Polly": "7.2.4",
           "Polly.Extensions.Http": "3.0.0"
+        }
+      },
+      "Microsoft.Extensions.Http.Resilience": {
+        "type": "CentralTransitive",
+        "requested": "[10.2.0, )",
+        "resolved": "9.6.0",
+        "contentHash": "Np2a8u0ttPzqSrfVlVNRavKNzrzrbLAEsd0gR0KX5jIVOp7SVlPQdAHBTBh8/Hd7Amni9STSBWE2hoxq2pu3XA==",
+        "dependencies": {
+          "Microsoft.Extensions.Http.Diagnostics": "9.6.0",
+          "Microsoft.Extensions.Resilience": "9.6.0"
         }
       },
       "Microsoft.Extensions.Telemetry": {

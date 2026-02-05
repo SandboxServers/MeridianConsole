@@ -8,21 +8,19 @@ using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Readiness;
 using Dhadgar.Secrets.Services;
 using SecretsHello = Dhadgar.Secrets.Hello;
-using Dhadgar.ServiceDefaults.Middleware;
-using Dhadgar.ServiceDefaults.Errors;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Errors;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Dhadgar service defaults with Aspire-compatible patterns
+builder.AddDhadgarServiceDefaults();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi("v1", options =>
@@ -122,9 +120,6 @@ builder.Services.AddSingleton<ISecretsAuditLogger, SecretsAuditLogger>();
 // Error handling infrastructure (RFC 9457 Problem Details)
 builder.Services.AddDhadgarErrorHandling();
 
-// Register request logging messages for RequestLoggingMiddleware
-builder.Services.AddSingleton<Dhadgar.ServiceDefaults.Logging.RequestLoggingMessages>();
-
 // Rate limiting configuration
 builder.Services.AddRateLimiter(options =>
 {
@@ -176,53 +171,6 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-var otlpUri = !string.IsNullOrWhiteSpace(otlpEndpoint) ? new Uri(otlpEndpoint) : null;
-var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Secrets");
-
-builder.Logging.AddOpenTelemetry(options =>
-{
-    options.SetResourceBuilder(resourceBuilder);
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
-    options.ParseStateValues = true;
-
-    if (otlpUri is not null)
-    {
-        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
-    }
-});
-
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
-    });
-
 // HttpClient for WIF token requests
 builder.Services.AddHttpClient("IdentityWif", client =>
 {
@@ -259,9 +207,12 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-app.UseMiddleware<CorrelationMiddleware>();
+// Dhadgar middleware pipeline
+// Note: Using individual middleware instead of UseDhadgarMiddleware because
+// we need UseDhadgarErrorHandling for proper ProblemDetails customization
+app.UseMiddleware<Dhadgar.ServiceDefaults.Middleware.CorrelationMiddleware>();
 app.UseDhadgarErrorHandling();  // RFC 9457 Problem Details with trace context
-app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<Dhadgar.ServiceDefaults.Middleware.RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

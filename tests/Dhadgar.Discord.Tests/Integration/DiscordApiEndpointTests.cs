@@ -21,17 +21,19 @@ public sealed class DiscordApiEndpointTests : IClassFixture<DiscordWebApplicatio
     }
 
     [Fact]
-    public async Task HealthCheck_ReturnsOkWithBotStatus()
+    public async Task HealthCheck_ReturnsStatusWithBotConnectionState()
     {
         // Act
         var response = await _client.GetAsync("/healthz");
 
-        // Assert
-        response.EnsureSuccessStatusCode();
+        // Assert - When bot is disconnected (as in test environment), returns 503 with degraded status
+        // This is intentional production behavior: health check returns 503 when bot is not connected
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+
         var content = await response.Content.ReadFromJsonAsync<HealthCheckResponse>();
         Assert.NotNull(content);
         Assert.Equal("Dhadgar.Discord", content.Service);
-        Assert.Equal("ok", content.Status);
+        Assert.Equal("degraded", content.Status);
         // Mock bot service returns Disconnected since we can't mock DiscordSocketClient
         Assert.Equal("Disconnected", content.BotStatus);
     }

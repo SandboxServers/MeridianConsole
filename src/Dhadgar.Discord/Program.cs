@@ -6,74 +6,18 @@ using Dhadgar.Discord.Data;
 using Dhadgar.Discord.Services;
 using Dhadgar.Messaging;
 using Dhadgar.ServiceDefaults;
-using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults.Swagger;
 using Microsoft.EntityFrameworkCore;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDhadgarServiceDefaults();
+// Add Dhadgar service defaults with Aspire-compatible patterns
+builder.AddDhadgarServiceDefaults();
+
 builder.Services.AddMeridianSwagger(
     title: "Dhadgar Discord API",
     description: "Discord bot integration for Meridian Console");
-
-// OpenTelemetry configuration
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-Uri? otlpUri = null;
-if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-{
-    if (Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out var parsedUri))
-    {
-        otlpUri = parsedUri;
-    }
-}
-var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Discord");
-
-builder.Logging.AddOpenTelemetry(options =>
-{
-    options.SetResourceBuilder(resourceBuilder);
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
-    options.ParseStateValues = true;
-
-    if (otlpUri is not null)
-    {
-        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
-    }
-});
-
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation();
-
-        if (otlpUri is not null)
-        {
-            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-    });
 
 // Database (minimal - just notification logs)
 builder.Services.AddDbContext<DiscordDbContext>(options =>
@@ -110,10 +54,8 @@ var app = builder.Build();
 
 app.UseMeridianSwagger();
 
-// Standard middleware
-app.UseMiddleware<CorrelationMiddleware>();
-app.UseMiddleware<ProblemDetailsMiddleware>();
-app.UseMiddleware<RequestLoggingMiddleware>();
+// Dhadgar middleware pipeline (correlation, tenant enrichment, problem details, request logging)
+app.UseDhadgarMiddleware();
 
 // Authentication and authorization
 app.UseAuthentication();
@@ -142,7 +84,18 @@ app.MapGet("/hello", () => Results.Text(Dhadgar.Discord.Hello.Message))
 app.MapGet("/healthz", (IDiscordBotService bot) =>
 {
     var botStatus = bot.ConnectionState.ToString();
-    return Results.Ok(new { service = "Dhadgar.Discord", status = "ok", botStatus });
+    var isConnected = bot.ConnectionState == Discord.ConnectionState.Connected;
+
+    // Return 503 Service Unavailable when bot is disconnected
+    // Kubernetes/orchestration expects this for proper health checking
+    if (!isConnected)
+    {
+        return Results.Json(
+            new { service = "Dhadgar.Discord", status = "degraded", botStatus },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return Results.Ok(new { service = "Dhadgar.Discord", status = "healthy", botStatus });
 }).WithTags("Health").WithName("DiscordHealthCheck");
 
 // Admin endpoints - Protected by API key authentication

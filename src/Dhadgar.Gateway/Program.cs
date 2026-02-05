@@ -9,7 +9,6 @@ using Dhadgar.Gateway.Readiness;
 using Dhadgar.Gateway.Services;
 using GatewayHello = Dhadgar.Gateway.Hello;
 using Dhadgar.ServiceDefaults.Health;
-using Dhadgar.ServiceDefaults.Logging;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Resilience;
@@ -17,13 +16,16 @@ using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
-using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Dhadgar service defaults with Aspire-compatible patterns
+// Note: Gateway uses custom middleware pipeline, so we only use AddDhadgarServiceDefaults
+// for OpenTelemetry, health checks, and other core services
+builder.AddDhadgarServiceDefaults();
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -62,9 +64,8 @@ builder.Services.AddCircuitBreaker(builder.Configuration);
 // Add Problem Details for standardized error responses
 builder.Services.AddProblemDetails();
 
-// Health checks: liveness (self) + readiness (YARP + Redis)
+// Health checks: add Gateway-specific readiness checks (self/liveness already added by AddDhadgarServiceDefaults)
 var healthChecksBuilder = builder.Services.AddHealthChecks()
-    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<YarpReadinessCheck>("yarp_ready", tags: ["ready"]);
 
 // Add Redis health check for rate limiting cache
@@ -129,70 +130,16 @@ builder.Services.AddHttpClient("OpenApiAggregation")
     .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<OpenApiAggregationService>();
 
-// Register source-generated request logging messages (required by RequestLoggingMiddleware)
-builder.Services.AddSingleton<RequestLoggingMessages>();
-
-// Add Dhadgar logging infrastructure with PII redaction
-builder.Services.AddDhadgarLogging();
-builder.Services.AddOrganizationContext();
-builder.Logging.AddDhadgarLogging("Dhadgar.Gateway", builder.Configuration);
-
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
-Uri? otlpUri = null;
-if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+// Add Gateway-specific OpenTelemetry instrumentation
+// Note: Base OTel configured by AddDhadgarServiceDefaults; here we extend with YARP and circuit breaker
+builder.Services.ConfigureOpenTelemetryTracerProvider(tracing =>
 {
-    if (!Uri.TryCreate(otlpEndpoint, UriKind.Absolute, out otlpUri))
-    {
-        Console.WriteLine($"Warning: Invalid OpenTelemetry:OtlpEndpoint '{otlpEndpoint}'. OTLP export disabled.");
-        otlpUri = null;
-    }
-}
-var resourceBuilder = ResourceBuilder.CreateDefault().AddService("Dhadgar.Gateway");
-
-builder.Logging.AddOpenTelemetry(options =>
-{
-    options.SetResourceBuilder(resourceBuilder);
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
-    options.ParseStateValues = true;
-
-    if (otlpUri is not null)
-    {
-        options.AddOtlpExporter(exporter => exporter.Endpoint = otlpUri);
-    }
+    tracing.AddSource("Yarp.ReverseProxy"); // YARP distributed tracing
 });
-
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddSource("Yarp.ReverseProxy"); // Add YARP distributed tracing
-
-        if (otlpUri is not null)
-        {
-            tracing.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation()
-            .AddMeter("Dhadgar.ServiceDefaults.CircuitBreaker"); // Custom circuit breaker metrics
-
-        if (otlpUri is not null)
-        {
-            metrics.AddOtlpExporter(options => options.Endpoint = otlpUri);
-        }
-        // OTLP export requires explicit endpoint configuration; skipped when not set
-    });
+builder.Services.ConfigureOpenTelemetryMeterProvider(metrics =>
+{
+    metrics.AddMeter("Dhadgar.ServiceDefaults.CircuitBreaker"); // Circuit breaker metrics
+});
 
 // Rate limiting (global + route policies)
 builder.Services.AddRateLimiter(options =>
@@ -359,11 +306,11 @@ app.UseMiddleware<CorrelationMiddleware>();
 // 4. Tenant enrichment (adds TenantId, ServiceName, etc. to logging scope)
 app.UseMiddleware<TenantEnrichmentMiddleware>();
 
-// 5. Problem Details exception handler (catch exceptions early)
-app.UseMiddleware<ProblemDetailsMiddleware>();
-
-// 6. Request logging (wraps downstream pipeline with full context)
+// 5. Request logging (wraps downstream pipeline - logs requests even when exceptions occur)
 app.UseMiddleware<RequestLoggingMiddleware>();
+
+// 6. Problem Details exception handler (after logging so exceptions are logged first)
+app.UseMiddleware<ProblemDetailsMiddleware>();
 
 // 6. CORS (for non-preflight requests)
 app.UseCors(CorsConfiguration.PolicyName);
