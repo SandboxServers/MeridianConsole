@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Dhadgar.Contracts.Servers;
 
 /// <summary>
@@ -25,7 +27,7 @@ public record CreateServerRequest(
     int DiskLimitMb,
     Guid? TemplateId,
     string? StartupCommand,
-    Dictionary<string, object>? GameSettings,
+    Dictionary<string, JsonElement>? GameSettings,
     bool AutoStart,
     bool AutoRestartOnCrash,
     IReadOnlyList<CreateServerPortRequest>? Ports,
@@ -72,7 +74,7 @@ public record UpdateServerRequest(
 /// <param name="JavaFlags">Java-specific flags for JVM-based servers.</param>
 public record UpdateServerConfigurationRequest(
     string? StartupCommand,
-    Dictionary<string, object>? GameSettings,
+    Dictionary<string, JsonElement>? GameSettings,
     Dictionary<string, string>? EnvironmentVariables,
     bool? AutoStart,
     bool? AutoRestartOnCrash,
@@ -117,7 +119,7 @@ public record CreateServerTemplateRequest(
     int DefaultMemoryLimitMb,
     int DefaultDiskLimitMb,
     string? DefaultStartupCommand,
-    Dictionary<string, object>? DefaultGameSettings,
+    Dictionary<string, JsonElement>? DefaultGameSettings,
     Dictionary<string, string>? DefaultEnvironmentVariables,
     string? DefaultJavaFlags,
     IReadOnlyList<CreateServerPortRequest>? DefaultPorts);
@@ -134,7 +136,7 @@ public record UpdateServerTemplateRequest(
     int? DefaultMemoryLimitMb,
     int? DefaultDiskLimitMb,
     string? DefaultStartupCommand,
-    Dictionary<string, object>? DefaultGameSettings,
+    Dictionary<string, JsonElement>? DefaultGameSettings,
     Dictionary<string, string>? DefaultEnvironmentVariables,
     string? DefaultJavaFlags,
     IReadOnlyList<CreateServerPortRequest>? DefaultPorts);

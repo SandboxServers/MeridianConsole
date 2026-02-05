@@ -85,7 +85,7 @@ Like all Meridian Console services, Mods operates in a multi-tenant environment:
 
 **Status: Alpha**
 
-The Mods service has core functionality implemented including mod registry, semantic versioning with range parsing, dependency resolution, compatibility tracking, and download management.
+The Mods service has core entities and semantic versioning implemented. Dependency resolution (service layer), download tracking endpoints, and Files service integration are not yet implemented.
 
 ### What Exists Today
 
@@ -97,10 +97,10 @@ The Mods service has core functionality implemented including mod registry, sema
 | Database Context | Complete | `ModsDbContext` with full entity mapping and migrations |
 | Mod CRUD | Complete | Org-scoped mod management endpoints |
 | Version Management | Complete | Semantic versioning with range parsing (npm-style: ^1.0.0, ~2.1.0) |
-| Dependency Resolution | Complete | Inter-mod dependency tracking and resolution |
+| Dependency Filtering | Partial | `VersionRangeParser` for filtering; full resolution service not implemented |
 | Compatibility Tracking | Complete | Game version compatibility matrix |
-| Category Management | Complete | Mod categorization system |
-| Download Tracking | Complete | Track mod downloads per version |
+| Category Management | Partial | `ModCategory` entity exists; CRUD endpoints not implemented |
+| Download Tracking | Partial | `ModDownload` entity exists; download endpoint not implemented |
 | OpenTelemetry | Complete | Tracing, metrics, and logging instrumentation |
 | Swagger/OpenAPI | Complete | API documentation at `/swagger` |
 | Middleware | Complete | Correlation tracking, problem details, request logging |
@@ -111,7 +111,7 @@ The Mods service has core functionality implemented including mod registry, sema
 
 | Feature | Priority | Description |
 |---------|----------|-------------|
-| Files Integration | Medium | Coordination with Files service for mod distribution |
+| Files Integration | **Critical** | Mods download + Files service integration required before production |
 | Search & Discovery | Medium | Full-text search and advanced filtering |
 | Messaging Consumers | Medium | MassTransit event handlers for async workflows |
 | Caching | Low | Redis caching for catalog queries |

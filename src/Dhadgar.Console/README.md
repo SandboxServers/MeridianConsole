@@ -181,16 +181,35 @@ You can test the SignalR hub using a simple JavaScript client:
 const signalR = require("@microsoft/signalr");
 
 const connection = new signalR.HubConnectionBuilder()
-  .withUrl("http://localhost:5070/hubs/console")
+  .withUrl("http://localhost:5070/hubs/console", {
+    accessTokenFactory: () => "your-jwt-token"
+  })
   .build();
 
-connection.on("pong", () => {
-  console.log("Received pong!");
+// Listen for console output
+connection.on("output", (data) => {
+  console.log(`[${data.type}] ${data.content}`);
+});
+
+// Listen for command results
+connection.on("commandResult", (result) => {
+  console.log("Command dispatched:", result);
 });
 
 await connection.start();
-await connection.invoke("Ping");
-// Console logs: "Received pong!"
+
+// Join a server's console session
+await connection.invoke("JoinServer", {
+  serverId: "your-server-guid",
+  organizationId: "your-org-guid",
+  historyLines: 100
+});
+
+// Send a command to the server
+await connection.invoke("SendCommand", {
+  serverId: "your-server-guid",
+  command: "help"
+});
 ```
 
 ---
@@ -268,23 +287,35 @@ This ensures that once a client connects to a Console service instance, subseque
 
 **Endpoint**: `/hubs/console`
 
-The current implementation is a minimal scaffold:
+The ConsoleHub is fully implemented with the following methods:
 
-```csharp
-public sealed class ConsoleHub : Hub
-{
-    public Task Ping() => Clients.Caller.SendAsync("pong");
-}
-```
+| Method | Description |
+|--------|-------------|
+| `JoinServer(request)` | Join a server's console session, validates org membership, returns history |
+| `LeaveServer(request)` | Leave a server's console session |
+| `SendCommand(request)` | Execute a command via MassTransit dispatch, validates session |
+| `RequestHistory(request)` | Request console history for a connected server |
+| `Ping()` | Basic connectivity test (returns "pong") |
 
-This provides:
+**Key Integrations**:
 
-- Basic connectivity testing between clients and the hub
-- Foundation for adding real console functionality
+- **Session Management**: Redis-backed via `IConsoleSessionManager` with distributed locking
+- **Command Dispatch**: MassTransit integration via `ICommandDispatcher` with audit logging
+- **History Service**: Hot/cold storage via `IConsoleHistoryService` (Redis + PostgreSQL)
+- **Tenant Isolation**: All operations validate organization membership via JWT claims
 
-### Planned Hub Methods
+**Client Events**:
 
-The following hub methods are planned for implementation:
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `joined` | `serverId` | Confirmation of successful join |
+| `left` | `serverId` | Confirmation of successful leave |
+| `output` | `ConsoleOutputDto` | Console output broadcast to group |
+| `history` | `ConsoleHistoryDto` | Historical console entries |
+| `commandResult` | `CommandResultDto` | Result of command dispatch |
+| `error` | `string` | Error message |
+
+### Additional Hub Methods (Planned)
 
 #### Server Methods (Client-to-Server)
 
