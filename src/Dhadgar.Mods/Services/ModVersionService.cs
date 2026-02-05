@@ -24,10 +24,20 @@ public sealed class ModVersionService : IModVersionService
     }
 
     public async Task<ServiceResult<ModVersionDetail>> GetVersionAsync(
+        Guid organizationId,
         Guid modId,
         Guid versionId,
         CancellationToken ct = default)
     {
+        // Validate mod belongs to organization
+        var modExists = await _db.Mods.AnyAsync(
+            m => m.Id == modId && m.OrganizationId == organizationId, ct);
+
+        if (!modExists)
+        {
+            return ServiceResult.Fail<ModVersionDetail>("mod_not_found");
+        }
+
         var version = await _db.ModVersions
             .Include(v => v.Dependencies).ThenInclude(d => d.DependsOnMod)
             .Include(v => v.Incompatibilities).ThenInclude(i => i.IncompatibleWithMod)
@@ -42,10 +52,20 @@ public sealed class ModVersionService : IModVersionService
     }
 
     public async Task<ServiceResult<ModVersionDetail>> GetLatestVersionAsync(
+        Guid organizationId,
         Guid modId,
         bool includePrerelease = false,
         CancellationToken ct = default)
     {
+        // Validate mod belongs to organization
+        var modExists = await _db.Mods.AnyAsync(
+            m => m.Id == modId && m.OrganizationId == organizationId, ct);
+
+        if (!modExists)
+        {
+            return ServiceResult.Fail<ModVersionDetail>("mod_not_found");
+        }
+
         var query = _db.ModVersions
             .Include(v => v.Dependencies).ThenInclude(d => d.DependsOnMod)
             .Include(v => v.Incompatibilities).ThenInclude(i => i.IncompatibleWithMod)
@@ -192,7 +212,7 @@ public sealed class ModVersionService : IModVersionService
             version.Version, modId);
 
         // Reload with navigation properties
-        var result = await GetVersionAsync(modId, version.Id, ct);
+        var result = await GetVersionAsync(organizationId, modId, version.Id, ct);
         return result;
     }
 
@@ -262,11 +282,21 @@ public sealed class ModVersionService : IModVersionService
         return ServiceResult.Ok(true);
     }
 
-    public async Task<IReadOnlyList<ModVersionSummary>> FindVersionsMatchingAsync(
+    public async Task<ServiceResult<IReadOnlyList<ModVersionSummary>>> FindVersionsMatchingAsync(
+        Guid organizationId,
         Guid modId,
         string? constraint,
         CancellationToken ct = default)
     {
+        // Validate mod belongs to organization
+        var modExists = await _db.Mods.AnyAsync(
+            m => m.Id == modId && m.OrganizationId == organizationId, ct);
+
+        if (!modExists)
+        {
+            return ServiceResult.Fail<IReadOnlyList<ModVersionSummary>>("mod_not_found");
+        }
+
         var versions = await _db.ModVersions
             .Where(v => v.ModId == modId && !v.IsDeprecated)
             .OrderByDescending(v => v.Major)
@@ -276,8 +306,9 @@ public sealed class ModVersionService : IModVersionService
 
         if (string.IsNullOrEmpty(constraint))
         {
-            return versions.Select(v => new ModVersionSummary(
+            var allVersions = versions.Select(v => new ModVersionSummary(
                 v.Id, v.Version, v.IsPrerelease, v.DownloadCount, v.PublishedAt)).ToList();
+            return ServiceResult.Ok<IReadOnlyList<ModVersionSummary>>(allVersions);
         }
 
         var matching = versions
@@ -291,7 +322,7 @@ public sealed class ModVersionService : IModVersionService
                 v.Id, v.Version, v.IsPrerelease, v.DownloadCount, v.PublishedAt))
             .ToList();
 
-        return matching;
+        return ServiceResult.Ok<IReadOnlyList<ModVersionSummary>>(matching);
     }
 
     private static ModVersionDetail MapToDetail(ModVersion version)

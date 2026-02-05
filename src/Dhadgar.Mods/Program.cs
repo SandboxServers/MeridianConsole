@@ -62,10 +62,11 @@ builder.Services.AddMassTransit(x =>
         options.Tags.Add("messaging");
     });
 
-    // Configure Entity Framework Core outbox
+    // Configure Entity Framework Core outbox with bus outbox for transactional publishing
     x.AddEntityFrameworkOutbox<ModsDbContext>(o =>
     {
         o.UsePostgres();
+        o.UseBusOutbox();
         o.DisableInboxCleanupService();
         o.QueryDelay = TimeSpan.FromSeconds(1);
     });

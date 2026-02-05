@@ -8,6 +8,7 @@ public interface IModVersionService
     /// Gets a specific version of a mod.
     /// </summary>
     Task<ServiceResult<ModVersionDetail>> GetVersionAsync(
+        Guid organizationId,
         Guid modId,
         Guid versionId,
         CancellationToken ct = default);
@@ -16,6 +17,7 @@ public interface IModVersionService
     /// Gets the latest version of a mod.
     /// </summary>
     Task<ServiceResult<ModVersionDetail>> GetLatestVersionAsync(
+        Guid organizationId,
         Guid modId,
         bool includePrerelease = false,
         CancellationToken ct = default);
@@ -42,7 +44,8 @@ public interface IModVersionService
     /// <summary>
     /// Finds versions matching a constraint.
     /// </summary>
-    Task<IReadOnlyList<ModVersionSummary>> FindVersionsMatchingAsync(
+    Task<ServiceResult<IReadOnlyList<ModVersionSummary>>> FindVersionsMatchingAsync(
+        Guid organizationId,
         Guid modId,
         string? constraint,
         CancellationToken ct = default);

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Dhadgar.Mods.Data.Entities;
 
 /// <summary>
@@ -24,6 +26,7 @@ public sealed class ModDownload
     public DateTime DownloadedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>IP address hash (for abuse detection, not tracking).</summary>
+    [MaxLength(IpAddressHashMaxLength)]
     public string? IpAddressHash { get; set; }
 
     public const int IpAddressHashMaxLength = 64;

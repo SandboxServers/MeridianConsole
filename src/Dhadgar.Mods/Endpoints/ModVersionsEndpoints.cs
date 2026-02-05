@@ -54,8 +54,14 @@ public static class ModVersionsEndpoints
         string? constraint = null,
         CancellationToken ct = default)
     {
-        var versions = await versionService.FindVersionsMatchingAsync(modId, constraint, ct);
-        return Results.Ok(versions);
+        var result = await versionService.FindVersionsMatchingAsync(organizationId, modId, constraint, ct);
+
+        if (!result.Success)
+        {
+            return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
+        }
+
+        return Results.Ok(result.Value);
     }
 
     private static async Task<IResult> GetLatestVersion(
@@ -65,7 +71,7 @@ public static class ModVersionsEndpoints
         bool includePrerelease = false,
         CancellationToken ct = default)
     {
-        var result = await versionService.GetLatestVersionAsync(modId, includePrerelease, ct);
+        var result = await versionService.GetLatestVersionAsync(organizationId, modId, includePrerelease, ct);
 
         if (!result.Success)
         {
@@ -82,7 +88,7 @@ public static class ModVersionsEndpoints
         IModVersionService versionService,
         CancellationToken ct = default)
     {
-        var result = await versionService.GetVersionAsync(modId, versionId, ct);
+        var result = await versionService.GetVersionAsync(organizationId, modId, versionId, ct);
 
         if (!result.Success)
         {

@@ -48,8 +48,9 @@ public sealed class ModVersionConfiguration : IEntityTypeConfiguration<ModVersio
         builder.HasIndex(v => v.ModId)
             .HasDatabaseName("ix_mod_versions_mod");
 
-        // Index for latest version queries
+        // Index for latest version queries - unique to enforce single latest per mod
         builder.HasIndex(v => new { v.ModId, v.IsLatest })
+            .IsUnique()
             .HasFilter("\"IsLatest\" = true")
             .HasDatabaseName("ix_mod_versions_latest");
 

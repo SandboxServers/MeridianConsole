@@ -23,9 +23,11 @@ public sealed class ServerPort : BaseEntity
     public string Protocol { get; set; } = "tcp";
 
     /// <summary>Port number inside the container/process (1-65535).</summary>
+    [Range(MinPort, MaxPort)]
     public int InternalPort { get; set; }
 
     /// <summary>Port number exposed externally (may differ from internal, 1-65535).</summary>
+    [Range(MinPort, MaxPort)]
     public int ExternalPort { get; set; }
 
     /// <summary>Minimum valid port number.</summary>

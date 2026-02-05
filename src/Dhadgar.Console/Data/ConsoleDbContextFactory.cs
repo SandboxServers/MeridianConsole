@@ -19,7 +19,10 @@ public sealed class ConsoleDbContextFactory : IDesignTimeDbContextFactory<Consol
             .Build();
 
         var connectionString = configuration.GetConnectionString("Postgres")
-            ?? "Host=localhost;Database=dhadgar_console;Username=dhadgar;Password=dhadgar";
+            ?? Environment.GetEnvironmentVariable("DHADGAR_CONSOLE_CONNECTION")
+            ?? throw new InvalidOperationException(
+                "Database connection string not configured. " +
+                "Set 'ConnectionStrings:Postgres' in appsettings.json or DHADGAR_CONSOLE_CONNECTION environment variable.");
 
         var optionsBuilder = new DbContextOptionsBuilder<ConsoleDbContext>();
         optionsBuilder.UseNpgsql(connectionString);
