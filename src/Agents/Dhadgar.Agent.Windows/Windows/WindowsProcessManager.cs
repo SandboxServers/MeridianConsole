@@ -709,8 +709,12 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
 
         if (argvPtr == IntPtr.Zero)
         {
-            // If the native API fails, fall back to basic splitting
-            // This should rarely happen, but provides a safety net
+            // If the native API fails, fall back to basic splitting.
+            // WARNING: This fallback does NOT handle quoted arguments (e.g., "path with spaces").
+            // This should rarely happen as CommandLineToArgvW is very reliable.
+            System.Diagnostics.Debug.WriteLine(
+                $"CommandLineToArgvW failed for command line, falling back to basic space-splitting. " +
+                "Quoted arguments will not be parsed correctly.");
             return [.. commandLine.Split(' ', StringSplitOptions.RemoveEmptyEntries)];
         }
 

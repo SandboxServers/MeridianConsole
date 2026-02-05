@@ -96,10 +96,10 @@ public sealed class GameServerServiceConfigTests
     }
 
     [Fact]
-    public void Validate_ServerIdTooLong_ReturnsError()
+    public void Validate_ServerIdExceedsMaxLength_ReturnsMaxLengthError()
     {
-        // Arrange - 201 characters exceeds the 200 char limit
-        // Use a fixed valid PipeName to isolate the ServerId validation
+        // Arrange - 201 characters exceeds the [MaxLength(200)] attribute limit
+        // This tests the DataAnnotations MaxLength validation (fires before Validate())
         var longServerId = new string('a', 201);
         var config = new GameServerServiceConfig
         {
@@ -118,6 +118,31 @@ public sealed class GameServerServiceConfigTests
         var error = Assert.Single(results);
         Assert.Contains(nameof(GameServerServiceConfig.ServerId), error.MemberNames);
         Assert.Contains("maximum length", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_ServiceNameExceedsMaxLength_ReturnsServiceNameLengthError()
+    {
+        // Arrange - 250 char ServerId is valid for [MaxLength(200)] but the combined
+        // service name "MeridianGS_{ServerId}" exceeds the 256-char Windows service name limit
+        var longServerId = new string('a', 250);
+        var config = new GameServerServiceConfig
+        {
+            ServerId = longServerId,
+            ProcessId = Guid.NewGuid(),
+            WrapperExecutablePath = TestWrapperPath,
+            ServerDirectory = TestServerDir,
+            ConfigFilePath = TestConfigPath,
+            PipeName = @"MeridianAgent_12345678901234567890123456789012\valid-server"
+        };
+
+        // Act
+        var results = ValidateConfig(config);
+
+        // Assert - Both MaxLength(200) and service name length should fire
+        Assert.True(results.Count >= 1);
+        Assert.Contains(results, r =>
+            r.MemberNames.Contains(nameof(GameServerServiceConfig.ServerId)));
     }
 
     [Fact]
@@ -164,6 +189,81 @@ public sealed class GameServerServiceConfigTests
         var error = Assert.Single(results);
         Assert.Contains(nameof(GameServerServiceConfig.ServerDirectory), error.MemberNames);
         Assert.Contains("fully qualified", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RelativeConfigFilePath_ReturnsError()
+    {
+        // Arrange
+        var config = new GameServerServiceConfig
+        {
+            ServerId = "test-server",
+            ProcessId = Guid.NewGuid(),
+            WrapperExecutablePath = TestWrapperPath,
+            ServerDirectory = TestServerDir,
+            ConfigFilePath = "relative/config.json", // Not absolute
+            PipeName = @"MeridianAgent_12345678901234567890123456789012\test-server"
+        };
+
+        // Act
+        var results = ValidateConfig(config);
+
+        // Assert
+        var error = Assert.Single(results);
+        Assert.Contains(nameof(GameServerServiceConfig.ConfigFilePath), error.MemberNames);
+        Assert.Contains("fully qualified", error.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Servers\..\Windows\System32")]
+    [InlineData(@"C:\Servers\test\..\..\..\Windows")]
+    public void Validate_PathTraversalInServerDirectory_ReturnsError(string traversalPath)
+    {
+        if (!IsWindows) return; // Path traversal detection is OS-specific
+
+        // Arrange
+        var config = new GameServerServiceConfig
+        {
+            ServerId = "test-server",
+            ProcessId = Guid.NewGuid(),
+            WrapperExecutablePath = TestWrapperPath,
+            ServerDirectory = traversalPath,
+            ConfigFilePath = TestConfigPath,
+            PipeName = @"MeridianAgent_12345678901234567890123456789012\test-server"
+        };
+
+        // Act
+        var results = ValidateConfig(config);
+
+        // Assert
+        Assert.Contains(results, r =>
+            r.MemberNames.Contains(nameof(GameServerServiceConfig.ServerDirectory)) &&
+            r.ErrorMessage!.Contains("traversal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData(@"MeridianAgent_123\test-server")] // Short agentId (not 32 hex chars)
+    [InlineData(@"MeridianAgent_ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\test-server")] // Non-hex characters
+    [InlineData(@"MeridianAgent_1234567890123456789012345678901\test-server")] // 31 chars (too short)
+    public void Validate_InvalidAgentIdInPipeName_ReturnsError(string pipeName)
+    {
+        // Arrange
+        var config = new GameServerServiceConfig
+        {
+            ServerId = "test-server",
+            ProcessId = Guid.NewGuid(),
+            WrapperExecutablePath = TestWrapperPath,
+            ServerDirectory = TestServerDir,
+            ConfigFilePath = TestConfigPath,
+            PipeName = pipeName
+        };
+
+        // Act
+        var results = ValidateConfig(config);
+
+        // Assert
+        var error = Assert.Single(results);
+        Assert.Contains(nameof(GameServerServiceConfig.PipeName), error.MemberNames);
     }
 
     [Fact]

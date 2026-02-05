@@ -69,7 +69,7 @@ public static class Program
 
                 // Use ServerBasePath as the allowed root (fail-closed security)
                 var allowedRoots = new List<string>();
-                if (!string.IsNullOrEmpty(agentOptions.Process.ServerBasePath))
+                if (!string.IsNullOrWhiteSpace(agentOptions.Process.ServerBasePath))
                 {
                     allowedRoots.Add(agentOptions.Process.ServerBasePath);
                 }
@@ -126,8 +126,8 @@ public static class Program
         }
         catch (Exception ex)
         {
-            // Output full exception for diagnostics, not just Message
-            Console.Error.WriteLine($"Fatal error: {ex}");
+            // Log type + message only; ex.ToString() can embed config values or tokens
+            Console.Error.WriteLine($"Fatal error: {ex.GetType().Name}: {ex.Message}");
             return 1;
         }
     }

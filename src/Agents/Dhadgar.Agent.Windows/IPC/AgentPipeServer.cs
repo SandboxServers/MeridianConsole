@@ -166,7 +166,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <inheritdoc />
     public async Task StopAsync()
     {
-        if (!_started)
+        if (!_started || _disposed)
         {
             return;
         }
@@ -461,6 +461,9 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
                 // Store connection (replaces any existing)
                 if (_connections.TryRemove(serverId, out var oldConnection))
                 {
+                    // Unwire events before disposing to prevent handler races
+                    oldConnection.MessageReceived -= OnMessageReceived;
+                    oldConnection.Disconnected -= OnConnectionDisconnected;
                     await oldConnection.DisposeAsync().ConfigureAwait(false);
                 }
 
@@ -521,9 +524,10 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             AccessControlType.Allow));
 
         // Grant the specific game server's service account read/write access
-        // SECURITY: We use NTAccount which validates the account exists.
-        // If the account doesn't exist yet, we still add the rule - Windows will
-        // resolve it when the service starts and the VSA is created.
+        // SECURITY: NTAccount constructor accepts the name but does NOT validate existence.
+        // However, NTAccount.Translate() or ACL application will throw IdentityNotMappedException
+        // if the account doesn't exist. For Virtual Service Accounts, the account is created
+        // when the service first starts, so this may throw if called before service creation.
         var serviceAccount = new NTAccount(serviceAccountName);
         security.AddAccessRule(new PipeAccessRule(
             serviceAccount,
@@ -675,13 +679,21 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <summary>
     /// Handles connection disconnection.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership transferred to DisposeConnectionAsync")]
     private void OnConnectionDisconnected(object? sender, PipeDisconnectedEventArgs e)
     {
         _logger.LogInformation(
             "Server {ServerId} disconnected from pipe",
             e.ServerId);
 
-        _connections.TryRemove(e.ServerId, out _);
+        if (_connections.TryRemove(e.ServerId, out var connection))
+        {
+            // Dispose the connection to release pipe handle and semaphore
+            _ = DisposeConnectionAsync(connection);
+        }
 
         // Notify status changed to stopped
         try

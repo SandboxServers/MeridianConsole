@@ -409,13 +409,15 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         }
         catch (IdentityNotMappedException ex)
         {
-            // Account doesn't exist yet - this is expected for Virtual Service Accounts
-            // before the service has been started
-            _logger.LogDebug(
+            // Account doesn't exist yet - returning failure because the deny rule was NOT applied.
+            // Returning success would signal the directory is protected when it isn't.
+            _logger.LogWarning(
                 ex,
-                "Service account {Account} not yet mapped, deny rule will be ineffective until service starts",
-                serviceAccountName);
-            return Result.Success();
+                "Service account {Account} not yet mapped - deny rule could not be applied. Directory {Path} is not protected from this account.",
+                serviceAccountName, directoryPath);
+            return Result.Failure(
+                $"[ACL.AccountNotMapped] Service account '{serviceAccountName}' not yet mapped - deny rule not applied. " +
+                "Directory is not protected from this account until the service has been started.");
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -554,8 +556,10 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
 
             return new SecurityIdentifier(sidString);
         }
-        catch
+        catch (Exception ex)
         {
+            // Log for debugging - bare catch previously hid programming errors
+            System.Diagnostics.Debug.WriteLine($"Failed to compute VSA SID for '{serviceName}': {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
@@ -588,17 +592,13 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         }
 
         // Check for path traversal attempts
-        if (!normalizedPath.Equals(directoryPath, StringComparison.OrdinalIgnoreCase) &&
-            !normalizedPath.Equals(directoryPath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
-        {
-            // Allow trailing separator differences but block traversal
-            var normalizedWithoutTrailing = normalizedPath.TrimEnd(Path.DirectorySeparatorChar);
-            var inputWithoutTrailing = directoryPath.TrimEnd(Path.DirectorySeparatorChar);
+        // Trim both directory separators to handle mixed separators (e.g., "C:\Servers/sub")
+        var normalizedTrimmed = normalizedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var inputTrimmed = directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-            if (!normalizedWithoutTrailing.Equals(inputWithoutTrailing, StringComparison.OrdinalIgnoreCase))
-            {
-                return Result.Failure("[ACL.PathTraversal] Path traversal detected in directory path");
-            }
+        if (!normalizedTrimmed.Equals(inputTrimmed, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure("[ACL.PathTraversal] Path traversal detected in directory path");
         }
 
         // Check against allowed roots (required - fail-closed security)

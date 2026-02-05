@@ -19,8 +19,9 @@
     Upgrade:
       msiexec /i MeridianConsoleAgent-NewVersion.msi /quiet                        - In-place upgrade
 
-    Uninstall:
-      msiexec /x {8A3B4E6F-1D2C-4A5B-9E0F-7C8D6B5A4E3F} /quiet                    - By UpgradeCode
+    Uninstall (use ProductCode, not UpgradeCode - msiexec /x only accepts ProductCode or MSI path):
+      msiexec /x {ProductCode-GUID} /quiet                                          - By ProductCode
+      To find ProductCode: wmic product where "Name='Meridian Console Agent'" get IdentifyingNumber
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
@@ -38,7 +39,8 @@
            Codepage="1252"
            Scope="perMachine"
            InstallerVersion="500"
-           Compressed="yes">
+           Compressed="yes"
+           Platform="x64">
 
     <!-- Summary Information -->
     <SummaryInformation Keywords="Installer,MSI"
