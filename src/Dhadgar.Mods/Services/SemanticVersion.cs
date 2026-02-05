@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Dhadgar.Mods.Services;
@@ -146,11 +147,11 @@ public sealed partial class SemanticVersion : IComparable<SemanticVersion>
 
     public override string ToString()
     {
-        var version = $"{Major}.{Minor}.{Patch}";
+        var version = string.Format(CultureInfo.InvariantCulture, "{0}.{1}.{2}", Major, Minor, Patch);
         if (!string.IsNullOrEmpty(Prerelease))
-            version += $"-{Prerelease}";
+            version = string.Concat(version, "-", Prerelease);
         if (!string.IsNullOrEmpty(BuildMetadata))
-            version += $"+{BuildMetadata}";
+            version = string.Concat(version, "+", BuildMetadata);
         return version;
     }
 

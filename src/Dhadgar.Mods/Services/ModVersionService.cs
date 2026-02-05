@@ -12,15 +12,18 @@ public sealed class ModVersionService : IModVersionService
     private readonly ModsDbContext _db;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<ModVersionService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public ModVersionService(
         ModsDbContext db,
         IPublishEndpoint publishEndpoint,
-        ILogger<ModVersionService> logger)
+        ILogger<ModVersionService> logger,
+        TimeProvider timeProvider)
     {
         _db = db;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async Task<ServiceResult<ModVersionDetail>> GetVersionAsync(
@@ -169,7 +172,7 @@ public sealed class ModVersionService : IModVersionService
             MaxGameVersion = request.MaxGameVersion,
             IsPrerelease = request.IsPrerelease,
             IsLatest = shouldBeLatest,
-            PublishedAt = DateTime.UtcNow
+            PublishedAt = _timeProvider.GetUtcNow().UtcDateTime
         };
 
         // Add dependencies
@@ -206,7 +209,7 @@ public sealed class ModVersionService : IModVersionService
             version.Version,
             version.IsPrerelease,
             version.IsLatest,
-            DateTimeOffset.UtcNow), ct);
+            _timeProvider.GetUtcNow()), ct);
 
         _logger.LogInformation("Published version {Version} for mod {ModId}",
             version.Version, modId);
@@ -274,7 +277,7 @@ public sealed class ModVersionService : IModVersionService
             version.Version,
             request.Reason,
             request.RecommendedVersionId,
-            DateTimeOffset.UtcNow), ct);
+            _timeProvider.GetUtcNow()), ct);
 
         _logger.LogInformation("Deprecated version {Version} for mod {ModId}: {Reason}",
             version.Version, modId, request.Reason);

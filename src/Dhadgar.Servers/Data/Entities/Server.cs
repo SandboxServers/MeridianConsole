@@ -11,7 +11,7 @@ namespace Dhadgar.Servers.Data.Entities;
 /// <summary>
 /// Primary entity representing a game server instance.
 /// </summary>
-public sealed class Server : BaseEntity
+public sealed class Server : BaseEntity, ITenantScoped
 {
     /// <summary>Organization that owns this server.</summary>
     public Guid OrganizationId { get; set; }
@@ -40,12 +40,15 @@ public sealed class Server : BaseEntity
     public ServerPowerState PowerState { get; set; } = ServerPowerState.Off;
 
     /// <summary>CPU limit in millicores (1000 = 1 CPU core).</summary>
+    [Range(1, int.MaxValue, ErrorMessage = "CPU limit must be at least 1 millicore")]
     public int CpuLimitMillicores { get; set; }
 
     /// <summary>Memory limit in megabytes.</summary>
+    [Range(1, int.MaxValue, ErrorMessage = "Memory limit must be at least 1 MB")]
     public int MemoryLimitMb { get; set; }
 
     /// <summary>Disk space limit in megabytes.</summary>
+    [Range(1, int.MaxValue, ErrorMessage = "Disk limit must be at least 1 MB")]
     public int DiskLimitMb { get; set; }
 
     /// <summary>Capacity reservation token from the Nodes service.</summary>

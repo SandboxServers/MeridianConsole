@@ -37,6 +37,7 @@ builder.Services.AddDbContext<ModsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 // Register services
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IModService, ModService>();
 builder.Services.AddScoped<IModVersionService, ModVersionService>();
 
