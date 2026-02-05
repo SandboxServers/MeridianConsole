@@ -63,13 +63,14 @@ What goes where (services can only reference these, not each other):
 - `Servers` - Game server lifecycle with 13-state machine, templates (PostgreSQL)
 - `Console` - Real-time server console via SignalR, command dispatch (PostgreSQL + Redis)
 - `Mods` - Mod registry with semantic versioning, dependency resolution (PostgreSQL)
+- `BetterAuth` - Passwordless authentication via Better Auth SDK (PostgreSQL shared with Identity)
 
 Note: Core services have working foundations but contain scaffolded endpoints and incomplete features.
 
 **Stubs** (scaffolding only, functionality planned):
 
 - With Database: Billing, Tasks, Files, Notifications
-- Stateless: Discord, BetterAuth
+- Stateless: Discord
 
 **Frontend Apps** (Astro/React/Tailwind):
 

@@ -93,7 +93,14 @@ The Mods service has core functionality implemented including mod registry, sema
 |-----------|--------|-------------|
 | Project Structure | Complete | Standard ASP.NET Core Minimal API layout |
 | Health Endpoints | Complete | `/healthz`, `/livez`, `/readyz` probes |
-| Database Context | Scaffolded | `ModsDbContext` with placeholder `SampleEntity` |
+| Database Entities | Complete | `Mod`, `ModVersion`, `ModCategory`, `ModDependency`, `ModDownload` entities |
+| Database Context | Complete | `ModsDbContext` with full entity mapping and migrations |
+| Mod CRUD | Complete | Org-scoped mod management endpoints |
+| Version Management | Complete | Semantic versioning with range parsing (npm-style: ^1.0.0, ~2.1.0) |
+| Dependency Resolution | Complete | Inter-mod dependency tracking and resolution |
+| Compatibility Tracking | Complete | Game version compatibility matrix |
+| Category Management | Complete | Mod categorization system |
+| Download Tracking | Complete | Track mod downloads per version |
 | OpenTelemetry | Complete | Tracing, metrics, and logging instrumentation |
 | Swagger/OpenAPI | Complete | API documentation at `/swagger` |
 | Middleware | Complete | Correlation tracking, problem details, request logging |
@@ -104,13 +111,9 @@ The Mods service has core functionality implemented including mod registry, sema
 
 | Feature | Priority | Description |
 |---------|----------|-------------|
-| Mod Entity & CRUD | High | Core mod management APIs |
-| Version Management | High | Mod version tracking and release channels |
-| Compatibility Matrix | High | Game version and mod compatibility tracking |
-| Dependency Resolution | Medium | Mod dependency and conflict detection |
-| Search & Discovery | Medium | Full-text search and filtering |
-| Files Integration | Medium | Coordination with Files service for distribution |
-| Messaging Consumers | Medium | MassTransit event handlers |
+| Files Integration | Medium | Coordination with Files service for mod distribution |
+| Search & Discovery | Medium | Full-text search and advanced filtering |
+| Messaging Consumers | Medium | MassTransit event handlers for async workflows |
 | Caching | Low | Redis caching for catalog queries |
 | Audit Logging | Low | Track changes to mods and versions |
 

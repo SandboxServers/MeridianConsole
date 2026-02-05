@@ -83,28 +83,27 @@ The Console service is the real-time communication backbone for interactive game
 
 ### What Exists Today
 
-| Component        | Status      | Description                                                     |
-| ---------------- | ----------- | --------------------------------------------------------------- |
-| `Program.cs`     | Implemented | ASP.NET Core application with SignalR configured                |
-| `ConsoleHub.cs`  | Scaffolding | Basic SignalR hub with `Ping()`/`pong` for connectivity testing |
-| `Hello.cs`       | Implemented | Static hello message for smoke tests                            |
-| Health Endpoints | Implemented | `/healthz`, `/livez`, `/readyz` via ServiceDefaults             |
-| Swagger UI       | Implemented | OpenAPI documentation at `/swagger`                             |
-| OpenTelemetry    | Implemented | Tracing, metrics, and logging configured                        |
-| Docker Support   | Implemented | Both development and pipeline Dockerfiles                       |
-| Test Project     | Implemented | Basic hello and Swagger tests                                   |
+| Component             | Status      | Description                                                           |
+| --------------------- | ----------- | --------------------------------------------------------------------- |
+| `Program.cs`          | Implemented | ASP.NET Core application with SignalR, Redis, MassTransit configured  |
+| `ConsoleHub.cs`       | Implemented | SignalR hub with JoinServer, LeaveServer, SendCommand methods         |
+| Session Management    | Implemented | Redis-backed console session tracking with distributed locking        |
+| Console History       | Implemented | Hot/cold storage pattern with Redis (recent) and PostgreSQL (archive) |
+| Command Dispatch      | Implemented | Command execution via MassTransit with audit logging                  |
+| Health Endpoints      | Implemented | `/healthz`, `/livez`, `/readyz` via ServiceDefaults                   |
+| Swagger UI            | Implemented | OpenAPI documentation at `/swagger`                                   |
+| OpenTelemetry         | Implemented | Tracing, metrics, and logging configured                              |
+| Docker Support        | Implemented | Both development and pipeline Dockerfiles                             |
+| Test Project          | Implemented | Unit and integration tests with WebApplicationFactory                 |
 
 ### What is Planned
 
-| Feature            | Priority | Description                                 |
-| ------------------ | -------- | ------------------------------------------- |
-| Output Streaming   | High     | Stream game server stdout/stderr to clients |
-| Command Execution  | High     | Execute commands on game servers            |
-| Session Management | High     | Track connected clients per server          |
-| History Storage    | Medium   | Persist console output for retrieval        |
-| Access Control     | Medium   | Role-based command permissions              |
-| Rate Limiting      | Medium   | Prevent command flooding                    |
-| Recording/Playback | Low      | Record and playback console sessions        |
+| Feature                    | Priority | Description                                         |
+| -------------------------- | -------- | --------------------------------------------------- |
+| Agent Response Consumers   | High     | MassTransit consumers for agent output events       |
+| Rate Limiting              | Medium   | Prevent command flooding per user/server            |
+| Recording/Playback         | Low      | Record and playback console sessions                |
+| Advanced Access Control    | Low      | Fine-grained command permissions                    |
 
 ---
 
