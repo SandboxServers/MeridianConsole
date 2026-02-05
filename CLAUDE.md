@@ -197,6 +197,73 @@ Based on analysis of CodeRabbit/qodo feedback across 20 PRs, these items are fre
 - Use MassTransit outbox pattern for reliable event publishing after database writes
 - Don't publish events after `SaveChangesAsync` without outbox (creates reliability gap)
 
+## Efficient Development Patterns
+
+Patterns for effective autonomous work (adapted from [Anthropic's multi-agent research](https://www.anthropic.com/engineering/building-c-compiler)):
+
+### Fast Feedback Loop
+
+Use test sampling for quick iteration, full suite before committing:
+
+```bash
+# Fast: Run tests for just the service you're changing (~5-30 sec)
+dotnet test tests/Dhadgar.Identity.Tests --filter "ClassName~UserService"
+
+# Medium: Run full service test suite (~30-60 sec)
+dotnet test tests/Dhadgar.Identity.Tests
+
+# Full: Run all tests before PR (required)
+dotnet test
+```
+
+### Context Management
+
+Preserve context window for reasoning, not output:
+
+```bash
+# BAD: Floods context with build output
+dotnet build
+
+# GOOD: Only see errors
+dotnet build -v q 2>&1 | grep -E "(error|warning CS)"
+
+# BAD: Full test output
+dotnet test
+
+# GOOD: Summary only, details on failure
+dotnet test --logger "console;verbosity=minimal"
+```
+
+### Iterative Development Cycle
+
+For implementing features or fixing bugs:
+
+```text
+1. Read relevant code (understand before changing)
+2. Make small, focused change
+3. Build to catch compile errors: dotnet build -v q
+4. Run targeted tests: dotnet test --filter "ClassName~FeatureYouChanged"
+5. If tests pass, expand scope; if fail, fix before continuing
+6. Run full test suite only when feature is complete
+7. Commit with conventional commit message
+```
+
+### Test-Driven Validation
+
+Tests are the oracle for "is this done?" Use them to:
+
+- **Validate assumptions**: Write a failing test first when unsure about behavior
+- **Confirm fixes**: A bug isn't fixed until a test proves it
+- **Check regressions**: Run related tests after any change
+
+### Progress Tracking
+
+For multi-step tasks, use the task list (TaskCreate/TaskUpdate tools) to:
+
+- Track what's done vs. remaining
+- Maintain state if context compacts
+- Provide visibility to the user
+
 ## Parallel Claude Sessions
 
 When running multiple Claude sessions simultaneously, each MUST use a separate git worktree:

@@ -196,7 +196,22 @@ msiexec /i MeridianConsoleAgent.msi /l*v debug.log
 
 ## Security Considerations
 
+### Service Account: LocalSystem
+
+The agent service runs as **LocalSystem** by default. This is a deliberate design decision, not a misconfiguration. LocalSystem is required because the agent must:
+
+- **Create and manage Windows Services** (game server isolation via `sc.exe`)
+- **Access the LocalMachine certificate store** (mTLS certificates for control plane communication)
+- **Manage Windows Firewall rules** (opening/closing ports for game servers)
+- **Set directory ACLs** for game server isolation (granting/denying access to Virtual Service Accounts)
+- **Manage Job Objects** for process isolation and resource limits
+
+A least-privilege service account would lack the permissions for these operations. Game server processes themselves run under isolated Virtual Service Accounts (`NT SERVICE\MeridianGS_{serverId}`) with minimal privileges -- LocalSystem is only used by the agent orchestrator.
+
+### Other Security Notes
+
 - The MSI requires administrator privileges to install
-- Service runs as LocalSystem (configurable in Package.wxs)
 - Certificates are stored in the Windows Certificate Store (LocalMachine)
 - All custom actions run elevated during install/uninstall
+- Enrollment tokens are stored in registry with SDDL ACLs restricting access to SYSTEM and Administrators only
+- After uninstall, residual artifacts (certificates, firewall rules, game server data) require manual cleanup -- see Package.wxs comments for details

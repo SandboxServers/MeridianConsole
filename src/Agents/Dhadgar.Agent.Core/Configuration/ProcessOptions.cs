@@ -96,15 +96,7 @@ public sealed class ProcessOptions : IValidatableObject
             }
             else
             {
-                // Validate path is absolute and normalized (no traversal)
-                var (normalizedPath, isValid) = TryGetFullPath(GameServerWrapperPath);
-                if (!isValid)
-                {
-                    yield return new ValidationResult(
-                        $"{nameof(GameServerWrapperPath)} is not a valid path",
-                        [nameof(GameServerWrapperPath)]);
-                }
-                else if (!Path.IsPathFullyQualified(GameServerWrapperPath))
+                if (!Path.IsPathFullyQualified(GameServerWrapperPath))
                 {
                     yield return new ValidationResult(
                         $"{nameof(GameServerWrapperPath)} must be a fully qualified absolute path",
@@ -112,16 +104,27 @@ public sealed class ProcessOptions : IValidatableObject
                 }
                 else
                 {
-                    // Reject path traversal sequences
-                    var comparison = StringComparison.OrdinalIgnoreCase; // Windows is case-insensitive
-                    var normalizedTrimmed = normalizedPath!.TrimEnd(Path.DirectorySeparatorChar);
-                    var originalTrimmed = GameServerWrapperPath.TrimEnd(Path.DirectorySeparatorChar);
-
-                    if (!originalTrimmed.Equals(normalizedTrimmed, comparison))
+                    // Validate path is normalized (no traversal)
+                    var (normalizedPath, isValid) = TryGetFullPath(GameServerWrapperPath);
+                    if (!isValid)
                     {
                         yield return new ValidationResult(
-                            $"{nameof(GameServerWrapperPath)} contains path traversal sequences",
+                            $"{nameof(GameServerWrapperPath)} is not a valid path",
                             [nameof(GameServerWrapperPath)]);
+                    }
+                    else
+                    {
+                        // Reject path traversal sequences - Windows is case-insensitive
+                        var comparison = StringComparison.OrdinalIgnoreCase;
+                        var normalizedTrimmed = normalizedPath!.TrimEnd(Path.DirectorySeparatorChar);
+                        var originalTrimmed = GameServerWrapperPath.TrimEnd(Path.DirectorySeparatorChar);
+
+                        if (!originalTrimmed.Equals(normalizedTrimmed, comparison))
+                        {
+                            yield return new ValidationResult(
+                                $"{nameof(GameServerWrapperPath)} contains path traversal sequences",
+                                [nameof(GameServerWrapperPath)]);
+                        }
                     }
                 }
             }

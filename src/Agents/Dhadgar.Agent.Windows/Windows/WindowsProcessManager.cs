@@ -1379,9 +1379,19 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             return Result<bool>.Failure($"[Process.InvalidPath] Invalid executable path: {ex.Message}");
         }
 
-        // SECURITY: Check for path traversal attempts
-        if (!fullPath.Equals(executablePath, StringComparison.OrdinalIgnoreCase) &&
-            !Path.IsPathFullyQualified(executablePath))
+        // SECURITY: Require fully qualified paths to reject drive-relative paths (e.g., "C:foo")
+        if (!Path.IsPathFullyQualified(executablePath))
+        {
+            return Result<bool>.Failure(
+                "[Process.InvalidPath] Executable path must be a fully qualified absolute path");
+        }
+
+        // SECURITY: Detect path mutations (traversal sequences, normalization differences)
+        var inputNormalized = executablePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullPathNormalized = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        if (!inputNormalized.Equals(fullPathNormalized, comparison))
         {
             _logger.LogWarning(
                 "Potential path traversal detected. Original: {Original}, Resolved: {Resolved}",
@@ -1466,7 +1476,6 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
             ".BAT" => true,
             ".CMD" => true,
             ".COM" => true,
-            "" => true, // Linux-style executables without extension
             _ => false
         };
     }

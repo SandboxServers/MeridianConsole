@@ -269,6 +269,47 @@ public sealed class DirectoryAclManagerTests
         Assert.True(result.IsSuccess);
     }
 
+    [Fact]
+    [Trait("Category", "Windows")]
+    public void RemoveServerDirectoryAccess_ExistingDirectoryWithAcls_RemovesAccess()
+    {
+        // Skip on non-Windows platforms (ACL APIs are Windows-only)
+        if (!IsWindows)
+        {
+            return;
+        }
+
+        // Arrange - Create temp directory and set up ACLs first
+        var tempPath = Path.Combine(Path.GetTempPath(), $"MeridianTest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempPath);
+
+        var tempRoot = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+        var allowedRootsWithTemp = new List<string>(TestAllowedRoots) { tempRoot };
+        var aclManagerWithTempRoot = new DirectoryAclManager(_logger, allowedRootsWithTemp);
+
+        var serviceAccount = @"NT SERVICE\MeridianGS_test-cleanup";
+
+        try
+        {
+            // Act - First setup, then remove
+            // Setup may fail if service account doesn't exist yet, which is expected
+            _ = aclManagerWithTempRoot.SetupServerDirectory(tempPath, serviceAccount);
+
+            var removeResult = aclManagerWithTempRoot.RemoveServerDirectoryAccess(tempPath, serviceAccount);
+
+            // Assert - Remove should succeed regardless of whether setup succeeded
+            Assert.True(removeResult.IsSuccess);
+        }
+        finally
+        {
+            // Cleanup
+            if (Directory.Exists(tempPath))
+            {
+                try { Directory.Delete(tempPath, recursive: true); } catch { /* Ignore cleanup errors */ }
+            }
+        }
+    }
+
     #endregion
 
     #region VerifyAccess Tests

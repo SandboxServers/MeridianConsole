@@ -48,6 +48,7 @@ public interface IAgentPipeServer : IAsyncDisposable
         string serverId,
         GameServerCommand command,
         string? payload = null,
+        int timeoutSeconds = 30,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -105,6 +106,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     private readonly object _startLock = new();
     private volatile bool _started;
     private volatile bool _disposed;
+    private readonly bool _enableAdminPipeAccess;
 
     /// <summary>
     /// Pattern for valid server IDs.
@@ -131,11 +133,13 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     public AgentPipeServer(
         Guid agentId,
         ILogger<AgentPipeServer> logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        bool enableAdminPipeAccess = true)
     {
         _agentId = agentId;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _enableAdminPipeAccess = enableAdminPipeAccess;
     }
 
     /// <inheritdoc />
@@ -298,6 +302,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         string serverId,
         GameServerCommand command,
         string? payload = null,
+        int timeoutSeconds = 30,
         CancellationToken cancellationToken = default)
     {
         if (!_connections.TryGetValue(serverId, out var connection))
@@ -305,7 +310,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             return Result.Failure($"[Pipe.NotConnected] Server {serverId} is not connected");
         }
 
-        var sent = await connection.SendCommandAsync(command, payload, 30, cancellationToken)
+        var sent = await connection.SendCommandAsync(command, payload, timeoutSeconds, cancellationToken)
             .ConfigureAwait(false);
 
         if (!sent)
@@ -512,7 +517,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <summary>
     /// Creates pipe security settings.
     /// </summary>
-    private static PipeSecurity CreatePipeSecurity(string serviceAccountName)
+    private PipeSecurity CreatePipeSecurity(string serviceAccountName)
     {
         var security = new PipeSecurity();
 
@@ -534,12 +539,15 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             PipeAccessRights.ReadWrite,
             AccessControlType.Allow));
 
-        // Grant BUILTIN\Administrators read/write for debugging
-        var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
-        security.AddAccessRule(new PipeAccessRule(
-            adminsSid,
-            PipeAccessRights.ReadWrite,
-            AccessControlType.Allow));
+        // Optionally grant BUILTIN\Administrators read/write for debugging
+        if (_enableAdminPipeAccess)
+        {
+            var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            security.AddAccessRule(new PipeAccessRule(
+                adminsSid,
+                PipeAccessRights.ReadWrite,
+                AccessControlType.Allow));
+        }
 
         return security;
     }
@@ -662,18 +670,59 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
 
     private void HandleErrorMessage(string serverId, ErrorMessage error)
     {
+        var sanitizedMessage = SanitizeLogMessage(error.Message);
+
         if (error.IsFatal)
         {
             _logger.LogError(
                 "Fatal error from server {ServerId}: [{Code}] {Message}",
-                serverId, error.ErrorCode, error.Message);
+                serverId, error.ErrorCode, sanitizedMessage);
         }
         else
         {
             _logger.LogWarning(
                 "Error from server {ServerId}: [{Code}] {Message}",
-                serverId, error.ErrorCode, error.Message);
+                serverId, error.ErrorCode, sanitizedMessage);
         }
+    }
+
+    /// <summary>
+    /// Sanitizes a message from an untrusted source for safe logging.
+    /// Removes control characters, collapses whitespace, and truncates to prevent log injection.
+    /// </summary>
+    private static string SanitizeLogMessage(string? raw, int maxLength = 500)
+    {
+        if (string.IsNullOrEmpty(raw))
+        {
+            return string.Empty;
+        }
+
+        // Remove control characters (newlines, tabs, etc.) to prevent log injection
+        var sanitized = new char[Math.Min(raw.Length, maxLength)];
+        var writeIndex = 0;
+        var lastWasSpace = false;
+
+        for (var i = 0; i < raw.Length && writeIndex < maxLength; i++)
+        {
+            var c = raw[i];
+            if (char.IsControl(c))
+            {
+                // Replace control chars with space (collapse consecutive)
+                if (!lastWasSpace && writeIndex > 0)
+                {
+                    sanitized[writeIndex++] = ' ';
+                    lastWasSpace = true;
+                }
+            }
+            else
+            {
+                sanitized[writeIndex++] = c;
+                lastWasSpace = c == ' ';
+            }
+        }
+
+        var result = new string(sanitized, 0, writeIndex);
+        return raw.Length > maxLength ? result + "..." : result;
     }
 
     /// <summary>

@@ -281,14 +281,21 @@
   </Fragment>
 
   <!--
-    Uninstall cleanup notes:
-    The following resources need manual cleanup after uninstall:
-    1. Certificates in LocalMachine\My (agent certificates)
-    2. Certificates in LocalMachine\Root (CA certificate)
+    SECURITY CONSIDERATION: Residual Artifacts After Uninstall
+
+    The following resources are intentionally NOT removed during uninstall to prevent
+    data loss and allow security review. Enterprise deployments should ensure manual
+    cleanup is performed, as residual certificates and firewall rules could be
+    repurposed if the host is later reassigned.
+
+    Residual artifacts requiring manual cleanup:
+    1. Certificates in LocalMachine\My (agent mTLS certificates)
+    2. Certificates in LocalMachine\Root (Meridian Console CA certificate)
     3. Firewall rules created by the agent
     4. Game server data in C:\ProgramData\Meridian Console\Agent\Servers
+    5. Game server Windows Services (MeridianGS_*) if service isolation was enabled
 
-    To clean up manually, run as Administrator:
+    To clean up manually, run as Administrator in PowerShell:
       # Remove certificates
       Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -like '*dhadgar-agent*' } | Remove-Item
       Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*Meridian Console CA*' } | Remove-Item
@@ -296,10 +303,15 @@
       # Remove firewall rules
       netsh advfirewall firewall delete rule name=all program="C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe"
 
+      # Remove game server services
+      Get-Service MeridianGS_* | Stop-Service -Force
+      Get-Service MeridianGS_* | ForEach-Object { sc.exe delete $_.Name }
+
       # Remove data (WARNING: deletes game server files!)
       Remove-Item -Recurse -Force "C:\ProgramData\Meridian Console"
 
-    Future enhancement: Add these as optional cleanup custom actions that run during uninstall.
+    Future enhancement: Add these as optional cleanup custom actions that run during
+    uninstall, with a warning dialog informing administrators about residual artifacts.
   -->
 
 </Wix>
