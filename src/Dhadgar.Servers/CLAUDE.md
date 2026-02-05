@@ -10,12 +10,15 @@ Game server lifecycle management.
 5030
 
 ## Status
-Stub - core functionality planned.
+Alpha - core functionality implemented.
 
-## Planned Features
-- Server configuration and templates
-- Start/stop/restart operations
-- Status tracking
+## Implemented Features
+- Server CRUD with org-scoped multi-tenancy
+- 13-state lifecycle state machine (Pending, Installing, Stopped, Starting, Running, etc.)
+- Server templates for game-specific defaults
+- Port allocation and configuration management
+- Power state tracking (On, Off, Suspended)
+- FluentValidation for request validation
 
 ## Dependencies
 - Dhadgar.Contracts

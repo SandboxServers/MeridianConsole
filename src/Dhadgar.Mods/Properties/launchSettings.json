@@ -3,7 +3,7 @@
     "Dhadgar.Mods": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "applicationUrl": "http://localhost:5008"
+      "applicationUrl": "http://localhost:5080"
     }
   }
 }

@@ -1,6 +1,6 @@
 # Dhadgar.Servers
 
-![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+![Status: Alpha](https://img.shields.io/badge/Status-Alpha-yellow)
 
 Game server lifecycle management service for Meridian Console. This service is the central component responsible for managing the complete lifecycle of game servers across customer-owned hardware, including provisioning, configuration, state management, and orchestration coordination.
 
@@ -79,9 +79,9 @@ The Servers service does NOT directly communicate with customer agents. Instead,
 
 ## Current Status
 
-**Status**: Stub Implementation (Scaffolding Phase)
+**Status**: Alpha Implementation
 
-The service is currently in a scaffolding state, providing the foundational structure for incremental development. This is intentional - the codebase establishes the "shape" of the service while core features remain unimplemented.
+The service has core functionality implemented including server CRUD operations, lifecycle management with a 13-state machine, server templates, and configuration management.
 
 ### What Exists Today
 

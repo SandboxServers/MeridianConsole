@@ -60,13 +60,16 @@ What goes where (services can only reference these, not each other):
 - `Nodes` - Agent enrollment, mTLS CA, heartbeats, capacity reservations; notification TODOs (PostgreSQL)
 - `Secrets` - Azure Key Vault integration, claims-based auth, audit logging; Azure REST API TODOs
 - `CLI` - Global .NET tool (`dhadgar`) for platform management (functional)
+- `Servers` - Game server lifecycle with 13-state machine, templates (PostgreSQL)
+- `Console` - Real-time server console via SignalR, command dispatch (PostgreSQL + Redis)
+- `Mods` - Mod registry with semantic versioning, dependency resolution (PostgreSQL)
 
 Note: Core services have working foundations but contain scaffolded endpoints and incomplete features.
 
 **Stubs** (scaffolding only, functionality planned):
 
-- With Database: Billing, Servers, Tasks, Files, Mods, Notifications
-- Stateless: Console (SignalR hub), Discord, BetterAuth
+- With Database: Billing, Tasks, Files, Notifications
+- Stateless: Discord, BetterAuth
 
 **Frontend Apps** (Astro/React/Tailwind):
 
