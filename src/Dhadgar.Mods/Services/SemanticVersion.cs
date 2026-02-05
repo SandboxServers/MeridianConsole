@@ -84,7 +84,59 @@ public sealed partial class SemanticVersion : IComparable<SemanticVersion>
         if (Prerelease is not null && other.Prerelease is null) return -1;
         if (Prerelease is null && other.Prerelease is null) return 0;
 
-        return string.Compare(Prerelease, other.Prerelease, StringComparison.Ordinal);
+        return ComparePrereleaseIdentifiers(Prerelease!, other.Prerelease!);
+    }
+
+    /// <summary>
+    /// Compares prerelease identifiers per semver 2.0 specification.
+    /// Rules:
+    /// - Identifiers are split by dots and compared left-to-right
+    /// - Numeric identifiers are compared as integers (1 < 2 < 10)
+    /// - Alphanumeric identifiers are compared lexically (ASCII)
+    /// - Numeric identifiers always have lower precedence than alphanumeric
+    /// - Fewer identifiers have lower precedence if all preceding match (alpha < alpha.1)
+    /// </summary>
+    private static int ComparePrereleaseIdentifiers(string left, string right)
+    {
+        var leftParts = left.Split('.');
+        var rightParts = right.Split('.');
+
+        var minLength = Math.Min(leftParts.Length, rightParts.Length);
+
+        for (var i = 0; i < minLength; i++)
+        {
+            var leftPart = leftParts[i];
+            var rightPart = rightParts[i];
+
+            var leftIsNumeric = long.TryParse(leftPart, out var leftNum);
+            var rightIsNumeric = long.TryParse(rightPart, out var rightNum);
+
+            if (leftIsNumeric && rightIsNumeric)
+            {
+                // Both numeric: compare as integers
+                var numCompare = leftNum.CompareTo(rightNum);
+                if (numCompare != 0) return numCompare;
+            }
+            else if (leftIsNumeric)
+            {
+                // Numeric < Alphanumeric
+                return -1;
+            }
+            else if (rightIsNumeric)
+            {
+                // Alphanumeric > Numeric
+                return 1;
+            }
+            else
+            {
+                // Both alphanumeric: compare lexically
+                var strCompare = string.Compare(leftPart, rightPart, StringComparison.Ordinal);
+                if (strCompare != 0) return strCompare;
+            }
+        }
+
+        // All preceding identifiers are equal; more identifiers = higher precedence
+        return leftParts.Length.CompareTo(rightParts.Length);
     }
 
     public bool Satisfies(string constraint)

@@ -7,7 +7,7 @@ public interface IConsoleHistoryService
     /// <summary>
     /// Adds a console output line to history.
     /// </summary>
-    Task AddOutputAsync(Guid serverId, Guid organizationId, ConsoleOutputType outputType, string content, long sequenceNumber, Guid? sessionId = null, CancellationToken ct = default);
+    Task AddOutputAsync(Guid serverId, Guid organizationId, ConsoleOutputType outputType, string content, long sequenceNumber, CancellationToken ct = default);
 
     /// <summary>
     /// Gets recent console history from hot storage (Redis).

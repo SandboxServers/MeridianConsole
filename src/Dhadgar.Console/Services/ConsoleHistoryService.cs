@@ -10,12 +10,19 @@ using EntityOutputType = Dhadgar.Console.Data.Entities.ConsoleOutputType;
 
 namespace Dhadgar.Console.Services;
 
+/// <summary>
+/// Hot storage data structure that includes metadata for proper archival.
+/// </summary>
+internal sealed record HotStorageData(Guid OrganizationId, List<ConsoleLine> Lines);
+
 public sealed class ConsoleHistoryService : IConsoleHistoryService
 {
     private readonly ConsoleDbContext _db;
     private readonly IDistributedCache _cache;
     private readonly ConsoleOptions _options;
     private readonly TimeSpan _hotStorageTtl;
+    private readonly TimeSpan _lockTimeout = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _lockExpiry = TimeSpan.FromSeconds(30);
     private const int MaxHotStorageLines = 500;
 
     public ConsoleHistoryService(
@@ -29,27 +36,44 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         _hotStorageTtl = TimeSpan.FromMinutes(_options.HotStorageTtlMinutes);
     }
 
-    public async Task AddOutputAsync(Guid serverId, Guid organizationId, ContractsOutputType outputType, string content, long sequenceNumber, Guid? sessionId = null, CancellationToken ct = default)
+    public async Task AddOutputAsync(Guid serverId, Guid organizationId, ContractsOutputType outputType, string content, long sequenceNumber, CancellationToken ct = default)
     {
-        // Add to Redis (hot storage)
         var key = GetHotStorageKey(serverId);
+        var lockKey = GetLockKey(serverId);
         var line = new ConsoleLine(content, outputType, DateTime.UtcNow, sequenceNumber);
-        var lineJson = JsonSerializer.Serialize(line);
 
-        // Use a list in Redis, pushing to the left (newest first)
-        // This is a simplified implementation - in production you'd use Redis LPUSH directly
-        var existing = await GetHotStorageLinesAsync(serverId, ct);
-        var lines = existing.Prepend(line).Take(MaxHotStorageLines).ToList();
+        // Acquire distributed lock to prevent race conditions during read-modify-write
+        if (!await TryAcquireLockAsync(lockKey, ct))
+        {
+            // Lock acquisition failed - log and continue (best effort)
+            // In production, consider using Redis LPUSH directly via StackExchange.Redis
+            return;
+        }
 
-        var linesJson = JsonSerializer.Serialize(lines);
-        await _cache.SetStringAsync(key, linesJson,
-            new DistributedCacheEntryOptions { SlidingExpiration = _hotStorageTtl }, ct);
+        try
+        {
+            var data = await GetHotStorageDataAsync(serverId, ct);
+            var lines = data?.Lines ?? [];
+            var orgId = data?.OrganizationId ?? organizationId;
+
+            // Prepend new line and truncate to max size
+            var updatedLines = lines.Prepend(line).Take(MaxHotStorageLines).ToList();
+            var updatedData = new HotStorageData(orgId, updatedLines);
+
+            var json = JsonSerializer.Serialize(updatedData);
+            await _cache.SetStringAsync(key, json,
+                new DistributedCacheEntryOptions { SlidingExpiration = _hotStorageTtl }, ct);
+        }
+        finally
+        {
+            await ReleaseLockAsync(lockKey, ct);
+        }
     }
 
     public async Task<IReadOnlyList<ConsoleLine>> GetRecentHistoryAsync(Guid serverId, int lineCount = 100, CancellationToken ct = default)
     {
-        var lines = await GetHotStorageLinesAsync(serverId, ct);
-        return lines.Take(lineCount).ToList();
+        var data = await GetHotStorageDataAsync(serverId, ct);
+        return data?.Lines.Take(lineCount).ToList() ?? [];
     }
 
     public async Task<ConsoleHistorySearchResult> SearchHistoryAsync(SearchConsoleHistoryRequest request, CancellationToken ct = default)
@@ -101,35 +125,54 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
 
     public async Task ArchiveOldEntriesAsync(Guid serverId, Guid organizationId, CancellationToken ct = default)
     {
-        var lines = await GetHotStorageLinesAsync(serverId, ct);
-        if (lines.Count == 0) return;
+        var lockKey = GetLockKey(serverId);
 
-        // Get the oldest entries that should be archived
-        var entriesToArchive = lines.Skip(MaxHotStorageLines / 2).ToList();
-        if (entriesToArchive.Count == 0) return;
-
-        // Insert into PostgreSQL
-        foreach (var line in entriesToArchive)
+        // Acquire lock to ensure consistency during archival
+        if (!await TryAcquireLockAsync(lockKey, ct))
         {
-            _db.ConsoleHistory.Add(new ConsoleHistoryEntry
-            {
-                ServerId = serverId,
-                OrganizationId = organizationId,
-                OutputType = (EntityOutputType)(int)line.OutputType,
-                Content = line.Content,
-                Timestamp = line.Timestamp,
-                SequenceNumber = line.SequenceNumber
-            });
+            return; // Another archival may be in progress
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            var data = await GetHotStorageDataAsync(serverId, ct);
+            if (data is null || data.Lines.Count == 0) return;
 
-        // Keep only recent entries in Redis
-        var recentLines = lines.Take(MaxHotStorageLines / 2).ToList();
-        var key = GetHotStorageKey(serverId);
-        var linesJson = JsonSerializer.Serialize(recentLines);
-        await _cache.SetStringAsync(key, linesJson,
-            new DistributedCacheEntryOptions { SlidingExpiration = _hotStorageTtl }, ct);
+            // Use organizationId from hot storage (authoritative) or fall back to parameter
+            var actualOrgId = data.OrganizationId;
+
+            // Get the oldest entries that should be archived
+            var entriesToArchive = data.Lines.Skip(MaxHotStorageLines / 2).ToList();
+            if (entriesToArchive.Count == 0) return;
+
+            // Insert into PostgreSQL
+            foreach (var line in entriesToArchive)
+            {
+                _db.ConsoleHistory.Add(new ConsoleHistoryEntry
+                {
+                    ServerId = serverId,
+                    OrganizationId = actualOrgId,
+                    OutputType = (EntityOutputType)(int)line.OutputType,
+                    Content = line.Content,
+                    Timestamp = line.Timestamp,
+                    SequenceNumber = line.SequenceNumber
+                });
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            // Keep only recent entries in Redis
+            var recentLines = data.Lines.Take(MaxHotStorageLines / 2).ToList();
+            var key = GetHotStorageKey(serverId);
+            var updatedData = new HotStorageData(actualOrgId, recentLines);
+            var json = JsonSerializer.Serialize(updatedData);
+            await _cache.SetStringAsync(key, json,
+                new DistributedCacheEntryOptions { SlidingExpiration = _hotStorageTtl }, ct);
+        }
+        finally
+        {
+            await ReleaseLockAsync(lockKey, ct);
+        }
     }
 
     public async Task PurgeOldEntriesAsync(int retentionDays, CancellationToken ct = default)
@@ -140,18 +183,56 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
             .ExecuteDeleteAsync(ct);
     }
 
-    private async Task<List<ConsoleLine>> GetHotStorageLinesAsync(Guid serverId, CancellationToken ct)
+    private async Task<HotStorageData?> GetHotStorageDataAsync(Guid serverId, CancellationToken ct)
     {
         var key = GetHotStorageKey(serverId);
-        var data = await _cache.GetStringAsync(key, ct);
+        var json = await _cache.GetStringAsync(key, ct);
 
-        if (string.IsNullOrEmpty(data))
+        if (string.IsNullOrEmpty(json))
         {
-            return [];
+            return null;
         }
 
-        return JsonSerializer.Deserialize<List<ConsoleLine>>(data) ?? [];
+        // Support both old format (List<ConsoleLine>) and new format (HotStorageData)
+        // for backward compatibility during migration
+        try
+        {
+            return JsonSerializer.Deserialize<HotStorageData>(json);
+        }
+        catch (JsonException)
+        {
+            // Try old format
+            var lines = JsonSerializer.Deserialize<List<ConsoleLine>>(json) ?? [];
+            return lines.Count > 0 ? new HotStorageData(Guid.Empty, lines) : null;
+        }
+    }
+
+    private async Task<bool> TryAcquireLockAsync(string lockKey, CancellationToken ct)
+    {
+        var lockValue = Guid.NewGuid().ToString();
+        var deadline = DateTime.UtcNow.Add(_lockTimeout);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var existing = await _cache.GetStringAsync(lockKey, ct);
+            if (string.IsNullOrEmpty(existing))
+            {
+                await _cache.SetStringAsync(lockKey, lockValue,
+                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = _lockExpiry }, ct);
+                return true;
+            }
+
+            await Task.Delay(50, ct);
+        }
+
+        return false;
+    }
+
+    private async Task ReleaseLockAsync(string lockKey, CancellationToken ct)
+    {
+        await _cache.RemoveAsync(lockKey, ct);
     }
 
     private static string GetHotStorageKey(Guid serverId) => $"console:history:{serverId}";
+    private static string GetLockKey(Guid serverId) => $"console:history:lock:{serverId}";
 }

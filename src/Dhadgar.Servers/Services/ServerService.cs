@@ -280,7 +280,7 @@ public sealed class ServerService : IServerService
             return ServiceResult.Fail<bool>("server_not_found");
         }
 
-        // Soft delete
+        // Soft delete - Status tracks state machine; DeletedAt triggers query filter exclusion
         server.Status = ServerStatus.Deleted;
         server.DeletedAt = DateTime.UtcNow;
 
