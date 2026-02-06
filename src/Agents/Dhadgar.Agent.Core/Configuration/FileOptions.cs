@@ -78,10 +78,10 @@ public sealed partial class FileOptions : IValidatableObject
         // TempDirectory must be an absolute, normalized path (same as ProcessOptions.ServerBasePath)
         if (!string.IsNullOrEmpty(TempDirectory))
         {
-            if (!Path.IsPathRooted(TempDirectory))
+            if (!Path.IsPathFullyQualified(TempDirectory))
             {
                 yield return new ValidationResult(
-                    $"{nameof(TempDirectory)} must be an absolute path",
+                    $"{nameof(TempDirectory)} must be a fully qualified absolute path",
                     [nameof(TempDirectory)]);
             }
             else

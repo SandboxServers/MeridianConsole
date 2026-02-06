@@ -9,15 +9,17 @@ namespace Dhadgar.Agent.Core.Authentication;
 public sealed class CertificateValidator
 {
     private readonly X509Certificate2? _caCertificate;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Timeout for online revocation checks to prevent hanging.
     /// </summary>
     private static readonly TimeSpan RevocationTimeout = TimeSpan.FromSeconds(5);
 
-    public CertificateValidator(X509Certificate2? caCertificate = null)
+    public CertificateValidator(X509Certificate2? caCertificate = null, TimeProvider? timeProvider = null)
     {
         _caCertificate = caCertificate;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -39,14 +41,15 @@ public sealed class CertificateValidator
         // Check expiration (normalize to UTC for correct comparison)
         var notAfterUtc = certificate.NotAfter.ToUniversalTime();
         var notBeforeUtc = certificate.NotBefore.ToUniversalTime();
+        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
 
-        if (notAfterUtc < DateTime.UtcNow)
+        if (notAfterUtc < utcNow)
         {
             return Result<bool>.Failure(
                 $"[Certificate.Expired] Certificate expired on {notAfterUtc:O}");
         }
 
-        if (notBeforeUtc > DateTime.UtcNow)
+        if (notBeforeUtc > utcNow)
         {
             return Result<bool>.Failure(
                 $"[Certificate.NotYetValid] Certificate not valid until {notBeforeUtc:O}");
@@ -98,8 +101,9 @@ public sealed class CertificateValidator
     /// </summary>
     /// <param name="certificate">Certificate to check.</param>
     /// <param name="thresholdDays">Days before expiry.</param>
+    /// <param name="timeProvider">Time provider for testability (defaults to system time).</param>
     /// <returns>Result containing true if within threshold, false otherwise, or failure for invalid inputs.</returns>
-    public static Result<bool> IsNearingExpiration(X509Certificate2? certificate, int thresholdDays)
+    public static Result<bool> IsNearingExpiration(X509Certificate2? certificate, int thresholdDays, TimeProvider? timeProvider = null)
     {
         if (certificate is null)
         {
@@ -112,7 +116,8 @@ public sealed class CertificateValidator
         }
 
         // Normalize to UTC for correct comparison
-        var isNearing = certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow.AddDays(thresholdDays);
+        var utcNow = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        var isNearing = certificate.NotAfter.ToUniversalTime() <= utcNow.AddDays(thresholdDays);
         return Result<bool>.Success(isNearing);
     }
 

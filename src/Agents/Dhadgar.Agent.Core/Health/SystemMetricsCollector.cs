@@ -14,19 +14,23 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
 {
     private readonly AgentMeter _meter;
     private readonly ILogger<SystemMetricsCollector> _logger;
+    private readonly TimeProvider _timeProvider;
 
     // For CPU calculation (thread-safe access via lock)
     private readonly object _cpuLock = new();
-    private DateTime _lastCpuCheck = DateTime.UtcNow;
+    private DateTime _lastCpuCheck;
     private TimeSpan _lastTotalProcessorTime = TimeSpan.Zero;
     private bool _isFirstCollection = true;
 
     public SystemMetricsCollector(
         AgentMeter meter,
-        ILogger<SystemMetricsCollector> logger)
+        ILogger<SystemMetricsCollector> logger,
+        TimeProvider? timeProvider = null)
     {
         _meter = meter ?? throw new ArgumentNullException(nameof(meter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _lastCpuCheck = _timeProvider.GetUtcNow().UtcDateTime;
     }
 
     public Task<Result<SystemMetrics>> CollectAsync(CancellationToken cancellationToken = default)
@@ -74,7 +78,7 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
                 currentCpuTime = process.TotalProcessorTime;
             }
 
-            var currentTime = DateTime.UtcNow;
+            var currentTime = _timeProvider.GetUtcNow().UtcDateTime;
 
             // Thread-safe access to shared state
             lock (_cpuLock)

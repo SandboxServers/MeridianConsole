@@ -13,7 +13,7 @@ namespace Dhadgar.Agent.Core.Files;
 /// </summary>
 public sealed class FileTransferService : IFileTransferService, IDisposable
 {
-    private bool _disposed;
+    private volatile bool _disposed;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IPathValidator _pathValidator;
     private readonly IFileIntegrityChecker _integrityChecker;

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>GameServerWrapper</AssemblyName>
+    <RootNamespace>Dhadgar.Agent.GameServerWrapper</RootNamespace>
+    <OutputType>Exe</OutputType>
+
+    <!--
+      Windows-only game server wrapper targeting Windows runtimes.
+      This executable runs as a Windows Service to host individual game servers.
+      linux-x64 is included for build/test on Linux CI runners (the app itself is Windows-only).
+    -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64</RuntimeIdentifiers>
+
+    <!-- Agent code runs on customer hardware - enforce strict security -->
+    <AnalysisMode>All</AnalysisMode>
+    <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
+
+    <!-- Publish settings for deployment -->
+    <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
+
+    <!--
+      CA1303: Agents don't need localization for console output
+      CA1416: This is a Windows-only project; all Windows APIs are intentional
+      CA1849: Console.Error.WriteLine is acceptable in startup/shutdown paths
+    -->
+    <NoWarn>$(NoWarn);CA1303;CA1416;CA1849</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dhadgar.Agent.Core\Dhadgar.Agent.Core.csproj" />
+    <ProjectReference Include="..\..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+    <ProjectReference Include="..\..\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Windows Service hosting -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Logging.EventLog" />
+
+    <!-- Security analyzers - critical for customer-hosted code -->
+    <PackageReference Include="SecurityCodeScan.VS2019" />
+  </ItemGroup>
+</Project>

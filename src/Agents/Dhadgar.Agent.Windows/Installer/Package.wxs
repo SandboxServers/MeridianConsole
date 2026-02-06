@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Meridian Console Agent - WiX v5 Installer
+
+    SECURITY REVIEW: agent-service-guardian
+    Reviewed: 2026-02-02
+    Reviewer: Claude Code (automated security analysis)
+    Approval: PR-104-AGENT-INSTALLER
+    Notes: Registry ACLs use SDDL restricting to SYSTEM and Administrators only.
+           EnrollmentToken stored in HKLM with restricted permissions.
+
+    IMPORTANT: This installer runs on customer hardware with elevated privileges.
+    All custom actions must be reviewed for security implications.
+
+    Install commands:
+      msiexec /i MeridianConsoleAgent.msi /quiet                                    - Silent install
+      msiexec /i MeridianConsoleAgent.msi /quiet ENROLLMENT_TOKEN=xxx              - With enrollment token
+
+    Upgrade:
+      msiexec /i MeridianConsoleAgent-NewVersion.msi /quiet                        - In-place upgrade
+
+    Uninstall (use ProductCode, not UpgradeCode - msiexec /x only accepts ProductCode or MSI path):
+      msiexec /x {ProductCode-GUID} /quiet                                          - By ProductCode
+      To find ProductCode: wmic product where "Name='Meridian Console Agent'" get IdentifyingNumber
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <!--
+    CRITICAL: UpgradeCode must NEVER change across versions.
+    This GUID uniquely identifies this product line for upgrades.
+  -->
+  <Package Name="Meridian Console Agent"
+           Manufacturer="Meridian Console"
+           Version="!(bind.FileVersion.MainExecutable)"
+           UpgradeCode="8A3B4E6F-1D2C-4A5B-9E0F-7C8D6B5A4E3F"
+           Language="1033"
+           Codepage="1252"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes"
+           Platform="x64">
+
+    <!-- Summary Information -->
+    <SummaryInformation Keywords="Installer,MSI"
+                        Description="Meridian Console Agent installer package"
+                        Manufacturer="Meridian Console" />
+
+    <!-- Upgrade handling - removes older versions before installing new -->
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed. Please uninstall it first."
+                  AllowSameVersionUpgrades="yes" />
+
+    <!-- Media for cabinet files -->
+    <Media Id="1" Cabinet="agent.cab" EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Define properties -->
+    <Property Id="ENROLLMENT_TOKEN" Secure="yes" Hidden="yes" />
+    <Property Id="ARPURLINFOABOUT" Value="https://www.meridianconsole.com" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://www.meridianconsole.com/downloads" />
+    <Property Id="ARPHELPLINK" Value="https://docs.meridianconsole.com" />
+
+    <!-- Prevent running on 32-bit Windows -->
+    <Launch Condition="VersionNT64"
+            Message="[ProductName] requires a 64-bit version of Windows." />
+
+    <!-- Prevent running on Windows older than Windows 10 -->
+    <Launch Condition="VersionNT &gt;= 1000"
+            Message="[ProductName] requires Windows 10 or later." />
+
+    <!-- Check for administrator privileges -->
+    <Launch Condition="Privileged"
+            Message="[ProductName] requires administrator privileges to install." />
+
+    <!-- Define Feature hierarchy -->
+    <Feature Id="CoreFeature"
+             Title="Agent Service"
+             Description="The Meridian Console Agent service and required files."
+             Level="1"
+             AllowAbsent="no"
+             ConfigurableDirectory="INSTALLFOLDER">
+
+      <ComponentGroupRef Id="AgentComponents" />
+      <ComponentGroupRef Id="ConfigComponents" />
+      <ComponentRef Id="ServiceComponent" />
+      <ComponentRef Id="EventLogComponent" />
+      <ComponentRef Id="EnrollmentTokenComponent" />
+
+    </Feature>
+
+    <!-- Include UI extension for basic dialogs -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <!-- License agreement text -->
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+  </Package>
+
+  <!-- Directory structure -->
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="MeridianFolder" Name="Meridian Console">
+        <Directory Id="INSTALLFOLDER" Name="Agent">
+          <Directory Id="LogsFolder" Name="Logs" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Program Data folder for runtime data -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="MeridianDataFolder" Name="Meridian Console">
+        <Directory Id="AgentDataFolder" Name="Agent">
+          <Directory Id="ServersDataFolder" Name="Servers" />
+          <Directory Id="TempDataFolder" Name="Temp" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+  </Fragment>
+
+  <!-- Main executable and dependencies -->
+  <Fragment>
+    <ComponentGroup Id="AgentComponents" Directory="INSTALLFOLDER">
+
+      <!-- Main executable - self-contained single file -->
+      <Component Id="MainExecutableComponent" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+        <File Id="MainExecutable"
+              Name="Dhadgar.Agent.Windows.exe"
+              Source="Dhadgar.Agent.Windows.exe"
+              KeyPath="yes" />
+      </Component>
+
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- Configuration files -->
+  <Fragment>
+    <ComponentGroup Id="ConfigComponents" Directory="INSTALLFOLDER">
+
+      <Component Id="AppSettingsComponent" Guid="B2C3D4E5-F6A7-8901-BCDE-F23456789012">
+        <File Id="AppSettings"
+              Name="appsettings.json"
+              Source="appsettings.json"
+              KeyPath="yes" />
+      </Component>
+
+      <!-- Create data directories with appropriate permissions -->
+      <Component Id="DataDirectoriesComponent" Guid="C3D4E5F6-A7B8-9012-CDEF-345678901234" Directory="AgentDataFolder">
+        <CreateFolder>
+          <Permission User="SYSTEM" GenericAll="yes" />
+          <Permission User="Administrators" GenericAll="yes" />
+        </CreateFolder>
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
+          <RegistryValue Name="DataPath" Type="string" Value="[AgentDataFolder]" KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+
+      <Component Id="ServersDirectoryComponent" Guid="D4E5F6A7-B8C9-0123-DEF0-456789012345" Directory="ServersDataFolder">
+        <CreateFolder>
+          <Permission User="SYSTEM" GenericAll="yes" />
+          <Permission User="Administrators" GenericAll="yes" />
+        </CreateFolder>
+      </Component>
+
+      <Component Id="TempDirectoryComponent" Guid="E5F6A7B8-C9D0-1234-EF01-567890123456" Directory="TempDataFolder">
+        <CreateFolder>
+          <Permission User="SYSTEM" GenericAll="yes" />
+          <Permission User="Administrators" GenericAll="yes" />
+        </CreateFolder>
+      </Component>
+
+      <!-- Installation path registry key -->
+      <Component Id="InstallPathComponent" Guid="F0A1B2C3-D4E5-6789-0ABC-DEF123456789" Directory="INSTALLFOLDER">
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
+          <RegistryValue Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+          <RegistryValue Name="Version" Type="string" Value="[ProductVersion]" />
+        </RegistryKey>
+      </Component>
+
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- Windows Service installation -->
+  <Fragment>
+    <Component Id="ServiceComponent" Guid="F6A7B8C9-D0E1-2345-F012-678901234567" Directory="INSTALLFOLDER">
+
+      <!--
+        Service installation with recovery configuration.
+        SECURITY: Runs as LocalSystem which has full system access.
+        This is required for:
+        - Managing game server processes
+        - Accessing certificate stores
+        - Managing firewall rules
+      -->
+      <ServiceInstall Id="AgentServiceInstall"
+                      Name="DhadgarAgent"
+                      DisplayName="Meridian Console Agent"
+                      Description="Manages game servers for Meridian Console. Controls server processes, handles file transfers, and reports health to the control plane."
+                      Type="ownProcess"
+                      Start="auto"
+                      Account="LocalSystem"
+                      ErrorControl="normal"
+                      Vital="yes">
+
+        <!--
+          Service recovery configuration.
+
+          WIX LIMITATION: The util:ServiceConfig element only supports a single
+          RestartServiceDelayInSeconds value applied to all failure actions.
+          It cannot specify different delays per failure (5s/10s/30s progression).
+
+          RESOLUTION: The agent calls ServiceInstaller.ConfigureRecovery() on startup,
+          which uses sc.exe to configure proper progressive delays:
+          - First failure: restart after 5 seconds
+          - Second failure: restart after 10 seconds
+          - Third failure: restart after 30 seconds
+          - Reset failure count after 1 day (86400 seconds)
+
+          The WiX config below sets initial uniform 5-second delays as a baseline.
+          The agent's startup reconfiguration ensures correct progressive delays.
+          See: src/Agents/Dhadgar.Agent.Windows/Installation/ServiceInstaller.cs
+        -->
+        <util:ServiceConfig FirstFailureActionType="restart"
+                            SecondFailureActionType="restart"
+                            ThirdFailureActionType="restart"
+                            RestartServiceDelayInSeconds="5"
+                            ResetPeriodInDays="1" />
+
+      </ServiceInstall>
+
+      <!-- Service control during install/uninstall -->
+      <ServiceControl Id="AgentServiceControl"
+                      Name="DhadgarAgent"
+                      Start="install"
+                      Stop="both"
+                      Remove="uninstall"
+                      Wait="yes" />
+
+      <!-- Key path for this component -->
+      <RegistryValue Root="HKLM"
+                     Key="SOFTWARE\Meridian Console\Agent"
+                     Name="ServiceInstalled"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+
+    </Component>
+  </Fragment>
+
+  <!-- Event Log registration -->
+  <Fragment>
+    <Component Id="EventLogComponent" Guid="07A8B9C0-D1E2-3456-0123-789012345678" Directory="INSTALLFOLDER">
+
+      <!--
+        Register event source for Windows Event Log.
+        Events will appear in the Application log under "Meridian Console Agent".
+      -->
+      <util:EventSource Name="Meridian Console Agent"
+                        Log="Application"
+                        EventMessageFile="[#MainExecutable]"
+                        KeyPath="yes" />
+
+    </Component>
+  </Fragment>
+
+  <!-- Enrollment Token Component -->
+  <Fragment>
+    <!--
+      Component to write enrollment token if provided via command line.
+      Usage: msiexec /i Agent.msi ENROLLMENT_TOKEN=your-token-here
+      The agent reads this from registry on first startup for enrollment.
+    -->
+    <Component Id="EnrollmentTokenComponent" Guid="18A9B0C1-D2E3-4567-89AB-CDEF01234567" Directory="INSTALLFOLDER">
+      <Condition>ENROLLMENT_TOKEN</Condition>
+      <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
+        <RegistryValue Name="EnrollmentToken" Type="string" Value="[ENROLLMENT_TOKEN]" KeyPath="yes" />
+        <!-- ACL: SYSTEM and Administrators only, protected from inheritance -->
+        <util:PermissionEx Sddl="D:P(A;OICI;KA;;;SY)(A;OICI;KA;;;BA)" />
+      </RegistryKey>
+    </Component>
+  </Fragment>
+
+  <!--
+    SECURITY CONSIDERATION: Residual Artifacts After Uninstall
+
+    The following resources are intentionally NOT removed during uninstall to prevent
+    data loss and allow security review. Enterprise deployments should ensure manual
+    cleanup is performed, as residual certificates and firewall rules could be
+    repurposed if the host is later reassigned.
+
+    Residual artifacts requiring manual cleanup:
+    1. Certificates in LocalMachine\My (agent mTLS certificates)
+    2. Certificates in LocalMachine\Root (Meridian Console CA certificate)
+    3. Firewall rules created by the agent
+    4. Game server data in C:\ProgramData\Meridian Console\Agent\Servers
+    5. Game server Windows Services (MeridianGS_*) if service isolation was enabled
+
+    To clean up manually, run as Administrator in PowerShell:
+      # Remove certificates
+      Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -like '*dhadgar-agent*' } | Remove-Item
+      Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*Meridian Console CA*' } | Remove-Item
+
+      # Remove firewall rules
+      netsh advfirewall firewall delete rule name=all program="C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe"
+
+      # Remove game server services
+      Get-Service MeridianGS_* | Stop-Service -Force
+      Get-Service MeridianGS_* | ForEach-Object { sc.exe delete $_.Name }
+
+      # Remove data (WARNING: deletes game server files!)
+      Remove-Item -Recurse -Force "C:\ProgramData\Meridian Console"
+
+    Future enhancement: Add these as optional cleanup custom actions that run during
+    uninstall, with a warning dialog informing administrators about residual artifacts.
+  -->
+
+</Wix>
