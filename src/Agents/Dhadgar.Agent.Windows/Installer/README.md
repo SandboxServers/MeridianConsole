@@ -38,7 +38,7 @@ dotnet build src/Agents/Dhadgar.Agent.Windows/Installer -c Release
 
 MSI files are output to:
 
-```
+```text
 bin\{Configuration}\{Platform}\en-US\MeridianConsoleAgent-{Version}-{Platform}.msi
 ```
 

@@ -168,6 +168,9 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
                 return Result.Failure($"[ACL.InvalidAccount] Invalid service account name: {ex.Message}");
             }
 
+            // Ensure we don't accumulate duplicate ACEs for repeated calls
+            security.PurgeAccessRules(serviceAccount);
+
             // Add FullControl for the game server's service account
             var accessRule = new FileSystemAccessRule(
                 serviceAccount,
@@ -489,6 +492,9 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
                     serviceName);
                 return Result.Failure($"[ACL.SidComputeFailed] Could not compute Virtual Service Account SID for service: {serviceName}");
             }
+
+            // Ensure we don't accumulate duplicate ACEs for repeated calls
+            security.PurgeAccessRules(vsaSid);
 
             var vsaRule = new FileSystemAccessRule(
                 vsaSid,

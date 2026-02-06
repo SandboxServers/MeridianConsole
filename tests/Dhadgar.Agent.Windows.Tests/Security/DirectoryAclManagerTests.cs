@@ -210,7 +210,8 @@ public sealed class DirectoryAclManagerTests
             {
                 // Should not be a validation error about service account format
                 Assert.DoesNotContain("Service account name is required", result.Error);
-                Assert.DoesNotContain("NT SERVICE\\MeridianGS_", result.Error);
+                // ACL operation errors have distinct codes; validation errors use [ACL.InvalidAccount]
+                Assert.DoesNotContain("[ACL.InvalidAccount]", result.Error);
             }
         }
         finally
@@ -342,14 +343,11 @@ public sealed class DirectoryAclManagerTests
         Assert.True(result.IsFailure);
     }
 
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "Windows")]
     public void VerifyAccess_AfterSetup_ReturnsTrue()
     {
-        if (!IsWindows)
-        {
-            return;
-        }
+        Skip.IfNot(IsWindows, "Windows-only test");
 
         // Arrange
         var tempPath = Path.Combine(Path.GetTempPath(), $"MeridianTest_{Guid.NewGuid():N}");
@@ -366,15 +364,14 @@ public sealed class DirectoryAclManagerTests
             // Act - Setup directory ACLs
             var setupResult = aclManagerWithTempRoot.SetupServerDirectory(tempPath, serviceAccount);
 
-            // Only verify access if setup succeeded (may fail if service account doesn't exist)
-            if (setupResult.IsSuccess)
-            {
-                var verifyResult = aclManagerWithTempRoot.VerifyAccess(tempPath, serviceAccount);
+            Skip.If(!setupResult.IsSuccess,
+                $"SetupServerDirectory failed (expected in CI without real service accounts): {setupResult.Error}");
 
-                // Assert
-                Assert.True(verifyResult.IsSuccess);
-                Assert.True(verifyResult.Value);
-            }
+            var verifyResult = aclManagerWithTempRoot.VerifyAccess(tempPath, serviceAccount);
+
+            // Assert
+            Assert.True(verifyResult.IsSuccess);
+            Assert.True(verifyResult.Value);
         }
         finally
         {
@@ -444,6 +441,44 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsSuccess);
+    }
+
+    [SkippableFact]
+    [Trait("Category", "Windows")]
+    public void DenyAccess_ExistingDirectory_AppliesDenyAce()
+    {
+        Skip.IfNot(IsWindows, "Windows-only test");
+
+        // Arrange
+        var tempPath = Path.Combine(Path.GetTempPath(), $"MeridianTest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempPath);
+
+        var tempRoot = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+        var allowedRootsWithTemp = new List<string>(TestAllowedRoots) { tempRoot };
+        var aclManagerWithTempRoot = new DirectoryAclManager(_logger, allowedRootsWithTemp);
+
+        var serviceAccount = @"NT SERVICE\MeridianGS_test-deny";
+
+        try
+        {
+            // Act
+            var result = aclManagerWithTempRoot.DenyAccess(tempPath, serviceAccount);
+
+            Skip.If(!result.IsSuccess,
+                $"DenyAccess failed (expected in CI without real service accounts): {result.Error}");
+
+            // After deny, VerifyAccess should return false (deny takes precedence over allow)
+            var verifyResult = aclManagerWithTempRoot.VerifyAccess(tempPath, serviceAccount);
+            Assert.True(verifyResult.IsSuccess);
+            Assert.False(verifyResult.Value);
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                try { Directory.Delete(tempPath, recursive: true); } catch { /* Ignore cleanup errors */ }
+            }
+        }
     }
 
     #endregion

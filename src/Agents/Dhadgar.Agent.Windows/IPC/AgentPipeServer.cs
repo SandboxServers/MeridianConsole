@@ -529,15 +529,45 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             AccessControlType.Allow));
 
         // Grant the specific game server's service account read/write access
-        // SECURITY: NTAccount constructor accepts the name but does NOT validate existence.
-        // However, NTAccount.Translate() or ACL application will throw IdentityNotMappedException
-        // if the account doesn't exist. For Virtual Service Accounts, the account is created
-        // when the service first starts, so this may throw if called before service creation.
-        var serviceAccount = new NTAccount(serviceAccountName);
-        security.AddAccessRule(new PipeAccessRule(
-            serviceAccount,
-            PipeAccessRights.ReadWrite,
-            AccessControlType.Allow));
+        // SECURITY: Handle both SID strings (S-1-5-...) and NTAccount names (NT SERVICE\...)
+        try
+        {
+            IdentityReference serviceAccount =
+                serviceAccountName.StartsWith("S-", StringComparison.OrdinalIgnoreCase)
+                    ? new SecurityIdentifier(serviceAccountName)
+                    : new NTAccount(serviceAccountName);
+
+            security.AddAccessRule(new PipeAccessRule(
+                serviceAccount,
+                PipeAccessRights.ReadWrite,
+                AccessControlType.Allow));
+        }
+        catch (IdentityNotMappedException)
+        {
+            // Virtual Service Accounts are created when the service starts.
+            // Use LOCAL SERVICE as a minimal fallback for pipe access only.
+            _logger.LogWarning(
+                "Service account {Account} not yet mapped, using LOCAL SERVICE fallback for pipe access",
+                serviceAccountName);
+            var localServiceSid = new SecurityIdentifier(WellKnownSidType.LocalServiceSid, null);
+            security.AddAccessRule(new PipeAccessRule(
+                localServiceSid,
+                PipeAccessRights.ReadWrite,
+                AccessControlType.Allow));
+        }
+        catch (ArgumentException ex)
+        {
+            // Invalid SID format or account name
+            _logger.LogWarning(
+                ex,
+                "Invalid service account identifier {Account}, using LOCAL SERVICE fallback for pipe access",
+                serviceAccountName);
+            var localServiceSid = new SecurityIdentifier(WellKnownSidType.LocalServiceSid, null);
+            security.AddAccessRule(new PipeAccessRule(
+                localServiceSid,
+                PipeAccessRights.ReadWrite,
+                AccessControlType.Allow));
+        }
 
         // Optionally grant BUILTIN\Administrators read/write for debugging
         if (_enableAdminPipeAccess)
