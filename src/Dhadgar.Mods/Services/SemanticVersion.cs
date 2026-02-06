@@ -44,13 +44,13 @@ public sealed partial class SemanticVersion : IComparable<SemanticVersion>
             return false;
 
         // Use TryParse to avoid OverflowException on large version numbers
-        if (!int.TryParse(match.Groups["major"].Value, out var major))
+        if (!int.TryParse(match.Groups["major"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var major))
             return false;
-        if (!int.TryParse(match.Groups["minor"].Value, out var minor))
+        if (!int.TryParse(match.Groups["minor"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var minor))
             return false;
 
         var patch = 0;
-        if (match.Groups["patch"].Success && !int.TryParse(match.Groups["patch"].Value, out patch))
+        if (match.Groups["patch"].Success && !int.TryParse(match.Groups["patch"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out patch))
             return false;
 
         var prerelease = match.Groups["prerelease"].Success ? match.Groups["prerelease"].Value : null;
@@ -109,8 +109,8 @@ public sealed partial class SemanticVersion : IComparable<SemanticVersion>
             var leftPart = leftParts[i];
             var rightPart = rightParts[i];
 
-            var leftIsNumeric = long.TryParse(leftPart, out var leftNum);
-            var rightIsNumeric = long.TryParse(rightPart, out var rightNum);
+            var leftIsNumeric = long.TryParse(leftPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var leftNum);
+            var rightIsNumeric = long.TryParse(rightPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rightNum);
 
             if (leftIsNumeric && rightIsNumeric)
             {

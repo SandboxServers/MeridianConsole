@@ -15,9 +15,9 @@ public interface IConsoleHistoryService
     Task<IReadOnlyList<ConsoleLine>> GetRecentHistoryAsync(Guid serverId, int lineCount = 100, CancellationToken ct = default);
 
     /// <summary>
-    /// Searches console history in cold storage (PostgreSQL).
+    /// Searches console history in cold storage (PostgreSQL), scoped to the specified organization.
     /// </summary>
-    Task<ConsoleHistorySearchResult> SearchHistoryAsync(SearchConsoleHistoryRequest request, CancellationToken ct = default);
+    Task<ConsoleHistorySearchResult> SearchHistoryAsync(Guid organizationId, SearchConsoleHistoryRequest request, CancellationToken ct = default);
 
     /// <summary>
     /// Archives old entries from Redis to PostgreSQL.

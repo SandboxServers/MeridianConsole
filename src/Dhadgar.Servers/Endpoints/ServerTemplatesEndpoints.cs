@@ -1,6 +1,8 @@
 using Dhadgar.Contracts;
 using Dhadgar.Contracts.Servers;
 using Dhadgar.Servers.Services;
+using Dhadgar.ServiceDefaults.Problems;
+using FluentValidation;
 
 namespace Dhadgar.Servers.Endpoints;
 
@@ -100,7 +102,7 @@ public static class ServerTemplatesEndpoints
     {
         var result = await templateService.GetTemplateAsync(templateId, organizationId, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "template_not_found");
         }
@@ -112,13 +114,24 @@ public static class ServerTemplatesEndpoints
         Guid organizationId,
         CreateServerTemplateRequest request,
         IServerTemplateService templateService,
+        IValidator<CreateServerTemplateRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await templateService.CreateTemplateAsync(organizationId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
+            return result.Error == "template_name_exists"
+                ? ProblemDetailsHelper.Conflict(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
         }
 
         return Results.Created($"/organizations/{organizationId}/templates/{result.Value.Id}", result.Value);
@@ -129,11 +142,20 @@ public static class ServerTemplatesEndpoints
         Guid templateId,
         UpdateServerTemplateRequest request,
         IServerTemplateService templateService,
+        IValidator<UpdateServerTemplateRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await templateService.UpdateTemplateAsync(organizationId, templateId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return result.Error == "template_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)
@@ -151,7 +173,7 @@ public static class ServerTemplatesEndpoints
     {
         var result = await templateService.DeleteTemplateAsync(organizationId, templateId, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "template_not_found");
         }

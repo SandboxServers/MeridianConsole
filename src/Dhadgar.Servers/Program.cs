@@ -72,6 +72,7 @@ builder.Services.AddMassTransit(x =>
     x.AddEntityFrameworkOutbox<ServersDbContext>(o =>
     {
         o.UsePostgres();
+        o.UseBusOutbox();
         o.DisableInboxCleanupService();
         o.QueryDelay = TimeSpan.FromSeconds(1);
     });

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Dhadgar.Mods.Services;
 
 /// <summary>
@@ -131,7 +133,7 @@ public static class VersionRangeParser
             {
                 if (wildcardParts[0] != "*")
                 {
-                    if (!int.TryParse(wildcardParts[0], out var major))
+                    if (!int.TryParse(wildcardParts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var major))
                         return false; // Invalid non-wildcard, non-numeric segment
                     if (version.Major != major) return false;
                 }
@@ -140,7 +142,7 @@ public static class VersionRangeParser
             {
                 if (wildcardParts[1] != "*")
                 {
-                    if (!int.TryParse(wildcardParts[1], out var minor))
+                    if (!int.TryParse(wildcardParts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var minor))
                         return false; // Invalid non-wildcard, non-numeric segment
                     if (version.Minor != minor) return false;
                 }

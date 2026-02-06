@@ -1,6 +1,7 @@
 using Dhadgar.Contracts.Mods;
 using Dhadgar.Mods.Data;
 using Dhadgar.Mods.Data.Entities;
+using Dhadgar.Shared.Results;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -26,7 +27,7 @@ public sealed class ModVersionService : IModVersionService
         _timeProvider = timeProvider;
     }
 
-    public async Task<ServiceResult<ModVersionDetail>> GetVersionAsync(
+    public async Task<Result<ModVersionDetail>> GetVersionAsync(
         Guid organizationId,
         Guid modId,
         Guid versionId,
@@ -38,7 +39,7 @@ public sealed class ModVersionService : IModVersionService
 
         if (!modExists)
         {
-            return ServiceResult.Fail<ModVersionDetail>("mod_not_found");
+            return Result<ModVersionDetail>.Failure("mod_not_found");
         }
 
         var version = await _db.ModVersions
@@ -48,13 +49,13 @@ public sealed class ModVersionService : IModVersionService
 
         if (version is null)
         {
-            return ServiceResult.Fail<ModVersionDetail>("version_not_found");
+            return Result<ModVersionDetail>.Failure("version_not_found");
         }
 
-        return ServiceResult.Ok(MapToDetail(version));
+        return Result<ModVersionDetail>.Success(MapToDetail(version));
     }
 
-    public async Task<ServiceResult<ModVersionDetail>> GetLatestVersionAsync(
+    public async Task<Result<ModVersionDetail>> GetLatestVersionAsync(
         Guid organizationId,
         Guid modId,
         bool includePrerelease = false,
@@ -66,7 +67,7 @@ public sealed class ModVersionService : IModVersionService
 
         if (!modExists)
         {
-            return ServiceResult.Fail<ModVersionDetail>("mod_not_found");
+            return Result<ModVersionDetail>.Failure("mod_not_found");
         }
 
         var query = _db.ModVersions
@@ -84,7 +85,7 @@ public sealed class ModVersionService : IModVersionService
 
         if (versions.Count == 0)
         {
-            return ServiceResult.Fail<ModVersionDetail>("no_versions_found");
+            return Result<ModVersionDetail>.Failure("no_versions_found");
         }
 
         // Sort using SemanticVersion for proper prerelease ordering
@@ -105,10 +106,10 @@ public sealed class ModVersionService : IModVersionService
                 .First();
         }
 
-        return ServiceResult.Ok(MapToDetail(latest));
+        return Result<ModVersionDetail>.Success(MapToDetail(latest));
     }
 
-    public async Task<ServiceResult<ModVersionDetail>> PublishVersionAsync(
+    public async Task<Result<ModVersionDetail>> PublishVersionAsync(
         Guid organizationId,
         Guid modId,
         PublishVersionRequest request,
@@ -119,13 +120,13 @@ public sealed class ModVersionService : IModVersionService
 
         if (mod is null)
         {
-            return ServiceResult.Fail<ModVersionDetail>("mod_not_found");
+            return Result<ModVersionDetail>.Failure("mod_not_found");
         }
 
         // Parse version
         if (!SemanticVersion.TryParse(request.Version, out var semver))
         {
-            return ServiceResult.Fail<ModVersionDetail>("invalid_version_format");
+            return Result<ModVersionDetail>.Failure("invalid_version_format");
         }
 
         // Check for duplicate version
@@ -134,7 +135,7 @@ public sealed class ModVersionService : IModVersionService
 
         if (exists)
         {
-            return ServiceResult.Fail<ModVersionDetail>("version_already_exists");
+            return Result<ModVersionDetail>.Failure("version_already_exists");
         }
 
         // Get current latest to compare versions
@@ -198,9 +199,8 @@ public sealed class ModVersionService : IModVersionService
         }
 
         _db.ModVersions.Add(version);
-        await _db.SaveChangesAsync(ct);
 
-        // Publish event
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ModVersionPublished(
             modId,
             version.Id,
@@ -211,6 +211,8 @@ public sealed class ModVersionService : IModVersionService
             version.IsLatest,
             _timeProvider.GetUtcNow()), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Published version {Version} for mod {ModId}",
             version.Version, modId);
 
@@ -219,7 +221,7 @@ public sealed class ModVersionService : IModVersionService
         return result;
     }
 
-    public async Task<ServiceResult<bool>> DeprecateVersionAsync(
+    public async Task<Result<bool>> DeprecateVersionAsync(
         Guid organizationId,
         Guid modId,
         Guid versionId,
@@ -231,7 +233,7 @@ public sealed class ModVersionService : IModVersionService
 
         if (mod is null)
         {
-            return ServiceResult.Fail<bool>("mod_not_found");
+            return Result<bool>.Failure("mod_not_found");
         }
 
         var version = await _db.ModVersions
@@ -239,7 +241,7 @@ public sealed class ModVersionService : IModVersionService
 
         if (version is null)
         {
-            return ServiceResult.Fail<bool>("version_not_found");
+            return Result<bool>.Failure("version_not_found");
         }
 
         version.IsDeprecated = true;
@@ -267,9 +269,7 @@ public sealed class ModVersionService : IModVersionService
             }
         }
 
-        await _db.SaveChangesAsync(ct);
-
-        // Publish event
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ModVersionDeprecated(
             modId,
             versionId,
@@ -279,13 +279,15 @@ public sealed class ModVersionService : IModVersionService
             request.RecommendedVersionId,
             _timeProvider.GetUtcNow()), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Deprecated version {Version} for mod {ModId}: {Reason}",
             version.Version, modId, request.Reason);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<IReadOnlyList<ModVersionSummary>>> FindVersionsMatchingAsync(
+    public async Task<Result<IReadOnlyList<ModVersionSummary>>> FindVersionsMatchingAsync(
         Guid organizationId,
         Guid modId,
         string? constraint,
@@ -297,7 +299,7 @@ public sealed class ModVersionService : IModVersionService
 
         if (!modExists)
         {
-            return ServiceResult.Fail<IReadOnlyList<ModVersionSummary>>("mod_not_found");
+            return Result<IReadOnlyList<ModVersionSummary>>.Failure("mod_not_found");
         }
 
         var versions = await _db.ModVersions
@@ -311,7 +313,7 @@ public sealed class ModVersionService : IModVersionService
         {
             var allVersions = versions.Select(v => new ModVersionSummary(
                 v.Id, v.Version, v.IsPrerelease, v.DownloadCount, v.PublishedAt)).ToList();
-            return ServiceResult.Ok<IReadOnlyList<ModVersionSummary>>(allVersions);
+            return Result<IReadOnlyList<ModVersionSummary>>.Success(allVersions);
         }
 
         var matching = versions
@@ -325,7 +327,7 @@ public sealed class ModVersionService : IModVersionService
                 v.Id, v.Version, v.IsPrerelease, v.DownloadCount, v.PublishedAt))
             .ToList();
 
-        return ServiceResult.Ok<IReadOnlyList<ModVersionSummary>>(matching);
+        return Result<IReadOnlyList<ModVersionSummary>>.Success(matching);
     }
 
     private static ModVersionDetail MapToDetail(ModVersion version)

@@ -1,5 +1,6 @@
 using Dhadgar.Contracts;
 using Dhadgar.Contracts.Servers;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Servers.Services;
 
@@ -19,7 +20,7 @@ public interface IServerTemplateService
     /// <summary>
     /// Gets a template by ID.
     /// </summary>
-    Task<ServiceResult<ServerTemplateDetail>> GetTemplateAsync(
+    Task<Result<ServerTemplateDetail>> GetTemplateAsync(
         Guid templateId,
         Guid? organizationId,
         CancellationToken ct = default);
@@ -27,7 +28,7 @@ public interface IServerTemplateService
     /// <summary>
     /// Creates a new template.
     /// </summary>
-    Task<ServiceResult<ServerTemplateDetail>> CreateTemplateAsync(
+    Task<Result<ServerTemplateDetail>> CreateTemplateAsync(
         Guid organizationId,
         CreateServerTemplateRequest request,
         CancellationToken ct = default);
@@ -35,7 +36,7 @@ public interface IServerTemplateService
     /// <summary>
     /// Updates a template.
     /// </summary>
-    Task<ServiceResult<ServerTemplateDetail>> UpdateTemplateAsync(
+    Task<Result<ServerTemplateDetail>> UpdateTemplateAsync(
         Guid organizationId,
         Guid templateId,
         UpdateServerTemplateRequest request,
@@ -44,7 +45,7 @@ public interface IServerTemplateService
     /// <summary>
     /// Deletes a template (soft delete).
     /// </summary>
-    Task<ServiceResult<bool>> DeleteTemplateAsync(
+    Task<Result<bool>> DeleteTemplateAsync(
         Guid organizationId,
         Guid templateId,
         CancellationToken ct = default);

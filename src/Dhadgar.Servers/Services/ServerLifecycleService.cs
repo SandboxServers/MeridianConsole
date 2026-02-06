@@ -1,6 +1,7 @@
 using Dhadgar.Contracts.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.Servers.Data.Entities;
+using Dhadgar.Shared.Results;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -40,7 +41,7 @@ public sealed class ServerLifecycleService : IServerLifecycleService
         _logger = logger;
     }
 
-    public async Task<ServiceResult<bool>> StartServerAsync(
+    public async Task<Result<bool>> StartServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default)
@@ -50,17 +51,17 @@ public sealed class ServerLifecycleService : IServerLifecycleService
 
         if (server is null)
         {
-            return ServiceResult.Fail<bool>("server_not_found");
+            return Result<bool>.Failure("server_not_found");
         }
 
         if (server.Status != ServerStatus.Ready && server.Status != ServerStatus.Stopped && server.Status != ServerStatus.Crashed)
         {
-            return ServiceResult.Fail<bool>($"cannot_start_from_status_{server.Status}");
+            return Result<bool>.Failure($"cannot_start_from_status_{server.Status}");
         }
 
         if (!server.NodeId.HasValue)
         {
-            return ServiceResult.Fail<bool>("server_not_placed");
+            return Result<bool>.Failure("server_not_placed");
         }
 
         var oldStatus = server.Status.ToString();
@@ -68,8 +69,7 @@ public sealed class ServerLifecycleService : IServerLifecycleService
         server.PowerState = ServerPowerState.Starting;
         // Note: LastStartedAt is set when transitioning to Running, not Starting
 
-        await _db.SaveChangesAsync(ct);
-
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerStatusChanged(
             server.Id,
             organizationId,
@@ -79,12 +79,14 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             "User requested start",
             DateTimeOffset.UtcNow), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Starting server {ServerId}", serverId);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<bool>> StopServerAsync(
+    public async Task<Result<bool>> StopServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default)
@@ -94,20 +96,19 @@ public sealed class ServerLifecycleService : IServerLifecycleService
 
         if (server is null)
         {
-            return ServiceResult.Fail<bool>("server_not_found");
+            return Result<bool>.Failure("server_not_found");
         }
 
         if (server.Status != ServerStatus.Running && server.Status != ServerStatus.Starting)
         {
-            return ServiceResult.Fail<bool>($"cannot_stop_from_status_{server.Status}");
+            return Result<bool>.Failure($"cannot_stop_from_status_{server.Status}");
         }
 
         var oldStatus = server.Status.ToString();
         server.Status = ServerStatus.Stopping;
         server.PowerState = ServerPowerState.Stopping;
 
-        await _db.SaveChangesAsync(ct);
-
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerStatusChanged(
             server.Id,
             organizationId,
@@ -117,12 +118,14 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             "User requested stop",
             DateTimeOffset.UtcNow), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Stopping server {ServerId}", serverId);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<bool>> RestartServerAsync(
+    public async Task<Result<bool>> RestartServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default)
@@ -132,12 +135,12 @@ public sealed class ServerLifecycleService : IServerLifecycleService
 
         if (server is null)
         {
-            return ServiceResult.Fail<bool>("server_not_found");
+            return Result<bool>.Failure("server_not_found");
         }
 
         if (server.Status != ServerStatus.Running)
         {
-            return ServiceResult.Fail<bool>($"cannot_restart_from_status_{server.Status}");
+            return Result<bool>.Failure($"cannot_restart_from_status_{server.Status}");
         }
 
         // Publish restart event - agent handles the actual restart
@@ -150,10 +153,10 @@ public sealed class ServerLifecycleService : IServerLifecycleService
 
         _logger.LogInformation("Restarting server {ServerId}", serverId);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<bool>> KillServerAsync(
+    public async Task<Result<bool>> KillServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default)
@@ -163,12 +166,12 @@ public sealed class ServerLifecycleService : IServerLifecycleService
 
         if (server is null)
         {
-            return ServiceResult.Fail<bool>("server_not_found");
+            return Result<bool>.Failure("server_not_found");
         }
 
         if (server.PowerState == ServerPowerState.Off)
         {
-            return ServiceResult.Fail<bool>("server_already_off");
+            return Result<bool>.Failure("server_already_off");
         }
 
         var oldStatus = server.Status.ToString();
@@ -183,8 +186,7 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             server.TotalUptimeSeconds += (long)uptime;
         }
 
-        await _db.SaveChangesAsync(ct);
-
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerStopped(
             server.Id,
             organizationId,
@@ -192,27 +194,31 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             "Force killed by user",
             DateTimeOffset.UtcNow), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Force killed server {ServerId}", serverId);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<bool>> TransitionStatusAsync(
+    public async Task<Result<bool>> TransitionStatusAsync(
+        Guid organizationId,
         Guid serverId,
         ServerStatus newStatus,
         string? reason = null,
         CancellationToken ct = default)
     {
-        var server = await _db.Servers.FindAsync([serverId], ct);
+        var server = await _db.Servers
+            .FirstOrDefaultAsync(s => s.Id == serverId && s.OrganizationId == organizationId, ct);
 
         if (server is null)
         {
-            return ServiceResult.Fail<bool>("server_not_found");
+            return Result<bool>.Failure("server_not_found");
         }
 
         if (!IsValidTransition(server.Status, newStatus))
         {
-            return ServiceResult.Fail<bool>($"invalid_transition_{server.Status}_to_{newStatus}");
+            return Result<bool>.Failure($"invalid_transition_{server.Status}_to_{newStatus}");
         }
 
         var oldStatus = server.Status.ToString();
@@ -251,8 +257,7 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             server.CrashCount++;
         }
 
-        await _db.SaveChangesAsync(ct);
-
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerStatusChanged(
             server.Id,
             server.OrganizationId,
@@ -262,29 +267,32 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             reason,
             DateTimeOffset.UtcNow), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Server {ServerId} transitioned from {OldStatus} to {NewStatus}: {Reason}",
             serverId, oldStatus, newStatus, reason);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<bool>> TransitionPowerStateAsync(
+    public async Task<Result<bool>> TransitionPowerStateAsync(
+        Guid organizationId,
         Guid serverId,
         ServerPowerState newPowerState,
         CancellationToken ct = default)
     {
-        var server = await _db.Servers.FindAsync([serverId], ct);
+        var server = await _db.Servers
+            .FirstOrDefaultAsync(s => s.Id == serverId && s.OrganizationId == organizationId, ct);
 
         if (server is null)
         {
-            return ServiceResult.Fail<bool>("server_not_found");
+            return Result<bool>.Failure("server_not_found");
         }
 
         var oldPowerState = server.PowerState.ToString();
         server.PowerState = newPowerState;
 
-        await _db.SaveChangesAsync(ct);
-
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerPowerStateChanged(
             server.Id,
             server.OrganizationId,
@@ -292,7 +300,9 @@ public sealed class ServerLifecycleService : IServerLifecycleService
             newPowerState.ToString(),
             DateTimeOffset.UtcNow), ct);
 
-        return ServiceResult.Ok(true);
+        await _db.SaveChangesAsync(ct);
+
+        return Result<bool>.Success(true);
     }
 
     private static bool IsValidTransition(ServerStatus current, ServerStatus target)

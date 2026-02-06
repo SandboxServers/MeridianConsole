@@ -1,12 +1,13 @@
 using Dhadgar.Servers.Services;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Servers.Endpoints;
 
 public static class ServerLifecycleEndpoints
 {
-    private static IResult HandleLifecycleResult(ServiceResult<bool> result, string defaultError)
+    private static IResult HandleLifecycleResult(Result<bool> result, string defaultError)
     {
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return result.Error == "server_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)

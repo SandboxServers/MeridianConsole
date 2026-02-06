@@ -1,3 +1,5 @@
+using Dhadgar.Shared.Results;
+
 namespace Dhadgar.Servers.Services;
 
 public interface IServerLifecycleService
@@ -5,7 +7,7 @@ public interface IServerLifecycleService
     /// <summary>
     /// Starts a server.
     /// </summary>
-    Task<ServiceResult<bool>> StartServerAsync(
+    Task<Result<bool>> StartServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default);
@@ -13,7 +15,7 @@ public interface IServerLifecycleService
     /// <summary>
     /// Stops a server gracefully.
     /// </summary>
-    Task<ServiceResult<bool>> StopServerAsync(
+    Task<Result<bool>> StopServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default);
@@ -21,7 +23,7 @@ public interface IServerLifecycleService
     /// <summary>
     /// Restarts a server.
     /// </summary>
-    Task<ServiceResult<bool>> RestartServerAsync(
+    Task<Result<bool>> RestartServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default);
@@ -29,24 +31,26 @@ public interface IServerLifecycleService
     /// <summary>
     /// Force-kills a server.
     /// </summary>
-    Task<ServiceResult<bool>> KillServerAsync(
+    Task<Result<bool>> KillServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default);
 
     /// <summary>
-    /// Transitions a server to a new status with validation.
+    /// Transitions a server to a new status with validation, scoped to the specified organization.
     /// </summary>
-    Task<ServiceResult<bool>> TransitionStatusAsync(
+    Task<Result<bool>> TransitionStatusAsync(
+        Guid organizationId,
         Guid serverId,
         Data.Entities.ServerStatus newStatus,
         string? reason = null,
         CancellationToken ct = default);
 
     /// <summary>
-    /// Transitions a server's power state.
+    /// Transitions a server's power state, scoped to the specified organization.
     /// </summary>
-    Task<ServiceResult<bool>> TransitionPowerStateAsync(
+    Task<Result<bool>> TransitionPowerStateAsync(
+        Guid organizationId,
         Guid serverId,
         Data.Entities.ServerPowerState newPowerState,
         CancellationToken ct = default);

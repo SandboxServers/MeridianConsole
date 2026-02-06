@@ -4,6 +4,7 @@ using Dhadgar.Contracts.Console;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 using System.Text.Json;
 using ContractsOutputType = Dhadgar.Contracts.Console.ConsoleOutputType;
 using EntityOutputType = Dhadgar.Console.Data.Entities.ConsoleOutputType;
@@ -19,19 +20,31 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
 {
     private readonly ConsoleDbContext _db;
     private readonly IDistributedCache _cache;
+    private readonly IConnectionMultiplexer _redis;
     private readonly ConsoleOptions _options;
     private readonly TimeSpan _hotStorageTtl;
     private readonly TimeSpan _lockTimeout = TimeSpan.FromSeconds(5);
     private readonly TimeSpan _lockExpiry = TimeSpan.FromSeconds(30);
     private const int MaxHotStorageLines = 500;
 
+    // Lua script for atomic compare-and-delete (release lock only if we own it)
+    private const string ReleaseLockScript = """
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("del", KEYS[1])
+        else
+            return 0
+        end
+        """;
+
     public ConsoleHistoryService(
         ConsoleDbContext db,
         IDistributedCache cache,
+        IConnectionMultiplexer redis,
         IOptions<ConsoleOptions> options)
     {
         _db = db;
         _cache = cache;
+        _redis = redis;
         _options = options.Value;
         _hotStorageTtl = TimeSpan.FromMinutes(_options.HotStorageTtlMinutes);
     }
@@ -43,10 +56,10 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         var line = new ConsoleLine(content, outputType, DateTime.UtcNow, sequenceNumber);
 
         // Acquire distributed lock to prevent race conditions during read-modify-write
-        if (!await TryAcquireLockAsync(lockKey, ct))
+        var lockValue = await TryAcquireLockAsync(lockKey, ct);
+        if (lockValue is null)
         {
             // Lock acquisition failed - log and continue (best effort)
-            // In production, consider using Redis LPUSH directly via StackExchange.Redis
             return;
         }
 
@@ -66,7 +79,7 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         }
         finally
         {
-            await ReleaseLockAsync(lockKey, ct);
+            await ReleaseLockAsync(lockKey, lockValue);
         }
     }
 
@@ -76,10 +89,10 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         return data?.Lines.Take(lineCount).ToList() ?? [];
     }
 
-    public async Task<ConsoleHistorySearchResult> SearchHistoryAsync(SearchConsoleHistoryRequest request, CancellationToken ct = default)
+    public async Task<ConsoleHistorySearchResult> SearchHistoryAsync(Guid organizationId, SearchConsoleHistoryRequest request, CancellationToken ct = default)
     {
         var query = _db.ConsoleHistory
-            .Where(h => h.ServerId == request.ServerId);
+            .Where(h => h.ServerId == request.ServerId && h.OrganizationId == organizationId);
 
         if (request.StartTime.HasValue)
         {
@@ -128,7 +141,8 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         var lockKey = GetLockKey(serverId);
 
         // Acquire lock to ensure consistency during archival
-        if (!await TryAcquireLockAsync(lockKey, ct))
+        var lockValue = await TryAcquireLockAsync(lockKey, ct);
+        if (lockValue is null)
         {
             return; // Another archival may be in progress
         }
@@ -171,7 +185,7 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         }
         finally
         {
-            await ReleaseLockAsync(lockKey, ct);
+            await ReleaseLockAsync(lockKey, lockValue);
         }
     }
 
@@ -207,30 +221,34 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         }
     }
 
-    private async Task<bool> TryAcquireLockAsync(string lockKey, CancellationToken ct)
+    private async Task<string?> TryAcquireLockAsync(string lockKey, CancellationToken ct)
     {
+        var db = _redis.GetDatabase();
         var lockValue = Guid.NewGuid().ToString();
         var deadline = DateTime.UtcNow.Add(_lockTimeout);
 
         while (DateTime.UtcNow < deadline)
         {
-            var existing = await _cache.GetStringAsync(lockKey, ct);
-            if (string.IsNullOrEmpty(existing))
+            // Atomic SET NX with expiry — only succeeds if key doesn't exist
+            var acquired = await db.StringSetAsync(lockKey, lockValue, _lockExpiry, When.NotExists);
+            if (acquired)
             {
-                await _cache.SetStringAsync(lockKey, lockValue,
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = _lockExpiry }, ct);
-                return true;
+                return lockValue;
             }
 
             await Task.Delay(50, ct);
         }
 
-        return false;
+        return null;
     }
 
-    private async Task ReleaseLockAsync(string lockKey, CancellationToken ct)
+    private async Task ReleaseLockAsync(string lockKey, string lockValue)
     {
-        await _cache.RemoveAsync(lockKey, ct);
+        var db = _redis.GetDatabase();
+        // Atomic compare-and-delete: only release if we still own the lock
+        await db.ScriptEvaluateAsync(ReleaseLockScript,
+            [(RedisKey)lockKey],
+            [(RedisValue)lockValue]);
     }
 
     private static string GetHotStorageKey(Guid serverId) => $"console:history:{serverId}";

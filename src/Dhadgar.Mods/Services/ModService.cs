@@ -2,6 +2,7 @@ using Dhadgar.Contracts;
 using Dhadgar.Contracts.Mods;
 using Dhadgar.Mods.Data;
 using Dhadgar.Mods.Data.Entities;
+using Dhadgar.Shared.Results;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,10 @@ public sealed class ModService : IModService
         ModSearchQuery query,
         CancellationToken ct = default)
     {
+        // Clamp pagination to valid ranges
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+
         var queryable = _db.Mods.Where(m => !m.IsArchived);
 
         // Filter by organization or public
@@ -61,7 +66,8 @@ public sealed class ModService : IModService
 
         if (!string.IsNullOrEmpty(query.Query))
         {
-            var searchPattern = $"%{query.Query}%";
+            var escapedQuery = EscapeLikePattern(query.Query);
+            var searchPattern = $"%{escapedQuery}%";
             queryable = queryable.Where(m =>
                 EF.Functions.ILike(m.Name, searchPattern) ||
                 (m.Description != null && EF.Functions.ILike(m.Description, searchPattern)) ||
@@ -103,8 +109,8 @@ public sealed class ModService : IModService
         var mods = await queryable
             .Include(m => m.Category)
             .Include(m => m.Versions.Where(v => v.IsLatest))
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(m => new ModListItem(
                 m.Id,
                 m.Name,
@@ -130,11 +136,11 @@ public sealed class ModService : IModService
         return FilteredPagedResponse<ModListItem>.Create(
             mods,
             totalCount,
-            query.Page,
-            query.PageSize);
+            page,
+            pageSize);
     }
 
-    public async Task<ServiceResult<ModDetail>> GetModAsync(
+    public async Task<Result<ModDetail>> GetModAsync(
         Guid modId,
         Guid? requestingOrgId,
         CancellationToken ct = default)
@@ -146,19 +152,19 @@ public sealed class ModService : IModService
 
         if (mod is null)
         {
-            return ServiceResult.Fail<ModDetail>("mod_not_found");
+            return Result<ModDetail>.Failure("mod_not_found");
         }
 
         // Check access
         if (!mod.IsPublic && mod.OrganizationId != requestingOrgId)
         {
-            return ServiceResult.Fail<ModDetail>("mod_not_found");
+            return Result<ModDetail>.Failure("mod_not_found");
         }
 
-        return ServiceResult.Ok(MapToDetail(mod));
+        return Result<ModDetail>.Success(MapToDetail(mod));
     }
 
-    public async Task<ServiceResult<ModDetail>> CreateModAsync(
+    public async Task<Result<ModDetail>> CreateModAsync(
         Guid organizationId,
         CreateModRequest request,
         CancellationToken ct = default)
@@ -169,7 +175,7 @@ public sealed class ModService : IModService
 
         if (exists)
         {
-            return ServiceResult.Fail<ModDetail>("mod_slug_exists");
+            return Result<ModDetail>.Failure("mod_slug_exists");
         }
 
         var mod = new Mod
@@ -188,9 +194,8 @@ public sealed class ModService : IModService
         };
 
         _db.Mods.Add(mod);
-        await _db.SaveChangesAsync(ct);
 
-        // Publish event
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ModCreated(
             mod.Id,
             organizationId,
@@ -200,13 +205,22 @@ public sealed class ModService : IModService
             mod.IsPublic,
             DateTimeOffset.UtcNow), ct);
 
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return Result<ModDetail>.Failure("mod_slug_exists");
+        }
+
         _logger.LogInformation("Created mod {ModId} '{ModName}' for org {OrgId}",
             mod.Id, mod.Name, organizationId);
 
-        return ServiceResult.Ok(MapToDetail(mod));
+        return Result<ModDetail>.Success(MapToDetail(mod));
     }
 
-    public async Task<ServiceResult<ModDetail>> UpdateModAsync(
+    public async Task<Result<ModDetail>> UpdateModAsync(
         Guid organizationId,
         Guid modId,
         UpdateModRequest request,
@@ -219,7 +233,7 @@ public sealed class ModService : IModService
 
         if (mod is null)
         {
-            return ServiceResult.Fail<ModDetail>("mod_not_found");
+            return Result<ModDetail>.Failure("mod_not_found");
         }
 
         var oldIsPublic = mod.IsPublic;
@@ -234,9 +248,7 @@ public sealed class ModService : IModService
         if (request.IconUrl != null) mod.IconUrl = request.IconUrl;
         if (request.Tags != null) mod.Tags = request.Tags.ToList();
 
-        await _db.SaveChangesAsync(ct);
-
-        // Publish visibility change event if applicable
+        // Publish visibility change event before save so the outbox captures it in the same transaction
         if (request.IsPublic.HasValue && request.IsPublic.Value != oldIsPublic)
         {
             await _publishEndpoint.Publish(new ModVisibilityChanged(
@@ -247,12 +259,14 @@ public sealed class ModService : IModService
                 DateTimeOffset.UtcNow), ct);
         }
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Updated mod {ModId} for org {OrgId}", modId, organizationId);
 
-        return ServiceResult.Ok(MapToDetail(mod));
+        return Result<ModDetail>.Success(MapToDetail(mod));
     }
 
-    public async Task<ServiceResult<bool>> DeleteModAsync(
+    public async Task<Result<bool>> DeleteModAsync(
         Guid organizationId,
         Guid modId,
         CancellationToken ct = default)
@@ -262,23 +276,31 @@ public sealed class ModService : IModService
 
         if (mod is null)
         {
-            return ServiceResult.Fail<bool>("mod_not_found");
+            return Result<bool>.Failure("mod_not_found");
         }
 
         mod.DeletedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
 
-        // Publish event
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ModDeleted(
             mod.Id,
             organizationId,
             mod.Name,
             DateTimeOffset.UtcNow), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Deleted mod {ModId} for org {OrgId}", modId, organizationId);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
+        ex.InnerException?.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) == true ||
+        ex.InnerException?.Message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string EscapeLikePattern(string input) =>
+        input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     private static ModDetail MapToDetail(Mod mod)
     {

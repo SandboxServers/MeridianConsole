@@ -1,5 +1,6 @@
 using Dhadgar.Contracts;
 using Dhadgar.Contracts.Mods;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Mods.Services;
 
@@ -16,7 +17,7 @@ public interface IModService
     /// <summary>
     /// Gets detailed information about a specific mod.
     /// </summary>
-    Task<ServiceResult<ModDetail>> GetModAsync(
+    Task<Result<ModDetail>> GetModAsync(
         Guid modId,
         Guid? requestingOrgId,
         CancellationToken ct = default);
@@ -24,7 +25,7 @@ public interface IModService
     /// <summary>
     /// Creates a new mod.
     /// </summary>
-    Task<ServiceResult<ModDetail>> CreateModAsync(
+    Task<Result<ModDetail>> CreateModAsync(
         Guid organizationId,
         CreateModRequest request,
         CancellationToken ct = default);
@@ -32,7 +33,7 @@ public interface IModService
     /// <summary>
     /// Updates a mod.
     /// </summary>
-    Task<ServiceResult<ModDetail>> UpdateModAsync(
+    Task<Result<ModDetail>> UpdateModAsync(
         Guid organizationId,
         Guid modId,
         UpdateModRequest request,
@@ -41,7 +42,7 @@ public interface IModService
     /// <summary>
     /// Deletes a mod (soft delete).
     /// </summary>
-    Task<ServiceResult<bool>> DeleteModAsync(
+    Task<Result<bool>> DeleteModAsync(
         Guid organizationId,
         Guid modId,
         CancellationToken ct = default);

@@ -40,15 +40,20 @@ public sealed class ConsoleOptions
     public int SessionCleanupIntervalSeconds { get; set; } = 300;
 
     /// <summary>
-    /// Regex patterns for dangerous commands that should be blocked.
+    /// Regex patterns for allowed game server commands.
+    /// Only commands matching at least one pattern will be dispatched.
     /// </summary>
-    public IList<string> DangerousCommandPatterns { get; set; } =
+    public IList<string> AllowedCommandPatterns { get; set; } =
     [
-        @"^(rm|del|delete|format)\s+-rf?\s+[/\\]",
-        @"^(shutdown|poweroff|reboot|halt)\s*",
-        @":(){ :|:& };:",
-        @">\s*/dev/(sda|null|zero)",
-        @"mkfs\.",
-        @"dd\s+if="
+        @"^(say|tell|msg|w|whisper|me)\s",
+        @"^(stop|save-all|save-on|save-off|list|seed|difficulty|gamemode|gamerule|weather|time|whitelist|ban|pardon|kick|op|deop|tp|teleport|give|clear|effect|enchant|xp|scoreboard|title|bossbar|data|execute|function|reload|summon|kill|setblock|fill|clone|particle|playsound|stopsound|spreadplayers|tag|team|trigger|worldborder|advancement|recipe|loot|item|place|ride|damage|return|tick)\s?",
+        @"^/",
+        @"^(help|version|tps|plugins|mods|status|info|debug)\s*$"
     ];
+
+    /// <summary>
+    /// Timeout in milliseconds for command regex matching to prevent ReDoS.
+    /// </summary>
+    [Range(10, 5000)]
+    public int CommandRegexTimeoutMs { get; set; } = 1000;
 }

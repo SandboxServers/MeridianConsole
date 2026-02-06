@@ -1,5 +1,6 @@
 using Dhadgar.Contracts;
 using Dhadgar.Contracts.Servers;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Servers.Services;
 
@@ -16,7 +17,7 @@ public interface IServerService
     /// <summary>
     /// Gets detailed information about a specific server.
     /// </summary>
-    Task<ServiceResult<ServerDetail>> GetServerAsync(
+    Task<Result<ServerDetail>> GetServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default);
@@ -24,7 +25,7 @@ public interface IServerService
     /// <summary>
     /// Creates a new server.
     /// </summary>
-    Task<ServiceResult<ServerDetail>> CreateServerAsync(
+    Task<Result<ServerDetail>> CreateServerAsync(
         Guid organizationId,
         CreateServerRequest request,
         CancellationToken ct = default);
@@ -32,7 +33,7 @@ public interface IServerService
     /// <summary>
     /// Updates a server's properties.
     /// </summary>
-    Task<ServiceResult<ServerDetail>> UpdateServerAsync(
+    Task<Result<ServerDetail>> UpdateServerAsync(
         Guid organizationId,
         Guid serverId,
         UpdateServerRequest request,
@@ -41,7 +42,7 @@ public interface IServerService
     /// <summary>
     /// Deletes a server (soft delete).
     /// </summary>
-    Task<ServiceResult<bool>> DeleteServerAsync(
+    Task<Result<bool>> DeleteServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default);

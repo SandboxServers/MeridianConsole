@@ -2,6 +2,7 @@ using Dhadgar.Contracts;
 using Dhadgar.Contracts.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.Servers.Data.Entities;
+using Dhadgar.Shared.Results;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -28,6 +29,10 @@ public sealed class ServerTemplateService : IServerTemplateService
         int pageSize,
         CancellationToken ct = default)
     {
+        // Clamp pagination to valid ranges
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var query = _db.ServerTemplates.Where(t => !t.IsArchived);
 
         if (organizationId.HasValue)
@@ -77,7 +82,7 @@ public sealed class ServerTemplateService : IServerTemplateService
         };
     }
 
-    public async Task<ServiceResult<ServerTemplateDetail>> GetTemplateAsync(
+    public async Task<Result<ServerTemplateDetail>> GetTemplateAsync(
         Guid templateId,
         Guid? organizationId,
         CancellationToken ct = default)
@@ -87,19 +92,19 @@ public sealed class ServerTemplateService : IServerTemplateService
 
         if (template is null)
         {
-            return ServiceResult.Fail<ServerTemplateDetail>("template_not_found");
+            return Result<ServerTemplateDetail>.Failure("template_not_found");
         }
 
         // Check access
         if (!template.IsPublic && template.OrganizationId != organizationId)
         {
-            return ServiceResult.Fail<ServerTemplateDetail>("template_not_found");
+            return Result<ServerTemplateDetail>.Failure("template_not_found");
         }
 
-        return ServiceResult.Ok(MapToDetail(template));
+        return Result<ServerTemplateDetail>.Success(MapToDetail(template));
     }
 
-    public async Task<ServiceResult<ServerTemplateDetail>> CreateTemplateAsync(
+    public async Task<Result<ServerTemplateDetail>> CreateTemplateAsync(
         Guid organizationId,
         CreateServerTemplateRequest request,
         CancellationToken ct = default)
@@ -110,7 +115,7 @@ public sealed class ServerTemplateService : IServerTemplateService
 
         if (exists)
         {
-            return ServiceResult.Fail<ServerTemplateDetail>("template_name_exists");
+            return Result<ServerTemplateDetail>.Failure("template_name_exists");
         }
 
         var template = new ServerTemplate
@@ -133,10 +138,10 @@ public sealed class ServerTemplateService : IServerTemplateService
         _logger.LogInformation("Created template {TemplateId} '{TemplateName}' for org {OrgId}",
             template.Id, template.Name, organizationId);
 
-        return ServiceResult.Ok(MapToDetail(template));
+        return Result<ServerTemplateDetail>.Success(MapToDetail(template));
     }
 
-    public async Task<ServiceResult<ServerTemplateDetail>> UpdateTemplateAsync(
+    public async Task<Result<ServerTemplateDetail>> UpdateTemplateAsync(
         Guid organizationId,
         Guid templateId,
         UpdateServerTemplateRequest request,
@@ -147,7 +152,7 @@ public sealed class ServerTemplateService : IServerTemplateService
 
         if (template is null)
         {
-            return ServiceResult.Fail<ServerTemplateDetail>("template_not_found");
+            return Result<ServerTemplateDetail>.Failure("template_not_found");
         }
 
         if (request.Name != null && request.Name != template.Name)
@@ -157,7 +162,7 @@ public sealed class ServerTemplateService : IServerTemplateService
 
             if (exists)
             {
-                return ServiceResult.Fail<ServerTemplateDetail>("template_name_exists");
+                return Result<ServerTemplateDetail>.Failure("template_name_exists");
             }
 
             template.Name = request.Name;
@@ -176,10 +181,10 @@ public sealed class ServerTemplateService : IServerTemplateService
 
         _logger.LogInformation("Updated template {TemplateId} for org {OrgId}", templateId, organizationId);
 
-        return ServiceResult.Ok(MapToDetail(template));
+        return Result<ServerTemplateDetail>.Success(MapToDetail(template));
     }
 
-    public async Task<ServiceResult<bool>> DeleteTemplateAsync(
+    public async Task<Result<bool>> DeleteTemplateAsync(
         Guid organizationId,
         Guid templateId,
         CancellationToken ct = default)
@@ -189,7 +194,7 @@ public sealed class ServerTemplateService : IServerTemplateService
 
         if (template is null)
         {
-            return ServiceResult.Fail<bool>("template_not_found");
+            return Result<bool>.Failure("template_not_found");
         }
 
         template.DeletedAt = DateTime.UtcNow;
@@ -197,7 +202,7 @@ public sealed class ServerTemplateService : IServerTemplateService
 
         _logger.LogInformation("Deleted template {TemplateId} for org {OrgId}", templateId, organizationId);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
 
     private static ServerTemplateDetail MapToDetail(ServerTemplate template)

@@ -1,5 +1,7 @@
 using Dhadgar.Contracts.Servers;
 using Dhadgar.Servers.Services;
+using Dhadgar.ServiceDefaults.Problems;
+using FluentValidation;
 
 namespace Dhadgar.Servers.Endpoints;
 
@@ -50,6 +52,7 @@ public static class ServersEndpoints
     private static async Task<IResult> ListServers(
         Guid organizationId,
         IServerService serverService,
+        HttpContext httpContext,
         int page = 1,
         int pageSize = 20,
         string? status = null,
@@ -63,6 +66,12 @@ public static class ServersEndpoints
         bool includeDeleted = false,
         CancellationToken ct = default)
     {
+        // Only admins can include soft-deleted servers
+        if (includeDeleted && !httpContext.User.IsInRole("admin"))
+        {
+            includeDeleted = false;
+        }
+
         var query = new ServerListQuery(
             page, pageSize, status, powerState, gameType, nodeId,
             search, tags, sortBy, sortOrder, includeDeleted);
@@ -79,7 +88,7 @@ public static class ServersEndpoints
     {
         var result = await serverService.GetServerAsync(organizationId, serverId, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "server_not_found");
         }
@@ -91,13 +100,24 @@ public static class ServersEndpoints
         Guid organizationId,
         CreateServerRequest request,
         IServerService serverService,
+        IValidator<CreateServerRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await serverService.CreateServerAsync(organizationId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
+            return result.Error == "server_name_exists"
+                ? ProblemDetailsHelper.Conflict(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
         }
 
         return Results.Created($"/organizations/{organizationId}/servers/{result.Value.Id}", result.Value);
@@ -108,15 +128,27 @@ public static class ServersEndpoints
         Guid serverId,
         UpdateServerRequest request,
         IServerService serverService,
+        IValidator<UpdateServerRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await serverService.UpdateServerAsync(organizationId, serverId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
-            return result.Error == "server_not_found"
-                ? ProblemDetailsHelper.NotFound(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
+            return result.Error switch
+            {
+                "server_not_found" => ProblemDetailsHelper.NotFound(result.Error),
+                "server_name_exists" => ProblemDetailsHelper.Conflict(result.Error),
+                _ => ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed")
+            };
         }
 
         return Results.Ok(result.Value);
@@ -130,7 +162,7 @@ public static class ServersEndpoints
     {
         var result = await serverService.DeleteServerAsync(organizationId, serverId, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "server_not_found");
         }

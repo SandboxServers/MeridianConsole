@@ -1,5 +1,7 @@
 using Dhadgar.Console.Services;
 using Dhadgar.Contracts.Console;
+using Dhadgar.ServiceDefaults.Problems;
+using FluentValidation;
 
 namespace Dhadgar.Console.Endpoints;
 
@@ -58,9 +60,18 @@ public static class ConsoleEndpoints
         Guid serverId,
         SearchConsoleHistoryRequest request,
         IConsoleHistoryService historyService,
+        IValidator<SearchConsoleHistoryRequest> validator,
         HttpContext httpContext,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         // Validate tenant access
         var userOrgId = httpContext.User?.FindFirst("org_id")?.Value;
         if (!Guid.TryParse(userOrgId, out var claimOrgId) || claimOrgId != organizationId)
@@ -79,7 +90,7 @@ public static class ConsoleEndpoints
             Page = clampedPage,
             PageSize = clampedPageSize
         };
-        var result = await historyService.SearchHistoryAsync(searchRequest, ct);
+        var result = await historyService.SearchHistoryAsync(organizationId, searchRequest, ct);
         return Results.Ok(result);
     }
 }

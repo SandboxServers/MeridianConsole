@@ -2,6 +2,7 @@ using Dhadgar.Contracts;
 using Dhadgar.Contracts.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.Servers.Data.Entities;
+using Dhadgar.Shared.Results;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,10 @@ public sealed class ServerService : IServerService
         ServerListQuery query,
         CancellationToken ct = default)
     {
+        // Clamp pagination to valid ranges
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+
         var queryable = _db.Servers
             .Where(s => s.OrganizationId == organizationId);
 
@@ -55,7 +60,8 @@ public sealed class ServerService : IServerService
 
         if (!string.IsNullOrEmpty(query.Search))
         {
-            var searchPattern = $"%{query.Search}%";
+            var escapedSearch = EscapeLikePattern(query.Search);
+            var searchPattern = $"%{escapedSearch}%";
             queryable = queryable.Where(s =>
                 EF.Functions.ILike(s.Name, searchPattern) ||
                 (s.DisplayName != null && EF.Functions.ILike(s.DisplayName, searchPattern)));
@@ -94,8 +100,8 @@ public sealed class ServerService : IServerService
 
         // Apply pagination
         var servers = await queryable
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(s => new ServerListItem(
                 s.Id,
                 s.Name,
@@ -118,11 +124,11 @@ public sealed class ServerService : IServerService
         return FilteredPagedResponse<ServerListItem>.Create(
             servers,
             totalCount,
-            query.Page,
-            query.PageSize);
+            page,
+            pageSize);
     }
 
-    public async Task<ServiceResult<ServerDetail>> GetServerAsync(
+    public async Task<Result<ServerDetail>> GetServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default)
@@ -134,13 +140,13 @@ public sealed class ServerService : IServerService
 
         if (server is null)
         {
-            return ServiceResult.Fail<ServerDetail>("server_not_found");
+            return Result<ServerDetail>.Failure("server_not_found");
         }
 
-        return ServiceResult.Ok(MapToDetail(server));
+        return Result<ServerDetail>.Success(MapToDetail(server));
     }
 
-    public async Task<ServiceResult<ServerDetail>> CreateServerAsync(
+    public async Task<Result<ServerDetail>> CreateServerAsync(
         Guid organizationId,
         CreateServerRequest request,
         CancellationToken ct = default)
@@ -151,7 +157,7 @@ public sealed class ServerService : IServerService
 
         if (exists)
         {
-            return ServiceResult.Fail<ServerDetail>("server_name_exists");
+            return Result<ServerDetail>.Failure("server_name_exists");
         }
 
         var server = new Server
@@ -195,7 +201,7 @@ public sealed class ServerService : IServerService
 
                 if (!serverPort.HasValidPorts())
                 {
-                    return ServiceResult.Fail<ServerDetail>(
+                    return Result<ServerDetail>.Failure(
                         $"invalid_port_range: port '{port.Name}' has invalid port numbers (must be {ServerPort.MinPort}-{ServerPort.MaxPort})");
                 }
 
@@ -204,9 +210,8 @@ public sealed class ServerService : IServerService
         }
 
         _db.Servers.Add(server);
-        await _db.SaveChangesAsync(ct);
 
-        // Publish event
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerCreated(
             server.Id,
             organizationId,
@@ -214,13 +219,22 @@ public sealed class ServerService : IServerService
             server.GameType,
             DateTimeOffset.UtcNow), ct);
 
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return Result<ServerDetail>.Failure("server_name_exists");
+        }
+
         _logger.LogInformation("Created server {ServerId} '{ServerName}' for org {OrgId}",
             server.Id, server.Name, organizationId);
 
-        return ServiceResult.Ok(MapToDetail(server));
+        return Result<ServerDetail>.Success(MapToDetail(server));
     }
 
-    public async Task<ServiceResult<ServerDetail>> UpdateServerAsync(
+    public async Task<Result<ServerDetail>> UpdateServerAsync(
         Guid organizationId,
         Guid serverId,
         UpdateServerRequest request,
@@ -233,7 +247,7 @@ public sealed class ServerService : IServerService
 
         if (server is null)
         {
-            return ServiceResult.Fail<ServerDetail>("server_not_found");
+            return Result<ServerDetail>.Failure("server_not_found");
         }
 
         if (request.Name != null && request.Name != server.Name)
@@ -244,7 +258,7 @@ public sealed class ServerService : IServerService
 
             if (exists)
             {
-                return ServiceResult.Fail<ServerDetail>("server_name_exists");
+                return Result<ServerDetail>.Failure("server_name_exists");
             }
 
             server.Name = request.Name;
@@ -264,10 +278,10 @@ public sealed class ServerService : IServerService
 
         _logger.LogInformation("Updated server {ServerId} for org {OrgId}", serverId, organizationId);
 
-        return ServiceResult.Ok(MapToDetail(server));
+        return Result<ServerDetail>.Success(MapToDetail(server));
     }
 
-    public async Task<ServiceResult<bool>> DeleteServerAsync(
+    public async Task<Result<bool>> DeleteServerAsync(
         Guid organizationId,
         Guid serverId,
         CancellationToken ct = default)
@@ -277,26 +291,33 @@ public sealed class ServerService : IServerService
 
         if (server is null)
         {
-            return ServiceResult.Fail<bool>("server_not_found");
+            return Result<bool>.Failure("server_not_found");
         }
 
         // Soft delete - Status tracks state machine; DeletedAt triggers query filter exclusion
         server.Status = ServerStatus.Deleted;
         server.DeletedAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
-
-        // Publish event
+        // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerDeleted(
             server.Id,
             organizationId,
             server.Name,
             DateTimeOffset.UtcNow), ct);
 
+        await _db.SaveChangesAsync(ct);
+
         _logger.LogInformation("Deleted server {ServerId} for org {OrgId}", serverId, organizationId);
 
-        return ServiceResult.Ok(true);
+        return Result<bool>.Success(true);
     }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
+        ex.InnerException?.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) == true ||
+        ex.InnerException?.Message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string EscapeLikePattern(string input) =>
+        input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     private static ServerDetail MapToDetail(Server server)
     {

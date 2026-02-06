@@ -8,6 +8,7 @@ using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Swagger;
+using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -50,16 +51,30 @@ builder.Services.AddStackExchangeRedisCache(options =>
 });
 
 // SignalR with Redis backplane
-builder.Services.AddSignalR()
+builder.Services.AddSignalR(hubOptions =>
+    {
+        hubOptions.MaximumReceiveMessageSize = 64 * 1024; // 64 KB
+        hubOptions.StreamBufferCapacity = 16;
+        hubOptions.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    })
     .AddStackExchangeRedis(redisConnectionString, options =>
     {
         options.Configuration.ChannelPrefix = RedisChannel.Literal("console");
     });
 
 // Register services
-builder.Services.AddScoped<IConsoleSessionManager, ConsoleSessionManager>();
+builder.Services.AddSingleton<IConsoleSessionManager, ConsoleSessionManager>();
 builder.Services.AddScoped<IConsoleHistoryService, ConsoleHistoryService>();
 builder.Services.AddScoped<ICommandDispatcher, CommandDispatcher>();
+
+// Server ownership validation via Servers API
+builder.Services.AddHttpClient<IServerOwnershipValidator, ServerOwnershipValidator>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:Servers:BaseUrl"] ?? "http://localhost:5030");
+});
+
+// FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 // Configure RabbitMQ options
 builder.Services.AddOptions<RabbitMqOptions>()
@@ -80,10 +95,11 @@ builder.Services.AddMassTransit(x =>
         options.Tags.Add("messaging");
     });
 
-    // Configure Entity Framework Core outbox
+    // Configure Entity Framework Core outbox for transactional messaging
     x.AddEntityFrameworkOutbox<ConsoleDbContext>(o =>
     {
         o.UsePostgres();
+        o.UseBusOutbox();
         o.DisableInboxCleanupService();
         o.QueryDelay = TimeSpan.FromSeconds(1);
     });

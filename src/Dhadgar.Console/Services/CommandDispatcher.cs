@@ -14,7 +14,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ConsoleOptions _options;
     private readonly ILogger<CommandDispatcher> _logger;
-    private readonly List<Regex> _dangerousPatterns;
+    private readonly List<Regex> _allowedPatterns;
 
     public CommandDispatcher(
         ConsoleDbContext db,
@@ -27,9 +27,10 @@ public sealed class CommandDispatcher : ICommandDispatcher
         _options = options.Value;
         _logger = logger;
 
-        // Compile dangerous command patterns
-        _dangerousPatterns = _options.DangerousCommandPatterns
-            .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled))
+        // Compile allowed command patterns with NonBacktracking to prevent ReDoS
+        var regexTimeout = TimeSpan.FromMilliseconds(_options.CommandRegexTimeoutMs);
+        _allowedPatterns = _options.AllowedCommandPatterns
+            .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.NonBacktracking, regexTimeout))
             .ToList();
     }
 
@@ -57,11 +58,13 @@ public sealed class CommandDispatcher : ICommandDispatcher
             return new CommandResultDto(serverId, command, false, validation.BlockReason, DateTime.UtcNow);
         }
 
-        // Log the command
-        await LogCommandAsync(serverId, organizationId, userId, username, command,
-            wasAllowed: true, null, CommandResultStatus.Success, connectionId, clientIpHash, ct);
+        // Create audit log entry (not yet saved)
+        var log = CreateAuditLog(serverId, organizationId, userId, username, command,
+            wasAllowed: true, null, CommandResultStatus.Success, connectionId, clientIpHash);
+        _db.CommandAuditLogs.Add(log);
 
-        // Dispatch command to agent via MassTransit
+        // Dispatch command to agent via MassTransit — publish before save
+        // so the outbox captures it in the same transaction
         var commandId = Guid.NewGuid();
         await _publishEndpoint.Publish(new ExecuteServerCommand(
             commandId,
@@ -71,6 +74,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
             userId,
             username,
             DateTime.UtcNow), ct);
+
+        await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Dispatched command {CommandId} to server {ServerId}: {Command}",
             commandId, serverId, command);
@@ -93,16 +98,50 @@ public sealed class CommandDispatcher : ICommandDispatcher
         // Normalize command before pattern matching to prevent bypass via leading whitespace
         var normalizedCommand = command.TrimStart();
 
-        // Check for dangerous patterns
-        foreach (var pattern in _dangerousPatterns)
+        // Allowlist: command must match at least one allowed pattern
+        var isAllowed = false;
+        foreach (var pattern in _allowedPatterns)
         {
             if (pattern.IsMatch(normalizedCommand))
             {
-                return (false, "Command contains potentially dangerous pattern");
+                isAllowed = true;
+                break;
             }
         }
 
+        if (!isAllowed)
+        {
+            return (false, "Command does not match any allowed pattern");
+        }
+
         return (true, null);
+    }
+
+    private static CommandAuditLog CreateAuditLog(
+        Guid serverId,
+        Guid organizationId,
+        Guid? userId,
+        string? username,
+        string command,
+        bool wasAllowed,
+        string? blockReason,
+        CommandResultStatus resultStatus,
+        string? connectionId,
+        string? clientIpHash)
+    {
+        return new CommandAuditLog
+        {
+            ServerId = serverId,
+            OrganizationId = organizationId,
+            UserId = userId,
+            Username = username,
+            Command = command.Length > 2000 ? command[..2000] : command,
+            WasAllowed = wasAllowed,
+            BlockReason = blockReason,
+            ResultStatus = resultStatus,
+            ConnectionId = connectionId,
+            ClientIpHash = clientIpHash
+        };
     }
 
     private async Task LogCommandAsync(
@@ -118,20 +157,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
         string? clientIpHash,
         CancellationToken ct)
     {
-        var log = new CommandAuditLog
-        {
-            ServerId = serverId,
-            OrganizationId = organizationId,
-            UserId = userId,
-            Username = username,
-            Command = command.Length > 2000 ? command[..2000] : command,
-            WasAllowed = wasAllowed,
-            BlockReason = blockReason,
-            ResultStatus = resultStatus,
-            ConnectionId = connectionId,
-            ClientIpHash = clientIpHash
-        };
-
+        var log = CreateAuditLog(serverId, organizationId, userId, username, command,
+            wasAllowed, blockReason, resultStatus, connectionId, clientIpHash);
         _db.CommandAuditLogs.Add(log);
         await _db.SaveChangesAsync(ct);
     }

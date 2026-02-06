@@ -9,26 +9,29 @@ public sealed class ConsoleHub : Hub
     private readonly IConsoleSessionManager _sessionManager;
     private readonly IConsoleHistoryService _historyService;
     private readonly ICommandDispatcher _commandDispatcher;
+    private readonly IServerOwnershipValidator _ownershipValidator;
     private readonly ILogger<ConsoleHub> _logger;
 
     public ConsoleHub(
         IConsoleSessionManager sessionManager,
         IConsoleHistoryService historyService,
         ICommandDispatcher commandDispatcher,
+        IServerOwnershipValidator ownershipValidator,
         ILogger<ConsoleHub> logger)
     {
         _sessionManager = sessionManager;
         _historyService = historyService;
         _commandDispatcher = commandDispatcher;
+        _ownershipValidator = ownershipValidator;
         _logger = logger;
     }
 
-    public Task Ping() => Clients.Caller.SendAsync("pong");
+    public Task Ping(CancellationToken ct = default) => Clients.Caller.SendAsync("pong", ct);
 
     /// <summary>
     /// Join a server's console session.
     /// </summary>
-    public async Task JoinServer(JoinServerRequest request)
+    public async Task JoinServer(JoinServerRequest request, CancellationToken ct = default)
     {
         var connectionId = Context.ConnectionId;
 
@@ -38,7 +41,7 @@ public sealed class ConsoleHub : Hub
 
         if (!organizationId.HasValue)
         {
-            await Clients.Caller.SendAsync("error", "Not authenticated");
+            await Clients.Caller.SendAsync("error", "Not authenticated", ct);
             return;
         }
 
@@ -48,7 +51,18 @@ public sealed class ConsoleHub : Hub
         {
             _logger.LogWarning("User from org {UserOrg} tried to join server in org {ServerOrg}",
                 organizationId.Value, request.OrganizationId);
-            await Clients.Caller.SendAsync("error", "Access denied");
+            await Clients.Caller.SendAsync("error", "Access denied", ct);
+            return;
+        }
+
+        // Verify the server actually belongs to the caller's organization
+        var ownsServer = await _ownershipValidator.ValidateOwnershipAsync(
+            request.ServerId, organizationId.Value, ct);
+        if (!ownsServer)
+        {
+            _logger.LogWarning("User from org {UserOrg} tried to join server {ServerId} that doesn't belong to their org",
+                organizationId.Value, request.ServerId);
+            await Clients.Caller.SendAsync("error", "Server not found", ct);
             return;
         }
 
@@ -56,7 +70,7 @@ public sealed class ConsoleHub : Hub
         await _sessionManager.AddConnectionAsync(connectionId, request.ServerId, organizationId.Value, userId);
 
         // Add to SignalR group for this server
-        await Groups.AddToGroupAsync(connectionId, GetServerGroup(request.ServerId));
+        await Groups.AddToGroupAsync(connectionId, GetServerGroup(request.ServerId), ct);
 
         _logger.LogInformation("Connection {ConnectionId} joined server {ServerId}",
             connectionId, request.ServerId);
@@ -67,31 +81,31 @@ public sealed class ConsoleHub : Hub
             request.ServerId,
             history,
             history.Count >= request.HistoryLines,
-            history.Count > 0 ? history[^1].Timestamp : null));
+            history.Count > 0 ? history[^1].Timestamp : null), ct);
 
-        await Clients.Caller.SendAsync("joined", request.ServerId);
+        await Clients.Caller.SendAsync("joined", request.ServerId, ct);
     }
 
     /// <summary>
     /// Leave a server's console session.
     /// </summary>
-    public async Task LeaveServer(LeaveServerRequest request)
+    public async Task LeaveServer(LeaveServerRequest request, CancellationToken ct = default)
     {
         var connectionId = Context.ConnectionId;
 
         await _sessionManager.RemoveConnectionAsync(connectionId, request.ServerId);
-        await Groups.RemoveFromGroupAsync(connectionId, GetServerGroup(request.ServerId));
+        await Groups.RemoveFromGroupAsync(connectionId, GetServerGroup(request.ServerId), ct);
 
         _logger.LogInformation("Connection {ConnectionId} left server {ServerId}",
             connectionId, request.ServerId);
 
-        await Clients.Caller.SendAsync("left", request.ServerId);
+        await Clients.Caller.SendAsync("left", request.ServerId, ct);
     }
 
     /// <summary>
     /// Execute a command on a server.
     /// </summary>
-    public async Task SendCommand(ExecuteCommandRequest request)
+    public async Task SendCommand(ExecuteCommandRequest request, CancellationToken ct = default)
     {
         var connectionId = Context.ConnectionId;
         var userId = GetUserId();
@@ -99,7 +113,7 @@ public sealed class ConsoleHub : Hub
 
         if (!organizationId.HasValue)
         {
-            await Clients.Caller.SendAsync("error", "Not authenticated");
+            await Clients.Caller.SendAsync("error", "Not authenticated", ct);
             return;
         }
 
@@ -107,7 +121,7 @@ public sealed class ConsoleHub : Hub
         var isConnected = await _sessionManager.IsConnectedToServerAsync(connectionId, request.ServerId);
         if (!isConnected)
         {
-            await Clients.Caller.SendAsync("error", "Not connected to this server");
+            await Clients.Caller.SendAsync("error", "Not connected to this server", ct);
             return;
         }
 
@@ -117,7 +131,7 @@ public sealed class ConsoleHub : Hub
         {
             _logger.LogWarning("User from org {UserOrg} tried to send command to server they don't own",
                 organizationId.Value);
-            await Clients.Caller.SendAsync("error", "Access denied");
+            await Clients.Caller.SendAsync("error", "Access denied", ct);
             return;
         }
 
@@ -130,7 +144,7 @@ public sealed class ConsoleHub : Hub
             connectionId,
             GetClientIpHash());
 
-        await Clients.Caller.SendAsync("commandResult", result);
+        await Clients.Caller.SendAsync("commandResult", result, ct);
 
         // Broadcast command to all connections on this server
         await Clients.Group(GetServerGroup(request.ServerId)).SendAsync("output", new ConsoleOutputDto(
@@ -138,13 +152,13 @@ public sealed class ConsoleHub : Hub
             ConsoleOutputType.Command,
             $"> {request.Command}",
             DateTime.UtcNow,
-            0));
+            0), ct);
     }
 
     /// <summary>
     /// Request console history.
     /// </summary>
-    public async Task RequestHistory(RequestHistoryRequest request)
+    public async Task RequestHistory(RequestHistoryRequest request, CancellationToken ct = default)
     {
         var connectionId = Context.ConnectionId;
 
@@ -152,7 +166,7 @@ public sealed class ConsoleHub : Hub
         var isConnected = await _sessionManager.IsConnectedToServerAsync(connectionId, request.ServerId);
         if (!isConnected)
         {
-            await Clients.Caller.SendAsync("error", "Not connected to this server");
+            await Clients.Caller.SendAsync("error", "Not connected to this server", ct);
             return;
         }
 
@@ -161,7 +175,7 @@ public sealed class ConsoleHub : Hub
             request.ServerId,
             history,
             history.Count >= request.LineCount,
-            history.Count > 0 ? history[^1].Timestamp : null));
+            history.Count > 0 ? history[^1].Timestamp : null), ct);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)

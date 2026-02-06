@@ -1,6 +1,8 @@
 using Dhadgar.Contracts;
 using Dhadgar.Contracts.Mods;
 using Dhadgar.Mods.Services;
+using Dhadgar.ServiceDefaults.Problems;
+using FluentValidation;
 
 namespace Dhadgar.Mods.Endpoints;
 
@@ -112,7 +114,7 @@ public static class ModsEndpoints
     {
         var result = await modService.GetModAsync(modId, organizationId, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
         }
@@ -127,7 +129,7 @@ public static class ModsEndpoints
     {
         var result = await modService.GetModAsync(modId, null, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
         }
@@ -139,13 +141,24 @@ public static class ModsEndpoints
         Guid organizationId,
         CreateModRequest request,
         IModService modService,
+        IValidator<CreateModRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await modService.CreateModAsync(organizationId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
+            return result.Error == "mod_slug_exists"
+                ? ProblemDetailsHelper.Conflict(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
         }
 
         return Results.Created($"/organizations/{organizationId}/mods/{result.Value.Id}", result.Value);
@@ -156,11 +169,20 @@ public static class ModsEndpoints
         Guid modId,
         UpdateModRequest request,
         IModService modService,
+        IValidator<UpdateModRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await modService.UpdateModAsync(organizationId, modId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return result.Error == "mod_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)
@@ -178,7 +200,7 @@ public static class ModsEndpoints
     {
         var result = await modService.DeleteModAsync(organizationId, modId, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
         }

@@ -1,5 +1,7 @@
 using Dhadgar.Contracts.Mods;
 using Dhadgar.Mods.Services;
+using Dhadgar.ServiceDefaults.Problems;
+using FluentValidation;
 
 namespace Dhadgar.Mods.Endpoints;
 
@@ -56,7 +58,7 @@ public static class ModVersionsEndpoints
     {
         var result = await versionService.FindVersionsMatchingAsync(organizationId, modId, constraint, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
         }
@@ -73,7 +75,7 @@ public static class ModVersionsEndpoints
     {
         var result = await versionService.GetLatestVersionAsync(organizationId, modId, includePrerelease, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "no_versions_found");
         }
@@ -90,7 +92,7 @@ public static class ModVersionsEndpoints
     {
         var result = await versionService.GetVersionAsync(organizationId, modId, versionId, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return ProblemDetailsHelper.NotFound(result.Error ?? "version_not_found");
         }
@@ -103,13 +105,24 @@ public static class ModVersionsEndpoints
         Guid modId,
         PublishVersionRequest request,
         IModVersionService versionService,
+        IValidator<PublishVersionRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await versionService.PublishVersionAsync(organizationId, modId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.BadRequest(result.Error ?? "publish_failed");
+            return result.Error == "version_already_exists"
+                ? ProblemDetailsHelper.Conflict(result.Error)
+                : ProblemDetailsHelper.BadRequest(result.Error ?? "publish_failed");
         }
 
         return Results.Created(
@@ -123,12 +136,21 @@ public static class ModVersionsEndpoints
         Guid versionId,
         DeprecateVersionRequest request,
         IModVersionService versionService,
+        IValidator<DeprecateVersionRequest> validator,
         CancellationToken ct = default)
     {
+        var validationResult = await validator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            return ProblemDetailsHelper.BadRequest(
+                ErrorCodes.CommonErrors.ValidationFailed,
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
+        }
+
         var result = await versionService.DeprecateVersionAsync(
             organizationId, modId, versionId, request, ct);
 
-        if (!result.Success)
+        if (!result.IsSuccess)
         {
             return result.Error == "version_not_found" || result.Error == "mod_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)
