@@ -1,5 +1,6 @@
 using Dhadgar.Console.Services;
 using Dhadgar.Contracts.Console;
+using FluentValidation;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Dhadgar.Console.Hubs;
@@ -10,6 +11,7 @@ public sealed class ConsoleHub : Hub
     private readonly IConsoleHistoryService _historyService;
     private readonly ICommandDispatcher _commandDispatcher;
     private readonly IServerOwnershipValidator _ownershipValidator;
+    private readonly IValidator<ExecuteCommandRequest> _commandValidator;
     private readonly ILogger<ConsoleHub> _logger;
 
     public ConsoleHub(
@@ -17,12 +19,14 @@ public sealed class ConsoleHub : Hub
         IConsoleHistoryService historyService,
         ICommandDispatcher commandDispatcher,
         IServerOwnershipValidator ownershipValidator,
+        IValidator<ExecuteCommandRequest> commandValidator,
         ILogger<ConsoleHub> logger)
     {
         _sessionManager = sessionManager;
         _historyService = historyService;
         _commandDispatcher = commandDispatcher;
         _ownershipValidator = ownershipValidator;
+        _commandValidator = commandValidator;
         _logger = logger;
     }
 
@@ -107,6 +111,14 @@ public sealed class ConsoleHub : Hub
     /// </summary>
     public async Task SendCommand(ExecuteCommandRequest request, CancellationToken ct = default)
     {
+        var validationResult = await _commandValidator.ValidateAsync(request, ct);
+        if (!validationResult.IsValid)
+        {
+            await Clients.Caller.SendAsync("error",
+                string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)), ct);
+            return;
+        }
+
         var connectionId = Context.ConnectionId;
         var userId = GetUserId();
         var organizationId = GetOrganizationId();
