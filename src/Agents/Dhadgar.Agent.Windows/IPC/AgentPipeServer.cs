@@ -107,8 +107,10 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     // Intentionally one-shot: once stopped/disposed, this server cannot be restarted.
     // Creating a new instance is required for restart scenarios.
     private volatile bool _started;
-    private volatile bool _disposed;
+    private int _disposeState;
     private readonly bool _enableAdminPipeAccess;
+
+    private bool IsDisposed => Volatile.Read(ref _disposeState) != 0;
 
     /// <summary>
     /// Pattern for valid server IDs.
@@ -138,6 +140,11 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         TimeProvider? timeProvider = null,
         bool enableAdminPipeAccess = true)
     {
+        if (agentId == Guid.Empty)
+        {
+            throw new ArgumentException("Agent ID must not be empty", nameof(agentId));
+        }
+
         _agentId = agentId;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -147,7 +154,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_disposed)
+        if (IsDisposed)
         {
             throw new ObjectDisposedException(nameof(AgentPipeServer));
         }
@@ -177,7 +184,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <inheritdoc />
     public async Task StopAsync()
     {
-        if (!_started || _disposed)
+        if (!_started || IsDisposed)
         {
             return;
         }
@@ -214,7 +221,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <inheritdoc />
     public Result RegisterServer(string serverId, string serviceAccountName)
     {
-        if (_disposed)
+        if (IsDisposed)
         {
             return Result.Failure("[Pipe.Disposed] Agent pipe server has been disposed");
         }
@@ -318,6 +325,16 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         int timeoutSeconds = 30,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            return Result.Failure("[Pipe.InvalidServerId] Server ID is required");
+        }
+
+        if (timeoutSeconds <= 0)
+        {
+            return Result.Failure("[Pipe.InvalidTimeout] Timeout must be positive");
+        }
+
         if (!_connections.TryGetValue(serverId, out var connection))
         {
             return Result.Failure($"[Pipe.NotConnected] Server {serverId} is not connected");
@@ -350,6 +367,11 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             return Result.Failure("[Pipe.InputTooLarge] Input exceeds maximum allowed size");
         }
 
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            return Result.Failure("[Pipe.InvalidServerId] Server ID is required");
+        }
+
         if (!_connections.TryGetValue(serverId, out var connection))
         {
             return Result.Failure($"[Pipe.NotConnected] Server {serverId} is not connected");
@@ -368,22 +390,18 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
         {
             return;
         }
 
-        await StopAsync().ConfigureAwait(false);
-
-        _disposed = true;
-
         try
         {
-            _serverCts.Dispose();
+            await StopAsync().ConfigureAwait(false);
         }
-        catch
+        finally
         {
-            // Ignore disposal errors
+            try { _serverCts.Dispose(); } catch { /* Ignore disposal errors */ }
         }
     }
 
@@ -398,9 +416,35 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         {
             await StartListeningForServerAsync(serverId, cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal shutdown — not an error
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception in listener for server {ServerId}", serverId);
+        }
+    }
+
+    /// <summary>
+    /// Starts reading from a connection with exception handling for fire-and-forget scenarios.
+    /// </summary>
+    private async Task StartReadingWithExceptionHandlingAsync(
+        PipeClientConnection connection,
+        string serverId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await connection.StartReadingAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal shutdown
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in reader for server {ServerId}", serverId);
         }
     }
 
@@ -500,8 +544,8 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
                 // Transfer ownership - don't dispose pipeStream
                 pipeStream = null;
 
-                // Start reading in background
-                _ = connection.StartReadingAsync(cancellationToken);
+                // Start reading in background with exception handling
+                _ = StartReadingWithExceptionHandlingAsync(connection, serverId, cancellationToken);
 
                 // Wait for disconnection before accepting new connection
                 // (only one wrapper per server can connect at a time)

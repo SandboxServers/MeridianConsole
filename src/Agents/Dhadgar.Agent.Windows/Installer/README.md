@@ -84,7 +84,7 @@ msiexec /x {ProductCode} /quiet
 
 # Or by UpgradeCode (recommended for automation):
 # Find installed product first
-Get-WmiObject Win32_Product | Where-Object { $_.Name -like '*Meridian Console Agent*' }
+Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridian Console Agent*' }
 ```
 
 ## Properties
@@ -139,16 +139,23 @@ The following resources are **not automatically removed** to prevent data loss a
 **Certificates** (run as Administrator in PowerShell):
 
 ```powershell
-# Remove agent certificates
-Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -like '*dhadgar-agent*' -or $_.FriendlyName -like '*Meridian Console*' } | Remove-Item -Force
+# Remove agent certificates (filter by issuer for safety)
+Get-ChildItem Cert:\LocalMachine\My | Where-Object {
+    $_.Subject -like '*CN=dhadgar-agent*' -and
+    $_.Issuer -like '*Meridian Console*'
+} | Remove-Item -Force
 
-# Remove CA certificate
-Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*Meridian Console CA*' } | Remove-Item -Force
+# Remove CA certificate (exact subject match)
+Get-ChildItem Cert:\LocalMachine\Root | Where-Object {
+    $_.Subject -eq 'CN=Meridian Console CA, O=Meridian Console'
+} | Remove-Item -Force
 ```
 
 **Firewall rules** (run as Administrator):
 
 ```powershell
+# Remove ALL firewall rules for the agent executable
+# This includes any rules created by the agent for game servers
 netsh advfirewall firewall delete rule name=all program="C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe"
 ```
 

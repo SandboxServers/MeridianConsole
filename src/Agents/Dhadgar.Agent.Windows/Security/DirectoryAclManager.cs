@@ -77,7 +77,7 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
     /// Pattern for valid service account names.
     /// Format: NT SERVICE\MeridianGS_{alphanumeric}
     /// </summary>
-    [GeneratedRegex(@"^NT SERVICE\\MeridianGS_[a-zA-Z0-9\-_]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^NT SERVICE\\MeridianGS_[a-zA-Z0-9\-_]+$", RegexOptions.IgnoreCase)]
     private static partial Regex ValidServiceAccountPattern();
 
     /// <summary>
@@ -593,7 +593,7 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         {
             normalizedPath = Path.GetFullPath(directoryPath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException or SecurityException)
         {
             return Result.Failure($"[ACL.InvalidPath] Invalid directory path: {ex.Message}");
         }
