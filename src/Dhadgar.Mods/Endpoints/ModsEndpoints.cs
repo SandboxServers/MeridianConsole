@@ -116,7 +116,7 @@ public static class ModsEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -131,7 +131,7 @@ public static class ModsEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -158,7 +158,7 @@ public static class ModsEndpoints
         {
             return result.Error == "mod_slug_exists"
                 ? ProblemDetailsHelper.Conflict(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.Created($"/organizations/{organizationId}/mods/{result.Value.Id}", result.Value);
@@ -186,7 +186,7 @@ public static class ModsEndpoints
         {
             return result.Error == "mod_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -202,7 +202,7 @@ public static class ModsEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.NoContent();

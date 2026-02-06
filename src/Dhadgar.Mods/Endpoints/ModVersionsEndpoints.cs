@@ -60,7 +60,7 @@ public static class ModVersionsEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "mod_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -77,7 +77,7 @@ public static class ModVersionsEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "no_versions_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -94,7 +94,7 @@ public static class ModVersionsEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "version_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -122,7 +122,7 @@ public static class ModVersionsEndpoints
         {
             return result.Error == "version_already_exists"
                 ? ProblemDetailsHelper.Conflict(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "publish_failed");
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.Created(
@@ -154,7 +154,7 @@ public static class ModVersionsEndpoints
         {
             return result.Error == "version_not_found" || result.Error == "mod_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "deprecate_failed");
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.NoContent();

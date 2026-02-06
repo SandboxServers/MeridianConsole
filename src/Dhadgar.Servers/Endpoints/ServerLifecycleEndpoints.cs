@@ -5,13 +5,13 @@ namespace Dhadgar.Servers.Endpoints;
 
 public static class ServerLifecycleEndpoints
 {
-    private static IResult HandleLifecycleResult(Result<bool> result, string defaultError)
+    private static IResult HandleLifecycleResult(Result<bool> result)
     {
         if (!result.IsSuccess)
         {
             return result.Error == "server_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? defaultError);
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.NoContent();
@@ -63,7 +63,7 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.StartServerAsync(organizationId, serverId, ct);
-        return HandleLifecycleResult(result, "start_failed");
+        return HandleLifecycleResult(result);
     }
 
     private static async Task<IResult> StopServer(
@@ -73,7 +73,7 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.StopServerAsync(organizationId, serverId, ct);
-        return HandleLifecycleResult(result, "stop_failed");
+        return HandleLifecycleResult(result);
     }
 
     private static async Task<IResult> RestartServer(
@@ -83,7 +83,7 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.RestartServerAsync(organizationId, serverId, ct);
-        return HandleLifecycleResult(result, "restart_failed");
+        return HandleLifecycleResult(result);
     }
 
     private static async Task<IResult> KillServer(
@@ -93,6 +93,6 @@ public static class ServerLifecycleEndpoints
         CancellationToken ct = default)
     {
         var result = await lifecycleService.KillServerAsync(organizationId, serverId, ct);
-        return HandleLifecycleResult(result, "kill_failed");
+        return HandleLifecycleResult(result);
     }
 }

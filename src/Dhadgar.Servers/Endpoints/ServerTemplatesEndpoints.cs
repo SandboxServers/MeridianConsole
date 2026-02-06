@@ -104,7 +104,7 @@ public static class ServerTemplatesEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "template_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -131,7 +131,7 @@ public static class ServerTemplatesEndpoints
         {
             return result.Error == "template_name_exists"
                 ? ProblemDetailsHelper.Conflict(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.Created($"/organizations/{organizationId}/templates/{result.Value.Id}", result.Value);
@@ -159,7 +159,7 @@ public static class ServerTemplatesEndpoints
         {
             return result.Error == "template_not_found"
                 ? ProblemDetailsHelper.NotFound(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -175,7 +175,7 @@ public static class ServerTemplatesEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "template_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.NoContent();

@@ -90,7 +90,7 @@ public static class ServersEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "server_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.Ok(result.Value);
@@ -117,7 +117,7 @@ public static class ServersEndpoints
         {
             return result.Error == "server_name_exists"
                 ? ProblemDetailsHelper.Conflict(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error ?? "create_failed");
+                : ProblemDetailsHelper.BadRequest(result.Error);
         }
 
         return Results.Created($"/organizations/{organizationId}/servers/{result.Value.Id}", result.Value);
@@ -147,7 +147,7 @@ public static class ServersEndpoints
             {
                 "server_not_found" => ProblemDetailsHelper.NotFound(result.Error),
                 "server_name_exists" => ProblemDetailsHelper.Conflict(result.Error),
-                _ => ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed")
+                _ => ProblemDetailsHelper.BadRequest(result.Error)
             };
         }
 
@@ -164,7 +164,7 @@ public static class ServersEndpoints
 
         if (!result.IsSuccess)
         {
-            return ProblemDetailsHelper.NotFound(result.Error ?? "server_not_found");
+            return ProblemDetailsHelper.NotFound(result.Error);
         }
 
         return Results.NoContent();

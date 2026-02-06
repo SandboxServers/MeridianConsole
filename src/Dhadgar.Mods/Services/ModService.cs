@@ -300,7 +300,7 @@ public sealed class ModService : IModService
         ex.InnerException?.Message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string EscapeLikePattern(string input) =>
-        input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+        input.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     private static ModDetail MapToDetail(Mod mod)
     {

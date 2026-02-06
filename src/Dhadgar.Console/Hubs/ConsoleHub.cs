@@ -67,7 +67,7 @@ public sealed class ConsoleHub : Hub
         }
 
         // Add to session
-        await _sessionManager.AddConnectionAsync(connectionId, request.ServerId, organizationId.Value, userId);
+        await _sessionManager.AddConnectionAsync(connectionId, request.ServerId, organizationId.Value, userId, ct);
 
         // Add to SignalR group for this server
         await Groups.AddToGroupAsync(connectionId, GetServerGroup(request.ServerId), ct);
@@ -76,7 +76,7 @@ public sealed class ConsoleHub : Hub
             connectionId, request.ServerId);
 
         // Send recent history
-        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, request.HistoryLines);
+        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, request.HistoryLines, ct);
         await Clients.Caller.SendAsync("history", new ConsoleHistoryDto(
             request.ServerId,
             history,
@@ -93,7 +93,7 @@ public sealed class ConsoleHub : Hub
     {
         var connectionId = Context.ConnectionId;
 
-        await _sessionManager.RemoveConnectionAsync(connectionId, request.ServerId);
+        await _sessionManager.RemoveConnectionAsync(connectionId, request.ServerId, ct);
         await Groups.RemoveFromGroupAsync(connectionId, GetServerGroup(request.ServerId), ct);
 
         _logger.LogInformation("Connection {ConnectionId} left server {ServerId}",
@@ -118,7 +118,7 @@ public sealed class ConsoleHub : Hub
         }
 
         // Check if connected to this server and validate tenant access
-        var isConnected = await _sessionManager.IsConnectedToServerAsync(connectionId, request.ServerId);
+        var isConnected = await _sessionManager.IsConnectedToServerAsync(connectionId, request.ServerId, ct);
         if (!isConnected)
         {
             await Clients.Caller.SendAsync("error", "Not connected to this server", ct);
@@ -126,7 +126,7 @@ public sealed class ConsoleHub : Hub
         }
 
         // Validate user's organization matches the server's organization
-        var metadata = await _sessionManager.GetConnectionMetadataAsync(connectionId, request.ServerId);
+        var metadata = await _sessionManager.GetConnectionMetadataAsync(connectionId, request.ServerId, ct);
         if (metadata == null || metadata.Value.OrganizationId != organizationId.Value)
         {
             _logger.LogWarning("User from org {UserOrg} tried to send command to server they don't own",
@@ -142,7 +142,8 @@ public sealed class ConsoleHub : Hub
             userId,
             Context.User?.Identity?.Name,
             connectionId,
-            GetClientIpHash());
+            GetClientIpHash(),
+            ct);
 
         await Clients.Caller.SendAsync("commandResult", result, ct);
 
@@ -163,14 +164,14 @@ public sealed class ConsoleHub : Hub
         var connectionId = Context.ConnectionId;
 
         // Check if connected to this server
-        var isConnected = await _sessionManager.IsConnectedToServerAsync(connectionId, request.ServerId);
+        var isConnected = await _sessionManager.IsConnectedToServerAsync(connectionId, request.ServerId, ct);
         if (!isConnected)
         {
             await Clients.Caller.SendAsync("error", "Not connected to this server", ct);
             return;
         }
 
-        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, request.LineCount);
+        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, request.LineCount, ct);
         await Clients.Caller.SendAsync("history", new ConsoleHistoryDto(
             request.ServerId,
             history,
