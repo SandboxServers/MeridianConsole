@@ -7,10 +7,9 @@
     <RootNamespace>Dhadgar.Agent.Windows.Tests</RootNamespace>
     <!--
       CA1416: Tests for Windows-specific code intentionally use Windows APIs
-      CA1307: xUnit Assert.Contains doesn't need StringComparison for test assertions
       CA2000: Test object disposal handled by test framework or explicit using statements
     -->
-    <NoWarn>$(NoWarn);CA1416;CA1307;CA2000</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;CA2000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -147,7 +147,8 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             security.AddAccessRule(systemRule);
 
             // Add FullControl for Administrators group (required for management)
-            var administratorsAccount = new NTAccount("BUILTIN", "Administrators");
+            // Use SID instead of NTAccount to avoid localization issues on non-English Windows
+            var administratorsAccount = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
             var administratorsRule = new FileSystemAccessRule(
                 administratorsAccount,
                 FileSystemRights.FullControl,
@@ -445,7 +446,8 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         try
         {
             // Extract service name from "NT SERVICE\MeridianGS_xxx"
-            var serviceName = serviceAccountName.Replace(@"NT SERVICE\", "", StringComparison.OrdinalIgnoreCase);
+            var backslashIndex = serviceAccountName.IndexOf('\\');
+            var serviceName = serviceAccountName[(backslashIndex + 1)..];
 
             _logger.LogDebug(
                 "Attempting to set ACLs using service SID for service {ServiceName}",
@@ -535,7 +537,7 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
     /// </remarks>
     /// <param name="serviceName">The service name (without NT SERVICE\ prefix).</param>
     /// <returns>The SID, or null if computation fails.</returns>
-    private static SecurityIdentifier? ComputeVirtualServiceAccountSid(string serviceName)
+    private SecurityIdentifier? ComputeVirtualServiceAccountSid(string serviceName)
     {
         try
         {
@@ -564,8 +566,7 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         }
         catch (Exception ex)
         {
-            // Log for debugging - bare catch previously hid programming errors
-            System.Diagnostics.Debug.WriteLine($"Failed to compute VSA SID for '{serviceName}': {ex.GetType().Name}: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to compute VSA SID for service {ServiceName}", serviceName);
             return null;
         }
     }
@@ -600,7 +601,9 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         // Check for path traversal attempts
         // Trim both directory separators to handle mixed separators (e.g., "C:\Servers/sub")
         var normalizedTrimmed = normalizedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var inputTrimmed = directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var inputTrimmed = directoryPath
+            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .TrimEnd(Path.DirectorySeparatorChar);
 
         if (!normalizedTrimmed.Equals(inputTrimmed, StringComparison.OrdinalIgnoreCase))
         {

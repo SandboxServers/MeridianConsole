@@ -59,6 +59,9 @@ msiexec /i MeridianConsoleAgent-1.0.0-x64.msi
 msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /norestart
 
 # With enrollment token
+# SECURITY NOTE: Command-line arguments are visible in process listings (Get-Process),
+# command history, and audit logs. For production deployments, consider using a transform
+# file (.mst) or clearing command history after installation.
 msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet ENROLLMENT_TOKEN=your-token-here
 
 # With logging
@@ -94,25 +97,30 @@ Get-WmiObject Win32_Product | Where-Object { $_.Name -like '*Meridian Console Ag
 ## What Gets Installed
 
 ### Files
+
 - `C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe`
 - `C:\Program Files\Meridian Console\Agent\appsettings.json`
 
 ### Directories
+
 - `C:\ProgramData\Meridian Console\Agent\` - Runtime data
 - `C:\ProgramData\Meridian Console\Agent\Servers\` - Game server files
 - `C:\ProgramData\Meridian Console\Agent\Temp\` - Temporary files
 
 ### Windows Service
+
 - Name: `DhadgarAgent`
 - Display Name: `Meridian Console Agent`
 - Startup Type: Automatic (Delayed Start)
 - Recovery: Restart on first 3 failures
 
 ### Event Log
+
 - Source: `Meridian Console Agent`
 - Log: `Application`
 
 ### Registry
+
 - `HKLM\SOFTWARE\Meridian Console\Agent`
 
 ## Uninstall Cleanup
@@ -155,9 +163,11 @@ Note: Game server data in `C:\ProgramData\Meridian Console\Agent\Servers\` is **
 ## Customization
 
 ### Adding a Custom Icon
+
 Place a 256x256 ICO file named `icon.ico` in this directory and uncomment the `<Icon>` and `<Property Id="ARPPRODUCTICON">` elements in `Package.wxs`.
 
 ### Signing the MSI
+
 For production deployments, uncomment the `<SignOutput>` property in the `.wixproj` file and configure code signing certificate.
 
 ## Troubleshooting
@@ -194,6 +204,7 @@ Run the installer as Administrator.
 ## Development
 
 ### Debugging Custom Actions
+
 Enable verbose logging:
 
 ```powershell
@@ -201,6 +212,7 @@ msiexec /i MeridianConsoleAgent.msi /l*v debug.log
 ```
 
 ### Modifying the Installer
+
 1. Edit `Package.wxs` for component changes
 2. Edit `Dhadgar.Agent.Windows.Installer.wixproj` for build configuration
 3. Rebuild with `dotnet build`

@@ -93,7 +93,22 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Directory path is required", result.Error);
+        Assert.Contains("Directory path is required", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SetupServerDirectory_PathOutsideAllowedRoots_ReturnsFailure()
+    {
+        // Arrange - Path is fully qualified and normalized, but outside allowed roots
+        var outsidePath = OperatingSystem.IsWindows() ? @"D:\OtherLocation\server1" : "/opt/other/server1";
+        var serviceAccount = @"NT SERVICE\MeridianGS_test";
+
+        // Act
+        var result = _aclManager.SetupServerDirectory(outsidePath, serviceAccount);
+
+        // Assert
+        Assert.True(result.IsFailure);
+        Assert.Contains("[ACL.PathNotAllowed]", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -152,7 +167,7 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Service account name is required", result.Error);
+        Assert.Contains("Service account name is required", result.Error, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -239,7 +254,7 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Directory path is required", result.Error);
+        Assert.Contains("Directory path is required", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -254,7 +269,7 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("NT SERVICE\\MeridianGS_", result.Error);
+        Assert.Contains("NT SERVICE\\MeridianGS_", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -271,15 +286,11 @@ public sealed class DirectoryAclManagerTests
         Assert.True(result.IsSuccess);
     }
 
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "Windows")]
     public void RemoveServerDirectoryAccess_ExistingDirectoryWithAcls_RemovesAccess()
     {
-        // Skip on non-Windows platforms (ACL APIs are Windows-only)
-        if (!IsWindows)
-        {
-            return;
-        }
+        Skip.IfNot(IsWindows, "Windows-only test");
 
         // Arrange - Create temp directory and set up ACLs first
         var tempPath = Path.Combine(Path.GetTempPath(), $"MeridianTest_{Guid.NewGuid():N}");
@@ -412,7 +423,7 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Directory path is required", result.Error);
+        Assert.Contains("Directory path is required", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]

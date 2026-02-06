@@ -104,6 +104,8 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     private readonly ConcurrentDictionary<string, PipeClientConnection> _connections = new();
     private readonly CancellationTokenSource _serverCts = new();
     private readonly object _startLock = new();
+    // Intentionally one-shot: once stopped/disposed, this server cannot be restarted.
+    // Creating a new instance is required for restart scenarios.
     private volatile bool _started;
     private volatile bool _disposed;
     private readonly bool _enableAdminPipeAccess;
@@ -111,7 +113,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <summary>
     /// Pattern for valid server IDs.
     /// </summary>
-    [GeneratedRegex(@"^[a-zA-Z0-9\-_]+$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^[a-zA-Z0-9\-_]+$")]
     private static partial Regex ValidServerIdPattern();
 
     /// <summary>
@@ -145,6 +147,11 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(AgentPipeServer));
+        }
+
         lock (_startLock)
         {
             if (_started)
@@ -225,6 +232,12 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         if (string.IsNullOrWhiteSpace(serviceAccountName))
         {
             return Result.Failure("[Pipe.InvalidServiceAccount] Service account name is required");
+        }
+
+        // Clean up any existing registration for this server to avoid leaking listener tasks
+        if (_registrations.ContainsKey(serverId))
+        {
+            UnregisterServer(serverId);
         }
 
         var pipeName = GetPipeName(serverId);
@@ -327,6 +340,16 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         string input,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(input))
+        {
+            return Result.Failure("[Pipe.InvalidInput] Input text is required");
+        }
+
+        if (input.Length > PipeMessage.MaxMessageSize)
+        {
+            return Result.Failure("[Pipe.InputTooLarge] Input exceeds maximum allowed size");
+        }
+
         if (!_connections.TryGetValue(serverId, out var connection))
         {
             return Result.Failure($"[Pipe.NotConnected] Server {serverId} is not connected");
@@ -350,9 +373,9 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             return;
         }
 
-        _disposed = true;
-
         await StopAsync().ConfigureAwait(false);
+
+        _disposed = true;
 
         try
         {
@@ -688,7 +711,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
         {
             _logger.LogWarning(
                 "Command {CorrelationId} failed for server {ServerId}: {Error}",
-                ack.AcknowledgedId, serverId, ack.ErrorMessage);
+                ack.AcknowledgedId, serverId, SanitizeLogMessage(ack.ErrorMessage));
         }
         else
         {
