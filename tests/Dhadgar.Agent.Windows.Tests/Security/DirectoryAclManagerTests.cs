@@ -114,6 +114,7 @@ public sealed class DirectoryAclManagerTests
     [Theory]
     [InlineData(@"C:\Servers\..\Windows\System32")]
     [InlineData(@"C:\Servers\test\..\..\Windows")]
+    [Trait("Category", "Windows")]
     public void SetupServerDirectory_PathTraversal_ReturnsFailure(string pathWithTraversal)
     {
         // Only run on Windows (these paths are Windows-specific)
@@ -339,6 +340,49 @@ public sealed class DirectoryAclManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    [Trait("Category", "Windows")]
+    public void VerifyAccess_AfterSetup_ReturnsTrue()
+    {
+        if (!IsWindows)
+        {
+            return;
+        }
+
+        // Arrange
+        var tempPath = Path.Combine(Path.GetTempPath(), $"MeridianTest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempPath);
+
+        var tempRoot = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+        var allowedRootsWithTemp = new List<string>(TestAllowedRoots) { tempRoot };
+        var aclManagerWithTempRoot = new DirectoryAclManager(_logger, allowedRootsWithTemp);
+
+        var serviceAccount = @"NT SERVICE\MeridianGS_test-verify";
+
+        try
+        {
+            // Act - Setup directory ACLs
+            var setupResult = aclManagerWithTempRoot.SetupServerDirectory(tempPath, serviceAccount);
+
+            // Only verify access if setup succeeded (may fail if service account doesn't exist)
+            if (setupResult.IsSuccess)
+            {
+                var verifyResult = aclManagerWithTempRoot.VerifyAccess(tempPath, serviceAccount);
+
+                // Assert
+                Assert.True(verifyResult.IsSuccess);
+                Assert.True(verifyResult.Value);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                try { Directory.Delete(tempPath, recursive: true); } catch { /* Ignore cleanup errors */ }
+            }
+        }
     }
 
     [Fact]

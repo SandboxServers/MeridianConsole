@@ -155,9 +155,10 @@ public sealed class ProcessOptions : IValidatableObject
                     var comparison = OperatingSystem.IsWindows()
                         ? StringComparison.OrdinalIgnoreCase
                         : StringComparison.Ordinal;
+                    var normalizedTrimmed = normalizedPath!.TrimEnd(Path.DirectorySeparatorChar);
+                    var originalTrimmed = ServerBasePath.TrimEnd(Path.DirectorySeparatorChar);
 
-                    if (!ServerBasePath.Equals(normalizedPath, comparison) &&
-                        !ServerBasePath.Equals(normalizedPath!.TrimEnd(Path.DirectorySeparatorChar), comparison))
+                    if (!originalTrimmed.Equals(normalizedTrimmed, comparison))
                     {
                         yield return new ValidationResult(
                             $"{nameof(ServerBasePath)} must be a normalized absolute path (use '{normalizedPath}' instead)",

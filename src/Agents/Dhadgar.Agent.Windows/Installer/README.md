@@ -37,6 +37,7 @@ dotnet build src/Agents/Dhadgar.Agent.Windows/Installer -c Release
 ## Output Location
 
 MSI files are output to:
+
 ```
 bin\{Configuration}\{Platform}\en-US\MeridianConsoleAgent-{Version}-{Platform}.msi
 ```
@@ -44,12 +45,15 @@ bin\{Configuration}\{Platform}\en-US\MeridianConsoleAgent-{Version}-{Platform}.m
 ## Installation
 
 ### Interactive Install
+
 Double-click the MSI file or run:
+
 ```powershell
 msiexec /i MeridianConsoleAgent-1.0.0-x64.msi
 ```
 
 ### Silent Install
+
 ```powershell
 # Basic silent install
 msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /norestart
@@ -57,20 +61,20 @@ msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /norestart
 # With enrollment token
 msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet ENROLLMENT_TOKEN=your-token-here
 
-# Auto-start service after install
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet ENROLLMENT_TOKEN=xxx AUTOSTART=1
-
 # With logging
 msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /l*v install.log
 ```
 
 ### Upgrade
+
 The installer supports in-place upgrades. Simply run the new MSI:
+
 ```powershell
 msiexec /i MeridianConsoleAgent-2.0.0-x64.msi /quiet
 ```
 
 ### Uninstall
+
 ```powershell
 # Via Add/Remove Programs, or:
 msiexec /x {ProductCode} /quiet
@@ -86,7 +90,6 @@ Get-WmiObject Win32_Product | Where-Object { $_.Name -like '*Meridian Console Ag
 |----------|-------------|---------|
 | `INSTALLFOLDER` | Installation directory | `C:\Program Files\Meridian Console\Agent\` |
 | `ENROLLMENT_TOKEN` | One-time enrollment token from control plane | (empty) |
-| `AUTOSTART` | Start service immediately after install (0 or 1) | 0 |
 
 ## What Gets Installed
 
@@ -126,6 +129,7 @@ The uninstaller will automatically:
 The following resources are **not automatically removed** to prevent data loss and ensure security review:
 
 **Certificates** (run as Administrator in PowerShell):
+
 ```powershell
 # Remove agent certificates
 Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -like '*dhadgar-agent*' -or $_.FriendlyName -like '*Meridian Console*' } | Remove-Item -Force
@@ -135,11 +139,13 @@ Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*Meridi
 ```
 
 **Firewall rules** (run as Administrator):
+
 ```powershell
 netsh advfirewall firewall delete rule name=all program="C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe"
 ```
 
 **Game server data** (WARNING: This deletes all server files!):
+
 ```powershell
 Remove-Item -Recurse -Force "C:\ProgramData\Meridian Console"
 ```
@@ -159,13 +165,17 @@ For production deployments, uncomment the `<SignOutput>` property in the `.wixpr
 ### Build Errors
 
 **"Cannot find file..."**
+
 Ensure you've published the agent first:
+
 ```powershell
 dotnet publish ..\Dhadgar.Agent.Windows.csproj -c Release -r win-x64 --self-contained
 ```
 
 **"WiX toolset not found"**
+
 The WiX SDK should be restored automatically. Run:
+
 ```powershell
 dotnet restore
 ```
@@ -185,6 +195,7 @@ Run the installer as Administrator.
 
 ### Debugging Custom Actions
 Enable verbose logging:
+
 ```powershell
 msiexec /i MeridianConsoleAgent.msi /l*v debug.log
 ```
