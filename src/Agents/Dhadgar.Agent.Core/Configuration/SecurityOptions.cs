@@ -131,10 +131,10 @@ public sealed partial class SecurityOptions : IValidatableObject
             yield break;
         }
 
-        if (!Path.IsPathRooted(path))
+        if (!Path.IsPathFullyQualified(path))
         {
             yield return new ValidationResult(
-                $"{propertyName} must be an absolute path",
+                $"{propertyName} must be a fully qualified absolute path",
                 [propertyName]);
             yield break;
         }

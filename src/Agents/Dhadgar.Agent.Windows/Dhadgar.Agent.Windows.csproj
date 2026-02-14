@@ -4,13 +4,31 @@
     <RootNamespace>Dhadgar.Agent.Windows</RootNamespace>
     <OutputType>Exe</OutputType>
 
+    <!--
+      Windows-only agent targeting Windows runtimes.
+      linux-x64 included to allow build/analysis on Linux CI runners.
+      Actual deployment always uses win-x64 or win-arm64.
+    -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64</RuntimeIdentifiers>
+
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
     <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
 
-    <!-- CA1303: Agents don't need localization for console output -->
-    <NoWarn>$(NoWarn);CA1303</NoWarn>
+    <!-- Publish settings for deployment -->
+    <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
+
+    <!-- Required for LibraryImport source generator which produces unsafe code -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!--
+      CA1303: Agents don't need localization for console output
+      CA1416: This is a Windows-only project; all Windows APIs are intentional
+      CA1849: Console.Error.WriteLine is acceptable in startup/shutdown paths
+    -->
+    <NoWarn>$(NoWarn);CA1303;CA1416;CA1849</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +38,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Windows Service hosting -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Logging.EventLog" />
+
     <!-- Security analyzers - critical for customer-hosted code -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>

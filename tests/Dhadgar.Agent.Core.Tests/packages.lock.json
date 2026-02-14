@@ -393,18 +393,6 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
         }
       },
-      "Microsoft.Extensions.Logging.EventLog": {
-        "type": "Transitive",
-        "resolved": "10.0.0",
-        "contentHash": "EWda5nSXhzQZr3yJ3+XgIApOek+Hm+txhWCEzWNVPp/OfimL4qmvctgXu87m+S2RXw/AoUP8aLMNicJ2KWblVA==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
-          "Microsoft.Extensions.Logging": "10.0.0",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
-          "Microsoft.Extensions.Options": "10.0.0",
-          "System.Diagnostics.EventLog": "10.0.0"
-        }
-      },
       "Microsoft.Extensions.Logging.EventSource": {
         "type": "Transitive",
         "resolved": "10.0.0",
@@ -696,6 +684,19 @@
         "contentHash": "RZkez/JjpnO+MZ6efKkSynN6ZztLpw3WbxNzjLCPBd97wWj1S9ZYPWi0nmT4kWBRa6atHsdM1ydGkUr8GudyDQ==",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.2"
+        }
+      },
+      "Microsoft.Extensions.Logging.EventLog": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.0, )",
+        "resolved": "10.0.0",
+        "contentHash": "EWda5nSXhzQZr3yJ3+XgIApOek+Hm+txhWCEzWNVPp/OfimL4qmvctgXu87m+S2RXw/AoUP8aLMNicJ2KWblVA==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Options": "10.0.0",
+          "System.Diagnostics.EventLog": "10.0.0"
         }
       },
       "Microsoft.Extensions.Options.DataAnnotations": {

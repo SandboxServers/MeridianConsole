@@ -2,11 +2,11 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
-      "Aspire.Dashboard.Sdk.osx-x64": {
+      "Aspire.Dashboard.Sdk.linux-x64": {
         "type": "Direct",
         "requested": "[13.1.0, )",
         "resolved": "13.1.0",
-        "contentHash": "hamP6UtWuF8jUYFaRKsa3qQU423+MX+PwnZc1rp/1TOXeAvo+OwrXpmW4hIJHPONfaWaCE9yMYTQWrw/+dUJXA=="
+        "contentHash": "gIvMR7NdVGw+mUpK9qZsGuuYfDp4CHvBDLlykSSP9pCh5XGlMgDNR3uOMfvKVlqH1hAsOuecvxEcfQ9kjufrWw=="
       },
       "Aspire.Hosting.AppHost": {
         "type": "Direct",
@@ -41,11 +41,11 @@
           "System.IO.Hashing": "9.0.10"
         }
       },
-      "Aspire.Hosting.Orchestration.osx-x64": {
+      "Aspire.Hosting.Orchestration.linux-x64": {
         "type": "Direct",
         "requested": "[13.1.0, )",
         "resolved": "13.1.0",
-        "contentHash": "a/7m1fuCaU9EDQ+lNMfmqzNP7vXV/jK+y67kXFlltGboD5gmNiZlHKZUMCbSFokPImy8u+5x4trjfD7PZifhFQ=="
+        "contentHash": "V8u8ukncoflImciXeHG03x1pWbOiR4z1bIl2lwOKgdy7/JshFrlEaabaNuGmAIZFdWEM/fsc/hVDjecQyHF2aQ=="
       },
       "Aspire.Hosting.PostgreSQL": {
         "type": "Direct",
@@ -535,18 +535,6 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.1"
         }
       },
-      "Microsoft.Extensions.Logging.EventLog": {
-        "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "Zp9MM+jFCa7oktIug62V9eNygpkf+6kFVatF+UC/ODeUwIr5givYKy8fYSSI9sWdxqDqv63y1x0mm2VjOl8GOw==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.1",
-          "Microsoft.Extensions.Logging": "10.0.1",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.1",
-          "Microsoft.Extensions.Options": "10.0.1",
-          "System.Diagnostics.EventLog": "10.0.1"
-        }
-      },
       "Microsoft.Extensions.Logging.EventSource": {
         "type": "Transitive",
         "resolved": "10.0.1",
@@ -753,6 +741,19 @@
         "contentHash": "YkmyiPIWAXVb+lPIrM0LE5bbtLOJkCiRTFiHpkVOvhI7uTvCfoOHLEN0LcsY56GpSD7NqX3gJNpsaDe87/B3zg==",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.1"
+        }
+      },
+      "Microsoft.Extensions.Logging.EventLog": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.0, )",
+        "resolved": "10.0.1",
+        "contentHash": "Zp9MM+jFCa7oktIug62V9eNygpkf+6kFVatF+UC/ODeUwIr5givYKy8fYSSI9sWdxqDqv63y1x0mm2VjOl8GOw==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.1",
+          "Microsoft.Extensions.Logging": "10.0.1",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.1",
+          "Microsoft.Extensions.Options": "10.0.1",
+          "System.Diagnostics.EventLog": "10.0.1"
         }
       },
       "StackExchange.Redis": {
