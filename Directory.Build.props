@@ -26,8 +26,9 @@
     <!-- CA1716: "Shared" namespace conflicts with VB keyword - acceptable for .NET-only codebase -->
     <!-- CA1034: Nested types used intentionally for organized log/trace categories -->
     <!-- CA1861: Constant arrays in EF migrations (auto-generated, shouldn't modify) -->
+    <!-- CA1873: Logging arg evaluation - suppress globally; genuinely expensive cases already guarded -->
     <!-- SYSLIB0057: X509Certificate2 constructor in CA/cert handling (migration tracked separately) -->
-    <NoWarn>CA1707;CA2007;CA1308;CA1062;CA1031;CA1056;CA2227;CA1310;CA1848;CA2234;CA1515;CA1716;CA1034;CA1861;SYSLIB0057</NoWarn>
+    <NoWarn>CA1707;CA2007;CA1308;CA1062;CA1031;CA1056;CA2227;CA1310;CA1848;CA2234;CA1515;CA1716;CA1034;CA1861;CA1873;SYSLIB0057</NoWarn>
   </PropertyGroup>
 
 </Project>
