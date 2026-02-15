@@ -11,12 +11,18 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Dhadgar.Mods.Tests;
 
 public class ModsWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"mods-tests-{Guid.NewGuid()}";
+
+    /// <summary>
+    /// Test-friendly TimeProvider that can be controlled in tests.
+    /// </summary>
+    public FakeTimeProvider FakeTimeProvider { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -36,6 +42,9 @@ public class ModsWebApplicationFactory : WebApplicationFactory<Program>
             services.AddDbContext<ModsDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName)
                     .UseInternalServiceProvider(efProvider));
+
+            // Register FakeTimeProvider for testing time-dependent services
+            services.AddSingleton<TimeProvider>(FakeTimeProvider);
 
             // Remove background services during testing
             services.RemoveAll<IHostedService>();

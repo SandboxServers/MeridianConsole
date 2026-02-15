@@ -2,6 +2,7 @@ using Dhadgar.Contracts;
 using Dhadgar.Contracts.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.Servers.Data.Entities;
+using Dhadgar.Shared.Data;
 using Dhadgar.Shared.Results;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -14,15 +15,18 @@ public sealed class ServerService : IServerService
     private readonly ServersDbContext _db;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<ServerService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public ServerService(
         ServersDbContext db,
         IPublishEndpoint publishEndpoint,
-        ILogger<ServerService> logger)
+        ILogger<ServerService> logger,
+        TimeProvider timeProvider)
     {
         _db = db;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async Task<FilteredPagedResponse<ServerListItem>> GetServersAsync(
@@ -60,7 +64,7 @@ public sealed class ServerService : IServerService
 
         if (!string.IsNullOrEmpty(query.Search))
         {
-            var escapedSearch = EscapeLikePattern(query.Search);
+            var escapedSearch = DatabaseHelpers.EscapeLikePattern(query.Search);
             var searchPattern = $"%{escapedSearch}%";
             queryable = queryable.Where(s =>
                 EF.Functions.ILike(s.Name, searchPattern) ||
@@ -223,7 +227,7 @@ public sealed class ServerService : IServerService
         {
             await _db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        catch (DbUpdateException ex) when (DatabaseHelpers.IsUniqueConstraintViolation(ex))
         {
             return Result<ServerDetail>.Failure("server_name_exists");
         }
@@ -296,7 +300,7 @@ public sealed class ServerService : IServerService
 
         // Soft delete - Status tracks state machine; DeletedAt triggers query filter exclusion
         server.Status = ServerStatus.Deleted;
-        server.DeletedAt = DateTime.UtcNow;
+        server.DeletedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ServerDeleted(
@@ -311,13 +315,6 @@ public sealed class ServerService : IServerService
 
         return Result<bool>.Success(true);
     }
-
-    private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
-        ex.InnerException?.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) == true ||
-        ex.InnerException?.Message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase) == true;
-
-    private static string EscapeLikePattern(string input) =>
-        input.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     private static ServerDetail MapToDetail(Server server)
     {

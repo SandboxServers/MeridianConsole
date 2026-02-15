@@ -90,8 +90,8 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-// Configure authorization with tenant-scoped validation
-builder.Services.AddTenantScopedAuthorization();
+// Configure authentication and authorization with tenant-scoped validation
+builder.Services.AddTenantScopedAuthorization(builder.Configuration, builder.Environment);
 
 // OpenTelemetry configuration
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];

@@ -36,24 +36,28 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
         end
         """;
 
+    private readonly TimeProvider _timeProvider;
+
     public ConsoleHistoryService(
         ConsoleDbContext db,
         IDistributedCache cache,
         IConnectionMultiplexer redis,
-        IOptions<ConsoleOptions> options)
+        IOptions<ConsoleOptions> options,
+        TimeProvider timeProvider)
     {
         _db = db;
         _cache = cache;
         _redis = redis;
         _options = options.Value;
         _hotStorageTtl = TimeSpan.FromMinutes(_options.HotStorageTtlMinutes);
+        _timeProvider = timeProvider;
     }
 
     public async Task AddOutputAsync(Guid serverId, Guid organizationId, ContractsOutputType outputType, string content, long sequenceNumber, CancellationToken ct = default)
     {
         var key = GetHotStorageKey(serverId);
         var lockKey = GetLockKey(serverId);
-        var line = new ConsoleLine(content, outputType, DateTime.UtcNow, sequenceNumber);
+        var line = new ConsoleLine(content, outputType, _timeProvider.GetUtcNow().UtcDateTime, sequenceNumber);
 
         // Acquire distributed lock to prevent race conditions during read-modify-write
         var lockValue = await TryAcquireLockAsync(lockKey, ct);
@@ -191,7 +195,7 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
 
     public async Task PurgeOldEntriesAsync(int retentionDays, CancellationToken ct = default)
     {
-        var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
+        var cutoff = _timeProvider.GetUtcNow().UtcDateTime.AddDays(-retentionDays);
         await _db.ConsoleHistory
             .Where(h => h.Timestamp < cutoff)
             .ExecuteDeleteAsync(ct);
@@ -225,9 +229,9 @@ public sealed class ConsoleHistoryService : IConsoleHistoryService
     {
         var db = _redis.GetDatabase();
         var lockValue = Guid.NewGuid().ToString();
-        var deadline = DateTime.UtcNow.Add(_lockTimeout);
+        var deadline = _timeProvider.GetUtcNow().UtcDateTime.Add(_lockTimeout);
 
-        while (DateTime.UtcNow < deadline)
+        while (_timeProvider.GetUtcNow().UtcDateTime < deadline)
         {
             // Atomic SET NX with expiry — only succeeds if key doesn't exist
             var acquired = await db.StringSetAsync(lockKey, lockValue, _lockExpiry, When.NotExists);

@@ -2,6 +2,7 @@ using Dhadgar.Contracts;
 using Dhadgar.Contracts.Mods;
 using Dhadgar.Mods.Data;
 using Dhadgar.Mods.Data.Entities;
+using Dhadgar.Shared.Data;
 using Dhadgar.Shared.Results;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -14,15 +15,18 @@ public sealed class ModService : IModService
     private readonly ModsDbContext _db;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<ModService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public ModService(
         ModsDbContext db,
         IPublishEndpoint publishEndpoint,
-        ILogger<ModService> logger)
+        ILogger<ModService> logger,
+        TimeProvider timeProvider)
     {
         _db = db;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async Task<FilteredPagedResponse<ModListItem>> GetModsAsync(
@@ -66,7 +70,7 @@ public sealed class ModService : IModService
 
         if (!string.IsNullOrEmpty(query.Query))
         {
-            var escapedQuery = EscapeLikePattern(query.Query);
+            var escapedQuery = DatabaseHelpers.EscapeLikePattern(query.Query);
             var searchPattern = $"%{escapedQuery}%";
             queryable = queryable.Where(m =>
                 EF.Functions.ILike(m.Name, searchPattern) ||
@@ -209,7 +213,7 @@ public sealed class ModService : IModService
         {
             await _db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        catch (DbUpdateException ex) when (DatabaseHelpers.IsUniqueConstraintViolation(ex))
         {
             return Result<ModDetail>.Failure("mod_slug_exists");
         }
@@ -279,7 +283,7 @@ public sealed class ModService : IModService
             return Result<bool>.Failure("mod_not_found");
         }
 
-        mod.DeletedAt = DateTime.UtcNow;
+        mod.DeletedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         // Publish event before save so the outbox captures it in the same transaction
         await _publishEndpoint.Publish(new ModDeleted(
@@ -294,13 +298,6 @@ public sealed class ModService : IModService
 
         return Result<bool>.Success(true);
     }
-
-    private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
-        ex.InnerException?.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) == true ||
-        ex.InnerException?.Message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase) == true;
-
-    private static string EscapeLikePattern(string input) =>
-        input.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     private static ModDetail MapToDetail(Mod mod)
     {

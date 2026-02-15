@@ -1,6 +1,7 @@
 using Dhadgar.Console.Data;
 using Dhadgar.Console.Data.Entities;
 using Dhadgar.Contracts.Console;
+using Dhadgar.Shared.Results;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,27 +15,30 @@ public sealed class CommandDispatcher : ICommandDispatcher
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ConsoleOptions _options;
     private readonly ILogger<CommandDispatcher> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly List<Regex> _allowedPatterns;
 
     public CommandDispatcher(
         ConsoleDbContext db,
         IPublishEndpoint publishEndpoint,
         IOptions<ConsoleOptions> options,
-        ILogger<CommandDispatcher> logger)
+        ILogger<CommandDispatcher> logger,
+        TimeProvider timeProvider)
     {
         _db = db;
         _publishEndpoint = publishEndpoint;
         _options = options.Value;
         _logger = logger;
+        _timeProvider = timeProvider;
 
         // Compile allowed command patterns with NonBacktracking to prevent ReDoS
         var regexTimeout = TimeSpan.FromMilliseconds(_options.CommandRegexTimeoutMs);
         _allowedPatterns = _options.AllowedCommandPatterns
-            .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.NonBacktracking, regexTimeout))
+            .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.NonBacktracking, regexTimeout))
             .ToList();
     }
 
-    public async Task<CommandResultDto> DispatchCommandAsync(
+    public async Task<Result<CommandResultDto>> DispatchCommandAsync(
         Guid serverId,
         Guid organizationId,
         string command,
@@ -44,6 +48,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
         string? clientIpHash,
         CancellationToken ct = default)
     {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
         // Validate command
         var validation = ValidateCommand(command);
         if (!validation.IsValid)
@@ -55,7 +61,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
             _logger.LogWarning("Blocked dangerous command on server {ServerId}: {Command} - {Reason}",
                 serverId, command, validation.BlockReason);
 
-            return new CommandResultDto(serverId, command, false, validation.BlockReason, DateTime.UtcNow);
+            return Result<CommandResultDto>.Failure(validation.BlockReason ?? "Command blocked");
         }
 
         // Create audit log entry (not yet saved)
@@ -73,14 +79,14 @@ public sealed class CommandDispatcher : ICommandDispatcher
             command,
             userId,
             username,
-            DateTime.UtcNow), ct);
+            now), ct);
 
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Dispatched command {CommandId} to server {ServerId}: {Command}",
             commandId, serverId, command);
 
-        return new CommandResultDto(serverId, command, true, null, DateTime.UtcNow);
+        return Result<CommandResultDto>.Success(new CommandResultDto(serverId, command, true, null, now));
     }
 
     private (bool IsValid, string? BlockReason) ValidateCommand(string command)

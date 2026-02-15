@@ -157,7 +157,14 @@ public sealed class ConsoleHub : Hub
             GetClientIpHash(),
             ct);
 
-        await Clients.Caller.SendAsync("commandResult", result, ct);
+        if (!result.IsSuccess)
+        {
+            await Clients.Caller.SendAsync("commandResult",
+                new CommandResultDto(request.ServerId, request.Command, false, result.Error, DateTime.UtcNow), ct);
+            return;
+        }
+
+        await Clients.Caller.SendAsync("commandResult", result.Value, ct);
 
         // Broadcast command to all connections on this server
         await Clients.Group(GetServerGroup(request.ServerId)).SendAsync("output", new ConsoleOutputDto(

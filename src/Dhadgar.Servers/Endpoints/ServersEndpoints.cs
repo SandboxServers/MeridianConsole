@@ -31,7 +31,8 @@ public static class ServersEndpoints
             .WithDescription("Create a new server")
             .WithSummary("Create server")
             .Produces<ServerDetail>(201)
-            .ProducesProblem(400);
+            .ProducesProblem(400)
+            .ProducesProblem(409);
 
         group.MapPatch("/{serverId:guid}", UpdateServer)
             .WithName("UpdateServer")

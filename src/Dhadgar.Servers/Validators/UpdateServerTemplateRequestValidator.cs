@@ -8,6 +8,7 @@ public sealed class UpdateServerTemplateRequestValidator : AbstractValidator<Upd
     public UpdateServerTemplateRequestValidator()
     {
         RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Template name cannot be empty")
             .MaximumLength(100).WithMessage("Template name must be 100 characters or less")
             .When(x => x.Name != null);
 

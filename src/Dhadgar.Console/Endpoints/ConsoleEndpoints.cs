@@ -17,13 +17,16 @@ public static class ConsoleEndpoints
             .WithName("GetConsoleHistory")
             .WithDescription("Get recent console history for a server")
             .WithSummary("Get console history")
-            .Produces<ConsoleHistoryDto>();
+            .Produces<ConsoleHistoryDto>()
+            .ProducesProblem(403);
 
         group.MapPost("/search", SearchHistory)
             .WithName("SearchConsoleHistory")
             .WithDescription("Search console history")
             .WithSummary("Search console history")
-            .Produces<ConsoleHistorySearchResult>();
+            .Produces<ConsoleHistorySearchResult>()
+            .ProducesProblem(400)
+            .ProducesProblem(403);
     }
 
     private static async Task<IResult> GetHistory(

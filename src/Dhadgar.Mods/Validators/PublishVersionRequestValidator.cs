@@ -22,7 +22,7 @@ public sealed class PublishVersionRequestValidator : AbstractValidator<PublishVe
             .When(x => x.FileHash != null);
 
         RuleFor(x => x.FileSizeBytes)
-            .GreaterThanOrEqualTo(0).WithMessage("File size must be non-negative");
+            .GreaterThan(0).WithMessage("File size must be positive for published versions");
 
         RuleFor(x => x.MinGameVersion)
             .MaximumLength(50).WithMessage("Min game version must be 50 characters or less")

@@ -21,7 +21,7 @@ public sealed class ServerOwnershipValidator : IServerOwnershipValidator
         try
         {
             // Call Servers API to verify the server belongs to the organization
-            var response = await _httpClient.GetAsync(
+            using var response = await _httpClient.GetAsync(
                 $"/organizations/{organizationId}/servers/{serverId}", ct);
 
             if (response.StatusCode == HttpStatusCode.NotFound)

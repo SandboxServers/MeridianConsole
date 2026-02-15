@@ -62,6 +62,9 @@ builder.Services.AddSignalR(hubOptions =>
         options.Configuration.ChannelPrefix = RedisChannel.Literal("console");
     });
 
+// Register TimeProvider for testability
+builder.Services.AddSingleton(TimeProvider.System);
+
 // Register services
 builder.Services.AddSingleton<IConsoleSessionManager, ConsoleSessionManager>();
 builder.Services.AddScoped<IConsoleHistoryService, ConsoleHistoryService>();
@@ -118,8 +121,7 @@ builder.Services.AddMassTransit(x =>
 });
 
 // Configure authentication and authorization with tenant-scoped validation
-builder.Services.AddAuthentication();
-builder.Services.AddTenantScopedAuthorization();
+builder.Services.AddTenantScopedAuthorization(builder.Configuration, builder.Environment);
 
 // OpenTelemetry configuration
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];

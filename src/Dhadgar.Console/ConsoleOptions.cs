@@ -47,7 +47,7 @@ public sealed class ConsoleOptions
     [
         @"^(say|tell|msg|w|whisper|me)\s",
         @"^(stop|save-all|save-on|save-off|list|seed|difficulty|gamemode|gamerule|weather|time|whitelist|ban|pardon|kick|op|deop|tp|teleport|give|clear|effect|enchant|xp|scoreboard|title|bossbar|data|execute|function|reload|summon|kill|setblock|fill|clone|particle|playsound|stopsound|spreadplayers|tag|team|trigger|worldborder|advancement|recipe|loot|item|place|ride|damage|return|tick)\s?",
-        @"^/",
+        @"^/(say|tell|msg|w|whisper|me|stop|save-all|save-on|save-off|list|seed|difficulty|gamemode|gamerule|weather|time|whitelist|ban|pardon|kick|op|deop|tp|teleport|give|clear|effect|enchant|xp|scoreboard|title|bossbar|data|execute|function|reload|summon|kill|setblock|fill|clone|particle|playsound|stopsound|spreadplayers|tag|team|trigger|worldborder|advancement|recipe|loot|item|place|ride|damage|return|tick|help|version|tps|plugins|mods|status|info|debug)(\s|$)",
         @"^(help|version|tps|plugins|mods|status|info|debug)\s*$"
     ];
 

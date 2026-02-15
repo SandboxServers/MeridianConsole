@@ -32,7 +32,8 @@ public static class ModsEndpoints
             .WithDescription("Create a new mod")
             .WithSummary("Create mod")
             .Produces<ModDetail>(201)
-            .ProducesProblem(400);
+            .ProducesProblem(400)
+            .ProducesProblem(409);
 
         group.MapPatch("/{modId:guid}", UpdateMod)
             .WithName("UpdateMod")

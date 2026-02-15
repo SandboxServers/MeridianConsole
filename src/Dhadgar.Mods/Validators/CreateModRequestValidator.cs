@@ -31,10 +31,14 @@ public sealed class CreateModRequestValidator : AbstractValidator<CreateModReque
 
         RuleFor(x => x.ProjectUrl)
             .MaximumLength(500).WithMessage("Project URL must be 500 characters or less")
+            .Must(url => Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == "https" || uri.Scheme == "http"))
+            .WithMessage("Project URL must be a valid HTTP or HTTPS URL")
             .When(x => x.ProjectUrl != null);
 
         RuleFor(x => x.IconUrl)
             .MaximumLength(500).WithMessage("Icon URL must be 500 characters or less")
+            .Must(url => Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == "https" || uri.Scheme == "http"))
+            .WithMessage("Icon URL must be a valid HTTP or HTTPS URL")
             .When(x => x.IconUrl != null);
 
         RuleForEach(x => x.Tags)

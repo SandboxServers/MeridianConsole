@@ -2,6 +2,7 @@ using Dhadgar.Contracts;
 using Dhadgar.Contracts.Servers;
 using Dhadgar.Servers.Data;
 using Dhadgar.Servers.Data.Entities;
+using Dhadgar.Shared.Data;
 using Dhadgar.Shared.Results;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -12,13 +13,16 @@ public sealed class ServerTemplateService : IServerTemplateService
 {
     private readonly ServersDbContext _db;
     private readonly ILogger<ServerTemplateService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public ServerTemplateService(
         ServersDbContext db,
-        ILogger<ServerTemplateService> logger)
+        ILogger<ServerTemplateService> logger,
+        TimeProvider timeProvider)
     {
         _db = db;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async Task<PagedResponse<ServerTemplateListItem>> GetTemplatesAsync(
@@ -133,7 +137,15 @@ public sealed class ServerTemplateService : IServerTemplateService
         };
 
         _db.ServerTemplates.Add(template);
-        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (DatabaseHelpers.IsUniqueConstraintViolation(ex))
+        {
+            return Result<ServerTemplateDetail>.Failure("template_name_exists");
+        }
 
         _logger.LogInformation("Created template {TemplateId} '{TemplateName}' for org {OrgId}",
             template.Id, template.Name, organizationId);
@@ -177,7 +189,14 @@ public sealed class ServerTemplateService : IServerTemplateService
         if (request.DefaultStartupCommand != null) template.DefaultStartupCommand = request.DefaultStartupCommand;
         if (request.DefaultJavaFlags != null) template.DefaultJavaFlags = request.DefaultJavaFlags;
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (DatabaseHelpers.IsUniqueConstraintViolation(ex))
+        {
+            return Result<ServerTemplateDetail>.Failure("template_name_exists");
+        }
 
         _logger.LogInformation("Updated template {TemplateId} for org {OrgId}", templateId, organizationId);
 
@@ -197,7 +216,7 @@ public sealed class ServerTemplateService : IServerTemplateService
             return Result<bool>.Failure("template_not_found");
         }
 
-        template.DeletedAt = DateTime.UtcNow;
+        template.DeletedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Deleted template {TemplateId} for org {OrgId}", templateId, organizationId);

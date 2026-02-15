@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.ServiceDefaults.MultiTenancy;
@@ -44,9 +47,9 @@ public sealed class TenantScopedHandler : AuthorizationHandler<TenantScopedRequi
         // Get the organization ID from the route
         if (!httpContext.Request.RouteValues.TryGetValue("organizationId", out var routeOrgIdValue))
         {
-            // No organizationId in route - this handler doesn't apply
-            // This allows the same policy to work on routes without org context
-            context.Succeed(requirement);
+            // No organizationId in route - skip this handler without succeeding.
+            // Other handlers (e.g., RequireAuthenticatedUser) still apply.
+            // Routes without org context should use a different policy.
             return Task.CompletedTask;
         }
 
@@ -92,12 +95,32 @@ public sealed class TenantScopedHandler : AuthorizationHandler<TenantScopedRequi
 public static class TenantScopedAuthorizationExtensions
 {
     /// <summary>
-    /// Adds tenant-scoped authorization with proper route validation.
-    /// This policy validates that the user's org_id claim matches
-    /// the organizationId route parameter.
+    /// Adds JWT Bearer authentication and tenant-scoped authorization.
+    /// Configures token validation using Auth:Issuer and Auth:Audience from configuration.
     /// </summary>
-    public static IServiceCollection AddTenantScopedAuthorization(this IServiceCollection services)
+    public static IServiceCollection AddTenantScopedAuthorization(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.Authority = configuration["Auth:Issuer"];
+                options.Audience = configuration["Auth:Audience"];
+                options.RequireHttpsMetadata = !environment.IsDevelopment();
+                options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ClockSkew = TimeSpan.FromSeconds(
+                        configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60)
+                };
+                options.RefreshOnIssuerKeyNotFound = true;
+            });
+
         services.AddHttpContextAccessor();
         services.AddSingleton<IAuthorizationHandler, TenantScopedHandler>();
         services.AddAuthorizationBuilder()
