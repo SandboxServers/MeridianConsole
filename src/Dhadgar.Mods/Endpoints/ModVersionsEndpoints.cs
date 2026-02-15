@@ -121,9 +121,12 @@ public static class ModVersionsEndpoints
 
         if (!result.IsSuccess)
         {
-            return result.Error == "version_already_exists"
-                ? ProblemDetailsHelper.Conflict(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error);
+            return result.Error switch
+            {
+                "version_already_exists" => ProblemDetailsHelper.Conflict(result.Error),
+                "mod_not_found" => ProblemDetailsHelper.NotFound(result.Error),
+                _ => ProblemDetailsHelper.BadRequest(result.Error)
+            };
         }
 
         return Results.Created(

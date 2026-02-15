@@ -79,8 +79,9 @@ public sealed class ConsoleHub : Hub
         _logger.LogInformation("Connection {ConnectionId} joined server {ServerId}",
             connectionId, request.ServerId);
 
-        // Send recent history
-        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, request.HistoryLines, ct);
+        // Send recent history (clamp to prevent unbounded reads)
+        var clampedLines = Math.Clamp(request.HistoryLines, 1, 1000);
+        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, clampedLines, ct);
         await Clients.Caller.SendAsync("history", new ConsoleHistoryDto(
             request.ServerId,
             history,
@@ -190,11 +191,12 @@ public sealed class ConsoleHub : Hub
             return;
         }
 
-        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, request.LineCount, ct);
+        var clampedLineCount = Math.Clamp(request.LineCount, 1, 1000);
+        var history = await _historyService.GetRecentHistoryAsync(request.ServerId, clampedLineCount, ct);
         await Clients.Caller.SendAsync("history", new ConsoleHistoryDto(
             request.ServerId,
             history,
-            history.Count >= request.LineCount,
+            history.Count >= clampedLineCount,
             history.Count > 0 ? history[^1].Timestamp : null), ct);
     }
 

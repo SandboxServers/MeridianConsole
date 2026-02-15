@@ -283,6 +283,11 @@ public sealed class ModService : IModService
             return Result<bool>.Failure("mod_not_found");
         }
 
+        if (mod.DeletedAt is not null)
+        {
+            return Result<bool>.Success(true); // already deleted, idempotent
+        }
+
         mod.DeletedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         // Publish event before save so the outbox captures it in the same transaction

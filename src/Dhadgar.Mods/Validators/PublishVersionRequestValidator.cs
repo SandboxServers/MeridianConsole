@@ -24,6 +24,14 @@ public sealed class PublishVersionRequestValidator : AbstractValidator<PublishVe
         RuleFor(x => x.FileSizeBytes)
             .GreaterThan(0).WithMessage("File size must be positive for published versions");
 
+        RuleFor(x => x.FilePath)
+            .MaximumLength(500).WithMessage("File path must be 500 characters or less")
+            .Must(path => !path!.Contains(".."))
+            .WithMessage("File path must not contain path traversal sequences")
+            .Must(path => !path!.Contains('\0'))
+            .WithMessage("File path must not contain null bytes")
+            .When(x => x.FilePath != null);
+
         RuleFor(x => x.MinGameVersion)
             .MaximumLength(50).WithMessage("Min game version must be 50 characters or less")
             .When(x => x.MinGameVersion != null);

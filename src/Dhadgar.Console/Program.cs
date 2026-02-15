@@ -73,7 +73,9 @@ builder.Services.AddScoped<ICommandDispatcher, CommandDispatcher>();
 // Server ownership validation via Servers API
 builder.Services.AddHttpClient<IServerOwnershipValidator, ServerOwnershipValidator>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:Servers:BaseUrl"] ?? "http://localhost:5030");
+    var serversBaseUrl = builder.Configuration["Services:Servers:BaseUrl"]
+        ?? throw new InvalidOperationException("'Services:Servers:BaseUrl' configuration is required.");
+    client.BaseAddress = new Uri(serversBaseUrl);
 });
 
 // FluentValidation

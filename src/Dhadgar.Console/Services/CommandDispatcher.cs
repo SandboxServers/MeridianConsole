@@ -66,7 +66,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
         // Create audit log entry (not yet saved)
         var log = CreateAuditLog(serverId, organizationId, userId, username, command,
-            wasAllowed: true, null, CommandResultStatus.Success, connectionId, clientIpHash);
+            wasAllowed: true, null, CommandResultStatus.Success, connectionId, clientIpHash, now);
         _db.CommandAuditLogs.Add(log);
 
         // Dispatch command to agent via MassTransit — publish before save
@@ -133,7 +133,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
         string? blockReason,
         CommandResultStatus resultStatus,
         string? connectionId,
-        string? clientIpHash)
+        string? clientIpHash,
+        DateTime executedAt)
     {
         return new CommandAuditLog
         {
@@ -146,7 +147,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
             BlockReason = blockReason,
             ResultStatus = resultStatus,
             ConnectionId = connectionId,
-            ClientIpHash = clientIpHash
+            ClientIpHash = clientIpHash,
+            ExecutedAt = executedAt
         };
     }
 
@@ -164,7 +166,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
         CancellationToken ct)
     {
         var log = CreateAuditLog(serverId, organizationId, userId, username, command,
-            wasAllowed, blockReason, resultStatus, connectionId, clientIpHash);
+            wasAllowed, blockReason, resultStatus, connectionId, clientIpHash,
+            _timeProvider.GetUtcNow().UtcDateTime);
         _db.CommandAuditLogs.Add(log);
         await _db.SaveChangesAsync(ct);
     }

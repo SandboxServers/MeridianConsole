@@ -42,6 +42,7 @@ public sealed class CreateModRequestValidator : AbstractValidator<CreateModReque
             .When(x => x.IconUrl != null);
 
         RuleForEach(x => x.Tags)
+            .NotEmpty().WithMessage("Tags must not be empty or whitespace")
             .MaximumLength(50).WithMessage("Each tag must be 50 characters or less")
             .When(x => x.Tags != null);
 

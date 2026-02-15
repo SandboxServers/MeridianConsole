@@ -54,6 +54,11 @@ public sealed class ServerTemplateService : IServerTemplateService
         {
             query = query.Where(t => t.IsPublic);
         }
+        else
+        {
+            // No org and not including public — return nothing to prevent data leak
+            query = query.Where(t => false);
+        }
 
         if (!string.IsNullOrEmpty(gameType))
         {

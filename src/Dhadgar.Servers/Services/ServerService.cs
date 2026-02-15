@@ -221,7 +221,7 @@ public sealed class ServerService : IServerService
             organizationId,
             server.Name,
             server.GameType,
-            DateTimeOffset.UtcNow), ct);
+            _timeProvider.GetUtcNow()), ct);
 
         try
         {
@@ -307,7 +307,7 @@ public sealed class ServerService : IServerService
             server.Id,
             organizationId,
             server.Name,
-            DateTimeOffset.UtcNow), ct);
+            _timeProvider.GetUtcNow()), ct);
 
         await _db.SaveChangesAsync(ct);
 
