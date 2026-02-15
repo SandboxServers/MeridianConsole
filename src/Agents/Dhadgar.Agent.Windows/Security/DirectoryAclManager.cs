@@ -447,6 +447,11 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         {
             // Extract service name from "NT SERVICE\MeridianGS_xxx"
             var backslashIndex = serviceAccountName.IndexOf('\\', StringComparison.Ordinal);
+            if (backslashIndex < 0)
+            {
+                return Result.Failure($"Invalid service account format (missing backslash): {serviceAccountName}");
+            }
+
             var serviceName = serviceAccountName[(backslashIndex + 1)..];
 
             _logger.LogDebug(

@@ -8,14 +8,17 @@ public sealed class UpdateModRequestValidator : AbstractValidator<UpdateModReque
     public UpdateModRequestValidator()
     {
         RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Mod name must not be empty or whitespace")
             .MaximumLength(100).WithMessage("Mod name must be 100 characters or less")
             .When(x => x.Name != null);
 
         RuleFor(x => x.Description)
+            .NotEmpty().WithMessage("Description must not be empty or whitespace")
             .MaximumLength(4000).WithMessage("Description must be 4000 characters or less")
             .When(x => x.Description != null);
 
         RuleFor(x => x.Author)
+            .NotEmpty().WithMessage("Author must not be empty or whitespace")
             .MaximumLength(200).WithMessage("Author must be 200 characters or less")
             .When(x => x.Author != null);
 

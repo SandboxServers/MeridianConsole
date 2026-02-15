@@ -97,7 +97,7 @@ public sealed class ServerTemplateService : IServerTemplateService
         CancellationToken ct = default)
     {
         var template = await _db.ServerTemplates
-            .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+            .FirstOrDefaultAsync(t => t.Id == templateId && !t.IsArchived && t.DeletedAt == null, ct);
 
         if (template is null)
         {
@@ -221,6 +221,7 @@ public sealed class ServerTemplateService : IServerTemplateService
             return Result<bool>.Failure("template_not_found");
         }
 
+        template.IsArchived = true;
         template.DeletedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await _db.SaveChangesAsync(ct);
 

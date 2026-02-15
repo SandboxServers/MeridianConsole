@@ -17,7 +17,8 @@ public static class ModVersionsEndpoints
             .WithName("ListModVersions")
             .WithDescription("List all versions of a mod")
             .WithSummary("List versions")
-            .Produces<IReadOnlyList<ModVersionSummary>>();
+            .Produces<IReadOnlyList<ModVersionSummary>>()
+            .ProducesProblem(404);
 
         group.MapGet("/latest", GetLatestVersion)
             .WithName("GetLatestModVersion")

@@ -207,7 +207,7 @@ public sealed class ModService : IModService
             mod.Slug,
             mod.GameType,
             mod.IsPublic,
-            DateTimeOffset.UtcNow), ct);
+            _timeProvider.GetUtcNow()), ct);
 
         try
         {
@@ -260,7 +260,7 @@ public sealed class ModService : IModService
                 organizationId,
                 mod.Name,
                 mod.IsPublic,
-                DateTimeOffset.UtcNow), ct);
+                _timeProvider.GetUtcNow()), ct);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -295,7 +295,7 @@ public sealed class ModService : IModService
             mod.Id,
             organizationId,
             mod.Name,
-            DateTimeOffset.UtcNow), ct);
+            _timeProvider.GetUtcNow()), ct);
 
         await _db.SaveChangesAsync(ct);
 

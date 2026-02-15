@@ -39,5 +39,19 @@ public sealed class PublishVersionRequestValidator : AbstractValidator<PublishVe
         RuleFor(x => x.MaxGameVersion)
             .MaximumLength(50).WithMessage("Max game version must be 50 characters or less")
             .When(x => x.MaxGameVersion != null);
+
+        RuleFor(x => x.Dependencies)
+            .Must(deps => deps!.Count <= 100)
+            .WithMessage("A mod version may declare at most 100 dependencies")
+            .When(x => x.Dependencies != null);
+
+        RuleForEach(x => x.Dependencies)
+            .ChildRules(child =>
+            {
+                child.RuleFor(d => d.ModId)
+                    .NotEqual(Guid.Empty)
+                    .WithMessage("Dependency ModId must not be empty");
+            })
+            .When(x => x.Dependencies != null);
     }
 }

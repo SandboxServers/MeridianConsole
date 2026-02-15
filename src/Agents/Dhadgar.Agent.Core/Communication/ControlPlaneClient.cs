@@ -395,7 +395,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             if (_logger.IsEnabled(LogLevel.Information))
             {
                 _logger.LogInformation("Received command {CommandType} with ID {CommandId}",
-                    envelope.CommandType, envelope.CommandId);
+                    metricCommandType, envelope.CommandId);
             }
             CommandReceived?.Invoke(this, new CommandReceivedEventArgs(envelope));
         }

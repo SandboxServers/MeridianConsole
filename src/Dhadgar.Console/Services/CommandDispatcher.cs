@@ -165,10 +165,17 @@ public sealed class CommandDispatcher : ICommandDispatcher
         string? clientIpHash,
         CancellationToken ct)
     {
-        var log = CreateAuditLog(serverId, organizationId, userId, username, command,
-            wasAllowed, blockReason, resultStatus, connectionId, clientIpHash,
-            _timeProvider.GetUtcNow().UtcDateTime);
-        _db.CommandAuditLogs.Add(log);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            var log = CreateAuditLog(serverId, organizationId, userId, username, command,
+                wasAllowed, blockReason, resultStatus, connectionId, clientIpHash,
+                _timeProvider.GetUtcNow().UtcDateTime);
+            _db.CommandAuditLogs.Add(log);
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist blocked-command audit log for server {ServerId}", serverId);
+        }
     }
 }
