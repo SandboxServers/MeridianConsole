@@ -85,7 +85,7 @@ public sealed class ConsoleHub : Hub
         await Clients.Caller.SendAsync("history", new ConsoleHistoryDto(
             request.ServerId,
             history,
-            history.Count >= request.HistoryLines,
+            history.Count >= clampedLines,
             history.Count > 0 ? history[^1].Timestamp : null), ct);
 
         await Clients.Caller.SendAsync("joined", request.ServerId, ct);

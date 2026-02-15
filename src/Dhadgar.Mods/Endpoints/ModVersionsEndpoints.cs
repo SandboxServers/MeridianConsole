@@ -39,6 +39,7 @@ public static class ModVersionsEndpoints
             .WithSummary("Publish version")
             .Produces<ModVersionDetail>(201)
             .ProducesProblem(400)
+            .ProducesProblem(404)
             .ProducesProblem(409);
 
         group.MapPost("/{versionId:guid}/deprecate", DeprecateVersion)
