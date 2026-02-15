@@ -110,9 +110,12 @@ public abstract class FaultConsumer<TMessage> : IConsumer<Fault<TMessage>>
             await HandleFaultAsync(context, context.CancellationToken);
 
             stopwatch.Stop();
-            Logger.LogDebug(
-                "Successfully processed fault for {MessageType} (FaultId: {FaultId}) in {ElapsedMs}ms",
-                messageType, fault.FaultId, stopwatch.ElapsedMilliseconds);
+            if (Logger.IsEnabled(LogLevel.Debug))
+            {
+                Logger.LogDebug(
+                    "Successfully processed fault for {MessageType} (FaultId: {FaultId}) in {ElapsedMs}ms",
+                    messageType, fault.FaultId, stopwatch.ElapsedMilliseconds);
+            }
         }
         catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
         {
@@ -193,7 +196,7 @@ public abstract class FaultConsumer<TMessage> : IConsumer<Fault<TMessage>>
                 fault.Timestamp);
 
             // Log stack trace at debug level for investigation
-            if (!string.IsNullOrEmpty(exceptionInfo.StackTrace))
+            if (!string.IsNullOrEmpty(exceptionInfo.StackTrace) && Logger.IsEnabled(LogLevel.Debug))
             {
                 Logger.LogDebug(
                     "Stack trace for {MessageType} fault {FaultId}:\n{StackTrace}",
@@ -213,7 +216,7 @@ public abstract class FaultConsumer<TMessage> : IConsumer<Fault<TMessage>>
                     inner.ExceptionType,
                     inner.Message);
 
-                if (!string.IsNullOrEmpty(inner.StackTrace))
+                if (!string.IsNullOrEmpty(inner.StackTrace) && Logger.IsEnabled(LogLevel.Debug))
                 {
                     Logger.LogDebug(
                         "Inner exception (level {Level}) stack trace for {MessageType} fault {FaultId}:\n{StackTrace}",

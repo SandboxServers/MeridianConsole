@@ -72,7 +72,10 @@ public sealed class DistributedPermissionCache : IPermissionCache
             }
 
             var permissions = JsonSerializer.Deserialize<string[]>(cached, JsonOptions);
-            _logger.LogDebug("Permission cache hit for user {UserId} in org {OrgId}", userId, organizationId);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Permission cache hit for user {UserId} in org {OrgId}", userId, organizationId);
+            }
             return permissions;
         }
         catch (Exception ex)
@@ -104,7 +107,10 @@ public sealed class DistributedPermissionCache : IPermissionCache
             };
 
             await _cache.SetStringAsync(key, value, cacheOptions, ct);
-            _logger.LogDebug("Cached {Count} permissions for user {UserId} in org {OrgId}", permissions.Count, userId, organizationId);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Cached {Count} permissions for user {UserId} in org {OrgId}", permissions.Count, userId, organizationId);
+            }
         }
         catch (Exception ex)
         {
@@ -126,7 +132,10 @@ public sealed class DistributedPermissionCache : IPermissionCache
         {
             var key = BuildKey(userId, organizationId);
             await _cache.RemoveAsync(key, ct);
-            _logger.LogDebug("Invalidated permission cache for user {UserId} in org {OrgId}", userId, organizationId);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Invalidated permission cache for user {UserId} in org {OrgId}", userId, organizationId);
+            }
         }
         catch (Exception ex)
         {
@@ -140,10 +149,13 @@ public sealed class DistributedPermissionCache : IPermissionCache
         // For a production system, consider using Redis SCAN with pattern matching
         // or maintaining a set of organization IDs per user.
         // For now, this is a no-op and relies on TTL expiration.
-        _logger.LogDebug(
-            "InvalidateUserAsync called for user {UserId} - relying on TTL expiration " +
-            "(pattern-based invalidation requires Redis-specific implementation)",
-            userId);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug(
+                "InvalidateUserAsync called for user {UserId} - relying on TTL expiration " +
+                "(pattern-based invalidation requires Redis-specific implementation)",
+                userId);
+        }
         return Task.CompletedTask;
     }
 
@@ -151,10 +163,13 @@ public sealed class DistributedPermissionCache : IPermissionCache
     {
         // Note: Same limitation as InvalidateUserAsync.
         // Consider maintaining a list of active users per org for pattern invalidation.
-        _logger.LogDebug(
-            "InvalidateOrganizationAsync called for org {OrgId} - relying on TTL expiration " +
-            "(pattern-based invalidation requires Redis-specific implementation)",
-            organizationId);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug(
+                "InvalidateOrganizationAsync called for org {OrgId} - relying on TTL expiration " +
+                "(pattern-based invalidation requires Redis-specific implementation)",
+                organizationId);
+        }
         return Task.CompletedTask;
     }
 

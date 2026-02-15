@@ -36,10 +36,16 @@ public static class DatabaseMigrationExtensions
 
         try
         {
-            logger.LogInformation("Applying migrations for {DbContext}...", contextName);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("Applying migrations for {DbContext}...", contextName);
+            }
             var db = scope.ServiceProvider.GetRequiredService<TDbContext>();
             await db.Database.MigrateAsync();
-            logger.LogInformation("Migrations applied successfully for {DbContext}", contextName);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("Migrations applied successfully for {DbContext}", contextName);
+            }
         }
         catch (Exception ex)
         {

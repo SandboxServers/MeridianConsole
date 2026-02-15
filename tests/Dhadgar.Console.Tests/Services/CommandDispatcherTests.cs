@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Dhadgar.Console.Tests.Services;
 
-public class CommandDispatcherTests
+public sealed class CommandDispatcherTests : IDisposable
 {
     private readonly ConsoleDbContext _db;
     private readonly IPublishEndpoint _publishEndpoint;
@@ -159,5 +159,10 @@ public class CommandDispatcherTests
             ServerId, OrgId, "  say hello", UserId, "testuser", "conn1", "iphash1");
 
         result.IsSuccess.Should().BeTrue();
+    }
+
+    public void Dispose()
+    {
+        _db.Dispose();
     }
 }

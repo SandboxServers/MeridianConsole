@@ -34,10 +34,10 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains("\"type\":\"output\"", json);
-        Assert.Contains("\"serverId\":\"test-server\"", json);
-        Assert.Contains("\"data\":\"Server started successfully\"", json);
-        Assert.Contains("\"isError\":false", json);
+        Assert.Contains("\"type\":\"output\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"serverId\":\"test-server\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"data\":\"Server started successfully\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"isError\":false", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -59,9 +59,9 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains("\"type\":\"status\"", json);
-        Assert.Contains("\"state\":\"Running\"", json);
-        Assert.Contains("\"osPid\":12345", json);
+        Assert.Contains("\"type\":\"status\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"state\":\"Running\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"osPid\":12345", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -82,10 +82,10 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains("\"type\":\"command\"", json);
-        Assert.Contains("\"command\":\"Stop\"", json);
-        Assert.Contains("\"payload\":\"graceful\"", json);
-        Assert.Contains("\"timeoutSeconds\":60", json);
+        Assert.Contains("\"type\":\"command\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"command\":\"Stop\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"payload\":\"graceful\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"timeoutSeconds\":60", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -104,8 +104,8 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains("\"type\":\"heartbeat\"", json);
-        Assert.Contains("\"sequence\":42", json);
+        Assert.Contains("\"type\":\"heartbeat\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"sequence\":42", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -125,9 +125,9 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains("\"type\":\"shutdown\"", json);
-        Assert.Contains("\"gracefulTimeoutSeconds\":45", json);
-        Assert.Contains("\"reason\":\"Manual shutdown requested\"", json);
+        Assert.Contains("\"type\":\"shutdown\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"gracefulTimeoutSeconds\":45", json, StringComparison.Ordinal);
+        Assert.Contains("\"reason\":\"Manual shutdown requested\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -147,10 +147,10 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains("\"type\":\"input\"", json);
-        Assert.Contains("\"serverId\":\"test-server\"", json);
-        Assert.Contains("\"input\":\"say Hello World\"", json);
-        Assert.Contains("\"correlationId\":\"input-123\"", json);
+        Assert.Contains("\"type\":\"input\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"serverId\":\"test-server\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"input\":\"say Hello World\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"correlationId\":\"input-123\"", json, StringComparison.Ordinal);
     }
 
     #endregion
@@ -466,7 +466,7 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains($"\"{state}\"", json);
+        Assert.Contains($"\"{state}\"", json, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -491,7 +491,7 @@ public sealed class PipeProtocolTests
         var json = Encoding.UTF8.GetString(bytes);
 
         // Assert
-        Assert.Contains($"\"{command}\"", json);
+        Assert.Contains($"\"{command}\"", json, StringComparison.Ordinal);
     }
 
     #endregion

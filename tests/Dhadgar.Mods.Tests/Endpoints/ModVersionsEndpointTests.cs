@@ -44,7 +44,7 @@ public class ModVersionsEndpointTests
             IsPrerelease: isPrerelease,
             Dependencies: null);
 
-    private async Task<ModDetail> CreateModAsync(HttpClient client, Guid orgId)
+    private static async Task<ModDetail> CreateModAsync(HttpClient client, Guid orgId)
     {
         var response = await client.PostAsJsonAsync(
             $"/organizations/{orgId}/mods", MakeCreateModRequest());
@@ -54,7 +54,7 @@ public class ModVersionsEndpointTests
         return mod!;
     }
 
-    private string VersionsUrl(Guid orgId, Guid modId) =>
+    private static string VersionsUrl(Guid orgId, Guid modId) =>
         $"/organizations/{orgId}/mods/{modId}/versions";
 
     // ── Publish ────────────────────────────────────────────────────────────

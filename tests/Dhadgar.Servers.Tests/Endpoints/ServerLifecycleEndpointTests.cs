@@ -14,7 +14,6 @@ namespace Dhadgar.Servers.Tests.Endpoints;
 public sealed class ServerLifecycleEndpointTests
 {
     private readonly ServersWebApplicationFactory _factory;
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public ServerLifecycleEndpointTests(ServersWebApplicationFactory factory)
     {

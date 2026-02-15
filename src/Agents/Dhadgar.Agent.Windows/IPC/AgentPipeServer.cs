@@ -154,10 +154,7 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (IsDisposed)
-        {
-            throw new ObjectDisposedException(nameof(AgentPipeServer));
-        }
+        ObjectDisposedException.ThrowIf(IsDisposed, nameof(AgentPipeServer));
 
         lock (_startLock)
         {

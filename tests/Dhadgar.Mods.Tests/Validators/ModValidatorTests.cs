@@ -163,7 +163,9 @@ public class ModValidatorTests
     [Theory]
     [InlineData("ftp://example.com/icon.png")]
     [InlineData("not-a-url")]
+#pragma warning disable CA1054
     public void CreateMod_InvalidUrlScheme_FailsValidation(string url)
+#pragma warning restore CA1054
     {
         var request = new CreateModRequest(
             Name: "My Mod",

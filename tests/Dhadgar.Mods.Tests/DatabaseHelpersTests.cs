@@ -12,7 +12,7 @@ public class DatabaseHelpersTests
     [Fact]
     public void IsUniqueConstraintViolation_DuplicateKeyMessage_ReturnsTrue()
     {
-        var inner = new Exception("ERROR: duplicate key value violates unique constraint");
+        var inner = new InvalidOperationException("ERROR: duplicate key value violates unique constraint");
         var ex = new DbUpdateException("Save failed", inner);
 
         var result = DatabaseHelpers.IsUniqueConstraintViolation(ex);
@@ -23,7 +23,7 @@ public class DatabaseHelpersTests
     [Fact]
     public void IsUniqueConstraintViolation_UniqueConstraintMessage_ReturnsTrue()
     {
-        var inner = new Exception("UNIQUE constraint failed: Mods.Slug");
+        var inner = new InvalidOperationException("UNIQUE constraint failed: Mods.Slug");
         var ex = new DbUpdateException("Save failed", inner);
 
         var result = DatabaseHelpers.IsUniqueConstraintViolation(ex);
@@ -34,7 +34,7 @@ public class DatabaseHelpersTests
     [Fact]
     public void IsUniqueConstraintViolation_OtherError_ReturnsFalse()
     {
-        var inner = new Exception("Some other database error occurred");
+        var inner = new InvalidOperationException("Some other database error occurred");
         var ex = new DbUpdateException("Save failed", inner);
 
         var result = DatabaseHelpers.IsUniqueConstraintViolation(ex);

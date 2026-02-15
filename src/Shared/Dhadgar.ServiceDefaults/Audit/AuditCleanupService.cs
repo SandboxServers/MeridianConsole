@@ -87,10 +87,13 @@ public sealed class AuditCleanupService<TContext> : BackgroundService
             return;
         }
 
-        _logger.LogInformation(
-            "Audit cleanup service started. Interval: {Interval}, RetentionPeriod: {RetentionPeriod}",
-            _options.Interval,
-            _options.RetentionPeriod);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
+                "Audit cleanup service started. Interval: {Interval}, RetentionPeriod: {RetentionPeriod}",
+                _options.Interval,
+                _options.RetentionPeriod);
+        }
 
         // Initial delay to let the service start up (don't run cleanup immediately)
         try
