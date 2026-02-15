@@ -104,8 +104,9 @@ public sealed class ServerTemplateService : IServerTemplateService
             return Result<ServerTemplateDetail>.Failure("template_not_found");
         }
 
-        // Check access
-        if (!template.IsPublic && template.OrganizationId != organizationId)
+        // Check access: non-public templates require a matching org.
+        // Guard against null == null: if the caller has no org, deny access to non-public templates.
+        if (!template.IsPublic && (!organizationId.HasValue || template.OrganizationId != organizationId))
         {
             return Result<ServerTemplateDetail>.Failure("template_not_found");
         }
