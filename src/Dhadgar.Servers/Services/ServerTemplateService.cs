@@ -37,7 +37,7 @@ public sealed class ServerTemplateService : IServerTemplateService
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var query = _db.ServerTemplates.Where(t => !t.IsArchived);
+        var query = _db.ServerTemplates.Where(t => !t.IsArchived && t.DeletedAt == null);
 
         if (organizationId.HasValue)
         {

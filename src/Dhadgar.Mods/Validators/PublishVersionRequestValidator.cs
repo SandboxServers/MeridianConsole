@@ -28,8 +28,6 @@ public sealed class PublishVersionRequestValidator : AbstractValidator<PublishVe
             .MaximumLength(500).WithMessage("File path must be 500 characters or less")
             .Must(path => !path!.Contains("..", StringComparison.Ordinal))
             .WithMessage("File path must not contain path traversal sequences")
-            .Must(path => !path!.Contains('\0', StringComparison.Ordinal))
-            .WithMessage("File path must not contain null bytes")
             .Must(path => !path!.Any(char.IsControl))
             .WithMessage("File path must not contain control characters")
             .When(x => x.FilePath != null);
