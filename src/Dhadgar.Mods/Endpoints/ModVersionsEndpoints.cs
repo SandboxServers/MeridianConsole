@@ -59,6 +59,11 @@ public static class ModVersionsEndpoints
         string? constraint = null,
         CancellationToken ct = default)
     {
+        if (constraint is { Length: > 100 })
+        {
+            return ProblemDetailsHelper.BadRequest("invalid_constraint", "Version constraint is too long");
+        }
+
         var result = await versionService.FindVersionsMatchingAsync(organizationId, modId, constraint, ct);
 
         if (!result.IsSuccess)
@@ -158,9 +163,11 @@ public static class ModVersionsEndpoints
 
         if (!result.IsSuccess)
         {
-            return result.Error == "version_not_found" || result.Error == "mod_not_found"
-                ? ProblemDetailsHelper.NotFound(result.Error)
-                : ProblemDetailsHelper.BadRequest(result.Error);
+            return result.Error switch
+            {
+                "version_not_found" or "mod_not_found" => ProblemDetailsHelper.NotFound(result.Error),
+                _ => ProblemDetailsHelper.BadRequest(result.Error)
+            };
         }
 
         return Results.NoContent();

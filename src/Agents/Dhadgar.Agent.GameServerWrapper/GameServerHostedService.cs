@@ -70,9 +70,12 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation(
-            "GameServerWrapper starting for server {ServerId}",
-            _options.ServerId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
+                "GameServerWrapper starting for server {ServerId}",
+                _options.ServerId);
+        }
 
         try
         {
@@ -80,7 +83,11 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             var configResult = ServerConfig.LoadFromFile(_options.ConfigPath);
             if (!configResult.IsSuccess)
             {
-                _logger.LogCritical("Failed to load configuration: {Error}", configResult.Error);
+                if (_logger.IsEnabled(LogLevel.Critical))
+                {
+                    _logger.LogCritical("Failed to load configuration: {Error}", configResult.Error);
+                }
+
                 _lifetime.StopApplication();
                 return;
             }
@@ -138,7 +145,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
     /// </summary>
     private async Task<bool> ConnectToPipeAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Connecting to agent pipe: {PipeName}", _options.PipeName);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Connecting to agent pipe: {PipeName}", _options.PipeName);
+        }
 
         try
         {
@@ -306,7 +316,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             ? corrProp.GetString()
             : null;
 
-        _logger.LogDebug("Received command: {Command}", command);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("Received command: {Command}", command);
+        }
 
         var success = true;
         string? errorMessage = null;
@@ -399,7 +412,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             ? seqProp.GetInt64()
             : 0;
 
-        _logger.LogTrace("Heartbeat received, sequence {Sequence}", sequence);
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            _logger.LogTrace("Heartbeat received, sequence {Sequence}", sequence);
+        }
 
         // Send heartbeat response
         await SendMessageAsync(new
@@ -424,7 +440,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             ? reasonProp.GetString()
             : null;
 
-        _logger.LogInformation("Shutdown requested: {Reason}", reason ?? "no reason provided");
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Shutdown requested: {Reason}", reason ?? "no reason provided");
+        }
 
         await StopGameServerAsync(TimeSpan.FromSeconds(timeout)).ConfigureAwait(false);
         _lifetime.StopApplication();
@@ -435,7 +454,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
     /// </summary>
     private async Task StartGameServerAsync(ServerConfig config, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting game server: {Executable}", config.ExecutablePath);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Starting game server: {Executable}", config.ExecutablePath);
+        }
 
         _currentState = GameServerState.Starting;
         await SendStatusAsync(_currentState).ConfigureAwait(false);
@@ -517,9 +539,12 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             _currentState = GameServerState.Running;
             await SendStatusAsync(_currentState, _gameServerProcess.Id).ConfigureAwait(false);
 
-            _logger.LogInformation(
-                "Game server started with PID {Pid}",
-                _gameServerProcess.Id);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "Game server started with PID {Pid}",
+                    _gameServerProcess.Id);
+            }
         }
         catch (Exception ex)
         {
@@ -542,7 +567,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
             return;
         }
 
-        _logger.LogInformation("Stopping game server with {Timeout} timeout", timeout);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Stopping game server with {Timeout} timeout", timeout);
+        }
 
         _currentState = GameServerState.Stopping;
         await SendStatusAsync(_currentState).ConfigureAwait(false);
@@ -626,7 +654,10 @@ public sealed class GameServerHostedService : BackgroundService, IAsyncDisposabl
         }
 
         var exitCode = _gameServerProcess.ExitCode;
-        _logger.LogInformation("Game server exited with code {ExitCode}", exitCode);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Game server exited with code {ExitCode}", exitCode);
+        }
 
         _currentState = exitCode == 0 ? GameServerState.Stopped : GameServerState.Failed;
 

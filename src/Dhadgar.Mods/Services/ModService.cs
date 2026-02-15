@@ -38,7 +38,7 @@ public sealed class ModService : IModService
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
 
-        var queryable = _db.Mods.Where(m => !m.IsArchived);
+        var queryable = _db.Mods.Where(m => !m.IsArchived && m.DeletedAt == null);
 
         // Filter by organization or public
         if (organizationId.HasValue)
@@ -152,7 +152,7 @@ public sealed class ModService : IModService
         var mod = await _db.Mods
             .Include(m => m.Category)
             .Include(m => m.Versions.OrderByDescending(v => v.Major).ThenByDescending(v => v.Minor).ThenByDescending(v => v.Patch).Take(10))
-            .FirstOrDefaultAsync(m => m.Id == modId, ct);
+            .FirstOrDefaultAsync(m => m.Id == modId && m.DeletedAt == null, ct);
 
         if (mod is null)
         {
@@ -233,7 +233,7 @@ public sealed class ModService : IModService
         var mod = await _db.Mods
             .Include(m => m.Category)
             .Include(m => m.Versions.OrderByDescending(v => v.Major).ThenByDescending(v => v.Minor).ThenByDescending(v => v.Patch).Take(10))
-            .FirstOrDefaultAsync(m => m.Id == modId && m.OrganizationId == organizationId, ct);
+            .FirstOrDefaultAsync(m => m.Id == modId && m.OrganizationId == organizationId && m.DeletedAt == null, ct);
 
         if (mod is null)
         {

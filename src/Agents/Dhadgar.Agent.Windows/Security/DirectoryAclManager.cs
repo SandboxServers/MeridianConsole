@@ -449,7 +449,7 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             var backslashIndex = serviceAccountName.IndexOf('\\', StringComparison.Ordinal);
             if (backslashIndex < 0)
             {
-                return Result.Failure($"Invalid service account format (missing backslash): {serviceAccountName}");
+                return Result.Failure($"[ACL.InvalidFormat] Invalid service account format (missing backslash): {serviceAccountName}");
             }
 
             var serviceName = serviceAccountName[(backslashIndex + 1)..];

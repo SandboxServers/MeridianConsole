@@ -30,6 +30,8 @@ public sealed class PublishVersionRequestValidator : AbstractValidator<PublishVe
             .WithMessage("File path must not contain path traversal sequences")
             .Must(path => !path!.Contains('\0', StringComparison.Ordinal))
             .WithMessage("File path must not contain null bytes")
+            .Must(path => !path!.Any(char.IsControl))
+            .WithMessage("File path must not contain control characters")
             .When(x => x.FilePath != null);
 
         RuleFor(x => x.MinGameVersion)

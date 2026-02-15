@@ -99,7 +99,8 @@ public sealed partial class SecurityEventLogger : ISecurityEventLogger
     {
         if (_logger.IsEnabled(LogLevel.Information))
         {
-            CustomRoleCreated(actorUserId, roleName, string.Join(", ", permissions), orgId);
+            var permissionList = string.Join(", ", permissions);
+            CustomRoleCreated(actorUserId, roleName, permissionList, orgId);
         }
     }
 
@@ -127,7 +128,8 @@ public sealed partial class SecurityEventLogger : ISecurityEventLogger
     {
         if (_logger.IsEnabled(LogLevel.Information))
         {
-            OrgMembershipChanged(userId, orgId, changeType, actorUserId?.ToString() ?? "system");
+            var actor = actorUserId?.ToString() ?? "system";
+            OrgMembershipChanged(userId, orgId, changeType, actor);
         }
     }
 
@@ -150,7 +152,8 @@ public sealed partial class SecurityEventLogger : ISecurityEventLogger
     {
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            ResourceAccessed(userId, resourceType, resourceId, action, orgId?.ToString() ?? "none");
+            var org = orgId?.ToString() ?? "none";
+            ResourceAccessed(userId, resourceType, resourceId, action, org);
         }
     }
 

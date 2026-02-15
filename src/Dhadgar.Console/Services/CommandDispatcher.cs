@@ -58,8 +58,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
             await LogCommandAsync(serverId, organizationId, userId, username, command,
                 wasAllowed: false, validation.BlockReason, CommandResultStatus.Blocked, connectionId, clientIpHash, ct);
 
-            _logger.LogWarning("Blocked dangerous command on server {ServerId}: {Command} - {Reason}",
-                serverId, command, validation.BlockReason);
+            _logger.LogWarning("Blocked dangerous command on server {ServerId} - {Reason}",
+                serverId, validation.BlockReason);
 
             return Result<CommandResultDto>.Failure(validation.BlockReason ?? "Command blocked");
         }
@@ -83,8 +83,8 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
         await _db.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Dispatched command {CommandId} to server {ServerId}: {Command}",
-            commandId, serverId, command);
+        _logger.LogInformation("Dispatched command {CommandId} to server {ServerId}",
+            commandId, serverId);
 
         return Result<CommandResultDto>.Success(new CommandResultDto(serverId, command, true, null, now));
     }

@@ -167,7 +167,10 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             _started = true;
         }
 
-        _logger.LogInformation("Agent pipe server started for agent {AgentId}", _agentId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Agent pipe server started for agent {AgentId}", _agentId);
+        }
 
         // Start listening for registered servers with exception handling
         foreach (var (serverId, _) in _registrations)
@@ -249,9 +252,12 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
 
         _registrations[serverId] = registration;
 
-        _logger.LogInformation(
-            "Registered server {ServerId} for pipe communication on {PipeName}",
-            serverId, pipeName);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
+                "Registered server {ServerId} for pipe communication on {PipeName}",
+                serverId, pipeName);
+        }
 
         // If already started, begin listening for this server with exception handling
         if (_started)
@@ -305,7 +311,10 @@ public sealed partial class AgentPipeServer : IAgentPipeServer
             }
         }
 
-        _logger.LogInformation("Unregistered server {ServerId}", serverId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Unregistered server {ServerId}", serverId);
+        }
     }
 
     /// <inheritdoc />

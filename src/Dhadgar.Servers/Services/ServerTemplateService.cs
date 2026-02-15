@@ -118,9 +118,9 @@ public sealed class ServerTemplateService : IServerTemplateService
         CreateServerTemplateRequest request,
         CancellationToken ct = default)
     {
-        // Check for duplicate name
+        // Check for duplicate name (exclude soft-deleted templates)
         var exists = await _db.ServerTemplates.AnyAsync(
-            t => t.OrganizationId == organizationId && t.Name == request.Name, ct);
+            t => t.OrganizationId == organizationId && t.Name == request.Name && !t.IsArchived && t.DeletedAt == null, ct);
 
         if (exists)
         {
@@ -165,7 +165,7 @@ public sealed class ServerTemplateService : IServerTemplateService
         CancellationToken ct = default)
     {
         var template = await _db.ServerTemplates
-            .FirstOrDefaultAsync(t => t.Id == templateId && t.OrganizationId == organizationId, ct);
+            .FirstOrDefaultAsync(t => t.Id == templateId && t.OrganizationId == organizationId && !t.IsArchived && t.DeletedAt == null, ct);
 
         if (template is null)
         {
@@ -175,7 +175,7 @@ public sealed class ServerTemplateService : IServerTemplateService
         if (request.Name != null && request.Name != template.Name)
         {
             var exists = await _db.ServerTemplates.AnyAsync(
-                t => t.OrganizationId == organizationId && t.Name == request.Name && t.Id != templateId, ct);
+                t => t.OrganizationId == organizationId && t.Name == request.Name && t.Id != templateId && !t.IsArchived && t.DeletedAt == null, ct);
 
             if (exists)
             {
@@ -214,7 +214,7 @@ public sealed class ServerTemplateService : IServerTemplateService
         CancellationToken ct = default)
     {
         var template = await _db.ServerTemplates
-            .FirstOrDefaultAsync(t => t.Id == templateId && t.OrganizationId == organizationId, ct);
+            .FirstOrDefaultAsync(t => t.Id == templateId && t.OrganizationId == organizationId && t.DeletedAt == null, ct);
 
         if (template is null)
         {
