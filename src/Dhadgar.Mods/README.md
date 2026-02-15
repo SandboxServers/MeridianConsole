@@ -1,6 +1,6 @@
 # Dhadgar.Mods Service
 
-![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+![Status: Alpha](https://img.shields.io/badge/Status-Alpha-yellow)
 
 The Mods service is responsible for managing game modification (mod) registry, versioning, compatibility tracking, and distribution coordination within the Meridian Console platform. It serves as the central catalog for all mods that can be deployed to game servers managed by the control plane.
 
@@ -83,9 +83,9 @@ Like all Meridian Console services, Mods operates in a multi-tenant environment:
 
 ## Current Status
 
-**Status: STUB SERVICE**
+**Status: Alpha**
 
-The Mods service is currently in the scaffolding phase. The foundational structure is in place, but core business functionality is not yet implemented.
+The Mods service has core entities and semantic versioning implemented. Dependency resolution (service layer), download tracking endpoints, and Files service integration are not yet implemented.
 
 ### What Exists Today
 
@@ -93,7 +93,14 @@ The Mods service is currently in the scaffolding phase. The foundational structu
 |-----------|--------|-------------|
 | Project Structure | Complete | Standard ASP.NET Core Minimal API layout |
 | Health Endpoints | Complete | `/healthz`, `/livez`, `/readyz` probes |
-| Database Context | Scaffolded | `ModsDbContext` with placeholder `SampleEntity` |
+| Database Entities | Complete | `Mod`, `ModVersion`, `ModCategory`, `ModDependency`, `ModDownload` entities |
+| Database Context | Complete | `ModsDbContext` with full entity mapping and migrations |
+| Mod CRUD | Complete | Org-scoped mod management endpoints |
+| Version Management | Complete | Semantic versioning with range parsing (npm-style: ^1.0.0, ~2.1.0) |
+| Dependency Filtering | Partial | `VersionRangeParser` for filtering; full resolution service not implemented |
+| Compatibility Tracking | Complete | Game version compatibility matrix |
+| Category Management | Partial | `ModCategory` entity exists; CRUD endpoints not implemented |
+| Download Tracking | Partial | `ModDownload` entity exists; download endpoint not implemented |
 | OpenTelemetry | Complete | Tracing, metrics, and logging instrumentation |
 | Swagger/OpenAPI | Complete | API documentation at `/swagger` |
 | Middleware | Complete | Correlation tracking, problem details, request logging |
@@ -104,13 +111,9 @@ The Mods service is currently in the scaffolding phase. The foundational structu
 
 | Feature | Priority | Description |
 |---------|----------|-------------|
-| Mod Entity & CRUD | High | Core mod management APIs |
-| Version Management | High | Mod version tracking and release channels |
-| Compatibility Matrix | High | Game version and mod compatibility tracking |
-| Dependency Resolution | Medium | Mod dependency and conflict detection |
-| Search & Discovery | Medium | Full-text search and filtering |
-| Files Integration | Medium | Coordination with Files service for distribution |
-| Messaging Consumers | Medium | MassTransit event handlers |
+| Files Integration | **Critical** | Mods download + Files service integration required before production |
+| Search & Discovery | Medium | Full-text search and advanced filtering |
+| Messaging Consumers | Medium | MassTransit event handlers for async workflows |
 | Caching | Low | Redis caching for catalog queries |
 | Audit Logging | Low | Track changes to mods and versions |
 

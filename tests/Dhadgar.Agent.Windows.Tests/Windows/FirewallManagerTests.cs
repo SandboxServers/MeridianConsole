@@ -78,7 +78,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Port must be between 1 and 65535", result.Error);
+        Assert.Contains("Port must be between 1 and 65535", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -90,7 +90,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Port must be between 1 and 65535", result.Error);
+        Assert.Contains("Port must be between 1 and 65535", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -130,7 +130,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Port must be between 1 and 65535", result.Error);
+        Assert.Contains("Port must be between 1 and 65535", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -170,7 +170,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Protocol must be one of: TCP, UDP", result.Error);
+        Assert.Contains("Protocol must be one of: TCP, UDP", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -182,7 +182,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Protocol cannot be null or empty", result.Error);
+        Assert.Contains("Protocol cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -194,7 +194,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Protocol cannot be null or empty", result.Error);
+        Assert.Contains("Protocol cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -206,7 +206,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Protocol cannot be null or empty", result.Error);
+        Assert.Contains("Protocol cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -223,7 +223,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Protocol must be one of: TCP, UDP", result.Error);
+        Assert.Contains("Protocol must be one of: TCP, UDP", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -239,7 +239,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Contains("Rule name cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -251,7 +251,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Contains("Rule name cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -263,7 +263,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Contains("Rule name cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -278,7 +278,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name must not exceed 256 characters", result.Error);
+        Assert.Contains("Rule name must not exceed 256 characters", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -306,7 +306,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name contains invalid characters", result.Error);
+        Assert.Contains("Rule name contains invalid characters", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -381,7 +381,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Contains("Rule name cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.RemovedRules);
     }
 
@@ -393,7 +393,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Contains("Rule name cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.RemovedRules);
     }
 
@@ -405,7 +405,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name contains invalid characters", result.Error);
+        Assert.Contains("Rule name contains invalid characters", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.RemovedRules);
     }
 
@@ -429,7 +429,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Contains("Rule name cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.CheckedRules);
     }
 
@@ -441,7 +441,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name cannot be null or empty", result.Error);
+        Assert.Contains("Rule name cannot be null or empty", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.CheckedRules);
     }
 
@@ -453,7 +453,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Rule name contains invalid characters", result.Error);
+        Assert.Contains("Rule name contains invalid characters", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.CheckedRules);
     }
 
@@ -615,8 +615,8 @@ public sealed class FirewallManagerTests : IDisposable
         Assert.Equal(expectedRuleName, addedRule.RuleName);
         Assert.Equal(expectedPort, addedRule.Port);
         Assert.Equal(expectedProtocol, addedRule.Protocol);
-        Assert.Contains("Meridian Console managed rule", addedRule.Description);
-        Assert.Contains("25565/TCP", addedRule.Description);
+        Assert.Contains("Meridian Console managed rule", addedRule.Description, StringComparison.Ordinal);
+        Assert.Contains("25565/TCP", addedRule.Description, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -638,7 +638,7 @@ public sealed class FirewallManagerTests : IDisposable
         Assert.Equal(expectedRuleName, addedRule.RuleName);
         Assert.Equal(expectedPort, addedRule.Port);
         Assert.Equal(expectedProtocol, addedRule.Protocol);
-        Assert.Contains("27015/UDP", addedRule.Description);
+        Assert.Contains("27015/UDP", addedRule.Description, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -704,7 +704,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("not available", result.Error);
+        Assert.Contains("not available", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -718,7 +718,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("not available", result.Error);
+        Assert.Contains("not available", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -732,7 +732,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("not available", result.Error);
+        Assert.Contains("not available", result.Error, StringComparison.Ordinal);
     }
 
     #endregion
@@ -747,7 +747,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("reserved", result.Error);
+        Assert.Contains("reserved", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.AddedRules);
     }
 
@@ -759,7 +759,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("reserved", result.Error);
+        Assert.Contains("reserved", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.RemovedRules);
     }
 
@@ -771,7 +771,7 @@ public sealed class FirewallManagerTests : IDisposable
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("reserved", result.Error);
+        Assert.Contains("reserved", result.Error, StringComparison.Ordinal);
         Assert.Empty(_mockOperations.CheckedRules);
     }
 

@@ -97,7 +97,11 @@ public sealed partial class SecurityEventLogger : ISecurityEventLogger
 
     public void LogCustomRoleCreated(Guid actorUserId, string roleName, IEnumerable<string> permissions, Guid orgId)
     {
-        CustomRoleCreated(actorUserId, roleName, string.Join(", ", permissions), orgId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            var permissionList = string.Join(", ", permissions);
+            CustomRoleCreated(actorUserId, roleName, permissionList, orgId);
+        }
     }
 
     public void LogOAuthAccountLinked(Guid userId, string provider, string? clientIp)
@@ -122,7 +126,11 @@ public sealed partial class SecurityEventLogger : ISecurityEventLogger
 
     public void LogOrgMembershipChange(Guid userId, Guid orgId, string changeType, Guid? actorUserId)
     {
-        OrgMembershipChanged(userId, orgId, changeType, actorUserId?.ToString() ?? "system");
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            var actor = actorUserId?.ToString() ?? "system";
+            OrgMembershipChanged(userId, orgId, changeType, actor);
+        }
     }
 
     public void LogEmailVerificationChange(Guid userId, string? email, bool verified)
@@ -142,7 +150,11 @@ public sealed partial class SecurityEventLogger : ISecurityEventLogger
 
     public void LogResourceAccess(Guid userId, string resourceType, string resourceId, string action, Guid? orgId)
     {
-        ResourceAccessed(userId, resourceType, resourceId, action, orgId?.ToString() ?? "none");
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            var org = orgId?.ToString() ?? "none";
+            ResourceAccessed(userId, resourceType, resourceId, action, org);
+        }
     }
 
     public void LogApiKeyUsage(string keyId, string endpoint, string? clientIp)

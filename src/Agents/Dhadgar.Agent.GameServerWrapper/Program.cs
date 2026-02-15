@@ -61,10 +61,13 @@ public static class Program
 
             // Log startup
             var logger = host.Services.GetRequiredService<ILogger<GameServerHostedService>>();
-            logger.LogInformation(
-                "GameServerWrapper starting. ServerId: {ServerId}, Pipe: {Pipe}",
-                options.ServerId,
-                options.PipeName);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation(
+                    "GameServerWrapper starting. ServerId: {ServerId}, Pipe: {Pipe}",
+                    options.ServerId,
+                    options.PipeName);
+            }
 
             await host.RunAsync().ConfigureAwait(false);
             return 0;

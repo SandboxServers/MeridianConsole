@@ -85,15 +85,21 @@ public abstract class DhadgarConsumer<TMessage> : IConsumer<TMessage>
             ["ConversationId"] = context.ConversationId?.ToString() ?? "none"
         });
 
-        Logger.LogDebug("Consuming {MessageType} message {MessageId}", messageType, messageId);
+        if (Logger.IsEnabled(LogLevel.Debug))
+        {
+            Logger.LogDebug("Consuming {MessageType} message {MessageId}", messageType, messageId);
+        }
 
         try
         {
             await ConsumeAsync(context, context.CancellationToken);
 
             stopwatch.Stop();
-            Logger.LogDebug("Successfully consumed {MessageType} message {MessageId} in {ElapsedMs}ms",
-                messageType, messageId, stopwatch.ElapsedMilliseconds);
+            if (Logger.IsEnabled(LogLevel.Debug))
+            {
+                Logger.LogDebug("Successfully consumed {MessageType} message {MessageId} in {ElapsedMs}ms",
+                    messageType, messageId, stopwatch.ElapsedMilliseconds);
+            }
         }
         catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
         {

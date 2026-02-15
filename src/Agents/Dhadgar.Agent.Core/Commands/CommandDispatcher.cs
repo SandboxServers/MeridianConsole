@@ -85,7 +85,10 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 $"A handler for command type '{handler.CommandType}' is already registered");
         }
 
-        _logger.LogDebug("Registered handler for command type: {CommandType}", handler.CommandType);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("Registered handler for command type: {CommandType}", handler.CommandType);
+        }
     }
 
     public bool HasHandler(string commandType)
@@ -192,10 +195,13 @@ public sealed class CommandDispatcher : ICommandDispatcher
             metricCommandType,
             envelope.CorrelationId);
 
-        _logger.LogInformation(
-            "Dispatching command {CommandType} with ID {CommandId}",
-            metricCommandType,
-            envelope.CommandId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
+                "Dispatching command {CommandType} with ID {CommandId}",
+                metricCommandType,
+                envelope.CommandId);
+        }
 
         // Validate the command
         var validationResult = _validator.Validate(envelope);
@@ -273,10 +279,13 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, result.ErrorMessage);
             }
 
-            _logger.LogInformation(
-                "Command {CommandId} completed with status {Status}",
-                envelope.CommandId,
-                result.Status);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "Command {CommandId} completed with status {Status}",
+                    envelope.CommandId,
+                    result.Status);
+            }
 
             return handlerResult;
         }

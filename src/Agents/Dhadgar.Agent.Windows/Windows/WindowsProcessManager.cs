@@ -253,9 +253,12 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
                 osProcess.BeginErrorReadLine();
             }
 
-            _logger.LogInformation(
-                "Started process {ProcessId} (PID: {OsPid}) for server {ServerId}",
-                processId, osProcess.Id, config.ServerId);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "Started process {ProcessId} (PID: {OsPid}) for server {ServerId}",
+                    processId, osProcess.Id, config.ServerId);
+            }
 
             // Ownership transferred to ProcessEntry in _processes dictionary
             // Set to null to prevent cleanup in case of any future exception paths

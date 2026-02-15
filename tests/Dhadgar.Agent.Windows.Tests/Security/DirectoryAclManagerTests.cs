@@ -224,9 +224,9 @@ public sealed class DirectoryAclManagerTests
             if (result.IsFailure)
             {
                 // Should not be a validation error about service account format
-                Assert.DoesNotContain("Service account name is required", result.Error);
+                Assert.DoesNotContain("Service account name is required", result.Error, StringComparison.Ordinal);
                 // ACL operation errors have distinct codes; validation errors use [ACL.InvalidAccount]
-                Assert.DoesNotContain("[ACL.InvalidAccount]", result.Error);
+                Assert.DoesNotContain("[ACL.InvalidAccount]", result.Error, StringComparison.Ordinal);
             }
         }
         finally

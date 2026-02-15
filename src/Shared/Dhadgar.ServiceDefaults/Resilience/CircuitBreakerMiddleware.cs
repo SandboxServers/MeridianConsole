@@ -112,9 +112,12 @@ public class CircuitBreakerMiddleware
                 {
                     state.Status = CircuitStatus.HalfOpen;
                     state.HalfOpenSuccessCount = 0;
-                    _logger.LogInformation(
-                        "Circuit for service {ServiceId} transitioning to half-open",
-                        serviceId);
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        _logger.LogInformation(
+                            "Circuit for service {ServiceId} transitioning to half-open",
+                            serviceId);
+                    }
                     return false;
                 }
                 return true;
@@ -179,10 +182,13 @@ public class CircuitBreakerMiddleware
                         state.OpenedAt = null;
                         CircuitClosedCounter.Add(1, new KeyValuePair<string, object?>("service_id", serviceId));
 
-                        _logger.LogInformation(
-                            "Circuit closed for service {ServiceId} after {SuccessCount} successful requests",
-                            serviceId,
-                            state.HalfOpenSuccessCount);
+                        if (_logger.IsEnabled(LogLevel.Information))
+                        {
+                            _logger.LogInformation(
+                                "Circuit closed for service {ServiceId} after {SuccessCount} successful requests",
+                                serviceId,
+                                state.HalfOpenSuccessCount);
+                        }
                     }
                 }
             }

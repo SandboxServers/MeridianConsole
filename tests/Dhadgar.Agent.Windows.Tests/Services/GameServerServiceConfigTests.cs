@@ -308,8 +308,8 @@ public sealed class GameServerServiceConfigTests
         Assert.Equal(TestWrapperPath, config.WrapperExecutablePath);
         Assert.Equal(TestServerDir, config.ServerDirectory);
         Assert.Equal(TestConfigPath, config.ConfigFilePath);
-        Assert.StartsWith("MeridianAgent_", config.PipeName);
-        Assert.Contains(serverId, config.PipeName);
+        Assert.StartsWith("MeridianAgent_", config.PipeName, StringComparison.Ordinal);
+        Assert.Contains(serverId, config.PipeName, StringComparison.Ordinal);
     }
 
     [Fact]

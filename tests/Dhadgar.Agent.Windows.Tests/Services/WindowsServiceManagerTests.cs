@@ -57,7 +57,7 @@ public sealed class WindowsServiceManagerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Contains("Server ID is required", result.Error);
+        Assert.Contains("Server ID is required", result.Error, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -123,7 +123,7 @@ public sealed class WindowsServiceManagerTests
         // Will fail with "Wrapper not found" since the file doesn't exist,
         // but that means validation passed
         Assert.True(result.IsFailure);
-        Assert.Contains("Wrapper executable not found", result.Error);
+        Assert.Contains("Wrapper executable not found", result.Error, StringComparison.Ordinal);
     }
 
     #endregion

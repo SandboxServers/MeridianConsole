@@ -12,7 +12,7 @@ public interface INodeService
     /// <summary>
     /// Gets a paginated list of nodes with optional filtering and sorting.
     /// </summary>
-    Task<FilteredPagedResponse<NodeListItem>> GetNodesAsync(
+    Task<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>> GetNodesAsync(
         Guid organizationId,
         NodeListQuery query,
         CancellationToken ct = default);

@@ -248,8 +248,11 @@ public sealed class EnrollmentService : IEnrollmentService
                 await _certificateStore.StoreCaCertificateAsync(caCert, cancellationToken);
             }
 
-            _logger.LogInformation("Enrollment completed successfully. Node ID: {NodeId}",
-                enrollmentResponse.NodeId);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Enrollment completed successfully. Node ID: {NodeId}",
+                    enrollmentResponse.NodeId);
+            }
 
             // SECURITY: Clean up the enrollment token from platform-specific storage
             // This prevents token reuse attacks and exposure via registry/file inspection
@@ -324,7 +327,10 @@ public sealed class EnrollmentService : IEnrollmentService
                 "[Renewal.NoCertificate] No current certificate found");
         }
 
-        _logger.LogInformation("Starting certificate renewal for node {NodeId}", _options.NodeId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Starting certificate renewal for node {NodeId}", _options.NodeId);
+        }
 
         try
         {
@@ -457,7 +463,10 @@ public sealed class EnrollmentService : IEnrollmentService
                 }
             }
 
-            _logger.LogInformation("Certificate renewal completed. New expiry: {Expiry:O}", newExpiry);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Certificate renewal completed. New expiry: {Expiry:O}", newExpiry);
+            }
 
             return Result<CertificateRenewalResult>.Success(new CertificateRenewalResult
             {

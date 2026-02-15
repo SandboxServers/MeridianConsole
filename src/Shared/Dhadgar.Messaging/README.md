@@ -284,7 +284,18 @@ src/Shared/Dhadgar.Contracts/
 │   ├── IdentityEvents.cs        # User/org events
 │   └── IdentityServiceContracts.cs
 ├── Servers/
-│   └── Contracts.cs             # Server provisioning
+│   ├── Contracts.cs             # Server provisioning
+│   ├── ServerRequests.cs        # Server request DTOs
+│   ├── ServerResponses.cs       # Server response DTOs
+│   └── ServerEvents.cs          # Server lifecycle events
+├── Console/
+│   └── ConsoleContracts.cs      # SignalR and messaging contracts
+├── Mods/
+│   ├── ModContracts.cs          # Mod request/response DTOs
+│   └── ModEvents.cs             # Mod installation events
+├── Nodes/
+│   ├── NodeEvents.cs            # Node health/status events
+│   └── NodeContracts.cs         # Node request/response DTOs
 └── Pagination.cs
 ```
 
@@ -868,7 +879,9 @@ This library intentionally has NO project references to maintain its position as
 Any service that participates in messaging should reference this library:
 
 - `Dhadgar.Identity` - Publishes authentication and organization events
-- `Dhadgar.Servers` - Publishes/consumes server provisioning messages
+- `Dhadgar.Servers` - Publishes/consumes server provisioning and lifecycle events
+- `Dhadgar.Console` - Publishes/consumes console commands and output events
+- `Dhadgar.Mods` - Publishes/consumes mod installation and update events
 - `Dhadgar.Nodes` - Publishes node health events
 - `Dhadgar.Tasks` - Orchestrates background tasks via messaging
 - `Dhadgar.Notifications` - Consumes events to send notifications
