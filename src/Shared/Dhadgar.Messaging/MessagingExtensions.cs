@@ -71,8 +71,10 @@ public static class MessagingExtensions
             x.UsingRabbitMq((ctx, cfg) =>
             {
                 var host = config["RabbitMq:Host"] ?? config.GetConnectionString("RabbitMqHost") ?? "localhost";
-                var user = config["RabbitMq:Username"] ?? "dhadgar";
-                var pass = config["RabbitMq:Password"] ?? "dhadgar";
+                var user = config["RabbitMq:Username"]
+                    ?? throw new InvalidOperationException("RabbitMq:Username is required. Configure via environment variables, user-secrets, or appsettings.");
+                var pass = config["RabbitMq:Password"]
+                    ?? throw new InvalidOperationException("RabbitMq:Password is required. Configure via environment variables, user-secrets, or appsettings.");
 
                 cfg.Host(host, h =>
                 {

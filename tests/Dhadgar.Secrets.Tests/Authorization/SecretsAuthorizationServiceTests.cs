@@ -28,6 +28,7 @@ public class SecretsAuthorizationServiceTests
 
         _service = new SecretsAuthorizationService(
             OptionsFactory.Create(_options),
+            new InMemoryBreakGlassNonceTracker(),
             NullLogger<SecretsAuthorizationService>.Instance);
     }
 
@@ -231,11 +232,14 @@ public class SecretsAuthorizationServiceTests
     [Fact]
     public void Authorize_WithBreakGlass_Succeeds()
     {
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
             new("break_glass", "true"),
-            new("break_glass_reason", "Critical production incident")
+            new("break_glass_reason", "Critical production incident"),
+            new("break_glass_exp", exp),
+            new("break_glass_nonce", Guid.NewGuid().ToString())
         };
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
@@ -247,31 +251,117 @@ public class SecretsAuthorizationServiceTests
     }
 
     [Fact]
-    public void Authorize_WithBreakGlass_AllowsAnyAction()
+    public void Authorize_WithBreakGlass_DeniedWhenExpired()
     {
+        var exp = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
-            new("break_glass", "true")
+            new("break_glass", "true"),
+            new("break_glass_exp", exp),
+            new("break_glass_nonce", Guid.NewGuid().ToString())
         };
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        foreach (var action in Enum.GetValues<SecretAction>())
+        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+
+        Assert.False(result.IsAuthorized);
+        Assert.Contains("expired", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Authorize_WithBreakGlass_DeniedWhenMissingExpiration()
+    {
+        var claims = new List<Claim>
         {
-            var result = _service.Authorize(user, "any-secret", action);
-            Assert.True(result.IsAuthorized, $"Break-glass should allow {action}");
-            Assert.True(result.IsBreakGlass);
-        }
+            new("sub", "emergency-user"),
+            new("break_glass", "true"),
+            new("break_glass_nonce", Guid.NewGuid().ToString())
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var user = new ClaimsPrincipal(identity);
+
+        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+
+        Assert.False(result.IsAuthorized);
+        Assert.Contains("expiration", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Authorize_WithBreakGlass_DeniedWhenMissingNonce()
+    {
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var claims = new List<Claim>
+        {
+            new("sub", "emergency-user"),
+            new("break_glass", "true"),
+            new("break_glass_exp", exp)
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var user = new ClaimsPrincipal(identity);
+
+        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+
+        Assert.False(result.IsAuthorized);
+        Assert.Contains("nonce", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Authorize_WithBreakGlass_DeniedOnNonceReplay()
+    {
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var nonce = Guid.NewGuid().ToString();
+        var claims = new List<Claim>
+        {
+            new("sub", "emergency-user"),
+            new("break_glass", "true"),
+            new("break_glass_exp", exp),
+            new("break_glass_nonce", nonce)
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var user = new ClaimsPrincipal(identity);
+
+        // First use succeeds
+        var result1 = _service.Authorize(user, "any-secret", SecretAction.Read);
+        Assert.True(result1.IsAuthorized);
+
+        // Replay denied
+        var result2 = _service.Authorize(user, "any-secret", SecretAction.Read);
+        Assert.False(result2.IsAuthorized);
+        Assert.Contains("already been used", result2.DenialReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Authorize_WithBreakGlass_DeniedWhenTtlExceedsMax()
+    {
+        var exp = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds().ToString();
+        var claims = new List<Claim>
+        {
+            new("sub", "emergency-user"),
+            new("break_glass", "true"),
+            new("break_glass_exp", exp),
+            new("break_glass_nonce", Guid.NewGuid().ToString())
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var user = new ClaimsPrincipal(identity);
+
+        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+
+        Assert.False(result.IsAuthorized);
+        Assert.Contains("exceeds maximum", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void AuthorizeCategory_WithBreakGlass_Succeeds()
     {
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
-            new("break_glass", "true")
+            new("break_glass", "true"),
+            new("break_glass_exp", exp),
+            new("break_glass_nonce", Guid.NewGuid().ToString())
         };
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
