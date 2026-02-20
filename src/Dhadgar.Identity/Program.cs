@@ -855,12 +855,13 @@ static async Task SeedDevOpenIddictClientAsync(
         return;
     }
 
-    var clientId = configuration["OpenIddict:DevClient:ClientId"] ?? "dev-client";
-    var clientSecret = configuration["OpenIddict:DevClient:ClientSecret"] ?? "dev-secret";
+    var clientId = configuration["OpenIddict:DevClient:ClientId"];
+    var clientSecret = configuration["OpenIddict:DevClient:ClientSecret"];
 
     if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
     {
-        logger.LogWarning("Dev OpenIddict client is missing ClientId/ClientSecret; skipping seed.");
+        logger.LogWarning("OpenIddict DevClient is enabled but ClientId/ClientSecret not configured; skipping seed. " +
+            "Set OpenIddict:DevClient:ClientId and OpenIddict:DevClient:ClientSecret, or disable with OpenIddict:DevClient:Enabled=false.");
         return;
     }
 
@@ -962,11 +963,16 @@ static async Task SeedServiceAccountAsync(
     var clientId = configuration[$"{configSection}:ClientId"] ?? defaultClientId;
     var clientSecret = configuration[$"{configSection}:ClientSecret"];
 
-    // Generate a deterministic but secure secret if not configured
-    // In production, this should be explicitly configured
     if (string.IsNullOrWhiteSpace(clientSecret))
     {
-        clientSecret = $"{clientId}-dev-secret-change-in-prod";
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        var secretBytes = new byte[32];
+        rng.GetBytes(secretBytes);
+        clientSecret = Convert.ToBase64String(secretBytes);
+        logger.LogWarning(
+            "Service account {ServiceKey} has no configured ClientSecret. A random secret was generated. " +
+            "Configure {ConfigSection}:ClientSecret explicitly for production use.",
+            serviceKey, configSection);
     }
 
     if (await manager.FindByClientIdAsync(clientId) is not null)

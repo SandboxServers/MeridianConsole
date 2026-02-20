@@ -114,6 +114,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<SecretsReadinessCheck>("secrets_ready", tags: ["ready"]);
 
 // Register authorization and audit services
+builder.Services.AddSingleton<IBreakGlassNonceTracker, InMemoryBreakGlassNonceTracker>();
 builder.Services.AddSingleton<ISecretsAuthorizationService, SecretsAuthorizationService>();
 builder.Services.AddSingleton<ISecretsAuditLogger, SecretsAuditLogger>();
 

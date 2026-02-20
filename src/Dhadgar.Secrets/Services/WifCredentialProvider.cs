@@ -86,7 +86,8 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
     {
         var wifConfig = _options.Wif!;
         var httpClient = _httpClientFactory.CreateClient("IdentityWif");
-        var serviceClientId = wifConfig.ServiceClientId ?? "dev-client";
+        var serviceClientId = wifConfig.ServiceClientId
+            ?? throw new InvalidOperationException("Secrets:Wif:ServiceClientId is required for WIF authentication.");
 
         _logger.LogInformation(
             "Requesting WIF token from Identity service: Endpoint={Endpoint}, ServiceClientId={ServiceClientId}",
@@ -98,7 +99,8 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = serviceClientId,
-            ["client_secret"] = wifConfig.ServiceClientSecret ?? "dev-secret",
+            ["client_secret"] = wifConfig.ServiceClientSecret
+                ?? throw new InvalidOperationException("Secrets:Wif:ServiceClientSecret is required for WIF authentication."),
             ["scope"] = "wif"
         });
 
