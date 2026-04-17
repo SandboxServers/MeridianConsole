@@ -1,5 +1,8 @@
 {
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
-  "omnisharp.enableEditorConfigSupport": true
+  "omnisharp.enableEditorConfigSupport": true,
+  "files.associations": {
+    "deploy/kubernetes/helm/*pipeline*.yml": "azure-pipelines"
+  }
 }
