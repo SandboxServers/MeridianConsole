@@ -68,7 +68,7 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.Disposed]", result.Error);
+        Assert.Contains("[Process.Disposed]", result.Error, StringComparison.Ordinal);
         Assert.Contains("disposed", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -100,7 +100,7 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.InvalidPath]", result.Error);
+        Assert.Contains("[Process.InvalidPath]", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.NotFound]", result.Error);
+        Assert.Contains("[Process.NotFound]", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class WindowsProcessManagerTests
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Contains("[Process.WorkingDirNotFound]", result.Error);
+            Assert.Contains("[Process.WorkingDirNotFound]", result.Error, StringComparison.Ordinal);
         }
         finally
         {
@@ -186,7 +186,7 @@ public sealed class WindowsProcessManagerTests
 
             // Assert
             Assert.False(result.IsSuccess);
-            Assert.Contains("[Process.InvalidExtension]", result.Error);
+            Assert.Contains("[Process.InvalidExtension]", result.Error, StringComparison.Ordinal);
         }
         finally
         {
@@ -212,7 +212,7 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.Disposed]", result.Error);
+        Assert.Contains("[Process.Disposed]", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -227,8 +227,8 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.NotFound]", result.Error);
-        Assert.Contains(unknownProcessId.ToString(), result.Error);
+        Assert.Contains("[Process.NotFound]", result.Error, StringComparison.Ordinal);
+        Assert.Contains(unknownProcessId.ToString(), result.Error, StringComparison.Ordinal);
     }
 
     #endregion
@@ -249,7 +249,7 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.Disposed]", result.Error);
+        Assert.Contains("[Process.Disposed]", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -264,8 +264,8 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.NotFound]", result.Error);
-        Assert.Contains(unknownProcessId.ToString(), result.Error);
+        Assert.Contains("[Process.NotFound]", result.Error, StringComparison.Ordinal);
+        Assert.Contains(unknownProcessId.ToString(), result.Error, StringComparison.Ordinal);
     }
 
     #endregion
@@ -354,7 +354,7 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.Disposed]", result.Error);
+        Assert.Contains("[Process.Disposed]", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -370,8 +370,8 @@ public sealed class WindowsProcessManagerTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("[Process.NotFound]", result.Error);
-        Assert.Contains(unknownProcessId.ToString(), result.Error);
+        Assert.Contains("[Process.NotFound]", result.Error, StringComparison.Ordinal);
+        Assert.Contains(unknownProcessId.ToString(), result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -417,19 +417,19 @@ public sealed class WindowsProcessManagerTests
         // Assert
         var startResult = await manager.StartProcessAsync(config);
         Assert.False(startResult.IsSuccess);
-        Assert.Contains("[Process.Disposed]", startResult.Error);
+        Assert.Contains("[Process.Disposed]", startResult.Error, StringComparison.Ordinal);
 
         var stopResult = await manager.StopProcessAsync(processId, TimeSpan.FromSeconds(5));
         Assert.False(stopResult.IsSuccess);
-        Assert.Contains("[Process.Disposed]", stopResult.Error);
+        Assert.Contains("[Process.Disposed]", stopResult.Error, StringComparison.Ordinal);
 
         var killResult = await manager.KillProcessAsync(processId);
         Assert.False(killResult.IsSuccess);
-        Assert.Contains("[Process.Disposed]", killResult.Error);
+        Assert.Contains("[Process.Disposed]", killResult.Error, StringComparison.Ordinal);
 
         var updateResult = await manager.UpdateResourceLimitsAsync(processId, limits);
         Assert.False(updateResult.IsSuccess);
-        Assert.Contains("[Process.Disposed]", updateResult.Error);
+        Assert.Contains("[Process.Disposed]", updateResult.Error, StringComparison.Ordinal);
 
         var getResult = manager.GetProcess(processId);
         Assert.Null(getResult);

@@ -26,7 +26,10 @@ public sealed class FileIntegrityChecker : IFileIntegrityChecker
             throw new FileNotFoundException("File not found for hash computation", filePath);
         }
 
-        _logger.LogDebug("Computing SHA256 hash for {FilePath}", filePath);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("Computing SHA256 hash for {FilePath}", filePath);
+        }
 
         await using var stream = new FileStream(
             filePath,
@@ -39,7 +42,10 @@ public sealed class FileIntegrityChecker : IFileIntegrityChecker
         var hashBytes = await SHA256.HashDataAsync(stream, cancellationToken);
         var hashString = Convert.ToHexString(hashBytes).ToLowerInvariant();
 
-        _logger.LogDebug("Computed hash for {FilePath}: {Hash}", filePath, hashString);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("Computed hash for {FilePath}: {Hash}", filePath, hashString);
+        }
 
         return hashString;
     }
@@ -64,7 +70,10 @@ public sealed class FileIntegrityChecker : IFileIntegrityChecker
 
             if (actualHash.Equals(normalizedExpected, StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogDebug("Hash verification succeeded for {FilePath}", filePath);
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug("Hash verification succeeded for {FilePath}", filePath);
+                }
                 return Result<bool>.Success(true);
             }
 

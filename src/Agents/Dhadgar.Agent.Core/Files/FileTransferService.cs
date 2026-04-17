@@ -251,9 +251,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                         catch (Exception cleanupEx)
                         {
                             // SECURITY: Log only filename, not full path
-                            _logger.LogDebug(cleanupEx,
-                                "Failed to clean up oversized download for {TransferId}: {FileName}",
-                                request.TransferId, Path.GetFileName(destinationPath));
+                            if (_logger.IsEnabled(LogLevel.Debug))
+                            {
+                                _logger.LogDebug(cleanupEx,
+                                    "Failed to clean up oversized download for {TransferId}: {FileName}",
+                                    request.TransferId, Path.GetFileName(destinationPath));
+                            }
                         }
                         return Result<FileTransferResult>.Failure(
                             $"[File.TooLarge] File exceeds maximum size of {_fileOptions.MaxFileSizeBytes} bytes");
@@ -298,9 +301,12 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                         catch (Exception cleanupEx)
                         {
                             // SECURITY: Log only filename, not full path
-                            _logger.LogDebug(cleanupEx,
-                                "Failed to clean up partial download for {TransferId}: {FileName}",
-                                request.TransferId, Path.GetFileName(destinationPath));
+                            if (_logger.IsEnabled(LogLevel.Debug))
+                            {
+                                _logger.LogDebug(cleanupEx,
+                                    "Failed to clean up partial download for {TransferId}: {FileName}",
+                                    request.TransferId, Path.GetFileName(destinationPath));
+                            }
                         }
                         return Result<FileTransferResult>.Failure(hashResult.Error!);
                     }
@@ -317,12 +323,15 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
                 _meter.RecordFileTransfer(bytesTransferred, isUpload: false);
                 // SECURITY: Log only filename, not full path to avoid exposing filesystem layout
-                _logger.LogInformation(
-                    "Download completed: {TransferId} to {FileName}, {Bytes} bytes in {Duration}",
-                    request.TransferId,
-                    Path.GetFileName(destinationPath),
-                    bytesTransferred,
-                    duration);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
+                        "Download completed: {TransferId} to {FileName}, {Bytes} bytes in {Duration}",
+                        request.TransferId,
+                        Path.GetFileName(destinationPath),
+                        bytesTransferred,
+                        duration);
+                }
 
                 return Result<FileTransferResult>.Success(new FileTransferResult
                 {
@@ -345,7 +354,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
                 if (!string.IsNullOrEmpty(destinationPath) && File.Exists(destinationPath))
                 {
                     File.Delete(destinationPath);
-                    _logger.LogDebug("Cleaned up partial download for cancelled transfer {TransferId}", request.TransferId);
+                    if (_logger.IsEnabled(LogLevel.Debug))
+                    {
+                        _logger.LogDebug("Cleaned up partial download for cancelled transfer {TransferId}", request.TransferId);
+                    }
                 }
             }
             catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException)
@@ -543,12 +555,15 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
 
                 _meter.RecordFileTransfer(fileInfo.Length, isUpload: true);
                 // SECURITY: Log only filename, not full path to avoid exposing filesystem layout
-                _logger.LogInformation(
-                    "Upload completed: {TransferId} from {FileName}, {Bytes} bytes in {Duration}",
-                    request.TransferId,
-                    Path.GetFileName(sourcePath),
-                    fileInfo.Length,
-                    duration);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
+                        "Upload completed: {TransferId} from {FileName}, {Bytes} bytes in {Duration}",
+                        request.TransferId,
+                        Path.GetFileName(sourcePath),
+                        fileInfo.Length,
+                        duration);
+                }
 
                 return Result<FileTransferResult>.Success(new FileTransferResult
                 {
@@ -615,7 +630,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
     {
         if (_activeTransfers.TryGetValue(transferId, out var state))
         {
-            _logger.LogInformation("Cancelling transfer {TransferId}", transferId);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Cancelling transfer {TransferId}", transferId);
+            }
             try
             {
                 await state.CancellationSource.CancelAsync();
@@ -623,7 +641,10 @@ public sealed class FileTransferService : IFileTransferService, IDisposable
             catch (ObjectDisposedException)
             {
                 // CTS was disposed because transfer completed concurrently - safe to ignore
-                _logger.LogDebug("Transfer {TransferId} already completed before cancellation", transferId);
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug("Transfer {TransferId} already completed before cancellation", transferId);
+                }
             }
         }
     }

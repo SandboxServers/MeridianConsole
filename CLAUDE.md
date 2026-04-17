@@ -132,7 +132,7 @@ Return `Result<ProcessInfo>` containing: PID, exit code, duration, output.
 
 **Tables:** Spaces around pipes `| Option | Type |`
 
-**Code blocks:** Always specify language ````csharp`
+**Code blocks:** Always specify language ` ```csharp `
 
 ---
 

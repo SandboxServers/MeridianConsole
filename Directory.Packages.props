@@ -31,6 +31,8 @@
     <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.0.0" />
     <PackageVersion Include="OpenIddict.Validation.AspNetCore" Version="7.0.0" />
     <PackageVersion Include="StackExchange.Redis" Version="2.7.27" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.0" />
 
     <!-- Health Checks -->
     <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />

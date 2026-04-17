@@ -92,9 +92,12 @@ public sealed class HeartbeatService : BackgroundService
         var payload = payloadResult.Value;
         await _controlPlaneClient.SendHeartbeatAsync(payload, cancellationToken);
 
-        _logger.LogDebug(
-            "Heartbeat sent. Status: {Status}, Active processes: {ProcessCount}",
-            payload.Status,
-            payload.ActiveProcesses.Count);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug(
+                "Heartbeat sent. Status: {Status}, Active processes: {ProcessCount}",
+                payload.Status,
+                payload.ActiveProcesses.Count);
+        }
     }
 }

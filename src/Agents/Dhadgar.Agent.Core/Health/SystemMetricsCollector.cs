@@ -184,7 +184,10 @@ public sealed class SystemMetricsCollector : ISystemMetricsCollector
             catch (Exception ex)
             {
                 // Per-drive error handling: log and continue to other drives
-                _logger.LogDebug(ex, "Failed to get metrics for drive {DriveName}", drive.Name);
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug(ex, "Failed to get metrics for drive {DriveName}", drive.Name);
+                }
             }
         }
 

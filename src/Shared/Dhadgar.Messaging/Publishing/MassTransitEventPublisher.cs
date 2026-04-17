@@ -40,13 +40,19 @@ public sealed class MassTransitEventPublisher : IEventPublisher
 
         var eventType = typeof(TEvent).Name;
 
-        _logger.LogDebug("Publishing {EventType} event", eventType);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("Publishing {EventType} event", eventType);
+        }
 
         try
         {
             await _publishEndpoint.Publish(@event, ct);
 
-            _logger.LogDebug("Successfully published {EventType} event", eventType);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Successfully published {EventType} event", eventType);
+            }
         }
         catch (Exception ex)
         {
@@ -67,11 +73,17 @@ public sealed class MassTransitEventPublisher : IEventPublisher
 
         if (eventList.Count == 0)
         {
-            _logger.LogDebug("Skipping empty batch publish for {EventType}", eventType);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Skipping empty batch publish for {EventType}", eventType);
+            }
             return;
         }
 
-        _logger.LogDebug("Publishing batch of {Count} {EventType} events", eventList.Count, eventType);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("Publishing batch of {Count} {EventType} events", eventList.Count, eventType);
+        }
 
         try
         {
@@ -79,8 +91,11 @@ public sealed class MassTransitEventPublisher : IEventPublisher
             // for better performance than sequential awaits
             await _publishEndpoint.PublishBatch(eventList, ct);
 
-            _logger.LogDebug("Successfully published batch of {Count} {EventType} events",
-                eventList.Count, eventType);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Successfully published batch of {Count} {EventType} events",
+                    eventList.Count, eventType);
+            }
         }
         catch (Exception ex)
         {

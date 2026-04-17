@@ -10,8 +10,12 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 |---------|------|-------------|----------|
 | **Gateway** | 5000 | API entry point, YARP reverse proxy | No |
 | **Identity** | 5010 | User/org management, roles, OAuth | PostgreSQL |
-| **BetterAuth** | 5130 | Passwordless authentication | PostgreSQL (shared) |
+| **Servers** | 5030 | Game server lifecycle, templates, state machine | PostgreSQL |
+| **Nodes** | 5040 | Agent enrollment, mTLS CA, health monitoring | PostgreSQL |
+| **Console** | 5070 | Real-time server console via SignalR | PostgreSQL + Redis |
+| **Mods** | 5080 | Mod registry, versioning, dependencies | PostgreSQL |
 | **Secrets** | 5110 | Secret management, Azure Key Vault integration | No |
+| **BetterAuth** | 5130 | Passwordless authentication | PostgreSQL (shared) |
 
 ---
 
@@ -20,12 +24,8 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 | Service | Port | Description | Database |
 |---------|------|-------------|----------|
 | **Billing** | 5020 | Subscription management, usage metering (planned) | No |
-| **Servers** | 5030 | Game server lifecycle management (planned) | No |
-| **Nodes** | 5040 | Hardware inventory, health monitoring (planned) | No |
 | **Tasks** | 5050 | Background job orchestration (planned) | No |
 | **Files** | 5060 | File upload/download, mod distribution (planned) | No |
-| **Console** | 5070 | Real-time server console via SignalR (planned) | No |
-| **Mods** | 5080 | Mod registry, versioning (planned) | No |
 | **Notifications** | 5090 | Email, Discord, webhook notifications (planned) | No |
 | **Discord** | 5120 | Discord bot integration (planned) | No |
 

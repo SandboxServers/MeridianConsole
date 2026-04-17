@@ -1,6 +1,6 @@
 # Dhadgar.Servers
 
-![Status: Stub](https://img.shields.io/badge/Status-Stub-red)
+![Status: Alpha](https://img.shields.io/badge/Status-Alpha-yellow)
 
 Game server lifecycle management service for Meridian Console. This service is the central component responsible for managing the complete lifecycle of game servers across customer-owned hardware, including provisioning, configuration, state management, and orchestration coordination.
 
@@ -79,9 +79,9 @@ The Servers service does NOT directly communicate with customer agents. Instead,
 
 ## Current Status
 
-**Status**: Stub Implementation (Scaffolding Phase)
+**Status**: Alpha Implementation
 
-The service is currently in a scaffolding state, providing the foundational structure for incremental development. This is intentional - the codebase establishes the "shape" of the service while core features remain unimplemented.
+The service has core functionality implemented including server CRUD operations, lifecycle management with a 13-state machine, server templates, and configuration management.
 
 ### What Exists Today
 
@@ -90,22 +90,26 @@ The service is currently in a scaffolding state, providing the foundational stru
 | ASP.NET Core Host | Complete | Minimal API setup with standard middleware |
 | Health Endpoints | Complete | `/healthz`, `/livez`, `/readyz` probes |
 | OpenAPI/Swagger | Complete | Development-mode API documentation |
-| EF Core Setup | Complete | DbContext with design-time factory |
+| Database Entities | Complete | `Server`, `ServerConfiguration`, `ServerTemplate`, `ServerPort` entities |
+| EF Core Setup | Complete | DbContext with full entity mapping and migrations |
+| Server CRUD | Complete | Org-scoped server management endpoints |
+| Lifecycle State Machine | Complete | 13-state transitions (Pending, Installing, Stopped, Starting, Running, etc.) |
+| Server Templates | Complete | Pre-configured templates for game-specific defaults |
+| Port Allocation | Complete | Port mapping and configuration management |
+| Power State Tracking | Complete | On, Off, Suspended power states |
+| Validation | Complete | FluentValidation for request validation |
 | OpenTelemetry | Complete | Tracing, metrics, and logging instrumentation |
 | Correlation Middleware | Complete | Request/trace ID propagation |
 | Problem Details | Complete | RFC 7807 error responses |
-| Unit Tests | Complete | Basic test scaffolding with WebApplicationFactory |
-| Database Entities | Placeholder | `SampleEntity` placeholder (to be replaced) |
+| Unit Tests | Complete | Test scaffolding with WebApplicationFactory |
 
 ### What Needs Implementation
 
-- Real domain entities (Server, ServerConfig, ServerTemplate)
-- CRUD API endpoints for servers
-- Lifecycle operations (start, stop, restart, update)
-- MassTransit message consumers and publishers
-- Business logic and validation
-- Integration with Nodes service for placement
-- Integration with Tasks service for orchestration
+- MassTransit message consumers and publishers for async workflows
+- Integration with Nodes service for server-to-node placement
+- Integration with Tasks service for long-running orchestration
+- Integration with Console service for real-time log streaming
+- Scheduled operations (cron-based restarts, maintenance windows)
 
 ---
 

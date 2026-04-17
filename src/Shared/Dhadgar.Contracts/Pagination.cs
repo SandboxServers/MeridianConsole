@@ -65,3 +65,48 @@ public sealed record PagedResponse<T>
     }
 #pragma warning restore CA1000
 }
+
+/// <summary>
+/// Paginated response with filter metadata for advanced list APIs.
+/// </summary>
+/// <typeparam name="T">Type of items in the collection</typeparam>
+public sealed record FilteredPagedResponse<T>
+{
+    public required IReadOnlyCollection<T> Items { get; init; }
+    public required int Page { get; init; }
+    public required int PageSize { get; init; }
+    public required int Total { get; init; }
+    public int TotalPages => PageSize > 0 ? (int)Math.Ceiling((double)Total / PageSize) : 0;
+    public bool HasNext => Page < TotalPages;
+    public bool HasPrev => Page > 1;
+
+    /// <summary>
+    /// Metadata about applied filters (service-specific).
+    /// </summary>
+    public object? Filters { get; init; }
+
+    /// <summary>
+    /// Creates a filtered paged response.
+    /// </summary>
+#pragma warning disable CA1000
+    public static FilteredPagedResponse<T> Create(
+        IReadOnlyCollection<T> items,
+        int total,
+        int page,
+        int pageSize,
+        object? filters = null)
+    {
+        var normalizedPage = Math.Max(1, page);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 100);
+
+        return new FilteredPagedResponse<T>
+        {
+            Items = items,
+            Page = normalizedPage,
+            PageSize = normalizedPageSize,
+            Total = total,
+            Filters = filters
+        };
+    }
+#pragma warning restore CA1000
+}

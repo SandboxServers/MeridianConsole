@@ -68,7 +68,10 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             }
 
             var endpoint = new Uri(baseUri, "/hubs/agent");
-            _logger.LogInformation("Connecting to control plane at {Endpoint}", endpoint);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Connecting to control plane at {Endpoint}", endpoint);
+            }
 
             // Dispose existing connection and certificate before creating new one
             if (_hubConnection is not null)
@@ -196,7 +199,10 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             cts.CancelAfter(TimeSpan.FromSeconds(_options.ControlPlane.InvocationTimeoutSeconds));
             await _hubConnection.InvokeAsync("Heartbeat", json, cts.Token);
             _meter.RecordHeartbeatSent();
-            _logger.LogDebug("Heartbeat sent for node {NodeId}", payload.NodeId);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Heartbeat sent for node {NodeId}", payload.NodeId);
+            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -230,7 +236,10 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(_options.ControlPlane.InvocationTimeoutSeconds));
             await _hubConnection.InvokeAsync("CommandResult", json, cts.Token);
-            _logger.LogDebug("Command result sent for command {CommandId}", result.CommandId);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Command result sent for command {CommandId}", result.CommandId);
+            }
             return true;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -383,8 +392,11 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             // Untrusted input could flood metrics with unique values, causing memory exhaustion
             var metricCommandType = SanitizeCommandTypeForMetrics(envelope.CommandType);
             _meter.RecordCommandReceived(metricCommandType);
-            _logger.LogInformation("Received command {CommandType} with ID {CommandId}",
-                envelope.CommandType, envelope.CommandId);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Received command {CommandType} with ID {CommandId}",
+                    metricCommandType, envelope.CommandId);
+            }
             CommandReceived?.Invoke(this, new CommandReceivedEventArgs(envelope));
         }
         catch (JsonException ex)
@@ -423,7 +435,10 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
 
     private Task OnReconnected(string? connectionId)
     {
-        _logger.LogInformation("Reconnected to control plane. Connection ID: {ConnectionId}", connectionId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Reconnected to control plane. Connection ID: {ConnectionId}", connectionId);
+        }
         SetState(ConnectionState.Connected);
         return Task.CompletedTask;
     }

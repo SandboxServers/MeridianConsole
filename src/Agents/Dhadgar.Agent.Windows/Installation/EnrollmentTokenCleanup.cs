@@ -42,9 +42,12 @@ public sealed class EnrollmentTokenCleanup : IEnrollmentTokenCleanup
             using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath, writable: true);
             if (key is null)
             {
-                _logger.LogDebug(
-                    "Registry key {KeyPath} does not exist, no enrollment token to clean up",
-                    RegistryKeyPath);
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug(
+                        "Registry key {KeyPath} does not exist, no enrollment token to clean up",
+                        RegistryKeyPath);
+                }
                 return;
             }
 
@@ -59,10 +62,13 @@ public sealed class EnrollmentTokenCleanup : IEnrollmentTokenCleanup
             // Delete the enrollment token value
             key.DeleteValue(EnrollmentTokenValueName, throwOnMissingValue: false);
 
-            _logger.LogInformation(
-                "Successfully removed enrollment token from registry at {KeyPath}\\{ValueName}",
-                RegistryKeyPath,
-                EnrollmentTokenValueName);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "Successfully removed enrollment token from registry at {KeyPath}\\{ValueName}",
+                    RegistryKeyPath,
+                    EnrollmentTokenValueName);
+            }
         }
         catch (UnauthorizedAccessException ex)
         {

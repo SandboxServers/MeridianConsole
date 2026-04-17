@@ -55,12 +55,15 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         var (statusCode, errorType, title) = ClassifyException(exception);
 
         // Log the exception
-        _logger.Log(
-            statusCode >= 500 ? LogLevel.Error : LogLevel.Warning,
-            ExceptionEventId,
-            exception,
-            "Unhandled exception. TraceId: {TraceId}, CorrelationId: {CorrelationId}, Path: {Path}, StatusCode: {StatusCode}",
-            traceId, correlationId, httpContext.Request.Path, statusCode);
+        if (_logger.IsEnabled(statusCode >= 500 ? LogLevel.Error : LogLevel.Warning))
+        {
+            _logger.Log(
+                statusCode >= 500 ? LogLevel.Error : LogLevel.Warning,
+                ExceptionEventId,
+                exception,
+                "Unhandled exception. TraceId: {TraceId}, CorrelationId: {CorrelationId}, Path: {Path}, StatusCode: {StatusCode}",
+                traceId, correlationId, httpContext.Request.Path, statusCode);
+        }
 
         // Build Problem Details response
         var problemDetails = new ProblemDetails

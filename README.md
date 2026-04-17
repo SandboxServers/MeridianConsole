@@ -127,6 +127,9 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 - **Nodes**: Agent enrollment with mTLS, Certificate Authority, heartbeat monitoring, capacity reservations
 - **Secrets**: Claims-based authorization, audit logging, rate limiting, Azure Key Vault integration
 - **BetterAuth**: Passwordless authentication via Better Auth SDK
+- **Servers**: Game server lifecycle with 13-state machine, templates, configuration management (PostgreSQL)
+- **Console**: Real-time server console via SignalR, command dispatch, session management (PostgreSQL + Redis)
+- **Mods**: Mod registry with semantic versioning, dependency resolution, compatibility tracking (PostgreSQL)
 - **CLI** (`dhadgar`): Global .NET tool for managing identity, secrets, nodes, enrollment, and more
 
 **Frontend Apps** (Astro/React/Tailwind stack):
@@ -145,10 +148,8 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 
 ### 🚧 What's Being Built
 
-- Game server provisioning workflows (Servers service)
-- File transfer orchestration and mod distribution (Files, Mods services)
+- File transfer orchestration (Files service)
 - Billing and subscription management (SaaS edition)
-- Real-time server console via SignalR (Console service)
 - Notification delivery (email, Discord, webhooks)
 - Production UI features (Panel dashboard, ShoppingCart checkout)
 - Agent implementations (Linux systemd, Windows Service)
@@ -599,39 +600,113 @@ These services have substantial implementations (some TODOs remain):
 
 **Config:** Stored in `~/.dhadgar/config.json`
 
+#### 🖥️ Servers (`src/Dhadgar.Servers`) - Port 5030
+
+**What it does:** Game server lifecycle management with state machine transitions.
+
+**Tech stack:** ASP.NET Core, PostgreSQL, Entity Framework Core, FluentValidation
+
+**Key features:**
+
+- Server CRUD with org-scoped multi-tenancy
+- 13-state lifecycle (Pending, Installing, Stopped, Starting, Running, Stopping, Restarting, Updating, Crashed, Failed, Maintenance, Suspended, Terminated)
+- Server templates for game-specific defaults
+- Port allocation and configuration management
+- Power state tracking (On, Off, Suspended)
+
+**Endpoints:**
+
+- `POST /organizations/{orgId}/servers` - Create server
+- `GET /organizations/{orgId}/servers` - List servers with filtering
+- `GET /organizations/{orgId}/servers/{serverId}` - Get server details
+- `PUT /organizations/{orgId}/servers/{serverId}` - Update server
+- `DELETE /organizations/{orgId}/servers/{serverId}` - Delete server
+- `POST /organizations/{orgId}/servers/{serverId}/start` - Start server
+- `POST /organizations/{orgId}/servers/{serverId}/stop` - Stop server
+- `POST /organizations/{orgId}/servers/{serverId}/restart` - Restart server
+- `POST /organizations/{orgId}/templates` - Create server template
+- `GET /organizations/{orgId}/templates` - List templates
+
+**Runs on:** Port 5030
+
+**Database:** PostgreSQL (`dhadgar_servers`)
+
+#### 🖥️ Console (`src/Dhadgar.Console`) - Port 5070
+
+**What it does:** Real-time server console access via SignalR.
+
+**Tech stack:** ASP.NET Core, SignalR, PostgreSQL, Redis (sessions)
+
+**Key features:**
+
+- Real-time bidirectional communication via SignalR hub
+- Console session management with Redis
+- Command dispatch to agents
+- Console history with hot/cold storage pattern
+- Command audit logging
+
+**Endpoints:**
+
+- `GET /organizations/{orgId}/servers/{serverId}/console/history` - Get console history
+- `DELETE /organizations/{orgId}/servers/{serverId}/console/history` - Clear history
+- `POST /organizations/{orgId}/servers/{serverId}/console/command` - Send command
+- `/hub/console` - SignalR hub for real-time streaming
+
+**Runs on:** Port 5070
+
+**Database:** PostgreSQL (`dhadgar_console`) + Redis (sessions)
+
+#### 🧩 Mods (`src/Dhadgar.Mods`) - Port 5080
+
+**What it does:** Mod registry with versioning and dependency management.
+
+**Tech stack:** ASP.NET Core, PostgreSQL, Entity Framework Core
+
+**Key features:**
+
+- Mod CRUD with org-scoped multi-tenancy
+- Semantic versioning with range parsing (npm-style: ^1.0.0, ~2.1.0, >=1.0.0 <2.0.0)
+- Dependency resolution between mod versions
+- Game compatibility tracking
+- Category management
+- Download tracking
+
+**Endpoints:**
+
+- `POST /organizations/{orgId}/mods` - Create mod
+- `GET /organizations/{orgId}/mods` - List mods with filtering
+- `GET /organizations/{orgId}/mods/{modId}` - Get mod details
+- `PUT /organizations/{orgId}/mods/{modId}` - Update mod
+- `DELETE /organizations/{orgId}/mods/{modId}` - Delete mod
+- `POST /organizations/{orgId}/mods/{modId}/versions` - Add version
+- `GET /organizations/{orgId}/mods/{modId}/versions` - List versions
+- `GET /organizations/{orgId}/mods/{modId}/versions/{versionId}/dependencies` - Resolve dependencies
+
+**Runs on:** Port 5080
+
+**Database:** PostgreSQL (`dhadgar_mods`)
+
 ### Stub Services
 
 These services have basic scaffolding (hello world, health checks) but core functionality is planned:
 
-#### 💰 Billing (`src/Dhadgar.Billing`) - Port 5002
+#### 💰 Billing (`src/Dhadgar.Billing`) - Port 5020
 
 **Planned:** Subscription management, usage metering, invoicing
 
-#### 🖥️ Servers (`src/Dhadgar.Servers`) - Port 5003
-
-**Planned:** Game server lifecycle management, configuration, start/stop/restart
-
-#### 📋 Tasks (`src/Dhadgar.Tasks`) - Port 5005
+#### 📋 Tasks (`src/Dhadgar.Tasks`) - Port 5050
 
 **Planned:** Background job orchestration, scheduling, status tracking
 
-#### 📁 Files (`src/Dhadgar.Files`) - Port 5006
+#### 📁 Files (`src/Dhadgar.Files`) - Port 5060
 
 **Planned:** File upload/download, transfer orchestration, mod distribution
 
-#### 🖥️ Console (`src/Dhadgar.Console`) - Port 5007
-
-**Planned:** Real-time server console via SignalR, command execution
-
-#### 🧩 Mods (`src/Dhadgar.Mods`) - Port 5008
-
-**Planned:** Mod registry, versioning, compatibility tracking
-
-#### 📧 Notifications (`src/Dhadgar.Notifications`) - Port 5009
+#### 📧 Notifications (`src/Dhadgar.Notifications`) - Port 5090
 
 **Planned:** Email, Discord, webhook notifications
 
-#### 💬 Discord (`src/Dhadgar.Discord`) - Port 5012
+#### 💬 Discord (`src/Dhadgar.Discord`) - Port 5120
 
 **Planned:** Discord bot integration, server management commands
 
@@ -650,6 +725,9 @@ MeridianConsole/
 │   ├── Dhadgar.Secrets/              # Secret management ✅
 │   ├── Dhadgar.Cli/                  # CLI tool (dhadgar) ✅
 │   ├── Dhadgar.BetterAuth/           # Passwordless auth ✅
+│   ├── Dhadgar.Servers/              # Game server lifecycle ✅
+│   ├── Dhadgar.Console/              # Real-time console (SignalR) ✅
+│   ├── Dhadgar.Mods/                 # Mod registry & versioning ✅
 │   ├── Dhadgar.{Service}/            # Other services (stubs)
 │   ├── Shared/
 │   │   ├── Dhadgar.Contracts/        # DTOs, message contracts

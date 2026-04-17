@@ -44,12 +44,24 @@ namespace Dhadgar.Shared.Data;
 /// </example>
 public abstract class DhadgarDbContext : DbContext
 {
+    private readonly TimeProvider _timeProvider;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DhadgarDbContext"/> class.
     /// </summary>
     /// <param name="options">The options to be used by the DbContext.</param>
-    protected DhadgarDbContext(DbContextOptions options) : base(options)
+    protected DhadgarDbContext(DbContextOptions options) : this(options, TimeProvider.System)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DhadgarDbContext"/> class with a custom TimeProvider.
+    /// </summary>
+    /// <param name="options">The options to be used by the DbContext.</param>
+    /// <param name="timeProvider">The time provider for generating timestamps.</param>
+    protected DhadgarDbContext(DbContextOptions options, TimeProvider timeProvider) : base(options)
+    {
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -234,7 +246,7 @@ public abstract class DhadgarDbContext : DbContext
     /// </remarks>
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        ApplyAuditTimestamps(DateTime.UtcNow);
+        ApplyAuditTimestamps(_timeProvider.GetUtcNow().UtcDateTime);
         return await base.SaveChangesAsync(cancellationToken);
     }
 
@@ -255,7 +267,7 @@ public abstract class DhadgarDbContext : DbContext
     /// </remarks>
     public override int SaveChanges()
     {
-        ApplyAuditTimestamps(DateTime.UtcNow);
+        ApplyAuditTimestamps(_timeProvider.GetUtcNow().UtcDateTime);
         return base.SaveChanges();
     }
 

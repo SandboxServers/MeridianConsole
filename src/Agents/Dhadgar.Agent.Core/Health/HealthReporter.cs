@@ -67,11 +67,14 @@ public sealed class HealthReporter : IHealthReporter
         {
             if (_status != status)
             {
-                _logger.LogInformation(
-                    "Node status changed from {OldStatus} to {NewStatus}. Reason: {Reason}",
-                    _status,
-                    status,
-                    reason ?? "unspecified");
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
+                        "Node status changed from {OldStatus} to {NewStatus}. Reason: {Reason}",
+                        _status,
+                        status,
+                        reason ?? "unspecified");
+                }
                 _status = status;
                 _statusReason = reason;
             }
