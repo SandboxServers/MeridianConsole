@@ -4,7 +4,7 @@ Public documentation and marketing site.
 
 ## Tech Stack
 
-- Astro 5.x
+- Astro 7.x
 - React
 - Tailwind CSS
 

@@ -3,7 +3,7 @@
 Marketing site and subscription checkout flow.
 
 ## Tech Stack
-- Astro 5.x
+- Astro 7.x
 - React
 - Tailwind CSS
 
