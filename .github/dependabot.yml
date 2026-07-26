@@ -1,0 +1,91 @@
+# Dependabot configuration (issue #129, chunk P0.8).
+# Covers the four npm manifests plus NuGet (central package management at the repo root).
+# Version updates are grouped per directory (patch + minor) so the alert backlog
+# cannot re-accumulate one PR at a time; majors still arrive as individual PRs.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /src/Dhadgar.Panel
+    schedule:
+      interval: weekly
+    groups:
+      panel-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      panel-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /src/Dhadgar.Scope
+    schedule:
+      interval: weekly
+    groups:
+      scope-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      scope-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /src/Dhadgar.ShoppingCart
+    schedule:
+      interval: weekly
+    groups:
+      shoppingcart-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      shoppingcart-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /src/Dhadgar.BetterAuth
+    schedule:
+      interval: weekly
+    groups:
+      betterauth-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      betterauth-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      nuget-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      nuget-security:
+        applies-to: security-updates
+        patterns:
+          - '*'

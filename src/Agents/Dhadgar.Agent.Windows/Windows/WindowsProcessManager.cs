@@ -1217,7 +1217,11 @@ public sealed class WindowsProcessManager : IProcessManager, IDisposable
         // Handle auto-restart if configured
         if (entry.Config.AutoRestart && !wasKilled && entry.ManagedProcess.RestartCount < entry.Config.MaxRestartAttempts)
         {
+            // Fire-and-forget by design: the restart task takes ownership of 'entry', which is
+            // only disposed on the non-restart path below or when the process is removed later.
+#pragma warning disable CA2025 // Ensure tasks using 'IDisposable' instances complete before the instances are disposed
             _ = HandleAutoRestartAsync(processId, entry);
+#pragma warning restore CA2025
         }
         else
         {

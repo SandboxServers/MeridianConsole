@@ -110,7 +110,7 @@ See `WindowsProcessManager` for Job Objects reference. `DieOnUnhandledException`
 ### Package Notes
 
 - **SIPSorcery:** P2P file transfer. Maintenance uncertain. Avoid for new implementations unless P2P required. Track Issue #95.
-- **OpenTelemetry:** Use latest compatible beta (`1.15.0-beta.1`).
+- **OpenTelemetry:** Core line (SDK, Api, Extensions.Hosting, OTLP exporter) pinned to stable `1.15.3` — patches GHSA-4625-4j76-fww9, GHSA-mr8r-92fq-pj8p, GHSA-q834-8qmm-v933, GHSA-g94r-2vxg-569j. Use stable releases >= 1.15.3; do not downgrade to 1.14.x or the 1.15.0 betas.
 
 ---
 
@@ -169,4 +169,4 @@ Use `security-review` label on PRs.
 
 ---
 
-Last updated: 2026-02-05
+Last updated: 2026-07-26

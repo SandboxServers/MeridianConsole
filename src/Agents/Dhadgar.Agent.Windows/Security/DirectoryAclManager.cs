@@ -446,7 +446,7 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         try
         {
             // Extract service name from "NT SERVICE\MeridianGS_xxx"
-            var backslashIndex = serviceAccountName.IndexOf('\\');
+            var backslashIndex = serviceAccountName.IndexOf('\\', StringComparison.Ordinal);
             var serviceName = serviceAccountName[(backslashIndex + 1)..];
 
             _logger.LogDebug(
