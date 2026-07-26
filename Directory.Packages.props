@@ -26,6 +26,11 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+    <!-- Direct pin: Microsoft.EntityFrameworkCore.Sqlite 10.0.0 transitively pulls
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11, flagged by GHSA-2m69-gcr7-jv3q (vulnerable range <= 2.1.11).
+         Referencing the bundle at 2.1.12 lifts the native lib out of the vulnerable range.
+         Remove once EF Core's own dependency moves past 2.1.11. -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageVersion Include="OpenIddict.AspNetCore" Version="7.0.0" />
     <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.0.0" />
@@ -57,14 +62,16 @@
     <!-- Observability -->
     <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="10.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Telemetry" Version="10.2.0" />
-    <PackageVersion Include="OpenTelemetry" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Api" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />
+    <!-- Core OpenTelemetry line held at >= 1.15.3: patches GHSA-4625-4j76-fww9, GHSA-mr8r-92fq-pj8p,
+         GHSA-q834-8qmm-v933 (OTLP exporter) and GHSA-g94r-2vxg-569j (Api) -->
+    <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Process" Version="1.14.0-beta.2" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.0.0-beta.12" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc9.14" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
@@ -124,7 +131,8 @@
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <PackageVersion Include="FluentAssertions" Version="8.3.0" />
-    <PackageVersion Include="Microsoft.OpenApi" Version="2.3.0" />
+    <!-- >= 2.7.5 patches GHSA-v5pm-xwqc-g5wc -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.6" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.12.20" />
 
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
