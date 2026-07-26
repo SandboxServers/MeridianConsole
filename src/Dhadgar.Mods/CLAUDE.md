@@ -10,7 +10,7 @@ Mod registry and versioning.
 5080
 
 ## Status
-Stub - core functionality planned.
+Stub - real implementation open in PR #88 (mod registry, semantic versioning).
 
 ## Planned Features
 - Mod catalog management

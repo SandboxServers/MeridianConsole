@@ -10,11 +10,17 @@ Discord bot integration.
 5120
 
 ## Status
-Stub - core functionality planned.
+Implemented (PR #39) — Discord.Net bot, slash commands, webhook delivery, EF migrations.
+
+## Implemented Features
+- Bot hosting (`DiscordBotService`) with health check reflecting connection state
+- Slash command handling
+- Notification delivery consumer (MassTransit)
+- Platform health reporting across services
+- Admin API (API-key protected): logs, platform health, channels
 
 ## Planned Features
 - Server management commands
-- Status notifications
 - User linking
 
 ## Dependencies

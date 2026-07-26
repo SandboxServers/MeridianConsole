@@ -10,7 +10,7 @@ Game server lifecycle management.
 5030
 
 ## Status
-Stub - core functionality planned.
+Stub - real implementation open in PR #88 (lifecycle state machine, templates, CRUD + lifecycle endpoints).
 
 ## Planned Features
 - Server configuration and templates

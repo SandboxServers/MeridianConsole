@@ -10,7 +10,7 @@ File metadata and transfer orchestration.
 5060
 
 ## Status
-Stub - core functionality planned.
+Stub - slated for removal; file operations move to the agents (issue #115).
 
 ## Planned Features
 - Upload/download orchestration

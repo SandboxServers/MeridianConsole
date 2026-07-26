@@ -3,12 +3,17 @@
 Primary user interface for server management.
 
 ## Tech Stack
-- Blazor WebAssembly
-- MudBlazor components
+- Astro 5 (SSR via `@astrojs/node`) + React 18 islands + Tailwind 3 + TypeScript
+- Auth via `@dhadgar/shared-auth` (`file:../Dhadgar.SharedAuth`)
+- A couple of vestigial `.razor` files remain from the old Blazor era (not built; safe to delete)
 
 ## Status
-Planned migration to Astro/React/Tailwind (see Dhadgar.Scope for target stack).
+Scaffolding: login/callback/logout/dashboard pages exist and real OAuth works, but the
+dashboard shows hardcoded zeros (the fully built API client in `src/lib/auth/api.ts` is
+never called) and the `/servers`, `/nodes`, `/settings` nav links 404. See beta roadmap
+Phase 4 in `docs/PROJECT-STATE.md`.
 
 ## Notes
-- Deploys to Azure Static Web Apps
-- Build output: `_swa_publish/wwwroot/`
+- SSR output (`dist/server/entry.mjs`, port 4321) — Dockerfile present; not an SWA target
+- No `.env.production` (prod Gateway URL arrives only via Docker build args)
+- No lint script and no JS/TS tests

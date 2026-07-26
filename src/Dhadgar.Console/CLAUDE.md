@@ -10,7 +10,7 @@ Real-time server console streaming.
 5070
 
 ## Status
-Stub - core functionality planned.
+Stub - real implementation open in PR #88 (SignalR console streaming, Redis+PostgreSQL history, command dispatch).
 
 ## Planned Features
 - Live console output streaming
