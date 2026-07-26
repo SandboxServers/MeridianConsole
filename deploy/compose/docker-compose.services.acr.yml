@@ -14,10 +14,10 @@ x-service-image: &service-image
 
 x-service-env: &service-env
   ASPNETCORE_ENVIRONMENT: Development
-  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dhadgar_platform;Username=dhadgar;Password=dhadgar
+  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dhadgar_platform;Username=dhadgar;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
   ConnectionStrings__RabbitMqHost: rabbitmq
-  RabbitMq__Username: dhadgar
-  RabbitMq__Password: dhadgar
+  RabbitMq__Username: ${RABBITMQ_USERNAME:-dhadgar}
+  RabbitMq__Password: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
 
 x-service-depends: &service-depends
   postgres:

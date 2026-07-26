@@ -20,8 +20,10 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-dhadgar}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-dhadgar}
+      # Wired to the same variables the service clients use (RabbitMq__Username/RabbitMq__Password
+      # in docker-compose.services.yml) so the broker and its clients cannot drift apart.
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-dhadgar}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
     ports:
       - "5672:5672"
       - "15672:15672"

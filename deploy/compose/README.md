@@ -112,8 +112,8 @@ Override defaults by creating a `.env` file in this directory:
 POSTGRES_USER=myuser
 POSTGRES_PASSWORD=mypassword
 POSTGRES_DB=mydb
-RABBITMQ_DEFAULT_USER=myuser
-RABBITMQ_DEFAULT_PASS=mypassword
+RABBITMQ_USERNAME=myuser
+RABBITMQ_PASSWORD=mypassword
 REDIS_PASSWORD=mypassword
 GRAFANA_ADMIN_USER=myadmin
 GRAFANA_ADMIN_PASSWORD=myadminpass
