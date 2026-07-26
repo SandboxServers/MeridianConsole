@@ -58,7 +58,7 @@ The Panel is the "mission control" for game server operators. It provides:
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| Project Setup | Complete | Astro 5.1.1 with React and Tailwind CSS integration |
+| Project Setup | Complete | Astro 7 with React and Tailwind CSS (via PostCSS) |
 | SSR Configuration | Complete | Node.js adapter for server-side rendering |
 | Authentication Flow | Complete | OAuth login, callback handling, token management |
 | Layout System | Complete | Base, Auth, and Dashboard layouts |

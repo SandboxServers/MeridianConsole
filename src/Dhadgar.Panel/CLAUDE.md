@@ -3,7 +3,7 @@
 Primary user interface for server management.
 
 ## Tech Stack
-- Astro 5 (SSR via `@astrojs/node`) + React 18 islands + Tailwind 3 + TypeScript
+- Astro 7 (SSR via `@astrojs/node`) + React 18 islands + Tailwind 3 (via PostCSS) + TypeScript
 - Auth via `@dhadgar/shared-auth` (`file:../Dhadgar.SharedAuth`)
 - A couple of vestigial `.razor` files remain from the old Blazor era (not built; safe to delete)
 
