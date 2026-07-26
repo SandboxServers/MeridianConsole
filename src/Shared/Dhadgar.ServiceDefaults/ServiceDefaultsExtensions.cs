@@ -196,10 +196,22 @@ public static class ServiceDefaultsExtensions
         if (dependencies.HasFlag(HealthCheckDependencies.RabbitMq))
         {
             var rabbitHost = builder.Configuration["RabbitMq:Host"] ?? "localhost";
-            var rabbitUser = builder.Configuration["RabbitMq:Username"]
-                ?? throw new InvalidOperationException("RabbitMq:Username is required. Configure via environment variables, user-secrets, or appsettings.");
-            var rabbitPass = builder.Configuration["RabbitMq:Password"]
-                ?? throw new InvalidOperationException("RabbitMq:Password is required. Configure via environment variables, user-secrets, or appsettings.");
+
+            // Fail fast: reject missing, empty, and whitespace-only credentials.
+            // A null-coalescing check is not enough — cleared appsettings values are "" (not null).
+            var rabbitUser = builder.Configuration["RabbitMq:Username"];
+            if (string.IsNullOrWhiteSpace(rabbitUser))
+            {
+                throw new InvalidOperationException(
+                    "RabbitMq:Username is required and must not be empty or whitespace. Configure via environment variables, user-secrets, or appsettings.");
+            }
+
+            var rabbitPass = builder.Configuration["RabbitMq:Password"];
+            if (string.IsNullOrWhiteSpace(rabbitPass))
+            {
+                throw new InvalidOperationException(
+                    "RabbitMq:Password is required and must not be empty or whitespace. Configure via environment variables, user-secrets, or appsettings.");
+            }
 
             healthChecks.AddRabbitMQ(
                 factory: async _ =>
@@ -352,10 +364,22 @@ public static class ServiceDefaultsExtensions
         if (dependencies.HasFlag(HealthCheckDependencies.RabbitMq))
         {
             var rabbitHost = configuration["RabbitMq:Host"] ?? "localhost";
-            var rabbitUser = configuration["RabbitMq:Username"]
-                ?? throw new InvalidOperationException("RabbitMq:Username is required. Configure via environment variables, user-secrets, or appsettings.");
-            var rabbitPass = configuration["RabbitMq:Password"]
-                ?? throw new InvalidOperationException("RabbitMq:Password is required. Configure via environment variables, user-secrets, or appsettings.");
+
+            // Fail fast: reject missing, empty, and whitespace-only credentials.
+            // A null-coalescing check is not enough — cleared appsettings values are "" (not null).
+            var rabbitUser = configuration["RabbitMq:Username"];
+            if (string.IsNullOrWhiteSpace(rabbitUser))
+            {
+                throw new InvalidOperationException(
+                    "RabbitMq:Username is required and must not be empty or whitespace. Configure via environment variables, user-secrets, or appsettings.");
+            }
+
+            var rabbitPass = configuration["RabbitMq:Password"];
+            if (string.IsNullOrWhiteSpace(rabbitPass))
+            {
+                throw new InvalidOperationException(
+                    "RabbitMq:Password is required and must not be empty or whitespace. Configure via environment variables, user-secrets, or appsettings.");
+            }
 
             healthChecks.AddRabbitMQ(
                 factory: async _ =>

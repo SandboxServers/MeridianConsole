@@ -49,11 +49,15 @@ public static class MessagingExtensions
     /// Configuration keys:
     /// <list type="bullet">
     ///   <item><description><c>RabbitMq:Host</c> - RabbitMQ host (default: localhost)</description></item>
-    ///   <item><description><c>RabbitMq:Username</c> - Username (default: dhadgar)</description></item>
-    ///   <item><description><c>RabbitMq:Password</c> - Password (default: dhadgar)</description></item>
+    ///   <item><description><c>RabbitMq:Username</c> - Username (required; no default)</description></item>
+    ///   <item><description><c>RabbitMq:Password</c> - Password (required; no default)</description></item>
     /// </list>
     /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown at bus creation (host startup) when <c>RabbitMq:Username</c> or
+    /// <c>RabbitMq:Password</c> is missing, empty, or whitespace.
+    /// </exception>
     public static IServiceCollection AddDhadgarMessaging(
         this IServiceCollection services,
         IConfiguration config,
@@ -71,10 +75,23 @@ public static class MessagingExtensions
             x.UsingRabbitMq((ctx, cfg) =>
             {
                 var host = config["RabbitMq:Host"] ?? config.GetConnectionString("RabbitMqHost") ?? "localhost";
-                var user = config["RabbitMq:Username"]
-                    ?? throw new InvalidOperationException("RabbitMq:Username is required. Configure via environment variables, user-secrets, or appsettings.");
-                var pass = config["RabbitMq:Password"]
-                    ?? throw new InvalidOperationException("RabbitMq:Password is required. Configure via environment variables, user-secrets, or appsettings.");
+
+                // Fail fast at bus creation (host startup): reject missing, empty, and
+                // whitespace-only credentials. A null-coalescing check is not enough —
+                // cleared appsettings values are "" (not null), so `?? throw` never fires.
+                var user = config["RabbitMq:Username"];
+                if (string.IsNullOrWhiteSpace(user))
+                {
+                    throw new InvalidOperationException(
+                        "RabbitMq:Username is required and must not be empty or whitespace. Configure via environment variables, user-secrets, or appsettings.");
+                }
+
+                var pass = config["RabbitMq:Password"];
+                if (string.IsNullOrWhiteSpace(pass))
+                {
+                    throw new InvalidOperationException(
+                        "RabbitMq:Password is required and must not be empty or whitespace. Configure via environment variables, user-secrets, or appsettings.");
+                }
 
                 cfg.Host(host, h =>
                 {

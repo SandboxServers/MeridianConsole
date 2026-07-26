@@ -442,7 +442,11 @@ public sealed class SecureSecretsWebApplicationFactory : WebApplicationFactory<P
             new("sub", userId),
             new("principal_type", "user"),
             new("break_glass", "true"),
-            new("break_glass_reason", reason)
+            new("break_glass_reason", reason),
+            // Break-glass hardening (PR #127): tokens must carry a bounded expiration
+            // (max 1-hour TTL) and a single-use nonce, or authorization is denied.
+            new("break_glass_exp", DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            new("break_glass_nonce", Guid.NewGuid().ToString())
         };
 
         return CreateClientWithToken(claims);

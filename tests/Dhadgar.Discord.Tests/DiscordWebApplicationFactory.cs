@@ -61,12 +61,16 @@ public class DiscordWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
 
-        // Configure test admin API key
+        // Configure test admin API key and dummy RabbitMQ credentials.
+        // AddDhadgarMessaging fails fast on missing/blank credentials since PR #127;
+        // the bus itself never starts in tests (hosted services are removed below).
         builder.ConfigureAppConfiguration((context, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["AdminApiKey"] = "test-admin-key"
+                ["AdminApiKey"] = "test-admin-key",
+                ["RabbitMq:Username"] = "test-rabbit-user",
+                ["RabbitMq:Password"] = "test-rabbit-password"
             });
         });
 

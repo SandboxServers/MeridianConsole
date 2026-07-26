@@ -86,8 +86,20 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
     {
         var wifConfig = _options.Wif!;
         var httpClient = _httpClientFactory.CreateClient("IdentityWif");
-        var serviceClientId = wifConfig.ServiceClientId
-            ?? throw new InvalidOperationException("Secrets:Wif:ServiceClientId is required for WIF authentication.");
+
+        // Fail fast: reject missing, empty, and whitespace-only values.
+        // A null-coalescing check is not enough — cleared configuration values are "" (not null).
+        var serviceClientId = wifConfig.ServiceClientId;
+        if (string.IsNullOrWhiteSpace(serviceClientId))
+        {
+            throw new InvalidOperationException("Secrets:Wif:ServiceClientId is required for WIF authentication.");
+        }
+
+        var serviceClientSecret = wifConfig.ServiceClientSecret;
+        if (string.IsNullOrWhiteSpace(serviceClientSecret))
+        {
+            throw new InvalidOperationException("Secrets:Wif:ServiceClientSecret is required for WIF authentication.");
+        }
 
         _logger.LogInformation(
             "Requesting WIF token from Identity service: Endpoint={Endpoint}, ServiceClientId={ServiceClientId}",
@@ -99,8 +111,7 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = serviceClientId,
-            ["client_secret"] = wifConfig.ServiceClientSecret
-                ?? throw new InvalidOperationException("Secrets:Wif:ServiceClientSecret is required for WIF authentication."),
+            ["client_secret"] = serviceClientSecret,
             ["scope"] = "wif"
         });
 
