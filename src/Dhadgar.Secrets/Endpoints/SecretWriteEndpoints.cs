@@ -80,7 +80,7 @@ public static class SecretWriteEndpoints
         }
 
         // Authorize
-        var authResult = authService.Authorize(context.User, secretName, SecretAction.Write);
+        var authResult = await authService.AuthorizeAsync(context.User, secretName, SecretAction.Write);
         if (!authResult.IsAuthorized)
         {
             auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
@@ -161,7 +161,7 @@ public static class SecretWriteEndpoints
         }
 
         // Authorize - rotation requires specific permission
-        var authResult = authService.Authorize(context.User, secretName, SecretAction.Rotate);
+        var authResult = await authService.AuthorizeAsync(context.User, secretName, SecretAction.Rotate);
         if (!authResult.IsAuthorized)
         {
             auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
@@ -254,7 +254,7 @@ public static class SecretWriteEndpoints
         }
 
         // Authorize - delete requires write permission
-        var authResult = authService.Authorize(context.User, secretName, SecretAction.Delete);
+        var authResult = await authService.AuthorizeAsync(context.User, secretName, SecretAction.Delete);
         if (!authResult.IsAuthorized)
         {
             auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(

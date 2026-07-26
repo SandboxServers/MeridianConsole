@@ -11,18 +11,23 @@ namespace Dhadgar.Secrets.Authorization;
 /// </summary>
 public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
 {
+    private static readonly TimeSpan MaxBreakGlassTtl = BreakGlassPolicy.MaxTtl;
+
     private readonly SecretsOptions _options;
+    private readonly IBreakGlassNonceTracker _nonceTracker;
     private readonly ILogger<SecretsAuthorizationService> _logger;
 
     public SecretsAuthorizationService(
         IOptions<SecretsOptions> options,
+        IBreakGlassNonceTracker nonceTracker,
         ILogger<SecretsAuthorizationService> logger)
     {
         _options = options.Value;
+        _nonceTracker = nonceTracker;
         _logger = logger;
     }
 
-    public AuthorizationResult Authorize(ClaimsPrincipal user, string secretName, SecretAction action)
+    public async Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, string secretName, SecretAction action)
     {
         var userId = user.FindFirstValue("sub");
         var principalType = user.FindFirstValue("principal_type") ?? "user";
@@ -37,12 +42,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
         // Check break-glass access
         if (user.HasClaim("break_glass", "true"))
         {
-            var reason = user.FindFirstValue("break_glass_reason") ?? "No reason provided";
-            _logger.LogWarning(
-                "Break-glass access granted for secret {SecretName} by {UserId}. Reason: {Reason}",
-                secretName, userId, reason);
-
-            return AuthorizationResult.Success(userId, principalType, isBreakGlass: true, isServiceAccount);
+            return await ValidateBreakGlassAccessAsync(user, userId, principalType, isServiceAccount, secretName);
         }
 
         // Determine the category of the secret
@@ -84,7 +84,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
             userId);
     }
 
-    public AuthorizationResult AuthorizeCategory(ClaimsPrincipal user, string category, SecretAction action)
+    public async Task<AuthorizationResult> AuthorizeCategoryAsync(ClaimsPrincipal user, string category, SecretAction action)
     {
         var userId = user.FindFirstValue("sub");
         var principalType = user.FindFirstValue("principal_type") ?? "user";
@@ -98,7 +98,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
         // Check break-glass
         if (user.HasClaim("break_glass", "true"))
         {
-            return AuthorizationResult.Success(userId, principalType, isBreakGlass: true, isServiceAccount);
+            return await ValidateBreakGlassAccessAsync(user, userId, principalType, isServiceAccount, $"category:{category}");
         }
 
         var actionStr = action.ToString().ToLowerInvariant();
@@ -121,6 +121,78 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
         return AuthorizationResult.Denied(
             $"Missing permission for {action} on category '{category}'",
             userId);
+    }
+
+    private async Task<AuthorizationResult> ValidateBreakGlassAccessAsync(
+        ClaimsPrincipal user,
+        string? userId,
+        string principalType,
+        bool isServiceAccount,
+        string resourceName)
+    {
+        // Capture the clock once so the max-TTL and expiry checks below evaluate
+        // against the same instant (avoids a tiny race between two UtcNow reads).
+        var now = DateTimeOffset.UtcNow;
+
+        // Require expiration claim
+        var expClaim = user.FindFirstValue("break_glass_exp");
+        if (string.IsNullOrWhiteSpace(expClaim))
+        {
+            _logger.LogWarning(
+                "Break-glass access DENIED for {ResourceName} by {UserId}: missing expiration claim (break_glass_exp).",
+                resourceName, userId);
+            return AuthorizationResult.Denied("Break-glass token must include an expiration (break_glass_exp).", userId);
+        }
+
+        if (!long.TryParse(expClaim, out var expUnix))
+        {
+            _logger.LogWarning(
+                "Break-glass access DENIED for {ResourceName} by {UserId}: invalid expiration format.",
+                resourceName, userId);
+            return AuthorizationResult.Denied("Break-glass token expiration (break_glass_exp) is not a valid Unix timestamp.", userId);
+        }
+
+        var expiration = DateTimeOffset.FromUnixTimeSeconds(expUnix);
+        if (expiration > now + MaxBreakGlassTtl)
+        {
+            _logger.LogWarning(
+                "Break-glass access DENIED for {ResourceName} by {UserId}: expiration exceeds maximum TTL of {MaxTtl}.",
+                resourceName, userId, MaxBreakGlassTtl);
+            return AuthorizationResult.Denied($"Break-glass token TTL exceeds maximum of {MaxBreakGlassTtl.TotalMinutes} minutes.", userId);
+        }
+
+        if (expiration <= now)
+        {
+            _logger.LogWarning(
+                "Break-glass access DENIED for {ResourceName} by {UserId}: token has expired at {Expiration}.",
+                resourceName, userId, expiration);
+            return AuthorizationResult.Denied("Break-glass token has expired.", userId);
+        }
+
+        // Require and validate single-use nonce
+        var nonce = user.FindFirstValue("break_glass_nonce");
+        if (string.IsNullOrWhiteSpace(nonce))
+        {
+            _logger.LogWarning(
+                "Break-glass access DENIED for {ResourceName} by {UserId}: missing nonce claim (break_glass_nonce).",
+                resourceName, userId);
+            return AuthorizationResult.Denied("Break-glass token must include a single-use nonce (break_glass_nonce).", userId);
+        }
+
+        if (!await _nonceTracker.TryConsumeNonceAsync(nonce))
+        {
+            _logger.LogWarning(
+                "Break-glass access DENIED for {ResourceName} by {UserId}: nonce {Nonce} has already been consumed (replay attempt).",
+                resourceName, userId, nonce);
+            return AuthorizationResult.Denied("Break-glass token nonce has already been used.", userId);
+        }
+
+        var reason = user.FindFirstValue("break_glass_reason") ?? "No reason provided";
+        _logger.LogWarning(
+            "Break-glass access GRANTED for {ResourceName} by {UserId}. Reason: {Reason}. Nonce: {Nonce}. Expires: {Expiration}.",
+            resourceName, userId, reason, nonce, expiration);
+
+        return AuthorizationResult.Success(userId, principalType, isBreakGlass: true, isServiceAccount);
     }
 
     private string GetSecretCategory(string secretName)

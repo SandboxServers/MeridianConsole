@@ -223,8 +223,10 @@ if (builder.Environment.IsEnvironment("Testing"))
 }
 else
 {
-    // Load gaming OAuth secrets from Secrets Service at startup
-    var secretsServiceUrl = builder.Configuration["SecretsService:Url"] ?? "http://localhost:5000";
+    // Load gaming OAuth secrets from Secrets Service at startup.
+    // Identity calls the Secrets service directly (not via the Gateway) — deployment
+    // config points SecretsService__Url at the Secrets container; 5110 is its local port.
+    var secretsServiceUrl = builder.Configuration["SecretsService:Url"] ?? "http://localhost:5110";
     using var oauthSecrets = new OAuthSecretProvider(new Uri(secretsServiceUrl));
     await oauthSecrets.LoadSecretsAsync();
 
@@ -855,12 +857,13 @@ static async Task SeedDevOpenIddictClientAsync(
         return;
     }
 
-    var clientId = configuration["OpenIddict:DevClient:ClientId"] ?? "dev-client";
-    var clientSecret = configuration["OpenIddict:DevClient:ClientSecret"] ?? "dev-secret";
+    var clientId = configuration["OpenIddict:DevClient:ClientId"];
+    var clientSecret = configuration["OpenIddict:DevClient:ClientSecret"];
 
     if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
     {
-        logger.LogWarning("Dev OpenIddict client is missing ClientId/ClientSecret; skipping seed.");
+        logger.LogWarning("OpenIddict DevClient is enabled but ClientId/ClientSecret not configured; skipping seed. " +
+            "Set OpenIddict:DevClient:ClientId and OpenIddict:DevClient:ClientSecret, or disable with OpenIddict:DevClient:Enabled=false.");
         return;
     }
 
@@ -962,11 +965,41 @@ static async Task SeedServiceAccountAsync(
     var clientId = configuration[$"{configSection}:ClientId"] ?? defaultClientId;
     var clientSecret = configuration[$"{configSection}:ClientSecret"];
 
-    // Generate a deterministic but secure secret if not configured
-    // In production, this should be explicitly configured
     if (string.IsNullOrWhiteSpace(clientSecret))
     {
-        clientSecret = $"{clientId}-dev-secret-change-in-prod";
+        // Accounts that authenticate via client_credentials need a secret the calling
+        // service also knows. Seeding a random hashed secret would permanently brick
+        // the account (the FindByClientIdAsync guard below prevents re-seeding), so
+        // warn and skip instead — matching the SeedDevOpenIddictClientAsync pattern.
+        // The account will be seeded on a later startup once the secret is configured.
+        var isWifOnly = scopes is ["wif"];
+        if (!isWifOnly)
+        {
+            logger.LogWarning(
+                "Service account {ServiceKey} has no configured ClientSecret; skipping seed to avoid " +
+                "registering an unusable client_credentials account. Set {ConfigSection}:ClientSecret " +
+                "(or disable with {ConfigSection}:Enabled=false); it will be seeded on the next startup.",
+                serviceKey, configSection, configSection);
+            return;
+        }
+
+        // WIF-only accounts exist as federated-credential subjects; a random placeholder
+        // secret is acceptable because federation, not the secret, authenticates them.
+        var secretBytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        try
+        {
+            clientSecret = Convert.ToBase64String(secretBytes);
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(secretBytes);
+        }
+
+        logger.LogWarning(
+            "WIF-only service account {ServiceKey} has no configured ClientSecret. A random placeholder " +
+            "was generated; the account cannot authenticate via client_credentials until " +
+            "{ConfigSection}:ClientSecret is configured explicitly.",
+            serviceKey, configSection);
     }
 
     if (await manager.FindByClientIdAsync(clientId) is not null)

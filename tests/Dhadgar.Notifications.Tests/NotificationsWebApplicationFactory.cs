@@ -3,6 +3,7 @@ using Dhadgar.Notifications.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -19,6 +20,18 @@ public class NotificationsWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        // Dummy RabbitMQ credentials: AddDhadgarMessaging fails fast on missing/blank
+        // credentials since PR #127; the bus itself never starts in tests (the
+        // MassTransit hosted services are removed below).
+        builder.ConfigureAppConfiguration((context, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RabbitMq:Username"] = "test-rabbit-user",
+                ["RabbitMq:Password"] = "test-rabbit-password"
+            });
+        });
 
         builder.ConfigureServices(services =>
         {

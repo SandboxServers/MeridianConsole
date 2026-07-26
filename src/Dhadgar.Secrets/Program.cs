@@ -114,6 +114,11 @@ builder.Services.AddHealthChecks()
     .AddCheck<SecretsReadinessCheck>("secrets_ready", tags: ["ready"]);
 
 // Register authorization and audit services
+// NOTE: InMemoryBreakGlassNonceTracker is safe for single-instance deployments only.
+// Its per-process store cannot detect nonces consumed on other replicas or before a
+// restart, so multi-instance production deployments must swap in a distributed
+// implementation (e.g., Redis-backed). Tracked as a P0.4 follow-up of issue #129.
+builder.Services.AddSingleton<IBreakGlassNonceTracker, InMemoryBreakGlassNonceTracker>();
 builder.Services.AddSingleton<ISecretsAuthorizationService, SecretsAuthorizationService>();
 builder.Services.AddSingleton<ISecretsAuditLogger, SecretsAuditLogger>();
 

@@ -3,6 +3,25 @@ using System.Security.Claims;
 namespace Dhadgar.Secrets.Authorization;
 
 /// <summary>
+/// Centralized break-glass policy constants shared by the authorization service
+/// and the nonce tracker, so their timing invariants cannot drift apart.
+/// </summary>
+public static class BreakGlassPolicy
+{
+    /// <summary>
+    /// Maximum time-to-live a break-glass token may declare via <c>break_glass_exp</c>.
+    /// </summary>
+    public static readonly TimeSpan MaxTtl = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// How long consumed nonces must be retained for replay detection.
+    /// Derived from <see cref="MaxTtl"/> (2x) so that a nonce is never evicted
+    /// while a token carrying it could still be within its validity window.
+    /// </summary>
+    public static readonly TimeSpan NonceRetentionPeriod = MaxTtl * 2;
+}
+
+/// <summary>
 /// Service for authorizing access to secrets.
 /// Supports permission hierarchy, service accounts, and break-glass access.
 /// </summary>
@@ -10,13 +29,17 @@ public interface ISecretsAuthorizationService
 {
     /// <summary>
     /// Checks if the user is authorized to perform the specified action on a secret.
+    /// Asynchronous because break-glass validation consumes a single-use nonce via
+    /// <see cref="IBreakGlassNonceTracker"/>, which may be backed by a distributed store.
     /// </summary>
-    AuthorizationResult Authorize(ClaimsPrincipal user, string secretName, SecretAction action);
+    Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, string secretName, SecretAction action);
 
     /// <summary>
     /// Checks if the user is authorized to access a category of secrets.
+    /// Asynchronous because break-glass validation consumes a single-use nonce via
+    /// <see cref="IBreakGlassNonceTracker"/>, which may be backed by a distributed store.
     /// </summary>
-    AuthorizationResult AuthorizeCategory(ClaimsPrincipal user, string category, SecretAction action);
+    Task<AuthorizationResult> AuthorizeCategoryAsync(ClaimsPrincipal user, string category, SecretAction action);
 }
 
 public enum SecretAction

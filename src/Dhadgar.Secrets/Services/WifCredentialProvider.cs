@@ -73,7 +73,7 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
             wifConfig.TenantId,
             wifConfig.ClientId,
             wifConfig.IdentityTokenEndpoint,
-            wifConfig.ServiceClientId ?? "(default)");
+            string.IsNullOrWhiteSpace(wifConfig.ServiceClientId) ? "(not configured)" : wifConfig.ServiceClientId);
 
         // Create a ClientAssertionCredential that gets tokens from our Identity service
         return new ClientAssertionCredential(
@@ -82,11 +82,28 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
             async (ct) => await GetIdentityTokenAsync(ct));
     }
 
+    // NOTE: This method intentionally throws instead of returning Result<T>. It is the
+    // assertion callback for Azure's ClientAssertionCredential, whose signature mandates
+    // Task<string> — there is no channel to surface a Result. The Azure SDK converts
+    // exceptions thrown here into credential/authentication failures for callers.
     private async Task<string> GetIdentityTokenAsync(CancellationToken ct)
     {
         var wifConfig = _options.Wif!;
         var httpClient = _httpClientFactory.CreateClient("IdentityWif");
-        var serviceClientId = wifConfig.ServiceClientId ?? "dev-client";
+
+        // Fail fast: reject missing, empty, and whitespace-only values.
+        // A null-coalescing check is not enough — cleared configuration values are "" (not null).
+        var serviceClientId = wifConfig.ServiceClientId;
+        if (string.IsNullOrWhiteSpace(serviceClientId))
+        {
+            throw new InvalidOperationException("Secrets:Wif:ServiceClientId is required for WIF authentication.");
+        }
+
+        var serviceClientSecret = wifConfig.ServiceClientSecret;
+        if (string.IsNullOrWhiteSpace(serviceClientSecret))
+        {
+            throw new InvalidOperationException("Secrets:Wif:ServiceClientSecret is required for WIF authentication.");
+        }
 
         _logger.LogInformation(
             "Requesting WIF token from Identity service: Endpoint={Endpoint}, ServiceClientId={ServiceClientId}",
@@ -98,7 +115,7 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
         {
             ["grant_type"] = "client_credentials",
             ["client_id"] = serviceClientId,
-            ["client_secret"] = wifConfig.ServiceClientSecret ?? "dev-secret",
+            ["client_secret"] = serviceClientSecret,
             ["scope"] = "wif"
         });
 
