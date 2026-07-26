@@ -33,7 +33,11 @@
     <!-- CA1034: Nested types used intentionally for organized log/trace categories -->
     <!-- CA1861: Constant arrays in EF migrations (auto-generated, shouldn't modify) -->
     <!-- SYSLIB0057: X509Certificate2 constructor in CA/cert handling (migration tracked separately) -->
-    <NoWarn>CA1707;CA2007;CA1308;CA1062;CA1031;CA1056;CA2227;CA1310;CA1848;CA2234;CA1515;CA1716;CA1034;CA1861;SYSLIB0057</NoWarn>
+    <!-- CA1873: Log-argument evaluation cost - same logging-performance family as the already-suppressed
+         CA1848; new .NET 10 SDK rule that fires on pre-existing log calls repo-wide (2026-07) -->
+    <!-- CA1307: StringComparison "for clarity" - the stricter correctness sibling CA1310 is already
+         suppressed above; CA1307 fires on ~74 pre-existing xUnit Assert.Contains/StartsWith call sites -->
+    <NoWarn>CA1707;CA2007;CA1308;CA1062;CA1031;CA1056;CA2227;CA1310;CA1848;CA2234;CA1515;CA1716;CA1034;CA1861;SYSLIB0057;CA1873;CA1307</NoWarn>
   </PropertyGroup>
 
 </Project>

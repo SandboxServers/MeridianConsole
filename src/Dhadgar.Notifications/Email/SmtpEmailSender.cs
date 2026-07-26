@@ -81,6 +81,12 @@ public sealed class SmtpEmailSender : IEmailSender
 
         if (!string.IsNullOrWhiteSpace(_options.SmtpUsername))
         {
+            if (string.IsNullOrWhiteSpace(_options.SmtpPassword))
+            {
+                _logger.LogWarning("SMTP username is configured but SMTP password is not; alert email not sent");
+                return;
+            }
+
             await client.AuthenticateAsync(
                 _options.SmtpUsername,
                 _options.SmtpPassword,
