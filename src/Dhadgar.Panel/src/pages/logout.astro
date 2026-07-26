@@ -1,6 +1,9 @@
 ---
 // Server-side logout - clear any server-side session state
 // Client will handle clearing tokens
+// Tailwind styles were previously injected globally by @astrojs/tailwind;
+// import them explicitly now that the integration is gone.
+import '../styles/global.css';
 ---
 
 <script>
