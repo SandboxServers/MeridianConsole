@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Dhadgar.Secrets.Authorization;
 using Dhadgar.Secrets.Options;
@@ -8,10 +9,11 @@ using OptionsFactory = Microsoft.Extensions.Options.Options;
 
 namespace Dhadgar.Secrets.Tests.Authorization;
 
-public class SecretsAuthorizationServiceTests
+public sealed class SecretsAuthorizationServiceTests : IDisposable
 {
     private readonly SecretsAuthorizationService _service;
     private readonly SecretsOptions _options;
+    private readonly InMemoryBreakGlassNonceTracker _nonceTracker;
 
     public SecretsAuthorizationServiceTests()
     {
@@ -26,10 +28,17 @@ public class SecretsAuthorizationServiceTests
             }
         };
 
+        _nonceTracker = new InMemoryBreakGlassNonceTracker();
         _service = new SecretsAuthorizationService(
             OptionsFactory.Create(_options),
-            new InMemoryBreakGlassNonceTracker(),
+            _nonceTracker,
             NullLogger<SecretsAuthorizationService>.Instance);
+    }
+
+    public void Dispose()
+    {
+        _nonceTracker.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     #region Unauthenticated Access
@@ -232,7 +241,7 @@ public class SecretsAuthorizationServiceTests
     [Fact]
     public async Task Authorize_WithBreakGlass_Succeeds()
     {
-        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
@@ -253,7 +262,7 @@ public class SecretsAuthorizationServiceTests
     [Fact]
     public async Task Authorize_WithBreakGlass_DeniedWhenExpired()
     {
-        var exp = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
@@ -291,7 +300,7 @@ public class SecretsAuthorizationServiceTests
     [Fact]
     public async Task Authorize_WithBreakGlass_DeniedWhenMissingNonce()
     {
-        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
@@ -310,7 +319,7 @@ public class SecretsAuthorizationServiceTests
     [Fact]
     public async Task Authorize_WithBreakGlass_DeniedOnNonceReplay()
     {
-        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var nonce = Guid.NewGuid().ToString();
         var claims = new List<Claim>
         {
@@ -362,7 +371,7 @@ public class SecretsAuthorizationServiceTests
             trackerSpy,
             NullLogger<SecretsAuthorizationService>.Instance);
 
-        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
@@ -389,7 +398,7 @@ public class SecretsAuthorizationServiceTests
             trackerSpy,
             NullLogger<SecretsAuthorizationService>.Instance);
 
-        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
@@ -410,7 +419,7 @@ public class SecretsAuthorizationServiceTests
     [Fact]
     public async Task Authorize_WithBreakGlass_DeniedWhenTtlExceedsMax()
     {
-        var exp = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
@@ -430,7 +439,7 @@ public class SecretsAuthorizationServiceTests
     [Fact]
     public async Task AuthorizeCategory_WithBreakGlass_Succeeds()
     {
-        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
         {
             new("sub", "emergency-user"),
