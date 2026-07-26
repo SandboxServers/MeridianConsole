@@ -3,7 +3,8 @@ import express from "express";
 import cors from "cors";
 import pg from "pg";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
-import { getMigrations } from "better-auth/db";
+// better-auth >= 1.6 moved getMigrations from "better-auth/db" to "better-auth/db/migration"
+import { getMigrations } from "better-auth/db/migration";
 import { loadSecrets } from "./secrets-client.js";
 
 // Load secrets from Secrets Service before initializing the app
@@ -38,7 +39,8 @@ async function runMigrations() {
       console.log(`  Tables to create: ${toBeCreated.map(t => t.table).join(", ")}`);
     }
     if (toBeAdded.length > 0) {
-      console.log(`  Fields to add: ${toBeAdded.map(t => `${t.table}.${t.fields?.join(", ")}`).join("; ")}`);
+      // t.fields is a Record<string, FieldAttribute>, not an array
+      console.log(`  Fields to add: ${toBeAdded.map(t => `${t.table}.${Object.keys(t.fields ?? {}).join(", ")}`).join("; ")}`);
     }
 
     await runMigrations();
