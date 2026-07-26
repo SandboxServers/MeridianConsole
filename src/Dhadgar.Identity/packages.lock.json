@@ -2,6 +2,12 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "AngleSharp": {
+        "type": "Direct",
+        "requested": "[1.5.2, )",
+        "resolved": "1.5.2",
+        "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
+      },
       "AspNet.Security.OAuth.BattleNet": {
         "type": "Direct",
         "requested": "[10.0.0, )",
@@ -302,11 +308,6 @@
         "dependencies": {
           "Pipelines.Sockets.Unofficial": "2.2.8"
         }
-      },
-      "AngleSharp": {
-        "type": "Transitive",
-        "resolved": "1.3.0",
-        "contentHash": "iHzfn4cK6CmhuURNdEpmSQCq5/HZFldEpkbnmqT9My8+6l2Sz3F+NxoqRA8z/jTkWB+SAu5boRdp4v/WtyjuIQ=="
       },
       "AspNet.Security.OpenId": {
         "type": "Transitive",

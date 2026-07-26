@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <!-- Pins the transitive System.Security.Cryptography.Xml (via EF Design's MSBuild deps) past its advisories; see Directory.Packages.props -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <!-- Pins the transitive SQLitePCLRaw native lib past GHSA-2m69-gcr7-jv3q; see Directory.Packages.props -->
