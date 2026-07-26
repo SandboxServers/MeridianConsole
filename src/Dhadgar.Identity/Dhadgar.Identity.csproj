@@ -13,6 +13,8 @@
   <PackageReference Include="MassTransit" />
   <PackageReference Include="MassTransit.RabbitMQ" />
   <PackageReference Include="AspNet.Security.OpenId.Steam" />
+  <!-- Pins the transitive AngleSharp past GHSA-pgww-w46g-26qg; see Directory.Packages.props -->
+  <PackageReference Include="AngleSharp" />
   <PackageReference Include="AspNet.Security.OAuth.BattleNet" />
   <PackageReference Include="Microsoft.AspNetCore.Authentication.MicrosoftAccount" />
   <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
