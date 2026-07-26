@@ -1,278 +1,199 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-01-19
+**Analysis Date:** 2026-07-26 (rewrite of the 2026-01-19 audit, which had become badly
+inaccurate — it described Nodes and the agents as empty stubs and listed a "Firewall"
+service that has never existed)
+
+For the full divergence register and beta roadmap, see `docs/PROJECT-STATE.md`.
 
 ## Implementation Status Overview
 
-Per CLAUDE.md, this codebase is "early-stage scaffolding with foundational structure in place." Most services have basic endpoints and EF Core wiring, but business logic is largely unimplemented.
-
-### Production-Ready Services
+### Production-Grade Services
 
 | Service | Status | Notes |
 |---------|--------|-------|
-| Identity | Functional | OAuth, RBAC, organizations, memberships, JWT, OpenIddict |
-| Gateway | Functional | YARP routing, rate limiting, auth, circuit breaker |
-| Secrets | Functional | Key Vault integration, authorization, audit logging |
-| Notifications | Functional | Email/Discord messaging via MassTransit |
-| Discord | Functional | Bot integration, slash commands |
+| Gateway | Functional | YARP routing, rate limiting, auth, circuit breaker, Cloudflare integration |
+| Identity | Functional | OAuth, RBAC, organizations, memberships, JWT, OpenIddict (MFA endpoints return 501) |
+| Nodes | Functional | Enrollment tokens, mTLS CA, heartbeats, capacity reservations, 5 consumers, 352 tests |
+| Secrets | Functional | Key Vault integration, claims authz, audit logging, rate limiting |
+| Notifications | Functional | Email (Office 365/SMTP), alerting, MassTransit consumers |
+| Discord | Functional | Discord.Net bot, slash commands, platform health |
 
 ### Scaffolded Services (Stub Only)
 
 | Service | Status | Notes |
 |---------|--------|-------|
-| Servers | Scaffold | Empty DbContext with SampleEntity placeholder |
-| Nodes | Scaffold | Empty DbContext with SampleEntity placeholder |
-| Tasks | Scaffold | Empty DbContext with SampleEntity placeholder |
-| Files | Scaffold | Empty DbContext with SampleEntity placeholder |
-| Mods | Scaffold | Empty DbContext with SampleEntity placeholder |
-| Billing | Scaffold | Empty DbContext with SampleEntity placeholder |
-| Console | Scaffold | SignalR hub registered, no real functionality |
-| Firewall | Scaffold | No business logic |
+| Servers | Scaffold | SampleEntity placeholder + audit plumbing; real implementation open in PR #88 |
+| Tasks | Scaffold | SampleEntity placeholder |
+| Files | Scaffold | SampleEntity placeholder; **slated for removal** (issue #115) |
+| Mods | Scaffold | SampleEntity placeholder; real implementation open in PR #88 |
+| Billing | Scaffold | SampleEntity placeholder |
+| Console | Scaffold | SignalR hub registered with a single `Ping()`; real implementation open in PR #88 |
 
-### Agents (Not Implemented)
+### Agents (Components Without a Runtime)
 
-| Agent | Status | Files |
+| Agent | Status | Notes |
 |-------|--------|-------|
-| Agent.Core | Stub | `src/Agents/Dhadgar.Agent.Core/Program.cs` |
-| Agent.Linux | Stub | `src/Agents/Dhadgar.Agent.Linux/Program.cs` |
-| Agent.Windows | Stub | `src/Agents/Dhadgar.Agent.Windows/Program.cs` |
+| Agent.Core | Substantial (~4,300 LOC), **not wired** | Enrollment, SignalR client, command framework, file transfer all exist; nothing bootstraps them |
+| Agent.Windows | Substantial (~6,000 LOC) | Job Objects, per-server Windows services, IPC pipes, ACLs, firewall, event log — well tested (384 tests) |
+| Agent.GameServerWrapper | Implemented | Per-server wrapper service, pipe client, process lifecycle |
+| Agent.Linux | Stub | 5-line `Program.cs`; no cert store, process manager, cgroups, or systemd integration |
 
-All three agents are just `Console.WriteLine(Hello.Message)` with a TODO comment.
+**Critical:** no agent ↔ control-plane call can currently succeed — the agent and Nodes
+implement incompatible contracts, the SignalR hub the agent expects doesn't exist, no
+command handlers exist (#118), command signing is unimplemented (#94), and NodeId is
+never persisted after enrollment (#101). Resolution: ADR-0008 + `docs/PROJECT-STATE.md`
+roadmap Phase 2.
 
 ---
 
 ## Tech Debt
 
 ### Duplicated DbContext Placeholder Pattern
-- **Issue:** Six services have identical placeholder DbContexts with `SampleEntity`
-- **Files:**
-  - `src/Dhadgar.Servers/Data/ServersDbContext.cs`
-  - `src/Dhadgar.Nodes/Data/NodesDbContext.cs`
-  - `src/Dhadgar.Tasks/Data/TasksDbContext.cs`
-  - `src/Dhadgar.Files/Data/FilesDbContext.cs`
-  - `src/Dhadgar.Mods/Data/ModsDbContext.cs`
-  - `src/Dhadgar.Billing/Data/BillingDbContext.cs`
+- **Issue:** Five services have identical placeholder DbContexts with `SampleEntity`
+- **Files:** `src/Dhadgar.{Servers,Tasks,Files,Mods,Billing}/Data/*DbContext.cs`
 - **Impact:** These services auto-migrate in dev mode, creating useless `Sample` tables
-- **Fix approach:** Replace SampleEntity with real domain entities when implementing each service
-
-### Duplicated OpenTelemetry Configuration
-- **Issue:** Every service duplicates ~40 lines of OpenTelemetry setup
-- **Files:** All `Program.cs` files in services
-- **Impact:** Configuration drift risk, maintenance overhead
-- **Fix approach:** Create `AddMeridianObservability()` extension in ServiceDefaults
+- **Fix approach:** Replace with real domain entities when implementing each service (PR #88 does this for Servers/Mods)
 
 ### MFA Endpoints Return 501
 - **Issue:** MFA policy endpoints are stubbed with `StatusCode(501)`
 - **Files:** `src/Dhadgar.Identity/Endpoints/MfaPolicyEndpoints.cs:48-77`
-- **Impact:** MFA management UI will break when connected
-- **Fix approach:** Implement MFA policy storage and retrieval
+- **Fix approach:** Implement MFA policy storage and retrieval (issue #80)
 
 ### Key Vault Purge Not Implemented
 - **Issue:** Purging deleted Key Vaults requires Azure Management REST API
 - **Files:** `src/Dhadgar.Secrets/Services/AzureKeyVaultManager.cs:365`
-- **Impact:** Cannot fully clean up deleted vaults
-- **Fix approach:** Implement Azure Management SDK for vault purge operations
+
+### Result vs Exception Inconsistency
+- **Issue:** CLAUDE.md mandates `Result<T>`, but `Guard` throws and ServiceDefaults has a
+  `DomainException` hierarchy; services mix both
+- **Fix approach:** Issue #119 — recommend formalizing "exceptions at HTTP boundaries,
+  Result internally" and documenting it
 
 ---
 
 ## Security Considerations
 
-### Agent Code Review Required
-- **Risk:** Agents run on customer hardware with high-trust privileges
-- **Files:**
-  - `src/Agents/Dhadgar.Agent.Core/*`
-  - `src/Agents/Dhadgar.Agent.Linux/*`
-  - `src/Agents/Dhadgar.Agent.Windows/*`
-- **Current mitigation:** None - agents are stubs
-- **Recommendations:**
-  - Implement process sandboxing before any command execution
-  - Use mTLS for agent-to-control-plane communication
-  - Add agent-service-guardian review for all agent PRs
+### Agent Command Signing Unimplemented
+- **Risk:** `CommandValidator` rejects all commands when signing is required, accepts
+  unsigned ones otherwise — no secure configuration exists
+- **Files:** `src/Agents/Dhadgar.Agent.Core/Commands/CommandValidator.cs:108-115`
+- **Tracking:** Issue #94; blocks any agent deployment
+
+### Agent.Core Test Coverage Inversion
+- **Risk:** ~13 lines of tests cover ~4,300 LOC of security-critical code that runs
+  privileged on customer hardware (EnrollmentService, ControlPlaneClient,
+  CommandDispatcher/Validator, FileTransferService all untested)
+- **Priority:** Critical before any agent ships (beta roadmap Phase 2)
+
+### Identity `/internal` Endpoints Lack Service Auth
+- **Risk:** The `/internal` group (permission checks, Microsoft assertions) has no
+  `RequireAuthorization()`; only the Gateway's `DenyAll` route protects it. Anything
+  reaching Identity directly gets in.
+- **Files:** `src/Dhadgar.Identity/Endpoints/InternalEndpoints.cs:17`
+
+### Nodes Has No JWT Bearer Scheme
+- **Risk:** Nodes calls `UseAuthentication()` and defines a `TenantScoped` policy but
+  registers no JWT scheme — bearer-token callers hitting Nodes directly fail closed;
+  works only via Gateway header injection or mTLS
+- **Files:** `src/Dhadgar.Nodes/Program.cs`, `src/Dhadgar.Nodes/Auth/`
 
 ### Authentication Not Enforced on Scaffolded Services
-- **Risk:** Scaffolded services (Servers, Nodes, Tasks, Files, Mods, Firewall) have no authentication
-- **Files:** These services only have health endpoints, no protected routes yet
-- **Current mitigation:** Services only expose health checks
-- **Recommendations:** Add authentication middleware when implementing real endpoints
+- **Risk:** Servers, Tasks, Files, Console (incl. its SignalR hub), Mods, Billing have
+  no authentication of their own — the Gateway is the only enforcement point
+- **Recommendations:** Every service promoted out of stub status must add its own
+  authn/authz (beta roadmap Phase 3)
 
-### Billing Service Missing Middleware
-- **Risk:** Billing service lacks standard ServiceDefaults middleware
-- **Files:** `src/Dhadgar.Billing/Program.cs`
-- **Impact:** No correlation tracking, problem details, or request logging
-- **Fix approach:** Add `builder.Services.AddDhadgarServiceDefaults()` and middleware
+### Missing `/refresh` Endpoint (Silent Logout)
+- **Risk:** SharedAuth calls `POST /api/v1/identity/refresh`; Identity maps no such
+  route. Users are silently logged out after 15 minutes; refresh tokens exist but can't
+  be redeemed
+- **Files:** `src/Dhadgar.SharedAuth/src/client.ts` vs `src/Dhadgar.Identity/`
+- **Priority:** P0 (beta roadmap Phase 1)
 
 ### Secrets Service Allowed List
 - **Risk:** Secrets must be explicitly listed in `AllowedSecrets` config
-- **Files:** `src/Dhadgar.Secrets/appsettings.json`
-- **Current mitigation:** Only configured secrets are accessible
-- **Recommendations:** Keep allowed list minimal, audit additions
+- **Current mitigation:** Only configured secrets are accessible; keep list minimal
+
+### Development Credentials
+- **Issue:** Default dev credentials are `dhadgar/dhadgar` everywhere
+- **Status:** PR #127 removes hardcoded credentials and fallback defaults (P0 issues
+  #108–#111); merge it first
 
 ---
 
 ## Test Coverage Gaps
 
-### Scaffolded Services Have HelloWorld Tests Only
-- **What's not tested:** All business logic (none exists yet)
-- **Files:**
-  - `tests/Dhadgar.Servers.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Nodes.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Tasks.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Files.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Mods.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Billing.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Console.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Firewall.Tests/HelloWorldTests.cs`
-- **Risk:** Tests pass but provide no coverage
-- **Priority:** Low (no logic to test yet)
-
-### Agent Tests Are HelloWorld Only
-- **What's not tested:** Agent functionality (none exists yet)
-- **Files:**
-  - `tests/Dhadgar.Agent.Core.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Agent.Linux.Tests/HelloWorldTests.cs`
-  - `tests/Dhadgar.Agent.Windows.Tests/HelloWorldTests.cs`
-- **Risk:** When agent code is added, it will lack test coverage
-- **Priority:** Critical when agent development begins
-
-### Well-Tested Services
-- **Identity:** 27+ test files covering services, endpoints, OAuth, integration
-- **Gateway:** 11 test files covering routing, rate limiting, security, circuit breaker
-- **Secrets:** 6 test files covering authorization, validation, security
+- **Agent.Core / Agent.Linux:** HelloWorld tests only (see inversion above)
+- **Contracts / Messaging:** 1 test each, despite being load-bearing for all messaging
+- **BetterAuth / SharedAuth / Panel:** no JS/TS tests at all
+- **Scaffolded services:** HelloWorld + Swagger tests only (expected)
+- **Flaky:** `Dhadgar.Nodes.Tests.StaleNodeDetectionServiceTests.ExecuteAsync_AdvancingTime_TriggersNextIteration`
+  fails on a clean checkout (timing-sensitive)
+- **Well-tested:** Nodes (352), Identity (188+), ServiceDefaults (107+), Gateway (74+),
+  Secrets (91), Agent.Windows (384)
 
 ---
 
 ## Infrastructure Gaps
 
+### Aspire AppHost Incomplete
+- **Problem:** BetterAuth is not orchestrated (no login possible under Aspire), Files
+  missing, zero `WithReference`/`WaitFor` wiring between services
+- **Files:** `src/Dhadgar.AppHost/Program.cs`
+- **Mitigation:** `deploy/compose/docker-compose.services.yml` runs the full stack and
+  is the beta deployment target
+
+### Helm Chart Non-Functional
+- **Problem:** Injects `ServiceUrls__*` env vars the Gateway never reads; references a
+  nonexistent `firewall` service; no BetterAuth deployment; container CI never builds
+  BetterAuth/Panel images
+- **Files:** `deploy/kubernetes/helm/meridian-console/`
+- **Priority:** Deferred post-beta (see `docs/PROJECT-STATE.md` DV-7)
+
 ### Terraform Not Implemented
-- **Problem:** `deploy/terraform/` directory does not exist
-- **Impact:** No IaC for production infrastructure
-- **Priority:** High - needed before production deployment
+- **Problem:** `deploy/terraform/` does not exist; Azure provisioning is PowerShell
+  (`deploy/scripts/*.ps1`)
 
-### Kubernetes Manifests via Helm Only
-- **Problem:** K8s deployment relies entirely on Helm charts
-- **Files:** `deploy/kubernetes/helm/meridian-console/*`
-- **Impact:** No raw manifests for debugging or GitOps without Helm
-- **Priority:** Low - Helm is standard practice
-
-### No Service Mesh Configuration
-- **Problem:** mTLS planned but not implemented
-- **Files:** None
-- **Impact:** Internal traffic is not encrypted
-- **Recommendations:** Add Istio or Linkerd configuration when deploying to production
-
----
-
-## Frontend Migration Debt
-
-### Blazor to Astro Migration Incomplete
-- **Issue:** Panel and ShoppingCart still use Blazor WebAssembly
-- **Files:**
-  - `src/Dhadgar.Panel/*` (Blazor)
-  - `src/Dhadgar.ShoppingCart/*` (Blazor)
-- **Migrated:** `src/Dhadgar.Scope/*` (Astro/React/Tailwind)
-- **Impact:** Two different frontend stacks to maintain
-- **Fix approach:** Migrate Panel and ShoppingCart per Scope pattern
-
----
-
-## Performance Concerns
-
-### Auto-Migration in Development
-- **Problem:** Services auto-migrate databases on startup in dev mode
-- **Files:** All service `Program.cs` files with `app.Environment.IsDevelopment()` checks
-- **Impact:** Slow startup, potential race conditions with concurrent services
-- **Recommendations:** Use explicit migration commands instead of auto-migration
-
-### No Connection Pooling Configuration
-- **Problem:** PostgreSQL connections use default EF Core settings
-- **Files:** All DbContext registrations
-- **Impact:** May hit connection limits under load
-- **Recommendations:** Configure connection pooling in production appsettings
+### CI Logic Is External
+- **Problem:** `azure-pipelines.yml` extends templates in the separate
+  `SandboxServers/Azure-Pipeline-YAML` repo; build/test behavior is not verifiable or
+  changeable from this repo alone. All microservice deploy stages are disabled.
+- **Also:** GitHub Actions frontend lint only covers Scope; SWA builds use
+  `npm install` instead of `npm ci`
 
 ---
 
 ## Fragile Areas
 
-### Identity Service Complexity
-- **Files:** `src/Dhadgar.Identity/Program.cs` (966 lines)
-- **Why fragile:** Contains OAuth setup, OpenIddict configuration, rate limiting, all in one file
-- **Safe modification:** Extract configuration into separate extension methods
-- **Test coverage:** Good - many integration tests exist
+### Identity Service Program.cs
+- **Files:** `src/Dhadgar.Identity/Program.cs` (~850 lines)
+- **Why fragile:** OAuth setup, OpenIddict configuration, rate limiting, Key Vault
+  certificate loading with multiple fallbacks, all in one file
+- **Safe modification:** Extract into extension methods; extensive integration tests exist
 
 ### Gateway Middleware Order
-- **Files:** `src/Dhadgar.Gateway/Program.cs:320-360`
-- **Why fragile:** Middleware order is critical - comments warn about dependencies
-- **Safe modification:** Follow existing comments, test extensively
-- **Test coverage:** Good - middleware tests exist
+- **Files:** `src/Dhadgar.Gateway/Program.cs`
+- **Why fragile:** Middleware order is critical — follow the in-file comments
 
-### Key Vault Certificate Loading
-- **Files:** `src/Dhadgar.Identity/Program.cs:875-963`
-- **Why fragile:** Complex certificate loading with multiple fallback strategies
-- **Safe modification:** Add extensive logging, test locally with Key Vault access
-- **Test coverage:** Limited - hard to test without Key Vault
+### Auth Token Exchange Chain
+- **Files:** BetterAuth `exchange.js` → Identity `/exchange` → SharedAuth `client.ts`
+- **Why fragile:** ES256 keypair must be split correctly across two services (private
+  key in BetterAuth, public in Identity); no keygen script exists; cookie domain is
+  hardcoded to `meridianconsole.com`, so localhost login fails
 
 ---
 
-## Dependencies at Risk
+## Frontend Notes
 
-### .NET 10 Preview
-- **Risk:** Using .NET 10.0.100 which may have breaking changes before GA
-- **Files:** `global.json`
-- **Impact:** Must update when .NET 10 releases
-- **Migration plan:** Track .NET 10 release notes, update SDK version
-
-### MudBlazor (Blazor Only)
-- **Risk:** Only used in Panel/ShoppingCart which will be migrated
-- **Files:** `src/Dhadgar.Panel/*`, `src/Dhadgar.ShoppingCart/*`
-- **Impact:** Dependency will be removed after migration
-- **Migration plan:** Complete Astro migration
+- The Blazor → Astro migration is **complete** (all three apps are Astro/React); a few
+  vestigial `.razor` files remain in Panel/ShoppingCart and can be deleted
+- Panel: fully built API client that the dashboard never calls; `/servers`, `/nodes`,
+  `/settings` nav links 404
+- ShoppingCart: working authenticated profile page, but post-login redirect targets a
+  nonexistent `/dashboard`
+- Login UI renders all 18 providers from a constant; at most 7 are configured
 
 ---
 
-## Missing Critical Features
-
-### Agent Implementation
-- **Problem:** No agent functionality exists
-- **Blocks:** Node enrollment, server provisioning, command execution
-- **Priority:** Critical for MVP
-
-### Server Lifecycle Management
-- **Problem:** Servers service is a stub
-- **Blocks:** Creating, starting, stopping game servers
-- **Priority:** Critical for MVP
-
-### Node Inventory
-- **Problem:** Nodes service is a stub
-- **Blocks:** Node health monitoring, capacity tracking
-- **Priority:** Critical for MVP
-
-### Task Orchestration
-- **Problem:** Tasks service is a stub
-- **Blocks:** Scheduled jobs, background operations
-- **Priority:** High for MVP
-
-### File Transfer
-- **Problem:** Files service is a stub
-- **Blocks:** Game server file uploads/downloads
-- **Priority:** High for MVP
-
----
-
-## Configuration Concerns
-
-### Development Secrets in Config
-- **Issue:** Default dev credentials are `dhadgar/dhadgar` everywhere
-- **Files:**
-  - `deploy/compose/docker-compose.dev.yml`
-  - `appsettings.Development.json` files
-- **Risk:** Accidental use in production
-- **Recommendations:** Use distinct credentials, enforce via CI/CD checks
-
-### Environment Variable Overlap
-- **Issue:** Some config can come from appsettings OR environment variables
-- **Impact:** Debugging configuration issues is difficult
-- **Recommendations:** Document canonical configuration source for each setting
-
----
-
-*Concerns audit: 2026-01-19*
+*Concerns audit: 2026-07-26 (previous audit 2026-01-19 superseded)*

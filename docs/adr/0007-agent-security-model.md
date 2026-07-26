@@ -2,7 +2,22 @@
 
 ## Status
 
-Accepted
+Accepted (partially implemented — see notes)
+
+> **Implementation status (2026-07-26):**
+>
+> - mTLS, enrollment tokens, and the certificate lifecycle are implemented on the
+>   control-plane side (`Dhadgar.Nodes`: CA, enrollment, renewal, revocation).
+> - **Command signing is NOT implemented** (issue #94): `CommandValidator` in
+>   `Dhadgar.Agent.Core` rejects all commands when `RequireSignedCommands` is enabled
+>   because verification doesn't exist yet, and accepts unsigned envelopes otherwise.
+> - The "command queue polling (not push)" communication pattern below is **superseded
+>   by ADR-0008**, which standardizes on a SignalR hub (push) transport.
+> - The agent-side enrollment client and the Nodes endpoints currently implement
+>   incompatible request/response contracts — no enrollment succeeds end to end
+>   (`docs/PROJECT-STATE.md` DV-1/DV-2).
+> - The referenced `.claude/agents/agent-service-guardian` review agent does not exist
+>   in this repository.
 
 ## Context
 

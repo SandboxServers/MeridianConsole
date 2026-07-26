@@ -1,5 +1,13 @@
 # Agent Core Implementation Plan
 
+> **STATUS (2026-07-26): STALE PLAN — read `docs/PROJECT-STATE.md` first.** The
+> "current state" sections below predate PRs #93/#104 and undercount what exists today
+> (Agent.Core ~4,300 LOC; Agent.Windows ~6,000 LOC with Job Objects, per-server Windows
+> services, IPC, ACL and firewall management). What is genuinely missing is the agent
+> runtime: bootstrap/orchestration, command handlers (#118), command signing (#94),
+> NodeId persistence (#101), and a control-plane transport that matches Nodes —
+> resolved by ADR-0008 (SignalR hub). Agent.Linux remains a stub.
+
 > **Status**: Ready for implementation
 > **Last Updated**: 2026-02-01
 > **Current State**: Scaffolding only - project structure exists, functionality planned

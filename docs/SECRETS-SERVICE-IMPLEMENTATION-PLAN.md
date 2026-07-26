@@ -1,5 +1,12 @@
 # Secrets Service Implementation Plan
 
+> **STATUS (2026-07-26): EXECUTED / HISTORICAL.** This plan's "missing" items (write
+> operations, rotation, certificate management, Key Vault CRUD) have all since been
+> implemented in `src/Dhadgar.Secrets` (`SecretWriteEndpoints.cs`, `CertificateEndpoints.cs`,
+> `KeyVaultEndpoints.cs`). Kept for historical context only. Note: the Gateway currently
+> routes only `/api/v1/secrets/*`; the `/api/v1/keyvaults` and `/api/v1/certificates`
+> prefixes documented in the API reference are not yet routed through the Gateway.
+
 The CLI now has comprehensive secret and Key Vault management commands, but the **backend APIs are not yet implemented**. This document outlines what needs to be added to the Secrets service to support these features.
 
 ## Current State

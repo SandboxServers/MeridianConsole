@@ -4,6 +4,14 @@
 
 Accepted
 
+> **Divergence note (2026-07-26):** "Each service owns its database schema" is not the
+> current reality. The Aspire AppHost provisions dedicated databases only for Identity
+> (`dhadgar-identity`) and Billing (`dhadgar-billing`); Nodes, Servers, Tasks, Mods,
+> Notifications and Discord share a single `dhadgar-platform` database, and BetterAuth
+> shares Identity's database without schema isolation. The Files service is also slated
+> for removal (issue #115). Either the deployment must be brought in line with this ADR
+> or the ADR amended — tracked in `docs/PROJECT-STATE.md` (DV-10).
+
 ## Context
 
 The platform manages multiple distinct domains:

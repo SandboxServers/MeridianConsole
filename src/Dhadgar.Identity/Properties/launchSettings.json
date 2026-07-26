@@ -3,7 +3,7 @@
     "Dhadgar.Identity": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "applicationUrl": "http://localhost:5001"
+      "applicationUrl": "http://localhost:5010"
     }
   }
 }

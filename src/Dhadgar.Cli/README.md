@@ -206,8 +206,8 @@ The file is created automatically on first run with default values.
 ```json
 {
   "gateway_url": "http://localhost:5000",
-  "identity_url": "http://localhost:5001",
-  "secrets_url": "http://localhost:5002",
+  "identity_url": "http://localhost:5010",
+  "secrets_url": "http://localhost:5110",
   "access_token": "eyJhbGciOiJSUzI1NiIs...",
   "refresh_token": "rt_abc123...",
   "current_org_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -218,8 +218,8 @@ The file is created automatically on first run with default values.
 | Field | Description | Default |
 |-------|-------------|---------|
 | `gateway_url` | Base URL for the YARP Gateway | `http://localhost:5000` |
-| `identity_url` | Direct URL for Identity service (dev mode) | `http://localhost:5001` |
-| `secrets_url` | Direct URL for Secrets service (dev mode) | `http://localhost:5002` |
+| `identity_url` | Direct URL for Identity service (dev mode) | `http://localhost:5010` |
+| `secrets_url` | Direct URL for Secrets service (dev mode) | `http://localhost:5110` |
 | `access_token` | Current OAuth access token | (none) |
 | `refresh_token` | OAuth refresh token for token renewal | (none) |
 | `current_org_id` | Currently selected organization ID | (none) |
@@ -240,8 +240,8 @@ For local development, you can override URLs to bypass the gateway:
 ```json
 {
   "gateway_url": "http://localhost:5000",
-  "identity_url": "http://localhost:5001",
-  "secrets_url": "http://localhost:5002"
+  "identity_url": "http://localhost:5010",
+  "secrets_url": "http://localhost:5110"
 }
 ```
 
@@ -483,8 +483,8 @@ dhadgar auth status
 | Setting        | Value                   |
 +----------------+-------------------------+
 | Gateway URL    | http://localhost:5000   |
-| Identity URL   | http://localhost:5001   |
-| Secrets URL    | http://localhost:5002   |
+| Identity URL   | http://localhost:5010   |
+| Secrets URL    | http://localhost:5110   |
 | Current Org ID | 550e8400-e29b-41d4...   |
 | Authentication | [green] Authenticated   |
 | Token Expires  | 1/22/2026 3:30 PM       |
@@ -1470,7 +1470,7 @@ Legacy command for simple health checks.
 dhadgar ping
 
 # Custom URL
-dhadgar ping --url http://localhost:5001/healthz
+dhadgar ping --url http://localhost:5010/healthz
 ```
 
 **Note:** Prefer `dhadgar gateway health` for comprehensive health checking.

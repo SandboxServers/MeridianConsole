@@ -1,5 +1,10 @@
 # Kubernetes Architecture Decision: Talos Linux
 
+> **STATUS (2026-07-26): PROPOSED / STALE (written 2024-12).** Never promoted to an ADR.
+> Kubernetes deployment is deferred post-beta; the Helm chart in `deploy/kubernetes` is
+> currently non-functional (see `docs/PROJECT-STATE.md` DV-7). Docker Compose is the
+> deployment target for the beta.
+
 **Date:** December 26, 2024
 **Status:** Proposed
 **Author:** Derek (with Claude Code assistance)

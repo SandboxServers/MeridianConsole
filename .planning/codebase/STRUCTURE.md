@@ -1,12 +1,11 @@
 # Codebase Structure
 
-**Analysis Date:** 2025-01-19
+**Analysis Date:** 2026-01-19
 
 ## Directory Layout
 
 ```
 MeridianConsole/
-├── .claude/                    # Claude Code configuration and agents
 ├── .github/                    # GitHub Actions workflows
 ├── .planning/                  # GSD planning documents
 │   └── codebase/               # Codebase analysis documents
@@ -230,11 +229,6 @@ MeridianConsole/
 - Pattern: `{ClassName}Tests.cs` with xUnit
 
 ## Special Directories
-
-**`.claude/`:**
-- Purpose: Claude Code configuration and specialized agents
-- Generated: No
-- Committed: Yes
 
 **`_swa_publish/`:**
 - Purpose: Azure Static Web Apps deployment output

@@ -65,7 +65,7 @@ Meridian Console is a **control plane** that orchestrates game servers on **cust
 │  │  • Runs on customer hardware                             │    │
 │  │  • Makes OUTBOUND connections to control plane           │    │
 │  │  • No inbound firewall holes required                    │    │
-│  │  • mTLS authentication (planned)                         │    │
+│  │  • mTLS authentication (CA + enrollment live in Nodes)   │    │
 │  │  • Sandboxed process execution                           │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │                              │                                   │

@@ -1,5 +1,9 @@
 # Secrets Service Analysis: Path to Production
 
+> **STATUS (2026-07-26): STALE.** Written 2026-01-16. Several findings are resolved —
+> e.g. "missing audit logging" is now implemented (`src/Dhadgar.Secrets/Audit/SecretsAuditLogger.cs`),
+> and PR #127 addresses the credential-handling P0s. Verify against current code before acting.
+
 **Document Version**: 1.0
 **Date**: 2026-01-16
 **Status**: Analysis Complete - Ready for Implementation Planning

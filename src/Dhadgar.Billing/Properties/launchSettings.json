@@ -3,7 +3,7 @@
     "Dhadgar.Billing": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "applicationUrl": "http://localhost:5002"
+      "applicationUrl": "http://localhost:5020"
     }
   }
 }

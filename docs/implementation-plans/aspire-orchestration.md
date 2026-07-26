@@ -1,5 +1,10 @@
 # .NET Aspire Migration Implementation Plan
 
+> **STATUS (2026-07-26): PARTIALLY IMPLEMENTED, DIVERGED.** AppHost exists but omits
+> BetterAuth (login impossible under Aspire) and Files, and none of the planned
+> `.WithReference()`/`.WaitFor()` service wiring was implemented — the Gateway relies on
+> hardcoded ports. See `docs/PROJECT-STATE.md` DV-6.
+
 > **Status**: Ready for implementation
 > **Last Updated**: 2026-01-31 (Phase 3 expanded with per-service configuration)
 > **Issue**: #48 - Adopt .NET Aspire as orchestration foundation

@@ -108,12 +108,15 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 
 ## Current Status
 
+> **📋 Full state-of-the-project review (2026-07):** see [docs/PROJECT-STATE.md](docs/PROJECT-STATE.md)
+> for the verified per-service maturity matrix, known divergences, and the beta roadmap.
+
 ### ✅ What Works Today
 
 **Core Platform:**
 
 - ✅ Full solution builds with .NET 10 (`dotnet build`)
-- ✅ All 947 tests pass (`dotnet test`)
+- ✅ ~1,640 tests (`dotnet test`); 12 AppHost tests skip without Docker
 - ✅ Local infrastructure with Docker Compose
 - ✅ API Gateway with YARP reverse proxy
 - ✅ OpenTelemetry distributed tracing + metrics
@@ -126,7 +129,9 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 - **Identity**: User/org management, roles, OAuth providers (Steam, Battle.net, Epic, Xbox), sessions; MFA returns 501
 - **Nodes**: Agent enrollment with mTLS, Certificate Authority, heartbeat monitoring, capacity reservations
 - **Secrets**: Claims-based authorization, audit logging, rate limiting, Azure Key Vault integration
-- **BetterAuth**: Passwordless authentication via Better Auth SDK
+- **BetterAuth**: Social OAuth authentication (Node.js/Express service using the Better Auth SDK)
+- **Notifications**: Email (Office 365/SMTP), alert dispatch, MassTransit event consumers
+- **Discord**: Discord.Net bot with slash commands, webhook delivery, platform health reporting
 - **CLI** (`dhadgar`): Global .NET tool for managing identity, secrets, nodes, enrollment, and more
 
 **Frontend Apps** (Astro/React/Tailwind stack):
@@ -145,15 +150,17 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 
 ### 🚧 What's Being Built
 
-- Game server provisioning workflows (Servers service)
-- File transfer orchestration and mod distribution (Files, Mods services)
+- Game server provisioning workflows (Servers service — implementation open in PR #88)
+- Real-time server console via SignalR (Console service — implementation open in PR #88)
+- Mod registry and versioning (Mods service — implementation open in PR #88)
+- Agent runtime: enrollment bootstrap, command handlers, SignalR transport
+  (Windows internals are substantial; Linux agent is a stub — see [docs/PROJECT-STATE.md](docs/PROJECT-STATE.md))
 - Billing and subscription management (SaaS edition)
-- Real-time server console via SignalR (Console service)
-- Notification delivery (email, Discord, webhooks)
 - Production UI features (Panel dashboard, ShoppingCart checkout)
-- Agent implementations (Linux systemd, Windows Service)
 
-**Bottom line:** The foundation is solid. Features are landing incrementally.
+**Bottom line:** The foundation is solid, but the integration seams (agent ↔ control
+plane, token refresh, server lifecycle) are the current work — see the
+[beta roadmap](docs/PROJECT-STATE.md#6-beta-roadmap-full-vertical-slice).
 
 ---
 
@@ -447,7 +454,7 @@ These services have substantial implementations (some TODOs remain):
 
 **Key features:**
 
-- Routes 17 route configurations to 14 backend clusters
+- Routes 17 route configurations to 12 backend clusters
 - Rate limiting (global, per-tenant, per-agent, auth endpoints)
 - Circuit breaker with configurable failure thresholds
 - Active health checks for backend services (30s interval)
@@ -494,22 +501,21 @@ These services have substantial implementations (some TODOs remain):
 - `GET /organizations/{orgId}/users/search` - Search users in org
 - `POST /webhooks/better-auth` - BetterAuth webhook
 
-**Runs on:** Port 5001
+**Runs on:** Port 5010
 
 **Database:** PostgreSQL (`dhadgar_identity`)
 
 #### 🔐 BetterAuth (`src/Dhadgar.BetterAuth`)
 
-**What it does:** Passwordless authentication using Better Auth SDK.
+**What it does:** Social OAuth authentication using the Better Auth SDK.
 
-**Tech stack:** Better Auth, Node.js-like integration in .NET
+**Tech stack:** Node.js/Express + Better Auth SDK (not .NET — wrapped in a NoTargets `.csproj` so `dotnet build` covers it)
 
 **Key features:**
 
-- Passwordless authentication (email magic links, OAuth)
-- Session management
-- Multiple OAuth providers (Google, GitHub, etc.)
-- Integration with Identity service
+- Social OAuth sign-in (Google, GitHub, Discord, Twitch, Facebook, Apple; Microsoft via WIF)
+- Cross-provider account linking and session management
+- ES256 exchange token (60s TTL, single-use) redeemed at Identity's `/exchange` for platform JWTs
 
 **Endpoints:**
 
@@ -623,17 +629,12 @@ These services have basic scaffolding (hello world, health checks) but core func
 
 **Planned:** Real-time server console via SignalR, command execution
 
-#### 🧩 Mods (`src/Dhadgar.Mods`) - Port 5008
+#### 🧩 Mods (`src/Dhadgar.Mods`) - Port 5080
 
-**Planned:** Mod registry, versioning, compatibility tracking
+**Planned:** Mod registry, versioning, compatibility tracking (implementation open in PR #88)
 
-#### 📧 Notifications (`src/Dhadgar.Notifications`) - Port 5009
-
-**Planned:** Email, Discord, webhook notifications
-
-#### 💬 Discord (`src/Dhadgar.Discord`) - Port 5012
-
-**Planned:** Discord bot integration, server management commands
+> **Note:** Notifications (port 5090) and Discord (port 5120) were previously listed here
+> but are implemented services — see [Core Services](#core-services).
 
 ---
 
@@ -649,21 +650,27 @@ MeridianConsole/
 │   ├── Dhadgar.Nodes/                # Agent enrollment, mTLS CA ✅
 │   ├── Dhadgar.Secrets/              # Secret management ✅
 │   ├── Dhadgar.Cli/                  # CLI tool (dhadgar) ✅
-│   ├── Dhadgar.BetterAuth/           # Passwordless auth ✅
+│   ├── Dhadgar.BetterAuth/           # Social OAuth (Node.js/Express) ✅
+│   ├── Dhadgar.SharedAuth/           # Browser auth client (TypeScript, used by Panel/ShoppingCart)
+│   ├── Dhadgar.Notifications/        # Email + alert dispatch ✅
+│   ├── Dhadgar.Discord/              # Discord bot ✅
+│   ├── Dhadgar.AppHost/              # .NET Aspire orchestration (partial — no BetterAuth)
 │   ├── Dhadgar.{Service}/            # Other services (stubs)
 │   ├── Shared/
 │   │   ├── Dhadgar.Contracts/        # DTOs, message contracts
 │   │   ├── Dhadgar.Shared/           # Utilities, data layer patterns
 │   │   ├── Dhadgar.Messaging/        # MassTransit conventions
+│   │   ├── Dhadgar.Testing/          # Shared test helpers
 │   │   └── Dhadgar.ServiceDefaults/  # Middleware, observability
 │   ├── Agents/
 │   │   ├── Dhadgar.Agent.Core/       # Shared agent logic
-│   │   ├── Dhadgar.Agent.Linux/      # Linux-specific agent (systemd)
-│   │   └── Dhadgar.Agent.Windows/    # Windows-specific agent (Service)
+│   │   ├── Dhadgar.Agent.Linux/      # Linux agent (stub)
+│   │   ├── Dhadgar.Agent.Windows/    # Windows agent (Job Objects, services, IPC)
+│   │   └── Dhadgar.Agent.GameServerWrapper/  # Per-server Windows service wrapper
 │   ├── Dhadgar.Scope/                # Documentation site ✅
 │   ├── Dhadgar.Panel/                # Main UI (scaffolding)
-│   └── Dhadgar.ShoppingCart/         # Marketing & checkout (wireframe)
-├── tests/                             # 1:1 test projects (23 total, 947 tests)
+│   └── Dhadgar.ShoppingCart/         # Marketing & profile (auth working)
+├── tests/                             # 1:1 test projects (25 total, ~1,640 tests)
 ├── deploy/
 │   ├── compose/                       # Docker Compose for local dev
 │   ├── kubernetes/helm/              # Helm charts for K8s deployment

@@ -1,5 +1,10 @@
 # Authentication Solutions Analysis for Meridian Console
 
+> **STATUS (2026-07-26): HISTORICAL / SUPERSEDED.** Written 2025-12 with "Decision
+> Pending" — the decision has since been made and shipped: hybrid BetterAuth (social
+> OAuth, Node.js) + OpenIddict (gaming providers, token issuance) — see issue #120.
+> This doc also assumes Blazor WebAssembly frontends; the actual frontends are Astro/React.
+
 **Date:** December 26, 2025
 **Status:** Decision Pending
 **Author:** Claude (AI-assisted analysis)

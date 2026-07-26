@@ -1,5 +1,12 @@
 # Gateway Routing Reference
 
+> **STATUS (2026-07-26): PARTIALLY STALE.** The route table below has drifted from
+> `src/Dhadgar.Gateway/appsettings.json` (which is authoritative): the documented
+> `nodes-route` does not exist (actual: `nodes-org-route` + `enrollment-route`), the
+> `agents-enroll-route` is missing here, and `agents-route` has no path transform
+> (documented as having one). Trust the appsettings file; a rewrite is tracked in
+> `docs/PROJECT-STATE.md`.
+
 This document provides a complete reference for the Gateway service's YARP routing configuration, rate limiting, health checks, CORS, and security headers.
 
 ---

@@ -134,7 +134,7 @@ GET /readyz        - Readiness probe (dependency checks)
 dotnet run --project src/Dhadgar.Discord
 ```
 
-The service will start on `http://localhost:5012`.
+The service will start on `http://localhost:5120`.
 
 #### Option 2: With Hot Reload
 
@@ -161,13 +161,13 @@ dotnet run --project src/Dhadgar.Discord
 
 ```bash
 # Service info
-curl http://localhost:5012/
+curl http://localhost:5120/
 
 # Health check
-curl http://localhost:5012/healthz
+curl http://localhost:5120/healthz
 
 # Hello world
-curl http://localhost:5012/hello
+curl http://localhost:5120/hello
 ```
 
 Expected responses:
@@ -188,7 +188,7 @@ Hello from Dhadgar.Discord
 In Development mode, Swagger UI is available at:
 
 ```
-http://localhost:5012/swagger
+http://localhost:5120/swagger
 ```
 
 ---
@@ -597,7 +597,7 @@ Process Discord interactions for stateless command handling.
 
 1. Navigate to "OAuth2" -> "General"
 2. Add redirect URL:
-   - Development: `http://localhost:5012/oauth/callback`
+   - Development: `http://localhost:5120/oauth/callback`
    - Production: `https://api.meridianconsole.com/api/v1/discord/oauth/callback`
 3. Note the **Client Secret**
 
@@ -1101,7 +1101,7 @@ Discord has strict rate limits. The service implements:
 dotnet run --project src/Dhadgar.Discord 2>&1 | grep -i discord
 
 # Check health endpoint
-curl -v http://localhost:5012/healthz
+curl -v http://localhost:5120/healthz
 ```
 
 ### Debug Logging

@@ -2,58 +2,44 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2025-01-19)
+See: .planning/PROJECT.md (updated 2026-07-26)
 
-**Core value:** All CodeRabbit review feedback addressed with no regressions
-**Current focus:** Phase 1 - Quick Wins
+**Core value:** Demoable full vertical slice — login → Panel → enrolled agent → real game server
+**Current focus:** Phase 0 — Unblock (PR #127, deflake, file P0 issues)
 
 ## Current Position
 
-Phase: 1 of 4 (Quick Wins)
-Plan: 0 of 1 in current phase
-Status: Ready to plan
-Last activity: 2025-01-19 — Roadmap created
+Phase: 0 of 4 (Unblock)
+Status: Ready to start
+Last activity: 2026-07-26 — Project-state audit completed; docs reconciled; ports
+standardized; ADR-0008 accepted; roadmap created
 
 Progress: [░░░░░░░░░░] 0%
-
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-- Last 5 plans: -
-- Trend: -
-
-*Updated after each plan completion*
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- None yet
+See Key Decisions table in PROJECT.md (D1–D4, decided 2026-07-26) and
+`docs/PROJECT-STATE.md` §2.
 
 ### Pending Todos
 
-None yet.
+- Rebase + merge PR #127, then PR #88 (in Phase 3)
+- File issues: missing `/refresh` (P0); agent↔Nodes contract mismatch (P0); AppHost
+  BetterAuth/wiring gaps; Helm ServiceUrls/firewall/betterauth gaps; Identity
+  `/internal` service auth; Nodes missing JWT bearer scheme; flaky
+  `StaleNodeDetectionServiceTests`
+- Deflake `Dhadgar.Nodes.Tests.StaleNodeDetectionServiceTests.ExecuteAsync_AdvancingTime_TriggersNextIteration`
 
 ### Blockers/Concerns
 
-None yet.
+- Agent.Core has ~13 lines of tests over ~4,300 LOC of security-critical code — Phase 2
+  must not ship without closing this
+- CI logic lives in the external `SandboxServers/Azure-Pipeline-YAML` repo; changes to
+  build/test behavior require touching that repo
 
 ## Session Continuity
 
-Last session: 2025-01-19
-Stopped at: Roadmap created
-Resume file: None
+Last session: 2026-07-26 (documentation review & reconciliation)
+Stopped at: Roadmap created; Phase 0 not started

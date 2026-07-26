@@ -166,9 +166,9 @@ This separation ensures the Identity service remains autonomous while other serv
    ```
 
 4. **Access the service**:
-   - API: http://localhost:5011
-   - Swagger UI: http://localhost:5011/swagger (Development mode only)
-   - Health check: http://localhost:5011/healthz
+   - API: http://localhost:5110
+   - Swagger UI: http://localhost:5110/swagger (Development mode only)
+   - Health check: http://localhost:5110/healthz
 
 ### Running with Azure Key Vault
 
@@ -193,15 +193,15 @@ This separation ensures the Identity service remains autonomous while other serv
 
 ```bash
 # Check service is running
-curl http://localhost:5011/hello
+curl http://localhost:5110/hello
 # Response: Hello from Dhadgar.Secrets
 
 # Check health
-curl http://localhost:5011/healthz
+curl http://localhost:5110/healthz
 # Response: {"status":"Healthy",...}
 
 # Access Swagger (development only)
-open http://localhost:5011/swagger
+open http://localhost:5110/swagger
 ```
 
 ---

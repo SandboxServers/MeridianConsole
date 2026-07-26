@@ -1,72 +1,67 @@
-# PR #39 Feedback Resolution
+# Beta: Full Vertical Slice
 
 ## What This Is
 
-Code quality improvements for the Discord and Notifications services based on CodeRabbit review feedback from PR #39. This is maintenance work to resolve all remaining review comments so the feature branch can be merged cleanly.
+Bring Meridian Console to a demoable beta: **login → Panel → enroll a real Windows
+agent → create/start/stop a real game server on that node**, deployable via Docker
+Compose plus a Windows agent package.
+
+> The previous contents of this directory described the "PR #39 Feedback Resolution"
+> task (completed 2026-01-19) and were stale. Replaced 2026-07-26 after a full
+> project-state review — see `docs/PROJECT-STATE.md` for the audit this plan is based on.
 
 ## Core Value
 
-All CodeRabbit review feedback addressed with no regressions—the PR passes review and is merge-ready.
-
-## Requirements
-
-### Validated
-
-- ✓ Discord service with bot hosting, slash commands, webhook delivery — existing
-- ✓ Notifications service as event orchestrator — existing
-- ✓ Admin API key authentication — existing
-- ✓ MassTransit retry policies — existing
-- ✓ Slash command registration guard — PR commit fec747b
-- ✓ Deferred interaction error handling — PR commit fec747b
-- ✓ Admin endpoint authorization — PR commit b9a7c24
-- ✓ discord-bot-token moved to Infrastructure category — PR commit fec747b
-- ✓ Limit capping on logs endpoints — PR commit fec747b
-
-### Active
-
-- [ ] **PKG-01**: Update Discord.Net from 3.13.0 to 3.18.0
-- [ ] **DB-01**: Truncate fields to EF max-length constraints in SendDiscordNotificationConsumer
-- [ ] **DB-02**: Separate databases for Discord and Notifications services
-- [ ] **DB-03**: Remove hardcoded connection string from DiscordDbContextFactory
-- [ ] **DB-04**: Enable nullable annotations in Discord migration files
-- [ ] **HTTP-01**: Dispose HttpResponseMessage and handle cancellation in PlatformHealthService
-- [ ] **MSG-01**: Enable MassTransit Entity Framework Outbox for atomic operations
-- [ ] **FE-01**: Add Node.js 20+ engines field to Dhadgar.Scope package.json
-- [ ] **DOC-01**: Fix capitalization (RabbitMQ, MVP) in sections.json
-- [ ] **API-01**: Change ActionUrl from string? to Uri? in SendPushNotification
-
-### Out of Scope
-
-- New features beyond PR #39 scope — this is review feedback resolution only
-- Refactoring unrelated code — keep changes focused on review comments
-- Additional test coverage beyond what's needed — PR already has tests
+A user can operate a real game server on their own hardware entirely through the
+platform, end to end, with sessions that don't expire out from under them.
 
 ## Context
 
-**PR #39 Summary**: Implements Discord service with bot hosting, slash commands, and webhook delivery. Implements Notifications service as event orchestrator with Office 365 email support.
+- Four production-grade services (Gateway, Identity, Nodes, Secrets) + implemented
+  Notifications/Discord/CLI/BetterAuth.
+- The three broken seams: agent ↔ Nodes contract mismatch (no agent call succeeds),
+  missing `/refresh` endpoint (silent logout at 15 min), Servers/Console/Mods stubs on
+  main (implementations parked in PR #88).
+- Decisions D1–D4 recorded in `docs/PROJECT-STATE.md` §2 (full slice; canonical 50x0
+  ports; revive PRs #127 → #88; SignalR hub transport per ADR-0008).
 
-**Services affected**:
-- `Dhadgar.Discord` - Discord bot, slash commands, webhook delivery
-- `Dhadgar.Notifications` - Event routing, email dispatch
-- `Dhadgar.Contracts` - Shared message contracts
-- `Dhadgar.Scope` - Documentation site (package.json update)
+## Requirements
 
-**Review source**: CodeRabbit automated review on GitHub PR #39
+### Active (phases in ROADMAP.md)
+
+- [ ] P0: merge PR #127; deflake `StaleNodeDetectionServiceTests`; file P0 issues
+- [ ] P1: Identity `/refresh` endpoint; honest login UI; localhost dev login; ShoppingCart redirect fix
+- [ ] P2: `/hubs/agent` in Nodes; reconciled enrollment contract; agent bootstrap;
+      command handlers (#118); command signing (#94); NodeId persistence (#101);
+      Agent.Core tests; agent API versioning (#116)
+- [ ] P3: rebase+merge PR #88; Servers→Nodes→agent lifecycle; service-level auth on
+      promoted services; console streaming
+- [ ] P4: Panel pages (/servers, /nodes, /settings); compose-based deployment + runbook;
+      CI integration tests (#121); demo script
+
+### Out of Scope (this beta)
+
+- Kubernetes/Helm (chart is non-functional; compose is the target)
+- Billing, Tasks features (parked stubs)
+- Linux agent (Windows-only beta)
+- Files service (removal tracked in #115)
+- Gaming-provider login UI (Steam/BattleNet/Epic/Xbox — backend exists, UI later)
 
 ## Constraints
 
-- **Branch**: Must work on `feature/discord-notifications-services` branch
-- **Compatibility**: Changes must not break existing functionality
-- **Testing**: All existing tests must continue to pass
-- **Migrations**: Database changes require new EF Core migrations
+- Security items from PR #127 must land before anything else
+- Agent-facing APIs must be versioned before an agent binary ships to real hardware
+- Services promoted out of stub status must add their own authn/authz (currently the
+  Gateway is their only protection)
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Use separate databases per service | Microservices architecture requires service isolation | — Pending |
-| Use MassTransit EF Outbox | Ensures atomic log + publish operations | — Pending |
-| Regenerate migrations with nullable enable | Matches project-wide nullable policy | — Pending |
+| Full vertical slice beta (D1) | Only a real agent demo proves the product | Decided 2026-07-26 |
+| Canonical 50x0 ports (D2) | Gateway/docs/Helm already agree; only launchSettings diverged | Fixed 2026-07-26 |
+| Revive PR #127 then #88 (D3) | Months of reviewed work; rewriting is waste | Decided 2026-07-26 |
+| SignalR hub transport (D4) | Matches built agent client; push semantics; console streaming later | ADR-0008 |
 
 ---
-*Last updated: 2026-01-19 after initialization*
+*Last updated: 2026-07-26 after project-state review*

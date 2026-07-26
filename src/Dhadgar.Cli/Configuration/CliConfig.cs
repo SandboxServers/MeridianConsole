@@ -64,10 +64,10 @@ public sealed class CliConfig
     public string EffectiveGatewayUrl => (GatewayUrl ?? "http://localhost:5000").TrimEnd('/');
 
     [JsonIgnore]
-    public string EffectiveNotificationsUrl => NotificationsUrl ?? "http://localhost:5008";
+    public string EffectiveNotificationsUrl => NotificationsUrl ?? "http://localhost:5090";
 
     [JsonIgnore]
-    public string EffectiveDiscordUrl => DiscordUrl ?? "http://localhost:5009";
+    public string EffectiveDiscordUrl => DiscordUrl ?? "http://localhost:5120";
 
     public static CliConfig Load()
     {
@@ -76,8 +76,8 @@ public sealed class CliConfig
             var config = new CliConfig
             {
                 GatewayUrl = "http://localhost:5000",
-                IdentityUrl = "http://localhost:5001",
-                SecretsUrl = "http://localhost:5002"
+                IdentityUrl = "http://localhost:5010",
+                SecretsUrl = "http://localhost:5110"
             };
 
             // Create the config file with defaults on first run

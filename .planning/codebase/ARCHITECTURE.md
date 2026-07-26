@@ -1,6 +1,6 @@
 # Architecture
 
-**Analysis Date:** 2025-01-19
+**Analysis Date:** 2026-01-19
 
 ## Pattern Overview
 
@@ -78,9 +78,11 @@
 4. Example: Identity publishes `UserAuthenticated` -> Notifications consumes it
 
 **State Management:**
-- Each service owns its PostgreSQL database
-- Redis used for caching (e.g., token replay prevention in Identity)
-- No shared database access between services
+- PostgreSQL for persistence, Redis for caching (e.g., token replay prevention in Identity)
+- *Intended* pattern is database-per-service, but the current AppHost/compose deployment
+  gives only Identity and Billing dedicated databases; Nodes, Servers, Tasks, Mods,
+  Notifications and Discord share `dhadgar-platform`, and BetterAuth shares Identity's
+  database (see divergence notes in ADR-0005/0006)
 - State synchronization via events only
 
 ## Key Abstractions

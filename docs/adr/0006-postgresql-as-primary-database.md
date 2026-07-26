@@ -4,6 +4,11 @@
 
 Accepted
 
+> **Divergence note (2026-07-26):** the PostgreSQL choice stands, but the
+> "database-per-service isolation" pattern listed below is only partially implemented —
+> six services currently share the `dhadgar-platform` database (see the note in ADR-0005
+> and `docs/PROJECT-STATE.md` DV-10).
+
 ## Context
 
 Each microservice needs persistent storage. Options considered:

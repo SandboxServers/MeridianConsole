@@ -1,78 +1,54 @@
-# Requirements: PR #39 Feedback Resolution
+# Requirements: Beta — Full Vertical Slice
 
-**Defined:** 2025-01-19
-**Core Value:** All CodeRabbit review feedback addressed with no regressions
+**Defined:** 2026-07-26
+**Core Value:** A user can operate a real game server on their own hardware entirely through the platform
 
-## v1 Requirements
+> Replaces the completed "PR #39 Feedback Resolution" requirements (all 11 items
+> shipped 2026-01-19).
 
-Requirements for this work. Each maps to roadmap phases.
+## v1 (Beta) Requirements
 
-### Package Updates
+### Auth & Sessions
 
-- [x] **PKG-01**: Update Discord.Net from 3.13.0 to 3.18.0 in Directory.Packages.props
+- [ ] **AUTH-01**: `POST /api/v1/identity/refresh` implemented (JSON contract SharedAuth expects); sessions survive access-token expiry
+- [ ] **AUTH-02**: Login UI renders only providers actually configured in BetterAuth
+- [ ] **AUTH-03**: Localhost development login works (configurable cookie domain, documented/scripted ES256 keypair setup)
+- [ ] **AUTH-04**: ShoppingCart post-login redirect lands on an existing page
 
-### Database Improvements
+### Agent Vertical
 
-- [x] **DB-01**: Truncate fields to EF max-length constraints in SendDiscordNotificationConsumer (EventType: 100, Channel: 100, Title: 500, ErrorMessage: 1000)
-- [x] **DB-02**: Configure separate databases for Discord and Notifications services (dhadgar_discord, dhadgar_notifications)
-- [x] **DB-03**: Remove hardcoded connection string from DiscordDbContextFactory, load from configuration
-- [x] **DB-04**: Enable nullable annotations in Discord migration files (replace #nullable disable with #nullable enable)
+- [ ] **AGENT-01**: `/hubs/agent` SignalR hub in Nodes with mTLS-bound connections (ADR-0008)
+- [ ] **AGENT-02**: Enrollment request/response contracts unified in `Dhadgar.Contracts`; Gateway route transform fixed; enrollment succeeds end to end
+- [ ] **AGENT-03**: Agent bootstrap hosted service (enroll → persist NodeId/OrgId (#101) → connect → dispatch)
+- [ ] **AGENT-04**: Command handlers: Ping, StartServer, StopServer, RestartServer, ServerStatus (#118)
+- [ ] **AGENT-05**: Command signing implemented control-plane side and verified agent side (#94)
+- [ ] **AGENT-06**: Agent-facing APIs and hub methods versioned before first binary ships (#116)
+- [ ] **AGENT-07**: Agent.Core security-critical classes have real test coverage
 
-### HTTP & Resource Management
+### Server Lifecycle
 
-- [x] **HTTP-01**: Dispose HttpResponseMessage in PlatformHealthService.CheckServiceAsync using `using` statement
-- [x] **HTTP-02**: Handle cancellation vs timeout properly (TaskCanceledException when !ct.IsCancellationRequested for timeout, rethrow OperationCanceledException when cancelled)
+- [ ] **SRV-01**: PR #88 rebased and merged (Servers, Console, Mods implementations)
+- [ ] **SRV-02**: Create-server flow: reserve node capacity → dispatch StartServer → track state from CommandResult/heartbeats
+- [ ] **SRV-03**: Services promoted from stub status enforce their own authn/authz
+- [ ] **SRV-04**: Minimal console streaming (last-N lines + live tail) via Console service
 
-### Messaging Infrastructure
+### Panel & Deployment
 
-- [x] **MSG-01**: Enable MassTransit Entity Framework Outbox for atomic log persistence and message publishing in NotificationDispatcher
-
-### Frontend
-
-- [x] **FE-01**: Add Node.js 20+ engines field to Dhadgar.Scope/package.json
-
-### Documentation & Cleanup
-
-- [x] **DOC-01**: Fix capitalization in sections.json (Rabbitmq -> RabbitMQ, Mvp -> MVP)
-
-### API Improvements
-
-- [x] **API-01**: Change ActionUrl from string? to Uri? in SendPushNotification record for type safety
-
-## v2 Requirements
-
-None — this is a focused PR feedback resolution.
+- [ ] **UI-01**: Panel `/servers`, `/nodes`, `/settings` pages exist and use the real API client
+- [ ] **UI-02**: Dashboard tiles show live counts (servers, nodes, tasks)
+- [ ] **DEP-01**: `docker-compose.services.yml` verified end to end; beta install runbook written
+- [ ] **DEP-02**: BetterAuth and Panel images built by container CI
+- [ ] **TEST-01**: #121 P0 integration tests running in CI
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| New features | PR feedback resolution only |
-| Refactoring unrelated code | Keep changes focused |
-| Additional test coverage | PR already has tests |
-| Performance optimizations | Not in review scope |
-
-## Traceability
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| PKG-01 | Phase 1 | Complete |
-| FE-01 | Phase 1 | Complete |
-| DOC-01 | Phase 1 | Complete |
-| DB-01 | Phase 2 | Complete |
-| DB-02 | Phase 2 | Complete |
-| DB-03 | Phase 2 | Complete |
-| DB-04 | Phase 2 | Complete |
-| HTTP-01 | Phase 3 | Complete |
-| HTTP-02 | Phase 3 | Complete |
-| MSG-01 | Phase 3 | Complete |
-| API-01 | Phase 4 | Complete |
-
-**Coverage:**
-- v1 requirements: 11 total
-- Mapped to phases: 11
-- Unmapped: 0
+| Kubernetes/Helm deploy | Chart non-functional; compose is the beta target |
+| Linux agent | Windows-only beta |
+| Billing/Tasks features | Parked stubs |
+| Files service | Slated for removal (#115) |
+| Gaming-provider login UI | Backend exists; UI post-beta |
 
 ---
-*Requirements defined: 2025-01-19*
-*Last updated: 2025-01-19 after roadmap creation*
+*Requirements defined: 2026-07-26*

@@ -1,5 +1,13 @@
 # Windows Agent Implementation Plan (Comprehensive)
 
+> **STATUS (2026-07-26): STALE PLAN — read `docs/PROJECT-STATE.md` first.** The
+> "current state" sections below predate PRs #93/#104 and undercount what exists today
+> (Agent.Core ~4,300 LOC; Agent.Windows ~6,000 LOC with Job Objects, per-server Windows
+> services, IPC, ACL and firewall management). What is genuinely missing is the agent
+> runtime: bootstrap/orchestration, command handlers (#118), command signing (#94),
+> NodeId persistence (#101), and a control-plane transport that matches Nodes —
+> resolved by ADR-0008 (SignalR hub). Agent.Linux remains a stub.
+
 > **Status**: Ready to Implement
 > **Last Updated**: 2026-02-01
 > **Prerequisite**: Agent.Core PR #93 merged ✅

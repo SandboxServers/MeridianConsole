@@ -40,18 +40,17 @@ public sealed class PlatformHealthService : IPlatformHealthService
     private static readonly Dictionary<string, string> DefaultServiceUrls = new()
     {
         ["Gateway"] = "http://localhost:5000",
-        ["Identity"] = "http://localhost:5001",
-        ["Billing"] = "http://localhost:5002",
-        ["Servers"] = "http://localhost:5003",
-        ["Nodes"] = "http://localhost:5004",
-        ["Tasks"] = "http://localhost:5005",
-        ["Files"] = "http://localhost:5006",
-        ["Mods"] = "http://localhost:5007",
-        ["Console"] = "http://localhost:5008",
-        ["Notifications"] = "http://localhost:5009",
-        ["Firewall"] = "http://localhost:5010",
-        ["Secrets"] = "http://localhost:5080",
-        ["Discord"] = "http://localhost:5012"
+        ["Identity"] = "http://localhost:5010",
+        ["Billing"] = "http://localhost:5020",
+        ["Servers"] = "http://localhost:5030",
+        ["Nodes"] = "http://localhost:5040",
+        ["Tasks"] = "http://localhost:5050",
+        ["Files"] = "http://localhost:5060",
+        ["Console"] = "http://localhost:5070",
+        ["Mods"] = "http://localhost:5080",
+        ["Notifications"] = "http://localhost:5090",
+        ["Secrets"] = "http://localhost:5110",
+        ["Discord"] = "http://localhost:5120"
     };
 
     public PlatformHealthService(

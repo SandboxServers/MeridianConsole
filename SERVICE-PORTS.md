@@ -2,6 +2,12 @@
 
 Quick reference guide for all service ports in Meridian Console (Dhadgar).
 
+> **Canonical scheme:** ports follow the `50x0` pattern below. This table, the Gateway's
+> YARP cluster config, `launchSettings.json`, the Helm chart, and the compose files all
+> agree on these values. (Before 2026-07 the `launchSettings.json` files used a divergent
+> sequential `5001–5012` scheme, which broke local Gateway routing; they were fixed to
+> match this table.)
+
 ---
 
 ## Core Services
@@ -9,9 +15,19 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 | Service | Port | Description | Database |
 |---------|------|-------------|----------|
 | **Gateway** | 5000 | API entry point, YARP reverse proxy | No |
-| **Identity** | 5010 | User/org management, roles, OAuth | PostgreSQL |
-| **BetterAuth** | 5130 | Passwordless authentication | PostgreSQL (shared) |
+| **Identity** | 5010 | User/org management, roles, OAuth, OpenIddict token issuance | PostgreSQL (`dhadgar-identity`) |
+| **Nodes** | 5040 | Agent enrollment, mTLS CA, heartbeats, capacity reservations | PostgreSQL (`dhadgar-platform`) |
 | **Secrets** | 5110 | Secret management, Azure Key Vault integration | No |
+| **BetterAuth** | 5130 | Social OAuth authentication (Node.js/Express) | PostgreSQL (shared with Identity) |
+
+---
+
+## Implemented Supporting Services
+
+| Service | Port | Description | Database |
+|---------|------|-------------|----------|
+| **Notifications** | 5090 | Email (Office 365/SMTP), alert dispatch, MassTransit consumers | PostgreSQL (`dhadgar-platform`) |
+| **Discord** | 5120 | Discord bot, slash commands, platform health reporting | PostgreSQL (`dhadgar-platform`) |
 
 ---
 
@@ -20,14 +36,11 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 | Service | Port | Description | Database |
 |---------|------|-------------|----------|
 | **Billing** | 5020 | Subscription management, usage metering (planned) | No |
-| **Servers** | 5030 | Game server lifecycle management (planned) | No |
-| **Nodes** | 5040 | Hardware inventory, health monitoring (planned) | No |
+| **Servers** | 5030 | Game server lifecycle management (implementation open in PR #88) | No |
 | **Tasks** | 5050 | Background job orchestration (planned) | No |
-| **Files** | 5060 | File upload/download, mod distribution (planned) | No |
-| **Console** | 5070 | Real-time server console via SignalR (planned) | No |
-| **Mods** | 5080 | Mod registry, versioning (planned) | No |
-| **Notifications** | 5090 | Email, Discord, webhook notifications (planned) | No |
-| **Discord** | 5120 | Discord bot integration (planned) | No |
+| **Files** | 5060 | File operations (slated for removal — see issue #115) | No |
+| **Console** | 5070 | Real-time server console via SignalR (implementation open in PR #88) | No |
+| **Mods** | 5080 | Mod registry, versioning (implementation open in PR #88) | No |
 
 ---
 
@@ -35,9 +48,9 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 
 | App | Port | Description | Type |
 |-----|------|-------------|------|
-| **Scope** | 4321 | Documentation site | Astro/React/Tailwind |
-| **Panel** | - | Main control plane UI (scaffolding) | Astro/React/Tailwind |
-| **ShoppingCart** | - | Marketing & checkout (wireframe) | Astro/React/Tailwind |
+| **Scope** | 4321 | Documentation site | Astro/React/Tailwind (static) |
+| **Panel** | 4321 | Main control plane UI (scaffolding) | Astro/React/Tailwind (SSR) |
+| **ShoppingCart** | 4322 | Marketing, pricing & profile | Astro/React/Tailwind (static) |
 
 ---
 
@@ -64,6 +77,11 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 docker compose -f deploy/compose/docker-compose.dev.yml up -d
 ```
 
+**Run the full application stack (including BetterAuth and frontends):**
+```bash
+docker compose -f deploy/compose/docker-compose.services.yml up -d
+```
+
 **Run Gateway:**
 ```bash
 dotnet run --project src/Dhadgar.Gateway
@@ -74,14 +92,14 @@ dotnet run --project src/Dhadgar.Gateway
 - Grafana: http://localhost:3000 (admin/admin)
 - Prometheus: http://localhost:9090
 - RabbitMQ: http://localhost:15672 (dhadgar/dhadgar)
-- Swagger (all services): http://localhost:5000/swagger (when routed through Gateway)
+- Scalar API docs (aggregated): http://localhost:5000/scalar/v1
 
 ---
 
 ## Notes
 
-- **All default credentials** for local services: `dhadgar` / `dhadgar`
+- **All default credentials** for local services: `dhadgar` / `dhadgar` (being removed by PR #127 — services will require explicit credentials)
 - **Gateway** (port 5000) is the single public entry point; it proxies to all microservices
-- **Database-per-service**: Each service owns its own schema
+- **Databases**: Identity and Billing get dedicated databases; Nodes, Servers, Tasks, Mods, Notifications and Discord currently share `dhadgar-platform` (see divergence note in ADR-0005/0006)
 - **Frontend apps** use npm/Node.js; run `npm run dev` in their directories
-- **Stub services** have basic scaffolding but core functionality is planned
+- **BetterAuth** is a Node.js process; it is *not* started by the Aspire AppHost — run it via `npm start` in `src/Dhadgar.BetterAuth` or via `docker-compose.services.yml`

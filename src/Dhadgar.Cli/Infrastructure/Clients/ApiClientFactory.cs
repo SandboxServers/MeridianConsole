@@ -9,11 +9,11 @@ namespace Dhadgar.Cli.Infrastructure.Clients;
 public sealed class ApiClientFactory : IDisposable
 {
     private static readonly Uri DefaultGatewayUri = new("http://localhost:5000");
-    private static readonly Uri DefaultIdentityUri = new("http://localhost:5001");
-    private static readonly Uri DefaultSecretsUri = new("http://localhost:5002");
+    private static readonly Uri DefaultIdentityUri = new("http://localhost:5010");
+    private static readonly Uri DefaultSecretsUri = new("http://localhost:5110");
     private static readonly Uri DefaultNodesUri = new("http://localhost:5040");
-    private static readonly Uri DefaultNotificationsUri = new("http://localhost:5008");
-    private static readonly Uri DefaultDiscordUri = new("http://localhost:5009");
+    private static readonly Uri DefaultNotificationsUri = new("http://localhost:5090");
+    private static readonly Uri DefaultDiscordUri = new("http://localhost:5120");
 
     private readonly Uri _gatewayUri;
     private readonly Uri _identityUri;

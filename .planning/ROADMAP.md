@@ -1,93 +1,53 @@
-# Roadmap: PR #39 Feedback Resolution
+# Roadmap: Beta — Full Vertical Slice
 
 ## Overview
 
-Address all CodeRabbit review feedback for the Discord and Notifications services PR. This is focused maintenance work: update packages, fix database configuration issues, improve resource handling, and clean up minor issues. Four phases deliver incrementally from quick wins to service code changes.
+Five phases to a demoable beta. Phase 2 (agent vertical) is the critical path; Phases 1
+and 3 can run in parallel with it. Full detail, estimates and rationale:
+`docs/PROJECT-STATE.md` §6.
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3, 4): Planned milestone work
-- Decimal phases (e.g., 2.1): Urgent insertions if needed
+- [ ] **Phase 0: Unblock** — merge PR #127 (P0 security), deflake the one failing Nodes
+      test, file the P0 issues discovered in the 2026-07 audit (missing `/refresh`,
+      agent↔Nodes contract, AppHost/Helm gaps, Identity `/internal` auth, Nodes JWT scheme)
+- [ ] **Phase 1: Sessions + honest login** — implement `POST /refresh` in Identity;
+      config-driven provider list in login UI; localhost login (cookie domain, ES256
+      keygen script); ShoppingCart redirect fix
+- [ ] **Phase 2: Agent vertical** — `/hubs/agent` SignalR hub in Nodes (ADR-0008);
+      reconciled enrollment contracts in `Dhadgar.Contracts`; Gateway route transform;
+      agent bootstrap hosted service; NodeId persistence (#101); command handlers (#118:
+      Ping/Start/Stop/Restart/Status); command signing (#94); Agent.Core test coverage;
+      agent API versioning (#116)
+- [ ] **Phase 3: Server lifecycle** — rebase + merge PR #88 (Servers/Console/Mods);
+      wire Servers → Nodes → agent (reserve capacity, dispatch StartServer, track state);
+      service-level auth on promoted services; minimal console streaming
+- [ ] **Phase 4: Panel + deploy + demo** — Panel `/servers`, `/nodes`, `/settings`
+      pages wired to the existing API client; compose-based beta deployment verified +
+      runbook; BetterAuth/Panel images added to container CI; #121 P0 integration tests;
+      demo script + seed data
 
-- [x] **Phase 1: Quick Wins** - Package update, Node.js engines, documentation fixes
-- [x] **Phase 2: Database Configuration** - Separate DBs, factory cleanup, nullable annotations, field truncation
-- [x] **Phase 3: Service Code** - HTTP disposal, cancellation handling, MassTransit outbox
-- [x] **Phase 4: API Contract** - Change ActionUrl to Uri type
+## Success Criteria (what must be TRUE at beta)
 
-## Phase Details
-
-### Phase 1: Quick Wins
-
-**Goal**: Simple fixes that don't affect runtime behavior or other code
-**Depends on**: Nothing (first phase)
-**Requirements**: PKG-01, FE-01, DOC-01
-**Success Criteria** (what must be TRUE):
-  1. Discord.Net package version is 3.18.0 in Directory.Packages.props
-  2. Dhadgar.Scope package.json has engines.node field requiring 20+
-  3. sections.json shows "RabbitMQ" and "MVP" with correct capitalization
-**Plans**:
-
-Plans:
-- [x] 01-01: Package and configuration updates
-
-### Phase 2: Database Configuration
-
-**Goal**: Services use separate databases with proper configuration
-**Depends on**: Phase 1
-**Requirements**: DB-01, DB-02, DB-03, DB-04
-**Success Criteria** (what must be TRUE):
-  1. Discord service connects to dhadgar_discord database
-  2. Notifications service connects to dhadgar_notifications database
-  3. DiscordDbContextFactory loads connection string from configuration (no hardcoded strings)
-  4. Discord migration files have nullable annotations enabled
-  5. SendDiscordNotificationConsumer truncates fields to EF max-length constraints before save
-**Plans**:
-
-Plans:
-- [x] 02-01: Separate database configuration
-- [x] 02-02: Migration regeneration and field truncation
-
-### Phase 3: Service Code
-
-**Goal**: Proper resource disposal and messaging patterns
-**Depends on**: Phase 2
-**Requirements**: HTTP-01, HTTP-02, MSG-01
-**Success Criteria** (what must be TRUE):
-  1. HttpResponseMessage is disposed after use in PlatformHealthService
-  2. TaskCanceledException when !ct.IsCancellationRequested returns timeout error (not cancelled)
-  3. OperationCanceledException rethrown when cancellation was requested
-  4. MassTransit Entity Framework Outbox is enabled for NotificationDispatcher
-**Plans**:
-
-Plans:
-- [x] 03-01: HTTP handling and MassTransit outbox
-
-### Phase 4: API Contract
-
-**Goal**: Type-safe URL handling in message contracts
-**Depends on**: Phase 3
-**Requirements**: API-01
-**Success Criteria** (what must be TRUE):
-  1. SendPushNotification.ActionUrl property is Uri? type (not string?)
-  2. All usages of ActionUrl compile and work with Uri type
-**Plans**:
-
-Plans:
-- [x] 04-01: ActionUrl type change
+1. A fresh user can log in (social OAuth), stay logged in past 15 minutes, and see a
+   live dashboard.
+2. A Windows machine running the agent installer enrolls with a token and appears
+   Online in Panel within a minute.
+3. Creating a server in Panel results in a real game-server process running on that
+   node; stop/restart work; state is reflected in Panel.
+4. The whole control plane starts from `docker-compose.services.yml` with documented
+   configuration; the demo is reproducible from the runbook by someone who didn't
+   build it.
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Quick Wins | 1/1 | Complete | 2026-01-19 |
-| 2. Database Configuration | 2/2 | Complete | 2026-01-19 |
-| 3. Service Code | 1/1 | Complete | 2026-01-19 |
-| 4. API Contract | 1/1 | Complete | 2026-01-19 |
+| Phase | Status | Completed |
+|-------|--------|-----------|
+| 0. Unblock | Not started | — |
+| 1. Sessions + login | Not started | — |
+| 2. Agent vertical | Not started | — |
+| 3. Server lifecycle | Not started | — |
+| 4. Panel + deploy + demo | Not started | — |
 
 ---
-*Roadmap created: 2026-01-19*
-*Completed: 2026-01-19*
+*Roadmap created: 2026-07-26 (replaces completed PR #39 roadmap)*
