@@ -1,5 +1,7 @@
 # Meridian Console Helm Chart
 
+> **Status: non-functional** — see issue [#135](https://github.com/SandboxServers/MeridianConsole/issues/135); Kubernetes is post-beta, `deploy/compose` is the beta deployment story.
+
 A Helm chart for deploying Meridian Console - a modern, security-first game server control plane.
 
 ## Overview
