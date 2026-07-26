@@ -35,22 +35,22 @@ public class SecretsAuthorizationServiceTests
     #region Unauthenticated Access
 
     [Fact]
-    public void Authorize_UnauthenticatedUser_ReturnsDenied()
+    public async Task Authorize_UnauthenticatedUser_ReturnsDenied()
     {
         var user = new ClaimsPrincipal(new ClaimsIdentity()); // Not authenticated
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Contains("not authenticated", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void AuthorizeCategory_UnauthenticatedUser_ReturnsDenied()
+    public async Task AuthorizeCategory_UnauthenticatedUser_ReturnsDenied()
     {
         var user = new ClaimsPrincipal(new ClaimsIdentity());
 
-        var result = _service.AuthorizeCategory(user, "oauth", SecretAction.Read);
+        var result = await _service.AuthorizeCategoryAsync(user, "oauth", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Contains("not authenticated", result.DenialReason, StringComparison.OrdinalIgnoreCase);
@@ -61,34 +61,34 @@ public class SecretsAuthorizationServiceTests
     #region Full Admin (secrets:*)
 
     [Fact]
-    public void Authorize_WithFullAdminPermission_Succeeds()
+    public async Task Authorize_WithFullAdminPermission_Succeeds()
     {
         var user = CreateUser("user-1", "secrets:*");
 
-        var result = _service.Authorize(user, "any-secret-name", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "any-secret-name", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
         Assert.Equal("user-1", result.UserId);
     }
 
     [Fact]
-    public void Authorize_WithFullAdmin_SucceedsForAllActions()
+    public async Task Authorize_WithFullAdmin_SucceedsForAllActions()
     {
         var user = CreateUser("admin-1", "secrets:*");
 
         foreach (var action in Enum.GetValues<SecretAction>())
         {
-            var result = _service.Authorize(user, "any-secret", action);
+            var result = await _service.AuthorizeAsync(user, "any-secret", action);
             Assert.True(result.IsAuthorized, $"Expected full admin to have {action} access");
         }
     }
 
     [Fact]
-    public void AuthorizeCategory_WithFullAdmin_Succeeds()
+    public async Task AuthorizeCategory_WithFullAdmin_Succeeds()
     {
         var user = CreateUser("admin-1", "secrets:*");
 
-        var result = _service.AuthorizeCategory(user, "oauth", SecretAction.Read);
+        var result = await _service.AuthorizeCategoryAsync(user, "oauth", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
@@ -98,41 +98,41 @@ public class SecretsAuthorizationServiceTests
     #region Action Wildcard (secrets:{action}:*)
 
     [Fact]
-    public void Authorize_WithReadWildcard_SucceedsForRead()
+    public async Task Authorize_WithReadWildcard_SucceedsForRead()
     {
         var user = CreateUser("user-1", "secrets:read:*");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_WithReadWildcard_FailsForWrite()
+    public async Task Authorize_WithReadWildcard_FailsForWrite()
     {
         var user = CreateUser("user-1", "secrets:read:*");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Write);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Write);
 
         Assert.False(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_WithWriteWildcard_SucceedsForWrite()
+    public async Task Authorize_WithWriteWildcard_SucceedsForWrite()
     {
         var user = CreateUser("user-1", "secrets:write:*");
 
-        var result = _service.Authorize(user, "any-secret", SecretAction.Write);
+        var result = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Write);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_WithRotateWildcard_SucceedsForRotate()
+    public async Task Authorize_WithRotateWildcard_SucceedsForRotate()
     {
         var user = CreateUser("user-1", "secrets:rotate:*");
 
-        var result = _service.Authorize(user, "any-secret", SecretAction.Rotate);
+        var result = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Rotate);
 
         Assert.True(result.IsAuthorized);
     }
@@ -142,51 +142,51 @@ public class SecretsAuthorizationServiceTests
     #region Category Permissions (secrets:{action}:{category})
 
     [Fact]
-    public void Authorize_WithOAuthCategoryPermission_SucceedsForOAuthSecrets()
+    public async Task Authorize_WithOAuthCategoryPermission_SucceedsForOAuthSecrets()
     {
         var user = CreateUser("user-1", "secrets:read:oauth");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_WithOAuthCategoryPermission_FailsForInfrastructureSecrets()
+    public async Task Authorize_WithOAuthCategoryPermission_FailsForInfrastructureSecrets()
     {
         var user = CreateUser("user-1", "secrets:read:oauth");
 
-        var result = _service.Authorize(user, "infra-db-password", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "infra-db-password", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_WithInfrastructureCategoryPermission_SucceedsForInfraSecrets()
+    public async Task Authorize_WithInfrastructureCategoryPermission_SucceedsForInfraSecrets()
     {
         var user = CreateUser("user-1", "secrets:read:infrastructure");
 
-        var result = _service.Authorize(user, "infra-db-password", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "infra-db-password", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void AuthorizeCategory_WithMatchingPermission_Succeeds()
+    public async Task AuthorizeCategory_WithMatchingPermission_Succeeds()
     {
         var user = CreateUser("user-1", "secrets:read:oauth");
 
-        var result = _service.AuthorizeCategory(user, "oauth", SecretAction.Read);
+        var result = await _service.AuthorizeCategoryAsync(user, "oauth", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void AuthorizeCategory_WithMismatchedPermission_Fails()
+    public async Task AuthorizeCategory_WithMismatchedPermission_Fails()
     {
         var user = CreateUser("user-1", "secrets:read:oauth");
 
-        var result = _service.AuthorizeCategory(user, "infrastructure", SecretAction.Read);
+        var result = await _service.AuthorizeCategoryAsync(user, "infrastructure", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
     }
@@ -196,31 +196,31 @@ public class SecretsAuthorizationServiceTests
     #region Specific Secret Permissions (secrets:{action}:{secretName})
 
     [Fact]
-    public void Authorize_WithSpecificSecretPermission_Succeeds()
+    public async Task Authorize_WithSpecificSecretPermission_Succeeds()
     {
         var user = CreateUser("user-1", "secrets:read:oauth-steam-api-key");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_WithSpecificSecretPermission_FailsForOtherSecrets()
+    public async Task Authorize_WithSpecificSecretPermission_FailsForOtherSecrets()
     {
         var user = CreateUser("user-1", "secrets:read:oauth-steam-api-key");
 
-        var result = _service.Authorize(user, "oauth-discord-client-secret", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-discord-client-secret", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_WithSpecificSecretPermission_FailsForOtherActions()
+    public async Task Authorize_WithSpecificSecretPermission_FailsForOtherActions()
     {
         var user = CreateUser("user-1", "secrets:read:oauth-steam-api-key");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Write);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Write);
 
         Assert.False(result.IsAuthorized);
     }
@@ -230,7 +230,7 @@ public class SecretsAuthorizationServiceTests
     #region Break-Glass Access
 
     [Fact]
-    public void Authorize_WithBreakGlass_Succeeds()
+    public async Task Authorize_WithBreakGlass_Succeeds()
     {
         var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
@@ -244,14 +244,14 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "sensitive-secret", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "sensitive-secret", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
         Assert.True(result.IsBreakGlass);
     }
 
     [Fact]
-    public void Authorize_WithBreakGlass_DeniedWhenExpired()
+    public async Task Authorize_WithBreakGlass_DeniedWhenExpired()
     {
         var exp = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
@@ -264,14 +264,14 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Contains("expired", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Authorize_WithBreakGlass_DeniedWhenMissingExpiration()
+    public async Task Authorize_WithBreakGlass_DeniedWhenMissingExpiration()
     {
         var claims = new List<Claim>
         {
@@ -282,14 +282,14 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Contains("expiration", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Authorize_WithBreakGlass_DeniedWhenMissingNonce()
+    public async Task Authorize_WithBreakGlass_DeniedWhenMissingNonce()
     {
         var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
@@ -301,14 +301,14 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Contains("nonce", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Authorize_WithBreakGlass_DeniedOnNonceReplay()
+    public async Task Authorize_WithBreakGlass_DeniedOnNonceReplay()
     {
         var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
         var nonce = Guid.NewGuid().ToString();
@@ -323,17 +323,92 @@ public class SecretsAuthorizationServiceTests
         var user = new ClaimsPrincipal(identity);
 
         // First use succeeds
-        var result1 = _service.Authorize(user, "any-secret", SecretAction.Read);
+        var result1 = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
         Assert.True(result1.IsAuthorized);
 
         // Replay denied
-        var result2 = _service.Authorize(user, "any-secret", SecretAction.Read);
+        var result2 = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
         Assert.False(result2.IsAuthorized);
         Assert.Contains("already been used", result2.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Authorize_WithBreakGlass_DeniedWhenTtlExceedsMax()
+    public async Task Authorize_WithBreakGlass_DeniedWhenExpirationIsInvalid()
+    {
+        var claims = new List<Claim>
+        {
+            new("sub", "emergency-user"),
+            new("break_glass", "true"),
+            new("break_glass_exp", "not-a-number"),
+            new("break_glass_nonce", Guid.NewGuid().ToString())
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var user = new ClaimsPrincipal(identity);
+
+        var result = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
+
+        Assert.False(result.IsAuthorized);
+        Assert.Contains("not a valid Unix timestamp", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Authorize_WithBreakGlass_DeniedWhenNonceIsEmpty_AndNonceIsNotConsumed()
+    {
+        // An empty-string nonce claim must be rejected before the tracker is consulted:
+        // "consuming" a blank nonce would permanently replay-reject all blank-nonce tokens.
+        var trackerSpy = new RecordingNonceTracker();
+        var service = new SecretsAuthorizationService(
+            OptionsFactory.Create(_options),
+            trackerSpy,
+            NullLogger<SecretsAuthorizationService>.Instance);
+
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var claims = new List<Claim>
+        {
+            new("sub", "emergency-user"),
+            new("break_glass", "true"),
+            new("break_glass_exp", exp),
+            new("break_glass_nonce", "")
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var user = new ClaimsPrincipal(identity);
+
+        var result = await service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
+
+        Assert.False(result.IsAuthorized);
+        Assert.Contains("nonce", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(trackerSpy.ConsumedNonces);
+    }
+
+    [Fact]
+    public async Task Authorize_WithBreakGlass_DeniedWhenNonceIsWhitespace_AndNonceIsNotConsumed()
+    {
+        var trackerSpy = new RecordingNonceTracker();
+        var service = new SecretsAuthorizationService(
+            OptionsFactory.Create(_options),
+            trackerSpy,
+            NullLogger<SecretsAuthorizationService>.Instance);
+
+        var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
+        var claims = new List<Claim>
+        {
+            new("sub", "emergency-user"),
+            new("break_glass", "true"),
+            new("break_glass_exp", exp),
+            new("break_glass_nonce", "   ")
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var user = new ClaimsPrincipal(identity);
+
+        var result = await service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
+
+        Assert.False(result.IsAuthorized);
+        Assert.Contains("nonce", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(trackerSpy.ConsumedNonces);
+    }
+
+    [Fact]
+    public async Task Authorize_WithBreakGlass_DeniedWhenTtlExceedsMax()
     {
         var exp = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
@@ -346,14 +421,14 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "any-secret", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "any-secret", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Contains("exceeds maximum", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void AuthorizeCategory_WithBreakGlass_Succeeds()
+    public async Task AuthorizeCategory_WithBreakGlass_Succeeds()
     {
         var exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString();
         var claims = new List<Claim>
@@ -366,7 +441,7 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.AuthorizeCategory(user, "oauth", SecretAction.Read);
+        var result = await _service.AuthorizeCategoryAsync(user, "oauth", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
         Assert.True(result.IsBreakGlass);
@@ -377,7 +452,7 @@ public class SecretsAuthorizationServiceTests
     #region Service Account Detection
 
     [Fact]
-    public void Authorize_WithServiceAccount_DetectsServiceAccountType()
+    public async Task Authorize_WithServiceAccount_DetectsServiceAccountType()
     {
         var claims = new List<Claim>
         {
@@ -388,7 +463,7 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
         Assert.True(result.IsServiceAccount);
@@ -396,11 +471,11 @@ public class SecretsAuthorizationServiceTests
     }
 
     [Fact]
-    public void Authorize_WithUserPrincipal_DetectsUserType()
+    public async Task Authorize_WithUserPrincipal_DetectsUserType()
     {
         var user = CreateUser("user-1", "secrets:read:oauth");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
         Assert.False(result.IsServiceAccount);
@@ -408,7 +483,7 @@ public class SecretsAuthorizationServiceTests
     }
 
     [Fact]
-    public void Authorize_WithNoPrincipalType_DefaultsToUser()
+    public async Task Authorize_WithNoPrincipalType_DefaultsToUser()
     {
         var claims = new List<Claim>
         {
@@ -418,7 +493,7 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
         Assert.False(result.IsServiceAccount);
@@ -430,32 +505,32 @@ public class SecretsAuthorizationServiceTests
     #region Category Inference from Naming Convention
 
     [Fact]
-    public void Authorize_InfersOAuthCategoryFromPrefix()
+    public async Task Authorize_InfersOAuthCategoryFromPrefix()
     {
         var user = CreateUser("user-1", "secrets:read:oauth");
 
         // Not in AllowedSecrets.OAuth list, but starts with "oauth-"
-        var result = _service.Authorize(user, "oauth-new-provider-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-new-provider-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_InfersBetterAuthCategoryFromPrefix()
+    public async Task Authorize_InfersBetterAuthCategoryFromPrefix()
     {
         var user = CreateUser("user-1", "secrets:read:betterauth");
 
-        var result = _service.Authorize(user, "betterauth-session-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "betterauth-session-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_UnknownSecret_DefaultsToCustomCategory()
+    public async Task Authorize_UnknownSecret_DefaultsToCustomCategory()
     {
         var user = CreateUser("user-1", "secrets:read:custom");
 
-        var result = _service.Authorize(user, "my-unknown-secret", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "my-unknown-secret", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
@@ -465,7 +540,7 @@ public class SecretsAuthorizationServiceTests
     #region Multiple Permissions
 
     [Fact]
-    public void Authorize_WithMultiplePermissions_SucceedsIfAnyMatches()
+    public async Task Authorize_WithMultiplePermissions_SucceedsIfAnyMatches()
     {
         var claims = new List<Claim>
         {
@@ -477,15 +552,15 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var readResult = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
-        var writeResult = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Write);
+        var readResult = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
+        var writeResult = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Write);
 
         Assert.True(readResult.IsAuthorized);
         Assert.True(writeResult.IsAuthorized);
     }
 
     [Fact]
-    public void Authorize_CaseInsensitivePermissions()
+    public async Task Authorize_CaseInsensitivePermissions()
     {
         var claims = new List<Claim>
         {
@@ -496,7 +571,7 @@ public class SecretsAuthorizationServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var user = new ClaimsPrincipal(identity);
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.True(result.IsAuthorized);
     }
@@ -506,28 +581,74 @@ public class SecretsAuthorizationServiceTests
     #region Denial Information
 
     [Fact]
-    public void Authorize_WhenDenied_IncludesUserId()
+    public async Task Authorize_WhenDenied_IncludesUserId()
     {
         var user = CreateUser("denied-user", "unrelated:permission");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Equal("denied-user", result.UserId);
     }
 
     [Fact]
-    public void Authorize_WhenDenied_IncludesActionInReason()
+    public async Task Authorize_WhenDenied_IncludesActionInReason()
     {
         var user = CreateUser("user-1", "secrets:write:oauth");
 
-        var result = _service.Authorize(user, "oauth-steam-api-key", SecretAction.Read);
+        var result = await _service.AuthorizeAsync(user, "oauth-steam-api-key", SecretAction.Read);
 
         Assert.False(result.IsAuthorized);
         Assert.Contains("Read", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 
     #endregion
+
+    #region Nonce Tracker Contract
+
+    [Fact]
+    public async Task NonceTracker_NullNonce_Throws()
+    {
+        using var tracker = new InMemoryBreakGlassNonceTracker();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => tracker.TryConsumeNonceAsync(null!));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task NonceTracker_EmptyOrWhitespaceNonce_Throws(string nonce)
+    {
+        using var tracker = new InMemoryBreakGlassNonceTracker();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => tracker.TryConsumeNonceAsync(nonce));
+    }
+
+    [Fact]
+    public async Task NonceTracker_ValidNonce_ConsumedOnceThenRejected()
+    {
+        using var tracker = new InMemoryBreakGlassNonceTracker();
+        var nonce = Guid.NewGuid().ToString();
+
+        Assert.True(await tracker.TryConsumeNonceAsync(nonce));
+        Assert.False(await tracker.TryConsumeNonceAsync(nonce));
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Hand-rolled spy: records every nonce the authorization service attempts to consume.
+    /// </summary>
+    private sealed class RecordingNonceTracker : IBreakGlassNonceTracker
+    {
+        public List<string> ConsumedNonces { get; } = new();
+
+        public Task<bool> TryConsumeNonceAsync(string nonce)
+        {
+            ConsumedNonces.Add(nonce);
+            return Task.FromResult(true);
+        }
+    }
 
     private static ClaimsPrincipal CreateUser(string userId, params string[] permissions)
     {

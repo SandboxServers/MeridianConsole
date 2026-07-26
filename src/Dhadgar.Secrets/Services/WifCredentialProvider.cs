@@ -73,7 +73,7 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
             wifConfig.TenantId,
             wifConfig.ClientId,
             wifConfig.IdentityTokenEndpoint,
-            wifConfig.ServiceClientId ?? "(default)");
+            string.IsNullOrWhiteSpace(wifConfig.ServiceClientId) ? "(not configured)" : wifConfig.ServiceClientId);
 
         // Create a ClientAssertionCredential that gets tokens from our Identity service
         return new ClientAssertionCredential(
@@ -82,6 +82,10 @@ public sealed class WifCredentialProvider : IWifCredentialProvider
             async (ct) => await GetIdentityTokenAsync(ct));
     }
 
+    // NOTE: This method intentionally throws instead of returning Result<T>. It is the
+    // assertion callback for Azure's ClientAssertionCredential, whose signature mandates
+    // Task<string> — there is no channel to surface a Result. The Azure SDK converts
+    // exceptions thrown here into credential/authentication failures for callers.
     private async Task<string> GetIdentityTokenAsync(CancellationToken ct)
     {
         var wifConfig = _options.Wif!;

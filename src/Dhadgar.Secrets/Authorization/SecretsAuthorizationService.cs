@@ -11,7 +11,7 @@ namespace Dhadgar.Secrets.Authorization;
 /// </summary>
 public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
 {
-    private static readonly TimeSpan MaxBreakGlassTtl = TimeSpan.FromHours(1);
+    private static readonly TimeSpan MaxBreakGlassTtl = BreakGlassPolicy.MaxTtl;
 
     private readonly SecretsOptions _options;
     private readonly IBreakGlassNonceTracker _nonceTracker;
@@ -27,7 +27,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
         _logger = logger;
     }
 
-    public AuthorizationResult Authorize(ClaimsPrincipal user, string secretName, SecretAction action)
+    public async Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, string secretName, SecretAction action)
     {
         var userId = user.FindFirstValue("sub");
         var principalType = user.FindFirstValue("principal_type") ?? "user";
@@ -42,7 +42,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
         // Check break-glass access
         if (user.HasClaim("break_glass", "true"))
         {
-            return ValidateBreakGlassAccess(user, userId, principalType, isServiceAccount, secretName);
+            return await ValidateBreakGlassAccessAsync(user, userId, principalType, isServiceAccount, secretName);
         }
 
         // Determine the category of the secret
@@ -84,7 +84,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
             userId);
     }
 
-    public AuthorizationResult AuthorizeCategory(ClaimsPrincipal user, string category, SecretAction action)
+    public async Task<AuthorizationResult> AuthorizeCategoryAsync(ClaimsPrincipal user, string category, SecretAction action)
     {
         var userId = user.FindFirstValue("sub");
         var principalType = user.FindFirstValue("principal_type") ?? "user";
@@ -98,7 +98,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
         // Check break-glass
         if (user.HasClaim("break_glass", "true"))
         {
-            return ValidateBreakGlassAccess(user, userId, principalType, isServiceAccount, $"category:{category}");
+            return await ValidateBreakGlassAccessAsync(user, userId, principalType, isServiceAccount, $"category:{category}");
         }
 
         var actionStr = action.ToString().ToLowerInvariant();
@@ -123,13 +123,17 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
             userId);
     }
 
-    private AuthorizationResult ValidateBreakGlassAccess(
+    private async Task<AuthorizationResult> ValidateBreakGlassAccessAsync(
         ClaimsPrincipal user,
         string? userId,
         string principalType,
         bool isServiceAccount,
         string resourceName)
     {
+        // Capture the clock once so the max-TTL and expiry checks below evaluate
+        // against the same instant (avoids a tiny race between two UtcNow reads).
+        var now = DateTimeOffset.UtcNow;
+
         // Require expiration claim
         var expClaim = user.FindFirstValue("break_glass_exp");
         if (string.IsNullOrWhiteSpace(expClaim))
@@ -149,7 +153,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
         }
 
         var expiration = DateTimeOffset.FromUnixTimeSeconds(expUnix);
-        if (expiration > DateTimeOffset.UtcNow + MaxBreakGlassTtl)
+        if (expiration > now + MaxBreakGlassTtl)
         {
             _logger.LogWarning(
                 "Break-glass access DENIED for {ResourceName} by {UserId}: expiration exceeds maximum TTL of {MaxTtl}.",
@@ -157,7 +161,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
             return AuthorizationResult.Denied($"Break-glass token TTL exceeds maximum of {MaxBreakGlassTtl.TotalMinutes} minutes.", userId);
         }
 
-        if (expiration <= DateTimeOffset.UtcNow)
+        if (expiration <= now)
         {
             _logger.LogWarning(
                 "Break-glass access DENIED for {ResourceName} by {UserId}: token has expired at {Expiration}.",
@@ -175,7 +179,7 @@ public sealed class SecretsAuthorizationService : ISecretsAuthorizationService
             return AuthorizationResult.Denied("Break-glass token must include a single-use nonce (break_glass_nonce).", userId);
         }
 
-        if (!_nonceTracker.TryConsumeNonceAsync(nonce).GetAwaiter().GetResult())
+        if (!await _nonceTracker.TryConsumeNonceAsync(nonce))
         {
             _logger.LogWarning(
                 "Break-glass access DENIED for {ResourceName} by {UserId}: nonce {Nonce} has already been consumed (replay attempt).",

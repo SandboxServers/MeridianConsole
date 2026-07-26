@@ -84,7 +84,7 @@ public static class SecretsEndpoints
         }
 
         // Authorize
-        var authResult = authService.Authorize(context.User, secretName, SecretAction.Read);
+        var authResult = await authService.AuthorizeAsync(context.User, secretName, SecretAction.Read);
         if (!authResult.IsAuthorized)
         {
             auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
@@ -170,7 +170,7 @@ public static class SecretsEndpoints
                 continue;
             }
 
-            var authResult = authService.Authorize(context.User, secretName, SecretAction.Read);
+            var authResult = await authService.AuthorizeAsync(context.User, secretName, SecretAction.Read);
             if (authResult.IsAuthorized)
             {
                 authorizedSecrets.Add(secretName);
@@ -213,7 +213,7 @@ public static class SecretsEndpoints
         HttpContext context,
         CancellationToken ct)
     {
-        var authResult = authService.AuthorizeCategory(context.User, "oauth", SecretAction.Read);
+        var authResult = await authService.AuthorizeCategoryAsync(context.User, "oauth", SecretAction.Read);
         if (!authResult.IsAuthorized)
         {
             auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
@@ -250,7 +250,7 @@ public static class SecretsEndpoints
         HttpContext context,
         CancellationToken ct)
     {
-        var authResult = authService.AuthorizeCategory(context.User, "betterauth", SecretAction.Read);
+        var authResult = await authService.AuthorizeCategoryAsync(context.User, "betterauth", SecretAction.Read);
         if (!authResult.IsAuthorized)
         {
             auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
@@ -287,7 +287,7 @@ public static class SecretsEndpoints
         HttpContext context,
         CancellationToken ct)
     {
-        var authResult = authService.AuthorizeCategory(context.User, "infrastructure", SecretAction.Read);
+        var authResult = await authService.AuthorizeCategoryAsync(context.User, "infrastructure", SecretAction.Read);
         if (!authResult.IsAuthorized)
         {
             auditLogger.LogAccessDenied(new SecretAccessDeniedEvent(
