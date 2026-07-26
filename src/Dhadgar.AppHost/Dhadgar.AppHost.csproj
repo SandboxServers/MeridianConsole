@@ -16,6 +16,8 @@
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
     <PackageReference Include="Aspire.Hosting.Redis" />
     <PackageReference Include="Aspire.Hosting.RabbitMQ" />
+    <!-- Pins the transitive MessagePack (via StreamJsonRpc) past its 2025/2026 advisories; see Directory.Packages.props -->
+    <PackageReference Include="MessagePack" />
   </ItemGroup>
 
   <ItemGroup>
