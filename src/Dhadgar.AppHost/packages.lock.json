@@ -2,11 +2,11 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
-      "Aspire.Dashboard.Sdk.win-x64": {
+      "Aspire.Dashboard.Sdk.linux-x64": {
         "type": "Direct",
         "requested": "[13.1.0, )",
         "resolved": "13.1.0",
-        "contentHash": "rrcsI8cankYCiUlj4Ev+os9uKcutUCv+9kvHQt85RiUX/ewXsloFZy0/depKWrzdJkdJuoTbYFRlSe43TKq6aQ=="
+        "contentHash": "gIvMR7NdVGw+mUpK9qZsGuuYfDp4CHvBDLlykSSP9pCh5XGlMgDNR3uOMfvKVlqH1hAsOuecvxEcfQ9kjufrWw=="
       },
       "Aspire.Hosting.AppHost": {
         "type": "Direct",
@@ -41,11 +41,11 @@
           "System.IO.Hashing": "9.0.10"
         }
       },
-      "Aspire.Hosting.Orchestration.win-x64": {
+      "Aspire.Hosting.Orchestration.linux-x64": {
         "type": "Direct",
         "requested": "[13.1.0, )",
         "resolved": "13.1.0",
-        "contentHash": "3w2UahEauTq719LPJ/BCySh31kz26sfjuOkRF5E4VYy1Q3xLRV43+OIGI3C5sy8feUHjrYz+DDq3DQn/2fu+4g=="
+        "contentHash": "V8u8ukncoflImciXeHG03x1pWbOiR4z1bIl2lwOKgdy7/JshFrlEaabaNuGmAIZFdWEM/fsc/hVDjecQyHF2aQ=="
       },
       "Aspire.Hosting.PostgreSQL": {
         "type": "Direct",
@@ -153,12 +153,13 @@
       },
       "MessagePack": {
         "type": "Direct",
-        "requested": "[2.5.302, )",
-        "resolved": "2.5.302",
-        "contentHash": "5DZsKli4dMEpm/glcMAheuO8/IesfaTskbfsuvgnQwWFKS5FN7Z6yNx+5F+UW94E+9N2qt8Zs63/XVzpLsElgA==",
+        "requested": "[3.1.8, )",
+        "resolved": "3.1.8",
+        "contentHash": "Qk2q+9FVxnMSp+NQ9y3SLz3HqWe7Rg3KRMHhBX28FkKUoOeP9YIU86mA4pFOxDDjUIRA9e7Ssbxs/LwWUcAzPw==",
         "dependencies": {
-          "MessagePack.Annotations": "2.5.302",
-          "Microsoft.NET.StringTools": "17.6.3"
+          "MessagePack.Annotations": "3.1.8",
+          "MessagePackAnalyzer": "3.1.8",
+          "Microsoft.NET.StringTools": "17.11.4"
         }
       },
       "Aspire.Hosting": {
@@ -312,8 +313,13 @@
       },
       "MessagePack.Annotations": {
         "type": "Transitive",
-        "resolved": "2.5.302",
-        "contentHash": "PTHQHbMJzx1VtUUCpnvPavD7o5X9s2dAJ4uQHAP2kBCwJKICpPTZq0qxzbB4/6iJJiIxem8zlxyfldGAx1SjSQ=="
+        "resolved": "3.1.8",
+        "contentHash": "SitOtZ4tOlAZZPF7p52M7143F+Cuz7o/aU0MrtAXX0+ZkPXzDNroOFhzzE2ogMFThsoEW/E6akXVVcBFM9ZKaw=="
+      },
+      "MessagePackAnalyzer": {
+        "type": "Transitive",
+        "resolved": "3.1.8",
+        "contentHash": "Vm4g0cR4YRKRchEOmMJ0uVFU6yxdg7cJa2KHv3SUAHEsdYKvMpHMF5A1hZfsix89ymD5cmuzRnw9a6dKMcvq+Q=="
       },
       "Microsoft.Extensions.Configuration.Abstractions": {
         "type": "Transitive",
@@ -559,8 +565,8 @@
       },
       "Microsoft.NET.StringTools": {
         "type": "Transitive",
-        "resolved": "17.6.3",
-        "contentHash": "N0ZIanl1QCgvUumEL1laasU0a7sOE5ZwLZVTn0pAePnfhq8P7SvTjF8Axq+CnavuQkmdQpGNXQ1efZtu5kDFbA=="
+        "resolved": "17.11.4",
+        "contentHash": "mudqUHhNpeqIdJoUx2YDWZO/I9uEDYVowan89R6wsomfnUJQk6HteoQTlNjZDixhT2B4IXMkMtgZtoceIjLRmA=="
       },
       "Microsoft.VisualStudio.Threading.Only": {
         "type": "Transitive",

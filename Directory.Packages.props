@@ -122,7 +122,7 @@
          flagged by 11 advisories (2 high: GHSA-hv8m-jj95-wg3x, GHSA-vh6j-jc39-fggf) patched at 2.5.301.
          Referenced directly in Dhadgar.AppHost and Dhadgar.AppHost.Tests.
          Remove once Aspire's StreamJsonRpc floors MessagePack >= 2.5.301. -->
-    <PackageVersion Include="MessagePack" Version="2.5.302" />
+    <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.Redis" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
