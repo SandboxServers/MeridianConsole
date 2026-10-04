@@ -49,6 +49,7 @@
     <PackageReference Include="SecurityCodeScan.VS2019" />
     <!-- Validation -->
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
 </Project>
 

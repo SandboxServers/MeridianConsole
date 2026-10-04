@@ -5,39 +5,39 @@
 
   <ItemGroup>
     <!-- Core -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.EventLog" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.EventLog" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Http.Polly" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
 
     <!-- Agent-specific -->
-    <PackageVersion Include="SIPSorcery" Version="10.0.3" />
+    <PackageVersion Include="SIPSorcery" Version="10.0.16" />
 
     <!-- Data -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <!-- Direct pin: Microsoft.EntityFrameworkCore.Sqlite 10.0.0 transitively pulls
          SQLitePCLRaw.lib.e_sqlite3 2.1.11, flagged by GHSA-2m69-gcr7-jv3q (vulnerable range <= 2.1.11).
          Referencing the bundle at 2.1.12 lifts the native lib out of the vulnerable range.
          Remove once EF Core's own dependency moves past 2.1.11. -->
-    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
-    <PackageVersion Include="OpenIddict.AspNetCore" Version="7.0.0" />
-    <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.0.0" />
-    <PackageVersion Include="OpenIddict.Validation.AspNetCore" Version="7.0.0" />
-    <PackageVersion Include="StackExchange.Redis" Version="2.7.27" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageVersion Include="OpenIddict.AspNetCore" Version="7.7.0" />
+    <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.7.0" />
+    <PackageVersion Include="OpenIddict.Validation.AspNetCore" Version="7.7.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
 
     <!-- Health Checks -->
     <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
@@ -48,64 +48,64 @@
     <!-- Direct pin: AspNet.Security.OpenId.Steam 10.0.0 resolves AngleSharp 1.3.0,
          flagged by GHSA-pgww-w46g-26qg (patched at 1.5.0). Referenced directly in Dhadgar.Identity.
          Remove once the Steam OpenId package floors AngleSharp >= 1.5.0. -->
-    <PackageVersion Include="AngleSharp" Version="1.5.2" />
+    <PackageVersion Include="AngleSharp" Version="1.8.1" />
     <PackageVersion Include="AspNet.Security.OAuth.BattleNet" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.MicrosoftAccount" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.MicrosoftAccount" Version="10.0.12" />
 
     <!-- Messaging -->
-    <PackageVersion Include="MassTransit" Version="8.3.6" />
-    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.3.6" />
-    <PackageVersion Include="MassTransit.RabbitMQ" Version="8.3.6" />
+    <PackageVersion Include="MassTransit" Version="8.5.10" />
+    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.5.10" />
+    <PackageVersion Include="MassTransit.RabbitMQ" Version="8.5.10" />
 
     <!-- Discord -->
-    <PackageVersion Include="Discord.Net" Version="3.18.0" />
+    <PackageVersion Include="Discord.Net" Version="3.20.1" />
 
     <!-- Email -->
     <PackageVersion Include="SendGrid" Version="9.29.3" />
-    <PackageVersion Include="Microsoft.Graph" Version="5.78.0" />
+    <PackageVersion Include="Microsoft.Graph" Version="5.105.0" />
     <!-- Direct pin: Microsoft.Graph resolves Microsoft.Kiota.Abstractions below 1.22.0
          (GHSA-7j59-v9qr-6fq9 patched at 1.22.0; even current Graph.Core 3.2.5 floors Kiota at 1.21.1).
          Referenced directly in Dhadgar.Notifications. Remove once Graph.Core floors Kiota >= 1.22.0. -->
     <PackageVersion Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
     <!-- >= 4.16.0 patches GHSA-9j88-vvj5-vhgr (MailKit) and floors MimeKit at 4.16.0,
          past GHSA-g7hc-96xr-gvvx (patched at 4.15.1) -->
-    <PackageVersion Include="MailKit" Version="4.16.0" />
+    <PackageVersion Include="MailKit" Version="4.17.0" />
 
     <!-- Observability -->
-    <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="10.2.0" />
-    <PackageVersion Include="Microsoft.Extensions.Telemetry" Version="10.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.Telemetry" Version="10.10.0" />
     <!-- Core OpenTelemetry line held at >= 1.15.3: patches GHSA-4625-4j76-fww9, GHSA-mr8r-92fq-pj8p,
          GHSA-q834-8qmm-v933 (OTLP exporter) and GHSA-g94r-2vxg-569j (Api) -->
     <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
-    <PackageVersion Include="OpenTelemetry.Api" Version="1.15.3" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Process" Version="1.14.0-beta.2" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.0.0-beta.12" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc9.14" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
-    <PackageVersion Include="Azure.Identity" Version="1.11.4" />
-    <PackageVersion Include="Azure.Security.KeyVault.Keys" Version="4.7.0" />
-    <PackageVersion Include="Azure.Security.KeyVault.Certificates" Version="4.6.0" />
-    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.6.0" />
-    <PackageVersion Include="Azure.ResourceManager" Version="1.13.2" />
-    <PackageVersion Include="Azure.ResourceManager.KeyVault" Version="1.3.3" />
-    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.14.0" />
-    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc9.15" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Azure.Identity" Version="1.21.0" />
+    <PackageVersion Include="Azure.Security.KeyVault.Keys" Version="4.10.1" />
+    <PackageVersion Include="Azure.Security.KeyVault.Certificates" Version="4.9.1" />
+    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.1" />
+    <PackageVersion Include="Azure.ResourceManager" Version="1.14.0" />
+    <PackageVersion Include="Azure.ResourceManager.KeyVault" Version="1.4.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.22.0" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
     <PackageVersion Include="Microsoft.Rest.ClientRuntime" Version="2.3.24" />
 
     <!-- Gateway -->
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
 
     <!-- CLI -->
-    <PackageVersion Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.0" />
-    <PackageVersion Include="Spectre.Console" Version="0.49.1" />
-    <PackageVersion Include="Spectre.Console.Cli" Version="0.49.1" />
+    <PackageVersion Include="Spectre.Console" Version="0.57.2" />
+    <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0" />
     <PackageVersion Include="Refit" Version="9.0.2" />
 
     <!-- Developer Experience -->
@@ -123,15 +123,15 @@
          Referenced directly in Dhadgar.AppHost and Dhadgar.AppHost.Tests.
          Remove once Aspire's StreamJsonRpc floors MessagePack >= 2.5.301. -->
     <PackageVersion Include="MessagePack" Version="2.5.302" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting.Redis" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.5.3" />
+    <PackageVersion Include="Aspire.Hosting.Redis" Version="13.5.3" />
+    <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.5.3" />
 
     <!-- Aspire Service Integrations -->
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
     <PackageVersion Include="Aspire.StackExchange.Redis" Version="13.1.0" />
     <PackageVersion Include="Aspire.RabbitMQ.Client" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.5.3" />
 
     <!-- WiX Installer -->
     <PackageVersion Include="WixToolset.Sdk" Version="5.0.2" />
@@ -144,19 +144,19 @@
          flagged by 7 high advisories (e.g. GHSA-23rf-6693-g89p) patched at 9.0.18 / 10.0.10.
          Referenced directly in the test projects whose restore graphs carry it.
          Remove once EF Design's MSBuild dependencies floor a patched version. -->
-    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.10" />
-    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.12" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.23" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.2.0" />
+    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.85" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
-    <PackageVersion Include="FluentAssertions" Version="8.3.0" />
+    <PackageVersion Include="FluentAssertions" Version="8.10.0" />
     <!-- >= 2.7.5 patches GHSA-v5pm-xwqc-g5wc -->
-    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.6" />
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.12.20" />
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.12.2" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.3" />
 
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0" />
