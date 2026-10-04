@@ -58,7 +58,9 @@ tmpclaude-*
 
 .serena/
 
-.claude/
+# Local Claude Code state; only the shared hook config is committed
+.claude/*
+!.claude/settings.json
 
 # Planning docs (local development artifacts)
 .planning/
