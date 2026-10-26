@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Generate token for spirit-of-the-diff
         id: generate_token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.SPIRIT_APP_ID }}
           private-key: ${{ secrets.SPIRIT_PRIVATE_KEY }}
