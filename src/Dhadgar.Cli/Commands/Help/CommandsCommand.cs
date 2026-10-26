@@ -117,18 +117,20 @@ public sealed class CommandsCommand
 
     private static string FormatOption(Option option)
     {
-        var alias = option.Aliases.FirstOrDefault(a => a.StartsWith("--", StringComparison.OrdinalIgnoreCase))
-                    ?? option.Aliases.FirstOrDefault()
-                    ?? $"--{option.Name}";
+        // Since System.CommandLine 2.0, Name carries the prefix ("--org") and
+        // Aliases holds only the additional aliases.
+        var alias = option.Name.StartsWith("--", StringComparison.Ordinal)
+            ? option.Name
+            : option.Aliases.FirstOrDefault(a => a.StartsWith("--", StringComparison.Ordinal)) ?? option.Name;
 
         if (option.Arity.MaximumNumberOfValues == 0)
         {
             return $"[{alias}]";
         }
 
-        var valueName = string.IsNullOrWhiteSpace(option.ArgumentHelpName)
-            ? option.Name
-            : option.ArgumentHelpName;
+        var valueName = string.IsNullOrWhiteSpace(option.HelpName)
+            ? option.Name.TrimStart('-', '/')
+            : option.HelpName;
 
         var valueToken = option.Arity.MinimumNumberOfValues == 0
             ? $"[{valueName}]"
