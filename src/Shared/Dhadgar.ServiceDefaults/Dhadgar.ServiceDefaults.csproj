@@ -36,5 +36,6 @@
     <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
     <PackageReference Include="AspNetCore.HealthChecks.Redis" />
     <PackageReference Include="AspNetCore.HealthChecks.Rabbitmq" />
+    <PackageReference Include="StackExchange.Redis" VersionOverride="2.13.17" />
   </ItemGroup>
 </Project>
