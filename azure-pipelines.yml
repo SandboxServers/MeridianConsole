@@ -1,16 +1,12 @@
 # Meridian Console CI/CD Pipeline
 # Security scanning enabled with SAST, SCA, Container, IaC, Secrets, SBOM
-trigger:
-  branches:
-    include:
-      - main
-      - develop
+#
+# Manual runs only. PR and push build/test moved to GitHub Actions
+# (.github/workflows/ci.yml). Run this pipeline by hand for the Static Web
+# Apps deploys, the security scans, or infrastructure and DNS provisioning.
+trigger: none
 
-pr:
-  branches:
-    include:
-      - main
-      - develop
+pr: none
 
 pool:
   name: "Sandbox Servers Agents"
