@@ -731,6 +731,22 @@ public class IdentityServiceClient : IIdentityServiceClient
 
 ---
 
+## Agents
+
+Agent hub, command, signing and event contracts, shared by Nodes and the Windows and Linux agents (VS-03). Namespace `Dhadgar.Contracts.Agents`, plus `Dhadgar.Contracts.Nodes` for the dispatch DTOs.
+
+| File | Contents |
+| --- | --- |
+| `Agents/AgentProtocol.cs` | `AgentProtocol`, `AgentMessageLimits`, `AgentCommandTypes`, `AgentJson` |
+| `Agents/AgentHubContracts.cs` | `IAgentHub`, `IAgentHubClient` |
+| `Agents/AgentMessages.cs` | `AgentCommandEnvelope`, `AgentCommandStatus`, `AgentCommandResult`, `AgentServerState`, `AgentServerProcess`, `AgentHeartbeat`, `AgentServerStatus`, `AgentConsoleLine`, `AgentConsoleBatch`, `AgentTelemetry` |
+| `Agents/AgentCommandPayloads.cs` | `PingPayload`, `PingResult`, `StartServerPayload`, `StopServerPayload`, `ServerStatusPayload`, `ServerStatusResult` |
+| `Agents/AgentEvents.cs` | `AgentCommandCompleted`, `AgentServerStatusChanged`, `ServerConsoleOutput` |
+| `Agents/AgentCommandSigning.cs` | `AgentCommandSigning` (signing input and key id, pure functions) |
+| `Nodes/AgentCommandDispatchContracts.cs` | `DispatchAgentCommandRequest`, `DispatchAgentCommandResponse` |
+
+The wire layout is specified in [the contract](../../../docs/analysis/vertical-slice/work-packets.md#the-contract) (C-2 to C-4).
+
 ## Constants Reference
 
 ### `MembershipChangeTypes`
