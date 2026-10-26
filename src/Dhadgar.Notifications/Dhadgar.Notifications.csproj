@@ -17,6 +17,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
     <!-- Pins the transitive System.Security.Cryptography.Pkcs (via EF Design's MSBuild deps and MimeKit) past its advisories; see Directory.Packages.props -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="SendGrid" />
