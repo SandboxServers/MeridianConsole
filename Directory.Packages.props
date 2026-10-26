@@ -106,7 +106,7 @@
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.0" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.57.2" />
-    <PackageVersion Include="Refit" Version="9.0.2" />
+    <PackageVersion Include="Refit" Version="16.4.0" />
 
     <!-- Developer Experience -->
     <PackageVersion Include="Mapster" Version="7.4.0" />
