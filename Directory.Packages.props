@@ -62,7 +62,7 @@
 
     <!-- Email -->
     <PackageVersion Include="SendGrid" Version="9.29.3" />
-    <PackageVersion Include="Microsoft.Graph" Version="5.105.0" />
+    <PackageVersion Include="Microsoft.Graph" Version="6.9.0" />
     <!-- Direct pin: Microsoft.Graph resolves Microsoft.Kiota.Abstractions below 1.22.0
          (GHSA-7j59-v9qr-6fq9 patched at 1.22.0; even current Graph.Core 3.2.5 floors Kiota at 1.21.1).
          Referenced directly in Dhadgar.Notifications. Remove once Graph.Core floors Kiota >= 1.22.0. -->
