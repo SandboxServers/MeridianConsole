@@ -53,11 +53,11 @@
       },
       "MessagePack": {
         "type": "Direct",
-        "requested": "[2.5.302, )",
-        "resolved": "2.5.302",
-        "contentHash": "5DZsKli4dMEpm/glcMAheuO8/IesfaTskbfsuvgnQwWFKS5FN7Z6yNx+5F+UW94E+9N2qt8Zs63/XVzpLsElgA==",
+        "requested": "[2.5.307, )",
+        "resolved": "2.5.307",
+        "contentHash": "P9LNJ2bz/wx8J5W0EQW4Bh7G5BiEikXiiDqGvw/WOMRyRI0QcxVvRM4XkqhidGJG6uzMT7iF89o0uYGLwmGifQ==",
         "dependencies": {
-          "MessagePack.Annotations": "2.5.302",
+          "MessagePack.Annotations": "2.5.307",
           "Microsoft.NET.StringTools": "17.6.3"
         }
       },
@@ -291,8 +291,8 @@
       },
       "MessagePack.Annotations": {
         "type": "Transitive",
-        "resolved": "2.5.302",
-        "contentHash": "PTHQHbMJzx1VtUUCpnvPavD7o5X9s2dAJ4uQHAP2kBCwJKICpPTZq0qxzbB4/6iJJiIxem8zlxyfldGAx1SjSQ=="
+        "resolved": "2.5.307",
+        "contentHash": "kIGiwydfCKWRim1ZoFbZ1qVHDHrQfXdJ+FEFVPEqse/XzvPT7lVUjIb1LOuocP3Tx1+PtFEdEandRhxB64Xd4A=="
       },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
@@ -800,7 +800,7 @@
           "Aspire.Hosting.RabbitMQ": "[13.1.0, )",
           "Aspire.Hosting.Redis": "[13.1.0, )",
           "Dhadgar.BetterAuth": "[1.0.0, )",
-          "MessagePack": "[2.5.302, )"
+          "MessagePack": "[2.5.307, )"
         }
       },
       "dhadgar.betterauth": {
