@@ -6,7 +6,7 @@
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
-    <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
 
     <!-- CA1303: Agents don't need localization for console output -->
