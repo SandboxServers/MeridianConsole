@@ -1,0 +1,31 @@
+name: Set up .NET and restore
+description: >-
+  Installs the .NET SDK pinned by global.json, caches NuGet packages keyed on every
+  packages.lock.json, and optionally restores a project or solution in locked mode.
+
+inputs:
+  restore:
+    description: Run dotnet restore after installing the SDK ('true' or 'false').
+    required: false
+    default: 'true'
+  project:
+    description: Project or solution to restore.
+    required: false
+    default: Dhadgar.sln
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET (global.json)
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        global-json-file: global.json
+        cache: true
+        cache-dependency-path: '**/packages.lock.json'
+
+    - name: Restore (locked mode)
+      if: inputs.restore == 'true'
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+      run: dotnet restore "$PROJECT" --locked-mode

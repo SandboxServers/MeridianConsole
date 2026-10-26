@@ -1,0 +1,136 @@
+# Reusable: build Dhadgar.sln, run every test project with coverage, and publish
+# test results plus a merged coverage report. Ported from the Azure Pipelines
+# "Build & Test" stage (Templates/Stages/Build.yml + Jobs/BuildSolution.yml).
+name: .NET build and test
+
+on:
+  workflow_call:
+    inputs:
+      configuration:
+        description: Build configuration.
+        type: string
+        default: Release
+      run-tests:
+        description: Run dotnet test after the build.
+        type: boolean
+        default: true
+      collect-coverage:
+        description: Collect and merge Cobertura coverage (needs run-tests).
+        type: boolean
+        default: true
+      runs-on:
+        description: Runner label.
+        type: string
+        default: ubuntu-24.04
+
+permissions: {}
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  # Turns on TreatWarningsAsErrors and full analyzers in Directory.Build.props.
+  CI: 'true'
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      checks: write # dorny/test-reporter publishes a check run
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The npm-backed projects run npm ci from MSBuild one at a time; doing it
+      # up front in parallel is faster and fails loudly per project.
+      - name: npm ci (parallel)
+        uses: $/.github/actions/npm-ci
+        with:
+          directories: |
+            src/Dhadgar.BetterAuth
+            src/Dhadgar.SharedAuth
+            src/Dhadgar.Scope
+            src/Dhadgar.ShoppingCart
+            src/Dhadgar.Panel
+
+      - name: Setup .NET and restore
+        uses: $/.github/actions/setup-dotnet-env
+
+      - name: Build solution
+        env:
+          CONFIGURATION: ${{ inputs.configuration }}
+        run: >-
+          dotnet build Dhadgar.sln
+          --configuration "$CONFIGURATION"
+          --no-restore
+          -m
+          -p:SkipGlobalToolInstall=true
+
+      - name: Test
+        if: inputs.run-tests
+        env:
+          CONFIGURATION: ${{ inputs.configuration }}
+          COLLECT_COVERAGE: ${{ inputs.collect-coverage }}
+        run: |
+          args=(Dhadgar.sln --configuration "$CONFIGURATION" --no-build
+                --logger trx --results-directory "$RUNNER_TEMP/testresults")
+          if [ "$COLLECT_COVERAGE" = 'true' ]; then
+            args+=(--collect 'XPlat Code Coverage')
+          fi
+          dotnet test "${args[@]}"
+
+      - name: Publish test results
+        if: ${{ !cancelled() && inputs.run-tests }}
+        # A fork PR's token cannot create check runs; the test step already gates the job.
+        continue-on-error: true
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: Test results
+          path: ${{ runner.temp }}/testresults/**/*.trx
+          reporter: dotnet-trx
+          list-tests: failed
+          fail-on-error: 'false'
+
+      - name: Find coverage files
+        id: find-coverage
+        if: ${{ !cancelled() && inputs.run-tests && inputs.collect-coverage }}
+        run: |
+          count=$(find "$RUNNER_TEMP/testresults" -name coverage.cobertura.xml 2>/dev/null | wc -l)
+          echo "Found $count coverage file(s)."
+          echo "found=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Merge coverage
+        id: coverage
+        if: ${{ !cancelled() && steps.find-coverage.outputs.found == 'true' }}
+        uses: danielpalme/ReportGenerator-GitHub-Action@d3ebf1f760f7d8ab92cc44d9bcfee7ad73722a31 # 5.5.11
+        with:
+          reports: ${{ runner.temp }}/testresults/**/coverage.cobertura.xml
+          targetdir: ${{ runner.temp }}/coverage
+          reporttypes: Cobertura;HtmlInline;MarkdownSummaryGithub
+          assemblyfilters: -*.Tests
+
+      - name: Coverage summary
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+        run: cat "$RUNNER_TEMP/coverage/SummaryGithub.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test results
+        if: ${{ !cancelled() && inputs.run-tests }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results
+          path: ${{ runner.temp }}/testresults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: ${{ runner.temp }}/coverage
+          retention-days: 14

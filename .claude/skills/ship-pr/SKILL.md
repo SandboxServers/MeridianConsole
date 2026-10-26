@@ -18,19 +18,21 @@ One worktree per worker. Never two implementers in one checkout.
 
 ## 2. Pre-PR checks
 
-CI (GitHub `code-quality.yml` and Azure Pipelines) builds with warnings as errors. Run locally, scoped to what you touched:
+GitHub Actions `ci.yml` builds the solution with `CI=true`, which turns on warnings as errors, full analyzers and NuGet audit, and then runs every test project. `code-quality.yml` lints YAML, workflows, the Scope frontend and Dockerfiles. Run locally, scoped to what you touched, with the same `CI` switch:
 
 ```powershell
-dotnet build <project.csproj> -c Release -p:TreatWarningsAsErrors=true
+$env:CI = 'true'; dotnet build <project.csproj> -c Release; Remove-Item Env:CI
 dotnet test <test-project.csproj>
 ```
+
+After a package bump, regenerate lock files (`dotnet restore Dhadgar.sln --force-evaluate`); CI restores in locked mode.
 
 Then walk the pre-commit checklist in [CLAUDE.md](../../../CLAUDE.md): `PathValidator`, `ArgumentList`, `Result<T>`, sensitive data zeroed, no package versions in `.csproj`, `using` on every `IDisposable`, trusted hosts, `WindowsBuild` in WiX. Also:
 
 - Runtime behaviour changed → a test that fails when the change is reverted.
 - A cross-service change → its seam test passes.
 - Changes under `src/Dhadgar.Scope` → `npm run lint` and `npm run format:check` there (CI lints only that app).
-- YAML changes → `yamllint --strict`.
+- YAML changes → `yamllint --strict`. Workflow or `.github/actions` changes → actionlint and zizmor too (see `code-quality.yml` for the files covered and flags).
 
 ## 3. Commit, push, open the PR
 
