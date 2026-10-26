@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +10,28 @@
             "type": "command",
             "command": "[ -x \"$HOME/.agent-board/board\" ] && \"$HOME/.agent-board/board\" hook session-start; exit 0",
             "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/resume_card.py\"; [ -n \"$CLAUDE_PROJECT_DIR\" ] && [ -f \"$f\" ] || exit 0; set -- \"$f\"; . \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/shell_guard.py\"; [ -n \"$CLAUDE_PROJECT_DIR\" ] && [ -f \"$f\" ] || exit 0; set -- \"$f\"; . \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.sh\"",
+            "timeout": 10
           }
         ]
       }
