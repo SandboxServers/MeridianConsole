@@ -246,6 +246,11 @@ services:
       EXCHANGE_TOKEN_AUDIENCE: https://dev.meridianconsole.com/api/v1/identity/exchange
       EXCHANGE_TOKEN_ISSUER: https://dev.meridianconsole.com/api/v1/betterauth
       EXCHANGE_TOKEN_KID: betterauth-exchange-v1
+      # Requests arrive through the Gateway, which sets one X-Forwarded-For
+      # entry with the real client IP; trust that one hop so the /exchange
+      # rate limit is per client, not one shared bucket. Callers that reach
+      # port 5130 directly could spoof the header, so keep it off the internet.
+      TRUST_PROXY: "1"
     ports:
       - "5130:8080"
     depends_on:
