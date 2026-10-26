@@ -64,31 +64,31 @@ The site is organized into 19 numbered sections covering:
 
 | Technology       | Version | Purpose                                         |
 | ---------------- | ------- | ----------------------------------------------- |
-| **Astro**        | 5.1.1   | Static site generator with islands architecture |
-| **React**        | 18.3.1  | UI components (hydrated as client-side islands) |
-| **Tailwind CSS** | 3.4.16  | Utility-first CSS framework                     |
+| **Astro**        | 7.4.2   | Static site generator with islands architecture |
+| **React**        | 19.3.1  | UI components (hydrated as client-side islands) |
+| **Tailwind CSS** | 4.3.3   | Utility-first CSS framework                     |
 | **TypeScript**   | 5.7.2   | Type-safe JavaScript                            |
 
 ### Key Dependencies
 
 | Package             | Version | Purpose                                        |
 | ------------------- | ------- | ---------------------------------------------- |
-| `@astrojs/react`    | 4.1.1   | Astro integration for React components         |
-| `@astrojs/tailwind` | 6.0.1   | Astro integration for Tailwind CSS             |
+| `@astrojs/react`    | 6.0.6   | Astro integration for React components         |
+| `@tailwindcss/vite` | 4.3.3   | Vite plugin for Tailwind CSS                   |
 | `clsx`              | 2.1.1   | Utility for conditional CSS class names        |
-| `cytoscape`         | 3.30.4  | Graph visualization library for dependency map |
+| `cytoscape`         | 3.34.4  | Graph visualization library for dependency map |
 
 ### Development Dependencies
 
 | Package                     | Version | Purpose                             |
 | --------------------------- | ------- | ----------------------------------- |
-| `eslint`                    | 9.39.2  | JavaScript/TypeScript linting       |
+| `eslint`                    | 9.39.5  | JavaScript/TypeScript linting       |
 | `eslint-plugin-astro`       | 1.5.0   | ESLint rules for Astro files        |
 | `eslint-plugin-react`       | 7.37.5  | ESLint rules for React              |
-| `eslint-plugin-react-hooks` | 7.0.1   | ESLint rules for React hooks        |
+| `eslint-plugin-react-hooks` | 7.1.1   | ESLint rules for React hooks        |
 | `eslint-plugin-jsx-a11y`    | 6.10.2  | Accessibility linting               |
 | `eslint-plugin-security`    | 3.0.1   | Security-focused linting            |
-| `prettier`                  | 3.7.4   | Code formatting                     |
+| `prettier`                  | 3.9.10  | Code formatting                     |
 | `prettier-plugin-astro`     | 0.14.1  | Prettier support for `.astro` files |
 
 ### Why These Technologies?
@@ -239,7 +239,7 @@ src/Dhadgar.Scope/
 │   │   ├── TechStack.astro
 │   │   └── Vision.astro
 │   └── styles/
-│       └── global.css           # Global styles and Tailwind imports
+│       └── global.css           # Tailwind import, @theme and global styles
 ├── .env.production              # Production environment variables
 ├── .gitignore
 ├── .prettierrc                  # Prettier configuration
@@ -249,7 +249,6 @@ src/Dhadgar.Scope/
 ├── eslint.config.js             # ESLint flat config
 ├── package.json
 ├── package-lock.json
-├── tailwind.config.mjs          # Tailwind CSS configuration
 └── tsconfig.json                # TypeScript configuration
 ```
 
@@ -714,33 +713,30 @@ interface Props {
 
 ### Tailwind CSS Configuration
 
-**File**: `tailwind.config.mjs`
+Tailwind CSS 4 is configured in CSS, not in a `tailwind.config.mjs` file. It runs through the
+`@tailwindcss/vite` plugin registered in `astro.config.mjs`. The configuration lives at the top
+of `src/styles/global.css`:
 
-```javascript
-export default {
-  content: ["./src/**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}"],
-  darkMode: "class",
-  theme: {
-    extend: {
-      colors: {
-        slate: {
-          950: "#020617", // Custom dark shade
-        },
-      },
-      fontFamily: {
-        sans: ["Roboto", "system-ui", "sans-serif"],
-      },
-    },
-  },
-  plugins: [],
-};
+```css
+/* Scan only src/ for class names */
+@import "tailwindcss" source("../");
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-slate-950: #020617;
+
+  --font-sans: Roboto, system-ui, sans-serif;
+}
 ```
 
 **Key customizations**:
 
-- `darkMode: 'class'`: Dark mode activated by `.dark` class on `<html>`
+- `@custom-variant dark`: Dark mode activated by `.dark` class on `<html>`
 - Custom `slate-950` color for very dark backgrounds
 - Roboto as the primary sans-serif font
+- v3 compatibility rules in `@layer base`: default border colour `gray-200` and `cursor: pointer`
+  on buttons
 
 ### Global CSS
 
@@ -748,12 +744,10 @@ export default {
 
 The global stylesheet includes:
 
-1. **Tailwind directives**:
+1. **Tailwind import and theme** (see above):
 
    ```css
-   @tailwind base;
-   @tailwind components;
-   @tailwind utilities;
+   @import "tailwindcss" source("../");
    ```
 
 2. **Dark mode color scheme**:
@@ -823,11 +817,15 @@ The global stylesheet includes:
 ```javascript
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
-import tailwind from "@astrojs/tailwind";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  integrations: [react(), tailwind()],
+  integrations: [react()],
+  vite: {
+    plugins: [tailwindcss()],
+  },
   output: "static",
+  compressHTML: true,
   build: {
     assets: "_assets",
   },
@@ -837,7 +835,8 @@ export default defineConfig({
 
 **Configuration details**:
 
-- `integrations`: Enables React components and Tailwind CSS
+- `integrations`: Enables React components
+- `vite.plugins`: Runs Tailwind CSS through `@tailwindcss/vite`
 - `output: 'static'`: Generates static HTML (no SSR server needed)
 - `build.assets`: Places bundled JS/CSS in `/_assets/` directory
 - `outDir`: Build output goes to `_swa_publish/wwwroot` for Azure SWA
@@ -1274,7 +1273,7 @@ Use these pre-defined classes for consistent styling:
 **Styles not applying**:
 
 - Run `npm run build` to regenerate Tailwind CSS
-- Check that the file is included in `tailwind.config.mjs` content array
+- Check that the file is under `src/` (the `source("../")` scan root in `global.css`)
 - Verify the `global.css` import in `BaseLayout.astro`
 
 **404 errors on direct URL access (production)**:

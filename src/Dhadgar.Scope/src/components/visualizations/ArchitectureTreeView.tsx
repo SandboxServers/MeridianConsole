@@ -55,7 +55,7 @@ export function ArchitectureTreeView() {
         aria-label="Filter architecture nodes"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white placeholder-white/50 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white placeholder-white/50 focus:border-indigo-500/50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/50"
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -124,7 +124,7 @@ export function ArchitectureTreeView() {
                   <ul className="mt-2 space-y-1">
                     {selectedNode.responsibilities.map((r, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-white/80">
-                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-indigo-400" />
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
                         {r}
                       </li>
                     ))}

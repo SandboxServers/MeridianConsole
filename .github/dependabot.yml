@@ -91,6 +91,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # MassTransit v9+ is commercially licensed; stay on 8.x until the
+      # OpenTransit switch (#195).
+      - dependency-name: 'MassTransit*'
+        update-types:
+          - version-update:semver-major
     groups:
       nuget-minor-patch:
         applies-to: version-updates

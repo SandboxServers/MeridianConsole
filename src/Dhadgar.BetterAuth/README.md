@@ -126,11 +126,11 @@ This separation follows the principle of using the best tool for each job while 
 | Package | Version | Purpose |
 |---------|---------|---------|
 | **better-auth** | ^1.3.1 (actual: 1.4.10) | Core authentication library |
-| **express** | ^4.19.2 | HTTP server framework |
+| **express** | ^5.3.0 | HTTP server framework |
 | **pg** | ^8.12.0 | PostgreSQL client for direct queries |
-| **jose** | ^5.6.3 | ES256 JWT signing for exchange tokens |
+| **jose** | ^6.2.13 | ES256 JWT signing for exchange tokens |
 | **cors** | ^2.8.5 | Cross-origin request handling |
-| **dotenv** | ^16.4.5 | Environment variable loading |
+| **dotenv** | ^17.4.2 | Environment variable loading |
 
 ### Runtime Environment
 

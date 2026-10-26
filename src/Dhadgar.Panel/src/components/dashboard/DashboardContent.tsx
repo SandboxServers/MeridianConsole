@@ -74,7 +74,7 @@ export default function DashboardContent() {
             <label className="block text-text-muted text-xs font-mono uppercase tracking-wider mb-1">
               User ID
             </label>
-            <p className="text-text-primary font-mono text-sm bg-panel-darker rounded px-3 py-2 border border-glow-line/30">
+            <p className="text-text-primary font-mono text-sm bg-panel-darker rounded-sm px-3 py-2 border border-glow-line/30">
               {user?.id ?? 'N/A'}
             </p>
           </div>
@@ -82,7 +82,7 @@ export default function DashboardContent() {
             <label className="block text-text-muted text-xs font-mono uppercase tracking-wider mb-1">
               Email
             </label>
-            <p className="text-text-primary font-mono text-sm bg-panel-darker rounded px-3 py-2 border border-glow-line/30">
+            <p className="text-text-primary font-mono text-sm bg-panel-darker rounded-sm px-3 py-2 border border-glow-line/30">
               {user?.email ?? 'N/A'}
             </p>
           </div>

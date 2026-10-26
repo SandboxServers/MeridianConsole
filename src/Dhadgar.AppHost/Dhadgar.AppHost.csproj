@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.1.0" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.5.3" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -12,6 +12,10 @@
     <!-- Aspire adds host-specific packages (Dashboard.Sdk.<rid>, Orchestration.<rid>), so a
          lock file from one OS fails locked-mode restore on another. Local-dev only; not shipped. -->
     <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <!-- Aspire 13.5 warns (ASPIRE010) when the AppHost keeps its default AspireUseCliBundle=false.
+         We keep that mode on purpose: DCP and the dashboard come from NuGet packages, so neither
+         CI nor local dev needs the Aspire CLI installed. Revisit if we adopt the CLI bundle. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);ASPIRE010</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
   <ItemGroup>

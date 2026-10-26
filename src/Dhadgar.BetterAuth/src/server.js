@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./env.js";
 import express from "express";
 import cors from "cors";
 import pg from "pg";
@@ -57,7 +57,8 @@ const { createExchangeToken } = await import("./exchange.js");
 const app = express();
 const port = Number(process.env.PORT ?? 5130);
 
-app.use(express.json());
+// No global body parser: Better Auth must read the raw request stream, so
+// express.json() is applied only to the routes that need it (see below).
 
 app.use(
   cors({
@@ -83,7 +84,8 @@ app.get("/healthz", (_req, res) => {
 });
 
 // Exchange token endpoint: emits ES256 one-time exchange token for Identity
-app.post("/api/v1/betterauth/exchange", async (req, res) => {
+// Registered before the Better Auth catch-all so it is matched first.
+app.post("/api/v1/betterauth/exchange", express.json(), async (req, res) => {
   try {
     const session = await auth.api.getSession({
       headers: fromNodeHeaders(req.headers)
@@ -135,10 +137,14 @@ app.post("/api/v1/betterauth/exchange", async (req, res) => {
   }
 });
 
-// Better Auth handles all auth routes
-app.all("/api/v1/betterauth/*", toNodeHandler(auth));
+// Better Auth handles all auth routes.
+// Express 5 (path-to-regexp v8) requires a named wildcard; a bare "*" throws at startup.
+app.all("/api/v1/betterauth/*splat", toNodeHandler(auth));
 
-const server = app.listen(port, () => {
+// Express 5 also calls the listen callback with the error when the server fails
+// to bind; the 'error' handler below reports it and exits.
+const server = app.listen(port, (err) => {
+  if (err) return;
   console.log(`Dhadgar.BetterAuth listening on http://localhost:${port}`);
 });
 
