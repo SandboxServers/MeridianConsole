@@ -123,7 +123,7 @@
          (GHSA-qhrr-8q5h-9q3h).
          Referenced directly in Dhadgar.AppHost and Dhadgar.AppHost.Tests.
          Remove once Aspire's StreamJsonRpc floors MessagePack >= 2.5.303. -->
-    <PackageVersion Include="MessagePack" Version="2.5.307" />
+    <PackageVersion Include="MessagePack" Version="3.1.12" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.Redis" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
