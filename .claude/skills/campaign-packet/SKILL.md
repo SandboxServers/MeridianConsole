@@ -52,7 +52,7 @@ Group packets into **waves** of about six small packets.
 ## 3. Dispatch a wave
 
 1. Ask `ops` for one worktree per packet, all in one message: `git worktree add <root>\.claude\worktrees\<name> -b <branch> origin/main`. One worktree per worker; never two implementers in one checkout. Testcontainers gives each test run its own database.
-2. Dispatch every independent packet of the wave **in one message, in the background**. Each brief stays under about 25 lines and carries: the worktree path; the packet section path (not its text); the absolute report path `<worktree>\.claude\reports\<campaign>\<packet>-<role>.md`; the commit message with the attribution lines; the return contract, exactly one line: `<packet> <done|blocked|failed> <commit-sha|-> <report-path>`.
+2. Dispatch every independent packet of the wave **in one message, in the background**. Each brief stays under about 25 lines and carries: the worktree path; the packet section path (not its text); the absolute report path `<worktree>\.claude\reports\<campaign>\<packet>-<role>.md`; the commit message with the attribution lines; the return contract, exactly one line: `<packet> <done|blocked|failed> <commit-sha|-> <report-path> <reason>` (reason `-` on `done`; on `blocked` one of `context`, `docker`, `tool`, `spec`).
 3. Workers commit locally and stop. No push, no `git stash`, no `git worktree prune`.
 4. On a one-line return, update the ledger row; `done` starts that packet's review loop. Open the report only on `blocked`, `failed` or `verdict=decision`.
 

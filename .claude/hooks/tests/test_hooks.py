@@ -61,6 +61,22 @@ class ShellGuardTests(unittest.TestCase):
         ):
             self.assert_allowed(command)
 
+    def test_wrapped_reads_are_refused(self):
+        for command in (
+            'powershell -Command "Get-Content x.cs"',
+            "bash -c 'cat x.cs | head -5'",
+            'pwsh -c "gc x.cs"',
+        ):
+            self.assert_refused(command)
+
+    def test_wrapped_non_reads_are_allowed(self):
+        for command in (
+            'pwsh -Command "dotnet build"',
+            'bash -c "git log | grep x"',
+            'powershell -Command "Get-Content a.txt > b.txt"',
+        ):
+            self.assert_allowed(command)
+
     def test_bypass_comment(self):
         self.assert_allowed("cat binary.dat # guard-ok")
         self.assert_allowed("git worktree prune # guard-ok")
@@ -133,6 +149,44 @@ class OrchestratorGuardTests(unittest.TestCase):
         payload = {"tool_name": "Write", "agent_id": "abc", "tool_input": {"file_path": str(self.root / "src/New.cs")}}
         self.assertIsNone(orchestrator_guard.verdict(payload, self.root))
 
+    def test_empty_agent_id_is_not_a_subagent(self):
+        for agent_id in ("", None, 0):
+            payload = {"tool_name": "Write", "agent_id": agent_id, "tool_input": {"file_path": str(self.root / "src/New.cs")}}
+            self.assertIsNotNone(orchestrator_guard.verdict(payload, self.root), repr(agent_id))
+
+    def test_traversal_out_of_ledger_refused(self):
+        self.assertIsNotNone(self.verdict("Write", "docs/analysis/../../src/New.cs"))
+        self.assertIsNotNone(self.verdict("Write", self.root / "docs/analysis/camp/../../../src/New.cs"))
+
+    def test_symlink_out_of_ledger_refused(self):
+        link = self.root / "docs" / "analysis" / "escape"
+        try:
+            os.symlink(self.root / "src", link, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot create symlinks here")
+        self.assertIsNotNone(self.verdict("Write", link / "New.cs"))
+
+    def test_worktree_ledger_allowed_and_code_refused(self):
+        wt = self.root / ".claude" / "worktrees" / "camp-wt"
+        (wt / "docs" / "analysis").mkdir(parents=True)
+        (wt / "src").mkdir()
+        self.assertIsNone(self.verdict("Write", wt / "docs/analysis/x.md"))
+        self.assertIsNotNone(self.verdict("Write", wt / "src/x.cs"))
+        # Same from inside the worktree with relative paths.
+        payload = {"tool_name": "Write", "cwd": str(wt), "tool_input": {"file_path": "docs/analysis/x.md"}}
+        self.assertIsNone(orchestrator_guard.verdict(payload, self.root))
+        payload["tool_input"]["file_path"] = "src/x.cs"
+        self.assertIsNotNone(orchestrator_guard.verdict(payload, self.root))
+
+    def test_hook_protocol(self):
+        payload = {"tool_name": "Write", "tool_input": {"file_path": str(self.root / "src/New.cs")}}
+        code, _, err = run_hook("orchestrator_guard.py", payload, env={"CLAUDE_PROJECT_DIR": str(self.root)})
+        self.assertEqual(code, 2)
+        self.assertIn(orchestrator_guard.WRITE_REASON, err)
+        payload["tool_input"]["file_path"] = str(self.root / "docs/analysis/camp/RESUME.md")
+        code, _, _ = run_hook("orchestrator_guard.py", payload, env={"CLAUDE_PROJECT_DIR": str(self.root)})
+        self.assertEqual(code, 0)
+
 
 class ResumeCardTests(unittest.TestCase):
     def test_card_from_active_campaign(self):
@@ -157,6 +211,32 @@ class ResumeCardTests(unittest.TestCase):
             root = Path(tmp)
             (root / ".claude" / "state").mkdir(parents=True)
             (root / ".claude" / "state" / "active-campaign").write_text("../etc\n")
+            self.assertIsNone(resume_card.build_card(root))
+
+    def write_pointer(self, root, name):
+        (root / ".claude" / "state").mkdir(parents=True, exist_ok=True)
+        (root / ".claude" / "state" / "active-campaign").write_text(name + "\n")
+
+    def test_unsafe_names_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "analysis").mkdir(parents=True)
+            for name in ("..", "a/../../x", "C:foo", "D:\\x", "..hidden", ".camp", "-x"):
+                self.write_pointer(root, name)
+                self.assertIsNone(resume_card.build_card(root), name)
+
+    def test_symlinked_resume_outside_base_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+            root = Path(tmp)
+            secret = Path(outside) / "secret.md"
+            secret.write_text("outside the repo")
+            camp = root / "docs" / "analysis" / "camp"
+            camp.mkdir(parents=True)
+            try:
+                os.symlink(secret, camp / "RESUME.md")
+            except (OSError, NotImplementedError):
+                self.skipTest("cannot create symlinks here")
+            self.write_pointer(root, "camp")
             self.assertIsNone(resume_card.build_card(root))
 
 

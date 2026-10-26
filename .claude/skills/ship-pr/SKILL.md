@@ -16,6 +16,8 @@ git worktree add .claude/worktrees/<name> -b <branch> origin/main
 
 One worktree per worker. Never two implementers in one checkout.
 
+Keep `<name>` to one path component (`[A-Za-z0-9][A-Za-z0-9._-]*`, no `..`) so the worktree stays under `.claude/worktrees`, and `<branch>` to `[A-Za-z0-9][A-Za-z0-9._/-]*`. Put free text such as a PR title in a single-quoted PowerShell variable (`$title = '...'`) and pass `--title $title`; never splice it into a double-quoted command.
+
 ## 2. Pre-PR checks
 
 GitHub Actions `ci.yml` builds the solution with `CI=true`, which turns on warnings as errors, full analyzers and NuGet audit, and then runs every test project. `code-quality.yml` lints YAML, workflows, the Scope frontend and Dockerfiles. Run locally, scoped to what you touched, with the same `CI` switch:
@@ -64,11 +66,14 @@ For a campaign packet, its `packet-reviewer` loop is the review; don't run a sec
 
 ## 6. Merge
 
-`main` has no branch protection, so the rule is ours to keep: merge only when every check is green.
+`main` has no branch protection, so the rule is ours to keep: merge only when every check is green, and only the commit those checks ran on.
 
 ```powershell
-gh pr merge <PR> --squash --delete-branch
+$sha = gh pr view <PR> --json headRefOid --jq .headRefOid   # the head the green checks ran on
+gh pr merge <PR> --squash --delete-branch --match-head-commit $sha
 ```
+
+If someone pushed after the checks, `--match-head-commit` refuses the merge; wait for CI on the new head.
 
 Never `--admin`. PRs stacked on the merged branch need `gh pr edit <child> --base main` and a rebase in their own worktree.
 

@@ -12,10 +12,12 @@ Never fails the session: every error ends with exit 0 and no output.
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
 CARD_LINES = 40
+SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 POINTER = (
     "Context was compacted. Active campaign: {name}. "
     "Read docs/analysis/{name}/RESUME.md and the ledger README before acting."
@@ -37,11 +39,14 @@ def build_card(root):
     if not lines:
         return None
     name = lines[0].strip()
-    # The name is a folder under docs/analysis/, never a path.
-    if name in ("", ".", "..") or "/" in name or "\\" in name:
+    # The name is one folder under docs/analysis/, never a path: no separators,
+    # no drive letters (`C:foo`), no `..`.
+    if not SAFE_NAME.match(name) or ".." in name:
         return None
-    resume = root / "docs" / "analysis" / name / "RESUME.md"
-    if not resume.is_file():
+    base = (root / "docs" / "analysis").resolve()
+    resume = (base / name / "RESUME.md").resolve()
+    # A symlinked folder or RESUME.md must not lead outside docs/analysis/.
+    if not resume.is_relative_to(base) or not resume.is_file():
         return None
     text = resume.read_text(encoding="utf-8", errors="replace")
     body = text.splitlines()[:CARD_LINES]

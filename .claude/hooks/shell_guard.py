@@ -168,7 +168,7 @@ def is_worktree_prune(command, depth=0):
     return False
 
 
-def is_plain_read(command):
+def is_plain_read(command, depth=0):
     command = re.sub(r"\d?>\s*(?:/dev/null|\$null|&\d)", "", command)
     stages, redirect = split_stages(command)
     if redirect or not stages:
@@ -179,6 +179,10 @@ def is_plain_read(command):
         tokens = strip_prefix(tokenize(stage))
         if not tokens:
             return False
+        inner = inner_command(tokens)
+        if inner is not None:
+            # Only a lone wrapper (`pwsh -Command "Get-Content x"`) is judged by its body.
+            return len(stages) == 1 and depth < 3 and is_plain_read(inner, depth + 1)
         word = tokens[0].lower()
         flags = {t.lower() for t in tokens[1:] if t.startswith("-")}
         if word == "sed":
