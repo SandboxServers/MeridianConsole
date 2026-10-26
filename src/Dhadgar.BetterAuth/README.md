@@ -130,7 +130,7 @@ This separation follows the principle of using the best tool for each job while 
 | **pg** | ^8.12.0 | PostgreSQL client for direct queries |
 | **jose** | ^6.2.13 | ES256 JWT signing for exchange tokens |
 | **cors** | ^2.8.5 | Cross-origin request handling |
-| **dotenv** | ^17.4.2 | Environment variable loading |
+| **dotenv** | ^18.0.9 | Environment variable loading (`.env` in local dev only) |
 
 ### Runtime Environment
 
