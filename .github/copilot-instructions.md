@@ -1,8 +1,8 @@
 ## Azure Pipelines YAML Authoring
 
-Azure Pipelines files in this repo:
-- `azure-pipelines.yml` (repo root) — main CI/CD pipeline
-- `azure-pipelines-containers.yml` (repo root) — container build pipeline
+CI/CD runs on GitHub Actions (`.github/workflows/`). The Azure Pipelines files below are manual-only and kept for reference until the GitHub workflows have run on main:
+- `azure-pipelines.yml` (repo root) — former main CI/CD pipeline
+- `azure-pipelines-containers.yml` (repo root) — former container build pipeline
 - `deploy/kubernetes/helm/helm-publish-pipeline.yml` — Helm chart publish pipeline
 
 ### Error checking

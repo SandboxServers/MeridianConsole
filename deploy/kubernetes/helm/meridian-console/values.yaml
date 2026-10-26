@@ -4,7 +4,7 @@
 # Global configuration
 global:
   # Container image registry
-  imageRegistry: "meridianconsoleacr-etdvg4cthscffqdf.azurecr.io"
+  imageRegistry: "ghcr.io/sandboxservers"
   # Image pull secrets for private registries
   imagePullSecrets: []
   # StorageClass for persistent volumes

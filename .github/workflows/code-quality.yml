@@ -71,7 +71,7 @@ jobs:
         run: yamllint --strict .
 
   # Lint GitHub Actions workflows and composite actions. Covers the files listed in
-  # LINTED_WORKFLOWS; add the gemini/helm/pr-agent workflows once their existing
+  # LINTED_WORKFLOWS; add the gemini/pr-agent workflows once their existing
   # findings (unpinned actions, issue_comment trigger) are fixed.
   workflow-lint:
     name: Lint Workflows (actionlint + zizmor)
@@ -84,6 +84,11 @@ jobs:
         .github/workflows/ci.yml
         .github/workflows/_dotnet-build-test.yml
         .github/workflows/code-quality.yml
+        .github/workflows/codeql.yml
+        .github/workflows/containers.yml
+        .github/workflows/helm-publish.yml
+        .github/workflows/infra.yml
+        .github/workflows/static-web-apps.yml
       LINTED_ACTIONS: >-
         .github/actions/npm-ci/action.yml
         .github/actions/setup-dotnet-env/action.yml

@@ -1,0 +1,138 @@
+# Builds and deploys the Astro sites (Scope, ShoppingCart) to Azure Static Web Apps.
+# Replaces the SWA stage of azure-pipelines.yml.
+#
+# Signs in to Azure with OIDC (app registration meridian-github-actions-deploy,
+# federated on the static-web-apps environment) and reads each site's deployment
+# token from the mc-cicd Key Vault, so no deployment token is stored in GitHub.
+# The site is built here and uploaded as-is: the SWA build (Oryx) fails on the
+# .NET 10 csproj that sits next to package.json.
+name: Static Web Apps
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/Dhadgar.Scope/**'
+      - 'src/Dhadgar.ShoppingCart/**'
+      - '.github/actions/npm-ci/**'
+      - '.github/workflows/static-web-apps.yml'
+  workflow_dispatch:
+    inputs:
+      site:
+        description: Site to deploy
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - Scope
+          - ShoppingCart
+
+permissions: {}
+
+# Never cancel a deploy halfway; queue the next one instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      sites: ${{ steps.plan.outputs.sites }}
+    steps:
+      - name: Pick sites to deploy
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          REQUESTED: ${{ inputs.site }}
+        run: |
+          set -euo pipefail
+          sites='[
+            {"name": "Scope", "dir": "src/Dhadgar.Scope", "secret": "swa-token-scope"},
+            {"name": "ShoppingCart", "dir": "src/Dhadgar.ShoppingCart", "secret": "swa-token-shoppingcart"}
+          ]'
+
+          if [ "$EVENT" = workflow_dispatch ]; then
+            pick=$(jq -c --arg r "$REQUESTED" '[.[] | select($r == "all" or .name == $r)]' <<< "$sites")
+          elif [[ "$BEFORE" =~ ^0+$ ]]; then
+            pick=$(jq -c . <<< "$sites")
+          else
+            files=$(gh api "repos/$REPO/compare/$BEFORE...$AFTER" --jq '[.files[].filename]')
+            pick=$(jq -c --argjson f "$files" '
+              ($f | any(startswith(".github/"))) as $all
+              | [.[] | . as $s | select($all or ($f | any(startswith($s.dir + "/"))))]' <<< "$sites")
+          fi
+          echo "sites=$pick" >> "$GITHUB_OUTPUT"
+          echo "Sites to deploy: $pick"
+
+  deploy:
+    name: Deploy ${{ matrix.site.name }}
+    needs: plan
+    if: needs.plan.outputs.sites != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: static-web-apps
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in to Azure
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.plan.outputs.sites) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        uses: $/.github/actions/npm-ci
+        with:
+          directories: ${{ matrix.site.dir }}
+
+      - name: Build site
+        working-directory: ${{ matrix.site.dir }}
+        run: |
+          npm run build
+          test -f _swa_publish/wwwroot/index.html
+
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read deployment token from Key Vault
+        id: token
+        env:
+          VAULT: ${{ vars.KEY_VAULT_NAME }}
+          SECRET: ${{ matrix.site.secret }}
+        run: |
+          set -euo pipefail
+          token=$(az keyvault secret show --vault-name "$VAULT" --name "$SECRET" --query value -o tsv)
+          echo "::add-mask::$token"
+          echo "value=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Static Web Apps
+        uses: Azure/static-web-apps-deploy@4d27395796ac319302594769cfe812bd207490b1 # v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.token.outputs.value }}
+          action: upload
+          app_location: ${{ matrix.site.dir }}/_swa_publish/wwwroot
+          skip_app_build: true
+          skip_api_build: true
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true

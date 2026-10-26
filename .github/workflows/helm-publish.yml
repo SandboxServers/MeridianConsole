@@ -1,115 +1,89 @@
-name: Publish Helm Charts to ACR
+# Lints the meridian-console Helm chart on pull requests and publishes it to GHCR
+# as an OCI chart (oci://ghcr.io/sandboxservers/charts/meridian-console) from main
+# and from releases. Install with:
+#   helm install meridian oci://ghcr.io/sandboxservers/charts/meridian-console --version <version>
+name: Helm Chart
 
 on:
   push:
     branches:
       - main
-    paths:
+    paths: &chart-paths
       - 'deploy/kubernetes/helm/meridian-console/**'
       - '.github/workflows/helm-publish.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths: *chart-paths
   release:
     types: [published]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Configure your Azure Container Registry name here or use repository variables
-  ACR_NAME: ${{ vars.ACR_NAME || 'meridianconsoleacr' }}
+  CHART_DIR: deploy/kubernetes/helm/meridian-console
+  CHART_REPO: oci://ghcr.io/sandboxservers/charts
 
 jobs:
-  publish-helm-chart:
-    runs-on: ubuntu-latest
+  chart:
+    name: Lint and publish chart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write # push the chart (not on pull requests)
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: '3.13.0'
+          version: v3.22.1
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Login to Azure Container Registry
-        run: |
-          # Get ACR login server
-          ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io"
-          echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
-
-          # Login to ACR using Azure CLI (uses the federated credential from azure/login)
-          az acr login --name $ACR_NAME
-
-          # Also login Helm registry for OCI push
-          ACCESS_TOKEN=$(az acr login --name $ACR_NAME --expose-token --output tsv --query accessToken)
-          echo "$ACCESS_TOKEN" | helm registry login "$ACR_LOGIN_SERVER" --username 00000000-0000-0000-0000-000000000000 --password-stdin
-
-      - name: Add Bitnami repository
+      - name: Build chart dependencies
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo update
+          helm dependency build "$CHART_DIR"
 
-      - name: Update chart dependencies
+      - name: Lint chart
+        run: helm lint "$CHART_DIR"
+
+      - name: Package chart
+        id: package
         run: |
-          cd deploy/kubernetes/helm/meridian-console
-          helm dependency update
+          helm package "$CHART_DIR" --destination dist
+          version=$(helm show chart "$CHART_DIR" | awk '/^version:/ {print $2}')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Lint Helm chart
+      - name: Push chart to GHCR
+        if: env.PUBLISH == 'true'
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
         run: |
-          cd deploy/kubernetes/helm
-          helm lint meridian-console
-
-      - name: Package and Push Helm chart to ACR
-        run: |
-          cd deploy/kubernetes/helm
-
-          # Package the chart
-          helm package meridian-console
-
-          # Get chart version
-          CHART_VERSION=$(grep '^version:' meridian-console/Chart.yaml | awk '{print $2}')
-          CHART_FILE="meridian-console-${CHART_VERSION}.tgz"
-
-          echo "=== Publishing Chart ==="
-          echo "Chart: meridian-console"
-          echo "Version: $CHART_VERSION"
-          echo "Registry: $ACR_LOGIN_SERVER"
-          echo "========================"
-
-          # Push to ACR as OCI artifact
-          helm push "$CHART_FILE" oci://$ACR_LOGIN_SERVER/helm
-
-          echo "✅ Successfully published meridian-console:${CHART_VERSION} to ACR"
-
-          # Save version for summary
-          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_ENV
-
-      - name: Create release summary
-        run: |
-          echo "## 📦 Helm Chart Published to Azure Container Registry" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Chart:** \`meridian-console\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`$CHART_VERSION\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** \`$ACR_LOGIN_SERVER\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🚀 Installation" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "# Login to ACR (Azure CLI required)" >> $GITHUB_STEP_SUMMARY
-          echo "az acr login --name $ACR_NAME" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "# Install the chart from ACR" >> $GITHUB_STEP_SUMMARY
-          echo "helm install meridian oci://$ACR_LOGIN_SERVER/helm/meridian-console \\" >> $GITHUB_STEP_SUMMARY
-          echo "  --version $CHART_VERSION \\" >> $GITHUB_STEP_SUMMARY
-          echo "  --namespace meridian-system \\" >> $GITHUB_STEP_SUMMARY
-          echo "  --create-namespace" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+          echo "$GH_TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          helm push "dist/meridian-console-${VERSION}.tgz" "$CHART_REPO"
+          helm registry logout ghcr.io
+          {
+            echo "## Helm chart published"
+            echo ""
+            echo "\`meridian-console\` \`${VERSION}\` pushed to \`${CHART_REPO}\`."
+            echo ""
+            echo '```bash'
+            echo "helm install meridian ${CHART_REPO}/meridian-console --version ${VERSION} \\"
+            echo "  --namespace meridian-system --create-namespace"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

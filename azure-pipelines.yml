@@ -1,9 +1,10 @@
 # Meridian Console CI/CD Pipeline
 # Security scanning enabled with SAST, SCA, Container, IaC, Secrets, SBOM
 #
-# Manual runs only. PR and push build/test moved to GitHub Actions
-# (.github/workflows/ci.yml). Run this pipeline by hand for the Static Web
-# Apps deploys, the security scans, or infrastructure and DNS provisioning.
+# Superseded by GitHub Actions and kept, manual-only, as a fallback: build/test
+# in ci.yml, Static Web Apps in static-web-apps.yml, infrastructure and DNS in
+# infra.yml, security scans in codeql.yml and containers.yml (Trivy). Delete
+# once those workflows have run on main.
 trigger: none
 
 pr: none

@@ -1,0 +1,289 @@
+# Builds the service container images, scans them with Trivy, and on main pushes
+# them to GHCR as ghcr.io/sandboxservers/dhadgar/<service> with provenance and SBOM
+# attestations. Replaces azure-pipelines-containers.yml (ACR).
+#
+# Only services whose files changed are built. A change to anything every image
+# copies in (src/Shared, the root props, the solution) rebuilds all of them.
+name: Containers
+
+on:
+  push:
+    branches:
+      - main
+    paths: &container-paths
+      - 'src/**'
+      - 'Dhadgar.sln'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - '.dockerignore'
+      - '.github/workflows/containers.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths: *container-paths
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Comma-separated services (e.g. "gateway,identity"), or "all"'
+        required: true
+        default: all
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE_PREFIX: ghcr.io/sandboxservers/dhadgar
+  # Newest image versions kept per service; older ones are deleted after a push.
+  KEEP_VERSIONS: 10
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      services: ${{ steps.plan.outputs.services }}
+    steps:
+      - name: Pick services to build
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          REQUESTED: ${{ inputs.services }}
+        run: |
+          set -euo pipefail
+          all=(Gateway Identity Billing Servers Nodes Tasks Files Mods Console Notifications Secrets Discord)
+          shared='^(src/Shared/|Dhadgar\.sln$|Directory\.(Build|Packages)\.props$|global\.json$|\.dockerignore$|\.github/workflows/containers\.yml$)'
+          selected=()
+
+          if [ "$EVENT" = workflow_dispatch ]; then
+            if [ "${REQUESTED,,}" = all ]; then
+              selected=("${all[@]}")
+            else
+              IFS=', ' read -ra wanted <<< "$REQUESTED"
+              for w in "${wanted[@]}"; do
+                [ -z "$w" ] && continue
+                match=''
+                for s in "${all[@]}"; do [ "${s,,}" = "${w,,}" ] && match=$s; done
+                if [ -z "$match" ]; then
+                  echo "::error::Unknown service '$w'. Known: ${all[*]}"
+                  exit 1
+                fi
+                selected+=("$match")
+              done
+            fi
+          else
+            if [ "$EVENT" = pull_request ]; then
+              files=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')
+            elif [[ "$BEFORE" =~ ^0+$ ]]; then
+              files='src/Shared/'  # new branch: no base to compare, build everything
+            else
+              compare=$(gh api "repos/$REPO/compare/$BEFORE...$AFTER")
+              files=$(jq -r '.files[].filename' <<< "$compare")
+              # The compare API lists at most 300 files; past that, build everything.
+              [ "$(jq '.files | length' <<< "$compare")" -ge 300 ] && files='src/Shared/'
+            fi
+
+            if grep -qE "$shared" <<< "$files"; then
+              selected=("${all[@]}")
+            else
+              for s in "${all[@]}"; do
+                grep -q "^src/Dhadgar\.$s/" <<< "$files" && selected+=("$s")
+              done
+            fi
+          fi
+
+          json=$(printf '%s\n' "${selected[@]}" | jq -R 'select(length > 0)' | jq -cs .)
+          echo "services=$json" >> "$GITHUB_OUTPUT"
+          echo "Services to build: $json"
+
+  build:
+    name: Build ${{ matrix.service }}
+    needs: plan
+    if: needs.plan.outputs.services != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write        # push to GHCR (main only)
+      id-token: write        # sign attestations (main only)
+      attestations: write    # store attestations (main only)
+      security-events: write # upload Trivy results to code scanning
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.plan.outputs.services) }}
+    env:
+      SERVICE: ${{ matrix.service }}
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      # Fork PRs get a read-only token, so they cannot upload code scanning results.
+      UPLOAD_SARIF: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Image name
+        id: image
+        run: |
+          echo "name=$IMAGE_PREFIX/${SERVICE,,}" >> "$GITHUB_OUTPUT"
+          echo "local=local/${SERVICE,,}:scan" >> "$GITHUB_OUTPUT"
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=pr
+            type=raw,value=latest,enable=${{ env.PUBLISH }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Build once into the local Docker engine so Trivy can scan it before
+      # anything is pushed. Only main writes the layer cache, so PR builds can
+      # never seed what a published image is built from.
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: src/Dhadgar.${{ matrix.service }}/Dockerfile
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.image.outputs.local }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: ${{ env.PUBLISH == 'true' && format('type=gha,mode=max,scope={0}', matrix.service) || '' }}
+
+      - name: Scan image (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.local }}
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload scan to code scanning
+        if: env.UPLOAD_SARIF == 'true'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-${{ matrix.service }}
+
+      - name: Fail on fixable critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.local }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          skip-setup-trivy: true
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Same inputs as the build above, so every layer comes from the builder's cache.
+      - name: Push image
+        id: push
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: src/Dhadgar.${{ matrix.service }}/Dockerfile
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+
+      - name: Generate SBOM
+        if: env.PUBLISH == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.local }}
+          format: spdx-json
+          output: sbom.spdx.json
+          skip-setup-trivy: true
+
+      # Attestations live in GitHub's attestation store, not the registry, so the
+      # package holds only tagged images. Verify with:
+      #   gh attestation verify oci://<image>:<tag> -R SandboxServers/MeridianConsole
+      - name: Attest build provenance
+        if: env.PUBLISH == 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+
+      - name: Attest SBOM
+        if: env.PUBLISH == 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: sbom.spdx.json
+
+      - name: Delete old image versions
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          package="dhadgar%2F${SERVICE,,}"
+          # Versions come back newest first. Keep the newest KEEP_VERSIONS and anything tagged latest.
+          gh api --paginate "orgs/$OWNER/packages/container/$package/versions" \
+            --jq '.[] | select((.metadata.container.tags | index("latest")) | not) | .id' \
+            | tail -n +"$((KEEP_VERSIONS + 1))" \
+            | while read -r id; do
+                echo "Deleting version $id"
+                gh api -X DELETE "orgs/$OWNER/packages/container/$package/versions/$id"
+              done
+
+  summary:
+    name: Containers Summary
+    needs: [plan, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          if [[ " $RESULTS " == *" failure "* || " $RESULTS " == *" cancelled "* ]]; then
+            echo "::error::A container job failed"
+            exit 1
+          fi
