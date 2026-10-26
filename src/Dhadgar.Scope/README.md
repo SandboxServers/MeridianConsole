@@ -362,9 +362,7 @@ The primary layout wrapper for all pages. Provides:
 **Usage**:
 
 ```astro
-<MainLayout client:load>
-  <!-- Page content here -->
-</MainLayout>
+<MainLayout client:load><!-- Page content here --></MainLayout>
 ```
 
 The `client:load` directive hydrates this component immediately on page load, enabling the mobile menu state management.

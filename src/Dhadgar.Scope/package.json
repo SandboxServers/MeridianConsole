@@ -39,7 +39,7 @@
     "eslint-plugin-security": "^4.2.0",
     "globals": "^17.13.0",
     "prettier": "^3.9.10",
-    "prettier-plugin-astro": "^0.14.1",
+    "prettier-plugin-astro": "^1.1.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.2"
   }
