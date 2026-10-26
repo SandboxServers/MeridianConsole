@@ -21,7 +21,8 @@ public static class ServiceJwtAuthenticationExtensions
     /// For requests whose path starts with one of hubPathPrefixes, a missing Authorization header
     /// falls back to the access_token query value.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Auth:Issuer or Auth:Audience is missing (startup configuration error).</exception>
+    /// <exception cref="InvalidOperationException">Auth:Issuer or Auth:Audience is missing, or Auth:MetadataAddress or
+    /// Auth:InternalBaseUrl is not an absolute https URL outside Development (startup configuration error).</exception>
     public static AuthenticationBuilder AddDhadgarJwtBearer(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -49,6 +50,12 @@ public static class ServiceJwtAuthenticationExtensions
         var internalBaseUrl = configuration["Auth:InternalBaseUrl"]; // e.g., http://identity:8080
         var clockSkewSeconds = configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60;
         var prefixes = hubPathPrefixes;
+
+        if (!environment.IsDevelopment())
+        {
+            RequireHttpsUrl(metadataAddress, "Auth:MetadataAddress");
+            RequireHttpsUrl(internalBaseUrl, "Auth:InternalBaseUrl");
+        }
 
         return services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -110,5 +117,21 @@ public static class ServiceJwtAuthenticationExtensions
                     }
                 };
             });
+    }
+
+    /// <summary>
+    /// Throws when a configured discovery URL is set but is not an absolute https URI.
+    /// </summary>
+    private static void RequireHttpsUrl(string? value, string key)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException($"{key} must be an absolute https URL outside Development.");
+        }
     }
 }

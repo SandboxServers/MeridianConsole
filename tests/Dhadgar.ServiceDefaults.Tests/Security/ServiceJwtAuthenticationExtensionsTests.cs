@@ -104,6 +104,73 @@ public sealed class ServiceJwtAuthenticationExtensionsTests
         Assert.Equal("http://identity:8080/.well-known/openid-configuration", options.MetadataAddress);
     }
 
+    [Fact]
+    public void Production_HttpInternalBaseUrl_ThrowsInvalidOperationException()
+    {
+        var settings = ValidConfig();
+        settings["Auth:InternalBaseUrl"] = "http://identity:8080";
+        var config = BuildConfiguration(settings);
+        var services = new ServiceCollection();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            services.AddDhadgarJwtBearer(config, CreateEnvironment(Environments.Production)));
+
+        Assert.Contains("Auth:InternalBaseUrl", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Production_HttpMetadataAddress_ThrowsInvalidOperationException()
+    {
+        var settings = ValidConfig();
+        settings["Auth:MetadataAddress"] = "http://identity:8080/.well-known/openid-configuration";
+        var config = BuildConfiguration(settings);
+        var services = new ServiceCollection();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            services.AddDhadgarJwtBearer(config, CreateEnvironment(Environments.Production)));
+
+        Assert.Contains("Auth:MetadataAddress", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Production_HttpsUrls_AreAccepted()
+    {
+        var settings = ValidConfig();
+        settings["Auth:MetadataAddress"] = "https://identity.internal/.well-known/openid-configuration";
+        settings["Auth:InternalBaseUrl"] = "https://identity.internal";
+        var config = BuildConfiguration(settings);
+        var services = new ServiceCollection();
+
+        var builder = services.AddDhadgarJwtBearer(config, CreateEnvironment(Environments.Production));
+
+        Assert.NotNull(builder);
+    }
+
+    [Fact]
+    public void Development_HttpInternalBaseUrl_IsAccepted()
+    {
+        var settings = ValidConfig();
+        settings["Auth:InternalBaseUrl"] = "http://identity:8080";
+        var config = BuildConfiguration(settings);
+        var services = new ServiceCollection();
+
+        var builder = services.AddDhadgarJwtBearer(config, CreateEnvironment(Environments.Development));
+
+        Assert.NotNull(builder);
+    }
+
+    [Fact]
+    public async Task DocumentRetriever_WithRequireHttps_RejectsHttpAddress()
+    {
+        using var retriever = new UrlRewritingDocumentRetriever("https://meridianconsole.com/api/v1/identity", "http://identity:8080")
+        {
+            RequireHttps = true
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            retriever.GetDocumentAsync("http://identity:8080/.well-known/openid-configuration", CancellationToken.None));
+    }
+
     private sealed class TestHostEnvironment : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = Environments.Development;
@@ -140,8 +207,8 @@ public sealed class ServiceJwtAuthenticationExtensionsTests
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> settings) =>
         new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
-    private static TestHostEnvironment CreateEnvironment() =>
-        new TestHostEnvironment();
+    private static TestHostEnvironment CreateEnvironment(string environmentName = "Development") =>
+        new TestHostEnvironment { EnvironmentName = environmentName };
 
     private static async Task<WebApplication> BuildAppAsync(Dictionary<string, string?> settings)
     {
