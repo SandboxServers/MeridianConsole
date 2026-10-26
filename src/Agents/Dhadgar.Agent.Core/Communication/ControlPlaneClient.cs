@@ -21,6 +21,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
     private readonly AgentMeter _meter;
     private readonly AgentActivitySource _activitySource;
     private readonly ILogger<ControlPlaneClient> _logger;
+    private readonly IHubConnectionConfigurator[] _configurators;
 
     private HubConnection? _hubConnection;
     private ConnectionState _state = ConnectionState.Disconnected;
@@ -37,13 +38,20 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         ICertificateStore certificateStore,
         AgentMeter meter,
         AgentActivitySource activitySource,
-        ILogger<ControlPlaneClient> logger)
+        ILogger<ControlPlaneClient> logger,
+        IEnumerable<IHubConnectionConfigurator> configurators)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _certificateStore = certificateStore ?? throw new ArgumentNullException(nameof(certificateStore));
         _meter = meter ?? throw new ArgumentNullException(nameof(meter));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _configurators = configurators?.ToArray() ?? throw new ArgumentNullException(nameof(configurators));
+
+        if (_configurators.Length > 0)
+        {
+            _logger.LogWarning("{Count} hub connection configurator(s) registered; test/diagnostic only", _configurators.Length);
+        }
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -108,6 +116,13 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                     {
                         // Not enrolled yet, but have a cert (e.g., during enrollment)
                         options.ClientCertificates = [clientCert];
+                    }
+
+                    // Runs last: configurators see the agent's own options and may adjust them, but must not
+                    // remove the client certificate. Production registers none (see IHubConnectionConfigurator).
+                    foreach (var configurator in _configurators)
+                    {
+                        configurator.Configure(options);
                     }
                 })
                 .WithAutomaticReconnect(new RetryPolicy(_options.ControlPlane))
