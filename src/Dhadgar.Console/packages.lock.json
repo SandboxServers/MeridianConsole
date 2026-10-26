@@ -4,11 +4,11 @@
     "net10.0": {
       "MassTransit": {
         "type": "Direct",
-        "requested": "[8.3.6, )",
-        "resolved": "8.3.6",
-        "contentHash": "iQQ02dUJuWlpNai3eDN7WmnstvmB2LAD8YN1i8OFT5BaNpGYYg3v0US3S6f1Zz7us+NnGHm6csg25Ak3z0H7Xg==",
+        "requested": "[9.2.4, )",
+        "resolved": "9.2.4",
+        "contentHash": "jdssspJ9ckqFzjtnPh81f9KzBt4G0569qPXo/F8VyTCvT9yiOpG3U14XiS0hDdd7zR2j2IkSY8dvrwHJCx+CQw==",
         "dependencies": {
-          "MassTransit.Abstractions": "8.3.6"
+          "MassTransit.Abstractions": "9.2.4"
         }
       },
       "MassTransit.RabbitMQ": {
@@ -92,8 +92,8 @@
       },
       "MassTransit.Abstractions": {
         "type": "Transitive",
-        "resolved": "8.3.6",
-        "contentHash": "F3R3EFPvUvpsiebnijmpvZ4IhSEcqkEJdrhlFuTOjzIUnMRYBgki/oDfFWj57Ki4b9yq0nilt4Q5bk11pC4ygg=="
+        "resolved": "9.2.4",
+        "contentHash": "yMT0p6b/ZkmXupC0JVoJRoOa1hTVafejA2MIDln/o8yKUvZ0rIMwf0NmsAB4JU9f5M1JfpiMekKTdLlu70VUKw=="
       },
       "Microsoft.EntityFrameworkCore.Abstractions": {
         "type": "Transitive",
@@ -157,7 +157,7 @@
       "dhadgar.messaging": {
         "type": "Project",
         "dependencies": {
-          "MassTransit": "[8.3.6, )",
+          "MassTransit": "[9.2.4, )",
           "MassTransit.RabbitMQ": "[8.3.6, )"
         }
       },
