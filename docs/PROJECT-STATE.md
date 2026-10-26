@@ -29,6 +29,17 @@ Verified on a clean checkout (2026-07-26, .NET SDK 10.0.100):
     (timing-sensitive; needs a deflake pass)
   - Skips: 12 Docker-dependent AppHost tests (by design) + 5 platform-conditional
 
+### Status update 2026-10-26 (Sprint 1: unblock the vertical slice)
+
+| Item | Status |
+| ---- | ------ |
+| DV-3 `POST /refresh` | **Code exists**, tested at Identity's HTTP boundary (exchange → refresh → replay rejected). Not yet confirmed working: no test runs SharedAuth against Identity, and no manual browser check has been recorded. Identity redeems the stored refresh token, rotates it, recomputes permissions, and revokes the token family on reuse. |
+| DV-1 Gateway prefix | **Code exists**, pinned by a Gateway config test. Not confirmed through a running Gateway. All four nodes-cluster routes now strip `/api/v1`; previously agent enrollment *and* org node management 404'd through the Gateway. |
+| DV-1 enrollment contract | **Confirmed working (seam test):** `AgentEnrollmentContractTests` runs the real Agent.Core client against the real Nodes API and CA, and fails if they disagree. One DTO pair in `Dhadgar.Contracts`. The agent sends its public key plus hardware inventory; Nodes signs that key (no server-generated private keys or PKCS#12 on this path) and returns `OrganizationId` + the CA cert. |
+| DV-1 hub / heartbeat / commands | Open. `/hubs/agent` is Sprint 2. |
+| Certificate renewal contract | Open. Same mismatch as enrollment had: the agent sends `{NodeId, PublicKey}`, Nodes expects `{CurrentThumbprint}` and still returns a PKCS#12. Do it alongside the hub. |
+| Flaky fake-clock tests | Fixed in #185 (`StaleNodeDetectionServiceTests`, `ReservationExpiryServiceTests`). |
+
 ## 2. Decisions made 2026-07-26
 
 These were decided explicitly and drive the roadmap below:

@@ -153,6 +153,30 @@ public class RouteConfigurationTests
         Assert.True(healthCheckEnabled);
     }
 
+    /// <summary>
+    /// Nodes maps its endpoints at the root (/agents/*, /organizations/{id}/nodes/*, ...)
+    /// with no path base, so every Gateway route into the nodes cluster must strip /api/v1.
+    /// Without this, agent enrollment and all node management 404 through the Gateway.
+    /// </summary>
+    [Theory]
+    [InlineData("agents-enroll-route", "/api/v1/agents/enroll", "/agents/enroll")]
+    [InlineData("agents-route", "/api/v1/agents/3f2a/heartbeat", "/agents/3f2a/heartbeat")]
+    [InlineData("nodes-org-route", "/api/v1/organizations/abc/nodes/xyz", "/organizations/abc/nodes/xyz")]
+    [InlineData("enrollment-route", "/api/v1/organizations/abc/enrollment/tokens", "/organizations/abc/enrollment/tokens")]
+    public void NodesRoutes_ShouldForwardToNodesRootPaths(string routeName, string publicPath, string expectedDownstream)
+    {
+        var route = _configuration.GetSection($"ReverseProxy:Routes:{routeName}");
+        Assert.Equal("nodes", route.GetValue<string>("ClusterId"));
+
+        var prefix = route.GetSection("Transforms").GetChildren()
+            .Select(t => t.GetValue<string>("PathRemovePrefix"))
+            .SingleOrDefault(p => p is not null);
+
+        Assert.NotNull(prefix);
+        Assert.StartsWith(prefix, publicPath, StringComparison.Ordinal);
+        Assert.Equal(expectedDownstream, publicPath[prefix.Length..]);
+    }
+
     private static string GetGatewayAppSettingsPath()
     {
         var solutionRoot = FindSolutionRoot(AppContext.BaseDirectory);

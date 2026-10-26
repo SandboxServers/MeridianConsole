@@ -91,6 +91,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("my-server"));
 
         // Act
@@ -119,6 +120,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "server-01",
                 OsVersion: "Debian 12",
@@ -153,6 +155,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "server-01",
                 OsVersion: "Ubuntu",
@@ -185,6 +188,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -211,6 +215,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -234,6 +239,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -257,6 +263,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -281,6 +288,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: "invalid-token-that-does-not-exist",
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -310,6 +318,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -332,6 +341,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // First enrollment succeeds
@@ -357,6 +367,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "macos", // Invalid - only linux and windows supported
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -379,6 +390,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "Windows", // Mixed case should work
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -403,6 +415,7 @@ public sealed class EnrollmentServiceTests
         var result1 = await service.EnrollAsync(new EnrollNodeRequest(
             Token: token1,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("server-01")));
 
         // Second enrollment with same hostname
@@ -410,6 +423,7 @@ public sealed class EnrollmentServiceTests
         var result2 = await service.EnrollAsync(new EnrollNodeRequest(
             Token: token2,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("server-01")));
 
         // Third enrollment with same hostname
@@ -417,6 +431,7 @@ public sealed class EnrollmentServiceTests
         var result3 = await service.EnrollAsync(new EnrollNodeRequest(
             Token: token3,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("server-01")));
 
         // Assert
@@ -441,6 +456,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("My Server!@#$%^&*()"));
 
         // Act
@@ -464,6 +480,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("Production-Server-01"));
 
         // Act
@@ -488,6 +505,7 @@ public sealed class EnrollmentServiceTests
         var request = new EnrollNodeRequest(
             Token: plainToken,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware());
 
         // Act
@@ -519,11 +537,13 @@ public sealed class EnrollmentServiceTests
         var result1 = await service.EnrollAsync(new EnrollNodeRequest(
             Token: token1,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("shared-name")));
 
         var result2 = await service.EnrollAsync(new EnrollNodeRequest(
             Token: token2,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: CreateHardware("shared-name")));
 
         // Assert

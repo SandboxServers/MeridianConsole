@@ -57,9 +57,44 @@ Exchange a Better Auth exchange token for a JWT access token and refresh token.
 
 ---
 
+#### POST `/refresh`
+
+Redeem a refresh token issued by `/exchange` for a new access token and a rotated refresh token. This is what `Dhadgar.SharedAuth` calls when the access token expires. Public path: `/api/v1/identity/refresh`.
+
+**Authentication**: None (anonymous). The refresh token is the credential.
+
+**Request Body**:
+```json
+{
+  "refreshToken": "string"
+}
+```
+
+**Response** `200 OK`:
+```json
+{
+  "accessToken": "eyJhbGciOiJFUzI1NiI...",
+  "refreshToken": "new-opaque-token",
+  "expiresIn": 900
+}
+```
+
+**Error Responses**:
+- `400 Bad Request` - Missing refresh token
+- `401 Unauthorized` - Unknown, expired, revoked or reused token, or user no longer active in the org (one generic response for all)
+- `403 Forbidden` - Email verification required and not completed
+- `429 Too Many Requests` - Rate limit exceeded (20/min per IP)
+
+**Notes**:
+- Single-use with rotation: the presented token is revoked and replaced atomically. Parallel redemptions of the same token cannot both succeed.
+- Permissions and role are recalculated from the database on every refresh.
+- Reuse detection: presenting an already-rotated token revokes every active refresh token for that user in that organization.
+
+---
+
 #### POST `/connect/token`
 
-OpenIddict token endpoint for refresh token exchange.
+OpenIddict token endpoint for OAuth clients (client credentials, authorization code, OpenIddict-issued refresh tokens). It does **not** redeem refresh tokens from `/exchange`; use `/refresh` for those.
 
 **Authentication**: None
 

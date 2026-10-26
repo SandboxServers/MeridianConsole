@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dhadgar.Nodes\Dhadgar.Nodes.csproj" />
+    <!-- Agent.Core is referenced so enrollment can be tested agent-to-control-plane with the real client. -->
+    <ProjectReference Include="..\..\src\Agents\Dhadgar.Agent.Core\Dhadgar.Agent.Core.csproj" />
     <ProjectReference Include="..\Dhadgar.ServiceDefaults.Tests\Dhadgar.ServiceDefaults.Tests.csproj" />
   </ItemGroup>
 

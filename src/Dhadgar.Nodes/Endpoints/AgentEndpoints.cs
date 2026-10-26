@@ -69,6 +69,7 @@ public static class AgentEndpoints
             {
                 "invalid_token" => ProblemDetailsHelper.Unauthorized(result.Error),
                 "invalid_platform" => ProblemDetailsHelper.BadRequest(result.Error),
+                "invalid_public_key" => ProblemDetailsHelper.BadRequest(result.Error),
                 "certificate_generation_failed" => ProblemDetailsHelper.BadRequest(result.Error),
                 _ => ProblemDetailsHelper.BadRequest(result.Error ?? "enrollment_failed")
             };
@@ -77,17 +78,13 @@ public static class AgentEndpoints
         // Map local model to Contracts DTO for API response
         var localResponse = result.Value!;
         var contractsResponse = new Dhadgar.Contracts.Nodes.EnrollNodeResponse(
-            NodeId: localResponse.NodeId.ToString(),
+            NodeId: localResponse.NodeId,
+            OrganizationId: localResponse.OrganizationId,
             CertificateThumbprint: localResponse.CertificateThumbprint,
             Certificate: localResponse.Certificate,
-            Pkcs12Base64: localResponse.Pkcs12Base64,
-            Pkcs12Password: localResponse.Pkcs12Password,
-            NotBefore: localResponse.NotBefore.HasValue
-                ? new DateTimeOffset(localResponse.NotBefore.Value, TimeSpan.Zero)
-                : null,
-            NotAfter: localResponse.NotAfter.HasValue
-                ? new DateTimeOffset(localResponse.NotAfter.Value, TimeSpan.Zero)
-                : null);
+            CaCertificate: localResponse.CaCertificate,
+            NotBefore: new DateTimeOffset(localResponse.NotBefore, TimeSpan.Zero),
+            NotAfter: new DateTimeOffset(localResponse.NotAfter, TimeSpan.Zero));
 
         return Results.Created($"/agents/{localResponse.NodeId}", contractsResponse);
     }

@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Health;
+using Dhadgar.Contracts.Nodes;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -22,6 +24,11 @@ public sealed class EnrollmentService : IEnrollmentService
     private const int MaxCertificateBase64Length = 8192;
 
     /// <summary>
+    /// The control plane serializes with ASP.NET Core web defaults (camelCase).
+    /// </summary>
+    private static readonly JsonSerializerOptions WireJsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
     /// Maximum allowed response body size (1 MB).
     /// Prevents memory exhaustion from malicious control plane responses.
     /// </summary>
@@ -32,14 +39,17 @@ public sealed class EnrollmentService : IEnrollmentService
     private readonly AgentOptions _options;
     private readonly ILogger<EnrollmentService> _logger;
     private readonly IEnrollmentTokenCleanup? _enrollmentTokenCleanup;
+    private readonly IHardwareInventoryCollector _hardwareInventory;
 
     public EnrollmentService(
         ICertificateStore certificateStore,
         IHttpClientFactory httpClientFactory,
         IOptions<AgentOptions> options,
         ILogger<EnrollmentService> logger,
+        IHardwareInventoryCollector hardwareInventory,
         IEnrollmentTokenCleanup? enrollmentTokenCleanup = null)
     {
+        _hardwareInventory = hardwareInventory ?? throw new ArgumentNullException(nameof(hardwareInventory));
         _certificateStore = certificateStore ?? throw new ArgumentNullException(nameof(certificateStore));
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
@@ -90,15 +100,13 @@ public sealed class EnrollmentService : IEnrollmentService
             using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
             var publicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
 
-            // Create enrollment request
-            var request = new EnrollmentRequest
-            {
-                EnrollmentToken = enrollmentToken,
-                NodeName = _options.NodeName,
-                PublicKey = Convert.ToBase64String(publicKeyBytes),
-                Platform = GetPlatformIdentifier(),
-                AgentVersion = GetAgentVersion()
-            };
+            // Create enrollment request (shared contract with Dhadgar.Nodes)
+            var request = new EnrollNodeRequest(
+                Token: enrollmentToken,
+                Platform: GetPlatformIdentifier(),
+                Hardware: _hardwareInventory.Collect(),
+                PublicKey: Convert.ToBase64String(publicKeyBytes),
+                AgentVersion: GetAgentVersion());
 
             // Send enrollment request
             using var client = _httpClientFactory.CreateClient("ControlPlane");
@@ -121,7 +129,7 @@ public sealed class EnrollmentService : IEnrollmentService
             // SECURITY: Use ResponseHeadersRead to check Content-Length before buffering entire body
             using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "api/v1/agents/enroll")
             {
-                Content = JsonContent.Create(request)
+                Content = JsonContent.Create(request, options: WireJsonOptions)
             };
 
             using var response = await client.SendAsync(
@@ -148,13 +156,14 @@ public sealed class EnrollmentService : IEnrollmentService
             }
 
             // Read with size-limited stream if Content-Length is missing or needs verification
-            EnrollmentResponse? enrollmentResponse;
+            EnrollNodeResponse? enrollmentResponse;
             await using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken))
             await using (var limitedStream = new SizeLimitedStream(responseStream, MaxResponseBodySize))
             {
-                enrollmentResponse = await JsonSerializer.DeserializeAsync<EnrollmentResponse>(
+                enrollmentResponse = await JsonSerializer.DeserializeAsync<EnrollNodeResponse>(
                     limitedStream,
-                    cancellationToken: cancellationToken);
+                    WireJsonOptions,
+                    cancellationToken);
             }
 
             if (enrollmentResponse is null)
@@ -191,12 +200,12 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Enrollment.CertificateTooLarge] Certificate data exceeds maximum allowed size");
             }
 
-            // Store the certificate (use X509CertificateLoader for security)
-            var certBytes = Convert.FromBase64String(enrollmentResponse.Certificate);
+            // Store the certificate. Nodes returns PEM; DecodeCertificate only accepts a single
+            // CERTIFICATE block and loads it via X509CertificateLoader (no PKCS#12/key material).
             DateTime certExpiry;
 
             // Use using to guarantee certificate disposal on all paths
-            using (var cert = X509CertificateLoader.LoadCertificate(certBytes))
+            using (var cert = DecodeCertificate(enrollmentResponse.Certificate))
             {
                 // Validate that the certificate's public key matches our locally generated keypair
                 // This prevents the server from issuing a certificate for a different key
@@ -243,8 +252,7 @@ public sealed class EnrollmentService : IEnrollmentService
                         "[Enrollment.CaCertificateTooLarge] CA certificate data exceeds maximum allowed size");
                 }
 
-                var caBytes = Convert.FromBase64String(enrollmentResponse.CaCertificate);
-                using var caCert = X509CertificateLoader.LoadCertificate(caBytes);
+                using var caCert = DecodeCertificate(enrollmentResponse.CaCertificate);
                 await _certificateStore.StoreCaCertificateAsync(caCert, cancellationToken);
             }
 
@@ -497,6 +505,33 @@ public sealed class EnrollmentService : IEnrollmentService
         }
     }
 
+    /// <summary>
+    /// Decodes a certificate sent by the control plane. Accepts a single PEM
+    /// <c>CERTIFICATE</c> block (what Nodes returns) or bare base64 DER.
+    /// </summary>
+    /// <exception cref="FormatException">Malformed PEM/base64.</exception>
+    /// <exception cref="CryptographicException">Not a valid X.509 certificate.</exception>
+    private static X509Certificate2 DecodeCertificate(string encoded)
+    {
+        byte[] der;
+        if (encoded.Contains("-----BEGIN", StringComparison.Ordinal))
+        {
+            if (!PemEncoding.TryFind(encoded, out var fields)
+                || !encoded.AsSpan()[fields.Label].SequenceEqual("CERTIFICATE"))
+            {
+                throw new FormatException("Expected a PEM CERTIFICATE block");
+            }
+
+            der = Convert.FromBase64String(encoded[fields.Base64Data]);
+        }
+        else
+        {
+            der = Convert.FromBase64String(encoded);
+        }
+
+        return X509CertificateLoader.LoadCertificate(der);
+    }
+
     private static string GetPlatformIdentifier()
     {
         return OperatingSystem.IsWindows() ? "windows"
@@ -511,29 +546,6 @@ public sealed class EnrollmentService : IEnrollmentService
         var version = assembly.GetName().Version;
         return version?.ToString() ?? "0.0.0";
     }
-}
-
-/// <summary>
-/// Enrollment request sent to the control plane.
-/// </summary>
-public sealed class EnrollmentRequest
-{
-    public required string EnrollmentToken { get; init; }
-    public string? NodeName { get; init; }
-    public required string PublicKey { get; init; }
-    public required string Platform { get; init; }
-    public required string AgentVersion { get; init; }
-}
-
-/// <summary>
-/// Enrollment response from the control plane.
-/// </summary>
-public sealed class EnrollmentResponse
-{
-    public required Guid NodeId { get; init; }
-    public required Guid OrganizationId { get; init; }
-    public required string Certificate { get; init; }
-    public string? CaCertificate { get; init; }
 }
 
 /// <summary>

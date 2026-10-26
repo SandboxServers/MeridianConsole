@@ -487,6 +487,7 @@ namespace Dhadgar.Identity.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("RevokedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TokenHash")
