@@ -8,9 +8,9 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@dhadgar/shared-auth": "file:../Dhadgar.SharedAuth",
     "@astrojs/react": "^6.0.1",
-    "astro": "^7.1.3",
+    "@dhadgar/shared-auth": "file:../Dhadgar.SharedAuth",
+    "astro": "^7.4.1",
     "clsx": "^2.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
