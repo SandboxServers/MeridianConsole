@@ -101,7 +101,7 @@ The CLI communicates with backend services through the Gateway (YARP reverse pro
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `System.CommandLine` | 2.0.0-beta5 | CLI framework with argument parsing, help generation |
+| `System.CommandLine` | 2.0.14 | CLI framework with argument parsing, help generation |
 | `Spectre.Console` | 0.49.1 | Rich terminal UI (tables, panels, colors, spinners) |
 | `Spectre.Console.Cli` | 0.49.1 | CLI command infrastructure |
 | `Refit` | 8.0.0 | Type-safe REST API clients |
@@ -418,20 +418,21 @@ var authCmd = new Command("auth", "Authentication commands");
 
 // Create subcommand with options
 var loginCmd = new Command("login", "Authenticate with Identity service");
-var clientIdOpt = new Option<string?>("--client-id", "Client ID");
-loginCmd.AddOption(clientIdOpt);
+var clientIdOpt = new Option<string?>("--client-id") { Description = "Client ID" };
+loginCmd.Options.Add(clientIdOpt);
 
-// Set handler
-loginCmd.SetHandler(async (string? clientId) =>
+// Set action
+loginCmd.SetAction(async (parseResult, _) =>
 {
+    var clientId = parseResult.GetValue(clientIdOpt);
     await LoginCommand.ExecuteAsync(clientId, CancellationToken.None);
-}, clientIdOpt);
+});
 
 // Build hierarchy
-authCmd.AddCommand(loginCmd);
-root.AddCommand(authCmd);
+authCmd.Subcommands.Add(loginCmd);
+root.Subcommands.Add(authCmd);
 
-return await root.InvokeAsync(args);
+return await root.Parse(args).InvokeAsync();
 ```
 
 ---
