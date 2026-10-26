@@ -13,8 +13,10 @@
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
-    <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
+    <!-- IL2026/IL2072: reflection-based options binding and COM activation; shown as warnings until #186 lands -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL2072</WarningsNotAsErrors>
 
     <!-- Publish settings for deployment -->
     <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>

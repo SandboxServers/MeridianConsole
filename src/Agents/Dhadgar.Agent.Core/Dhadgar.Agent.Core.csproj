@@ -6,11 +6,13 @@
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
-    <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
 
     <!-- CA1303: Agents don't need localization for console output -->
     <NoWarn>$(NoWarn);CA1303</NoWarn>
+    <!-- IL2026: reflection-based JSON/options/DataAnnotations; shown as warnings until #186 lands -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

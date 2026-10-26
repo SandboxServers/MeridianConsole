@@ -15,11 +15,11 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
 
     <!-- Agent-specific -->
-    <PackageVersion Include="SIPSorcery" Version="10.0.3" />
+    <PackageVersion Include="SIPSorcery" Version="10.0.17" />
 
     <!-- Data -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
@@ -119,10 +119,11 @@
 
     <!-- Aspire Hosting -->
     <!-- Direct pin: Aspire.Hosting 13.1.0 -> StreamJsonRpc 2.22.23 resolves MessagePack 2.5.192,
-         flagged by 11 advisories (2 high: GHSA-hv8m-jj95-wg3x, GHSA-vh6j-jc39-fggf) patched at 2.5.301.
+         flagged by 12 advisories (2 high: GHSA-hv8m-jj95-wg3x, GHSA-vh6j-jc39-fggf) patched at 2.5.303
+         (GHSA-qhrr-8q5h-9q3h).
          Referenced directly in Dhadgar.AppHost and Dhadgar.AppHost.Tests.
-         Remove once Aspire's StreamJsonRpc floors MessagePack >= 2.5.301. -->
-    <PackageVersion Include="MessagePack" Version="2.5.302" />
+         Remove once Aspire's StreamJsonRpc floors MessagePack >= 2.5.303. -->
+    <PackageVersion Include="MessagePack" Version="2.5.307" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.Redis" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
@@ -141,10 +142,16 @@
     <!-- Tests -->
     <!-- Direct pin: Microsoft.EntityFrameworkCore.Design 10.0.0 -> Microsoft.Build.Tasks.Core /
          Microsoft.CodeAnalysis.Workspaces.MSBuild resolve System.Security.Cryptography.Xml 9.0.0,
-         flagged by 7 high advisories (e.g. GHSA-23rf-6693-g89p) patched at 9.0.18 / 10.0.10.
+         flagged by 7 high advisories (e.g. GHSA-23rf-6693-g89p) patched at 10.0.13
+         (GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj, GHSA-r955-8q5j-3h83).
          Referenced directly in the test projects whose restore graphs carry it.
          Remove once EF Design's MSBuild dependencies floor a patched version. -->
-    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.10" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.14" />
+    <!-- Direct pin: System.Security.Cryptography.Pkcs arrives at 9.0.0 / 10.0.0 / 10.0.10 through
+         several src and test graphs, flagged by GHSA-2fmv-rv2c-59x7 and GHSA-846f-f764-76mx,
+         patched at 10.0.13. Referenced directly in the projects whose restore graphs carry it.
+         Remove once upstream packages floor a patched version. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.23" />

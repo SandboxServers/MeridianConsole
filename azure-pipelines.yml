@@ -1,16 +1,13 @@
 # Meridian Console CI/CD Pipeline
 # Security scanning enabled with SAST, SCA, Container, IaC, Secrets, SBOM
-trigger:
-  branches:
-    include:
-      - main
-      - develop
+#
+# Superseded by GitHub Actions and kept, manual-only, as a fallback: build/test
+# in ci.yml, Static Web Apps in static-web-apps.yml, infrastructure and DNS in
+# infra.yml, security scans in codeql.yml and containers.yml (Trivy). Delete
+# once those workflows have run on main.
+trigger: none
 
-pr:
-  branches:
-    include:
-      - main
-      - develop
+pr: none
 
 pool:
   name: "Sandbox Servers Agents"

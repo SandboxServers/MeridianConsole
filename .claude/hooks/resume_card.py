@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""SessionStart hook for the "compact" matcher: re-reads the active campaign.
+
+After a compaction the orchestrator has lost its working context. If
+`.claude/state/active-campaign` names a campaign whose
+`docs/analysis/<name>/RESUME.md` exists, print the SessionStart hook JSON with a
+pointer to the ledger and the first 40 lines of RESUME.md as additional context.
+Otherwise print nothing.
+
+Never fails the session: every error ends with exit 0 and no output.
+"""
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+CARD_LINES = 40
+SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+POINTER = (
+    "Context was compacted. Active campaign: {name}. "
+    "Read docs/analysis/{name}/RESUME.md and the ledger README before acting."
+)
+
+
+def project_dir():
+    """The project root that Claude Code exports, or the working directory."""
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+
+
+def build_card(root):
+    """Return the card text, or None when there is no usable pointer."""
+    pointer = root / ".claude" / "state" / "active-campaign"
+    if not pointer.is_file():
+        return None
+    # utf-8-sig: a pointer saved with a BOM (Windows editors) still names the folder.
+    lines = pointer.read_text(encoding="utf-8-sig", errors="replace").strip().splitlines()
+    if not lines:
+        return None
+    name = lines[0].strip()
+    # The name is one folder under docs/analysis/, never a path: no separators,
+    # no drive letters (`C:foo`), no `..`.
+    if not SAFE_NAME.match(name) or ".." in name:
+        return None
+    base = (root / "docs" / "analysis").resolve()
+    resume = (base / name / "RESUME.md").resolve()
+    # A symlinked folder or RESUME.md must not lead outside docs/analysis/.
+    if not resume.is_relative_to(base) or not resume.is_file():
+        return None
+    text = resume.read_text(encoding="utf-8", errors="replace")
+    body = text.splitlines()[:CARD_LINES]
+    return "\n".join([POINTER.format(name=name), *body])
+
+
+def main():
+    try:
+        # The hook input is not needed; the card depends only on the pointer.
+        sys.stdin.read()
+        card = build_card(project_dir())
+        if card is None:
+            return 0
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": card,
+            }
+        }
+        print(json.dumps(output))
+    except Exception:
+        return 0
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

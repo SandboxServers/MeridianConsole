@@ -1,0 +1,60 @@
+name: npm ci (parallel)
+description: >-
+  Sets up Node.js with an npm cache covering every listed project, then runs
+  `npm ci` in all of them in parallel. Fails if any install fails.
+
+inputs:
+  directories:
+    description: Newline-separated project directories, each with a package-lock.json.
+    required: true
+  node-version:
+    description: Node.js version.
+    required: false
+    default: '22'
+
+runs:
+  using: composite
+  steps:
+    - name: Build lockfile list for the npm cache
+      id: locks
+      shell: bash
+      env:
+        DIRECTORIES: ${{ inputs.directories }}
+      run: |
+        {
+          echo 'paths<<EOF'
+          while IFS= read -r dir; do
+            [ -n "$dir" ] && echo "$dir/package-lock.json"
+          done <<< "$DIRECTORIES"
+          echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Setup Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ steps.locks.outputs.paths }}
+
+    - name: npm ci (parallel)
+      shell: bash
+      env:
+        DIRECTORIES: ${{ inputs.directories }}
+      run: |
+        pids=()
+        dirs=()
+        while IFS= read -r dir; do
+          [ -z "$dir" ] && continue
+          (cd "$dir" && npm ci --prefer-offline --no-audit --no-fund) &
+          pids+=("$!")
+          dirs+=("$dir")
+        done <<< "$DIRECTORIES"
+
+        failed=0
+        for i in "${!pids[@]}"; do
+          if ! wait "${pids[$i]}"; then
+            echo "::error::npm ci failed in ${dirs[$i]}"
+            failed=1
+          fi
+        done
+        exit "$failed"

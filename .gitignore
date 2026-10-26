@@ -58,9 +58,15 @@ tmpclaude-*
 
 .serena/
 
-# Local Claude Code state; only the shared hook config is committed
+# Claude Code: shared config, agents, skills, hooks and project memory are committed;
+# per-machine settings, campaign pointers, worker reports and worktrees are not
 .claude/*
 !.claude/settings.json
+!.claude/agents/
+!.claude/skills/
+!.claude/hooks/
+!.claude/agent-memory/
+.claude/hooks/**/__pycache__/
 
 # Planning docs (local development artifacts)
 .planning/

@@ -15,7 +15,7 @@
 
     <!-- Agent code runs on customer hardware - enforce strict security -->
     <AnalysisMode>All</AnalysisMode>
-    <EnableTrimAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableTrimAnalyzer>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
 
     <!-- Publish settings for deployment -->
@@ -28,6 +28,8 @@
       CA1849: Console.Error.WriteLine is acceptable in startup/shutdown paths
     -->
     <NoWarn>$(NoWarn);CA1303;CA1416;CA1849</NoWarn>
+    <!-- IL2026: reflection-based System.Text.Json calls; shown as warnings until #186 lands -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

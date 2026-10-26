@@ -159,9 +159,9 @@ discord:
 
 # Global container registry (if using private registry)
 global:
-  imageRegistry: "your-registry.azurecr.io"
+  imageRegistry: "ghcr.io/sandboxservers"
   imagePullSecrets:
-    - name: acr-credentials
+    - name: ghcr-credentials  # only needed while the GHCR packages are private
 
 # Environment
 config:

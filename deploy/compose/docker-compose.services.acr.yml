@@ -1,16 +1,16 @@
-# Docker Compose Services - ACR Images
-# This file overrides docker-compose.services.yml to use pre-built images from ACR
+# Docker Compose Services - Pre-built Images (GHCR)
+# This file overrides docker-compose.services.yml to use pre-built images from GHCR
 # instead of building locally.
 #
 # Usage:
 #   docker compose -f docker-compose.dev.yml -f docker-compose.services.acr.yml up -d
 #
-# Environment variables required:
-#   ACR_LOGIN_SERVER - ACR login server (e.g., meridianconsoleacr-etdvg4cthscffqdf.azurecr.io)
+# Environment variables (optional):
+#   IMAGE_REGISTRY - Registry and owner (default: ghcr.io/sandboxservers, built by .github/workflows/containers.yml)
 #   IMAGE_TAG - Image tag to use (default: latest)
 
 x-service-image: &service-image
-  image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/${SERVICE_NAME}:${IMAGE_TAG:-latest}
+  image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/${SERVICE_NAME}:${IMAGE_TAG:-latest}
 
 x-service-env: &service-env
   ASPNETCORE_ENVIRONMENT: Development
@@ -27,7 +27,7 @@ x-service-depends: &service-depends
 
 services:
   gateway:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/gateway:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/gateway:${IMAGE_TAG:-latest}
     environment:
       <<: *service-env
       ASPNETCORE_ENVIRONMENT: Development
@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
 
   identity:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/identity:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/identity:${IMAGE_TAG:-latest}
     environment:
       <<: *service-env
       Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity
@@ -89,7 +89,7 @@ services:
     restart: unless-stopped
 
   billing:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/billing:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/billing:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5020:8080"
@@ -97,7 +97,7 @@ services:
     restart: unless-stopped
 
   servers:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/servers:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/servers:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5030:8080"
@@ -105,7 +105,7 @@ services:
     restart: unless-stopped
 
   nodes:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/nodes:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/nodes:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5040:8080"
@@ -113,7 +113,7 @@ services:
     restart: unless-stopped
 
   tasks:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/tasks:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/tasks:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5050:8080"
@@ -121,7 +121,7 @@ services:
     restart: unless-stopped
 
   files:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/files:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/files:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5060:8080"
@@ -129,7 +129,7 @@ services:
     restart: unless-stopped
 
   console:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/console:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/console:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5070:8080"
@@ -137,7 +137,7 @@ services:
     restart: unless-stopped
 
   mods:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/mods:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/mods:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5080:8080"
@@ -145,7 +145,7 @@ services:
     restart: unless-stopped
 
   notifications:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/notifications:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/notifications:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5090:8080"
@@ -153,7 +153,7 @@ services:
     restart: unless-stopped
 
   firewall:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/firewall:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/firewall:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5100:8080"
@@ -161,7 +161,7 @@ services:
     restart: unless-stopped
 
   secrets:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/secrets:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/secrets:${IMAGE_TAG:-latest}
     environment:
       <<: *service-env
       ASPNETCORE_ENVIRONMENT: Development
@@ -176,7 +176,7 @@ services:
     restart: unless-stopped
 
   discord:
-    image: ${ACR_LOGIN_SERVER:-meridianconsoleacr-etdvg4cthscffqdf.azurecr.io}/dhadgar/discord:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/discord:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5120:8080"

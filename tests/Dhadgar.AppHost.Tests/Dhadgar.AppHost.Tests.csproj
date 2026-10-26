@@ -8,6 +8,8 @@
     <IsTestProject>true</IsTestProject>
     <AssemblyName>Dhadgar.AppHost.Tests</AssemblyName>
     <RootNamespace>Dhadgar.AppHost.Tests</RootNamespace>
+    <!-- Follows Dhadgar.AppHost: its Aspire packages are host-specific, so no lock file. -->
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>

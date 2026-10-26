@@ -1,25 +1,9 @@
-trigger:
-  branches:
-    include:
-      - main
-      - develop
-      - feature/*
-  paths:
-    include:
-      - src/Dhadgar.Gateway/**
-      - src/Dhadgar.Identity/**
-      - src/Dhadgar.Billing/**
-      - src/Dhadgar.Servers/**
-      - src/Dhadgar.Nodes/**
-      - src/Dhadgar.Tasks/**
-      - src/Dhadgar.Files/**
-      - src/Dhadgar.Mods/**
-      - src/Dhadgar.Console/**
-      - src/Dhadgar.Notifications/**
-      - src/Dhadgar.Secrets/**
-      - src/Dhadgar.Discord/**
-      - src/Shared/**
-      - Dhadgar.sln
+# Superseded by .github/workflows/containers.yml, which builds these images and
+# pushes them to GHCR. Kept manual-only for reference only: it pushes to an ACR
+# that no longer exists. Delete once the GitHub workflow has run on main.
+trigger: none
+
+pr: none
 
 resources:
   repositories:

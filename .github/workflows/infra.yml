@@ -1,0 +1,153 @@
+# Provisions Azure resources and Cloudflare DNS for one environment. Manual only.
+# Replaces the Infrastructure stage of azure-pipelines.yml.
+#
+# Runs in the `infra` environment, which only main can use and which waits for a
+# reviewer's approval. Signs in with OIDC as the meridian-github-infra app
+# registration, whose only federated credential (github-env-infra) trusts this
+# environment, so no other workflow can use its rights. It holds:
+#   - Contributor on the subscription, for resource groups and Key Vaults
+#   - Microsoft Graph Application.ReadWrite.All (admin consent), for the app registrations
+#   - Key Vault Secrets User on mc-cicd, for the Cloudflare secrets
+# Cloudflare credentials are read from mc-cicd as cloudflare-api-token and
+# cloudflare-zone-id.
+name: Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      provision-azure:
+        description: Create resource groups and Key Vaults
+        type: boolean
+        default: true
+      provision-app-registrations:
+        description: Create or update the Entra app registrations
+        type: boolean
+        default: false
+      configure-dns:
+        description: Create or update Cloudflare DNS records
+        type: boolean
+        default: false
+      dns-ip:
+        description: Public IPv4 the environment's A record points at (needed for DNS)
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  TARGET_ENV: ${{ inputs.environment }}
+
+jobs:
+  azure:
+    name: Azure (${{ inputs.environment }})
+    if: inputs.provision-azure || inputs.provision-app-registrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: infra
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in to Azure
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resource groups and Key Vaults
+        if: inputs.provision-azure
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $location = 'centralus'
+          $config = @{
+            dev     = @{ rg = 'meridian-dev-rg';     vaults = @('mc-core-dev', 'mc-oauth-dev') }
+            staging = @{ rg = 'meridian-staging-rg'; vaults = @('mc-core-staging', 'mc-oauth-staging') }
+            prod    = @{ rg = 'meridian-prod-rg';    vaults = @('mc-core', 'mc-oauth') }
+          }[$env:TARGET_ENV]
+
+          foreach ($rg in @($config.rg, 'Secrets')) {
+            if ((az group exists --name $rg) -eq 'true') {
+              Write-Host "Resource group exists: $rg"
+            } else {
+              Write-Host "Creating resource group: $rg"
+              az group create --name $rg --location $location --output none
+            }
+          }
+
+          foreach ($vault in $config.vaults) {
+            $found = az keyvault list --resource-group Secrets --query "[?name=='$vault'].name" -o tsv
+            if ($found) {
+              Write-Host "Key Vault exists: $vault"
+            } else {
+              Write-Host "Creating Key Vault: $vault"
+              az keyvault create --name $vault --resource-group Secrets --location $location `
+                --enable-rbac-authorization true --output none
+            }
+          }
+
+      - name: App registrations
+        if: inputs.provision-app-registrations
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: ./deploy/scripts/provision-azure-app-registrations.ps1 -TenantId $env:TENANT_ID -Environment $env:TARGET_ENV
+
+  dns:
+    name: DNS (${{ inputs.environment }})
+    needs: azure
+    # Runs after the Azure job, or on its own when that job was not requested.
+    if: ${{ !cancelled() && inputs.configure-dns && needs.azure.result != 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: infra
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in to Azure
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure Cloudflare DNS
+        env:
+          VAULT: ${{ vars.KEY_VAULT_NAME }}
+          DNS_IP: ${{ inputs.dns-ip }}
+        run: |
+          set -euo pipefail
+          CLOUDFLARE_API_TOKEN=$(az keyvault secret show --vault-name "$VAULT" --name cloudflare-api-token --query value -o tsv)
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          CLOUDFLARE_ZONE_ID=$(az keyvault secret show --vault-name "$VAULT" --name cloudflare-zone-id --query value -o tsv)
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ZONE_ID
+          bash deploy/scripts/configure-cloudflare-dns.sh "$TARGET_ENV" "$DNS_IP"
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true

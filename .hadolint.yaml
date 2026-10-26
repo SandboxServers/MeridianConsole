@@ -4,7 +4,7 @@
 # Trusted registries (images from these don't need explicit tags)
 trustedRegistries:
   - mcr.microsoft.com
-  - meridianconsoleacr-etdvg4cthscffqdf.azurecr.io
+  - ghcr.io
   - docker.io
 
 # Rule severity overrides
