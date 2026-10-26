@@ -10,10 +10,9 @@ var postgres = builder.AddPostgres("postgres")
     .WithDataVolume("dhadgar-postgres-data")
     .WithPgAdmin();
 
-// Create databases (platformDb is shared by most services; identityDb and billingDb are service-specific)
+// Create databases (platformDb is shared by most services; identityDb is service-specific)
 var platformDb = postgres.AddDatabase("dhadgar-platform");
 var identityDb = postgres.AddDatabase("dhadgar-identity");
-var billingDb = postgres.AddDatabase("dhadgar-billing");
 
 // Redis - Caching and session storage
 var redis = builder.AddRedis("cache")

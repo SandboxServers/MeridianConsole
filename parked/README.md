@@ -35,7 +35,7 @@ D-03 of campaign `vertical-slice` (owner decision, 2026-10-26): park Billing, Ta
 ## How to unpark a project
 
 1. Move it back to its original path with `git mv parked/<original path> <original path>`. Do this for the project and its test project.
-2. Fix the `ProjectReference` paths in the moved `.csproj` files. References to shared projects (`..\Shared\...`, `..\..\Shared\...`, `..\Dhadgar.Agent.Core\...`, `..\Dhadgar.ServiceDefaults.Tests\...`) gain two `..\` segments under `parked/`, so reverse that change. References between parked projects (for example a test project to its service) are unchanged.
+2. Restore the original `ProjectReference` paths. Services (Billing, Tasks, Files, Mods): `..\..\..\src\Shared\X` becomes `..\Shared\X`. Agent.Linux: `..\..\..\..\src\Agents\Dhadgar.Agent.Core\...` becomes `..\Dhadgar.Agent.Core\...` and `..\..\..\..\src\Shared\X` becomes `..\..\Shared\X`. Test projects: `..\..\..\tests\Dhadgar.ServiceDefaults.Tests\...` becomes `..\Dhadgar.ServiceDefaults.Tests\...`. A test project's reference to its own service (`..\..\src\Dhadgar.<Name>\...`) is unchanged. ShoppingCart: `package.json` `file:../Dhadgar.SharedAuth` resolves again once the project is back under `src/`.
 3. Add the projects back to the solution with `dotnet sln Dhadgar.sln add <csproj>`.
 4. For a service, restore its resource and references in `src/Dhadgar.AppHost/Program.cs`, its `ProjectReference` in `src/Dhadgar.AppHost/Dhadgar.AppHost.csproj`, and its health test in `tests/Dhadgar.AppHost.Tests/AppHostIntegrationTests.cs`.
 5. Restore the Gateway routes, compose entries and Discord map entries removed by VS-02.
