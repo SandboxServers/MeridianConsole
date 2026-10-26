@@ -18,6 +18,12 @@ on:
         description: Collect and merge Cobertura coverage (needs run-tests).
         type: boolean
         default: true
+      test-filter:
+        description: >-
+          dotnet test --filter expression. The default leaves out the Aspire AppHost
+          tests, which start the full container stack; pass '' to run everything.
+        type: string
+        default: RequiresDocker!=true
       runs-on:
         description: Runner label.
         type: string
@@ -76,11 +82,15 @@ jobs:
         env:
           CONFIGURATION: ${{ inputs.configuration }}
           COLLECT_COVERAGE: ${{ inputs.collect-coverage }}
+          TEST_FILTER: ${{ inputs.test-filter }}
         run: |
           args=(Dhadgar.sln --configuration "$CONFIGURATION" --no-build
                 --logger trx --results-directory "$RUNNER_TEMP/testresults")
           if [ "$COLLECT_COVERAGE" = 'true' ]; then
             args+=(--collect 'XPlat Code Coverage')
+          fi
+          if [ -n "$TEST_FILTER" ]; then
+            args+=(--filter "$TEST_FILTER")
           fi
           dotnet test "${args[@]}"
 
