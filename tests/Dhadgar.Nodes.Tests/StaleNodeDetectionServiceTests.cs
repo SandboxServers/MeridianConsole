@@ -255,8 +255,8 @@ public sealed class StaleNodeDetectionServiceTests
     {
         // Arrange
         var callCount = 0;
-        var firstCallTcs = new TaskCompletionSource();
-        var secondCallTcs = new TaskCompletionSource();
+        var firstCallTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondCallTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var heartbeatService = Substitute.For<IHeartbeatService>();
         heartbeatService.CheckStaleNodesAsync(Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -295,12 +295,18 @@ public sealed class StaleNodeDetectionServiceTests
         await firstCallTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(1, callCount);
 
-        // Advance time past the check interval to trigger second iteration
-        fakeTimeProvider.Advance(TimeSpan.FromMinutes(2));
+        // Advance time past the check interval to trigger the second iteration.
+        // The service may not have started its delay yet when the first call
+        // completes, so keep advancing until the second call lands.
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!secondCallTcs.Task.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            fakeTimeProvider.Advance(TimeSpan.FromMinutes(2));
+            await Task.WhenAny(secondCallTcs.Task, Task.Delay(50));
+        }
 
-        // Wait for second call
-        await secondCallTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(2, callCount);
+        await secondCallTcs.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.True(callCount >= 2);
 
         await cts.CancelAsync();
         await service.StopAsync(CancellationToken.None);
