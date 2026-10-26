@@ -89,7 +89,7 @@ The ShoppingCart application is currently in a functional wireframe state with t
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | [Astro](https://astro.build) | 5.1.1 | Static site generation, hybrid rendering |
-| [React](https://react.dev) | 18.3.1 | Interactive UI components |
+| [React](https://react.dev) | 19.3.1 | Interactive UI components |
 | [TypeScript](https://typescriptlang.org) | 5.7.2 | Type-safe JavaScript |
 | [Tailwind CSS](https://tailwindcss.com) | 3.4.16 | Utility-first CSS framework |
 

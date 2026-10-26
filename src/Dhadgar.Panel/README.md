@@ -96,7 +96,7 @@ The Panel was originally built with Blazor WebAssembly (see legacy `Pages/` and 
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | **Astro** | 5.1.1 | Static site generation with islands architecture |
-| **React** | 18.3.1 | Interactive UI components (islands) |
+| **React** | 19.3.1 | Interactive UI components (islands) |
 | **Tailwind CSS** | 3.4.16 | Utility-first CSS framework |
 | **TypeScript** | 5.7.2 | Type-safe JavaScript |
 | **Node.js** | 22+ | Runtime for SSR and build tools |
