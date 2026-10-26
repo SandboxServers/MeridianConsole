@@ -213,6 +213,11 @@
         "resolved": "10.0.3",
         "contentHash": "TV62UsrJZPX6gbt3c4WrtXh7bmaDIcMqf9uft1cc4L6gJXOU07hDGEh+bFQh/L2Az0R1WVOkiT66lFqS6G2NmA=="
       },
+      "Microsoft.Bcl.Cryptography": {
+        "type": "Transitive",
+        "resolved": "10.0.2",
+        "contentHash": "LG9Yll3B5aNpxv0+D47g6LiOiKBIlodhcHdQwcYzo8VeexFLGqx5ymetmA2aBRyo9cCcWsQWrFsdbsr8LvmWDw=="
+      },
       "Microsoft.Build.Framework": {
         "type": "Transitive",
         "resolved": "18.0.2",
@@ -351,15 +356,15 @@
       },
       "Microsoft.IdentityModel.Abstractions": {
         "type": "Transitive",
-        "resolved": "8.18.0",
-        "contentHash": "8VUcDy66uw1GUC/ytyRJAUgGxydPu2rLtUbUAiniCHd5SMB/01Q28XgqFyxIqb3srz6HWTgSsZdDbkdVJr3LXQ=="
+        "resolved": "8.23.0",
+        "contentHash": "JjiBkKj12OKvuWr+kB5sQwb7fmWW5bi03Mq/rd2Fu/7YwZ1RWQO9KhI9lBxki4o1VvY0wzqny8c7nwx1uuZzVg=="
       },
       "Microsoft.IdentityModel.Logging": {
         "type": "Transitive",
-        "resolved": "8.18.0",
-        "contentHash": "c2l/VEtW1XI/ifcu49xzDwgrZZ0a0aX/TwCPC7mEHFQk/KixDgtSdjB5eDhYyCO38GJiRUjeRTz9aWCy1t55ww==",
+        "resolved": "8.23.0",
+        "contentHash": "wSXXOoV4b4hhRcC492jyNBZkO0LWrcWtWP5Cl5ujrON3vTMlufXDT39gTZfBhFAZCV2XJtNU6DLHMDR6E9YpUg==",
         "dependencies": {
-          "Microsoft.IdentityModel.Abstractions": "8.18.0"
+          "Microsoft.IdentityModel.Abstractions": "8.23.0"
         }
       },
       "Microsoft.IdentityModel.Protocols": {
@@ -381,10 +386,11 @@
       },
       "Microsoft.IdentityModel.Tokens": {
         "type": "Transitive",
-        "resolved": "8.18.0",
-        "contentHash": "c6ksXXFj5oPPsl8pfsui5zv8Gs7uxrGetXCTc1p7k7Nue/C8iBMtAVgtRrH7Esqe596QWD7KS3exKYY1FJG2iw==",
+        "resolved": "8.23.0",
+        "contentHash": "PUowLq8gqICt+oepHWmKBOJmnVmWoQ5dOVn2CgwFMBZZOAEMHgCQLWs8ONYdsjAyjhDHaFy+AAx0OMG/oV06Zw==",
         "dependencies": {
-          "Microsoft.IdentityModel.Logging": "8.18.0"
+          "Microsoft.Bcl.Cryptography": "10.0.2",
+          "Microsoft.IdentityModel.Logging": "8.23.0"
         }
       },
       "Microsoft.IdentityModel.Validators": {
@@ -504,15 +510,15 @@
           "OpenTelemetry.Api": "1.20.1"
         }
       },
-      "Pipelines.Sockets.Unofficial": {
-        "type": "Transitive",
-        "resolved": "2.2.8",
-        "contentHash": "zG2FApP5zxSx6OcdJQLbZDk2AVlN2BNQD6MorwIfV6gVj0RRxWPEp2LXAxqDGZqeNV1Zp0BNPcNaey/GXmTdvQ=="
-      },
       "RabbitMQ.Client": {
         "type": "Transitive",
         "resolved": "7.2.2",
         "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA=="
+      },
+      "RESPite": {
+        "type": "Transitive",
+        "resolved": "3.4.20",
+        "contentHash": "MRBfXbMStwHGzM2UsbWsmh7mF/WDh4kNonrhOj5HLfkVp+PIstu4MuElusyJLHu5MkOIQj9+u1xWQ5YeJTveHQ=="
       },
       "starkbank-ecdsa": {
         "type": "Transitive",
@@ -585,6 +591,11 @@
           "System.Composition.Runtime": "9.0.0"
         }
       },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.13",
+        "contentHash": "ZlcywyQ7FJmgOV2nctdfOEPGS0kRK8T2CdOoPr6F4HPYpmjSo6GQfj3yTyOzNO6B+2U84/JKSPkJJMWqLmVsMw=="
+      },
       "System.Memory.Data": {
         "type": "Transitive",
         "resolved": "10.0.3",
@@ -626,7 +637,7 @@
           "OpenTelemetry.Instrumentation.Http": "[1.20.1, )",
           "OpenTelemetry.Instrumentation.Process": "[1.14.0-beta.2, )",
           "OpenTelemetry.Instrumentation.Runtime": "[1.20.1, )",
-          "OpenTelemetry.Instrumentation.StackExchangeRedis": "[1.0.0-rc9.15, )",
+          "OpenTelemetry.Instrumentation.StackExchangeRedis": "[1.20.1-beta.1, )",
           "Scalar.AspNetCore": "[2.18.3, )"
         }
       },
@@ -696,10 +707,10 @@
       "Microsoft.IdentityModel.JsonWebTokens": {
         "type": "CentralTransitive",
         "requested": "[8.23.0, )",
-        "resolved": "8.18.0",
-        "contentHash": "ZUMJt3r1zOi67AVSfnh3u9hg9KCq06roOIX5gs7FqsucSZ/VTsI89DI9h2gHyU0xOtj/qVZV2ugWS6JlLMTwHQ==",
+        "resolved": "8.23.0",
+        "contentHash": "ePEm+mv5iswzckE3mygh52uFUeQpVlHa1B10nS4jpEyNV5tL1mLgRS9U5sMaRlhsPRsZ1DJP0+FhxSrOIfMGIg==",
         "dependencies": {
-          "Microsoft.IdentityModel.Tokens": "8.18.0"
+          "Microsoft.IdentityModel.Tokens": "8.23.0"
         }
       },
       "Microsoft.OpenApi": {
@@ -734,31 +745,32 @@
       },
       "OpenTelemetry.Instrumentation.StackExchangeRedis": {
         "type": "CentralTransitive",
-        "requested": "[1.0.0-rc9.15, )",
-        "resolved": "1.0.0-rc9.15",
-        "contentHash": "EnNfbEEncmJIT5YITE9bglnjkhwvb/IeP9pVV43o/7XtGQKRn/yDNNQG3QOYm/yLw/fyFEOFi/v03Qsr/aX1tA==",
+        "requested": "[1.20.1-beta.1, )",
+        "resolved": "1.20.1-beta.1",
+        "contentHash": "ow9XltcylUAtbI9kmzXyOSg7M06dK3nkvUb17e9WBzbkWVtLl7nUJXD1+wQdSyudXEyaUtEEmjH0sJBjmyfBsg==",
         "dependencies": {
-          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.9.0, 2.0.0)",
-          "StackExchange.Redis": "[2.1.58, 3.0.0)"
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.20.1, 2.0.0)",
+          "StackExchange.Redis": "2.6.122"
         }
       },
       "StackExchange.Redis": {
         "type": "CentralTransitive",
-        "requested": "[2.13.17, )",
-        "resolved": "2.7.4",
-        "contentHash": "lD6a0lGOCyV9iuvObnzStL74EDWAyK31w6lS+Md9gIz1eP4U6KChDIflzTdtrktxlvVkeOvPtkaYOcm4qjbHSw==",
+        "requested": "[3.4.20, )",
+        "resolved": "3.4.20",
+        "contentHash": "eIPMxCzqw3BMWp1GOOcafs7RPrScSHiCT9b1DIEJ49h9b7tHBw21+rN6gLWdQmJzvR+Wzwx3obmCp3FpgKuUSg==",
         "dependencies": {
-          "Pipelines.Sockets.Unofficial": "2.2.8"
+          "RESPite": "3.4.20",
+          "System.IO.Hashing": "10.0.13"
         }
       },
       "System.IdentityModel.Tokens.Jwt": {
         "type": "CentralTransitive",
         "requested": "[8.23.0, )",
-        "resolved": "8.18.0",
-        "contentHash": "JxKlBca3/eXeH4koAGjEXOwrBdtwyDXwHXdYT5TQunp64TcVBl4wBCfmlGwhSG017Q/Qrz24leLxV6v2eknnJg==",
+        "resolved": "8.23.0",
+        "contentHash": "mUuRjk0KKvF3dlF7CKcnjHn/4TFaWRDGjDRtn1rACitoIflv96apfLD9KPDisyCEuc/0ierocnHCvIXBvCL4Sw==",
         "dependencies": {
-          "Microsoft.IdentityModel.JsonWebTokens": "8.18.0",
-          "Microsoft.IdentityModel.Tokens": "8.18.0"
+          "Microsoft.IdentityModel.JsonWebTokens": "8.23.0",
+          "Microsoft.IdentityModel.Tokens": "8.23.0"
         }
       }
     }

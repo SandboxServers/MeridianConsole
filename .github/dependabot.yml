@@ -101,6 +101,11 @@ updates:
       - dependency-name: 'MassTransit*'
         update-types:
           - version-update:semver-major
+      # Microsoft.AspNetCore.OpenApi 10.x requires Microsoft.OpenApi < 3.0
+      # (#216). Lift this when ASP.NET Core moves to OpenApi 3.
+      - dependency-name: 'Microsoft.OpenApi'
+        update-types:
+          - version-update:semver-major
     groups:
       nuget-minor-patch:
         applies-to: version-updates
