@@ -66,7 +66,7 @@
     <!-- Direct pin: Microsoft.Graph resolves Microsoft.Kiota.Abstractions below 1.22.0
          (GHSA-7j59-v9qr-6fq9 patched at 1.22.0; even current Graph.Core 3.2.5 floors Kiota at 1.21.1).
          Referenced directly in Dhadgar.Notifications. Remove once Graph.Core floors Kiota >= 1.22.0. -->
-    <PackageVersion Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
+    <PackageVersion Include="Microsoft.Kiota.Abstractions" Version="2.1.2" />
     <!-- >= 4.16.0 patches GHSA-9j88-vvj5-vhgr (MailKit) and floors MimeKit at 4.16.0,
          past GHSA-g7hc-96xr-gvvx (patched at 4.15.1) -->
     <PackageVersion Include="MailKit" Version="4.18.2" />
