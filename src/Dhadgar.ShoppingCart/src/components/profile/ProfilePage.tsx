@@ -161,7 +161,7 @@ export default function ProfilePage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <a href="/" className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded bg-cyber-magenta/20 border border-cyber-magenta/50 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-sm bg-cyber-magenta/20 border border-cyber-magenta/50 flex items-center justify-center">
                   <svg className="w-5 h-5 text-cyber-magenta" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
                     <path d="M2 17l10 5 10-5"></path>
@@ -189,7 +189,7 @@ export default function ProfilePage() {
         <section className="mb-8 p-6 rounded-lg bg-panel-dark border border-glow-line/50">
           <div className="flex items-start gap-6">
             {/* Avatar */}
-            <div className="w-20 h-20 rounded-full bg-cyber-magenta/20 border-2 border-cyber-magenta/50 flex items-center justify-center flex-shrink-0">
+            <div className="w-20 h-20 rounded-full bg-cyber-magenta/20 border-2 border-cyber-magenta/50 flex items-center justify-center shrink-0">
               <span className="font-display text-2xl text-cyber-magenta">
                 {(profile.displayName || profile.email)[0].toUpperCase()}
               </span>
@@ -247,7 +247,7 @@ export default function ProfilePage() {
                       <div className="flex items-center gap-2">
                         <h3 className="font-medium text-text-primary">{org.name}</h3>
                         {org.isPreferred && (
-                          <span className="px-2 py-0.5 text-xs rounded bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/50">
+                          <span className="px-2 py-0.5 text-xs rounded-sm bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/50">
                             Default
                           </span>
                         )}

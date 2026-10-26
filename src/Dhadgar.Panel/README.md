@@ -58,7 +58,7 @@ The Panel is the "mission control" for game server operators. It provides:
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| Project Setup | Complete | Astro 7 with React and Tailwind CSS (via PostCSS) |
+| Project Setup | Complete | Astro 7 with React and Tailwind CSS 4 (via `@tailwindcss/vite`) |
 | SSR Configuration | Complete | Node.js adapter for server-side rendering |
 | Authentication Flow | Complete | OAuth login, callback handling, token management |
 | Layout System | Complete | Base, Auth, and Dashboard layouts |
@@ -97,7 +97,7 @@ The Panel was originally built with Blazor WebAssembly (see legacy `Pages/` and 
 |------------|---------|---------|
 | **Astro** | 5.1.1 | Static site generation with islands architecture |
 | **React** | 19.3.1 | Interactive UI components (islands) |
-| **Tailwind CSS** | 3.4.16 | Utility-first CSS framework |
+| **Tailwind CSS** | 4.3.3 | Utility-first CSS framework |
 | **TypeScript** | 5.7.2 | Type-safe JavaScript |
 | **Node.js** | 22+ | Runtime for SSR and build tools |
 
@@ -106,7 +106,7 @@ The Panel was originally built with Blazor WebAssembly (see legacy `Pages/` and 
 | Package | Purpose |
 |---------|---------|
 | `@astrojs/react` | React integration for Astro |
-| `@astrojs/tailwind` | Tailwind CSS integration |
+| `@tailwindcss/vite` | Tailwind CSS 4 Vite plugin |
 | `@astrojs/node` | Node.js adapter for SSR deployment |
 | `@dhadgar/shared-auth` | Shared authentication client library |
 | `clsx` | Conditional CSS class utility |
@@ -230,8 +230,7 @@ src/Dhadgar.Panel/
 ├── dist/                    # Build output
 │   ├── client/              # Static assets for CDN
 │   └── server/              # Node.js server bundle
-├── astro.config.mjs         # Astro configuration
-├── tailwind.config.mjs      # Tailwind CSS configuration
+├── astro.config.mjs         # Astro configuration (wires @tailwindcss/vite)
 ├── tsconfig.json            # TypeScript configuration
 ├── package.json             # Node.js dependencies
 ├── Dhadgar.Panel.csproj     # .NET shim for solution integration
@@ -727,7 +726,7 @@ The Panel uses a cyberpunk-inspired design system with:
 
 ### Color Palette
 
-Defined in `tailwind.config.mjs`:
+Defined in the `@theme` block of `src/styles/global.css`:
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -757,26 +756,26 @@ From `global.css`:
 
 ```css
 /* Text glow effect */
-.text-glow { text-shadow: 0 0 10px currentColor; }
+@utility text-glow { text-shadow: 0 0 10px currentColor; }
 
 /* Glass morphism */
-.glass {
+@utility glass {
   background: rgba(17, 24, 39, 0.8);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(30, 58, 95, 0.5);
 }
 
 /* Status indicators */
-.status-online { @apply w-2 h-2 rounded-full bg-cyber-green shadow-glow-green; }
-.status-offline { @apply w-2 h-2 rounded-full bg-cyber-magenta shadow-glow-magenta; }
-.status-warning { @apply w-2 h-2 rounded-full bg-cyber-amber shadow-glow-amber; }
+@utility status-online { @apply w-2 h-2 rounded-full bg-cyber-green shadow-glow-green; }
+@utility status-offline { @apply w-2 h-2 rounded-full bg-cyber-magenta shadow-glow-magenta; }
+@utility status-warning { @apply w-2 h-2 rounded-full bg-cyber-amber shadow-glow-amber; }
 
 /* Data display */
-.data-label { @apply text-text-muted text-xs font-mono uppercase tracking-wider; }
-.data-value { @apply text-text-primary font-mono; }
+@utility data-label { @apply text-text-muted text-xs font-mono uppercase tracking-wider; }
+@utility data-value { @apply text-text-primary font-mono; }
 
 /* Gradient text */
-.gradient-text { @apply bg-gradient-to-r from-cyber-cyan to-cyber-magenta bg-clip-text text-transparent; }
+@utility gradient-text { @apply bg-linear-to-r from-cyber-cyan to-cyber-magenta bg-clip-text text-transparent; }
 ```
 
 ### Animations
@@ -809,12 +808,16 @@ From `global.css`:
 ```javascript
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
-import tailwind from '@astrojs/tailwind';
 import node from '@astrojs/node';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  // Enable React and Tailwind integrations
-  integrations: [react(), tailwind()],
+  integrations: [react()],
+
+  // Tailwind CSS 4 via its Vite plugin; theme lives in src/styles/global.css
+  vite: {
+    plugins: [tailwindcss()]
+  },
 
   // SSR mode with Node.js adapter
   output: 'server',
@@ -853,7 +856,7 @@ export default defineConfig({
 
 ### Tailwind Configuration
 
-See `tailwind.config.mjs` for the complete theme configuration including:
+Tailwind CSS 4 uses CSS-first configuration: there is no `tailwind.config.mjs` or PostCSS config. See the `@theme` block and `@utility` rules in `src/styles/global.css` for the complete theme, including:
 
 - Custom color palette
 - Custom fonts
