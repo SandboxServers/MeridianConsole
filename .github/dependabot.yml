@@ -82,6 +82,10 @@ updates:
       - /.github/actions/*
     schedule:
       interval: weekly
+    ignore:
+      # Only published as a moving `v1` tag. Dependabot resolves it to the
+      # 2021 tag commit and proposes that as a "bump" (#207); update by hand.
+      - dependency-name: 'Azure/static-web-apps-deploy'
     groups:
       actions:
         patterns:

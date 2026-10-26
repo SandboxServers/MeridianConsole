@@ -130,7 +130,8 @@ This separation follows the principle of using the best tool for each job while 
 | **pg** | ^8.12.0 | PostgreSQL client for direct queries |
 | **jose** | ^6.2.13 | ES256 JWT signing for exchange tokens |
 | **cors** | ^2.8.5 | Cross-origin request handling |
-| **dotenv** | ^17.4.2 | Environment variable loading |
+| **express-rate-limit** | ^8.7.1 | Per-client rate limit on the exchange endpoint |
+| **dotenv** | ^18.0.9 | Environment variable loading (`.env` in local dev only) |
 
 ### Runtime Environment
 
@@ -224,6 +225,18 @@ Configuration is loaded from environment variables, with secrets fetched from th
 |----------|-------------|---------|
 | `PORT` | HTTP server port | `5130` |
 | `NODE_ENV` | Environment mode | `development` |
+| `TRUST_PROXY` | Express `trust proxy` setting, used to derive the client IP for rate limiting. Unset, `false` or `0` trusts nothing (`req.ip` is the socket peer). A positive integer trusts that many proxy hops; set `1` behind the Gateway. This gives per-client limits only when Cloudflare is in front of the Gateway (the Gateway only accepts `X-Forwarded-For` from Cloudflare); without it, every client shares one bucket. Limits are per process, so each replica counts separately. Otherwise a comma-separated list of proxy addresses/subnets or Express presets (`loopback`, `uniquelocal`). `true` is refused at startup because it lets clients spoof `X-Forwarded-For`. | unset (off) |
+
+#### Exchange Endpoint Rate Limiting
+
+`POST /api/v1/betterauth/exchange` is rate-limited per client IP in the service itself, in addition to the Gateway's `Auth` policy. Over the limit it returns `429` with `{ "error": "rate_limited" }`, plus `RateLimit`/`RateLimit-Policy` (IETF draft 8) and `Retry-After` headers. Other routes are not limited here.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `EXCHANGE_RATE_LIMIT_MAX` | Requests allowed per client per window | `30` |
+| `EXCHANGE_RATE_LIMIT_WINDOW_MS` | Window length in milliseconds | `60000` |
+
+The limit is keyed on `req.ip`, so `TRUST_PROXY` must match the deployment. Behind the Gateway with `TRUST_PROXY` unset, every request appears to come from the Gateway and all users share one bucket; `express-rate-limit` then logs an `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` validation error on the first proxied request. The Gateway resolves the real client IP (trusting Cloudflare ranges only) and forwards it as a single `X-Forwarded-For` entry, so `TRUST_PROXY=1` is the right value there. Invalid values for any of these variables stop the service at startup.
 
 #### Secrets Service Integration
 
@@ -1206,6 +1219,9 @@ JOIN "account" a ON a."userId" = u.id;
 Via Gateway:
 - **30 requests/minute** per IP for authentication endpoints
 - Protects against brute force and credential stuffing
+
+In the service:
+- `POST /api/v1/betterauth/exchange` is limited per client IP (default 30/minute, see [Exchange Endpoint Rate Limiting](#exchange-endpoint-rate-limiting)), so direct calls that bypass the Gateway are limited too
 
 ---
 
