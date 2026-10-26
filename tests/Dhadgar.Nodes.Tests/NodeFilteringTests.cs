@@ -113,7 +113,7 @@ public sealed class NodeFilteringTests
         string? displayNameOverride = null)
     {
         // CA5394 suppressed: Random is acceptable for test data generation - no security implications
-#pragma warning disable CA5394 // Do not use insecure randomness
+#pragma warning disable CA5394, SCS0005 // Insecure randomness is fine for test data
         return new Node
         {
             Id = Guid.NewGuid(),
@@ -127,7 +127,7 @@ public sealed class NodeFilteringTests
             LastHeartbeat = DateTime.UtcNow.AddMinutes(-1),
             CreatedAt = DateTime.UtcNow.AddDays(-Random.Shared.Next(1, 30))
         };
-#pragma warning restore CA5394
+#pragma warning restore CA5394, SCS0005
     }
 
     private static NodeHealth CreateNodeHealth(

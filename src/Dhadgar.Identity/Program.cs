@@ -150,6 +150,7 @@ builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<IClientAssertionService, ClientAssertionService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<TokenExchangeService>();
+builder.Services.AddScoped<TokenRefreshService>();
 builder.Services.AddScoped<ILinkedAccountService, LinkedAccountService>();
 builder.Services.AddScoped<OrganizationService>();
 builder.Services.AddScoped<MembershipService>();
@@ -820,6 +821,15 @@ app.MapPost("/exchange", TokenExchangeEndpoint.Handle)
     .WithTags("Authentication")
     .WithName("TokenExchange")
     .WithDescription("Exchange a Better Auth token for a JWT access token and refresh token")
+    .AllowAnonymous();
+
+// Refresh endpoint - redeems a refresh token from /exchange for a rotated token pair.
+// Anonymous because the caller's access token has (by definition) expired; the refresh
+// token itself is the credential. Rate-limited by the "/refresh" global limiter partition.
+app.MapPost("/refresh", TokenRefreshEndpoint.Handle)
+    .WithTags("Authentication")
+    .WithName("TokenRefresh")
+    .WithDescription("Redeem a refresh token for a new access token and rotated refresh token")
     .AllowAnonymous();
 
 // OAuth provider endpoints

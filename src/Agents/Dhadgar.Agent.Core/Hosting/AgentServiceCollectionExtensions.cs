@@ -36,6 +36,7 @@ public static class AgentServiceCollectionExtensions
 
         // Authentication - IEnrollmentService requires ICertificateStore from platform-specific host
         services.AddSingleton<IEnrollmentService, EnrollmentService>();
+        services.AddSingleton<IHardwareInventoryCollector, HardwareInventoryCollector>();
 
         // Communication
         services.AddSingleton<IControlPlaneClient, ControlPlaneClient>();

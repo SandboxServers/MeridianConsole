@@ -258,6 +258,67 @@ public sealed class AuthenticationFlowIntegrationTests : IAsyncLifetime
     /// <summary>
     /// Creates an ES256-signed exchange token simulating Better Auth
     /// </summary>
+    [Fact]
+    public async Task Refresh_AfterExchange_RotatesTokens_AndRejectsReuse()
+    {
+        // Arrange: log in via exchange
+        var exchangeToken = CreateExchangeToken(
+            Guid.NewGuid().ToString("N"), "refresh-flow@example.com", "discord", "discord_refresh_flow");
+        var exchangeResponse = await _client.PostAsJsonAsync("/exchange", new { exchangeToken });
+        Assert.Equal(HttpStatusCode.OK, exchangeResponse.StatusCode);
+        var exchanged = await exchangeResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var originalRefresh = exchanged.GetProperty("refreshToken").GetString()!;
+
+        // Act: redeem the refresh token (same JSON contract SharedAuth uses)
+        var refreshResponse = await _client.PostAsJsonAsync("/refresh", new { refreshToken = originalRefresh });
+
+        // Assert: new pair, rotated refresh token, valid JWT with the same subject/org
+        if (refreshResponse.StatusCode != HttpStatusCode.OK)
+        {
+            Assert.Fail(await refreshResponse.Content.ReadAsStringAsync());
+        }
+
+        var refreshed = await refreshResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var newAccess = refreshed.GetProperty("accessToken").GetString();
+        var newRefresh = refreshed.GetProperty("refreshToken").GetString();
+        Assert.False(string.IsNullOrEmpty(newAccess));
+        Assert.False(string.IsNullOrEmpty(newRefresh));
+        Assert.NotEqual(originalRefresh, newRefresh);
+        Assert.True(refreshed.GetProperty("expiresIn").GetInt32() > 0);
+
+        var handler = new JwtSecurityTokenHandler();
+        var originalJwt = handler.ReadJwtToken(exchanged.GetProperty("accessToken").GetString());
+        var newJwt = handler.ReadJwtToken(newAccess);
+        Assert.Equal(
+            originalJwt.Claims.First(c => c.Type == "sub").Value,
+            newJwt.Claims.First(c => c.Type == "sub").Value);
+        Assert.Equal(
+            originalJwt.Claims.First(c => c.Type == "org_id").Value,
+            newJwt.Claims.First(c => c.Type == "org_id").Value);
+
+        // Act: replay the original (now rotated) token
+        var replayResponse = await _client.PostAsJsonAsync("/refresh", new { refreshToken = originalRefresh });
+
+        // Assert: rejected, and reuse detection killed the rotated token as well
+        Assert.Equal(HttpStatusCode.Unauthorized, replayResponse.StatusCode);
+        var afterReuse = await _client.PostAsJsonAsync("/refresh", new { refreshToken = newRefresh });
+        Assert.Equal(HttpStatusCode.Unauthorized, afterReuse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_WithUnknownToken_Returns401()
+    {
+        var response = await _client.PostAsJsonAsync("/refresh", new { refreshToken = "not-a-real-token" });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_WithMissingToken_Returns400()
+    {
+        var response = await _client.PostAsJsonAsync("/refresh", new { refreshToken = "" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private string CreateExchangeToken(
         string userId,
         string email,

@@ -77,6 +77,24 @@ public sealed class TestCertificateAuthorityService : ICertificateAuthorityServi
             password));
     }
 
+    public Task<CertificateIssuanceResult> IssueCertificateForPublicKeyAsync(
+        Guid nodeId,
+        string subjectPublicKeyInfoBase64,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            System.Security.Cryptography.X509Certificates.PublicKey.CreateFromSubjectPublicKeyInfo(
+                Convert.FromBase64String(subjectPublicKeyInfoBase64), out _);
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException or ArgumentException)
+        {
+            return Task.FromResult(CertificateIssuanceResult.Fail("invalid_public_key"));
+        }
+
+        return IssueCertificateAsync(nodeId, ct);
+    }
+
     public Task<CertificateIssuanceResult> RenewCertificateAsync(
         Guid nodeId,
         string currentCertificateThumbprint,

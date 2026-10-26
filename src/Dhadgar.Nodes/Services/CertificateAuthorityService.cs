@@ -161,6 +161,166 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         }
     }
 
+    public async Task<CertificateIssuanceResult> IssueCertificateForPublicKeyAsync(
+        Guid nodeId,
+        string subjectPublicKeyInfoBase64,
+        CancellationToken ct = default)
+    {
+        PublicKey publicKey;
+        X509KeyUsageFlags keyUsage;
+        try
+        {
+            (publicKey, keyUsage) = ParseAgentPublicKey(subjectPublicKeyInfoBase64);
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException or ArgumentException)
+        {
+            _logger.LogWarning("Rejected agent public key for node {NodeId}: {Reason}", nodeId, ex.Message);
+            return CertificateIssuanceResult.Fail("invalid_public_key");
+        }
+
+        try
+        {
+            await EnsureInitializedAsync(ct);
+
+            if (_caCertificate is null)
+            {
+                throw new InvalidOperationException("CA certificate has not been initialized. Call InitializeAsync first.");
+            }
+
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
+            var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
+            var request = new CertificateRequest(subject, publicKey, HashAlgorithmName.SHA256);
+            AddClientCertificateExtensions(request, nodeId, keyUsage);
+
+            var serialBytes = RandomNumberGenerator.GetBytes(16);
+            serialBytes[0] &= 0x7F; // positive serial
+
+            using var caPrivateKey = _caCertificate.GetRSAPrivateKey()
+                ?? throw new InvalidOperationException("CA certificate does not have an RSA private key");
+            var signer = X509SignatureGenerator.CreateForRSA(caPrivateKey, RSASignaturePadding.Pkcs1);
+
+            using var certificate = request.Create(
+                _caCertificate.SubjectName,
+                signer,
+                now,
+                now.AddDays(AgentCertificateValidityDays),
+                serialBytes);
+
+            var thumbprint = CalculateSha256Thumbprint(certificate);
+            var serialNumber = Convert.ToHexString(certificate.GetSerialNumber().Reverse().ToArray()).ToLowerInvariant();
+
+            _logger.LogInformation(
+                "Certificate issued for node {NodeId} (agent-held key). Thumbprint: {Thumbprint}, SerialNumber: {SerialNumber}, NotAfter: {NotAfter}",
+                nodeId,
+                thumbprint,
+                serialNumber,
+                certificate.NotAfter);
+
+            return CertificateIssuanceResult.Ok(
+                thumbprint,
+                serialNumber,
+                DateTime.SpecifyKind(certificate.NotBefore.ToUniversalTime(), DateTimeKind.Utc),
+                DateTime.SpecifyKind(certificate.NotAfter.ToUniversalTime(), DateTimeKind.Utc),
+                certificate.ExportCertificatePem());
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to issue certificate for node {NodeId}", nodeId);
+            return CertificateIssuanceResult.Fail("certificate_generation_failed");
+        }
+    }
+
+    /// <summary>
+    /// Parses and vets an agent-supplied SubjectPublicKeyInfo. Accepts ECDSA on P-256/P-384
+    /// and RSA with at least 2048-bit modulus; everything else is rejected.
+    /// </summary>
+    private static (PublicKey Key, X509KeyUsageFlags KeyUsage) ParseAgentPublicKey(string subjectPublicKeyInfoBase64)
+    {
+        if (string.IsNullOrWhiteSpace(subjectPublicKeyInfoBase64))
+        {
+            throw new ArgumentException("Public key is empty.");
+        }
+
+        var spki = Convert.FromBase64String(subjectPublicKeyInfoBase64);
+        var publicKey = PublicKey.CreateFromSubjectPublicKeyInfo(spki, out var bytesRead);
+        if (bytesRead != spki.Length)
+        {
+            throw new ArgumentException("Trailing data after SubjectPublicKeyInfo.");
+        }
+
+        using (var ecdsa = publicKey.GetECDsaPublicKey())
+        {
+            if (ecdsa is not null)
+            {
+                var curve = ecdsa.ExportParameters(false).Curve;
+                var oid = curve.Oid?.Value;
+                if (oid is not ("1.2.840.10045.3.1.7" or "1.3.132.0.34")) // P-256, P-384
+                {
+                    throw new ArgumentException("Unsupported ECDSA curve.");
+                }
+
+                // ECDSA keys sign; key encipherment is not valid for EC.
+                return (publicKey, X509KeyUsageFlags.DigitalSignature);
+            }
+        }
+
+        using (var rsa = publicKey.GetRSAPublicKey())
+        {
+            if (rsa is not null)
+            {
+                if (rsa.KeySize < 2048)
+                {
+                    throw new ArgumentException("RSA key too small.");
+                }
+
+                return (publicKey, X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment);
+            }
+        }
+
+        throw new ArgumentException("Unsupported key algorithm.");
+    }
+
+    /// <summary>
+    /// Standard extension set for agent client certificates (shared by all issuance paths).
+    /// </summary>
+    private void AddClientCertificateExtensions(CertificateRequest request, Guid nodeId, X509KeyUsageFlags keyUsage)
+    {
+        // Basic constraints - not a CA
+        request.CertificateExtensions.Add(
+            new X509BasicConstraintsExtension(
+                certificateAuthority: false,
+                hasPathLengthConstraint: false,
+                pathLengthConstraint: 0,
+                critical: true));
+
+        // Key usage for client authentication
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(keyUsage, critical: true));
+
+        // Extended key usage - client authentication
+        request.CertificateExtensions.Add(
+            new X509EnhancedKeyUsageExtension(
+                [new Oid("1.3.6.1.5.5.7.3.2")], // id-kp-clientAuth
+                critical: true));
+
+        // Subject Key Identifier
+        request.CertificateExtensions.Add(
+            new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
+
+        // Authority Key Identifier - link to CA
+        request.CertificateExtensions.Add(
+            CreateAuthorityKeyIdentifierExtension(_caCertificate!));
+
+        // Subject Alternative Name with SPIFFE ID
+        var sanBuilder = new SubjectAlternativeNameBuilder();
+        var spiffeId = string.Format(CultureInfo.InvariantCulture, SpiffeIdFormat, nodeId);
+        sanBuilder.AddUri(new Uri(spiffeId));
+        request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
+    }
+
     public async Task<string> GetCaCertificatePemAsync(CancellationToken ct = default)
     {
         await EnsureInitializedAsync(ct);
@@ -300,41 +460,10 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
             var request = new CertificateRequest(subject, clientKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
-            // Client certificate extensions
-
-            // Basic constraints - not a CA
-            request.CertificateExtensions.Add(
-                new X509BasicConstraintsExtension(
-                    certificateAuthority: false,
-                    hasPathLengthConstraint: false,
-                    pathLengthConstraint: 0,
-                    critical: true));
-
-            // Key usage for client authentication
-            request.CertificateExtensions.Add(
-                new X509KeyUsageExtension(
-                    X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
-                    critical: true));
-
-            // Extended key usage - client authentication
-            request.CertificateExtensions.Add(
-                new X509EnhancedKeyUsageExtension(
-                    [new Oid("1.3.6.1.5.5.7.3.2")], // id-kp-clientAuth
-                    critical: true));
-
-            // Subject Key Identifier
-            request.CertificateExtensions.Add(
-                new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
-
-            // Authority Key Identifier - link to CA
-            request.CertificateExtensions.Add(
-                CreateAuthorityKeyIdentifierExtension(_caCertificate!));
-
-            // Subject Alternative Name with SPIFFE ID
-            var sanBuilder = new SubjectAlternativeNameBuilder();
-            var spiffeId = string.Format(CultureInfo.InvariantCulture, SpiffeIdFormat, nodeId);
-            sanBuilder.AddUri(new Uri(spiffeId));
-            request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
+            AddClientCertificateExtensions(
+                request,
+                nodeId,
+                X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment);
 
             // Generate serial number
             var serialBytes = RandomNumberGenerator.GetBytes(16);
