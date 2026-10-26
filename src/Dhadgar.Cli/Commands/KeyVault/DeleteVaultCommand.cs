@@ -24,9 +24,10 @@ public sealed class DeleteVaultCommand
             AnsiConsole.MarkupLine("[dim]If soft-delete is enabled, the vault can be recovered within the retention period.[/]");
             AnsiConsole.WriteLine();
 
-            var confirm = AnsiConsole.Confirm(
+            var confirm = await AnsiConsole.ConfirmAsync(
                 $"[yellow]Are you sure you want to delete vault '[cyan]{Markup.Escape(vaultName)}[/]'?[/]",
-                defaultValue: false);
+                defaultValue: false,
+                cancellationToken: ct);
 
             if (!confirm)
             {

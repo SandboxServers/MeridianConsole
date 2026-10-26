@@ -133,7 +133,7 @@ public static class TracingExtensions
                     options.SetDbStatementForStoredProcedure = true;
                     options.EnrichWithIDbCommand = (activity, command) =>
                     {
-                        activity.SetTag(TracingConstants.Attributes.DbSystem, TracingConstants.DatabaseSystem);
+                        activity.SetTag(TracingConstants.SpanAttributes.DbSystem, TracingConstants.DatabaseSystem);
                     };
                 });
 

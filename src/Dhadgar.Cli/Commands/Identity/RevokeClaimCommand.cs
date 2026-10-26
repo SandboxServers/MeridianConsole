@@ -42,9 +42,10 @@ public sealed class RevokeClaimCommand
         // Confirm unless --force is specified
         if (!force)
         {
-            var confirm = AnsiConsole.Confirm(
+            var confirm = await AnsiConsole.ConfirmAsync(
                 $"[yellow]Revoke claim '[cyan]{Markup.Escape(claimId)}[/]' from member?[/]",
-                defaultValue: false);
+                defaultValue: false,
+                cancellationToken: ct);
 
             if (!confirm)
             {
