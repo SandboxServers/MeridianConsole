@@ -30,6 +30,9 @@ public interface IAgentHubClient
     /// <summary>Delivers a signed command to the agent.</summary>
     Task ReceiveCommand(AgentCommandEnvelope command);
 
-    /// <summary>Liveness check carrying an opaque nonce echoed back in the ping result.</summary>
+    /// <summary>
+    /// Liveness check carrying an opaque nonce echoed back in the ping result. The nonce is at most
+    /// <see cref="AgentMessageLimits.MaxNonceLength"/> characters.
+    /// </summary>
     Task ReceivePing(string nonce);
 }

@@ -11,7 +11,7 @@ public class AgentMessagesSerializationTests
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-10-26T12:00:00Z", CultureInfo.InvariantCulture);
     private static readonly Guid Id = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Options = AgentJson.Options;
 
     /// <summary>
     /// Serializes, deserializes and serializes again; the two JSON strings must match.
@@ -107,6 +107,22 @@ public class AgentMessagesSerializationTests
     public void StartServerPayload_RoundTrips()
     {
         AssertRoundTrip(new StartServerPayload(Id, "1.21.1", "https://example.test/server.jar", "abcdef", 2048, 25565, true));
+    }
+
+    [Fact]
+    public void StartServerPayload_MissingRequiredProperty_Throws()
+    {
+        var json = $"{{\"serverId\":\"{Id:D}\",\"minecraftVersion\":\"1.21.1\",\"serverJarSha1\":\"abcdef\",\"memoryMb\":2048,\"port\":25565,\"eulaAccepted\":true}}";
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<StartServerPayload>(json, AgentJson.Options));
+    }
+
+    [Fact]
+    public void StartServerPayload_UnknownProperty_Throws()
+    {
+        var json = $"{{\"serverId\":\"{Id:D}\",\"minecraftVersion\":\"1.21.1\",\"serverJarUrl\":\"https://example.test/server.jar\",\"serverJarSha1\":\"abcdef\",\"memoryMb\":2048,\"port\":25565,\"eulaAccepted\":true,\"extra\":1}}";
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<StartServerPayload>(json, AgentJson.Options));
     }
 
     [Fact]

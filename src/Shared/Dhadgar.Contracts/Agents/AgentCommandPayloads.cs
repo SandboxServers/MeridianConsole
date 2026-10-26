@@ -3,13 +3,13 @@ namespace Dhadgar.Contracts.Agents;
 /// <summary>
 /// Payload of a <see cref="AgentCommandTypes.Ping"/> command.
 /// </summary>
-/// <param name="Nonce">Opaque value echoed back in <see cref="PingResult"/>.</param>
+/// <param name="Nonce">Opaque value echoed back in <see cref="PingResult"/>, at most <see cref="AgentMessageLimits.MaxNonceLength"/> characters.</param>
 public sealed record PingPayload(string? Nonce);
 
 /// <summary>
 /// Result of a <see cref="AgentCommandTypes.Ping"/> command.
 /// </summary>
-/// <param name="AgentVersion">Agent build version.</param>
+/// <param name="AgentVersion">Agent build version, at most <see cref="AgentMessageLimits.MaxAgentVersionLength"/> characters.</param>
 /// <param name="AgentTime">The agent's clock at the time of the reply.</param>
 /// <param name="Nonce">Nonce echoed from <see cref="PingPayload"/>.</param>
 public sealed record PingResult(string AgentVersion, DateTimeOffset AgentTime, string? Nonce);
@@ -17,10 +17,22 @@ public sealed record PingResult(string AgentVersion, DateTimeOffset AgentTime, s
 /// <summary>
 /// Payload of a <see cref="AgentCommandTypes.StartServer"/> command.
 /// </summary>
+/// <remarks>
+/// The agent must validate every field before it acts on it, even though Nodes signed the payload:
+/// <list type="bullet">
+/// <item><description><see cref="ServerJarUrl"/> must be https, must have no userinfo, its host must be in the trusted-host allowlist,
+/// every redirect must be revalidated against the same allowlist, and it must be at most <see cref="AgentMessageLimits.MaxServerJarUrlLength"/> characters.</description></item>
+/// <item><description><see cref="MinecraftVersion"/> must match <see cref="AgentMessageLimits.MinecraftVersionPattern"/>. It must never be used as a path
+/// component without <c>PathValidator</c>.</description></item>
+/// <item><description><see cref="ServerJarSha1"/> must be exactly <see cref="AgentMessageLimits.ServerJarSha1HexLength"/> hex characters. The agent must verify it before executing the jar.</description></item>
+/// <item><description><see cref="MemoryMb"/> must be within <see cref="AgentMessageLimits.MinServerMemoryMb"/> to <see cref="AgentMessageLimits.MaxServerMemoryMb"/>.</description></item>
+/// <item><description><see cref="Port"/> must be within <see cref="AgentMessageLimits.MinServerPort"/> to <see cref="AgentMessageLimits.MaxServerPort"/>.</description></item>
+/// </list>
+/// </remarks>
 /// <param name="ServerId">Server to start.</param>
 /// <param name="MinecraftVersion">Minecraft version to install.</param>
-/// <param name="ServerJarUrl">Download URL of the server jar; must pass the trusted-host check.</param>
-/// <param name="ServerJarSha1">Expected SHA-1 of the server jar.</param>
+/// <param name="ServerJarUrl">Download URL of the server jar; https, trusted-host allowlist, no userinfo.</param>
+/// <param name="ServerJarSha1">Expected SHA-1 of the server jar, 40 lower- or upper-case hex characters.</param>
 /// <param name="MemoryMb">Heap size in megabytes.</param>
 /// <param name="Port">Listen port.</param>
 /// <param name="EulaAccepted">Whether the EULA was accepted.</param>
@@ -33,7 +45,8 @@ public sealed record StartServerPayload(
 /// Payload of a <see cref="AgentCommandTypes.StopServer"/> command.
 /// </summary>
 /// <param name="ServerId">Server to stop.</param>
-/// <param name="GracefulTimeoutSeconds">Seconds to wait for a graceful stop before killing the process.</param>
+/// <param name="GracefulTimeoutSeconds">Seconds to wait for a graceful stop before killing the process; must be within
+/// <see cref="AgentMessageLimits.MinGracefulTimeoutSeconds"/> to <see cref="AgentMessageLimits.MaxGracefulTimeoutSeconds"/>.</param>
 public sealed record StopServerPayload(Guid ServerId, int GracefulTimeoutSeconds);
 
 /// <summary>

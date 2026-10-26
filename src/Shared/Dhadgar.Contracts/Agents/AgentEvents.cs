@@ -39,6 +39,6 @@ public sealed record AgentServerStatusChanged(
 /// <param name="ServerId">Server id.</param>
 /// <param name="OrganizationId">Owning organization.</param>
 /// <param name="NodeId">Node the server runs on.</param>
-/// <param name="Lines">Console lines.</param>
+/// <param name="Lines">Console lines. Each line's text is untrusted: consumers must encode it for the output context and must not treat it as markup or as log-safe text (see <see cref="AgentConsoleLine.Text"/>).</param>
 public sealed record ServerConsoleOutput(
     Guid ServerId, Guid OrganizationId, Guid NodeId, IReadOnlyList<AgentConsoleLine> Lines);

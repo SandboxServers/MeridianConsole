@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,10 +15,17 @@ public static class AgentCommandSigning
     public const string Domain = "dhadgar-cmd-v1";
 
     /// <summary>
+    /// UTF-8 encoding that throws on lone surrogates instead of replacing them with U+FFFD, so that
+    /// the signed bytes are a unique encoding of the string.
+    /// </summary>
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>
     /// Builds the signing input for an envelope. Equivalent to the field overload with the envelope's values.
     /// </summary>
     /// <param name="envelope">The command envelope.</param>
     /// <returns>UTF-8 bytes of the signing input.</returns>
+    /// <exception cref="EncoderFallbackException">A field contains an unpaired surrogate.</exception>
     public static byte[] BuildSigningInput(AgentCommandEnvelope envelope)
     {
         ArgumentNullException.ThrowIfNull(envelope);
@@ -34,7 +42,42 @@ public static class AgentCommandSigning
     }
 
     /// <summary>
+    /// Verify-side variant of <see cref="BuildSigningInput(AgentCommandEnvelope)"/>. Use it on envelope fields
+    /// received from the network, where bad input is not a programming error.
+    /// </summary>
+    /// <param name="envelope">The command envelope as received.</param>
+    /// <param name="input">UTF-8 bytes of the signing input when the method returns true; otherwise null.</param>
+    /// <returns>
+    /// False when the envelope or a required field is null, when <c>CommandType</c> or <c>CorrelationId</c>
+    /// contains a line break, or when any signed string contains an unpaired surrogate.
+    /// </returns>
+    public static bool TryBuildSigningInput(AgentCommandEnvelope envelope, [NotNullWhen(true)] out byte[]? input)
+    {
+        input = null;
+        if (envelope is null || envelope.CommandType is null || envelope.PayloadJson is null)
+        {
+            return false;
+        }
+
+        if (ContainsLineBreak(envelope.CommandType) || ContainsLineBreak(envelope.CorrelationId))
+        {
+            return false;
+        }
+
+        try
+        {
+            input = BuildSigningInput(envelope);
+            return true;
+        }
+        catch (EncoderFallbackException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Builds the signing input: UTF-8 of ten fields joined by LF with no trailing newline.
+    /// Strings are encoded with a strict UTF-8 encoder, so a lone surrogate throws instead of being replaced.
     /// </summary>
     /// <param name="commandId">Command id, formatted "D".</param>
     /// <param name="nodeId">Target node id, formatted "D".</param>
@@ -48,6 +91,7 @@ public static class AgentCommandSigning
     /// <returns>UTF-8 bytes of the signing input.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="commandType"/> or <paramref name="payloadJson"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="commandType"/> or <paramref name="correlationId"/> contains a line break.</exception>
+    /// <exception cref="EncoderFallbackException">A string contains an unpaired surrogate.</exception>
     public static byte[] BuildSigningInput(
         Guid commandId, Guid nodeId, Guid organizationId, string commandType,
         DateTimeOffset issuedAt, DateTimeOffset expiresAt, Guid? initiatedByUserId,
@@ -58,7 +102,7 @@ public static class AgentCommandSigning
         RejectLineBreaks(commandType, nameof(commandType));
         RejectLineBreaks(correlationId, nameof(correlationId));
 
-        var payloadHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+        var payloadHash = Convert.ToHexStringLower(SHA256.HashData(StrictUtf8.GetBytes(payloadJson)));
         var text = string.Join('\n',
             Domain,
             commandId.ToString("D"),
@@ -70,7 +114,7 @@ public static class AgentCommandSigning
             initiatedByUserId?.ToString("D") ?? string.Empty,
             correlationId ?? string.Empty,
             payloadHash);
-        return Encoding.UTF8.GetBytes(text);
+        return StrictUtf8.GetBytes(text);
     }
 
     /// <summary>
@@ -81,9 +125,12 @@ public static class AgentCommandSigning
     public static string ComputeKeyId(ReadOnlySpan<byte> subjectPublicKeyInfo) =>
         Convert.ToHexStringLower(SHA256.HashData(subjectPublicKeyInfo));
 
+    private static bool ContainsLineBreak(string? value) =>
+        value is not null && (value.Contains('\n') || value.Contains('\r'));
+
     private static void RejectLineBreaks(string? value, string paramName)
     {
-        if (value is not null && (value.Contains('\n') || value.Contains('\r')))
+        if (ContainsLineBreak(value))
         {
             throw new ArgumentException("Value must not contain line breaks.", paramName);
         }

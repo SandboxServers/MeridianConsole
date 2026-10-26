@@ -95,4 +95,59 @@ public class AgentCommandSigningTests
 
         Assert.Equal(fromFields, fromEnvelope);
     }
+
+    [Fact]
+    public void TryBuildSigningInput_ReturnsInput_ForValidEnvelope()
+    {
+        var envelope = new AgentCommandEnvelope(
+            CommandId, "Ping", NodeId, OrganizationId, null,
+            IssuedAt, ExpiresAt, PayloadJson, "sig", "kid", "corr-1");
+
+        Assert.True(AgentCommandSigning.TryBuildSigningInput(envelope, out var input));
+        Assert.Equal(ExpectedInput, Encoding.UTF8.GetString(input));
+    }
+
+    [Fact]
+    public void TryBuildSigningInput_ReturnsFalse_ForLineBreaks()
+    {
+        var withLf = new AgentCommandEnvelope(
+            CommandId, "Ping\nX", NodeId, OrganizationId, null,
+            IssuedAt, ExpiresAt, PayloadJson, "sig", "kid", "corr-1");
+        var withCr = new AgentCommandEnvelope(
+            CommandId, "Ping", NodeId, OrganizationId, null,
+            IssuedAt, ExpiresAt, PayloadJson, "sig", "kid", "corr\r1");
+
+        Assert.False(AgentCommandSigning.TryBuildSigningInput(withLf, out var lfInput));
+        Assert.Null(lfInput);
+        Assert.False(AgentCommandSigning.TryBuildSigningInput(withCr, out _));
+    }
+
+    [Fact]
+    public void TryBuildSigningInput_ReturnsFalse_ForLoneSurrogate()
+    {
+        var envelope = new AgentCommandEnvelope(
+            CommandId, "Ping", NodeId, OrganizationId, null,
+            IssuedAt, ExpiresAt, PayloadJson, "sig", "kid", "a\uD800");
+
+        Assert.False(AgentCommandSigning.TryBuildSigningInput(envelope, out var input));
+        Assert.Null(input);
+    }
+
+    [Fact]
+    public void TryBuildSigningInput_ReturnsFalse_ForNullFields()
+    {
+        var envelope = new AgentCommandEnvelope(
+            CommandId, null!, NodeId, OrganizationId, null,
+            IssuedAt, ExpiresAt, PayloadJson, "sig", "kid", null);
+
+        Assert.False(AgentCommandSigning.TryBuildSigningInput(envelope, out _));
+    }
+
+    [Fact]
+    public void BuildSigningInput_RejectsLoneSurrogate()
+    {
+        Assert.Throws<EncoderFallbackException>(() => AgentCommandSigning.BuildSigningInput(
+            CommandId, NodeId, OrganizationId, "Ping",
+            IssuedAt, ExpiresAt, null, "a\uD800", PayloadJson));
+    }
 }
