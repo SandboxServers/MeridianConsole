@@ -9,6 +9,9 @@
     <Nullable>enable</Nullable>
     <IsAspireHost>true</IsAspireHost>
     <UserSecretsId>dhadgar-apphost</UserSecretsId>
+    <!-- Aspire adds host-specific packages (Dashboard.Sdk.<rid>, Orchestration.<rid>), so a
+         lock file from one OS fails locked-mode restore on another. Local-dev only; not shipped. -->
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>
