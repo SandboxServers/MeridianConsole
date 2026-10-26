@@ -1,5 +1,7 @@
 extern alias nodes;
 
+using System.Net;
+using System.Net.Http;
 using Dhadgar.Agent.Core.Health;
 using nodes::Dhadgar.Nodes.Data;
 using nodes::Dhadgar.Nodes.Data.Entities;
@@ -78,8 +80,14 @@ public sealed class AgentClientHubSeamTests
     {
         using var host = new SeamHost();
         using var agent = host.CreateAgent();
-        await using var client = agent.CreateControlPlaneClient(Guid.NewGuid(), Guid.NewGuid());
+        // NodeId null: ControlPlaneClient's own "certificate required" guard only covers enrolled agents, so the
+        // negotiate request reaches the Gateway with no client certificate and the control plane must refuse it.
+        await using var client = agent.CreateControlPlaneClient(nodeId: null, Guid.NewGuid());
 
-        await Assert.ThrowsAnyAsync<Exception>(() => client.ConnectAsync());
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => client.ConnectAsync());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, ex.StatusCode);
+        // The request must have reached the backend's mTLS check, not failed in the agent or at the Gateway.
+        Assert.Contains("nodes", host.Forwarder.ForwardedClusters);
     }
 }

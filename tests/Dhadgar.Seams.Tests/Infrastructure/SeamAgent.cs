@@ -47,10 +47,10 @@ public sealed class SeamAgent : IDisposable
     }
 
     /// <summary>
-    /// Builds the real hub client for an enrolled node. The hub's transport is routed through the Gateway by
-    /// <see cref="SeamHubConfigurator"/>.
+    /// Builds the real hub client for an enrolled node, or for an unenrolled agent when <paramref name="nodeId"/>
+    /// is null. The hub's transport is routed through the Gateway by <see cref="SeamHubConfigurator"/>.
     /// </summary>
-    public ControlPlaneClient CreateControlPlaneClient(Guid nodeId, Guid orgId)
+    public ControlPlaneClient CreateControlPlaneClient(Guid? nodeId, Guid orgId)
     {
         var options = new AgentOptions
         {

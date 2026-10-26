@@ -124,6 +124,21 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                     {
                         configurator.Configure(options);
                     }
+
+                    // Fail closed: a configurator must not have moved the connection off HTTPS or removed the
+                    // client certificate the agent applied above.
+                    if (options.Url is null || options.Url.Scheme != Uri.UriSchemeHttps)
+                    {
+                        throw new InvalidOperationException(
+                            "Hub connection configurators must not change the endpoint away from HTTPS");
+                    }
+
+                    if (clientCert is not null &&
+                        (options.ClientCertificates is null || !options.ClientCertificates.Contains(clientCert)))
+                    {
+                        throw new InvalidOperationException(
+                            "Hub connection configurators must not remove the client certificate");
+                    }
                 })
                 .WithAutomaticReconnect(new RetryPolicy(_options.ControlPlane))
                 .ConfigureLogging(logging =>
