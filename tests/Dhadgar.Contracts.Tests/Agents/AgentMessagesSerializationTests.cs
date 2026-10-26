@@ -118,6 +118,15 @@ public class AgentMessagesSerializationTests
     }
 
     [Fact]
+    public void PingPayload_EmptyObject_DeserializesWithNullNonce()
+    {
+        var payload = JsonSerializer.Deserialize<PingPayload>("{}", AgentJson.Options);
+
+        Assert.NotNull(payload);
+        Assert.Null(payload.Nonce);
+    }
+
+    [Fact]
     public void StartServerPayload_UnknownProperty_Throws()
     {
         var json = $"{{\"serverId\":\"{Id:D}\",\"minecraftVersion\":\"1.21.1\",\"serverJarUrl\":\"https://example.test/server.jar\",\"serverJarSha1\":\"abcdef\",\"memoryMb\":2048,\"port\":25565,\"eulaAccepted\":true,\"extra\":1}}";

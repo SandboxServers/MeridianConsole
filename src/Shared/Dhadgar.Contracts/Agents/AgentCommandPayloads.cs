@@ -4,7 +4,7 @@ namespace Dhadgar.Contracts.Agents;
 /// Payload of a <see cref="AgentCommandTypes.Ping"/> command.
 /// </summary>
 /// <param name="Nonce">Opaque value echoed back in <see cref="PingResult"/>, at most <see cref="AgentMessageLimits.MaxNonceLength"/> characters.</param>
-public sealed record PingPayload(string? Nonce);
+public sealed record PingPayload(string? Nonce = null);
 
 /// <summary>
 /// Result of a <see cref="AgentCommandTypes.Ping"/> command.
