@@ -25,6 +25,9 @@
     <PackageReference Include="Aspire.Hosting.RabbitMQ" />
     <!-- Pins the transitive MessagePack (via StreamJsonRpc) past its 2025/2026 advisories; see Directory.Packages.props -->
     <PackageReference Include="MessagePack" />
+    <PackageReference Include="OpenTelemetry.Api" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
   </ItemGroup>
 
   <ItemGroup>
