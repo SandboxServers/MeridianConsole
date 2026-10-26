@@ -105,14 +105,6 @@ extends:
         projectPath: src/Agents/Dhadgar.Agent.Core/Dhadgar.Agent.Core.csproj
         testProjectPath: tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj
         deploy:  # Shared library, no deployment
-      - id: Dhadgar.Agent.Linux
-        projectPath: src/Agents/Dhadgar.Agent.Linux/Dhadgar.Agent.Linux.csproj
-        testProjectPath: tests/Dhadgar.Agent.Linux.Tests/Dhadgar.Agent.Linux.Tests.csproj
-        deploy:  # Disabled: agent deployment not needed yet
-        # agent:
-        #   runtimes: 'linux-x64'
-        #   storageAccount: meridianconsoleblob
-        #   containerName: agent-releases
       - id: Dhadgar.Agent.Windows
         projectPath: src/Agents/Dhadgar.Agent.Windows/Dhadgar.Agent.Windows.csproj
         testProjectPath: tests/Dhadgar.Agent.Windows.Tests/Dhadgar.Agent.Windows.Tests.csproj
@@ -122,10 +114,6 @@ extends:
         #   storageAccount: meridianconsoleblob
         #   containerName: agent-releases
       # Microservices - deployed via Docker Compose to dev environment
-      - id: Dhadgar.Billing
-        projectPath: src/Dhadgar.Billing/Dhadgar.Billing.csproj
-        testProjectPath: tests/Dhadgar.Billing.Tests/Dhadgar.Billing.Tests.csproj
-        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Cli
         projectPath: src/Dhadgar.Cli/Dhadgar.Cli.csproj
         testProjectPath: tests/Dhadgar.Cli.Tests/Dhadgar.Cli.Tests.csproj
@@ -143,10 +131,6 @@ extends:
         projectPath: src/Dhadgar.Discord/Dhadgar.Discord.csproj
         testProjectPath: tests/Dhadgar.Discord.Tests/Dhadgar.Discord.Tests.csproj
         deploy:  # Disabled: runs locally on Docker Desktop
-      - id: Dhadgar.Files
-        projectPath: src/Dhadgar.Files/Dhadgar.Files.csproj
-        testProjectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
-        deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Gateway
         projectPath: src/Dhadgar.Gateway/Dhadgar.Gateway.csproj
         testProjectPath: tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj
@@ -154,10 +138,6 @@ extends:
       - id: Dhadgar.Identity
         projectPath: src/Dhadgar.Identity/Dhadgar.Identity.csproj
         testProjectPath: tests/Dhadgar.Identity.Tests/Dhadgar.Identity.Tests.csproj
-        deploy:  # Disabled: runs locally on Docker Desktop
-      - id: Dhadgar.Mods
-        projectPath: src/Dhadgar.Mods/Dhadgar.Mods.csproj
-        testProjectPath: tests/Dhadgar.Mods.Tests/Dhadgar.Mods.Tests.csproj
         deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Nodes
         projectPath: src/Dhadgar.Nodes/Dhadgar.Nodes.csproj
@@ -176,15 +156,6 @@ extends:
           appLocation: src/Dhadgar.Scope
           outputLocation: _swa_publish/wwwroot
           appBuildCommand: npm install && npm run build
-      - id: Dhadgar.ShoppingCart
-        projectPath: src/Dhadgar.ShoppingCart/Dhadgar.ShoppingCart.csproj
-        testProjectPath: tests/Dhadgar.ShoppingCart.Tests/Dhadgar.ShoppingCart.Tests.csproj
-        deploy: swa
-        swa:
-          apiTokenVar: Dhadgar_ShoppingCart_Swa_ApiToken
-          appLocation: src/Dhadgar.ShoppingCart
-          outputLocation: _swa_publish/wwwroot
-          appBuildCommand: npm install && npm run build
       - id: Dhadgar.Secrets
         projectPath: src/Dhadgar.Secrets/Dhadgar.Secrets.csproj
         testProjectPath: tests/Dhadgar.Secrets.Tests/Dhadgar.Secrets.Tests.csproj
@@ -192,10 +163,6 @@ extends:
       - id: Dhadgar.Servers
         projectPath: src/Dhadgar.Servers/Dhadgar.Servers.csproj
         testProjectPath: tests/Dhadgar.Servers.Tests/Dhadgar.Servers.Tests.csproj
-        deploy:  # Disabled: runs locally on Docker Desktop
-      - id: Dhadgar.Tasks
-        projectPath: src/Dhadgar.Tasks/Dhadgar.Tasks.csproj
-        testProjectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
         deploy:  # Disabled: runs locally on Docker Desktop
       - id: Dhadgar.Panel
         projectPath: src/Dhadgar.Panel/Dhadgar.Panel.csproj
@@ -222,16 +189,8 @@ extends:
         projectPath: tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj
         testProjectPath: ''
         deploy:
-      - id: Dhadgar.Agent.Linux.Tests
-        projectPath: tests/Dhadgar.Agent.Linux.Tests/Dhadgar.Agent.Linux.Tests.csproj
-        testProjectPath: ''
-        deploy:
       - id: Dhadgar.Agent.Windows.Tests
         projectPath: tests/Dhadgar.Agent.Windows.Tests/Dhadgar.Agent.Windows.Tests.csproj
-        testProjectPath: ''
-        deploy:
-      - id: Dhadgar.Billing.Tests
-        projectPath: tests/Dhadgar.Billing.Tests/Dhadgar.Billing.Tests.csproj
         testProjectPath: ''
         deploy:
       - id: Dhadgar.Cli.Tests
@@ -250,10 +209,6 @@ extends:
         projectPath: tests/Dhadgar.Discord.Tests/Dhadgar.Discord.Tests.csproj
         testProjectPath: ''
         deploy:
-      - id: Dhadgar.Files.Tests
-        projectPath: tests/Dhadgar.Files.Tests/Dhadgar.Files.Tests.csproj
-        testProjectPath: ''
-        deploy:
       - id: Dhadgar.Gateway.Tests
         projectPath: tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj
         testProjectPath: ''
@@ -266,10 +221,6 @@ extends:
         projectPath: tests/Dhadgar.Messaging.Tests/Dhadgar.Messaging.Tests.csproj
         testProjectPath: ''
         deploy:
-      - id: Dhadgar.Mods.Tests
-        projectPath: tests/Dhadgar.Mods.Tests/Dhadgar.Mods.Tests.csproj
-        testProjectPath: ''
-        deploy:
       - id: Dhadgar.Nodes.Tests
         projectPath: tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj
         testProjectPath: ''
@@ -280,10 +231,6 @@ extends:
         deploy:
       - id: Dhadgar.Scope.Tests
         projectPath: tests/Dhadgar.Scope.Tests/Dhadgar.Scope.Tests.csproj
-        testProjectPath: ''
-        deploy:
-      - id: Dhadgar.ShoppingCart.Tests
-        projectPath: tests/Dhadgar.ShoppingCart.Tests/Dhadgar.ShoppingCart.Tests.csproj
         testProjectPath: ''
         deploy:
       - id: Dhadgar.Secrets.Tests
@@ -300,10 +247,6 @@ extends:
         deploy:
       - id: Dhadgar.Shared.Tests
         projectPath: tests/Dhadgar.Shared.Tests/Dhadgar.Shared.Tests.csproj
-        testProjectPath: ''
-        deploy:
-      - id: Dhadgar.Tasks.Tests
-        projectPath: tests/Dhadgar.Tasks.Tests/Dhadgar.Tasks.Tests.csproj
         testProjectPath: ''
         deploy:
       - id: Dhadgar.Panel.Tests

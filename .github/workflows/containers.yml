@@ -65,7 +65,7 @@ jobs:
           REQUESTED: ${{ inputs.services }}
         run: |
           set -euo pipefail
-          all=(Gateway Identity Billing Servers Nodes Tasks Files Mods Console Notifications Secrets Discord)
+          all=(Gateway Identity Servers Nodes Console Notifications Secrets Discord)
           shared='^(src/Shared/|Dhadgar\.sln$|Directory\.(Build|Packages)\.props$|global\.json$|\.dockerignore$|\.github/workflows/containers\.yml$)'
           selected=()
 

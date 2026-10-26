@@ -61,7 +61,6 @@ jobs:
             src/Dhadgar.BetterAuth
             src/Dhadgar.SharedAuth
             src/Dhadgar.Scope
-            src/Dhadgar.ShoppingCart
             src/Dhadgar.Panel
 
       - name: Setup .NET and restore

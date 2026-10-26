@@ -1,4 +1,4 @@
-# Builds and deploys the Astro sites (Scope, ShoppingCart) to Azure Static Web Apps.
+# Builds and deploys the Astro sites (Scope) to Azure Static Web Apps.
 # Replaces the SWA stage of azure-pipelines.yml.
 #
 # Signs in to Azure with OIDC (app registration meridian-github-actions-deploy,
@@ -14,7 +14,6 @@ on:
       - main
     paths:
       - 'src/Dhadgar.Scope/**'
-      - 'src/Dhadgar.ShoppingCart/**'
       - '.github/actions/npm-ci/**'
       - '.github/workflows/static-web-apps.yml'
   workflow_dispatch:
@@ -27,7 +26,6 @@ on:
         options:
           - all
           - Scope
-          - ShoppingCart
 
 permissions: {}
 
@@ -58,8 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           sites='[
-            {"name": "Scope", "dir": "src/Dhadgar.Scope", "secret": "swa-token-scope"},
-            {"name": "ShoppingCart", "dir": "src/Dhadgar.ShoppingCart", "secret": "swa-token-shoppingcart"}
+            {"name": "Scope", "dir": "src/Dhadgar.Scope", "secret": "swa-token-scope"}
           ]'
 
           if [ "$EVENT" = workflow_dispatch ]; then

@@ -69,24 +69,12 @@ var discord = builder.AddProject<Projects.Dhadgar_Discord>("discord")
 // Stub Services (Scaffolding)
 // ═══════════════════════════════════════════════════════════════════════════
 
-var billing = builder.AddProject<Projects.Dhadgar_Billing>("billing")
-    .WithReference(billingDb)
-    .WithReference(rabbitmq);
-
 var servers = builder.AddProject<Projects.Dhadgar_Servers>("servers")
-    .WithReference(platformDb)
-    .WithReference(rabbitmq);
-
-var tasks = builder.AddProject<Projects.Dhadgar_Tasks>("tasks")
     .WithReference(platformDb)
     .WithReference(rabbitmq);
 
 var console = builder.AddProject<Projects.Dhadgar_Console>("console")
     .WithReference(redis)
-    .WithReference(rabbitmq);
-
-var mods = builder.AddProject<Projects.Dhadgar_Mods>("mods")
-    .WithReference(platformDb)
     .WithReference(rabbitmq);
 
 builder.Build().Run();
