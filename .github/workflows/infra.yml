@@ -2,11 +2,12 @@
 # Replaces the Infrastructure stage of azure-pipelines.yml.
 #
 # Runs in the `infra` environment, which only main can use and which waits for a
-# reviewer's approval. Signs in with OIDC as the meridian-helm-publisher app
-# registration (federated credential github-env-infra). That identity needs:
+# reviewer's approval. Signs in with OIDC as the meridian-github-infra app
+# registration, whose only federated credential (github-env-infra) trusts this
+# environment, so no other workflow can use its rights. It holds:
 #   - Contributor on the subscription, for resource groups and Key Vaults
 #   - Microsoft Graph Application.ReadWrite.All (admin consent), for the app registrations
-#   - Key Vault Secrets User on mc-cicd, for the Cloudflare secrets (granted)
+#   - Key Vault Secrets User on mc-cicd, for the Cloudflare secrets
 # Cloudflare credentials are read from mc-cicd as cloudflare-api-token and
 # cloudflare-zone-id.
 name: Infrastructure
