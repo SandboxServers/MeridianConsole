@@ -1,0 +1,2 @@
+# Claude Code hook scripts are sourced by Git Bash, which breaks on CRLF.
+.claude/hooks/*.sh text eol=lf
