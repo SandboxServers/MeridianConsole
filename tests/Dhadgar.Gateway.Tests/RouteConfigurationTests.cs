@@ -27,7 +27,7 @@ public class RouteConfigurationTests
     [Fact]
     public void ReverseProxyShouldHave13Routes()
     {
-        // 9 active backend services + Better Auth + console hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 13 total (billing, tasks, files, mods are parked, D-03)
+        // 6 backend service routes (identity, servers, console, notifications, secrets, discord) + Better Auth + console hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 13 total (billing, tasks, files, mods are parked, D-03)
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 

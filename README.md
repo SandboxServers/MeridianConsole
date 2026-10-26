@@ -138,7 +138,7 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 
 - **Scope**: Documentation site with 19 sections and interactive dependency graphs (functional)
 - **Panel**: Control plane UI with OAuth integration (scaffolding, dashboard skeleton)
-- **ShoppingCart**: Marketing site with pricing tiers (wireframe, OAuth flow only)
+- **ShoppingCart**: Marketing site with pricing tiers (wireframe, OAuth flow only) — parked (see parked/README.md)
 
 **Development Experience:**
 
@@ -669,7 +669,7 @@ MeridianConsole/
 │   │   └── Dhadgar.Agent.GameServerWrapper/  # Per-server Windows service wrapper
 │   ├── Dhadgar.Scope/                # Documentation site ✅
 │   ├── Dhadgar.Panel/                # Main UI (scaffolding)
-│   └── Dhadgar.ShoppingCart/         # Marketing & profile (auth working)
+│   └── Dhadgar.ShoppingCart/         # Marketing & profile (parked, see parked/README.md)
 ├── tests/                             # 1:1 test projects (25 total, ~1,640 tests)
 ├── deploy/
 │   ├── compose/                       # Docker Compose for local dev
