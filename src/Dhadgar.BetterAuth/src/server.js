@@ -6,6 +6,7 @@ import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 // better-auth >= 1.6 moved getMigrations from "better-auth/db" to "better-auth/db/migration"
 import { getMigrations } from "better-auth/db/migration";
 import { loadSecrets } from "./secrets-client.js";
+import { createExchangeRateLimiter, parseTrustProxy } from "./rate-limit.js";
 
 // Load secrets from Secrets Service before initializing the app
 await loadSecrets();
@@ -57,6 +58,11 @@ const { createExchangeToken } = await import("./exchange.js");
 const app = express();
 const port = Number(process.env.PORT ?? 5130);
 
+// Which proxy hops to trust when deriving req.ip (used by the rate limiter).
+// Off by default; behind the Gateway set TRUST_PROXY=1. See rate-limit.js.
+app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
+const exchangeRateLimiter = createExchangeRateLimiter();
+
 // No global body parser: Better Auth must read the raw request stream, so
 // express.json() is applied only to the routes that need it (see below).
 
@@ -85,7 +91,7 @@ app.get("/healthz", (_req, res) => {
 
 // Exchange token endpoint: emits ES256 one-time exchange token for Identity
 // Registered before the Better Auth catch-all so it is matched first.
-app.post("/api/v1/betterauth/exchange", express.json(), async (req, res) => {
+app.post("/api/v1/betterauth/exchange", exchangeRateLimiter, express.json(), async (req, res) => {
   try {
     const session = await auth.api.getSession({
       headers: fromNodeHeaders(req.headers)
