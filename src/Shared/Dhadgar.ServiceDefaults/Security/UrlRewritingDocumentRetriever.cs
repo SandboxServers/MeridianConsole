@@ -1,6 +1,6 @@
 using Microsoft.IdentityModel.Protocols;
 
-namespace Dhadgar.Secrets.Infrastructure;
+namespace Dhadgar.ServiceDefaults.Security;
 
 /// <summary>
 /// A document retriever that rewrites external URLs to internal URLs for Docker/K8s environments.
