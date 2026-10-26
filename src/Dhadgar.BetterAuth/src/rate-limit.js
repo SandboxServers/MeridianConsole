@@ -76,7 +76,9 @@ export function createExchangeRateLimiter(env = process.env) {
     limit,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    handler: (_req, res, _next, options) => {
+    handler: (req, res, _next, options) => {
+      // req.ip can come from X-Forwarded-For; JSON-encode it so it can't forge log lines.
+      console.warn(`Exchange rate limit hit for client ${JSON.stringify(req.ip)}`);
       res.status(options.statusCode).json({ error: "rate_limited" });
     },
   });

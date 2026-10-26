@@ -225,7 +225,7 @@ Configuration is loaded from environment variables, with secrets fetched from th
 |----------|-------------|---------|
 | `PORT` | HTTP server port | `5130` |
 | `NODE_ENV` | Environment mode | `development` |
-| `TRUST_PROXY` | Express `trust proxy` setting, used to derive the client IP for rate limiting. Unset, `false` or `0` trusts nothing (`req.ip` is the socket peer). A positive integer trusts that many proxy hops; set `1` behind the Gateway. Otherwise a comma-separated list of proxy addresses/subnets or Express presets (`loopback`, `uniquelocal`). `true` is refused at startup because it lets clients spoof `X-Forwarded-For`. | unset (off) |
+| `TRUST_PROXY` | Express `trust proxy` setting, used to derive the client IP for rate limiting. Unset, `false` or `0` trusts nothing (`req.ip` is the socket peer). A positive integer trusts that many proxy hops; set `1` behind the Gateway. This gives per-client limits only when Cloudflare is in front of the Gateway (the Gateway only accepts `X-Forwarded-For` from Cloudflare); without it, every client shares one bucket. Limits are per process, so each replica counts separately. Otherwise a comma-separated list of proxy addresses/subnets or Express presets (`loopback`, `uniquelocal`). `true` is refused at startup because it lets clients spoof `X-Forwarded-For`. | unset (off) |
 
 #### Exchange Endpoint Rate Limiting
 

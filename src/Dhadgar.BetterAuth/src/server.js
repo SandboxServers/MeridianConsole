@@ -8,6 +8,13 @@ import { getMigrations } from "better-auth/db/migration";
 import { loadSecrets } from "./secrets-client.js";
 import { createExchangeRateLimiter, parseTrustProxy } from "./rate-limit.js";
 
+// Read the proxy and rate-limit settings first, so a bad value stops startup
+// before secrets are fetched or migrations touch the database.
+// TRUST_PROXY decides which hops are trusted when deriving req.ip (the limiter's
+// key). Off by default; behind the Gateway set TRUST_PROXY=1. See rate-limit.js.
+const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+const exchangeRateLimiter = createExchangeRateLimiter();
+
 // Load secrets from Secrets Service before initializing the app
 await loadSecrets();
 
@@ -58,10 +65,7 @@ const { createExchangeToken } = await import("./exchange.js");
 const app = express();
 const port = Number(process.env.PORT ?? 5130);
 
-// Which proxy hops to trust when deriving req.ip (used by the rate limiter).
-// Off by default; behind the Gateway set TRUST_PROXY=1. See rate-limit.js.
-app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
-const exchangeRateLimiter = createExchangeRateLimiter();
+app.set("trust proxy", trustProxy);
 
 // No global body parser: Better Auth must read the raw request stream, so
 // express.json() is applied only to the routes that need it (see below).

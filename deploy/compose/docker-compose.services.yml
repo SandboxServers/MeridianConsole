@@ -249,10 +249,11 @@ services:
       # Requests arrive through the Gateway, which sets one X-Forwarded-For
       # entry with the real client IP; trust that one hop so the /exchange
       # rate limit is per client, not one shared bucket. Callers that reach
-      # port 5130 directly could spoof the header, so keep it off the internet.
+      # BetterAuth directly could spoof the header, so the host port below is
+      # bound to loopback only; the Gateway uses the compose network.
       TRUST_PROXY: "1"
     ports:
-      - "5130:8080"
+      - "127.0.0.1:5130:8080"
     depends_on:
       postgres:
         condition: service_healthy
