@@ -81,7 +81,7 @@ export function Alert({ severity = "info", dense = false, className, children }:
         className
       )}
     >
-      <span className="flex-shrink-0 mt-0.5">{icons[severityKey]}</span>
+      <span className="shrink-0 mt-0.5">{icons[severityKey]}</span>
       <div>{children}</div>
     </div>
   );
