@@ -282,6 +282,56 @@ public class MtlsMiddlewareTests
         Assert.Equal("abc123thumbprint", context.User.FindFirst("certificate_thumbprint")?.Value);
     }
 
+    [Fact]
+    public async Task InvokeAsync_HubNegotiateWithoutCertificate_Returns401ProblemJson()
+    {
+        // Arrange
+        var context = CreateHttpContext("/hubs/agent/negotiate");
+        var nextCalled = false;
+        var next = new RequestDelegate(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var sut = new MtlsMiddleware(
+            next,
+            Options.Create(new MtlsOptions { Enabled = true, RequireClientCertificate = true }),
+            NullLogger<MtlsMiddleware>.Instance);
+
+        // Act
+        await sut.InvokeAsync(context, Substitute.For<ICertificateValidationService>());
+
+        // Assert
+        Assert.False(nextCalled);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Equal("application/problem+json", context.Response.ContentType);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_HubLookalikePath_PassesThrough()
+    {
+        // Arrange
+        var context = CreateHttpContext("/hubs/agentx");
+        var nextCalled = false;
+        var next = new RequestDelegate(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var sut = new MtlsMiddleware(
+            next,
+            Options.Create(new MtlsOptions { Enabled = true, RequireClientCertificate = true }),
+            NullLogger<MtlsMiddleware>.Instance);
+
+        // Act
+        await sut.InvokeAsync(context, Substitute.For<ICertificateValidationService>());
+
+        // Assert
+        Assert.True(nextCalled);
+    }
+
     private static DefaultHttpContext CreateHttpContext(string path, X509Certificate2? certificate = null)
     {
         var context = new DefaultHttpContext();
