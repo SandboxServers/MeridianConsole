@@ -16,7 +16,7 @@ namespace Dhadgar.Seams.Tests.AgentHub;
 /// </summary>
 public sealed class AgentClientHubSeamTests
 {
-    [Fact(Skip = "Pending VS-13: no /hubs/agent hub and no typed agent wire yet")]
+    [Fact(Skip = "Pending VS-13: hub exists (Sprint 2) but is not yet exercised through the Gateway with mTLS")]
     public async Task Heartbeat_ThroughGateway_UpdatesNode()
     {
         using var host = new SeamHost();
@@ -75,7 +75,7 @@ public sealed class AgentClientHubSeamTests
         }
     }
 
-    [Fact(Skip = "Pending VS-13: no /hubs/agent hub and no typed agent wire yet")]
+    [Fact(Skip = "Pending VS-13: hub exists (Sprint 2) but is not yet exercised through the Gateway with mTLS")]
     public async Task Connect_WithoutCertificate_IsRejected()
     {
         using var host = new SeamHost();
