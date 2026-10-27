@@ -146,6 +146,33 @@ public sealed class InstallerPackageTests
     }
 
     [Fact]
+    public void PackageWxs_CreateFolders_HaveProtectedSddlWithOwnerRightsAce()
+    {
+        // Every CreateFolder sits under %ProgramData%\Meridian Console (the MeridianDataFolder tree).
+        var folders = LoadPackage().Descendants(Wix + "CreateFolder").ToList();
+
+        Assert.Equal(4, folders.Count);
+        foreach (var folder in folders)
+        {
+            var sddl = (string?)folder.Elements(Wix + "PermissionEx").Single().Attribute("Sddl") ?? string.Empty;
+
+            Assert.StartsWith("D:P", sddl, System.StringComparison.Ordinal);
+            Assert.Contains("(A;OICI;;;;OW)", sddl, System.StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void PackageWxs_EndpointLaunchCondition_AppliesOutsideUninstall()
+    {
+        var condition = LoadPackage().Descendants(Wix + "Launch")
+            .Select(l => (string?)l.Attribute("Condition") ?? string.Empty)
+            .Single(c => c.Contains("CONTROL_PLANE_ENDPOINT ~<<", System.StringComparison.Ordinal));
+
+        Assert.Contains("REMOVE=\"ALL\"", condition, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("Installed", condition, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Wixproj_InstallerPlatform_IsX64()
     {
         var platform = LoadWixproj().Descendants("InstallerPlatform").Single();

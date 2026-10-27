@@ -78,8 +78,12 @@
     <Property Id="ARPURLUPDATEINFO" Value="https://www.meridianconsole.com/downloads" />
     <Property Id="ARPHELPLINK" Value="https://docs.meridianconsole.com" />
 
-    <!-- Refuse a non-HTTPS control plane endpoint before anything is written (case-insensitive prefix test) -->
-    <Launch Condition="Installed OR NOT CONTROL_PLANE_ENDPOINT OR (CONTROL_PLANE_ENDPOINT ~&lt;&lt; &quot;https://&quot;)"
+    <!--
+      Refuse a non-HTTPS control plane endpoint before anything is written (case-insensitive prefix test).
+      Skipped only on uninstall (REMOVE=ALL), so a bad stored value cannot block msiexec /x. Repair and
+      REINSTALL runs are checked too.
+    -->
+    <Launch Condition="REMOVE=&quot;ALL&quot; OR NOT CONTROL_PLANE_ENDPOINT OR (CONTROL_PLANE_ENDPOINT ~&lt;&lt; &quot;https://&quot;)"
             Message="CONTROL_PLANE_ENDPOINT must be an https:// URL." />
 
     <!-- Prevent running on 32-bit Windows -->
@@ -165,10 +169,20 @@
               KeyPath="yes" />
       </Component>
 
+      <!--
+        Parent of the agent data folders. Owned here so a standard user cannot pre-create it and keep ownership
+        (an owner holds WRITE_DAC; the OW ACE with an empty mask removes that implicit right on every folder below).
+      -->
+      <Component Id="MeridianDataFolderComponent" Guid="29749030-80CB-4553-8E2D-88D9B53D53DA" Directory="MeridianDataFolder">
+        <CreateFolder>
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
+        </CreateFolder>
+      </Component>
+
       <!-- Create data directories with appropriate permissions -->
       <Component Id="DataDirectoriesComponent" Guid="C3D4E5F6-A7B8-9012-CDEF-345678901234" Directory="AgentDataFolder">
         <CreateFolder>
-          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
         </CreateFolder>
         <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
           <RegistryValue Name="DataPath" Type="string" Value="[AgentDataFolder]" KeyPath="yes" />
@@ -177,13 +191,13 @@
 
       <Component Id="ServersDirectoryComponent" Guid="D4E5F6A7-B8C9-0123-DEF0-456789012345" Directory="ServersDataFolder">
         <CreateFolder>
-          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
         </CreateFolder>
       </Component>
 
       <Component Id="TempDirectoryComponent" Guid="E5F6A7B8-C9D0-1234-EF01-567890123456" Directory="TempDataFolder">
         <CreateFolder>
-          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
         </CreateFolder>
       </Component>
 

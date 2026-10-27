@@ -272,7 +272,7 @@ The recommended installation method for production deployments:
 Invoke-WebRequest -Uri "https://releases.meridianconsole.com/agent/windows/latest/dhadgar-agent-windows.msi" -OutFile "dhadgar-agent-windows.msi"
 
 # Silent install
-msiexec /i dhadgar-agent-windows.msi /quiet /log install.log ENROLLMENT_TOKEN="your-token-here"
+msiexec /i dhadgar-agent-windows.msi /qn /l*v install.log ENROLLMENT_TOKEN="your-token-here" CONTROL_PLANE_ENDPOINT="https://<control-plane-host>"
 
 # Interactive install
 msiexec /i dhadgar-agent-windows.msi

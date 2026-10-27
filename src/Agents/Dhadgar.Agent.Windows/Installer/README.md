@@ -47,23 +47,23 @@ bin\Release\MeridianConsoleAgent.msi
 Double-click the MSI file or run:
 
 ```powershell
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi
+msiexec /i MeridianConsoleAgent.msi
 ```
 
 ### Silent Install
 
 ```powershell
 # Basic silent install
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /norestart
+msiexec /i MeridianConsoleAgent.msi /qn /norestart
 
 # With enrollment token
 # SECURITY NOTE: Command-line arguments are visible in process listings (Get-Process),
 # command history, and audit logs. For production deployments, consider using a transform
 # file (.mst) or clearing command history after installation.
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet ENROLLMENT_TOKEN=your-token-here CONTROL_PLANE_ENDPOINT=https://control.example.com
+msiexec /i MeridianConsoleAgent.msi /qn ENROLLMENT_TOKEN=your-token-here CONTROL_PLANE_ENDPOINT=https://control.example.com
 
 # With logging
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /l*v install.log
+msiexec /i MeridianConsoleAgent.msi /qn /l*v install.log
 ```
 
 ### Upgrade
@@ -71,7 +71,7 @@ msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /l*v install.log
 The installer supports in-place upgrades. Simply run the new MSI:
 
 ```powershell
-msiexec /i MeridianConsoleAgent-2.0.0-x64.msi /quiet
+msiexec /i MeridianConsoleAgent-NewVersion.msi /quiet
 ```
 
 ### Uninstall
@@ -140,16 +140,11 @@ The following resources are **not automatically removed** to prevent data loss a
 **Certificates** (run as Administrator in PowerShell):
 
 ```powershell
-# Remove agent certificates (filter by issuer for safety)
-Get-ChildItem Cert:\LocalMachine\My | Where-Object {
-    $_.Subject -like '*CN=dhadgar-agent*' -and
-    $_.Issuer -like '*Meridian Console*'
-} | Remove-Item -Force
+# Remove agent client certificates (issued by the agent CA)
+Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Issuer -like '*CN=Meridian Console Agent CA*' } | Remove-Item -Force
 
-# Remove CA certificate (exact subject match)
-Get-ChildItem Cert:\LocalMachine\Root | Where-Object {
-    $_.Subject -eq 'CN=Meridian Console CA, O=Meridian Console'
-} | Remove-Item -Force
+# Remove the agent CA from its custom store
+Get-ChildItem Cert:\LocalMachine\MeridianConsoleAgent | Where-Object { $_.Subject -like '*CN=Meridian Console Agent CA*' } | Remove-Item -Force
 ```
 
 **Firewall rules** (run as Administrator):
@@ -159,6 +154,8 @@ Get-ChildItem Cert:\LocalMachine\Root | Where-Object {
 # This includes any rules created by the agent for game servers
 netsh advfirewall firewall delete rule name=all program="C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe"
 ```
+
+Agent state `C:\ProgramData\Meridian Console\Agent\agent-state.json` and the event source `Meridian Console Agent` also remain.
 
 **Game server data** (WARNING: This deletes all server files!):
 
@@ -187,7 +184,7 @@ For production deployments, uncomment the `<SignOutput>` property in the `.wixpr
 Ensure you've published the agent first:
 
 ```powershell
-dotnet publish ..\Dhadgar.Agent.Windows.csproj -c Release -r win-x64 --self-contained
+dotnet publish ..\Dhadgar.Agent.Windows.csproj -c Release -r win-x64
 ```
 
 **"WiX toolset not found"**
