@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Agent.Windows.Uat.Preflight;
@@ -18,6 +21,7 @@ internal static class UatRunner
 {
     private const int SchemaVersion = 1;
     private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan EventLogTimeout = TimeSpan.FromSeconds(60);
 
     /// <summary>Scenarios built so far: the stack and enrollment smoke (P19) for each mode.</summary>
     internal static IReadOnlyDictionary<string, IUatScenario> ScenarioRegistry { get; } =
@@ -206,6 +210,7 @@ internal static class UatRunner
         var redactor = new Redactor(); // One redactor per run: child output, step evidence and results.* all pass through it.
         string? internalError = null;
         CleanupSummary cleanup = CleanupSummary.NotRun();
+        StepResult u9;
 
         try
         {
@@ -244,7 +249,10 @@ internal static class UatRunner
 #pragma warning restore CA1031
         finally
         {
+            // The events go out before the manifest undo, which deletes the event source (U9).
+            await ExportAgentEventsAsync(paths, started, redactor, warnings);
             cleanup = await CleanupGuardedAsync(paths, actions, probe, warnings);
+            u9 = CleanupAndScan(paths, cleanup, redactor, warnings);
         }
 
         if (internalError is not null)
@@ -252,13 +260,14 @@ internal static class UatRunner
             warnings.Add("internal error: " + internalError);
         }
 
-        var overall = internalError is not null ? "fail" : Overall(steps.Steps, cleanup);
+        var allSteps = steps.Steps.Append(u9).ToList();
+        var overall = internalError is not null ? "fail" : Overall(allSteps, cleanup);
         var exitCode = cleanup.Status == "footprint-left" ? UatExitCodes.FootprintLeft
             : internalError is not null ? UatExitCodes.InternalError
             : overall == "pass" ? UatExitCodes.Pass
             : UatExitCodes.Fail;
 
-        return await PersistAsync(args, paths, started, "run", args.Mode, steps.Steps, cleanup, warnings,
+        return await PersistAsync(args, paths, started, "run", args.Mode, allSteps, cleanup, warnings,
             overall, exitCode, launchedByAgent, actions, redactor);
     }
 
@@ -337,6 +346,112 @@ internal static class UatRunner
                 [new CleanupFailure("cleanup", paths.RunDir, $"{ex.GetType().Name}: {ex.Message}")], [], [], []);
         }
 #pragma warning restore CA1031
+    }
+
+    /// <summary>
+    /// Exports the agent's Application events from this run to <c>logs\eventlog.txt</c>, redacted. Runs before the manifest
+    /// undo, which deletes the event source. A failed export is a warning: U9 does not depend on it.
+    /// </summary>
+    private static async Task ExportAgentEventsAsync(RunPaths paths, DateTime startedUtc, Redactor redactor, List<string> warnings)
+    {
+        var since = startedUtc.ToString("O", CultureInfo.InvariantCulture);
+        var query = $"*[System[Provider[@Name='Meridian Console Agent'] and TimeCreated[@SystemTime>='{since}']]]";
+        var result = await CommandRunner.RunAsync(
+            "wevtutil", ["qe", "Application", $"/q:{query}", "/f:text"], EventLogTimeout, redactor, null, CancellationToken.None);
+        if (result.IsFailure || result.Value.ExitCode != 0)
+        {
+            warnings.Add("agent event export failed; logs\\eventlog.txt was not written");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(paths.Logs);
+            File.WriteAllText(
+                Path.Combine(paths.Logs, "eventlog.txt"),
+                redactor.Redact(result.Value.StandardOutput),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            warnings.Add($"agent event export could not be written ({ex.GetType().Name})");
+        }
+    }
+
+    /// <summary>
+    /// U9 after the manifest undo: the undo must have no failures, the probe must be empty and the Root diff must have
+    /// no additions or removals. Then the secret scan runs, and the run's Nodes CA, agent state and agent data folders are
+    /// deleted (they are not manifest entries; they are only ever under the run folder).
+    /// </summary>
+    internal static StepResult CleanupAndScan(RunPaths paths, CleanupSummary cleanup, Redactor redactor, List<string> warnings)
+    {
+        var clock = Stopwatch.StartNew();
+        var failures = new List<string>();
+        if (cleanup.Failed.Count > 0)
+        {
+            failures.Add($"manifest undo had {cleanup.Failed.Count} failure(s)");
+        }
+
+        if (cleanup.Remaining.Count > 0)
+        {
+            failures.Add("probe is not empty after cleanup: " + string.Join(", ", cleanup.Remaining));
+        }
+
+        if (cleanup.RootAdded.Count > 0 || cleanup.RootRemoved.Count > 0)
+        {
+            failures.Add($"Root changed: {cleanup.RootAdded.Count} added, {cleanup.RootRemoved.Count} removed");
+        }
+
+        var scan = SecretScan.Run(paths, redactor);
+        failures.AddRange(scan.Failures);
+        warnings.AddRange(scan.Warnings);
+
+        var directoryFailures = DeleteRunDirectories(paths);
+        failures.AddRange(directoryFailures);
+
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["cleanup"] = cleanup.Status,
+            ["undone"] = cleanup.Undone,
+            ["filesScanned"] = scan.FilesScanned,
+            ["secretFindings"] = scan.Failures.Count,
+            ["passwordWarnings"] = scan.Warnings.Count,
+        };
+        clock.Stop();
+        return failures.Count == 0
+            ? new StepResult("U9", "Cleanup and scan", "pass", evidence, null, (long)clock.Elapsed.TotalMilliseconds)
+            : new StepResult("U9", "Cleanup and scan", "fail", evidence, string.Join("; ", failures), (long)clock.Elapsed.TotalMilliseconds);
+    }
+
+    /// <summary>Deletes the run's Nodes CA, agent state and agent data folders. Each path is checked against the run folder first.</summary>
+    private static List<string> DeleteRunDirectories(RunPaths paths)
+    {
+        var failures = new List<string>();
+        foreach (var dir in new[] { paths.Ca, paths.AgentState, paths.AgentData })
+        {
+            var valid = paths.Validate(dir);
+            if (valid.IsFailure)
+            {
+                failures.Add(valid.Error!);
+                continue;
+            }
+
+            if (!Directory.Exists(dir))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failures.Add($"could not delete {Path.GetFileName(dir)} ({ex.GetType().Name})");
+            }
+        }
+
+        return failures;
     }
 
     /// <summary>

@@ -3,8 +3,11 @@ using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
+using Dhadgar.Agent.Windows.Uat.Agent;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
 using Dhadgar.Agent.Windows.Uat.Infra;
+using Dhadgar.Agent.Windows.Uat.Probe;
 using Dhadgar.Agent.Windows.Uat.Stack;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Shared.Results;
@@ -23,6 +26,8 @@ namespace Dhadgar.Agent.Windows.Uat.Scenarios;
 internal sealed class StackScenario : IUatScenario
 {
     private static readonly TimeSpan HubStartTimeout = TimeSpan.FromSeconds(30);
+    private const int AgentHeartbeatSeconds = 10;
+    private const int AgentConnectionCheckSeconds = 10;
 
     /// <summary>Creates the scenario for one mode name (<c>process</c>, <c>service</c>, <c>msi</c> or <c>stack-only</c>).</summary>
     public StackScenario(string mode)
@@ -49,7 +54,7 @@ internal sealed class StackScenario : IUatScenario
         using var host = new ServiceHost(context.Paths, job, context.Redactor, context.Manifest);
         try
         {
-            var outcome = await RunStepsAsync(context, host, evidence, ct);
+            var outcome = await RunStepsAsync(context, host, job, evidence, ct);
             return outcome.IsSuccess
                 ? Result<Dictionary<string, object?>>.Success(evidence)
                 : Result<Dictionary<string, object?>>.Failure(outcome.Error!);
@@ -61,7 +66,7 @@ internal sealed class StackScenario : IUatScenario
     }
 
     private static async Task<Result> RunStepsAsync(
-        RunContext context, ServiceHost host, Dictionary<string, object?> evidence, CancellationToken ct)
+        RunContext context, ServiceHost host, JobObject job, Dictionary<string, object?> evidence, CancellationToken ct)
     {
         var redactor = context.Redactor;
         var ports = new List<int>();
@@ -227,7 +232,48 @@ internal sealed class StackScenario : IUatScenario
         }
 
         evidence["S-db"] = "pass";
-        return Result.Success();
+        if (context.Mode != "process")
+        {
+            return Result.Success();
+        }
+
+        return await RunAgentLegsAsync(context, job, nodesDb, gatewayBase, evidence, ct);
+    }
+
+    /// <summary>
+    /// The process-mode agent legs (P20 U2-U4) after the stack smoke. The legs use a new organization, so the smoke's
+    /// node is not counted as a node of the run's organization in U3.
+    /// </summary>
+    private static async Task<Result> RunAgentLegsAsync(
+        RunContext context, JobObject job, NodesDb nodesDb, Uri gatewayBase, Dictionary<string, object?> evidence, CancellationToken ct)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var accountSid = identity.User?.Value;
+        if (accountSid is null)
+        {
+            return Fail(evidence, "U2", "could not read the SID of the account the agent runs as");
+        }
+
+        var organizationId = Guid.NewGuid();
+        var minter = new TokenMinter(() => nodesDb.Create(), context.RunId, context.Redactor);
+        var config = new AgentConfig(
+            gatewayBase,
+            AgentHeartbeatSeconds,
+            AgentConnectionCheckSeconds,
+            context.Paths.AgentState,
+            Path.Combine(context.Paths.AgentData, "Servers"),
+            Path.Combine(context.Paths.AgentData, "Temp"));
+        var deps = new AgentLegsDeps(
+            new RegistryToken(context.Manifest),
+            new StoreInspector(),
+            new AgentProcess(context.Paths, job, context.Redactor, context.Manifest),
+            new NodesAgentLegsDb(() => nodesDb.Create()),
+            (label, c) => minter.MintAsync(organizationId, label, c));
+        var options = new AgentLegsOptions(
+            organizationId, accountSid, config, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(60));
+        evidence["legsOrganizationId"] = organizationId.ToString();
+
+        return await new AgentLegs(context.Paths, context.Manifest, deps, options).RunAsync(evidence, ct);
     }
 
     private static async Task<Result> HubHeartbeatAsync(
