@@ -651,6 +651,33 @@ docker run -p 5040:8080 \
 
 ---
 
+## Agent hub
+
+Agents hold a persistent SignalR connection to the Nodes service for heartbeats.
+
+- **Path:** `/hubs/agent` (`AgentHubProtocol.Path`). The Gateway routes the same path.
+- **Auth:** the hub is mapped with `RequireAuthorization("AgentPolicy")`, and mTLS must be enabled. The node ID is taken only from the `node_id` claim of the client certificate, never from the payload. A certificate that is revoked, or past its `NotAfter` time (unless `AllowExpiredCertificates` is set), is refused at connect, and a heartbeat on an open connection is refused and the connection is closed.
+- **Protocol header:** `X-Agent-Protocol`. Only `1` is accepted. A missing header is treated as `1`. Any other value aborts the connection.
+- **`Heartbeat(AgentHeartbeat)`:** returns `AgentHeartbeatAck`. Limits are enforced by `AgentHeartbeatValidator` before any database write:
+
+  | Field | Limit |
+  |-------|-------|
+  | `CpuUsagePercent`, `MemoryUsagePercent`, `DiskUsagePercent` | finite, 0-100 |
+  | `ActiveGameServers` | 0-10000 |
+  | `AgentVersion` | at most 50 characters, no control characters |
+  | `HealthIssues` | at most 20 entries, each non-null, at most 256 characters, no control characters |
+
+- **Error codes:** returned in `AgentHeartbeatAck.ErrorCode`, never as a `HubException`:
+
+  | Code | Meaning |
+  |------|---------|
+  | `node_not_found` | No node matches the certificate's node ID |
+  | `node_decommissioned` | The node is decommissioned; no heartbeat is written |
+  | `invalid_heartbeat` | The payload failed validation; nothing was written |
+  | `heartbeat_failed` | Any other failure, including a revoked or expired certificate |
+
+---
+
 ## Related Documentation
 
 | Document | Location |

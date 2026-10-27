@@ -27,7 +27,8 @@ public static class AgentHeartbeatValidator
             return false;
         }
 
-        if (h.AgentVersion is not null && h.AgentVersion.Length > AgentHeartbeatLimits.MaxAgentVersionLength)
+        if (h.AgentVersion is not null &&
+            (h.AgentVersion.Length > AgentHeartbeatLimits.MaxAgentVersionLength || HasControlCharacter(h.AgentVersion)))
         {
             return false;
         }
@@ -41,7 +42,9 @@ public static class AgentHeartbeatValidator
 
             foreach (var issue in h.HealthIssues)
             {
-                if (issue is null || issue.Length > AgentHeartbeatLimits.MaxHealthIssueLength)
+                if (issue is null ||
+                    issue.Length > AgentHeartbeatLimits.MaxHealthIssueLength ||
+                    HasControlCharacter(issue))
                 {
                     return false;
                 }
@@ -53,4 +56,19 @@ public static class AgentHeartbeatValidator
 
     private static bool IsPercentage(double value) =>
         double.IsFinite(value) && value >= 0 && value <= 100;
+
+    // Control characters (NUL, CR, LF, ...) are rejected: NUL cannot be stored in PostgreSQL text,
+    // and CR/LF would forge extra lines in the operator log entries that echo these values.
+    private static bool HasControlCharacter(string value)
+    {
+        foreach (var c in value)
+        {
+            if (char.IsControl(c))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

@@ -1,10 +1,10 @@
+using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes;
 using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Consumers;
 using Dhadgar.Nodes.Data;
-using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Hubs;
 using Dhadgar.Nodes.Observability;
