@@ -40,6 +40,11 @@ public sealed class EnrollmentService : IEnrollmentService
     /// </summary>
     private const int MaxErrorBodySize = 4 * 1024;
 
+    /// <summary>
+    /// How far a renewed certificate's NotBefore may sit ahead of this machine's clock.
+    /// </summary>
+    private const int MaxClockSkewMinutes = 5;
+
     private readonly ICertificateStore _certificateStore;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AgentOptions _options;
@@ -47,28 +52,32 @@ public sealed class EnrollmentService : IEnrollmentService
     private readonly IEnrollmentTokenCleanup? _enrollmentTokenCleanup;
     private readonly IHardwareInventoryCollector _hardwareInventory;
     private readonly IClientCertificateProvider _clientCertificateProvider;
+    private readonly TimeProvider _timeProvider;
 
     /// <param name="clientCertificateProvider">
-    /// Invalidated after enrollment and renewal store new key material. When omitted, a provider
-    /// over <paramref name="certificateStore"/> is created, which is only correct when no other
-    /// handshake consumer shares the store.
+    /// Invalidated after enrollment and renewal attempts that change the certificate store, so the
+    /// mTLS handshake picks up the new key material. Must be the same instance the handshake handler reads.
     /// </param>
+    /// <param name="enrollmentTokenCleanup">Optional cleanup of the consumed enrollment token.</param>
+    /// <param name="timeProvider">Clock for the renewed certificate validity check. Defaults to <see cref="TimeProvider.System"/>.</param>
     public EnrollmentService(
         ICertificateStore certificateStore,
         IHttpClientFactory httpClientFactory,
         IOptions<AgentOptions> options,
         ILogger<EnrollmentService> logger,
         IHardwareInventoryCollector hardwareInventory,
+        IClientCertificateProvider clientCertificateProvider,
         IEnrollmentTokenCleanup? enrollmentTokenCleanup = null,
-        IClientCertificateProvider? clientCertificateProvider = null)
+        TimeProvider? timeProvider = null)
     {
         _hardwareInventory = hardwareInventory ?? throw new ArgumentNullException(nameof(hardwareInventory));
         _certificateStore = certificateStore ?? throw new ArgumentNullException(nameof(certificateStore));
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _clientCertificateProvider = clientCertificateProvider ?? throw new ArgumentNullException(nameof(clientCertificateProvider));
         _enrollmentTokenCleanup = enrollmentTokenCleanup;
-        _clientCertificateProvider = clientCertificateProvider ?? new ClientCertificateProvider(certificateStore);
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -252,10 +261,11 @@ public sealed class EnrollmentService : IEnrollmentService
                 {
                     // SECURITY: Zero sensitive key material immediately after use
                     System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
+
+                    // Drop the cached handshake certificate even when the store threw part-way
+                    _clientCertificateProvider.Invalidate();
                 }
             }
-
-            _clientCertificateProvider.Invalidate();
 
             // Store CA certificate if provided
             if (!string.IsNullOrEmpty(enrollmentResponse.CaCertificate))
@@ -473,6 +483,17 @@ public sealed class EnrollmentService : IEnrollmentService
                         "[Renewal.WrongIdentity] Certificate SAN does not match this node");
                 }
 
+                // An expired or not-yet-valid certificate would be filtered out by the store on the next read,
+                // leaving the agent with no usable certificate and no way to renew
+                var now = _timeProvider.GetUtcNow();
+                if (new DateTimeOffset(newCert.NotBefore) > now.AddMinutes(MaxClockSkewMinutes)
+                    || new DateTimeOffset(newCert.NotAfter) <= now)
+                {
+                    _logger.LogError("Renewed certificate is outside its validity window for node {NodeId}", nodeId);
+                    return Result<CertificateRenewalResult>.Failure(
+                        "[Renewal.InvalidValidity] Certificate is not currently valid");
+                }
+
                 // Capture expiry before cert is disposed
                 newExpiry = newCert.NotAfter;
 
@@ -487,10 +508,10 @@ public sealed class EnrollmentService : IEnrollmentService
                 {
                     // SECURITY: Zero sensitive key material immediately after use
                     System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
-                }
 
-                // Handshakes must present the new certificate from now on
-                _clientCertificateProvider.Invalidate();
+                    // Handshakes must present the new certificate from now on, even if the store threw part-way
+                    _clientCertificateProvider.Invalidate();
+                }
             }
 
             // Store CA certificate if provided
@@ -600,23 +621,32 @@ public sealed class EnrollmentService : IEnrollmentService
                 continue;
             }
 
-            var reader = new AsnReader(extension.RawData, AsnEncodingRules.DER);
-            var names = reader.ReadSequence();
-            while (names.HasData)
+            try
             {
-                // GeneralName uniformResourceIdentifier is [6] IA5String
-                if (names.PeekTag().HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 6)))
+                var reader = new AsnReader(extension.RawData, AsnEncodingRules.DER);
+                var names = reader.ReadSequence();
+                while (names.HasData)
                 {
-                    var uri = names.ReadCharacterString(
-                        UniversalTagNumber.IA5String,
-                        new Asn1Tag(TagClass.ContextSpecific, 6));
-                    uriCount++;
-                    matches = string.Equals(uri, expectedUri, StringComparison.Ordinal);
+                    // GeneralName uniformResourceIdentifier is [6] IA5String
+                    if (names.PeekTag().HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 6)))
+                    {
+                        var uri = names.ReadCharacterString(
+                            UniversalTagNumber.IA5String,
+                            new Asn1Tag(TagClass.ContextSpecific, 6));
+                        uriCount++;
+                        matches = string.Equals(uri, expectedUri, StringComparison.Ordinal);
+                    }
+                    else
+                    {
+                        names.ReadEncodedValue();
+                    }
                 }
-                else
-                {
-                    names.ReadEncodedValue();
-                }
+            }
+            catch (AsnContentException)
+            {
+                // A malformed SAN is a wrong identity, not a crash. AsnContentException derives from
+                // Exception, not CryptographicException, so the caller's catch clauses would not see it.
+                return false;
             }
         }
 

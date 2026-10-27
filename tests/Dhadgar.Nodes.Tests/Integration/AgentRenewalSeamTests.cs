@@ -82,7 +82,8 @@ public sealed class AgentRenewalSeamTests : IDisposable
         var renewing = CreateRenewingAgent(
             new TestServerClientFactory(factory.Server, certificate: () => store.ClientCertificate),
             store,
-            enrolled);
+            enrolled,
+            _baseFactory.TimeProvider);
         var renewal = await renewing.RenewCertificateAsync();
         Assert.True(renewal.IsSuccess, renewal.Error);
 
@@ -157,7 +158,8 @@ public sealed class AgentRenewalSeamTests : IDisposable
                     return dropper;
                 }),
             store,
-            enrolled);
+            enrolled,
+            _baseFactory.TimeProvider);
 
         // Nodes commits the new certificate, but the response is lost, so the agent keeps the old one.
         var first = await renewing.RenewCertificateAsync();
@@ -204,7 +206,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         var before = await ReadCertificateStateAsync(factory, enrolled.NodeId);
 
         var empty = new InMemoryCertificateStore();
-        var renewing = CreateRenewingAgent(new TestServerClientFactory(factory.Server), empty, enrolled);
+        var renewing = CreateRenewingAgent(new TestServerClientFactory(factory.Server), empty, enrolled, _baseFactory.TimeProvider);
 
         var result = await renewing.RenewCertificateAsync();
 
@@ -238,7 +240,8 @@ public sealed class AgentRenewalSeamTests : IDisposable
     private static AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
-        EnrollmentResult enrolled)
+        EnrollmentResult enrolled,
+        TimeProvider timeProvider)
     {
         return new AgentEnrollmentService(
             store,
@@ -249,7 +252,10 @@ public sealed class AgentRenewalSeamTests : IDisposable
                 OrganizationId = enrolled.OrganizationId
             }),
             NullLogger<AgentEnrollmentService>.Instance,
-            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance));
+            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
+            new ClientCertificateProvider(store),
+            enrollmentTokenCleanup: null,
+            timeProvider: timeProvider);
     }
 
     /// <summary>

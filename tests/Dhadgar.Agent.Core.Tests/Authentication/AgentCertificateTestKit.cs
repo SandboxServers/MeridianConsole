@@ -37,9 +37,16 @@ internal sealed class TestAgentCa : IDisposable
 
     /// <summary>
     /// Issues a leaf certificate for <paramref name="subjectPublicKeyInfo"/>. When
-    /// <paramref name="spiffeUri"/> is null the certificate carries no URI SAN.
+    /// <paramref name="spiffeUri"/> is null the certificate carries no URI SAN. The validity window
+    /// defaults to one minute ago through thirty days ahead. <paramref name="rawSanExtension"/>, when set,
+    /// replaces the SAN extension with these raw DER bytes, for malformed-extension tests.
     /// </summary>
-    public X509Certificate2 Issue(byte[] subjectPublicKeyInfo, string? spiffeUri)
+    public X509Certificate2 Issue(
+        byte[] subjectPublicKeyInfo,
+        string? spiffeUri,
+        DateTimeOffset? notBefore = null,
+        DateTimeOffset? notAfter = null,
+        byte[]? rawSanExtension = null)
     {
         var subjectKey = PublicKey.CreateFromSubjectPublicKeyInfo(subjectPublicKeyInfo, out _);
         var request = new CertificateRequest(
@@ -51,7 +58,12 @@ internal sealed class TestAgentCa : IDisposable
         request.CertificateExtensions.Add(
             new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: true));
 
-        if (spiffeUri is not null)
+        if (rawSanExtension is not null)
+        {
+            request.CertificateExtensions.Add(
+                new X509Extension(new Oid("2.5.29.17"), rawSanExtension, critical: false));
+        }
+        else if (spiffeUri is not null)
         {
             var san = new SubjectAlternativeNameBuilder();
             san.AddUri(new Uri(spiffeUri));
@@ -62,8 +74,8 @@ internal sealed class TestAgentCa : IDisposable
         using var issued = request.Create(
             _certificate.SubjectName,
             generator,
-            DateTimeOffset.UtcNow.AddMinutes(-1),
-            DateTimeOffset.UtcNow.AddDays(30),
+            notBefore ?? DateTimeOffset.UtcNow.AddMinutes(-1),
+            notAfter ?? DateTimeOffset.UtcNow.AddDays(30),
             RandomNumberGenerator.GetBytes(16));
 
         return X509CertificateLoader.LoadCertificate(issued.RawData);
@@ -95,6 +107,9 @@ internal sealed class RecordingCertificateStore : ICertificateStore
 
     public int StoreCertificateCount { get; private set; }
 
+    /// <summary>When set, <see cref="StoreCertificateAsync"/> throws it, as a store failing part-way would.</summary>
+    public Exception? StoreException { get; set; }
+
     public int StoreCaCertificateCount { get; private set; }
 
     /// <summary>A copy of the PKCS#8 bytes handed to <see cref="StoreCertificateAsync"/>.</summary>
@@ -112,6 +127,11 @@ internal sealed class RecordingCertificateStore : ICertificateStore
         CancellationToken cancellationToken = default)
     {
         StoreCertificateCount++;
+        if (StoreException is not null)
+        {
+            throw StoreException;
+        }
+
         StoredPrivateKey = privateKey.ToArray();
         StoredCertificateDer = certificate.RawData.ToArray();
         _clientCertificate = X509CertificateLoader.LoadCertificate(certificate.RawData);

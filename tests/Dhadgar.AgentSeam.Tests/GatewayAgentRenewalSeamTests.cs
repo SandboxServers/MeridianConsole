@@ -78,7 +78,8 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
         var renewing = CreateRenewingAgent(
             new TestServerClientFactory(harness.GatewayServer, stripApiPrefix: false, certificate: () => store.ClientCertificate),
             store,
-            enrolled);
+            enrolled,
+            harness.NodesBase.TimeProvider);
         var renewal = await renewing.RenewCertificateAsync();
         Assert.True(renewal.IsSuccess, renewal.Error);
 
@@ -130,7 +131,8 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
     private static AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
-        EnrollmentResult enrolled)
+        EnrollmentResult enrolled,
+        TimeProvider timeProvider)
     {
         return new AgentEnrollmentService(
             store,
@@ -141,7 +143,10 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
                 OrganizationId = enrolled.OrganizationId
             }),
             NullLogger<AgentEnrollmentService>.Instance,
-            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance));
+            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
+            new ClientCertificateProvider(store),
+            enrollmentTokenCleanup: null,
+            timeProvider: timeProvider);
     }
 
     /// <summary>

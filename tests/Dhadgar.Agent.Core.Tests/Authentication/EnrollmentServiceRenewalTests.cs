@@ -184,6 +184,79 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
             System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
     }
 
+    [Fact]
+    public async Task MalformedSanResponse_FailsWithoutStoring()
+    {
+        // 30 05 86 09 41: a GeneralName [6] claiming 9 bytes with only 1 present. Loads as a certificate,
+        // but reading the SAN throws AsnContentException, which must become a wrong-identity failure.
+        var malformedSan = new byte[] { 0x30, 0x05, 0x86, 0x09, 0x41 };
+        var handler = new ScriptedHttpHandler((_, body) =>
+            Renewed(_ca.Issue(
+                AgentCertificateTestJson.ReadPublicKey(body),
+                Spiffe(NodeId),
+                rawSanExtension: malformedSan)));
+        var sut = BuildSut(handler, out var store, out var provider);
+
+        var result = await sut.RenewCertificateAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Renewal.WrongIdentity]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(0, store.StoreCertificateCount);
+        Assert.Equal(0, provider.InvalidateCount);
+    }
+
+    [Fact]
+    public async Task ExpiredResponse_FailsWithoutStoring()
+    {
+        var handler = new ScriptedHttpHandler((_, body) =>
+            Renewed(_ca.Issue(
+                AgentCertificateTestJson.ReadPublicKey(body),
+                Spiffe(NodeId),
+                notBefore: DateTimeOffset.UtcNow.AddDays(-2),
+                notAfter: DateTimeOffset.UtcNow.AddDays(-1))));
+        var sut = BuildSut(handler, out var store, out var provider);
+
+        var result = await sut.RenewCertificateAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Renewal.InvalidValidity]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(0, store.StoreCertificateCount);
+        Assert.Equal(0, provider.InvalidateCount);
+    }
+
+    [Fact]
+    public async Task NotYetValidResponse_FailsWithoutStoring()
+    {
+        var handler = new ScriptedHttpHandler((_, body) =>
+            Renewed(_ca.Issue(
+                AgentCertificateTestJson.ReadPublicKey(body),
+                Spiffe(NodeId),
+                notBefore: DateTimeOffset.UtcNow.AddHours(1),
+                notAfter: DateTimeOffset.UtcNow.AddDays(30))));
+        var sut = BuildSut(handler, out var store, out var provider);
+
+        var result = await sut.RenewCertificateAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Renewal.InvalidValidity]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(0, store.StoreCertificateCount);
+        Assert.Equal(0, provider.InvalidateCount);
+    }
+
+    [Fact]
+    public async Task StoreThrows_StillInvalidatesTheProvider()
+    {
+        var handler = new ScriptedHttpHandler((_, body) =>
+            Renewed(_ca.Issue(AgentCertificateTestJson.ReadPublicKey(body), Spiffe(NodeId))));
+        var sut = BuildSut(handler, out var store, out var provider);
+        store.StoreException = new CryptographicException("store failed part-way");
+
+        var result = await sut.RenewCertificateAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(1, provider.InvalidateCount);
+    }
+
     private static string Spiffe(Guid nodeId) => AgentCertificateProfile.SpiffeId(nodeId);
 
     private EnrollmentService BuildSut(

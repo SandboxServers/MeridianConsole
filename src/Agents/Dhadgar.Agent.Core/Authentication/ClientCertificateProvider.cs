@@ -11,6 +11,11 @@ public sealed class ClientCertificateProvider : IClientCertificateProvider, IDis
     private readonly ICertificateStore _certificateStore;
     private readonly object _lock = new();
     private X509Certificate2? _certificate;
+
+    // A handshake may hold the instance returned by Current after Invalidate runs, and SslStream
+    // uses it after the selection callback returns. The retired instance is disposed one
+    // generation later (on the next Invalidate) or on Dispose, never on the same call.
+    private X509Certificate2? _retired;
     private bool _loaded;
     private bool _disposed;
 
@@ -43,7 +48,8 @@ public sealed class ClientCertificateProvider : IClientCertificateProvider, IDis
     {
         lock (_lock)
         {
-            _certificate?.Dispose();
+            _retired?.Dispose();
+            _retired = _certificate;
             _certificate = null;
             _loaded = false;
         }
@@ -61,6 +67,8 @@ public sealed class ClientCertificateProvider : IClientCertificateProvider, IDis
 
             _certificate?.Dispose();
             _certificate = null;
+            _retired?.Dispose();
+            _retired = null;
             _loaded = false;
             _disposed = true;
         }
