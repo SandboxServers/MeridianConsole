@@ -1679,7 +1679,7 @@ steps, the pass conditions and how to read the results are in `scripts/uat/READM
 - **[Root CLAUDE.md](/CLAUDE.md)**: Main project guidance and conventions
 - **[Root README.md](/README.md)**: Project overview and quick start
 - **[Agent Core CLAUDE.md](/src/Agents/Dhadgar.Agent.Core/CLAUDE.md)**: Core agent library guidance
-- **[Linux Agent README](/src/Agents/Dhadgar.Agent.Linux/README.md)**: Linux agent documentation (peer project)
+- **[Linux Agent README](/parked/src/Agents/Dhadgar.Agent.Linux/README.md)**: Linux agent documentation (peer project, parked under VS-01)
 
 ### Architecture Documentation
 
