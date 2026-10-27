@@ -82,7 +82,8 @@ public sealed class AgentRenewalSeamTests : IDisposable
         var renewing = CreateRenewingAgent(
             new TestServerClientFactory(factory.Server, certificate: () => store.ClientCertificate),
             store,
-            enrolled);
+            enrolled,
+            _baseFactory.TimeProvider);
         var renewal = await renewing.RenewCertificateAsync();
         Assert.True(renewal.IsSuccess, renewal.Error);
 
@@ -157,7 +158,8 @@ public sealed class AgentRenewalSeamTests : IDisposable
                     return dropper;
                 }),
             store,
-            enrolled);
+            enrolled,
+            _baseFactory.TimeProvider);
 
         // Nodes commits the new certificate, but the response is lost, so the agent keeps the old one.
         var first = await renewing.RenewCertificateAsync();
@@ -197,6 +199,41 @@ public sealed class AgentRenewalSeamTests : IDisposable
     }
 
     [Fact]
+    public async Task RealAgent_HubReconnectAfterRenewal_PresentsRenewedCertificate()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true, settings: GraceSettings);
+        var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+
+        // One client instance for the whole test. ConnectAsync reads the store on every connect (D-S231).
+        using var meter = new AgentMeter();
+        using var activity = new AgentActivitySource();
+        await using var client = CreateAgentClient(factory, enrolled, store, meter, activity);
+        await ConnectAgentAsync(client);
+
+        var renewing = CreateRenewingAgent(
+            new TestServerClientFactory(factory.Server, certificate: () => store.ClientCertificate),
+            store,
+            enrolled,
+            _baseFactory.TimeProvider);
+        var renewal = await renewing.RenewCertificateAsync();
+        Assert.True(renewal.IsSuccess, renewal.Error);
+
+        // AgentBootstrapService disconnects after renewal. The next ConnectAsync rebuilds the hub connection
+        // from the store, so the renewed certificate is the one presented.
+        await client.DisconnectAsync();
+        await ConnectAgentAsync(client);
+
+        // 61 minutes after renewal the old certificate has left grace. The renewed connection is still acknowledged.
+        _baseFactory.TimeProvider.Advance(TimeSpan.FromMinutes(61));
+        var ack = await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(new HeartbeatPayload
+        {
+            NodeId = enrolled.NodeId,
+            AgentVersion = "2.0.0-renewal"
+        }));
+        Assert.True(ack.IsSuccess && ack.Value.Acknowledged, ack.Error);
+    }
+
+    [Fact]
     public async Task Renew_WithoutCertificate_Fails()
     {
         using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true, settings: GraceSettings);
@@ -204,7 +241,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         var before = await ReadCertificateStateAsync(factory, enrolled.NodeId);
 
         var empty = new InMemoryCertificateStore();
-        var renewing = CreateRenewingAgent(new TestServerClientFactory(factory.Server), empty, enrolled);
+        var renewing = CreateRenewingAgent(new TestServerClientFactory(factory.Server), empty, enrolled, _baseFactory.TimeProvider);
 
         var result = await renewing.RenewCertificateAsync();
 
@@ -238,7 +275,8 @@ public sealed class AgentRenewalSeamTests : IDisposable
     private static AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
-        EnrollmentResult enrolled)
+        EnrollmentResult enrolled,
+        TimeProvider timeProvider)
     {
         return new AgentEnrollmentService(
             store,
@@ -249,7 +287,10 @@ public sealed class AgentRenewalSeamTests : IDisposable
                 OrganizationId = enrolled.OrganizationId
             }),
             NullLogger<AgentEnrollmentService>.Instance,
-            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance));
+            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
+            new ClientCertificateProvider(store),
+            enrollmentTokenCleanup: null,
+            timeProvider: timeProvider);
     }
 
     /// <summary>

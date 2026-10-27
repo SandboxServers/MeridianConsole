@@ -112,6 +112,8 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                         options.HttpMessageHandlerFactory = handlerFactory;
                     }
 
+                    // D-S231: one certificate per HubConnection (the WebSockets transport takes a fixed list). A renewed
+                    // certificate is presented when ConnectAsync rebuilds the connection; AgentBootstrapService disconnects after renewal.
                     options.ClientCertificates = [clientCert];
                     options.Headers[AgentHubProtocol.VersionHeader] = AgentHubProtocol.CurrentVersion;
                 })
@@ -272,6 +274,13 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
             _logger.LogWarning(ex, "Heartbeat invocation failed: connection not active");
             return Result<AgentHeartbeatAck>.Failure("[ControlPlane.NotConnected] Connection dropped during heartbeat");
+        }
+        catch (HttpRequestException ex)
+        {
+            // The control plane refuses a certificate outside its grace window with 401; SignalR surfaces that as a transport error
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
+            _logger.LogWarning(ex, "Heartbeat transport failed: connection refused or dropped");
+            return Result<AgentHeartbeatAck>.Failure("[ControlPlane.Transport] Heartbeat transport failed; connection refused or dropped");
         }
     }
 

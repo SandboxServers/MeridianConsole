@@ -474,6 +474,33 @@ Authentication is planned but not yet implemented. The target architecture uses 
    - Agents check certificate revocation list (CRL) or OCSP
    - Revoked agents cannot connect
 
+### Certificate Renewal Flow (Implemented)
+
+`EnrollmentService.RenewCertificateAsync` renews the client certificate over the existing mTLS channel:
+
+1. The node id comes from `AgentOptions`. Without an enrolled node or a stored certificate the call fails with `[Renewal.NotEnrolled]` or `[Renewal.NoCertificate]`.
+2. The agent generates a fresh ECDSA P-384 key pair in memory. The private key never leaves the agent.
+3. The agent posts only the public key, as `RenewCertificateRequest` from `Dhadgar.Contracts`, to `POST api/v1/agents/{nodeId}/certificates/renew`. The body is the camelCase `{"publicKey":"<base64 SPKI>"}`.
+4. The response is `RenewCertificateResponse`, read through a size-limited stream. A non-success status becomes `[Renewal.Rejected] {status} {errorCode}`, where `errorCode` is the bounded token from the problem+json body.
+5. The new certificate, PEM or bare base64 DER, must bind the agent's own public key (`[Renewal.KeyMismatch]` otherwise). Its only URI SAN must equal `AgentCertificateProfile.SpiffeId(nodeId)` (`[Renewal.WrongIdentity]` otherwise). A failed check stores nothing.
+6. The key is exported as PKCS#8, handed to `ICertificateStore.StoreCertificateAsync`, and zeroed in a `finally` block. The CA certificate, when present, is stored afterwards.
+7. `IClientCertificateProvider.Invalidate()` runs after the store, so the next mTLS handshake presents the new certificate.
+
+Enrollment follows the same handoff: it exports PKCS#8 and invalidates the provider.
+
+HTTP calls (`ControlPlaneMtls`) pick the current certificate on each handshake; the hub keeps one certificate per connection and picks up a renewed one when it reconnects (D-S231).
+
+#### PKCS#8 Handoff for `ICertificateStore` Implementers
+
+`ICertificateStore.StoreCertificateAsync` receives the private key as **PKCS#8 DER (PrivateKeyInfo) on every platform**, not SEC1 `ECPrivateKey`. Implementations must:
+
+- Import the bytes with `ImportPkcs8PrivateKey`. Fall back to SEC1 only for legacy material already on disk.
+- Zero their own copies after use. The caller zeroes its buffer once the call returns, so do not keep a reference to it.
+
+#### Client Certificate Caching
+
+`ClientCertificateProvider` (registered as a singleton by `AddAgentCore`) loads the certificate from `ICertificateStore` on first use and caches it. `ControlPlaneMtls` builds a `SocketsHttpHandler` whose `LocalCertificateSelectionCallback` reads `provider.Current` on each handshake, and `PooledConnectionLifetime` is one minute, so a renewed certificate is picked up without a restart. When `Current` is null the handshake presents no certificate and the server answers 401.
+
 ### JWT Tokens (Planned)
 
 In addition to mTLS, agents may use JWT tokens for:

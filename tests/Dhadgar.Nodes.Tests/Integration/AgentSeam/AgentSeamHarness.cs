@@ -87,14 +87,20 @@ public static class AgentSeamHarness
     /// <summary>
     /// Creates the real agent enrollment service over the given HTTP client factory and certificate store.
     /// </summary>
-    public static AgentEnrollmentService CreateEnrollmentService(IHttpClientFactory httpClientFactory, ICertificateStore store)
+    public static AgentEnrollmentService CreateEnrollmentService(
+        IHttpClientFactory httpClientFactory,
+        ICertificateStore store,
+        TimeProvider? timeProvider = null)
     {
         return new AgentEnrollmentService(
             store,
             httpClientFactory,
             Options.Create(new AgentOptions()),
             NullLogger<AgentEnrollmentService>.Instance,
-            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance));
+            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
+            new ClientCertificateProvider(store),
+            enrollmentTokenCleanup: null,
+            timeProvider: timeProvider);
     }
 
     /// <summary>
