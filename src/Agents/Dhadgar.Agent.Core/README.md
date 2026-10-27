@@ -488,6 +488,8 @@ Authentication is planned but not yet implemented. The target architecture uses 
 
 Enrollment follows the same handoff: it exports PKCS#8 and invalidates the provider.
 
+HTTP calls (`ControlPlaneMtls`) pick the current certificate on each handshake; the hub keeps one certificate per connection and picks up a renewed one when it reconnects (D-S231).
+
 #### PKCS#8 Handoff for `ICertificateStore` Implementers
 
 `ICertificateStore.StoreCertificateAsync` receives the private key as **PKCS#8 DER (PrivateKeyInfo) on every platform**, not SEC1 `ECPrivateKey`. Implementations must:

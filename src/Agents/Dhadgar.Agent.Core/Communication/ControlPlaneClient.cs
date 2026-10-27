@@ -112,6 +112,8 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                         options.HttpMessageHandlerFactory = handlerFactory;
                     }
 
+                    // D-S231: one certificate per HubConnection (the WebSockets transport takes a fixed list). A renewed
+                    // certificate is presented when ConnectAsync rebuilds the connection; AgentBootstrapService disconnects after renewal.
                     options.ClientCertificates = [clientCert];
                     options.Headers[AgentHubProtocol.VersionHeader] = AgentHubProtocol.CurrentVersion;
                 })
