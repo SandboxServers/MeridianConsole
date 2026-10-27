@@ -15,6 +15,8 @@
 
     Exit codes: 0 pass, 1 fail or inconclusive, 2 refused before any machine change,
     3 footprint left after cleanup, 4 internal error. The script exits with the driver's code.
+
+    It builds through Build-AgentWindowsUat.ps1 (locked, RID-less restore, then --no-restore; P32), so a build never changes a tracked file.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Preflight')]
 param(
@@ -31,26 +33,13 @@ $ErrorActionPreference = 'Stop'
 
 $repo = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $uatRoot = Join-Path $repo '.uat\agent-windows'
-$driverProject = Join-Path $repo 'tests\Dhadgar.Agent.Windows.Uat\Dhadgar.Agent.Windows.Uat.csproj'
 $driverExe = Join-Path $repo 'tests\Dhadgar.Agent.Windows.Uat\bin\Release\net10.0\Dhadgar.Agent.Windows.Uat.exe'
-$nodesProject = Join-Path $repo 'src\Dhadgar.Nodes\Dhadgar.Nodes.csproj'
-$gatewayProject = Join-Path $repo 'src\Dhadgar.Gateway\Dhadgar.Gateway.csproj'
-$agentProject = Join-Path $repo 'src\Agents\Dhadgar.Agent.Windows\Dhadgar.Agent.Windows.csproj'
 $installerProject = Join-Path $repo 'src\Agents\Dhadgar.Agent.Windows\Installer\Dhadgar.Agent.Windows.Installer.wixproj'
 
 function New-RunId {
     $stamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss', [System.Globalization.CultureInfo]::InvariantCulture)
     $suffix = [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(2)).ToLowerInvariant()
     return "$stamp-$suffix"
-}
-
-function Invoke-DotNet {
-    param([Parameter(Mandatory)][string[]] $Arguments)
-
-    & dotnet @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "dotnet $($Arguments[0]) failed with exit code $LASTEXITCODE"
-    }
 }
 
 try {
@@ -114,36 +103,16 @@ try {
     }
 
     if (-not $NoBuild) {
-        Invoke-DotNet -Arguments @('build', $driverProject, '-c', 'Release')
-        if ($verb -eq 'stack-only' -or $verb -eq 'run') {
-            Invoke-DotNet -Arguments @('build', $nodesProject, '-c', 'Release')
-            Invoke-DotNet -Arguments @('build', $gatewayProject, '-c', 'Release')
-        }
-        if ($verb -eq 'run' -and $Mode -eq 'Msi') {
-            # Stale output from an earlier build or branch is git-ignored and would be harvested into the MSI, so the
-            # publish folder and the installer's Release output are deleted first. Both are checked to be under the repo.
-            foreach ($stale in @(
-                    (Join-Path (Split-Path -Parent $agentProject) 'bin\Release\net10.0\win-x64\publish'),
-                    (Join-Path (Split-Path -Parent $installerProject) 'bin\Release'))) {
-                $resolvedStale = [System.IO.Path]::GetFullPath($stale)
-                $repoPrefix = $repo.TrimEnd('\') + '\'
-                if (-not $resolvedStale.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-                    [Console]::Error.WriteLine("Refusing to delete ${resolvedStale}: it is not under $repo.")
-                    exit 4
-                }
-                if (Test-Path -LiteralPath $resolvedStale) {
-                    Remove-Item -LiteralPath $resolvedStale -Recurse -Force
-                }
+        # One build path for every verb (P32, D-S241): locked, RID-less restores, then --no-restore builds,
+        # so the build never rewrites a tracked lock file and an agent run keeps its clean tree (D-S239).
+        $buildArgs = @{ Verb = $verb }
+        if ($verb -eq 'run') {
+            $buildArgs.Mode = $Mode
+            if ($Mode -ne 'Msi') {
+                $buildArgs.AgentOut = Join-Path $runDir 'agent'
             }
-
-            # The MSI harvests the default publish folder (bin\Release\net10.0\win-x64\publish), so no -o (P23).
-            Invoke-DotNet -Arguments @('publish', $agentProject, '-c', 'Release', '-r', 'win-x64')
-            Invoke-DotNet -Arguments @('build', $installerProject, '-c', 'Release')
         }
-        elseif ($verb -eq 'run') {
-            $agentOut = Join-Path $runDir 'agent'
-            Invoke-DotNet -Arguments @('publish', $agentProject, '-c', 'Release', '-r', 'win-x64', '-o', $agentOut)
-        }
+        & (Join-Path $PSScriptRoot 'Build-AgentWindowsUat.ps1') @buildArgs
     }
 
     if ($verb -eq 'run' -and $Mode -eq 'Msi') {

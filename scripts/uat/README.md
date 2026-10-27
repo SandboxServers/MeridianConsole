@@ -155,7 +155,7 @@ password found is a warning only, and the file is rewritten too. Last, U9 delete
 ## MSI mode: the installed agent (P23, D-S223)
 
 `-Mode Msi -AcceptMachineChanges` installs `MeridianConsoleAgent.msi`, proves the installed `DhadgarAgent`
-service enrolls and restarts, then uninstalls it and checks what is left. The script publishes the agent without `-o`
+service enrolls and restarts, then uninstalls it and checks what is left. The build script publishes the agent without `-o`
 (the MSI harvests `bin\Release\net10.0\win-x64\publish`), builds the `.wixproj` in Release and copies the MSI to
 `<runDir>\msi\`. The driver never runs `msiexec` for anything but U11a and U11b. Run it from an elevated PowerShell 7.4+ shell: you, or the UAT runner
 agent under D-S239. Coders never run it.
@@ -189,6 +189,17 @@ status, evidence and duration. The evidence is `key=value` pairs. The first `fai
 its condition, and steps after it show `skipped`. `results.json` holds the same data for tools.
 `warnings` lists password hits from U9, the expected service-recovery warning, and any export problem.
 
+## How the script builds (P32, D-S241)
+
+The wrapper builds through `Build-AgentWindowsUat.ps1`, and no build step runs `dotnet` directly. Each project gets
+`dotnet restore --locked-mode` without a runtime identifier first, and only then `build` or `publish --no-restore`.
+The reason is a lock-file clash. A self-restoring `publish -r win-x64` adds a `net10.0/win-x64` section to the
+lock files of `Agent.Core`, `Contracts` and `Shared`, so the tree turns dirty and the driver refuses the agent run
+(D-S239). A lock file that does not match its project now fails the restore with NU1004. On a development tree,
+run `dotnet restore <project>` without `--locked-mode`, commit the updated lock file and run again. An agent run only
+reports the mismatch: exit 4, before the driver starts, so no machine change. `-ListSteps` prints the build plan as
+JSON and builds nothing.
+
 ## Parameters
 
 | Call | What it does |
@@ -199,7 +210,7 @@ its condition, and steps after it show `skipped`. `results.json` holds the same 
 | `-Mode Service -AcceptMachineChanges` | Runs the scenario as the `DhadgarAgent` LocalSystem service with a run-scoped localhost TLS root (P22, see Service mode). |
 | `-Mode Msi -AcceptMachineChanges` | Builds and installs the MSI, runs U3 and U4 against the installed service, uninstalls it and checks the residue (P23, see MSI mode). It takes about 6 minutes. |
 | `-CleanupOnly <runFolder>` | Undoes the changes recorded in that run's manifest. Use it after a crash. |
-| `-NoBuild` | Skips `dotnet build` and `dotnet publish`. The driver exe must already exist. |
+| `-NoBuild` | Skips `Build-AgentWindowsUat.ps1`. The driver exe must already exist. |
 
 Each run gets a folder `<repo>\.uat\agent-windows\<runId>`, where `runId` is the UTC time
 `yyyyMMdd-HHmmss` plus 4 random hex characters. The script prints the folder path first. The
@@ -213,7 +224,7 @@ folder is ignored by git (`.uat/`).
 | 1 | A step `fail` or `inconclusive` (cleanup `clean`) |
 | 2 | Refused before any machine change: not elevated, switch missing, agent run on a dirty tree or with `-NoBuild`, run folder already used, agent cleanup of a non-agent run folder, footprint found, port 5672 busy, Docker down |
 | 3 | Footprint left after cleanup (overrides 1) |
-| 4 | Internal driver error (cleanup still ran) |
+| 4 | Internal error: a failed build or locked restore (before the driver starts, nothing changed), or a driver error (cleanup still ran) |
 
 ## Results
 
