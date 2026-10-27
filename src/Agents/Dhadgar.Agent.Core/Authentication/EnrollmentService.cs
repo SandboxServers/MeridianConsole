@@ -251,6 +251,22 @@ public sealed class EnrollmentService : IEnrollmentService
                         "[Enrollment.KeyMismatch] Certificate public key does not match locally generated keypair");
                 }
 
+                // The certificate must name the enrolled node and no other identity, and be valid now (as renewal checks).
+                // Checked before the store is written, so a mismatched certificate never becomes the agent's identity.
+                if (!AgentCertificateIdentity.HasOnlySpiffeUri(cert, AgentCertificateProfile.SpiffeId(enrollmentResponse.NodeId)))
+                {
+                    return Result<EnrollmentResult>.Failure(
+                        "[Enrollment.WrongIdentity] Certificate SAN does not match the enrolled node");
+                }
+
+                var enrollNow = _timeProvider.GetUtcNow();
+                if (new DateTimeOffset(cert.NotBefore) > enrollNow.AddMinutes(MaxClockSkewMinutes)
+                    || new DateTimeOffset(cert.NotAfter) <= enrollNow)
+                {
+                    return Result<EnrollmentResult>.Failure(
+                        "[Enrollment.InvalidValidity] Certificate is not currently valid");
+                }
+
                 // Capture expiry before cert is disposed
                 certExpiry = cert.NotAfter;
 

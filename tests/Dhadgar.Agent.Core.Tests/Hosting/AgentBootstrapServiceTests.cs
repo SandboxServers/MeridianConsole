@@ -77,7 +77,8 @@ public sealed class AgentBootstrapServiceTests
             h.Client.ConnectAsync(Arg.Any<CancellationToken>());
         });
 
-        // The token must never reach the log.
+        // The token must never reach the log. Non-empty first, so the check cannot pass against a logger that records nothing.
+        Assert.NotEmpty(h.Logger.Entries);
         Assert.DoesNotContain(h.Logger.Messages, m => m.Contains(Token, StringComparison.Ordinal));
     }
 
@@ -102,8 +103,7 @@ public sealed class AgentBootstrapServiceTests
             await Task.Delay(50);
             await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
 
-            h.Time.Advance(TimeSpan.FromSeconds(60));
-            await WaitUntilAsync(() => h.ConnectCount >= 1);
+            await h.AdvanceUntilAsync(() => h.ConnectCount >= 1, TimeSpan.FromSeconds(60));
         }
         finally
         {
@@ -123,13 +123,14 @@ public sealed class AgentBootstrapServiceTests
 
         var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
-        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
-        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
+        await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
         await sut.StopAsync(CancellationToken.None);
 
         await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
         Assert.True(h.Store.ReceivedCalls().Any(), "Store.LoadAsync was not called");
+        Assert.Contains(h.Logger.Entries, e => e.Level == LogLevel.Critical);
     }
 
     [Fact]
@@ -215,8 +216,7 @@ public sealed class AgentBootstrapServiceTests
             await Task.Delay(50);
 
             // D-S231: the renewed certificate reaches the hub only through a disconnect and a rebuild.
-            h.Time.Advance(TimeSpan.FromSeconds(60));
-            await WaitUntilAsync(() => h.ConnectCount >= 2);
+            await h.AdvanceUntilAsync(() => h.ConnectCount >= 2, TimeSpan.FromSeconds(60));
         }
         finally
         {
@@ -363,10 +363,7 @@ public sealed class AgentBootstrapServiceTests
         try
         {
             await WaitUntilAsync(() => h.SaveCount >= 1);
-            h.Time.Advance(TimeSpan.FromSeconds(2));
-            await WaitUntilAsync(() => h.SaveCount >= 2);
-            h.Time.Advance(TimeSpan.FromSeconds(2));
-            await WaitUntilAsync(() => h.SaveCount >= 3);
+            await h.AdvanceUntilAsync(() => h.SaveCount >= 3, TimeSpan.FromSeconds(2));
 
             await WaitUntilAsync(() => h.ConnectCount >= 1);
         }
@@ -375,14 +372,20 @@ public sealed class AgentBootstrapServiceTests
             await sut.StopAsync(CancellationToken.None);
         }
 
+        Assert.Equal(3, h.SaveCount);
         h.Identity.Received().Set(Arg.Is<AgentIdentity>(i => i.NodeId == NodeId));
-        Assert.True(h.Store.ReceivedCalls().Any(), "Store.LoadAsync was not called");
+        Assert.Contains(h.Logger.Entries, e => e.Level == LogLevel.Critical && e.Message.Contains("not persisted", StringComparison.Ordinal));
     }
 
-    [Theory]
-    [InlineData("[AgentState.Io] Failed to read agent state file")]
-    [InlineData("[AgentState.Untrusted] State file is writable by group or others")]
-    public async Task LoadFailure_DoesNotEnroll(string error)
+    [Fact]
+    public Task LoadFailure_Io_DoesNotEnroll() =>
+        RunLoadFailureAsync("[AgentState.Io] Failed to read agent state file");
+
+    [Fact]
+    public Task LoadFailure_Untrusted_DoesNotEnroll() =>
+        RunLoadFailureAsync("[AgentState.Untrusted] State file is writable by group or others");
+
+    private static async Task RunLoadFailureAsync(string error)
     {
         var h = new Harness();
         h.Store.LoadAsync(Arg.Any<CancellationToken>())
@@ -391,12 +394,131 @@ public sealed class AgentBootstrapServiceTests
 
         var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
-        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
-        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
+        await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
         await sut.StopAsync(CancellationToken.None);
 
         await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
+        Assert.Contains(h.Logger.Entries, e => e.Level == LogLevel.Critical);
+    }
+
+    [Fact]
+    public async Task LoadThrows_LogsCriticalAndDoesNotEnroll()
+    {
+        var h = new Harness();
+        h.Store.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException<Result<StoredAgentState>>(new IOException("disk gone")));
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(0, h.EnrollCalls);
+        await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
+        Assert.Contains(h.Logger.Entries, e => e.Level == LogLevel.Critical);
+    }
+
+    [Fact]
+    public async Task EnrollmentThrows_BacksOffAndRetries_DoesNotFaultHost()
+    {
+        var h = new Harness();
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+        h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException<Result<EnrollmentResult>>(new TaskCanceledException()));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.EnrollCalls >= 1);
+            await Task.Delay(50);
+
+            // EnrollmentRetrySeconds (60) is the backoff: no second attempt before it elapses.
+            h.Time.Advance(TimeSpan.FromSeconds(59));
+            await Task.Delay(50);
+            Assert.Equal(1, h.EnrollCalls);
+
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            await WaitUntilAsync(() => h.EnrollCalls >= 2);
+            Assert.False(sut.ExecuteTask!.IsFaulted);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task RenewalThrows_RetriesAfterRetryInterval_NotBefore()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.ClientState = ConnectionState.Connected;
+        h.Certificates.NeedsRenewal(Arg.Any<int>()).Returns(true);
+        h.Enrollment.RenewCertificateAsync(Arg.Any<CancellationToken>()).Returns(
+            _ => Task.FromException<Result<CertificateRenewalResult>>(new TaskCanceledException()),
+            _ => Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult())));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await h.WaitForRenewalCallsAsync(1);
+
+            for (var i = 0; i < 4; i++)
+            {
+                await h.StepPassAsync();
+            }
+
+            Assert.Equal(1, h.RenewalCalls);
+
+            await h.StepPassAsync();
+            await h.WaitForRenewalCallsAsync(2);
+            Assert.False(sut.ExecuteTask!.IsFaulted);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task DisconnectThrows_AfterRenewal_StillRebuildsOnNextPass()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.ClientState = ConnectionState.Connected;
+        h.Certificates.NeedsRenewal(Arg.Any<int>()).Returns(true);
+        h.Enrollment.RenewCertificateAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult())));
+
+        // The hub still reports Connected on the old certificate, so only the forced rebuild can present the new one.
+        h.Client.DisconnectAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException(new InvalidOperationException("hub busy")));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await h.WaitForRenewalCallsAsync(1);
+            await h.AdvanceUntilAsync(() => h.ConnectCount >= 1, TimeSpan.FromSeconds(60));
+            Assert.False(sut.ExecuteTask!.IsFaulted);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -409,14 +531,15 @@ public sealed class AgentBootstrapServiceTests
 
         var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
-        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
-        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
+        await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
         await sut.StopAsync(CancellationToken.None);
 
         await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         h.Identity.DidNotReceive().Set(Arg.Any<AgentIdentity>());
         await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
         Assert.True(h.Certificates.ReceivedCalls().Any(), "The certificate was not checked");
+        Assert.Contains(h.Logger.Entries, e => e.Level == LogLevel.Critical && e.Message.Contains("[AgentState.CertificateMismatch]", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -429,8 +552,8 @@ public sealed class AgentBootstrapServiceTests
 
         var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
-        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
-        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
+        await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
         await sut.StopAsync(CancellationToken.None);
 
         await h.Store.DidNotReceive().SaveAsync(Arg.Any<AgentIdentity>(), Arg.Any<CancellationToken>());
@@ -541,7 +664,8 @@ public sealed class AgentBootstrapServiceTests
 
     private sealed class CapturingLogger : ILogger<AgentBootstrapService>
     {
-        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+        // Written from the service's thread and read by the test, so a concurrent queue, enumerated as a snapshot.
+        public ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();
 
         public IEnumerable<string> Messages => Entries.Select(e => e.Message);
 
@@ -550,7 +674,7 @@ public sealed class AgentBootstrapServiceTests
         public bool IsEnabled(LogLevel logLevel) => true;
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, formatter(state, exception)));
+            Entries.Enqueue((logLevel, formatter(state, exception)));
     }
 
     /// <summary>Substitutes for every bootstrap dependency, plus a clock and counters the tests wait on.</summary>
@@ -628,6 +752,8 @@ public sealed class AgentBootstrapServiceTests
 
         public int DisconnectCount => Client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IControlPlaneClient.DisconnectAsync));
 
+        public int EnrollCalls => Enrollment.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IEnrollmentService.EnrollAsync));
+
         public int SaveCount => Store.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IAgentStateStore.SaveAsync));
 
         public int RenewalCalls => Enrollment.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IEnrollmentService.RenewCertificateAsync));
@@ -660,5 +786,24 @@ public sealed class AgentBootstrapServiceTests
         }
 
         public Task WaitForRenewalCallsAsync(int count) => WaitUntilAsync(() => RenewalCalls >= count);
+
+        /// <summary>
+        /// Advances the clock in steps until the condition holds. Unlike a single advance, this is not lost when the
+        /// bootstrap has not yet registered its delay timer.
+        /// </summary>
+        public async Task AdvanceUntilAsync(Func<bool> condition, TimeSpan step)
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (!condition())
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("Condition not met within 10 seconds.");
+                }
+
+                Time.Advance(step);
+                await Task.Delay(10);
+            }
+        }
     }
 }

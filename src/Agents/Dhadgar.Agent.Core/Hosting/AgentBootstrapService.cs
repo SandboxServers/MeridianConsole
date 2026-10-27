@@ -4,6 +4,7 @@ using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Contracts.Nodes;
+using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -86,14 +87,16 @@ public sealed class AgentBootstrapService : BackgroundService
         var checkInterval = TimeSpan.FromSeconds(_cp.ConnectionCheckIntervalSeconds);
         var maxConnectDelay = TimeSpan.FromSeconds(_cp.MaxReconnectDelaySeconds);
         var connectDelay = TimeSpan.FromSeconds(_cp.ReconnectDelaySeconds);
+        var rebuildRequired = false;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             var wait = checkInterval;
 
             // Rebuild the connection unless it is Connected. Reconnecting counts: SignalR's automatic reconnect
-            // reuses the certificate it was built with and never gives up (D-S231).
-            if (_client.State != ConnectionState.Connected)
+            // reuses the certificate it was built with and never gives up (D-S231). After a renewal the rebuild
+            // is forced, because a disconnect that threw may have left the hub Connected on the old certificate.
+            if (_client.State != ConnectionState.Connected || rebuildRequired)
             {
                 var connected = await _client.ConnectAsync(stoppingToken);
                 if (!connected.IsSuccess)
@@ -110,6 +113,7 @@ public sealed class AgentBootstrapService : BackgroundService
                 }
 
                 connectDelay = TimeSpan.FromSeconds(_cp.ReconnectDelaySeconds);
+                rebuildRequired = false;
             }
 
             if (_time.GetUtcNow() >= nextRenewalCheck)
@@ -125,14 +129,18 @@ public sealed class AgentBootstrapService : BackgroundService
                 }
                 else if (_certificateStore.NeedsRenewal(_security.CertificateRenewalThresholdDays))
                 {
-                    var renewed = await _enrollment.RenewCertificateAsync(stoppingToken);
+                    var renewed = await GuardAsync<CertificateRenewalResult>(
+                        () => _enrollment.RenewCertificateAsync(stoppingToken),
+                        "Certificate renewal",
+                        stoppingToken);
 
                     // D-S231: the hub pins its certificate per HubConnection, so only a disconnect followed by
                     // ConnectAsync presents the renewed one. The next pass reconnects.
                     if (renewed.IsSuccess)
                     {
                         _logger.LogInformation("Agent certificate renewed; reconnecting with the new certificate");
-                        await _client.DisconnectAsync(stoppingToken);
+                        await DisconnectSafelyAsync(stoppingToken);
+                        rebuildRequired = true;
                     }
                     else
                     {
@@ -159,7 +167,7 @@ public sealed class AgentBootstrapService : BackgroundService
     /// </summary>
     private async Task<AgentIdentity?> ResolveIdentityAsync(CancellationToken stoppingToken)
     {
-        var loaded = await _store.LoadAsync(stoppingToken);
+        var loaded = await GuardAsync<StoredAgentState>(() => _store.LoadAsync(stoppingToken), "Agent state load", stoppingToken);
         if (loaded.IsFailure)
         {
             _logger.LogCritical(
@@ -244,7 +252,10 @@ public sealed class AgentBootstrapService : BackgroundService
                 continue;
             }
 
-            var enrolled = await _enrollment.EnrollAsync(token.Value!, stoppingToken);
+            var enrolled = await GuardAsync<EnrollmentResult>(
+                () => _enrollment.EnrollAsync(token.Value!, stoppingToken),
+                "Enrollment",
+                stoppingToken);
             if (enrolled.IsSuccess)
             {
                 var identity = new AgentIdentity(
@@ -276,7 +287,7 @@ public sealed class AgentBootstrapService : BackgroundService
     {
         for (var attempt = 1; attempt <= SaveAttempts; attempt++)
         {
-            var saved = await _store.SaveAsync(identity, stoppingToken);
+            var saved = await GuardAsync(() => _store.SaveAsync(identity, stoppingToken), "Agent state save", stoppingToken);
             if (saved.IsSuccess)
             {
                 return true;
@@ -318,6 +329,56 @@ public sealed class AgentBootstrapService : BackgroundService
         }
 
         return "none";
+    }
+
+    /// <summary>
+    /// Runs an external call and turns an exception into a failure result, so the existing backoff, retry and
+    /// Critical paths handle it. Without this a timeout or IO fault would fault <c>ExecuteAsync</c> and stop the host.
+    /// Only the exception type is logged: messages can carry paths and URLs.
+    /// </summary>
+    private async Task<Result<T>> GuardAsync<T>(Func<Task<Result<T>>> call, string operation, CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await call();
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogError("{Operation} threw {ExceptionType}; treating it as a failure", operation, ex.GetType().Name);
+            return Result<T>.Failure($"[Bootstrap.Unexpected] {operation} threw {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Non-generic form of <see cref="GuardAsync{T}"/>, for calls that return a plain <see cref="Result"/>.
+    /// </summary>
+    private async Task<Result> GuardAsync(Func<Task<Result>> call, string operation, CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await call();
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogError("{Operation} threw {ExceptionType}; treating it as a failure", operation, ex.GetType().Name);
+            return Result.Failure($"[Bootstrap.Unexpected] {operation} threw {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Disconnects after a renewal. A fault here is not fatal: the renewed certificate is already stored, and the
+    /// loop forces a rebuild on the next pass.
+    /// </summary>
+    private async Task DisconnectSafelyAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await _client.DisconnectAsync(stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Disconnect after renewal threw {ExceptionType}; reconnecting on the next pass", ex.GetType().Name);
+        }
     }
 
     private async Task<bool> DelayAsync(TimeSpan delay, CancellationToken stoppingToken)

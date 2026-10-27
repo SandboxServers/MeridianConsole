@@ -525,11 +525,12 @@ In addition to mTLS, agents may use JWT tokens for:
 - **Audit Trail**: Token-based request attribution
 
 ---
+
 ### Startup sequence (AgentBootstrapService)
 
 `AgentBootstrapService` runs before `HeartbeatService` and owns the connection lifecycle (#101):
 
-1. **Resolve identity.** Load the state file. A load failure, including an untrusted file, logs Critical and stops without enrolling (D-S232). Stored identity connects only when the client certificate's only URI SAN is `AgentCertificateProfile.SpiffeId(nodeId)`; a mismatch logs `[AgentState.CertificateMismatch]` and stops (D-S233). With no stored state, a configured `NodeId`/`OrganizationId` seeds the identity only when the certificate names that node. Otherwise the agent enrolls.
+1. **Resolve identity.** Load the state file. A load failure, including an untrusted file, logs Critical and stops without enrolling (D-S232). Stored identity connects only when the client certificate's only URI SAN is `AgentCertificateProfile.SpiffeId(nodeId)`; a mismatch logs `[AgentState.CertificateMismatch]` and stops (D-S233). With no stored state, a configured `NodeId`/`OrganizationId` seeds the identity only when the certificate names that node. Otherwise the agent enrolls. Recovery for a Critical load failure or `[AgentState.CertificateMismatch]`: stop the agent, remove `agent-state.json` from the state directory (and, for a mismatch, the stale client certificate), set `Agent:EnrollmentToken` to a new token and start the agent.
 2. **Enrollment token.** `IEnrollmentTokenSource` reads `Agent:EnrollmentToken` on every attempt, and the token is never logged. A blank token waits `EnrollmentRetrySeconds` (warning at most hourly). A failed enrollment backs off, doubling from `EnrollmentRetrySeconds` up to 15 minutes.
 3. **Persist.** The identity is saved three times, two seconds apart. If every save fails, the agent runs in memory and logs Critical.
 4. **Connect and renew.** Every `ConnectionCheckIntervalSeconds` (60) the loop calls `ConnectAsync` whenever the state is not `Connected`, including `Reconnecting`. Connect failures back off from `ReconnectDelaySeconds` up to `MaxReconnectDelaySeconds`.

@@ -26,5 +26,11 @@ public sealed class SecurityOptionsTests
 
         Assert.False(valid);
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(SecurityOptions.CertificateRenewalThresholdDays)));
+
+        // The boundary itself is valid, so the range is exactly 1..ValidityDays.
+        var atBoundary = new SecurityOptions { CertificateRenewalThresholdDays = AgentCertificateProfile.ValidityDays };
+        var valid90 = Validator.TryValidateObject(atBoundary, new ValidationContext(atBoundary), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.True(valid90);
     }
 }
