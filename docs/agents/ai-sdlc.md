@@ -33,6 +33,7 @@ Definitions live in `.claude/agents/`.
 | `packet-coder` | Haiku | One packet in one worktree, or one fix pass; commits locally | Push, design, edit files the packet does not name |
 | `packet-reviewer` | Sonnet | Read-only review of a packet, wave or campaign; numbered fix notes | Edit source |
 | `security-advisor` | Sonnet | Read-only security pass on security-review areas | Edit source |
+| `documentation-writer` | Sonnet | Writes and reviews library docs under `docs/` per [docs/meta/](../meta/README.md); doc packets and close-out doc sweeps | Edit source, tests or CI; commit; push |
 | `ops` | Haiku | Worktrees, commits, pushes, PRs, CI reads, merges, board posts | Anything off its list; prune; force |
 | `hands-on` | Opus | Everything, when the user launches it | Get dispatched by the orchestrator |
 
