@@ -219,11 +219,14 @@ public class RenewalLegsTests : IDisposable
     [Fact]
     public async Task RunAsync_WhenCancelledDuringU8_StillRecordsACertificateStoredAfterTheStop()
     {
-        // Ctrl+C while U8 polls: the poll is cancelled, and the stop in the finally must still complete (CancellationToken.None),
-        // so the certificate the agent stores while it stops is recorded before the run ends.
+        // Security N1, U8 side: Ctrl+C while U8 polls. The poll is cancelled, and the stop in the finally must still complete
+        // (CancellationToken.None), so the certificate the agent stores while it stops is recorded before the run ends.
+        // OnStop also runs at U6's stop, so the certificate in My when U8 starts is captured: the stop must replace it.
         using var cts = new CancellationTokenSource();
+        string? inMyAtU8Start = null;
         _world.OnRestart = w =>
         {
+            inMyAtU8Start = w.My.Count == 1 ? w.My[0].Sha1Thumbprint : null;
             w.Rows.Add(new CertRow(Guid.NewGuid(), "0000000000000000", false));
             cts.Cancel();
         };
@@ -232,11 +235,37 @@ public class RenewalLegsTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => _world.Legs().RunAsync(new Dictionary<string, object?>(), cts.Token));
 
-        var c3Sha1 = Assert.Single(_world.My).Sha1Thumbprint;
+        // The same certificate still alone in My means U8's stop was aborted before the agent stored its certificate.
+        var stored = Assert.Single(_world.My).Sha1Thumbprint;
+        Assert.NotNull(inMyAtU8Start);
+        Assert.NotEqual(inMyAtU8Start, stored);
         var loaded = CleanupManifest.Load(_paths.Manifest);
         Assert.True(loaded.IsSuccess, loaded.Error);
         Assert.Contains(loaded.Value, entry => entry is CertificateEntry certificate
-            && string.Equals(certificate.ThumbprintSha1, c3Sha1, StringComparison.OrdinalIgnoreCase));
+            && string.Equals(certificate.ThumbprintSha1, stored, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenCancelledDuringU6_StillRecordsACertificateStoredAfterTheStop()
+    {
+        // Security N1, U6 side: Ctrl+C while U6 polls. The agent does not renew on start, so the first poll is unmet and its
+        // delay throws. The stop in U6's finally must still complete (CancellationToken.None), so the certificate the agent
+        // stores while it stops replaces C1 in My and is recorded before the run ends.
+        using var cts = new CancellationTokenSource();
+        _world.OnFirstStart = _ => cts.Cancel();
+        _world.OnStop = w => w.AgentRenewsFromGrace();
+        var c1Sha1 = _world.C1Store!.Sha1Thumbprint;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => _world.Legs().RunAsync(new Dictionary<string, object?>(), cts.Token));
+
+        // C1 still alone in My means U6's stop was aborted before the agent stored its certificate.
+        var stored = Assert.Single(_world.My).Sha1Thumbprint;
+        Assert.NotEqual(c1Sha1, stored);
+        var loaded = CleanupManifest.Load(_paths.Manifest);
+        Assert.True(loaded.IsSuccess, loaded.Error);
+        Assert.Contains(loaded.Value, entry => entry is CertificateEntry certificate
+            && string.Equals(certificate.ThumbprintSha1, stored, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
