@@ -1,3 +1,5 @@
+using Dhadgar.Shared.Results;
+
 namespace Dhadgar.Agent.Windows.Uat.Msi;
 
 /// <summary>
@@ -6,9 +8,12 @@ namespace Dhadgar.Agent.Windows.Uat.Msi;
 /// </summary>
 internal interface IMsiProducts
 {
-    /// <summary>The product codes (<c>{GUID}</c>) installed under this upgrade code. Empty when none is installed.</summary>
-    IReadOnlyList<string> RelatedProducts(string upgradeCode);
+    /// <summary>
+    /// The product codes (<c>{GUID}</c>) installed under this upgrade code. Empty when none is installed. A failure means
+    /// the installer could not be asked, so the caller cannot prove that no product is installed.
+    /// </summary>
+    Result<IReadOnlyList<string>> RelatedProducts(string upgradeCode);
 
-    /// <summary>The <c>VersionString</c> of an installed product, or <c>null</c> when the product is unknown.</summary>
-    string? ProductVersion(string productCode);
+    /// <summary>The <c>VersionString</c> of an installed product. A failure when the product is unknown or unreadable.</summary>
+    Result<string> ProductVersion(string productCode);
 }

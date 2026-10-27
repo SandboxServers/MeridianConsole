@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Windows.Uat.Agent;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
@@ -20,6 +21,7 @@ namespace Dhadgar.Agent.Windows.Uat.Scenarios;
 /// <param name="Registry">The HKLM agent values by name (<see cref="MsiLegs.RegistryValueNames"/>); null when absent.</param>
 /// <param name="ExecutableExists">True when <c>&lt;InstallPath&gt;\Dhadgar.Agent.Windows.exe</c> exists.</param>
 /// <param name="RelatedProducts">The product codes that carry the agent's UpgradeCode.</param>
+/// <param name="RelatedProductsError">Set when the installer could not list the products; the check then fails.</param>
 internal sealed record MsiInstallFacts(
     int ExitCode,
     string? StartType,
@@ -27,7 +29,8 @@ internal sealed record MsiInstallFacts(
     string? ServiceState,
     IReadOnlyDictionary<string, string?> Registry,
     bool ExecutableExists,
-    IReadOnlyList<string> RelatedProducts);
+    IReadOnlyList<string> RelatedProducts,
+    string? RelatedProductsError = null);
 
 /// <summary>What U11b read from the machine after the MSI uninstall.</summary>
 /// <param name="ExitCode">The <c>msiexec /x</c> exit code.</param>
@@ -39,6 +42,7 @@ internal sealed record MsiInstallFacts(
 /// <param name="CaStoreHasCertificates">True when the <c>MeridianConsoleAgent</c> store still holds certificates (residue).</param>
 /// <param name="StateDirectoryExists">True when <c>%ProgramData%\Meridian Console\Agent</c> still exists (residue).</param>
 /// <param name="EventSourceExists">True when the event source is still registered (residue).</param>
+/// <param name="RelatedProductsError">Set when the installer could not list the products; the check then fails, since absence is unproven.</param>
 internal sealed record MsiUninstallFacts(
     int ExitCode,
     bool ServiceExists,
@@ -48,7 +52,8 @@ internal sealed record MsiUninstallFacts(
     IReadOnlyList<StoreCert> AgentCertificatesInMy,
     bool CaStoreHasCertificates,
     bool StateDirectoryExists,
-    bool EventSourceExists);
+    bool EventSourceExists,
+    string? RelatedProductsError = null);
 
 /// <summary>
 /// The MSI leg (P23, D-S223). Its manifest entries are recorded before U11a's install, so the cleanup engine can
@@ -183,6 +188,11 @@ internal static class MsiLegs
             return Result.Failure($"{AgentProcess.ExecutableName} is not in the install folder");
         }
 
+        if (facts.RelatedProductsError is not null)
+        {
+            return Result.Failure($"related products unreadable: {facts.RelatedProductsError}");
+        }
+
         if (facts.RelatedProducts.Count != 1)
         {
             return Result.Failure($"expected one related product for the agent UpgradeCode, found {facts.RelatedProducts.Count}");
@@ -206,6 +216,11 @@ internal static class MsiLegs
         if (facts.ServiceExists)
         {
             return Result<IReadOnlyList<string>>.Failure($"service {AgentWindowsFacts.ServiceName} still exists after uninstall");
+        }
+
+        if (facts.RelatedProductsError is not null)
+        {
+            return Result<IReadOnlyList<string>>.Failure($"related products unreadable, absence unproven: {facts.RelatedProductsError}");
         }
 
         if (facts.RelatedProducts.Count > 0)
@@ -299,6 +314,7 @@ internal static class MsiLegs
         msi["installExitCode"] = installed.Value.ExitCode;
         msi["installCommandLine"] = installed.Value.LoggedCommandLine;
         msi["installWarnings"] = installed.Value.Warnings;
+        EvidenceWarnings(evidence).AddRange(installed.Value.Warnings);
 
         var deadline = DateTime.UtcNow + window;
         Result check;
@@ -309,7 +325,10 @@ internal static class MsiLegs
             if (check.IsSuccess || DateTime.UtcNow >= deadline)
             {
                 msi["productCode"] = facts.RelatedProducts.FirstOrDefault();
-                msi["productVersion"] = facts.RelatedProducts.Count == 1 ? products.ProductVersion(facts.RelatedProducts[0]) : null;
+                msi["productVersion"] = facts.RelatedProducts.Count == 1
+                    && products.ProductVersion(facts.RelatedProducts[0]) is { IsSuccess: true } version
+                    ? version.Value
+                    : null;
                 break;
             }
 
@@ -354,6 +373,7 @@ internal static class MsiLegs
         msi["uninstallExitCode"] = uninstalled.Value.ExitCode;
         msi["uninstallCommandLine"] = uninstalled.Value.LoggedCommandLine;
         msi["uninstallWarnings"] = uninstalled.Value.Warnings;
+        EvidenceWarnings(evidence).AddRange(uninstalled.Value.Warnings);
 
         var facts = await ReadUninstallFactsAsync(uninstalled.Value.ExitCode, service, products, store);
         var checkResult = EvaluateUninstall(facts);
@@ -364,8 +384,62 @@ internal static class MsiLegs
         }
 
         msi["residue"] = checkResult.Value.ToList();
+        EvidenceWarnings(evidence).AddRange(checkResult.Value);
         evidence[UninstallStepName] = "pass";
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Custody after a failed U11a (P23 security review, N2). The MSI starts the LocalSystem service and the agent may
+    /// have enrolled, so a client certificate may now sit in <c>LocalMachine\My</c>. <see cref="AgentLegs"/> never runs
+    /// on this path, so nothing else records it: this stops the service (ignoring a failure, which becomes a warning)
+    /// and appends a <c>certificate</c> entry for every agent certificate in My, so cleanup removes it and its key.
+    /// Duplicate entries are harmless because the certificate removal is idempotent.
+    /// </summary>
+    internal static async Task RecordCustodyAfterFailedInstallAsync(
+        IServiceControl service,
+        IStoreInspector store,
+        CleanupManifest manifest,
+        Dictionary<string, object?> evidence)
+    {
+        var warnings = EvidenceWarnings(evidence);
+        var stopped = await service.StopAsync(CancellationToken.None);
+        if (stopped.IsFailure)
+        {
+            warnings.Add($"agent stop after failed install: {stopped.Error}");
+        }
+
+        try
+        {
+            foreach (var certificate in store.AgentCertificatesInMy())
+            {
+                foreach (var entry in AgentLegs.CertificateEntries(certificate))
+                {
+                    var appended = manifest.Append(entry);
+                    if (appended.IsFailure)
+                    {
+                        warnings.Add($"certificate custody: {appended.Error}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is CryptographicException or UnauthorizedAccessException or IOException)
+        {
+            warnings.Add($"certificate custody: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// The evidence <c>warnings</c> list, created when the first step needs it. <c>AgentLegs.RunStepsAsync</c> reuses
+    /// the same list, so an install warning and the residue survive into the results.
+    /// </summary>
+    internal static List<string> EvidenceWarnings(Dictionary<string, object?> evidence)
+    {
+        var list = evidence.TryGetValue("warnings", out var existing) && existing is List<string> warnings
+            ? warnings
+            : new List<string>();
+        evidence["warnings"] = list;
+        return list;
     }
 
     private static async Task<MsiInstallFacts> ReadInstallFactsAsync(int exitCode, IServiceControl service, IMsiProducts products)
@@ -375,6 +449,7 @@ internal static class MsiLegs
         var registry = ReadAgentRegistry();
         var installPath = registry.GetValueOrDefault("InstallPath");
         var exe = string.IsNullOrEmpty(installPath) ? null : Path.Combine(installPath, AgentProcess.ExecutableName);
+        var related = products.RelatedProducts(AgentWindowsFacts.MsiUpgradeCode);
         return new MsiInstallFacts(
             exitCode,
             config.IsSuccess ? config.Value.StartType : null,
@@ -382,7 +457,8 @@ internal static class MsiLegs
             state.IsSuccess ? state.Value : null,
             registry,
             exe is not null && File.Exists(exe),
-            products.RelatedProducts(AgentWindowsFacts.MsiUpgradeCode));
+            related.IsSuccess ? related.Value : [],
+            related.IsFailure ? related.Error : null);
     }
 
     private static async Task<MsiUninstallFacts> ReadUninstallFactsAsync(
@@ -392,16 +468,18 @@ internal static class MsiLegs
         var serviceExists = state.IsSuccess || !state.Error!.Contains(ServiceMissingText, StringComparison.OrdinalIgnoreCase);
         var registry = ReadAgentRegistry();
         var remaining = RegistryValueNames.Where(name => !string.IsNullOrEmpty(registry.GetValueOrDefault(name))).ToList();
+        var related = products.RelatedProducts(AgentWindowsFacts.MsiUpgradeCode);
         return new MsiUninstallFacts(
             exitCode,
             serviceExists,
-            products.RelatedProducts(AgentWindowsFacts.MsiUpgradeCode),
+            related.IsSuccess ? related.Value : [],
             Directory.Exists(AgentDirectories.MachineProgramFilesAgentDirectory),
             remaining,
             store.AgentCertificatesInMy(),
             CaStoreHasCertificates(),
             Directory.Exists(AgentDirectories.MachineAgentDirectory),
-            EventSourceExists(AgentWindowsFacts.EventLogSourceName));
+            EventSourceExists(AgentWindowsFacts.EventLogSourceName),
+            related.IsFailure ? related.Error : null);
     }
 
     private static IReadOnlyDictionary<string, string?> ReadAgentRegistry()

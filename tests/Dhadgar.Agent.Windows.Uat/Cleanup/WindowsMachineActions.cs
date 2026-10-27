@@ -32,18 +32,31 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     private const int MsiUnknownProduct = 1605;
     private readonly IMsiProducts _msiProducts;
     private readonly Func<IReadOnlyList<string>, Result<CommandOutput>> _msiexec;
+    private readonly string? _msiCleanupLogPath;
 
-    /// <summary>Creates the machine actions over the real Windows Installer database and <c>msiexec.exe</c>.</summary>
-    public WindowsMachineActions()
-        : this(new MsiProducts(), args => CommandRunner.RunAsync("msiexec.exe", args, MsiexecTimeout).GetAwaiter().GetResult())
+    /// <summary>
+    /// Creates the machine actions over the real Windows Installer database and <c>msiexec.exe</c>.
+    /// </summary>
+    /// <param name="msiCleanupLogPath">
+    /// Where the cleanup <c>msiexec /x</c> writes its verbose log (<c>/l*v</c>); null writes none.
+    /// </param>
+    public WindowsMachineActions(string? msiCleanupLogPath = null)
+        : this(
+            new MsiProducts(),
+            args => CommandRunner.RunAsync("msiexec.exe", args, MsiexecTimeout).GetAwaiter().GetResult(),
+            msiCleanupLogPath)
     {
     }
 
     /// <summary>Creates the machine actions over the given installer seams (tests pass fakes).</summary>
-    internal WindowsMachineActions(IMsiProducts msiProducts, Func<IReadOnlyList<string>, Result<CommandOutput>> msiexec)
+    internal WindowsMachineActions(
+        IMsiProducts msiProducts,
+        Func<IReadOnlyList<string>, Result<CommandOutput>> msiexec,
+        string? msiCleanupLogPath = null)
     {
         _msiProducts = msiProducts;
         _msiexec = msiexec;
+        _msiCleanupLogPath = msiCleanupLogPath;
     }
 
     /// <inheritdoc />
@@ -516,21 +529,37 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     }
 
     /// <inheritdoc />
-    public Result UninstallMsiProduct(string upgradeCode) => UninstallRelatedProducts(_msiProducts, upgradeCode, _msiexec);
+    public Result UninstallMsiProduct(string upgradeCode) =>
+        UninstallRelatedProducts(_msiProducts, upgradeCode, _msiexec, _msiCleanupLogPath);
 
     /// <summary>
     /// Runs <c>msiexec /x</c> for each product the upgrade code lists. Exit 0, 3010 (reboot requested) and 1605
-    /// (unknown product, already gone) are success. Every product is attempted; the failures are joined.
+    /// (unknown product, already gone) are success. Every product is attempted; the failures are joined. When the
+    /// installer cannot list the products, absence is unproven and the result is a failure, never a success.
     /// </summary>
     internal static Result UninstallRelatedProducts(
         IMsiProducts products,
         string upgradeCode,
-        Func<IReadOnlyList<string>, Result<CommandOutput>> msiexec)
+        Func<IReadOnlyList<string>, Result<CommandOutput>> msiexec,
+        string? logPath = null)
     {
-        var failures = new List<string>();
-        foreach (var product in products.RelatedProducts(upgradeCode))
+        var related = products.RelatedProducts(upgradeCode);
+        if (related.IsFailure)
         {
-            var output = msiexec(["/x", product, "/qn", "/norestart"]);
+            return Result.Failure($"related products unreadable, cannot prove the MSI is gone: {related.Error}");
+        }
+
+        var failures = new List<string>();
+        foreach (var product in related.Value)
+        {
+            var args = new List<string> { "/x", product, "/qn", "/norestart" };
+            if (logPath is not null)
+            {
+                args.Add("/l*v");
+                args.Add(logPath);
+            }
+
+            var output = msiexec(args);
             if (output.IsFailure)
             {
                 failures.Add(output.Error!);

@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Dhadgar.Agent.Windows.Installation;
 using Dhadgar.Agent.Windows.Uat;
 using Xunit;
 
@@ -47,9 +48,11 @@ public sealed class MsiFactsTests
     [Fact]
     public void ControlPlaneEndpointValueName_EqualsTheRegistryValueTheInstallerWrites()
     {
-        // The agent reads AgentRegistry.ControlPlaneEndpointValueName; this is the installer side of that name.
+        // Both sides are pinned: the agent's AgentRegistry constant (the value it reads), the driver's copy, and the
+        // installer's RegistryValue (the value the MSI writes). A rename on any one of them fails this test.
         var names = LoadPackage().Descendants(Wix + "RegistryValue").Select(v => (string?)v.Attribute("Name")).ToHashSet(StringComparer.Ordinal);
 
+        Assert.Equal(AgentRegistry.ControlPlaneEndpointValueName, AgentWindowsFacts.ControlPlaneEndpointValueName);
         Assert.Contains(AgentWindowsFacts.ControlPlaneEndpointValueName, names);
     }
 }

@@ -85,7 +85,7 @@ Cleanup removes the containers and processes. A passing run exits 0 with `cleanu
 `-Mode Process -AcceptMachineChanges` runs the stack, then the real published agent as a child process
 of the driver. It is machine-changing: it writes the enrollment token to HKLM, creates the agent's
 machine certificate in `LocalMachine\My` and the `MeridianConsoleAgent` store, and an event source.
-Run it yourself from an elevated PowerShell 7.4+ shell. Automated coders never run it.
+Run it from an elevated PowerShell 7.4+ shell: you, or the UAT runner agent under D-S239. Coders never run it.
 
 | Step | What it checks | Pass condition |
 | --- | --- | --- |
@@ -157,8 +157,8 @@ password found is a warning only, and the file is rewritten too. Last, U9 delete
 `-Mode Msi -AcceptMachineChanges` installs `MeridianConsoleAgent.msi`, proves the installed `DhadgarAgent`
 service enrolls and restarts, then uninstalls it and checks what is left. The script publishes the agent without `-o`
 (the MSI harvests `bin\Release\net10.0\win-x64\publish`), builds the `.wixproj` in Release and copies the MSI to
-`<runDir>\msi\`. The driver never runs `msiexec` for anything but U11a and U11b. Run it yourself from an elevated
-PowerShell 7.4+ shell; automated coders never run it.
+`<runDir>\msi\`. The driver never runs `msiexec` for anything but U11a and U11b. Run it from an elevated PowerShell 7.4+ shell: you, or the UAT runner
+agent under D-S239. Coders never run it.
 
 - **Step order:** U0 → U10 (TLS leaf and decoy only, no service) → U1 → **U11a** → U3 → U4 → U5-U8 (skipped) → **U11b** → U9.
 - **Why U5-U8 are skipped:** renewal and grace are properties of the agent code, not of how it is installed. Process
@@ -170,7 +170,7 @@ PowerShell 7.4+ shell; automated coders never run it.
   The manifest holds an `msiProduct` entry before msiexec runs, so a crash mid-install is still undone.
 - **U3 and U4** run against the installed service exactly as in service mode (first start, then restart with T2).
 - **U11b "MSI uninstall":** removes the product by product code. Pass: exit 0, the service and the install folder
-  are gone, and the product is no longer registered.
+  are gone, the HKLM install values (`InstallPath`, `Version`, `DataPath`, `ServiceInstalled`, `ControlPlaneEndpoint`, `EnrollmentToken`) are gone, and the product is no longer registered.
 - **Residue (warnings, not failures):** the uninstall does not remove what the agent itself created at run time: its
   certificates in `LocalMachine\My`, the `MeridianConsoleAgent` store, `%ProgramData%\Meridian Console\Agent`
   and the event source. U11b lists them in `results.json` `msi.residue`, and the final cleanup removes them.

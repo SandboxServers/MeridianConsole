@@ -282,8 +282,9 @@ public class MsiRunTests : IDisposable
 
     private sealed class NoProducts : IMsiProducts
     {
-        public IReadOnlyList<string> RelatedProducts(string upgradeCode) => [];
+        public Result<IReadOnlyList<string>> RelatedProducts(string upgradeCode) =>
+            Result<IReadOnlyList<string>>.Success([]);
 
-        public string? ProductVersion(string productCode) => null;
+        public Result<string> ProductVersion(string productCode) => Result<string>.Failure("not installed");
     }
 }

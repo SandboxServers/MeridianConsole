@@ -14,6 +14,7 @@ public class MsiProductCleanupTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-msi-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
+    private const string LogPath = @"C:\run-1\logs\msi-cleanup.log";
 
     public MsiProductCleanupTests()
     {
@@ -83,12 +84,47 @@ public class MsiProductCleanupTests : IDisposable
         {
             calls.Add(args);
             return Result<CommandOutput>.Success(new CommandOutput(exitCodes.Dequeue(), string.Empty, string.Empty));
-        });
+        }, LogPath);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, calls.Count);
+        Assert.Equal(["/x", "{11111111-1111-1111-1111-111111111111}", "/qn", "/norestart", "/l*v", LogPath], calls[0]);
+        Assert.Equal(["/x", "{22222222-2222-2222-2222-222222222222}", "/qn", "/norestart", "/l*v", LogPath], calls[1]);
+    }
+
+    [Fact]
+    public void UninstallRelatedProducts_NoLogPath_PassesNoLogSwitch()
+    {
+        var products = new FakeMsiProducts(["{11111111-1111-1111-1111-111111111111}"]);
+        var calls = new List<IReadOnlyList<string>>();
+
+        var result = WindowsMachineActions.UninstallRelatedProducts(products, AgentWindowsFacts.MsiUpgradeCode, args =>
+        {
+            calls.Add(args);
+            return Result<CommandOutput>.Success(new CommandOutput(0, string.Empty, string.Empty));
+        }, null);
+
+        Assert.True(result.IsSuccess);
         Assert.Equal(["/x", "{11111111-1111-1111-1111-111111111111}", "/qn", "/norestart"], calls[0]);
-        Assert.Equal(["/x", "{22222222-2222-2222-2222-222222222222}", "/qn", "/norestart"], calls[1]);
+    }
+
+    [Fact]
+    public void UninstallRelatedProducts_EnumerationFails_IsAFailureAndRunsNoMsiexec()
+    {
+        // The installer could not list the products, so absence is unproven: a success here would let cleanup count
+        // msiProduct as undone while the product is still installed.
+        var products = new FakeMsiProducts([], "MsiEnumRelatedProductsW returned 5");
+        var calls = 0;
+
+        var result = WindowsMachineActions.UninstallRelatedProducts(products, AgentWindowsFacts.MsiUpgradeCode, _ =>
+        {
+            calls++;
+            return Result<CommandOutput>.Success(new CommandOutput(0, string.Empty, string.Empty));
+        }, LogPath);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("unreadable", result.Error, StringComparison.Ordinal);
+        Assert.Equal(0, calls);
     }
 
     [Fact]
@@ -118,11 +154,14 @@ public class MsiProductCleanupTests : IDisposable
         Assert.Contains("1603", result.Error, StringComparison.Ordinal);
     }
 
-    /// <summary>Fake installer database: a fixed list of related products.</summary>
-    private sealed class FakeMsiProducts(IReadOnlyList<string> related) : IMsiProducts
+    /// <summary>Fake installer database: a fixed list of related products, or an enumeration failure.</summary>
+    private sealed class FakeMsiProducts(IReadOnlyList<string> related, string? enumerationError = null) : IMsiProducts
     {
-        public IReadOnlyList<string> RelatedProducts(string upgradeCode) => related;
+        public Result<IReadOnlyList<string>> RelatedProducts(string upgradeCode) =>
+            enumerationError is null
+                ? Result<IReadOnlyList<string>>.Success(related)
+                : Result<IReadOnlyList<string>>.Failure(enumerationError);
 
-        public string? ProductVersion(string productCode) => "1.0.0";
+        public Result<string> ProductVersion(string productCode) => Result<string>.Success("1.0.0");
     }
 }

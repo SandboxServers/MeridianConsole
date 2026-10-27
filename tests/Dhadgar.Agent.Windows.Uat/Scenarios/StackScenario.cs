@@ -326,10 +326,26 @@ internal sealed class StackScenario : IUatScenario
         var control = new ServiceControl(context.Paths, context.Manifest, context.Redactor);
         var products = new MsiProducts();
         var installer = new MsiInstaller(context.Paths, context.Redactor);
-        var installed = await MsiLegs.PrepareAndInstallAsync(
-            () => MsiLegs.AppendPreInstallEntries(context.Manifest, msiPath.Value),
-            installer, control, products, msiPath.Value, minted.Value, gatewayBase,
-            MsiInstallWindow, TimeSpan.FromSeconds(2), evidence, ct);
+        // A failed install (or a cancelled one) may already have enrolled the agent; its certificate is recorded here,
+        // since AgentLegs does not run on this path. A successful install keeps the service running for the legs.
+        var installSucceeded = false;
+        Result installed;
+        try
+        {
+            installed = await MsiLegs.PrepareAndInstallAsync(
+                () => MsiLegs.AppendPreInstallEntries(context.Manifest, msiPath.Value),
+                installer, control, products, msiPath.Value, minted.Value, gatewayBase,
+                MsiInstallWindow, TimeSpan.FromSeconds(2), evidence, ct);
+            installSucceeded = installed.IsSuccess;
+        }
+        finally
+        {
+            if (!installSucceeded)
+            {
+                await MsiLegs.RecordCustodyAfterFailedInstallAsync(control, new StoreInspector(), context.Manifest, evidence);
+            }
+        }
+
         if (installed.IsFailure)
         {
             return installed;

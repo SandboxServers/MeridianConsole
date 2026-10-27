@@ -112,6 +112,23 @@ public class MsiInstallerTests : IDisposable
     }
 
     [Fact]
+    public void Install_ExitCode1603_WithALockedLog_FailsWithoutThrowing()
+    {
+        // A log that another process holds open (no sharing) must not throw out of Install; the failure still returns.
+        Directory.CreateDirectory(_paths.Logs);
+        using var locked = new FileStream(
+            Path.Combine(_paths.Logs, "msi-install.log"), FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+        locked.Write(Encoding.Unicode.GetBytes("Error 1721 Return value 3\r\n"));
+        locked.Flush();
+
+        var result = Installer(1603).Install(MsiPath, Minted, _endpoint);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("1603", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(Token, result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Install_RunnerFailure_IsAFailureWithoutTheToken()
     {
         var installer = new MsiInstaller(_paths, _redactor, args =>

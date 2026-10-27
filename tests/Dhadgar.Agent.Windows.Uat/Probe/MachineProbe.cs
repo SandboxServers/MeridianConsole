@@ -78,7 +78,13 @@ internal sealed class MachineProbe : IMachineProbe
             items.Add($"directory:{AgentDirectories.MachineProgramFilesAgentDirectory}");
         }
 
-        if (new MsiProducts().RelatedProducts(AgentWindowsFacts.MsiUpgradeCode).Count > 0)
+        // An installer that cannot be asked leaves the product unproven, so the footprint says so rather than "none".
+        var related = new MsiProducts().RelatedProducts(AgentWindowsFacts.MsiUpgradeCode);
+        if (related.IsFailure)
+        {
+            items.Add("msiProduct:unreadable");
+        }
+        else if (related.Value.Count > 0)
         {
             items.Add($"msiProduct:{AgentWindowsFacts.MsiUpgradeCode}");
         }

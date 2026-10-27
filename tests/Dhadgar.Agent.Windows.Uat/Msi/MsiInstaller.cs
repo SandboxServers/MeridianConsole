@@ -156,14 +156,26 @@ internal sealed class MsiInstaller : IMsiInstaller
             return [];
         }
 
+        // A log that is still locked or unreadable gives the lines read so far; the failure is still returned, never thrown.
         var lines = new List<string>();
-        using var reader = new StreamReader(logPath, detectEncodingFromByteOrderMarks: true);
-        while (reader.ReadLine() is { } line)
+        try
         {
-            if (line.Contains("Return value 3", StringComparison.Ordinal) || line.Contains("Error", StringComparison.Ordinal))
+            using var reader = new StreamReader(logPath, detectEncodingFromByteOrderMarks: true);
+            while (reader.ReadLine() is { } line)
             {
-                lines.Add(_redactor.Redact(line));
+                if (line.Contains("Return value 3", StringComparison.Ordinal) || line.Contains("Error", StringComparison.Ordinal))
+                {
+                    lines.Add(_redactor.Redact(line));
+                }
             }
+        }
+        catch (IOException)
+        {
+            // The lines read so far are kept.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The lines read so far are kept.
         }
 
         return lines.TakeLast(LogTailLines).ToList();

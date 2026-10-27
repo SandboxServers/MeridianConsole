@@ -209,15 +209,19 @@ internal sealed class AgentLegs
             }
 
             return await U4RestartAsync(state, token);
-        }, ct);
+        }, ct, stopAgentAtEnd: false);
 
     private async Task<Result> RunStepsAsync(
         Dictionary<string, object?> evidence,
         MintedToken? installToken,
         Func<LegState, CancellationToken, Task<Result>> steps,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool stopAgentAtEnd = true)
     {
-        var warnings = new List<string>();
+        // Reuse a list an earlier step already wrote (the MSI install warnings), so none is lost.
+        var warnings = evidence.TryGetValue("warnings", out var existing) && existing is List<string> list
+            ? list
+            : new List<string>();
         evidence["warnings"] = warnings;
         var state = new LegState(evidence) { Token1 = installToken };
         try
@@ -226,10 +230,14 @@ internal sealed class AgentLegs
         }
         finally
         {
-            var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
-            if (stopped.IsFailure)
+            // The MSI leg (RunMsiAsync) leaves the service running so U11b uninstalls a running service.
+            if (stopAgentAtEnd)
             {
-                warnings.Add($"agent stop: {stopped.Error}");
+                var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
+                if (stopped.IsFailure)
+                {
+                    warnings.Add($"agent stop: {stopped.Error}");
+                }
             }
 
             // The recovery warning is read from agent.log only where the host has a console log (process mode).

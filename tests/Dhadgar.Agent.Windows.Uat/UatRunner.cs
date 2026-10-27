@@ -38,7 +38,11 @@ internal static class UatRunner
     public static Task<int> RunAsync(UatArgs args, CancellationToken ct)
     {
         var launchedByAgent = Environment.GetEnvironmentVariable("CLAUDECODE") is not null;
-        return RunWithAsync(args, new WindowsMachineActions(), new MachineProbe(), launchedByAgent, new GitWorkTree(), ScenarioRegistry, ct);
+
+        // The cleanup msiexec /x writes its verbose log next to the run's other logs (spec step 8, msi-cleanup.log).
+        var paths = new RunPaths(args.RepoRoot, args.RunId);
+        var actions = new WindowsMachineActions(Path.Combine(paths.Logs, "msi-cleanup.log"));
+        return RunWithAsync(args, actions, new MachineProbe(), launchedByAgent, new GitWorkTree(), ScenarioRegistry, ct);
     }
 
     /// <summary>Runs a verb with explicit machine seams, so the guards and cleanup can be tested with fakes.</summary>

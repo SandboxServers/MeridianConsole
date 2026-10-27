@@ -120,6 +120,22 @@ try {
             Invoke-DotNet -Arguments @('build', $gatewayProject, '-c', 'Release')
         }
         if ($verb -eq 'run' -and $Mode -eq 'Msi') {
+            # Stale output from an earlier build or branch is git-ignored and would be harvested into the MSI, so the
+            # publish folder and the installer's Release output are deleted first. Both are checked to be under the repo.
+            foreach ($stale in @(
+                    (Join-Path (Split-Path -Parent $agentProject) 'bin\Release\net10.0\win-x64\publish'),
+                    (Join-Path (Split-Path -Parent $installerProject) 'bin\Release'))) {
+                $resolvedStale = [System.IO.Path]::GetFullPath($stale)
+                $repoPrefix = $repo.TrimEnd('\') + '\'
+                if (-not $resolvedStale.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    [Console]::Error.WriteLine("Refusing to delete $resolvedStale: it is not under $repo.")
+                    exit 4
+                }
+                if (Test-Path -LiteralPath $resolvedStale) {
+                    Remove-Item -LiteralPath $resolvedStale -Recurse -Force
+                }
+            }
+
             # The MSI harvests the default publish folder (bin\Release\net10.0\win-x64\publish), so no -o (P23).
             Invoke-DotNet -Arguments @('publish', $agentProject, '-c', 'Release', '-r', 'win-x64')
             Invoke-DotNet -Arguments @('build', $installerProject, '-c', 'Release')
@@ -132,15 +148,14 @@ try {
 
     if ($verb -eq 'run' -and $Mode -eq 'Msi') {
         # Copy the freshly built MSI into the run folder; the driver installs only from <runDir>\msi.
-        $installerBin = Join-Path (Split-Path -Parent $installerProject) 'bin'
-        $builtMsi = Get-ChildItem -LiteralPath $installerBin -Filter 'MeridianConsoleAgent.msi' -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '[\\/]Release[\\/]' } |
-            Sort-Object LastWriteTimeUtc -Descending |
-            Select-Object -First 1
-        if (-not $builtMsi) {
-            [Console]::Error.WriteLine("MeridianConsoleAgent.msi not found under $installerBin. Run without -NoBuild.")
+        # Exactly one candidate is accepted: more than one means stale output, which must not be installed (P23 review).
+        $installerRelease = Join-Path (Split-Path -Parent $installerProject) 'bin\Release'
+        $msiCandidates = @(Get-ChildItem -LiteralPath $installerRelease -Filter 'MeridianConsoleAgent.msi' -Recurse -File -ErrorAction SilentlyContinue)
+        if ($msiCandidates.Count -ne 1) {
+            [Console]::Error.WriteLine("Expected one MeridianConsoleAgent.msi under $installerRelease, found $($msiCandidates.Count). Run without -NoBuild.")
             exit 4
         }
+        $builtMsi = $msiCandidates[0]
         $msiDir = Join-Path $runDir 'msi'
         [System.IO.Directory]::CreateDirectory($msiDir) | Out-Null
         Copy-Item -LiteralPath $builtMsi.FullName -Destination (Join-Path $msiDir 'MeridianConsoleAgent.msi')
