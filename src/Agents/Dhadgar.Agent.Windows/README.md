@@ -1663,6 +1663,15 @@ dotnet test tests/Dhadgar.Agent.Windows.Tests --filter "Category!=Integration"
 
 ---
 
+### Verifying on Windows
+
+Unit tests cannot reach HKLM, the machine certificate stores or the service manager, so the agent is also
+checked on a real Windows machine by the UAT driver in `tests/Dhadgar.Agent.Windows.Uat`. Process mode
+(`scripts\uat\Invoke-AgentWindowsUat.ps1 -Mode Process -AcceptMachineChanges`, run by a person from an
+elevated shell) enrolls the published agent, checks its certificate store layout and state file, restarts it
+and confirms the second start does not consume a new enrollment token. It then cleans up after itself. The
+steps, the pass conditions and how to read the results are in `scripts/uat/README.md`.
+
 ## Related Documentation
 
 ### Repository Documentation

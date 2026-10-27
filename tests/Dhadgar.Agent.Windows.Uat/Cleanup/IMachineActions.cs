@@ -46,6 +46,12 @@ internal interface IMachineActions
     /// <summary>Deletes a registry key tree.</summary>
     Result DeleteRegistryKey(string hive, string path);
 
+    /// <summary>
+    /// Deletes the key only when it has no values and no subkeys. Missing counts as success; a non-empty key is a
+    /// failure and is left in place (D-S238).
+    /// </summary>
+    Result DeleteEmptyRegistryKey(string hive, string path);
+
     /// <summary>Deletes a registry value.</summary>
     Result DeleteRegistryValue(string path, string name);
 

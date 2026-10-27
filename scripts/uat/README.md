@@ -4,9 +4,8 @@ The Windows agent UAT proves the agent on a real Windows machine: it enrolls, st
 heartbeats and cleans up after itself. The driver is `tests/Dhadgar.Agent.Windows.Uat`. The entry
 point is `scripts/uat/Invoke-AgentWindowsUat.ps1`.
 
-This README covers the skeleton delivered by P18: `-Preflight`, `-StackOnly` (P19),
-`-CleanupOnly`, and the guards of `-Mode Process`. Scenario steps and the `Service` and `Msi` modes
-are added by later packets.
+This README covers `-Preflight`, `-StackOnly` (P19), `-CleanupOnly`, the guards of `-Mode Process`,
+and the process-mode agent legs (P20: U0-U4 and U9). The `Service` and `Msi` modes are added by later packets.
 
 ## Who runs what (D-S225)
 
@@ -21,16 +20,16 @@ are added by later packets.
 - The UAT needs RabbitMQ on 127.0.0.1:5672 and a Docker engine for the local stack. Preflight
   reports both.
 
-## Threat model (D-S237)
+## Threat model (D-S237, D-S238)
 
 The driver trusts the account that runs it. Anything running as that user can change the repo, the build
 or the driver that the elevated script builds and runs, so the driver does not try to defend against it.
 
 Its guards stop driver bugs, a stale or foreign manifest, and PID reuse from touching anything the run
 did not create. Cleanup replays only these items: the named service, the agent registry key and its
-`EnrollmentToken` value, agent and UAT certificates in `LocalMachine` `Root`, `My` and
+`EnrollmentToken` value, and the `SOFTWARE\Meridian Console` parent key only when the run created it and it is empty, agent and UAT certificates in `LocalMachine` `Root`, `My` and
 `MeridianConsoleAgent`, the `MeridianConsoleAgent` store, the agent event source, `meridian-uat-*`
-containers and CNG keys, files and folders under the run folder (plus the machine agent folder), and
+containers and CNG keys, and the agent's own key, deleted through its certificate in `My` (D-S238), files and folders under the run folder (plus the machine agent folder), and
 processes whose image is under the run folder or is the Nodes or Gateway build the stack starts.
 
 A process cleanup cannot read is left running and reported, never killed.
@@ -70,13 +69,47 @@ Cleanup removes the containers and processes. A passing run exits 0 with `cleanu
 `docker ps -a --filter label=meridian-uat` prints nothing. Build Nodes and the Gateway in Release first
 (the script does this unless `-NoBuild`).
 
+## Process mode: the agent legs (P20)
+
+`-Mode Process -AcceptMachineChanges` runs the stack, then the real published agent as a child process
+of the driver. It is machine-changing: it writes the enrollment token to HKLM, creates the agent's
+machine certificate in `LocalMachine\My` and the `MeridianConsoleAgent` store, and an event source.
+Run it yourself from an elevated PowerShell 7.4+ shell. Automated coders never run it.
+
+| Step | What it checks | Pass condition |
+| --- | --- | --- |
+| U0 | Preflight for run (elevation, footprint, Docker, ports, certificate trust). | Every check required for run passes. |
+| U1 | The stack (containers, Nodes, Gateway) and the enrollment smoke (S-mint to S-db). | The smoke passes; see the stack section. |
+| U2 | Token: mints token T1 for a new organization and writes it to `HKLM\SOFTWARE\Meridian Console\Agent`. | The registry value exists. |
+| U3 | First start: applies the agent config and starts the agent. Polls every 2 s for up to 90 s. | All of these hold: `agent-state.json` has a node ID; exactly one node for the organization, `Online` or `Degraded`, with a heartbeat; T1 is used by that node; the registry value is gone; exactly one agent certificate in `My`, with a machine CNG key that can sign, SAN equal to the node's SPIFFE ID; exactly one unrevoked certificate row with the store certificate's SHA-256 thumbprint; the CA is in `MeridianConsoleAgent` and the client certificate chains to it; no agent CA in `LocalMachine\Root`; the state file's ACL is protected and every Allow ACE is SYSTEM, Administrators or the agent's account (A1). |
+| U4 | Restart (#101): mints T2, writes it, stops the agent, starts it again. Polls for up to 60 s. | The heartbeat is later than before the restart; still one node; T2 is not used; the certificate row count is unchanged; the node ID in the state file is the same; the same thumbprint is in `My`. A second token is not consumed. |
+| U9 | Cleanup and scan, always last. | See below. |
+
+The agent is stopped at the end of the legs. P21 restarts it for the renewal legs.
+
+**U9** runs in every `run`, after the manifest undo. It passes when the undo had no failures, the machine
+probe finds nothing, and the `LocalMachine\Root` diff has no additions or removals. Then the secret scan
+runs over `logs\` (including `logs\eventlog.txt`, the agent's Application events exported before the event
+source is deleted), `results.md`, `results.json` and `cleanup-manifest.jsonl`. An enrollment token found
+there fails U9, with the file and line number and never the text, and the file is rewritten redacted. A
+password found is a warning only, and the file is rewritten too. Last, U9 deletes the run's `ca`,
+`agent-state` and `agent-data` folders. `agent` and `logs` stay in the run folder.
+
+## Reading `results.md`
+
+`results.md` has one header block (verb, mode, overall result and exit code, cleanup status, git
+revision, Windows build, whether the run was elevated) and one table row per step: step ID, name,
+status, evidence and duration. The evidence is `key=value` pairs. The first `fail` names the step and
+its condition, and steps after it show `skipped`. `results.json` holds the same data for tools.
+`warnings` lists password hits from U9, the expected service-recovery warning, and any export problem.
+
 ## Parameters
 
 | Call | What it does |
 | --- | --- |
 | `Invoke-AgentWindowsUat.ps1` or `-Preflight` | Checks the machine and writes `U0`. Changes nothing. |
 | `-StackOnly` | Starts the local stack and runs the enrollment smoke (P19). Needs no elevation. |
-| `-Mode Process -AcceptMachineChanges` | Runs the scenario as a child process (elevated, machine-changing). |
+| `-Mode Process -AcceptMachineChanges` | Runs the stack and the agent legs U2-U4 as a child process (elevated, machine-changing). |
 | `-Mode Service -AcceptMachineChanges` | Runs the scenario as a Windows service (P22, not built yet). |
 | `-Mode Msi -AcceptMachineChanges` | Installs the MSI (P23, not built yet). The script refuses. |
 | `-CleanupOnly <runFolder>` | Undoes the changes recorded in that run's manifest. Use it after a crash. |

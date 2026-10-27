@@ -103,6 +103,63 @@ public class CleanupEngineTests
     }
 
     [Fact]
+    public async Task UndoAsync_RegistryParentKeyNotExistedBefore_DeletesOnlyIfEmpty()
+    {
+        var actions = new RecordingActions();
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new RegistryKeyEntry("HKLM", AgentWindowsFacts.RegistryParentKeyPath, false)], CancellationToken.None);
+
+        Assert.Equal([@"DeleteEmptyRegistryKey:HKLM\SOFTWARE\Meridian Console"], actions.Calls);
+        Assert.Empty(report.Failed);
+    }
+
+    [Fact]
+    public async Task UndoAsync_RegistryParentKeyExistedBefore_IsSkipped()
+    {
+        var actions = new RecordingActions();
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new RegistryKeyEntry("HKLM", AgentWindowsFacts.RegistryParentKeyPath, true)], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Empty(report.Failed);
+        Assert.Equal(0, report.Undone);
+    }
+
+    [Theory]
+    [InlineData(@"SOFTWARE\Meridian Console2")]
+    [InlineData(@"SOFTWARE\Meridian Console Other")]
+    [InlineData(@"SOFTWARE\Microsoft")]
+    [InlineData("SOFTWARE")]
+    [InlineData(@"SOFTWARE\Meridian Console\Other")]
+    [InlineData(@"SOFTWARE\Meridian Console\")]
+    public async Task UndoAsync_RegistryKeyNearParent_IsRefused(string path)
+    {
+        var actions = new RecordingActions();
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new RegistryKeyEntry("HKLM", path, false)], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        var failure = Assert.Single(report.Failed);
+        Assert.Contains("refused", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UndoAsync_CngKeyWithWindowsAssignedName_IsRefused()
+    {
+        var actions = new RecordingActions();
+        var name = $"{Guid.NewGuid():N}_{Guid.NewGuid():D}";
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new CngKeyEntry(name, "Microsoft Software Key Storage Provider", true)], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Single(report.Failed);
+    }
+
+    [Fact]
     public async Task UndoAsync_ContainerWithoutUatPrefix_IsRefused()
     {
         var actions = new RecordingActions();

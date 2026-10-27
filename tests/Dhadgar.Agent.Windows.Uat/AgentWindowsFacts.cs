@@ -19,6 +19,9 @@ internal static class AgentWindowsFacts
     /// <summary>Registry key of the agent (<c>AgentRegistry.KeyPath</c>), under HKLM.</summary>
     public const string RegistryKeyPath = @"SOFTWARE\Meridian Console\Agent";
 
+    /// <summary>Parent of the agent's key. Cleanup deletes it only when the run created it and it is empty (D-S238).</summary>
+    public const string RegistryParentKeyPath = @"SOFTWARE\Meridian Console";
+
     /// <summary>Registry value holding the enrollment token (<c>AgentRegistry.EnrollmentTokenValueName</c>).</summary>
     public const string EnrollmentTokenValueName = "EnrollmentToken";
 }
