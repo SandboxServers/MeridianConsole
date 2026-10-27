@@ -177,7 +177,7 @@ public sealed class AgentBootstrapServiceTests
         try
         {
             await WaitUntilAsync(() => h.ConnectCount >= 1);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => h.Time.HasPendingTimer);
 
             // ReconnectDelaySeconds (5) is the first backoff: no second attempt before it elapses.
             h.Time.Advance(TimeSpan.FromSeconds(4));
@@ -440,7 +440,7 @@ public sealed class AgentBootstrapServiceTests
         try
         {
             await WaitUntilAsync(() => h.EnrollCalls >= 1);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => h.Time.HasPendingTimer);
 
             // EnrollmentRetrySeconds (60) is the backoff: no second attempt before it elapses.
             h.Time.Advance(TimeSpan.FromSeconds(59));
@@ -677,6 +677,37 @@ public sealed class AgentBootstrapServiceTests
             Entries.Enqueue((logLevel, formatter(state, exception)));
     }
 
+    /// <summary>
+    /// A fake clock that counts the delay timers armed and not yet fired. The bootstrap loop is sequential and parks on
+    /// exactly one delay per pass, so a pending timer means the loop has finished the pass and is waiting for the clock.
+    /// </summary>
+    private sealed class ObservableFakeTimeProvider : FakeTimeProvider
+    {
+        private int _pendingTimers;
+
+        public ObservableFakeTimeProvider(DateTimeOffset start)
+            : base(start)
+        {
+        }
+
+        public bool HasPendingTimer => Volatile.Read(ref _pendingTimers) > 0;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            // Counted before the timer is armed so a fire can never observe a count that has not been raised yet.
+            Interlocked.Increment(ref _pendingTimers);
+            return base.CreateTimer(
+                s =>
+                {
+                    Interlocked.Decrement(ref _pendingTimers);
+                    callback(s);
+                },
+                state,
+                dueTime,
+                period);
+        }
+    }
+
     /// <summary>Substitutes for every bootstrap dependency, plus a clock and counters the tests wait on.</summary>
     private sealed class Harness
     {
@@ -723,7 +754,7 @@ public sealed class AgentBootstrapServiceTests
 
         public ConcurrentQueue<string> Events { get; } = new();
 
-        public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
+        public ObservableFakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
 
         public IAgentStateStore Store { get; } = Substitute.For<IAgentStateStore>();
 
@@ -776,13 +807,17 @@ public sealed class AgentBootstrapServiceTests
         public void UseCertificate(Guid? nodeId) =>
             Certificates.GetClientCertificate().Returns(_ => nodeId is { } id ? CertificateFor(id) : null);
 
-        /// <summary>Advances the clock one check interval and waits for the bootstrap loop to finish that pass.</summary>
+        /// <summary>
+        /// Advances the clock one check interval and waits for the bootstrap loop to run that pass and park on its next delay.
+        /// The clock moves only once the loop is parked. Advancing earlier can land between the loop's state read and its
+        /// delay, and that advance is then lost: the new delay is armed from the advanced time and nothing wakes the loop.
+        /// </summary>
         public async Task StepPassAsync()
         {
+            await WaitUntilAsync(() => Time.HasPendingTimer);
             var before = Volatile.Read(ref _stateReads);
             Time.Advance(TimeSpan.FromSeconds(Settings.ControlPlane.ConnectionCheckIntervalSeconds));
-            await WaitUntilAsync(() => Volatile.Read(ref _stateReads) > before);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => Volatile.Read(ref _stateReads) > before && Time.HasPendingTimer);
         }
 
         public Task WaitForRenewalCallsAsync(int count) => WaitUntilAsync(() => RenewalCalls >= count);
