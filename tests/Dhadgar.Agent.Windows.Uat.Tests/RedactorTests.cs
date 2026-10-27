@@ -49,4 +49,40 @@ public class RedactorTests
             File.Delete(file);
         }
     }
+
+    [Fact]
+    public void Redact_LongerSecretWithSharedPrefix_ReplacesWholeSecret()
+    {
+        var redactor = new Redactor();
+        redactor.AddSecret("abc", SecretKind.Password);
+        redactor.AddSecret("abcdef", SecretKind.EnrollmentToken);
+
+        var line = redactor.Redact("x abcdef y");
+
+        Assert.Equal("x ***EnrollmentToken*** y", line);
+    }
+
+    [Fact]
+    public async Task AddSecret_WhileRedacting_DoesNotThrow()
+    {
+        var redactor = new Redactor();
+        redactor.AddSecret("seed-secret", SecretKind.Password);
+
+        var adder = Task.Run(() =>
+        {
+            for (var i = 0; i < 10_000; i++)
+            {
+                redactor.AddSecret($"secret-{i}", SecretKind.Password);
+            }
+        });
+        var reader = Task.Run(() =>
+        {
+            for (var i = 0; i < 10_000; i++)
+            {
+                _ = redactor.Redact("line with seed-secret and secret-5");
+            }
+        });
+
+        await Task.WhenAll(adder, reader);
+    }
 }

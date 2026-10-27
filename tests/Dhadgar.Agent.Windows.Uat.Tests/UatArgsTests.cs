@@ -31,6 +31,7 @@ public class UatArgsTests
     [InlineData("20261027-142233-9F3A")]
     [InlineData("../../etc")]
     [InlineData("20261027142233-9f3a")]
+    [InlineData("20261027-142233-9f3a\n")]
     public void Parse_BadRunId_Fails(string runId)
     {
         var result = UatArgs.Parse(["preflight", "--repo-root", "C:\\repo", "--run-id", runId]);

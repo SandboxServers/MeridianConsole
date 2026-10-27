@@ -15,7 +15,8 @@ are added by later packets.
   `-Mode Msi` change this machine: services, HKLM, machine certificate stores and the
   installed MSI. Run them yourself from an elevated PowerShell 7.4+ shell, passing
   `-AcceptMachineChanges`.
-- The driver refuses `run` (exit 2) when `CLAUDECODE` is set in the environment. Do not
+- The driver refuses `run` (exit 2) when `CLAUDECODE` is set in the environment. It also
+  refuses `cleanup` (`-CleanupOnly`) then, so `-CleanupOnly` is a person-only call. Do not
   clear it to get around that.
 - The UAT needs RabbitMQ on 127.0.0.1:5672 and a Docker engine for the local stack. Preflight
   reports both.

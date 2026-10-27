@@ -1,3 +1,4 @@
+using System.IO;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
 using Dhadgar.Shared.Results;
 
@@ -11,6 +12,9 @@ internal sealed class RecordingActions : IMachineActions
     public HashSet<string> FailOn { get; } = [];
 
     public bool Elevated { get; set; } = true;
+
+    /// <summary>Calls that throw an <see cref="IOException"/> instead of returning a result.</summary>
+    public HashSet<string> ThrowOn { get; } = [];
 
     public bool IsElevated() => Elevated;
 
@@ -42,6 +46,11 @@ internal sealed class RecordingActions : IMachineActions
     private Result Record(string call)
     {
         Calls.Add(call);
+        if (ThrowOn.Contains(call))
+        {
+            throw new IOException($"fake exception: {call}");
+        }
+
         return FailOn.Contains(call) ? Result.Failure($"fake failure: {call}") : Result.Success();
     }
 }

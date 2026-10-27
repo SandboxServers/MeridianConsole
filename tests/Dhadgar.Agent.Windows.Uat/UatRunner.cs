@@ -43,7 +43,7 @@ internal static class UatRunner
         return args.Verb switch
         {
             "preflight" => await PreflightVerbAsync(args, paths, actions, probe, launchedByAgent, ct),
-            "cleanup" => await CleanupVerbAsync(args, paths, actions, probe),
+            "cleanup" => await CleanupVerbAsync(args, paths, actions, probe, launchedByAgent),
             "stack-only" => Refuse("stack-only is not built yet (P19)"),
             _ => await RunVerbAsync(args, paths, actions, probe, launchedByAgent, scenarios, ct),
         };
@@ -74,7 +74,7 @@ internal static class UatRunner
         var step = new StepResult("U0", "Preflight", pass ? "pass" : "fail", evidence, null, 0);
         var overall = pass ? "pass" : "fail";
         return await PersistAsync(args, paths, started, "preflight", null, [step], CleanupSummary.NotRun(),
-            [], overall, pass ? UatExitCodes.Pass : UatExitCodes.Fail, launchedByAgent, actions);
+            [], overall, pass ? UatExitCodes.Pass : UatExitCodes.Fail, launchedByAgent, actions, new Redactor());
     }
 
     private static async Task<int> RunVerbAsync(
@@ -120,6 +120,7 @@ internal static class UatRunner
         var steps = new StepRecorder();
         var warnings = new List<string>();
         var manifest = new CleanupManifest(paths.Manifest);
+        var redactor = new Redactor(); // One redactor per run: child output, step evidence and results.* all pass through it.
         string? internalError = null;
         CleanupSummary cleanup = CleanupSummary.NotRun();
 
@@ -143,7 +144,7 @@ internal static class UatRunner
             {
                 if (scenarios.TryGetValue(args.Mode!, out var scenario))
                 {
-                    var context = new RunContext(paths, args.RunId, args.Mode!, manifest, new Redactor());
+                    var context = new RunContext(paths, args.RunId, args.Mode!, manifest, redactor);
                     await steps.RunAsync("U1", scenario.Mode, c => scenario.RunAsync(context, c), ct);
                 }
                 else
@@ -160,7 +161,7 @@ internal static class UatRunner
 #pragma warning restore CA1031
         finally
         {
-            cleanup = await CleanupAsync(paths, actions, probe, warnings);
+            cleanup = await CleanupGuardedAsync(paths, actions, probe, warnings);
         }
 
         if (internalError is not null)
@@ -175,11 +176,18 @@ internal static class UatRunner
             : UatExitCodes.Fail;
 
         return await PersistAsync(args, paths, started, "run", args.Mode, steps.Steps, cleanup, warnings,
-            overall, exitCode, launchedByAgent, actions);
+            overall, exitCode, launchedByAgent, actions, redactor);
     }
 
-    private static async Task<int> CleanupVerbAsync(UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe)
+    private static async Task<int> CleanupVerbAsync(
+        UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent)
     {
+        // D-S225: an agent may not run cleanup. This is checked before the manifest is read.
+        if (launchedByAgent)
+        {
+            return Refuse("cleanup refused: CLAUDECODE is set; only the user runs cleanup (D-S225)");
+        }
+
         var given = Path.GetFullPath(args.RunDir!).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (!string.Equals(given, paths.RunDir.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
         {
@@ -191,9 +199,18 @@ internal static class UatRunner
             return Refuse("cleanup refused: run folder does not exist");
         }
 
+        if (!actions.IsElevated())
+        {
+            var manifest = CleanupManifest.Load(paths.Manifest);
+            if (manifest.IsSuccess && manifest.Value.Any(RequiresElevation))
+            {
+                return Refuse("cleanup refused: not elevated and the manifest holds machine items; run cleanup elevated");
+            }
+        }
+
         var warnings = new List<string>();
-        var cleanup = await CleanupAsync(paths, actions, probe, warnings);
-        var written = ResultsWriter.WriteCleanup(cleanup, paths.RunDir);
+        var cleanup = await CleanupGuardedAsync(paths, actions, probe, warnings);
+        var written = ResultsWriter.WriteCleanup(cleanup, paths.RunDir, new Redactor());
         if (written.IsFailure)
         {
             Console.Error.WriteLine(written.Error);
@@ -207,6 +224,36 @@ internal static class UatRunner
 
         Console.WriteLine($"cleanup: {cleanup.Status} (undone {cleanup.Undone})");
         return cleanup.Status == "clean" ? UatExitCodes.Pass : UatExitCodes.FootprintLeft;
+    }
+
+    /// <summary>True when undoing this entry needs an elevated process (service, HKLM, LocalMachine store, machine directory).</summary>
+    private static bool RequiresElevation(CleanupEntry entry) => entry switch
+    {
+        ServiceEntry or RegistryKeyEntry or RegistryValueEntry or CertStoreEntry or EventSourceEntry => true,
+        CertificateEntry c => string.Equals(c.StoreLocation, "LocalMachine", StringComparison.Ordinal),
+        CngKeyEntry k => k.MachineKey,
+        DirectoryEntry d => AgentDirectories.IsMachineAgentDirectory(d.Path),
+        _ => false,
+    };
+
+    /// <summary>
+    /// <see cref="CleanupAsync"/> with a last resort: an exception from cleanup is recorded as a footprint-left
+    /// summary, so the caller still writes results.json.
+    /// </summary>
+    private static async Task<CleanupSummary> CleanupGuardedAsync(
+        RunPaths paths, IMachineActions actions, IMachineProbe probe, List<string> warnings)
+    {
+#pragma warning disable CA1031 // Cleanup must never escape: results.json is written in every case (D-S225).
+        try
+        {
+            return await CleanupAsync(paths, actions, probe, warnings);
+        }
+        catch (Exception ex)
+        {
+            return new CleanupSummary("footprint-left", 0,
+                [new CleanupFailure("cleanup", paths.RunDir, $"{ex.GetType().Name}: {ex.Message}")], [], [], []);
+        }
+#pragma warning restore CA1031
     }
 
     /// <summary>Undoes the manifest, rescans the machine, and compares the Root snapshot.</summary>
@@ -242,7 +289,19 @@ internal static class UatRunner
             }
         }
 
-        var remaining = probe.Scan().Items;
+        IReadOnlyList<string> remaining;
+#pragma warning disable CA1031 // A failed rescan is a footprint-left finding, not a crash.
+        try
+        {
+            remaining = probe.Scan().Items;
+        }
+        catch (Exception ex)
+        {
+            failed.Add(new CleanupFailure("probe", "scan", $"{ex.GetType().Name}: {ex.Message}"));
+            remaining = [];
+        }
+#pragma warning restore CA1031
+
         var clean = failed.Count == 0 && remaining.Count == 0 && rootAdded.Count == 0 && rootRemoved.Count == 0;
         return new CleanupSummary(clean ? "clean" : "footprint-left", report.Undone, failed, remaining, rootAdded, rootRemoved);
     }
@@ -296,7 +355,8 @@ internal static class UatRunner
         string overall,
         int exitCode,
         bool launchedByAgent,
-        IMachineActions actions)
+        IMachineActions actions,
+        Redactor redactor)
     {
         var (sha, dirty) = await ReadGitAsync(args.RepoRoot);
         var results = new UatResults(
@@ -318,7 +378,7 @@ internal static class UatRunner
             cleanup,
             warnings);
 
-        var written = ResultsWriter.Write(results, paths.RunDir);
+        var written = ResultsWriter.Write(results, paths.RunDir, redactor);
         if (written.IsFailure)
         {
             Console.Error.WriteLine(written.Error);

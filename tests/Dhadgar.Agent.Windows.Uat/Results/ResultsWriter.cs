@@ -1,33 +1,78 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Uat.Results;
 
 /// <summary>
-/// Writes <c>results.json</c> and <c>results.md</c>. Each file is written to a temp file and then moved
-/// over the target, so a reader never sees a half-written result.
+/// Writes <c>results.json</c>, <c>results.md</c> and <c>cleanup-results.json</c>. Each file is written to a temp file
+/// and then moved over the target, so a reader never sees a half-written result. Every string in them passes
+/// through the run's <see cref="Redactor"/> first (R-LOG), so a secret echoed by a step or an exception never lands in a file.
 /// </summary>
 internal static class ResultsWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     /// <summary>Writes <c>results.json</c> and <c>results.md</c> into <paramref name="runDir"/>.</summary>
-    public static Result Write(UatResults results, string runDir)
+    public static Result Write(UatResults results, string runDir, Redactor redactor)
     {
-        var json = WriteAtomically(Path.Combine(runDir, "results.json"), JsonSerializer.Serialize(results, JsonOptions));
+        var node = JsonSerializer.SerializeToNode(results, JsonOptions);
+        RedactInPlace(node, redactor);
+        var json = WriteAtomically(Path.Combine(runDir, "results.json"), node?.ToJsonString(JsonOptions) ?? "null");
         if (json.IsFailure)
         {
             return json;
         }
 
-        return WriteAtomically(Path.Combine(runDir, "results.md"), ToMarkdown(results));
+        return WriteAtomically(Path.Combine(runDir, "results.md"), redactor.Redact(ToMarkdown(results)));
     }
 
     /// <summary>Writes the cleanup object to <c>cleanup-results.json</c> (the <c>cleanup</c> verb).</summary>
-    public static Result WriteCleanup(CleanupSummary cleanup, string runDir)
+    public static Result WriteCleanup(CleanupSummary cleanup, string runDir, Redactor redactor)
     {
-        return WriteAtomically(Path.Combine(runDir, "cleanup-results.json"), JsonSerializer.Serialize(cleanup, JsonOptions));
+        var node = JsonSerializer.SerializeToNode(cleanup, JsonOptions);
+        RedactInPlace(node, redactor);
+        return WriteAtomically(Path.Combine(runDir, "cleanup-results.json"), node?.ToJsonString(JsonOptions) ?? "null");
+    }
+
+    /// <summary>Replaces every string value in the tree with its redacted form. Object keys are left as they are.</summary>
+    private static void RedactInPlace(JsonNode? node, Redactor redactor)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var key in obj.Select(kv => kv.Key).ToList())
+                {
+                    var child = obj[key];
+                    if (child is JsonValue value && value.TryGetValue<string>(out var text))
+                    {
+                        obj[key] = JsonValue.Create(redactor.Redact(text));
+                    }
+                    else
+                    {
+                        RedactInPlace(child, redactor);
+                    }
+                }
+
+                break;
+            case JsonArray array:
+                for (var i = 0; i < array.Count; i++)
+                {
+                    var child = array[i];
+                    if (child is JsonValue value && value.TryGetValue<string>(out var text))
+                    {
+                        array[i] = JsonValue.Create(redactor.Redact(text));
+                    }
+                    else
+                    {
+                        RedactInPlace(child, redactor);
+                    }
+                }
+
+                break;
+        }
     }
 
     private static Result WriteAtomically(string target, string content)

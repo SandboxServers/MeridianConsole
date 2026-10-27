@@ -67,6 +67,20 @@ try {
         exit 2
     }
 
+    # Cheap guards run before the build and the run folder, so a refused call changes nothing.
+    # The driver repeats them and stays authoritative.
+    if (($verb -eq 'run' -or $verb -eq 'cleanup') -and (Test-Path env:CLAUDECODE)) {
+        [Console]::Error.WriteLine("$verb refused: CLAUDECODE is set; only the user runs $verb (D-S225)")
+        exit 2
+    }
+    if ($verb -eq 'run') {
+        $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+        if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            [Console]::Error.WriteLine('run refused: not elevated')
+            exit 2
+        }
+    }
+
     if ($verb -eq 'cleanup') {
         $runDir = [System.IO.Path]::GetFullPath($CleanupOnly)
         $runId = Split-Path -Leaf $runDir

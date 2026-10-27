@@ -1,21 +1,23 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Dhadgar.Shared.Results;
+using Microsoft.Win32.SafeHandles;
 
 namespace Dhadgar.Agent.Windows.Uat.Infra;
 
 /// <summary>
 /// A Windows job object with <c>KILL_ON_JOB_CLOSE</c>, so every child process dies with the driver
-/// even if the driver crashes. Owns its handle; disposing closes it.
+/// even if the driver crashes. The handle is a <see cref="SafeHandle"/>: it is closed by <see cref="Dispose"/>,
+/// and by the finalizer if a caller forgets.
 /// </summary>
 internal sealed partial class JobObject : IDisposable
 {
     private const int ExtendedLimitInformationClass = 9;
     private const uint JobObjectLimitKillOnJobClose = 0x2000;
 
-    private IntPtr _handle;
+    private readonly JobHandle _handle;
 
-    private JobObject(IntPtr handle)
+    private JobObject(JobHandle handle)
     {
         _handle = handle;
     }
@@ -23,12 +25,14 @@ internal sealed partial class JobObject : IDisposable
     /// <summary>Creates a job object configured to kill its processes when the handle closes.</summary>
     public static Result<JobObject> Create()
     {
-        var handle = CreateJobObjectW(IntPtr.Zero, null);
-        if (handle == IntPtr.Zero)
+        var raw = CreateJobObjectW(IntPtr.Zero, null);
+        if (raw == IntPtr.Zero)
         {
             return Result<JobObject>.Failure($"CreateJobObjectW failed with Win32 error {Marshal.GetLastPInvokeError()}");
         }
 
+        // Wrap the raw handle before anything else can fail, so an early return still closes it.
+        var handle = new JobHandle(raw);
         var job = new JobObject(handle);
         var info = new JobObjectExtendedLimitInformation
         {
@@ -40,7 +44,7 @@ internal sealed partial class JobObject : IDisposable
         try
         {
             Marshal.StructureToPtr(info, ptr, fDeleteOld: false);
-            if (!SetInformationJobObject(handle, ExtendedLimitInformationClass, ptr, (uint)size))
+            if (!SetInformationJobObject(handle.DangerousGetHandle(), ExtendedLimitInformationClass, ptr, (uint)size))
             {
                 job.Dispose();
                 return Result<JobObject>.Failure($"SetInformationJobObject failed with Win32 error {Marshal.GetLastPInvokeError()}");
@@ -57,8 +61,8 @@ internal sealed partial class JobObject : IDisposable
     /// <summary>Assigns a started process to this job.</summary>
     public Result AssignProcess(Process process)
     {
-        ObjectDisposedException.ThrowIf(_handle == IntPtr.Zero, this);
-        return AssignProcessToJobObject(_handle, process.Handle)
+        ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+        return AssignProcessToJobObject(_handle.DangerousGetHandle(), process.Handle)
             ? Result.Success()
             : Result.Failure($"AssignProcessToJobObject failed with Win32 error {Marshal.GetLastPInvokeError()}");
     }
@@ -66,11 +70,7 @@ internal sealed partial class JobObject : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_handle != IntPtr.Zero)
-        {
-            CloseHandle(_handle);
-            _handle = IntPtr.Zero;
-        }
+        _handle.Dispose();
     }
 
     [LibraryImport("kernel32.dll", EntryPoint = "CreateJobObjectW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
@@ -87,6 +87,18 @@ internal sealed partial class JobObject : IDisposable
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CloseHandle(IntPtr handle);
+
+    /// <summary>Owns the job handle. Closed once, whether by <see cref="Dispose"/> or the finalizer.</summary>
+    private sealed class JobHandle : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        public JobHandle(IntPtr existing)
+            : base(ownsHandle: true)
+        {
+            SetHandle(existing);
+        }
+
+        protected override bool ReleaseHandle() => CloseHandle(handle);
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct JobObjectBasicLimitInformation

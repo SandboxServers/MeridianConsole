@@ -14,7 +14,7 @@ internal sealed record UatArgs(
     bool AcceptMachineChanges,
     string? RunDir)
 {
-    private static readonly Regex RunIdPattern = new(@"^\d{8}-\d{6}-[0-9a-f]{4}$", RegexOptions.CultureInvariant);
+    private static readonly Regex RunIdPattern = new(@"^\d{8}-\d{6}-[0-9a-f]{4}\z", RegexOptions.CultureInvariant);
     private static readonly string[] Verbs = ["preflight", "stack-only", "run", "cleanup"];
     private static readonly string[] Modes = ["process", "service", "msi"];
 

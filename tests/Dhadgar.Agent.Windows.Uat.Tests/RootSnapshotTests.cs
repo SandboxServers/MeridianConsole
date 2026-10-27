@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Windows.Uat.Probe;
+using Dhadgar.Contracts.Nodes;
 using Xunit;
 
 namespace Dhadgar.Agent.Windows.Uat.Tests;
@@ -28,6 +29,18 @@ public class RootSnapshotTests
         var diff = RootSnapshot.Diff(before, after, _ => SelfSigned("CN=decoy, O=Meridian Console UAT"));
 
         Assert.Equal(["CCC"], diff.RootAdded);
+        Assert.Empty(diff.Warnings);
+    }
+
+    [Fact]
+    public void Diff_AddedAgentCa_ReportsRootAdded()
+    {
+        var before = new RootSnapshot(["AAA"]);
+        var after = new RootSnapshot(["AAA", "EEE"]);
+
+        var diff = RootSnapshot.Diff(before, after, _ => SelfSigned($"CN={AgentCertificateProfile.CaCommonName}"));
+
+        Assert.Equal(["EEE"], diff.RootAdded);
         Assert.Empty(diff.Warnings);
     }
 

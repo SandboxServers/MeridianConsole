@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
+using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Shared.Results;
 using Microsoft.Win32;
@@ -19,6 +20,9 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     private const uint CertSystemStoreLocalMachine = 0x00020000;
     private const uint CertStoreDeleteFlag = 0x10;
     private const int Win32FileNotFound = 2;
+    private const int HResultFileNotFound = unchecked((int)0x80070002); // ERROR_FILE_NOT_FOUND, as a CryptographicException HResult
+    private const int HResultBadKeyset = unchecked((int)0x80090016); // NTE_BAD_KEYSET: CNG key not found
+    private const int HResultNotFound = unchecked((int)0x80090011); // NTE_NOT_FOUND
     private const int ScServiceDoesNotExist = 1060;
     private static readonly TimeSpan ServiceStopWait = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(60);
@@ -178,20 +182,46 @@ internal sealed partial class WindowsMachineActions : IMachineActions
             using var store = new X509Store(storeName, location);
             store.Open(OpenFlags.ReadWrite | OpenFlags.OpenExistingOnly);
             var matches = store.Certificates.Find(X509FindType.FindByThumbprint, thumbprintSha1, validOnly: false);
-            foreach (var cert in matches)
+            try
             {
-                store.Remove(cert);
-                cert.Dispose();
-            }
+                foreach (var cert in matches)
+                {
+                    // A forged thumbprint in the manifest must not remove an unrelated certificate.
+                    if (!IsDriverCertificate(cert))
+                    {
+                        return Result.Failure($"certificate {thumbprintSha1} is not an agent or UAT certificate; not removed");
+                    }
 
-            matches.Clear();
-            return Result.Success();
+                    store.Remove(cert);
+                }
+
+                return Result.Success();
+            }
+            finally
+            {
+                foreach (var cert in matches)
+                {
+                    cert.Dispose();
+                }
+
+                matches.Clear();
+            }
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex) when (ex.HResult == HResultFileNotFound)
         {
             return Result.Success(); // Store does not exist: already gone.
         }
+        catch (CryptographicException ex)
+        {
+            return Result.Failure($"certificate removal failed: 0x{ex.HResult:X8} {ex.Message}");
+        }
     }
+
+    /// <summary>True for a certificate the driver or the agent CA created: the agent CA, an agent client certificate, or a UAT subject.</summary>
+    private static bool IsDriverCertificate(X509Certificate2 cert) =>
+        AgentCertificateMatcher.IsAgentCa(cert)
+        || AgentCertificateMatcher.IsAgentClientCertificate(cert, new DateTimeOffset(cert.NotBefore))
+        || cert.Subject.Contains("O=Meridian Console UAT", StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public Result DeleteCngKey(string keyName, string provider, bool machineKey)
@@ -203,9 +233,13 @@ internal sealed partial class WindowsMachineActions : IMachineActions
             key.Delete();
             return Result.Success();
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex) when (ex.HResult is HResultBadKeyset or HResultNotFound)
         {
             return Result.Success(); // Key does not exist: already gone.
+        }
+        catch (CryptographicException ex)
+        {
+            return Result.Failure($"cng key delete failed: 0x{ex.HResult:X8} {ex.Message}");
         }
     }
 

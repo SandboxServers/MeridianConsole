@@ -50,7 +50,6 @@ internal sealed partial class ChildProcess : IDisposable
         }
 
         var logsDir = Path.Combine(Path.GetDirectoryName(manifest.Path)!, "logs");
-        Directory.CreateDirectory(logsDir);
 
         var psi = new ProcessStartInfo(spec.FileName)
         {
@@ -79,12 +78,21 @@ internal sealed partial class ChildProcess : IDisposable
             psi.Environment[key] = value;
         }
 
+        // The log is opened before the child starts: if it cannot be opened, no child is left running without a pump.
+        StreamWriter? log = null;
         Process? process = null;
         try
         {
+            Directory.CreateDirectory(logsDir);
+            log = new StreamWriter(Path.Combine(logsDir, spec.Name + ".log"), append: false, Encoding.UTF8)
+            {
+                AutoFlush = true,
+            };
+
             process = Process.Start(psi);
             if (process is null)
             {
+                log.Dispose();
                 return Result<ChildProcess>.Failure($"{spec.Name} did not start");
             }
 
@@ -94,6 +102,7 @@ internal sealed partial class ChildProcess : IDisposable
             {
                 KillQuietly(process);
                 process.Dispose();
+                log.Dispose();
                 return Result<ChildProcess>.Failure(recorded.Error);
             }
 
@@ -102,18 +111,21 @@ internal sealed partial class ChildProcess : IDisposable
             {
                 KillQuietly(process);
                 process.Dispose();
+                log.Dispose();
                 return Result<ChildProcess>.Failure(assigned.Error);
             }
 
-            var log = new StreamWriter(Path.Combine(logsDir, spec.Name + ".log"), append: false, Encoding.UTF8)
-            {
-                AutoFlush = true,
-            };
             return Result<ChildProcess>.Success(new ChildProcess(process, log, redactor));
         }
-        catch (System.ComponentModel.Win32Exception ex)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
         {
-            process?.Dispose();
+            if (process is not null)
+            {
+                KillQuietly(process); // Started but not recorded or assigned: nothing else would stop it.
+                process.Dispose();
+            }
+
+            log?.Dispose();
             return Result<ChildProcess>.Failure($"{spec.Name} could not be started: {ex.Message}");
         }
     }
