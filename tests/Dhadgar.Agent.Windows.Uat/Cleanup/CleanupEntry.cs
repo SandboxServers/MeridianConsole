@@ -18,6 +18,7 @@ namespace Dhadgar.Agent.Windows.Uat.Cleanup;
 [JsonDerivedType(typeof(FileEntry), "file")]
 [JsonDerivedType(typeof(EventSourceEntry), "eventSource")]
 [JsonDerivedType(typeof(ServiceEntry), "service")]
+[JsonDerivedType(typeof(MsiProductEntry), "msiProduct")]
 internal abstract record CleanupEntry;
 
 /// <summary>A Docker container named by the driver (<c>docker rm -f</c>).</summary>
@@ -52,3 +53,9 @@ internal sealed record EventSourceEntry(string Source, bool ExistedBefore) : Cle
 
 /// <summary>A Windows service; undo stops it (quiesce pass) and deletes it.</summary>
 internal sealed record ServiceEntry(string Name) : CleanupEntry;
+
+/// <summary>
+/// An MSI product the driver installed (P23). Undo runs <c>msiexec /x</c> for every product that the upgrade code
+/// still lists (<see cref="Msi.IMsiProducts"/>), so it removes the product even when the MSI file is gone.
+/// </summary>
+internal sealed record MsiProductEntry(string UpgradeCode, string MsiPath) : CleanupEntry;

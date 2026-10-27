@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Windows.Uat.Infra;
+using Dhadgar.Agent.Windows.Uat.Msi;
 using Dhadgar.Shared.Results;
 using Microsoft.Win32;
 
@@ -26,6 +27,24 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     private const int ScServiceDoesNotExist = 1060;
     private static readonly TimeSpan ServiceStopWait = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan MsiexecTimeout = TimeSpan.FromMinutes(5);
+    private const int MsiSuccessRebootRequested = 3010;
+    private const int MsiUnknownProduct = 1605;
+    private readonly IMsiProducts _msiProducts;
+    private readonly Func<IReadOnlyList<string>, Result<CommandOutput>> _msiexec;
+
+    /// <summary>Creates the machine actions over the real Windows Installer database and <c>msiexec.exe</c>.</summary>
+    public WindowsMachineActions()
+        : this(new MsiProducts(), args => CommandRunner.RunAsync("msiexec.exe", args, MsiexecTimeout).GetAwaiter().GetResult())
+    {
+    }
+
+    /// <summary>Creates the machine actions over the given installer seams (tests pass fakes).</summary>
+    internal WindowsMachineActions(IMsiProducts msiProducts, Func<IReadOnlyList<string>, Result<CommandOutput>> msiexec)
+    {
+        _msiProducts = msiProducts;
+        _msiexec = msiexec;
+    }
 
     /// <inheritdoc />
     public bool IsElevated()
@@ -494,6 +513,40 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     public Result DeleteEventSource(string source)
     {
         return DeleteRegistryKey("HKLM", $@"SYSTEM\CurrentControlSet\Services\EventLog\Application\{source}");
+    }
+
+    /// <inheritdoc />
+    public Result UninstallMsiProduct(string upgradeCode) => UninstallRelatedProducts(_msiProducts, upgradeCode, _msiexec);
+
+    /// <summary>
+    /// Runs <c>msiexec /x</c> for each product the upgrade code lists. Exit 0, 3010 (reboot requested) and 1605
+    /// (unknown product, already gone) are success. Every product is attempted; the failures are joined.
+    /// </summary>
+    internal static Result UninstallRelatedProducts(
+        IMsiProducts products,
+        string upgradeCode,
+        Func<IReadOnlyList<string>, Result<CommandOutput>> msiexec)
+    {
+        var failures = new List<string>();
+        foreach (var product in products.RelatedProducts(upgradeCode))
+        {
+            var output = msiexec(["/x", product, "/qn", "/norestart"]);
+            if (output.IsFailure)
+            {
+                failures.Add(output.Error!);
+                continue;
+            }
+
+            var exitCode = output.Value.ExitCode;
+            if (exitCode is 0 or MsiSuccessRebootRequested or MsiUnknownProduct)
+            {
+                continue;
+            }
+
+            failures.Add($"msiexec /x {product} exited {exitCode}");
+        }
+
+        return failures.Count == 0 ? Result.Success() : Result.Failure(string.Join("; ", failures));
     }
 
     private static Result<CommandOutput> RunSc(IReadOnlyList<string> args) =>

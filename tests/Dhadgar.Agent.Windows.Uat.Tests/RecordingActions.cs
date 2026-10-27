@@ -82,6 +82,8 @@ internal sealed class RecordingActions : IMachineActions
 
     public Result DeleteEventSource(string source) => Record($"DeleteEventSource:{source}");
 
+    public Result UninstallMsiProduct(string upgradeCode) => Record($"UninstallMsiProduct:{upgradeCode}");
+
     private Result Record(string call)
     {
         Calls.Add(call);

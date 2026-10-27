@@ -115,6 +115,8 @@ internal sealed class CleanupEngine
             CertStoreEntry s => string.Equals(s.StoreName, AgentWindowsFacts.CaStoreName, StringComparison.Ordinal),
             EventSourceEntry e => string.Equals(e.Source, AgentWindowsFacts.EventLogSourceName, StringComparison.Ordinal),
             ContainerEntry c => ContainerNamePattern.IsMatch(c.Name),
+            MsiProductEntry m => string.Equals(m.UpgradeCode, AgentWindowsFacts.MsiUpgradeCode, StringComparison.OrdinalIgnoreCase)
+                && _runPaths.Validate(m.MsiPath).IsSuccess,
             CngKeyEntry k => k.Provider is KeyStorageProvider or PlatformCryptoProvider
                 && k.KeyName.StartsWith(CngKeyPrefix, StringComparison.Ordinal)
                 && CngKeyNamePattern.IsMatch(k.KeyName),
@@ -185,6 +187,7 @@ internal sealed class CleanupEngine
             FileEntry f => ("file", f.Path, DeleteGuarded(f.Path, _actions.DeleteFile, isDirectory: false)),
             EventSourceEntry e when !e.ExistedBefore => ("eventSource", e.Source, _actions.DeleteEventSource(e.Source)),
             ServiceEntry s => ("service", s.Name, StopThenDelete(s.Name)),
+            MsiProductEntry m => ("msiProduct", m.UpgradeCode, _actions.UninstallMsiProduct(m.UpgradeCode)),
             _ => ("skipped", entry.GetType().Name, null),
         };
     }
@@ -202,6 +205,7 @@ internal sealed class CleanupEngine
         FileEntry => "file",
         EventSourceEntry => "eventSource",
         ServiceEntry => "service",
+        MsiProductEntry => "msiProduct",
         _ => "skipped",
     };
 
@@ -218,6 +222,7 @@ internal sealed class CleanupEngine
         FileEntry f => f.Path,
         EventSourceEntry e => e.Source,
         ServiceEntry s => s.Name,
+        MsiProductEntry m => m.UpgradeCode,
         _ => entry.GetType().Name,
     };
 
