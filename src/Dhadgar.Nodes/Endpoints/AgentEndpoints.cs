@@ -8,8 +8,6 @@ using Microsoft.EntityFrameworkCore;
 // Alias local models to avoid ambiguity with Contracts types
 using LocalEnrollNodeRequest = Dhadgar.Nodes.Models.EnrollNodeRequest;
 using LocalEnrollNodeResponse = Dhadgar.Nodes.Models.EnrollNodeResponse;
-using LocalRenewCertificateRequest = Dhadgar.Nodes.Models.RenewCertificateRequest;
-using LocalRenewCertificateResponse = Dhadgar.Nodes.Models.RenewCertificateResponse;
 
 namespace Dhadgar.Nodes.Endpoints;
 
@@ -45,6 +43,7 @@ public static class AgentEndpoints
             .Produces<Dhadgar.Contracts.Nodes.RenewCertificateResponse>()
             .ProducesProblem(400)
             .ProducesProblem(401)
+            .ProducesProblem(403)
             .ProducesProblem(404)
             .RequireAuthorization("AgentPolicy");
 
@@ -142,7 +141,7 @@ public static class AgentEndpoints
 
     private static async Task<IResult> RenewCertificate(
         Guid nodeId,
-        LocalRenewCertificateRequest request,
+        Dhadgar.Contracts.Nodes.RenewCertificateRequest request,
         HttpContext context,
         NodesDbContext dbContext,
         ICertificateAuthorityService caService,
@@ -156,14 +155,14 @@ public static class AgentEndpoints
         if (nodeIdClaim is null)
         {
             logger.LogWarning("Missing node_id claim in certificate for certificate renewal request to node {NodeId}", nodeId);
-            return Results.Forbid();
+            return ProblemDetailsHelper.Forbidden("forbidden");
         }
 
         var nodeIdFromCert = nodeIdClaim.Value;
         if (!Guid.TryParse(nodeIdFromCert, out var certNodeId))
         {
             logger.LogWarning("Invalid node_id claim format in certificate: {NodeIdClaim}", nodeIdFromCert);
-            return Results.Forbid();
+            return ProblemDetailsHelper.Forbidden("forbidden");
         }
 
         if (certNodeId != nodeId)
@@ -171,7 +170,7 @@ public static class AgentEndpoints
             logger.LogWarning(
                 "Node ID mismatch: certificate has {CertNodeId}, request is for {RequestNodeId}",
                 certNodeId, nodeId);
-            return Results.Forbid();
+            return ProblemDetailsHelper.Forbidden("forbidden");
         }
 
         // Find the node
@@ -179,6 +178,20 @@ public static class AgentEndpoints
         if (node is null)
         {
             return ProblemDetailsHelper.NotFound("node_not_found");
+        }
+
+        // The current thumbprint comes only from the mTLS client certificate, never from the body.
+        var presented = context.User.FindFirst("certificate_thumbprint")?.Value;
+        if (string.IsNullOrEmpty(presented))
+        {
+            logger.LogWarning("Missing certificate_thumbprint claim for certificate renewal request to node {NodeId}", nodeId);
+            return ProblemDetailsHelper.Unauthorized("certificate_required");
+        }
+
+        // The agent's new key: a bounded, non-blank SubjectPublicKeyInfo. Parsing happens in the CA.
+        if (string.IsNullOrWhiteSpace(request.PublicKey) || request.PublicKey.Length > 4096)
+        {
+            return ProblemDetailsHelper.BadRequest("invalid_public_key");
         }
 
         // Find the current certificate and validate the thumbprint
@@ -193,22 +206,24 @@ public static class AgentEndpoints
                 "No active certificate found for this node.");
         }
 
-        if (!string.Equals(currentCert.Thumbprint, request.CurrentThumbprint, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(currentCert.Thumbprint, presented, StringComparison.OrdinalIgnoreCase))
         {
             logger.LogWarning(
                 "Certificate renewal failed for node {NodeId}: thumbprint mismatch. " +
                 "Expected: {Expected}, Provided: {Provided}",
-                nodeId, currentCert.Thumbprint, request.CurrentThumbprint);
+                nodeId, currentCert.Thumbprint, presented);
             return ProblemDetailsHelper.Unauthorized("thumbprint_mismatch",
                 "The provided certificate thumbprint does not match the current certificate.");
         }
 
-        // Issue new certificate
-        var certResult = await caService.RenewCertificateAsync(nodeId, request.CurrentThumbprint, ct);
+        // Issue new certificate bound to the agent-held public key
+        var certResult = await caService.IssueCertificateForPublicKeyAsync(nodeId, request.PublicKey, ct);
         if (!certResult.Success)
         {
             logger.LogError("Failed to renew certificate for node {NodeId}: {Error}", nodeId, certResult.Error);
-            return ProblemDetailsHelper.BadRequest("certificate_renewal_failed", certResult.Error);
+            return certResult.Error == "invalid_public_key"
+                ? ProblemDetailsHelper.BadRequest("invalid_public_key")
+                : ProblemDetailsHelper.BadRequest("certificate_renewal_failed");
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -256,8 +271,7 @@ public static class AgentEndpoints
         var contractsResponse = new Dhadgar.Contracts.Nodes.RenewCertificateResponse(
             CertificateThumbprint: certResult.Thumbprint!,
             Certificate: certResult.CertificatePem!,
-            Pkcs12Base64: certResult.Pkcs12Base64!,
-            Pkcs12Password: certResult.Pkcs12Password!,
+            CaCertificate: await caService.GetCaCertificatePemAsync(ct),
             NotBefore: new DateTimeOffset(certResult.NotBefore!.Value, TimeSpan.Zero),
             NotAfter: new DateTimeOffset(certResult.NotAfter!.Value, TimeSpan.Zero));
 

@@ -1,14 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
 using Microsoft.Extensions.DependencyInjection;
 
-// Alias local models to avoid ambiguity with Contracts types
-using RenewCertificateRequest = Dhadgar.Nodes.Models.RenewCertificateRequest;
-using RenewCertificateResponse = Dhadgar.Nodes.Models.RenewCertificateResponse;
+// Alias contract DTOs explicitly; the Models namespace declares types with the same names.
+using RenewCertificateRequest = Dhadgar.Contracts.Nodes.RenewCertificateRequest;
+using RenewCertificateResponse = Dhadgar.Contracts.Nodes.RenewCertificateResponse;
 
 namespace Dhadgar.Nodes.Tests.Integration;
 
@@ -24,99 +26,66 @@ public sealed class CertificateRenewalIntegrationTests
     }
 
     [Fact]
-    public async Task RenewCertificate_ValidRequest_ReturnsNewCertificate()
+    public async Task Renew_ValidKey_IssuesCertBoundToRequestKey()
     {
-        // Arrange - Create a node with certificate
+        // Arrange - the agent generates a new key pair and sends only its public half
         var (node, originalCert) = await SeedNodeWithCertificateAsync();
         var client = _factory.CreateAgentClient(node.Id);
-
-        var request = new RenewCertificateRequest(originalCert.Thumbprint);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        var spki = ecdsa.ExportSubjectPublicKeyInfo();
 
         // Act
         var response = await client.PostAsJsonAsync(
             $"/agents/{node.Id}/certificates/renew",
-            request);
+            new RenewCertificateRequest(Convert.ToBase64String(spki)));
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<RenewCertificateResponse>();
         Assert.NotNull(result);
-        Assert.NotEmpty(result.CertificateThumbprint);
         Assert.NotEqual(originalCert.Thumbprint, result.CertificateThumbprint);
         Assert.Contains("BEGIN CERTIFICATE", result.Certificate, StringComparison.Ordinal);
-        Assert.NotEmpty(result.Pkcs12Base64);
-        Assert.NotEmpty(result.Pkcs12Password);
+        Assert.Contains("BEGIN CERTIFICATE", result.CaCertificate, StringComparison.Ordinal);
+
+        using var issued = X509Certificate2.CreateFromPem(result.Certificate);
+        Assert.Equal(spki, issued.PublicKey.ExportSubjectPublicKeyInfo());
     }
 
     [Fact]
-    public async Task RenewCertificate_InvalidThumbprint_ReturnsUnauthorized()
-    {
-        // Arrange
-        var (node, _) = await SeedNodeWithCertificateAsync();
-        var client = _factory.CreateAgentClient(node.Id);
-
-        var request = new RenewCertificateRequest("invalid-thumbprint-that-does-not-match");
-
-        // Act
-        var response = await client.PostAsJsonAsync(
-            $"/agents/{node.Id}/certificates/renew",
-            request);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task RenewCertificate_NodeIdMismatch_ReturnsForbidden()
-    {
-        // Arrange
-        var (node, originalCert) = await SeedNodeWithCertificateAsync();
-        var differentNodeId = Guid.NewGuid();
-        var client = _factory.CreateAgentClient(differentNodeId);
-
-        var request = new RenewCertificateRequest(originalCert.Thumbprint);
-
-        // Act
-        var response = await client.PostAsJsonAsync(
-            $"/agents/{node.Id}/certificates/renew",
-            request);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task RenewCertificate_NodeNotFound_ReturnsNotFound()
-    {
-        // Arrange
-        var nonExistentNodeId = Guid.NewGuid();
-        var client = _factory.CreateAgentClient(nonExistentNodeId);
-
-        var request = new RenewCertificateRequest("some-thumbprint");
-
-        // Act
-        var response = await client.PostAsJsonAsync(
-            $"/agents/{nonExistentNodeId}/certificates/renew",
-            request);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task RenewCertificate_RevokesOldCertificate()
+    public async Task Renew_ResponseHasNoPkcs12()
     {
         // Arrange
         var (node, originalCert) = await SeedNodeWithCertificateAsync();
         var client = _factory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
 
-        var request = new RenewCertificateRequest(originalCert.Thumbprint);
+        // Act
+        var response = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var raw = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("pkcs12", raw, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Renew_RevokesPreviousCertificate()
+    {
+        // Arrange
+        var (node, originalCert) = await SeedNodeWithCertificateAsync();
+        var client = _factory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
 
         // Act
         await client.PostAsJsonAsync(
             $"/agents/{node.Id}/certificates/renew",
-            request);
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
 
         // Assert - Check that old certificate is revoked
         using var scope = _factory.Services.CreateScope();
@@ -130,19 +99,19 @@ public sealed class CertificateRenewalIntegrationTests
     }
 
     [Fact]
-    public async Task RenewCertificate_PublishesEvents()
+    public async Task Renew_PublishesEvents()
     {
         // Arrange
         var (node, originalCert) = await SeedNodeWithCertificateAsync();
         var client = _factory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
         _factory.EventPublisher.Clear();
-
-        var request = new RenewCertificateRequest(originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
 
         // Act
         await client.PostAsJsonAsync(
             $"/agents/{node.Id}/certificates/renew",
-            request);
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
 
         // Assert
         Assert.True(_factory.EventPublisher.HasMessage<AgentCertificateRenewed>());
@@ -152,6 +121,105 @@ public sealed class CertificateRenewalIntegrationTests
         var renewedEvent = _factory.EventPublisher.GetLastMessage<AgentCertificateRenewed>()!;
         Assert.Equal(node.Id, renewedEvent.NodeId);
         Assert.Equal(originalCert.Thumbprint, renewedEvent.OldThumbprint);
+    }
+
+    [Fact]
+    public async Task Renew_MissingThumbprintClaim_Returns401CertificateRequired()
+    {
+        // Arrange - no X-Test-Cert-Thumbprint header, so no certificate_thumbprint claim
+        var (node, _) = await SeedNodeWithCertificateAsync();
+        var client = _factory.CreateAgentClient(node.Id);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+
+        // Act
+        var response = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains("certificate_required", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Renew_ThumbprintMismatch_Returns401()
+    {
+        // Arrange
+        var (node, _) = await SeedNodeWithCertificateAsync();
+        var client = _factory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, "not-the-current-thumbprint");
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+
+        // Act
+        var response = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains("thumbprint_mismatch", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Renew_InvalidPublicKey_Returns400()
+    {
+        // Arrange
+        var (node, originalCert) = await SeedNodeWithCertificateAsync();
+        var client = _factory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var rsa1024 = RSA.Create(1024);
+
+        // Act - garbage bytes, then a well-formed but too-small RSA key
+        var garbage = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest("not-a-key!!"));
+        var weakKey = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(rsa1024.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, garbage.StatusCode);
+        Assert.Contains("invalid_public_key", await garbage.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.BadRequest, weakKey.StatusCode);
+        Assert.Contains("invalid_public_key", await weakKey.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Renew_OtherNode_Returns403ProblemJson()
+    {
+        // Arrange - the certificate belongs to a different node than the URL
+        var (node, originalCert) = await SeedNodeWithCertificateAsync();
+        var differentNodeId = Guid.NewGuid();
+        var client = _factory.CreateAgentClient(differentNodeId);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+
+        // Act
+        var response = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Renew_NodeNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        var nonExistentNodeId = Guid.NewGuid();
+        var client = _factory.CreateAgentClient(nonExistentNodeId);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, "some-thumbprint");
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+
+        // Act
+        var response = await client.PostAsJsonAsync(
+            $"/agents/{nonExistentNodeId}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]

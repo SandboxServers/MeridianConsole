@@ -108,51 +108,6 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         }
     }
 
-    public async Task<CertificateIssuanceResult> RenewCertificateAsync(
-        Guid nodeId,
-        string currentCertificateThumbprint,
-        CancellationToken ct = default)
-    {
-        X509Certificate2? certificate = null;
-        RSA? privateKey = null;
-        try
-        {
-            await EnsureInitializedAsync(ct);
-
-            // Validation of current certificate is done at the endpoint level
-            // by checking the AgentCertificate table. Here we just issue a new cert.
-
-            (certificate, privateKey) = CreateClientCertificate(nodeId);
-
-            _logger.LogInformation(
-                "Certificate renewed for node {NodeId}. Old thumbprint: {OldThumbprint}, New thumbprint: {NewThumbprint}",
-                nodeId,
-                currentCertificateThumbprint,
-                certificate.Thumbprint);
-
-            return CreateIssuanceResult(certificate, privateKey, nodeId);
-        }
-        catch (OperationCanceledException)
-        {
-            throw; // Let cancellation propagate
-        }
-        catch (CryptographicException ex)
-        {
-            _logger.LogError(ex, "Cryptographic failure renewing certificate for node {NodeId}", nodeId);
-            return CertificateIssuanceResult.Fail("certificate_renewal_failed");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error renewing certificate for node {NodeId}", nodeId);
-            return CertificateIssuanceResult.Fail("certificate_renewal_failed");
-        }
-        finally
-        {
-            certificate?.Dispose();
-            privateKey?.Dispose();
-        }
-    }
-
     public async Task<CertificateIssuanceResult> IssueCertificateForPublicKeyAsync(
         Guid nodeId,
         string subjectPublicKeyInfoBase64,

@@ -273,6 +273,7 @@ public sealed class TestNodesAuthHandler : AuthenticationHandler<AuthenticationS
     public const string UserIdHeader = "X-Test-User-Id";
     public const string OrgIdHeader = "X-Test-Org-Id";
     public const string NodeIdHeader = "X-Test-Node-Id";
+    public const string CertThumbprintHeader = "X-Test-Cert-Thumbprint";
 
     public TestNodesAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
@@ -309,6 +310,13 @@ public sealed class TestNodesAuthHandler : AuthenticationHandler<AuthenticationS
             Guid.TryParse(nodeIdValues.FirstOrDefault(), out var nodeId))
         {
             claims.Add(new Claim("node_id", nodeId.ToString()));
+        }
+
+        // Add the presented client certificate thumbprint (mTLS renewal identity)
+        if (Request.Headers.TryGetValue(CertThumbprintHeader, out var thumbprintValues) &&
+            !string.IsNullOrEmpty(thumbprintValues.FirstOrDefault()))
+        {
+            claims.Add(new Claim("certificate_thumbprint", thumbprintValues.First()!));
         }
 
         var identity = new ClaimsIdentity(claims, SchemeName);

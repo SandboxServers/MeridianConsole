@@ -40,18 +40,6 @@ public interface ICertificateAuthorityService
         CancellationToken ct = default);
 
     /// <summary>
-    /// Renews an existing certificate for an agent.
-    /// </summary>
-    /// <param name="nodeId">The unique identifier of the node.</param>
-    /// <param name="currentCertificateThumbprint">The thumbprint of the current certificate to validate.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Result containing the new certificate details and PKCS#12 bundle.</returns>
-    Task<CertificateIssuanceResult> RenewCertificateAsync(
-        Guid nodeId,
-        string currentCertificateThumbprint,
-        CancellationToken ct = default);
-
-    /// <summary>
     /// Gets the CA certificate in PEM format for agents to add to their trust store.
     /// </summary>
     Task<string> GetCaCertificatePemAsync(CancellationToken ct = default);
