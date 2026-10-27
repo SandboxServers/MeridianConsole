@@ -399,10 +399,10 @@ internal static class UatRunner
     /// <summary>True when undoing this entry needs an elevated process (service, HKLM, LocalMachine store, machine directory).</summary>
     private static bool RequiresElevation(CleanupEntry entry) => entry switch
     {
-        ServiceEntry or RegistryKeyEntry or RegistryValueEntry or CertStoreEntry or EventSourceEntry => true,
+        ServiceEntry or RegistryKeyEntry or RegistryValueEntry or CertStoreEntry or EventSourceEntry or MsiProductEntry => true,
         CertificateEntry c => string.Equals(c.StoreLocation, "LocalMachine", StringComparison.Ordinal),
         CngKeyEntry k => k.MachineKey,
-        DirectoryEntry d => AgentDirectories.IsMachineAgentDirectory(d.Path),
+        DirectoryEntry d => AgentDirectories.IsMachineDirectory(d.Path),
         _ => false,
     };
 

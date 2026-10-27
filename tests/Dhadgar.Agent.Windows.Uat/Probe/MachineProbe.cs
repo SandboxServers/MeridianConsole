@@ -1,6 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Agent.Core.Authentication;
+using Dhadgar.Agent.Windows.Uat.Msi;
 using Microsoft.Win32;
 
 namespace Dhadgar.Agent.Windows.Uat.Probe;
@@ -70,6 +71,16 @@ internal sealed class MachineProbe : IMachineProbe
         if (Directory.Exists(AgentDirectories.MachineAgentDirectory))
         {
             items.Add($"directory:{AgentDirectories.MachineAgentDirectory}");
+        }
+
+        if (Directory.Exists(AgentDirectories.MachineProgramFilesAgentDirectory))
+        {
+            items.Add($"directory:{AgentDirectories.MachineProgramFilesAgentDirectory}");
+        }
+
+        if (new MsiProducts().RelatedProducts(AgentWindowsFacts.MsiUpgradeCode).Count > 0)
+        {
+            items.Add($"msiProduct:{AgentWindowsFacts.MsiUpgradeCode}");
         }
 
         items.AddRange(ListUatContainers().Select(name => $"container:{name}"));

@@ -259,7 +259,7 @@ internal sealed class CleanupEngine
     private Result DeleteGuarded(string path, Func<string, Result> delete, bool isDirectory)
     {
         var validated = _runPaths.Validate(path);
-        var machineDirectory = isDirectory && AgentDirectories.IsMachineAgentDirectory(path);
+        var machineDirectory = isDirectory && AgentDirectories.IsMachineDirectory(path);
         if (validated.IsFailure && !machineDirectory)
         {
             return Result.Failure($"refusing to delete outside the run folder: {validated.Error}");
