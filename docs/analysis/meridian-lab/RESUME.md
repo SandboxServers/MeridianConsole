@@ -1,37 +1,39 @@
 # RESUME: meridian-lab
 
-Ledger: [README.md](README.md). Packets and contract: [work-packets.md](work-packets.md).
+Ledger: [README.md](README.md). Packets and contract (C1-C17): [work-packets.md](work-packets.md).
 
 ## State (2026-10-27)
 
-- Design done. 28 packets (L01-L28) in 6 waves. Nothing built; no branch yet.
-- L01 is **Ready**. L19-L21, L25 and L27 are **BlockedDecision**; the rest are BlockedDependency.
-- Sprint 2 is not on `main` (local branch `campaign/sprint2-agent-nodes-w1`). Waves 1-4 do not need it; wave 5 does.
-- Supersedes Sprint 2's wave 2U (P18-P23) as the lasting UAT apparatus (D-ML17); the orchestrator reconciles the Sprint 2 ledger.
+- Reworked 2026-10-27 for the owner's WTT-grade goal: 48 packets (L00-L47), 10 waves. Nothing built yet, and there is no branch. PR #227 (the plan) is not merged unless the user says so.
+- **Ready:** L00 (Windows-container spike, worknote only) and L01. Everything else is BlockedDependency. No decision blocks waves 0-5.
+- The MACHINE tier and the elevated helper are gone. Windows rows run in container pool members (D-ML29). The `Machine` gate is reserved (D-ML43). D-ML12 and D-ML13 are superseded.
+- Sprint 2 is not on `main`. Waves 0-7 build against `main`; wave 8 needs Sprint 2 merged.
 
 ## Next actions (orchestrator)
 
-1. ops: worktree `.claude/worktrees/meridian-lab` on new branch `campaign/meridian-lab` from `main`.
-2. Wave 1: L01 → L02 → L03 → L04 → L05 → L06 (L03, L04 may run beside L02). Per packet: `packet-coder`, then `packet-reviewer` + `security-advisor`; at `ship` a Sonnet `general-purpose` agent merges locally and reports the tip.
-3. Ask the user D-ML12 and D-ML13 before wave 4; D-ML14 and D-ML15 with Sprint 2's D-S222/D-S223 before wave 5.
+1. ops: create worktree `.claude/worktrees/meridian-lab` on a new branch `campaign/meridian-lab` from `main`.
+2. Dispatch L00 (spike on the workstation, no code) beside L01. Then L02, L03 and L04 in parallel → L05 → L06. Per packet: `packet-coder`, then `packet-reviewer` + `security-advisor`.
+3. When L00's worknote lands, ask an architect ruling to fill L31's "Settings from L00" table. Raise D-ML37 or D-ML38 only if the outcome needs it.
+4. Raise the non-blocking decisions with the owner whenever convenient. Rule D-ML39 before wave 3 ends (it decides whether M1 ships as a PR).
 
-## Open decisions
+## Owner decisions (recommendation)
 
 | ID | Question | Blocks |
 | --- | --- | --- |
-| D-ML12 | UAC-launched elevated helper (recommended) vs standing elevated service | L19-L21 |
-| D-ML13 | Which machine may run the MACHINE tier (marker on workstation, recommended, vs VM only) | live L21, L27 |
-| D-ML14 | Agent trust of the lab Gateway; follows D-S222 | L25, connected-agent rows of L26 |
-| D-ML15 | MSI leg in UAT; follows D-S223 | nothing |
+| D-ML31 | VM tier: follow-up campaign after wave 9 | nothing |
+| D-ML37 | Enable Hyper-V and Containers if L00 says outcome B: yes | wave 6 under B |
+| D-ML38 | Separate Windows `dockerd` service if engines can't coexist: yes | wave 6 if needed |
+| D-ML39 | One PR per milestone M1-M6: yes (D-ML16 holds until ruled) | ship cadence |
+| D-ML40 | Default-off SMTP switch and BetterAuth cookie-domain env: allow | email and login rows |
+| D-ML41 | Discord bot coverage: out | nothing |
+| D-ML42 | Filing drafts: owner runs `gh issue create`, or ops gains that verb | nothing |
 
-## Gates
-
-- Wave 1: S-L1 green; user installs via `tools\lab\install.ps1`, `claude mcp list` shows `meridian-lab`.
-- Wave 2: S-L2 green (Docker run recorded). Wave 3: S-L5, S-L6 green. Wave 4: S-L4 green plus the user's elevated test run.
-- Wave 5: Sprint 2 merged to `main`, `main` merged into the campaign branch; S-L3 green; L27 ledgers in `worknotes/`.
-- Then campaign review `ship` → L28 → ops pushes once, one PR with `security-review`, merged after the user's yes.
+Owner action **O1**: add the promotion-rule line (D-ML33) to CLAUDE.md.
 
 ## Watch-outs
 
-- Red seams are excluded by `--filter "Seam!=S-Lx"` until their green packet; Docker and elevation tests by trait.
-- Lab ports (15000/15040/15432/15673/16379) never collide with dev compose or Sprint 2's 5672 UAT broker.
+- Faults hit only lab targets. `FaultTargetGuard` checks the registry, a live inspect and the tripwire, and BR tests prove it. Never touch the dev Aspire stack or its volumes.
+- Observation paths bypass Toxiproxy (D-ML34). An invariant check error grades the row UNVERIFIED, never PASS.
+- Red seams are excluded by `Seam!=S-Lx`; Docker, Windows-container and network tests by trait. CI is ubuntu-24.04.
+- No tool files issues or calls GitHub (D-ML28, `NoGitHubCallsTests`). Never a bare `publish -r` (D-S241).
+- Waves 5-7 may run in parallel but merge one at a time (shared `ToolPolicy.cs`, C4, `LabServices.cs`).
