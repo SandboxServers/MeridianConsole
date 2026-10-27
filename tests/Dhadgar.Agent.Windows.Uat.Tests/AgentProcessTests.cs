@@ -35,12 +35,12 @@ public class AgentProcessTests
             Assert.False(read.Value);
 
             Assert.True((await agent.StopAsync()).IsSuccess);
-            File.AppendAllText(Path.Combine(paths.Logs, "agent.log"), "first-run-marker" + Environment.NewLine);
+            await File.AppendAllTextAsync(Path.Combine(paths.Logs, "agent.log"), "first-run-marker" + Environment.NewLine);
 
             Assert.True(agent.Start().IsSuccess);
             await agent.StopAsync();
 
-            Assert.Contains("first-run-marker", File.ReadAllText(Path.Combine(paths.Logs, "agent.log")), StringComparison.Ordinal);
+            Assert.Contains("first-run-marker", await File.ReadAllTextAsync(Path.Combine(paths.Logs, "agent.log")), StringComparison.Ordinal);
         }
         finally
         {

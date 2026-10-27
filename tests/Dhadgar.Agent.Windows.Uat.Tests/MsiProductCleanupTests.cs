@@ -10,7 +10,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// The <c>msiProduct</c> cleanup entry (P23): the engine's allowlist and undo, and the msiexec loop behind it, with
 /// fakes for the installer database and for <c>msiexec</c>. No test installs or removes a product.
 /// </summary>
-public class MsiProductCleanupTests : IDisposable
+public sealed class MsiProductCleanupTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-msi-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -23,6 +23,7 @@ public class MsiProductCleanupTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

@@ -10,7 +10,7 @@ using Xunit;
 namespace Dhadgar.Agent.Windows.Uat.Tests;
 
 /// <summary>U10 "Service setup" (D-S222 (A)): the Root pass condition and the service configuration check.</summary>
-public class ServiceLegsTests : IDisposable
+public sealed class ServiceLegsTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-service-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -30,6 +30,7 @@ public class ServiceLegsTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

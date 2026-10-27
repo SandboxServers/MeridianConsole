@@ -10,7 +10,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// producers append, including the two <c>LocalMachine\Root</c> certificates, is read back from the manifest and
 /// pushed through the real <see cref="CleanupEngine"/>; none may be refused.
 /// </summary>
-public class ServiceCleanupEntriesTests : IDisposable
+public sealed class ServiceCleanupEntriesTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-svc-entries-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -23,6 +23,7 @@ public class ServiceCleanupEntriesTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

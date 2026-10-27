@@ -90,12 +90,14 @@ public class AgentRunTreeTests
         Assert.True(agentRun.GetProperty("treeClean").GetBoolean());
     }
 
+    private static readonly JsonSerializerOptions ResultsJsonOptions = new(JsonSerializerDefaults.Web);
+
     private static string SerializeResults(AgentRunInfo? agentRun)
     {
         var now = DateTime.UtcNow;
         var results = new UatResults(
             1, "20261027-142233-9f3a", "run", "process", now, now, "0123456789abcdef", false, 22631, "10.0.0",
             agentRun is null ? "user" : "agent", true, "pass", 0, [], CleanupSummary.NotRun(), [], agentRun);
-        return JsonSerializer.Serialize(results, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return JsonSerializer.Serialize(results, ResultsJsonOptions);
     }
 }

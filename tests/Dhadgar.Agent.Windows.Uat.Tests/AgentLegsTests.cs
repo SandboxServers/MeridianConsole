@@ -263,7 +263,7 @@ internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentHost, IA
     }
 }
 
-public class AgentLegsTests : IDisposable
+public sealed class AgentLegsTests : IDisposable
 {
     private const string RunId = "20261027-142233-9f3a";
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-legs-" + Guid.NewGuid().ToString("N"));
@@ -279,6 +279,7 @@ public class AgentLegsTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

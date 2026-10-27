@@ -8,7 +8,7 @@ using Xunit;
 namespace Dhadgar.Agent.Windows.Uat.Tests;
 
 /// <summary>The run-scoped TLS leaf (F14): profile, manifest order, the public-only add and the Redactor.</summary>
-public class UatTlsCertificateTests : IDisposable
+public sealed class UatTlsCertificateTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-tls-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -25,6 +25,7 @@ public class UatTlsCertificateTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

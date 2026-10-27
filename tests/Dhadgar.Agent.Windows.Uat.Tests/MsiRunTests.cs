@@ -16,7 +16,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// The MSI run's wiring (P23): U10 without a service, the manifest-before-install order, the U9 scan of UTF-16 MSI logs,
 /// and the <c>msi</c> object of the results. No test runs <c>msiexec</c>.
 /// </summary>
-public class MsiRunTests : IDisposable
+public sealed class MsiRunTests : IDisposable
 {
     private const string RunId = "20261027-142233-9f3a";
     private const string Token = "uat-enroll-token-0123456789abcdef";
@@ -34,6 +34,7 @@ public class MsiRunTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);
@@ -56,7 +57,7 @@ public class MsiRunTests : IDisposable
         Assert.Equal("pass", evidence["U10"]);
         Assert.Equal(result.Value.Tls.ThumbprintSha1, evidence["tlsThumbprint"]);
         Assert.False(evidence.ContainsKey("serviceBinaryPath"));
-        Assert.Equal("{}", File.ReadAllText(Path.Combine(_paths.AgentPublish, "appsettings.json")));
+        Assert.Equal("{}", await File.ReadAllTextAsync(Path.Combine(_paths.AgentPublish, "appsettings.json")));
     }
 
     [SkippableFact]
@@ -260,7 +261,7 @@ public class MsiRunTests : IDisposable
             InstallCalls++;
             var loaded = CleanupManifest.Load(manifestPath);
             EntriesAtInstall = loaded.IsSuccess ? loaded.Value.Count : -1;
-            FirstEntryAtInstall = loaded.IsSuccess ? loaded.Value.FirstOrDefault() : null;
+            FirstEntryAtInstall = loaded.IsSuccess && loaded.Value.Count > 0 ? loaded.Value[0] : null;
             return Result<MsiOutcome>.Failure("stop after the order check");
         }
 

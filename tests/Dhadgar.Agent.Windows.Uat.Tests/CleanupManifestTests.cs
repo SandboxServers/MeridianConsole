@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Dhadgar.Agent.Windows.Uat.Tests;
 
-public class CleanupManifestTests : IDisposable
+public sealed class CleanupManifestTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "uat-manifest-" + Guid.NewGuid().ToString("N"));
 
@@ -14,6 +14,7 @@ public class CleanupManifestTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         Directory.Delete(_dir, recursive: true);
     }
 
