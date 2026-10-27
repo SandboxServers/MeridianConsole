@@ -314,8 +314,29 @@ internal static class UatRunner
             : overall == "pass" ? UatExitCodes.Pass
             : UatExitCodes.Fail;
 
+        var serviceRun = args.Mode == "service" ? ServiceInfoFor(allSteps) : null;
         return await PersistAsync(args, paths, started, "run", args.Mode, allSteps, cleanup, warnings,
-            overall, exitCode, launchedByAgent, treeClean, actions, redactor);
+            overall, exitCode, launchedByAgent, treeClean, actions, redactor, serviceRun);
+    }
+
+    /// <summary>
+    /// The service object of <c>results.json</c> (P22). Runs after cleanup: the TLS leaf's thumbprint (from U10 in
+    /// the U1 evidence) must be absent from <c>LocalMachine\Root</c> by then. The U1 evidence is missing when the
+    /// scenario failed, so the flags are then false, which means "not shown", not "failed".
+    /// </summary>
+    private static ServiceRunInfo ServiceInfoFor(IReadOnlyList<StepResult> steps)
+    {
+        var evidence = steps.FirstOrDefault(s => s.Id == "U1")?.Evidence;
+        var decoyRemoved = evidence is not null && evidence.TryGetValue("U3", out var u3) && u3 is "pass";
+        var tlsThumbprint = evidence is not null && evidence.TryGetValue("tlsThumbprint", out var tls) ? tls as string : null;
+        var tlsRootRemoved = false;
+        if (tlsThumbprint is not null)
+        {
+            var root = RootSnapshot.Take();
+            tlsRootRemoved = root.IsSuccess && !root.Value.Thumbprints.Contains(tlsThumbprint, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return new ServiceRunInfo(AgentWindowsFacts.ServiceName, "LocalSystem", decoyRemoved, tlsRootRemoved);
     }
 
     private static async Task<int> CleanupVerbAsync(
@@ -625,7 +646,8 @@ internal static class UatRunner
         bool launchedByAgent,
         bool? agentTreeClean,
         IMachineActions actions,
-        Redactor redactor)
+        Redactor redactor,
+        ServiceRunInfo? serviceRun = null)
     {
         var (sha, dirty) = await ReadGitAsync(args.RepoRoot);
         var results = new UatResults(
@@ -646,7 +668,8 @@ internal static class UatRunner
             steps,
             cleanup,
             warnings,
-            launchedByAgent ? new AgentRunInfo("D-S239", "CLAUDECODE", agentTreeClean == true) : null);
+            launchedByAgent ? new AgentRunInfo("D-S239", "CLAUDECODE", agentTreeClean == true) : null,
+            serviceRun);
 
         var written = ResultsWriter.Write(results, paths.RunDir, redactor);
         if (written.IsFailure)

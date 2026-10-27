@@ -28,6 +28,12 @@ internal sealed record CleanupSummary(
 /// <summary>The agent-run object of <c>results.json</c>, present only when <c>launchedBy</c> is <c>agent</c> (D-S239).</summary>
 internal sealed record AgentRunInfo(string Authority, string DetectedBy, bool TreeClean);
 
+/// <summary>
+/// The service object of <c>results.json</c>, present only in service mode (P22, D-S222). <c>DecoyRemoved</c> is U3's
+/// result; <c>TlsRootRemovedAtCleanup</c> is the post-cleanup <c>LocalMachine\Root</c> check of the TLS leaf by thumbprint.
+/// </summary>
+internal sealed record ServiceRunInfo(string Name, string Account, bool DecoyRemoved, bool TlsRootRemovedAtCleanup);
+
 /// <summary>The schema of <c>results.json</c> (schemaVersion 1).</summary>
 internal sealed record UatResults(
     int SchemaVersion,
@@ -47,4 +53,5 @@ internal sealed record UatResults(
     IReadOnlyList<StepResult> Steps,
     CleanupSummary Cleanup,
     IReadOnlyList<string> Warnings,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentRunInfo? AgentRun = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentRunInfo? AgentRun = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ServiceRunInfo? Service = null);

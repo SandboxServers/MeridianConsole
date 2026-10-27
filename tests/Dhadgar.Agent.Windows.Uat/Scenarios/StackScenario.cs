@@ -8,6 +8,7 @@ using Dhadgar.Agent.Windows.Uat.Agent;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Agent.Windows.Uat.Probe;
+using Dhadgar.Agent.Windows.Uat.Service;
 using Dhadgar.Agent.Windows.Uat.Stack;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Shared.Results;
@@ -28,6 +29,9 @@ internal sealed class StackScenario : IUatScenario
     private static readonly TimeSpan HubStartTimeout = TimeSpan.FromSeconds(30);
     private const int AgentHeartbeatSeconds = 10;
     private const int AgentConnectionCheckSeconds = 10;
+
+    /// <summary>Service mode (P22): the service control and U10's outcome, kept for the agent legs.</summary>
+    private sealed record ServiceRun(ServiceControl Control, ServiceSetupOutcome Setup);
 
     /// <summary>Creates the scenario for one mode name (<c>process</c>, <c>service</c>, <c>msi</c> or <c>stack-only</c>).</summary>
     public StackScenario(string mode)
@@ -82,9 +86,27 @@ internal sealed class StackScenario : IUatScenario
         }
 
         var (postgresPort, nodesPort, gatewayPort) = (ports[0], ports[1], ports[2]);
+        var gatewayBase = ServiceHost.GatewayBase(gatewayPort);
+
+        // U10 runs before U1 in service mode, because the Gateway needs the run-scoped TLS certificate at start (P22).
+        ServiceRun? serviceRun = null;
+        GatewayTls? tls = null;
+        if (context.Mode == "service")
+        {
+            var setUp = await SetUpServiceAsync(context, gatewayBase, evidence);
+            if (setUp.IsFailure)
+            {
+                return Result.Failure(setUp.Error!);
+            }
+
+            serviceRun = setUp.Value;
+            tls = new GatewayTls(setUp.Value.Setup.Tls.PfxPath, setUp.Value.Setup.Tls.Password);
+        }
+
         var settings = new StackSettings(
             postgresPort, FreePorts.RabbitMqPort, nodesPort, gatewayPort,
-            Secrets.GeneratePassword(redactor), Secrets.GeneratePassword(redactor), Secrets.GeneratePassword(redactor));
+            Secrets.GeneratePassword(redactor), Secrets.GeneratePassword(redactor), Secrets.GeneratePassword(redactor),
+            tls);
         evidence["ports"] = $"postgres {postgresPort}, rabbitmq {FreePorts.RabbitMqPort}, nodes {nodesPort}, gateway {gatewayPort}";
 
         // U1: containers, then Nodes and the Gateway.
@@ -132,7 +154,6 @@ internal sealed class StackScenario : IUatScenario
 
         // S-enroll
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-        var gatewayBase = ServiceHost.GatewayBase(gatewayPort);
         var hardware = new HardwareInventoryRequest(
             Environment.MachineName,
             RuntimeInformation.OSDescription,
@@ -232,23 +253,49 @@ internal sealed class StackScenario : IUatScenario
         }
 
         evidence["S-db"] = "pass";
-        if (context.Mode != "process")
+        if (context.Mode is not ("process" or "service"))
         {
             return Result.Success();
         }
 
-        return await RunAgentLegsAsync(context, job, nodesDb, gatewayBase, ServiceHost.NodesBase(nodesPort), evidence, ct);
+        return await RunAgentLegsAsync(context, job, nodesDb, gatewayBase, ServiceHost.NodesBase(nodesPort), serviceRun, evidence, ct);
     }
 
     /// <summary>
-    /// The process-mode agent legs (P20 U2-U4) after the stack smoke, then the renewal legs (P21 U5-U8). The legs use a
-    /// new organization, so the smoke's node is not counted as a node of the run's organization in U3.
+    /// U10 in service mode (P22): the run-scoped TLS leaf and the decoy CA go into <c>LocalMachine\Root</c>, and the
+    /// <c>DhadgarAgent</c> service is created. The returned <see cref="ServiceRun"/> keeps the service control for the legs.
+    /// </summary>
+    private static async Task<Result<ServiceRun>> SetUpServiceAsync(
+        RunContext context, Uri gatewayBase, Dictionary<string, object?> evidence)
+    {
+        var control = new ServiceControl(context.Paths, context.Manifest, context.Redactor);
+        var deps = new ServiceSetupDeps(new WindowsMachineActions(), control, RootSnapshot.Take);
+        var setup = await ServiceSetup.RunAsync(
+            context.Paths, context.RunId, context.Manifest, context.Redactor, BuildAgentConfig(context, gatewayBase), deps, evidence);
+        return setup.IsSuccess
+            ? Result<ServiceRun>.Success(new ServiceRun(control, setup.Value))
+            : Result<ServiceRun>.Failure(setup.Error!);
+    }
+
+    private static AgentConfig BuildAgentConfig(RunContext context, Uri gatewayBase) => new(
+        gatewayBase,
+        AgentHeartbeatSeconds,
+        AgentConnectionCheckSeconds,
+        context.Paths.AgentState,
+        Path.Combine(context.Paths.AgentData, "Servers"),
+        Path.Combine(context.Paths.AgentData, "Temp"));
+
+    /// <summary>
+    /// The agent legs (P20 U2-U4) after the stack smoke, then the renewal legs (P21 U5-U8). In process mode the agent is
+    /// a child process; in service mode (P22) it is the <c>DhadgarAgent</c> LocalSystem service. The legs use a new
+    /// organization, so the smoke's node is not counted as a node of the run's organization in U3.
     /// </summary>
     private static async Task<Result> RunAgentLegsAsync(
-        RunContext context, JobObject job, NodesDb nodesDb, Uri gatewayBase, Uri nodesBase, Dictionary<string, object?> evidence, CancellationToken ct)
+        RunContext context, JobObject job, NodesDb nodesDb, Uri gatewayBase, Uri nodesBase, ServiceRun? service,
+        Dictionary<string, object?> evidence, CancellationToken ct)
     {
-        using var identity = WindowsIdentity.GetCurrent();
-        var accountSid = identity.User?.Value;
+        // The service runs as LocalSystem (U10 checks it); the process agent runs as the elevated user.
+        var accountSid = service is null ? CurrentUserSid() : new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null).Value;
         if (accountSid is null)
         {
             return Fail(evidence, "U2", "could not read the SID of the account the agent runs as");
@@ -256,15 +303,11 @@ internal sealed class StackScenario : IUatScenario
 
         var organizationId = Guid.NewGuid();
         var minter = new TokenMinter(() => nodesDb.Create(), context.RunId, context.Redactor);
-        var config = new AgentConfig(
-            gatewayBase,
-            AgentHeartbeatSeconds,
-            AgentConnectionCheckSeconds,
-            context.Paths.AgentState,
-            Path.Combine(context.Paths.AgentData, "Servers"),
-            Path.Combine(context.Paths.AgentData, "Temp"));
-        using var agentProcess = new AgentProcess(context.Paths, job, context.Redactor, context.Manifest);
-        var agentHost = new ProcessAgentHost(context.Paths, agentProcess);
+        var config = BuildAgentConfig(context, gatewayBase);
+        using var agentProcess = service is null ? new AgentProcess(context.Paths, job, context.Redactor, context.Manifest) : null;
+        IAgentHost agentHost = service is null
+            ? new ProcessAgentHost(context.Paths, agentProcess!)
+            : new ServiceAgentHost(service.Control, context.Manifest);
         var deps = new AgentLegsDeps(
             new RegistryToken(context.Manifest),
             new StoreInspector(),
@@ -272,7 +315,8 @@ internal sealed class StackScenario : IUatScenario
             new NodesAgentLegsDb(() => nodesDb.Create()),
             (label, c) => minter.MintAsync(organizationId, label, c));
         var options = new AgentLegsOptions(
-            organizationId, accountSid, config, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(60));
+            organizationId, accountSid, config, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(60),
+            service?.Setup.DecoyThumbprint);
         evidence["legsOrganizationId"] = organizationId.ToString();
 
         var legs = await new AgentLegs(context.Paths, context.Manifest, deps, options).RunAsync(evidence, ct);
@@ -281,7 +325,7 @@ internal sealed class StackScenario : IUatScenario
             return legs.IsFailure ? legs : Fail(evidence, "U5", "the node ID from U3 is missing");
         }
 
-        // The renewal legs run after the agent is stopped (U4 leaves it stopped), with the same process object.
+        // The renewal legs run after the agent is stopped (U4 leaves it stopped), with the same host object.
         var renewalDeps = new RenewalLegsDeps(
             new StoreInspector(),
             agentHost,
@@ -298,6 +342,13 @@ internal sealed class StackScenario : IUatScenario
             TimeSpan.FromSeconds(90),
             TimeSpan.FromSeconds(60));
         return await new RenewalLegs(context.Paths, context.Manifest, renewalDeps, renewalOptions).RunAsync(evidence, ct);
+    }
+
+    /// <summary>The SID of the account this run runs as, or null when it cannot be read.</summary>
+    private static string? CurrentUserSid()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        return identity.User?.Value;
     }
 
     /// <summary>Opens a <c>LocalMachine\My</c> certificate with its key, by its SHA-1 thumbprint (P21 U5-U7).</summary>
