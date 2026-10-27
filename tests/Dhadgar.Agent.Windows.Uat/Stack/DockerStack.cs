@@ -102,7 +102,7 @@ internal sealed class DockerStack
             return recorded;
         }
 
-        var output = await CommandRunner.RunAsync("docker", arguments, CommandTimeout, _redactor, null, ct, environment);
+        var output = await CommandRunner.RunAsync("docker", arguments, ReadyBudget, _redactor, null, ct, environment);
         if (output.IsFailure)
         {
             return Result.Failure($"docker run {name} failed: {output.Error}");

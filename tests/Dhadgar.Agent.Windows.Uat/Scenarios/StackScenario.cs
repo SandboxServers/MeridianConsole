@@ -140,7 +140,7 @@ internal sealed class StackScenario : IUatScenario
             Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()), "uat");
 
         EnrollNodeResponse? enrolled;
-        using (var client = GatewayClients.Create())
+        using (var client = GatewayClients.Create(null, TimeSpan.FromSeconds(60)))
         {
             using var response = await client.PostAsJsonAsync(new Uri(gatewayBase, "api/v1/agents/enroll"), request, ct);
             evidence["enrollStatus"] = (int)response.StatusCode;
@@ -249,8 +249,10 @@ internal sealed class StackScenario : IUatScenario
         {
             await connection.StartAsync(startCts.Token);
             evidence["hubTransport"] = "WebSockets";
+            using var invokeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            invokeCts.CancelAfter(HubStartTimeout);
             var ack = await connection.InvokeAsync<AgentHeartbeatAck>(
-                nameof(IAgentHub.Heartbeat), new AgentHeartbeat(1, 1, 1, 0, "uat-smoke", null), ct);
+                nameof(IAgentHub.Heartbeat), new AgentHeartbeat(1, 1, 1, 0, "uat-smoke", null), invokeCts.Token);
             evidence["hubAckServerTime"] = ack.ServerTime.ToString("O");
             return ack.Acknowledged
                 ? Result.Success()
@@ -258,7 +260,7 @@ internal sealed class StackScenario : IUatScenario
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return Result.Failure("hub did not start within 30 s");
+            return Result.Failure("hub did not start or answer the heartbeat within 30 s");
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException
                                        or System.Net.WebSockets.WebSocketException or HubException)
@@ -269,7 +271,7 @@ internal sealed class StackScenario : IUatScenario
 
     private static async Task<int> PostNegotiateAsync(Uri uri, X509Certificate2? certificate, CancellationToken ct)
     {
-        using var client = GatewayClients.Create(certificate);
+        using var client = GatewayClients.Create(certificate, TimeSpan.FromSeconds(30));
         using var request = new HttpRequestMessage(HttpMethod.Post, uri);
         request.Headers.Add(AgentHubProtocol.VersionHeader, AgentHubProtocol.CurrentVersion);
         using var response = await client.SendAsync(request, ct);

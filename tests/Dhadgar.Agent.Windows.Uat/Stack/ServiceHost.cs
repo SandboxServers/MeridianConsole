@@ -100,16 +100,21 @@ internal sealed class ServiceHost : IDisposable
             ["ReverseProxy__Clusters__nodes__Destinations__d1__Address"] = $"http://127.0.0.1:{s.NodesPort}/",
         };
 
+    /// <summary>The Nodes child spec: the image from <see cref="RunPaths.StackImages"/>, its folder, and the Nodes environment (N5).</summary>
+    internal static ChildSpec NodesSpec(StackSettings settings, RunPaths paths) =>
+        new("nodes", paths.StackImages[0], [], Path.GetDirectoryName(paths.StackImages[0])!, NodesEnvironment(settings, paths));
+
+    /// <summary>The Gateway child spec: the image from <see cref="RunPaths.StackImages"/>, its folder, and the Gateway environment (N5).</summary>
+    internal static ChildSpec GatewaySpec(StackSettings settings, RunPaths paths) =>
+        new("gateway", paths.StackImages[1], [], Path.GetDirectoryName(paths.StackImages[1])!, GatewayEnvironment(settings));
+
     /// <summary>
     /// Starts Nodes, waits for its <c>/healthz</c>, then starts the Gateway and waits for its own. A child that
     /// exits early fails with its exit code and the tail of its log.
     /// </summary>
     public async Task<Result> StartAsync(StackSettings settings, CancellationToken ct)
     {
-        var nodesDir = Path.GetDirectoryName(_paths.StackImages[0])!;
-        var nodes = ChildProcess.Start(
-            new ChildSpec("nodes", _paths.StackImages[0], [], nodesDir, NodesEnvironment(settings, _paths)),
-            _job, _redactor, _manifest);
+        var nodes = ChildProcess.Start(NodesSpec(settings, _paths), _job, _redactor, _manifest);
         if (nodes.IsFailure)
         {
             return Result.Failure($"nodes did not start: {nodes.Error}");
@@ -122,10 +127,7 @@ internal sealed class ServiceHost : IDisposable
             return nodesHealthy;
         }
 
-        var gatewayDir = Path.GetDirectoryName(_paths.StackImages[1])!;
-        var gateway = ChildProcess.Start(
-            new ChildSpec("gateway", _paths.StackImages[1], [], gatewayDir, GatewayEnvironment(settings)),
-            _job, _redactor, _manifest);
+        var gateway = ChildProcess.Start(GatewaySpec(settings, _paths), _job, _redactor, _manifest);
         if (gateway.IsFailure)
         {
             return Result.Failure($"gateway did not start: {gateway.Error}");

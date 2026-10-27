@@ -46,10 +46,8 @@ folder. It needs no elevation and runs under `CLAUDECODE`. It refuses (exit 2) w
 | --- | --- | --- |
 | PostgreSQL 16 | Docker container `meridian-uat-pg-<runId>`, database `dhadgar_nodes_uat` | free loopback port |
 | RabbitMQ 3 | Docker container `meridian-uat-mq-<runId>` | **5672** (fixed) |
-| Nodes | child process from `src\Dhadgar.Nodesin\Release
-et10.0`, plain HTTP on 127.0.0.1 | free loopback port |
-| Gateway | child process from `src\Dhadgar.Gatewayin\Release
-et10.0`, HTTPS on `localhost` | free loopback port |
+| Nodes | child process from `src\Dhadgar.Nodes\bin\Release\net10.0`, plain HTTP on 127.0.0.1 | free loopback port |
+| Gateway | child process from `src\Dhadgar.Gateway\bin\Release\net10.0`, HTTPS on `localhost` | free loopback port |
 
 RabbitMQ must be on 5672 because `RabbitMqOptions` has no port setting. Stop a dev-compose RabbitMQ first.
 Containers bind to 127.0.0.1 only and carry the label `meridian-uat=<runId>`. Passwords are 24 random

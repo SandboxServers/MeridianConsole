@@ -55,4 +55,19 @@ public class ServiceEnvironmentTests
         Assert.EndsWith(@"Dhadgar.Nodes\bin\Release\net10.0\Dhadgar.Nodes.exe", Paths.StackImages[0], StringComparison.OrdinalIgnoreCase);
         Assert.EndsWith(@"Dhadgar.Gateway\bin\Release\net10.0\Dhadgar.Gateway.exe", Paths.StackImages[1], StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void StartedSpecs_RunTheStackImages_NotAnyOtherExe()
+    {
+        // Asserts the spec StartAsync actually starts, so a changed FileName or WorkingDirectory fails here (N5).
+        var nodes = ServiceHost.NodesSpec(Settings, Paths);
+        var gateway = ServiceHost.GatewaySpec(Settings, Paths);
+
+        Assert.Equal(Paths.StackImages[0], nodes.FileName);
+        Assert.Equal(Paths.StackImages[1], gateway.FileName);
+        Assert.Equal(Path.GetDirectoryName(Paths.StackImages[0]), nodes.WorkingDirectory);
+        Assert.Equal(Path.GetDirectoryName(Paths.StackImages[1]), gateway.WorkingDirectory);
+        Assert.Equal(ServiceHost.NodesEnvironment(Settings, Paths), nodes.Environment);
+        Assert.Equal(ServiceHost.GatewayEnvironment(Settings), gateway.Environment);
+    }
 }

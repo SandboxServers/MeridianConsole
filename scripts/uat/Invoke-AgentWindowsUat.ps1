@@ -91,7 +91,8 @@ try {
     }
 
     Write-Output "Run folder: $runDir"
-    if ($verb -ne 'cleanup') {
+    # stack-only must find no run folder (the driver refuses one that exists, N1), so the driver creates it.
+    if ($verb -ne 'cleanup' -and $verb -ne 'stack-only') {
         [System.IO.Directory]::CreateDirectory($runDir) | Out-Null
     }
 

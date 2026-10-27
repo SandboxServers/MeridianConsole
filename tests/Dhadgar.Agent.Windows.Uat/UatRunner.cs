@@ -91,6 +91,12 @@ internal static class UatRunner
     private static async Task<int> StackOnlyVerbAsync(
         UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent, CancellationToken ct)
     {
+        // The manifest is then written only by this process: a planted or stale manifest must never reach cleanup (N1).
+        if (Directory.Exists(paths.RunDir))
+        {
+            return Refuse("stack-only refused: run folder already exists");
+        }
+
         var preflight = await new PreflightChecks(probe, actions, paths.RunDir, null, launchedByAgent)
             .RunAsync(PreflightMode.StackOnly, ct);
         if (!preflight.PassesFor(PreflightMode.StackOnly))
@@ -136,7 +142,7 @@ internal static class UatRunner
 #pragma warning restore CA1031
         finally
         {
-            cleanup = await CleanupGuardedAsync(paths, actions, probe, warnings);
+            cleanup = await CleanupGuardedAsync(paths, actions, probe, warnings, entry => IsStackOnlyEntry(paths, entry));
         }
 
         if (internalError is not null)
@@ -318,12 +324,12 @@ internal static class UatRunner
     /// summary, so the caller still writes results.json.
     /// </summary>
     private static async Task<CleanupSummary> CleanupGuardedAsync(
-        RunPaths paths, IMachineActions actions, IMachineProbe probe, List<string> warnings)
+        RunPaths paths, IMachineActions actions, IMachineProbe probe, List<string> warnings, Func<CleanupEntry, bool>? keep = null)
     {
 #pragma warning disable CA1031 // Cleanup must never escape: results.json is written in every case (D-S225).
         try
         {
-            return await CleanupAsync(paths, actions, probe, warnings);
+            return await CleanupAsync(paths, actions, probe, warnings, keep);
         }
         catch (Exception ex)
         {
@@ -333,8 +339,20 @@ internal static class UatRunner
 #pragma warning restore CA1031
     }
 
+    /// <summary>
+    /// The entries stack-only may undo: the containers and child processes it starts, and directories under the run
+    /// folder. Machine items (services, certificates, registry, event sources) are never undone by stack-only (N1).
+    /// </summary>
+    private static bool IsStackOnlyEntry(RunPaths paths, CleanupEntry entry) => entry switch
+    {
+        ContainerEntry or ProcessEntry => true,
+        DirectoryEntry d => paths.Validate(d.Path).IsSuccess,
+        _ => false,
+    };
+
     /// <summary>Undoes the manifest, rescans the machine, and compares the Root snapshot.</summary>
-    private static async Task<CleanupSummary> CleanupAsync(RunPaths paths, IMachineActions actions, IMachineProbe probe, List<string> warnings)
+    private static async Task<CleanupSummary> CleanupAsync(
+        RunPaths paths, IMachineActions actions, IMachineProbe probe, List<string> warnings, Func<CleanupEntry, bool>? keep = null)
     {
         var loaded = CleanupManifest.Load(paths.Manifest);
         if (loaded.IsFailure)
@@ -343,7 +361,8 @@ internal static class UatRunner
                 [new CleanupFailure("manifest", paths.Manifest, loaded.Error)], [], [], []);
         }
 
-        var report = await new CleanupEngine(actions, paths).UndoAsync(loaded.Value, CancellationToken.None);
+        var entries = keep is null ? loaded.Value : loaded.Value.Where(keep).ToList();
+        var report = await new CleanupEngine(actions, paths).UndoAsync(entries, CancellationToken.None);
         var failed = report.Failed.ToList();
         var rootAdded = new List<string>();
         var rootRemoved = new List<string>();

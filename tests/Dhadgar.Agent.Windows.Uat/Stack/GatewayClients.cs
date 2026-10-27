@@ -15,9 +15,11 @@ internal static class GatewayClients
 
     /// <summary>
     /// A client with redirects off. When <paramref name="clientCertificate"/> is given it is offered for the TLS
-    /// client handshake. The caller disposes the client.
+    /// client handshake. <paramref name="timeout"/> defaults to <see cref="ProbeTimeout"/>; the enroll and negotiate
+    /// requests pass a longer one, because the first request through a fresh stack pays JIT and migration cost (N3).
+    /// The caller disposes the client.
     /// </summary>
-    public static HttpClient Create(X509Certificate2? clientCertificate = null)
+    public static HttpClient Create(X509Certificate2? clientCertificate = null, TimeSpan? timeout = null)
     {
         var handler = new SocketsHttpHandler
         {
@@ -32,6 +34,6 @@ internal static class GatewayClients
                 (_, _, _, _, _) => clientCertificate;
         }
 
-        return new HttpClient(handler, disposeHandler: true) { Timeout = ProbeTimeout };
+        return new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? ProbeTimeout };
     }
 }
