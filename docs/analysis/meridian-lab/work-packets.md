@@ -88,6 +88,7 @@ public static class LabPorts
     public const int Panel = 14321;               // L34
     public const int AgentIngress = 25000;        // Toxiproxy agent-ingress -> gateway
     public const int AgentIngressTls = 25443;     // L41
+    public const int Barrier = 25080;             // L49: in-daemon lab-only HTTP barrier proxy -> AgentIngress (C10)
     // Infrastructure (host side)
     public const int Postgres = 15432;
     public const int RabbitMq = 15673;
@@ -96,7 +97,7 @@ public static class LabPorts
     public const int ToxiproxyApi = 18474;
     public const int Sink = 18090;                // L36
     public static readonly IReadOnlySet<int> ServicePorts = new HashSet<int>
-        { Gateway, GatewayTls, Identity, Nodes, Notifications, Discord, BetterAuth, Panel, AgentIngress, AgentIngressTls };
+        { Gateway, GatewayTls, Identity, Nodes, Notifications, Discord, BetterAuth, Panel, AgentIngress, AgentIngressTls, Barrier };
     public static readonly IReadOnlySet<int> InfraPorts = new HashSet<int>
         { RabbitMqManagement, ToxiproxyApi, Sink };     // HTTP observation endpoints only
 }
@@ -104,6 +105,7 @@ public static class LabPorts
 public static class LabIds
 {
     public static readonly Guid OrganizationId = new("4d4c4142-0000-4000-8000-000000000001");
+    public static readonly Guid TenantBOrganizationId = new("4d4c4142-0000-4000-8000-000000000002"); // L56 twin variant tenant
     public const string CreatedByUserId = "meridian-lab";
 }
 
@@ -310,16 +312,17 @@ Every Leased tool takes a required `lease_id` string; it is not repeated below. 
 | `job_status` | Open | `job_id?` (default all) | `{jobs:[{job_id, kind, state, started_at, progress, result?}]}` | L27 |
 | `pool_list` | Open | - | `{providers:[{kind, available, reason}], members:[PoolMember]}` | L30 |
 | `ui_flow_list` | Open | - | `{flows:[{name, description}]}` | L35 |
-| `lab_build` | Leased | `checkout` (repo root or under `<repo>\.claude\worktrees\`), `projects?` (C10 build projects) | `{build_id, commit, dirty, path, projects, images, duration_ms}` | L09 |
+| `lab_build` | Leased | `checkout` (repo root or under `<repo>\.claude\worktrees\`), `projects?` (C10 build projects), `baseline?` (L60: a name from `tools/lab/baselines.toml`; then `checkout` is ignored and the build comes from `git archive <sha>`), `mutant?` (L54: a lab-only mutant id, C19) | `{build_id, commit, dirty, path, projects, images, duration_ms, baseline?, mutant?}` | L09, L54, L60 |
 | `stack_up` | Leased | `wipe?` | `stack_status` result | L08 |
 | `stack_down` | Leased | `wipe?` | `stack_status` result | L08 |
 | `stack_reset_data` | Leased | `databases?` (default all lab DBs) | `{truncated:[{database, tables}]}` | L11 |
 | `svc_start`, `svc_stop`, `svc_restart` | Leased | `service` (C10 services), `build_id?` (default latest) | `{target_id, state, image}` | L09 |
 | `svc_config_set` | Leased | `service`, `key`, `value` (string or null to clear) | `{service, overlay:{...}}` | L09 |
-| `http_request` | Leased | `via` (`gateway`, `agent_ingress`, `sink` (L36), or a C10 service), `method`, `path`, `headers?`, `body?` (JSON; `${secret:<ref>}` placeholders) | `{status, headers, body, duration_ms}` (redacted, body max 64 KiB) | L10 |
-| `nodes_token_mint` | Leased | `label?`, `validity_minutes?` (60, 1 to 1440) | `{token_ref, token_id, expires_at}` | L11 |
-| `nodes_enroll_probe` | Leased | `token_ref`, `platform` (`windows`, `linux`), `via` (`gateway`, `agent_ingress`, `nodes`) | `{status, node_id?, certificate_thumbprint?, error?}` | L11 |
+| `http_request` | Leased | `via` (`gateway`, `agent_ingress`, `sink` (L36), or a C10 service), `method`, `path`, `headers?`, `body?` (JSON; `${secret:<ref>}` placeholders), `bearer_ref?` (L56: a `brr-N` vault ref sent as `Authorization: Bearer`, redacted in evidence) | `{status, headers, body, duration_ms, outcome}` (redacted, body max 64 KiB; `outcome` `ok`/`fail`/`unknown` per C18, from L48; a transport error after sending returns `outcome: unknown` with the error code) | L10, L48, L56 |
+| `nodes_token_mint` | Leased | `label?`, `validity_minutes?` (60, 1 to 1440), `organization_id?` (L56: `LabIds.OrganizationId` (default), `LabIds.TenantBOrganizationId`, or an organization id present in the lab Identity database; anything else `[Lab.InvalidArgument]`) | `{token_ref, token_id, expires_at, organization_id}` | L11, L56 |
+| `nodes_enroll_probe` | Leased | `token_ref`, `platform` (`windows`, `linux`), `via` (`gateway`, `agent_ingress`, `nodes`), `hostname?` (L51; `^[a-z0-9-]{1,48}$`, default `meridian-lab-probe`), `key_ref?` (L51; reuse a vaulted key for a retry, default a new key) | `{status, node_id?, certificate_thumbprint?, key_ref, error?}` | L11, L51 |
 | `nodes_cert_time_shift` | Leased | `node_id`, `shift_minutes` (-525600..0), `fields?` (`issued_at`, `not_before`, `not_after`, `grace_until`) | `{rows_updated}` | L11, L40 |
+| `nodes_decommission` | Leased | `node_id` (a node the lab enrolled in this lease, else `[Lab.BlastRadius]`) | `{status}` | L58; runs `INodeService.DecommissionNodeAsync` through the Nodes lab adapter (the user route needs a user token, F38) |
 | `fault_toxic_add` | Leased | `proxy` (C10), `toxic` (`latency`, `bandwidth`, `timeout`, `reset_peer`, `slow_close`, `slicer`, `limit_data`), `stream` (`upstream`, `downstream`), `toxicity?` (1.0), `attributes`, `heal_after_s?` | `ActiveFault` | L19 |
 | `fault_proxy_disable` | Leased | `proxy`, `heal_after_s?` | `ActiveFault` | L19 |
 | `fault_partition` | Leased | `from` (service), `to` (service or dependency), `heal_after_s?` | `ActiveFault` (one fault id over every proxy on the edge) | L19 |
@@ -347,6 +350,7 @@ Every Leased tool takes a required `lease_id` string; it is not repeated below. 
 | `agent_install` | Leased | `member`, `mode` (`service`, `console`), `build_id?` | `{member, mode, binary_path}` | L32 |
 | `agent_uninstall` | Leased | `member` | `{removed}` | L32 |
 | `agent_start`, `agent_stop` | Leased | `member` | `{member, state}` | L32 |
+| `agent_kill` | Leased | `member` | `{member, pid}`; kills only the agent process, not its tree, through the probe's `kill-agent`, so the row sees the job object's own behaviour (F44) | L59 |
 | `agent_token_write` | Leased | `member`, `token_ref` | `{written:true}` | L32 |
 | `agent_config_set` | Leased | `member`, `key`, `value` (or null) | `{member, overlay:{...}}` | L32 |
 | `agent_msi_install`, `agent_msi_uninstall` | Leased | `member`, `build_id?`, `token_ref?` | `{member, exit_code, log_path}` | L43 |
@@ -354,6 +358,18 @@ Every Leased tool takes a required `lease_id` string; it is not repeated below. 
 | `ui_flow_run` | Leased | `flow` (C14), `seed?` | C14 `UiFlowResult` | L35 |
 | `uat_run` | OwnLease | `specs`, `sections?`, `rows?`, `plan_only?`, `label?`, `seed?`, `replay?` (bundle-relative `repro/*.toml`), `lease_id?` | `{run_id, bundle, seed, overall, summary, rows:[...]}` | L15, L22 |
 | `uat_attest` | Leased | `run_id`, `section`, `row`, `clause_id`, `verdict` (`held`, `not_held`), `note` | `{section, row, grade}` | L16 |
+| `identity_user_token` | Leased | `tenant` (`a`, `b`) | `{bearer_ref, organization_id, user_id}` (signs up or signs in a seeded lab user per tenant through the Gateway, exchanges for an Identity access token with `org_id`; the token goes to the vault as `brr-N`) | L56 |
+| `events_read` | Open | `run_id`, `after_seq?` (0), `actor?`, `kind?`, `max?` (500, max 5000) | `{events:[LabObservation], next_seq}` (C18) | L48 |
+| `history_run` | OwnLease | `scenario` (C19 scenario id), `clients?` (2..8), `seed?`, `minimise?` (true), `replay?`, `lease_id?` | `{run_id, verdict:"linearizable"\|"violation"\|"unknown", violations:[{rule, ops}], minimal_repro?}` (synchronous, at most 300 s) | L51 |
+| `twin_run` | OwnLease | `experiment` (`docs/guides/uat-specs/twins/<name>.toml`), `seed?`, `lease_id?` | `{experiment_id, base_run_id, variant_run_id, relation, held, diffs:[...]}` | L53, L56 |
+| `mutation_run` | OwnLease | `mutants?` (default all product mutants), `lease_id?` | `{job_id}`; the job writes `mutants.json` and `mutants.md` (C19) | L54 |
+| `coverage_report` | Open | `since_run_id?`, `kind?` | `{dimensions:[{kind, total, hit, unhit:[...]}]}` (C18) | L52 |
+| `envelope_run` | OwnLease | `envelope` (`docs/guides/uat-specs/envelopes/<name>.toml`), `cells?` (cell ids, default all), `seed?`, `lease_id?` | `{job_id}`; the job writes `envelope.json` and `envelope.md` (C20) | L57 |
+| `peer_run` | OwnLease | `attack` (C19 peer attack id or `all`), `seed?`, `lease_id?` | `{job_id}` | L58 |
+| `version_run` | OwnLease | `pair` (`docs/guides/uat-specs/versions/<name>.toml`), `seed?`, `lease_id?` | `{job_id}` (C20) | L60, L61 |
+| `guided_ab_run` | OwnLease | `job` (`hunt_model_run` or `chaos_run`), `args` (that tool's arguments without `seed`), `runs?` (100 per arm, 20..200), `seed?`, `lease_id?` | `{job_id}`; the job writes `ab.json` and `ab.md` (C20) | L62 |
+
+`hunt_model_run` and `chaos_run` gain `mode?` (`random` (default), `guided`) and `random_share?` (0.3, 0.3..1.0) in L62; `guided` is refused with `[Lab.InvalidArgument] guided mode disabled` while `tools/lab/guided.toml` says `enabled = false` (C20).
 
 No tool has gate `Machine` (D-ML43).
 
@@ -383,7 +399,7 @@ public static class AgentWindowsFootprint
 
 `src/Shared/Dhadgar.Contracts/Agents/ProbeFootprint.cs` (L12) is the JSON the probe prints inside a Windows member and the lab reads; its shape is in L12. It crosses a process and container boundary, so it lives in Contracts.
 
-The lab reuses existing product contracts unchanged: `Dhadgar.Contracts.Nodes.EnrollNodeRequest(Token, Platform, Hardware, PublicKey, AgentVersion?)`, `EnrollNodeResponse`, `HardwareInventoryRequest`, `AgentCertificateProfile`, `CommandEnvelope` (L44 fuzzes it) and `AgentHubContracts` (after Sprint 2). The fleet (L42) drives the real `Dhadgar.Agent.Core` classes; it never re-implements an agent message.
+The lab reuses existing product contracts unchanged: `Dhadgar.Contracts.Nodes.EnrollNodeRequest(Token, Platform, Hardware, PublicKey, AgentVersion?)`, `EnrollNodeResponse`, `HardwareInventoryRequest`, `AgentCertificateProfile`, `CommandEnvelope` (L44 fuzzes it) and `AgentHubContracts` (`IAgentHub`, `IAgentHubClient`, `AgentHubProtocol`; on `main` since Sprint 2, D-ML60). The fleet (L42) drives the real `Dhadgar.Agent.Core` classes; it never re-implements an agent message.
 
 ### C6. Seam stubs written in L01
 
@@ -406,7 +422,8 @@ public static class EnrollProbe
 
 // NodesLabAdapter(Func<NodesDbContext> createContext, SecretVault vault, TimeProvider time, ILoggerFactory loggers)
 // L01: every method returns Failure("[Lab.NotImplemented] ..."). L11 implements.
-// GraceUntil: L11 returns [Lab.Unavailable] for it until L40 (Sprint 2 adds the column).
+// GraceUntil: L11 implements it; Sprint 2's AgentCertificate.GraceUntil column is on main (D-ML60).
+// L58 adds: Task<Result<NodeStatus>> DecommissionNodeAsync(Guid nodeId, CancellationToken ct); // through the product's NodeService
 ```
 
 ### C7. UAT spec (TOML, schema 1)
@@ -430,7 +447,7 @@ id = "token-mint"                   # unique in section
 title = "A minted enrollment token is stored hashed and unused"
 expected = "One enrollment token row with the label, not used"
 depends_on = ["stack-up"]           # rows in this section
-known_issue = ""                    # optional KI id (C12); a FAIL becomes known, not new
+known_issue = ""                    # optional KI id (C12): a claim, honoured only when every failure signature of the row matches that issue (C12 "Matching")
 reuse_member = false                # sections with requires_pool: skip the member reset before this row
 allow_invariants = []               # row-level additions
 
@@ -481,6 +498,7 @@ Clause sources and their fields:
 | `invariant` | `id` (C11 id), `since?` | `{violations:[...], count}` |
 | `hub` (L40) | `event` (`connected`, `disconnected`), `node_id`, `since?` | `{events:[...], count}` |
 | `agent_log` (L40) | like `log`, for the agent in a member (`member`, `contains` or `matches`) | `{matches:[...], count}` |
+| `game` (L59) | `member`, `server_id` (the synthetic game's id in this row) | `{alive, pid, counter, counter_at, restarts}` read inside the member by the probe mode `game-tick` (C20) |
 | `human` | `text` only | none; pending until attested |
 
 `since` is `run_start`, `row_start` (default), `step:<id>` or `fault_heal:<id>` (the moment that fault was healed; recovery clauses use it). `certstore`, `registry` and `state_file` take `member?` (L32); without it they read the host.
@@ -504,17 +522,34 @@ Precedence once a row ran: BLOCKED > FAIL > UNVERIFIED > NEEDS_HUMAN > PASS. Non
 
 **Invariants (L22).** After each row the runner checkpoints the invariant monitor (C11). A violation in that row's window whose id is not in the section's or row's `allow_invariants` turns a PASS or NEEDS_HUMAN into FAIL with reason `invariant <id>: <summary>`. An invariant check error (C11 `InvariantCheckError`) in a row's window turns a PASS or NEEDS_HUMAN into UNVERIFIED with reason `invariant <id> unchecked: <error>`: a judge that could not look never counts as a pass. Violations and check errors outside any row window are graded as synthetic rows `invariants/<id>` (FAIL for violations, UNVERIFIED for check errors, one per id).
 
-**Overall (L25).** As C12: `pass` (no FAIL, BLOCKED or UNVERIFIED row and no unallowed violation), `pass_with_known` (every failure is linked to an open known issue, by the row's `known_issue` or by signature), `fail` (any new failure). Before L25, `overall` is `pass` or `fail` and every failure counts as new.
+**Overall (L15 computes it, L25 adds known-issue linking; defect fix D-ML46).** A *failure* is a FAIL, BLOCKED or UNVERIFIED row (synthetic rows included) or an unallowed violation. Rows excluded by the request's `section`/`rows` filter are not part of the run and are not recorded. In precedence order:
+
+| Overall | When |
+| --- | --- |
+| `fail` | any failure that is new (before L25 every failure is new) |
+| `incomplete` | no new failure, and at least one of: a NEEDS_HUMAN row, a SKIPPED row, no row ran at all |
+| `pass_with_known` | no new failure, nothing incomplete, at least one failure linked to an open known issue (C12 "Matching") |
+| `pass` | no failure, nothing incomplete |
+
+`incomplete` is never evidence: the status-honesty gate (C12) accepts only `pass` and `pass_with_known`. Attesting the last pending human clause re-computes `overall` (L16).
 
 ```csharp
 namespace Dhadgar.Lab.Uat;
 public enum RowGrade { Pass, Fail, Blocked, Skipped, NeedsHuman, Unverified }
 public enum ClauseState { Held, NotHeld, Unverified, Pending }
+public enum RunOverall { Pass, PassWithKnown, Incomplete, Fail }   // JSON: "pass", "pass_with_known", "incomplete", "fail"
 public static class RowGrader
 {
     public static (RowGrade Grade, string Reason) Grade(bool ran, string? skipReason, string? stepError, IReadOnlyList<(bool Required, ClauseState State)> clauses);
 }
+public static class RunOutcome
+{
+    // failures: one entry per failed row or unallowed violation; isKnown is false for every entry until L25.
+    public static RunOverall Compute(IReadOnlyList<RowGrade> grades, IReadOnlyList<(string FailureKey, bool IsKnown)> failures);
+}
 ```
+
+CLI exit codes (`meridian-lab uat run`, L17): 0 `pass`, 1 `fail`, 2 config or plan error, 4 `incomplete`, 5 `pass_with_known`. Code 3 stays the daemon's "already running" (F1) and is never used by `uat run`.
 
 ### C9. Evidence bundle
 
@@ -524,11 +559,13 @@ public static class RowGrader
   rows\<section>\<row>.json
   logs\<process>.jsonl          (redacted log slices for the run window; containers and members too)
   invariants.json               (L21: every violation in the run, redacted)
-  repro\repro.toml              (L22: seed, build, specs and their sha256, row filter, fault list; `uat_run {replay}` reads it)
+  events.jsonl                  (L48: the ordered observation stream, C18)
+  fingerprint.json              (L48: the reproducibility fingerprint, C18)
+  repro\repro.toml              (L22: seed, build, specs and their sha256, row filter, fault list, `fidelity` (C18); `uat_run {replay}` reads it)
   ledger.md
 ```
 
-`run.json`: `{schema:1, run_id, label, seed, started_at, ended_at, daemon_version, os, build:{id, commit, dirty, checkout}, lease_owner, members:[{id, dims}], specs:[{file, sha256}], tools:[...], summary:{PASS, FAIL, BLOCKED, SKIPPED, NEEDS_HUMAN, UNVERIFIED}, overall:"pass"|"pass_with_known"|"fail", new_failures:[<signature id>], known_failures:[{signature, known_issue}], violations:<int>, redactions, secret_scan:"passed"|"failed"}`. Fields from later packets are present from L16 with empty or zero values.
+`run.json`: `{schema:1, run_id, label, seed, started_at, ended_at, daemon_version, os, build:{id, commit, dirty, checkout}, lease_owner, members:[{id, dims}], specs:[{file, sha256}], tools:[...], summary:{PASS, FAIL, BLOCKED, SKIPPED, NEEDS_HUMAN, UNVERIFIED}, overall:"pass"|"pass_with_known"|"incomplete"|"fail", incomplete_reasons:[<text>], new_failures:[<signature id>], known_failures:[{signature, known_issue}], violations:<int>, redactions, secret_scan:"passed"|"failed", fingerprint_sha256, fidelity:"exact"|"schedule_approximate"|"evidence_only", pair:null|{experiment_id, role, partner_run_id, relation}, replay:null|{of, fingerprint_diff:[<text>], reproduced:true|false|null}, events:<int>}`. Fields from later packets are present from L16 (L48 for the C18 fields) with empty, null or zero values.
 
 Row JSON: `{section, id, title, expected, grade, reason, started_at, ended_at, member, faults:[{id, tool, target, fault_id, injected_at, healed_at, heal_error}], steps:[{id, tool, ok, error, error_code, expected_error, duration_ms, result}], clauses:[{id, text, source, op, value, required, state, observed, attempts, checked_at}], violations:[{id, summary, at}], attestations:[{clause_id, verdict, note, at}]}`. `result` and `observed` are redacted and truncated to 16 KiB.
 
@@ -608,6 +645,18 @@ Toxiproxy proxies (`ProxyCatalog`; listen addresses are inside the Toxiproxy con
 
 Agent ingress is also published on the host's container-NAT address only if the L00 worknote shows Windows members cannot reach `127.0.0.1` on the host; never on `0.0.0.0`.
 
+Lab-only HTTP barrier proxy (L49, D-ML47): an in-daemon Kestrel listener on `127.0.0.1:25080` (`LabPorts.Barrier`), upstream `http://127.0.0.1:25000` (the `agent-ingress` Toxiproxy listener, so the real path Gateway → `gateway-nodes` → Nodes stays in place). Plain HTTP only. `LabPorts.ServicePorts` gains 25080 so `LabHosts.IsLabEndpoint` accepts it. Only history clients (C19) send through it; nothing in a product container is configured to use it.
+
+Fault impact map (`FaultImpactMap`, L21; defect fix D-ML46). A fault on target T can explain a 502, 503 or 504 answered by service S only when T is in S's impact set:
+
+| Answering service | Impact set (fault targets) |
+| --- | --- |
+| S other than `gateway` | `c:<S>`, `d:<S>`, every `p:<proxy>` in S's "Dependencies reached through Toxiproxy" cell, the infra container upstream of each of those proxies (`c:postgres`, `c:rabbitmq`, `c:redis`, `c:sink`), and `c:toxiproxy` |
+| `gateway`, request path routed to cluster K that is a lab service | `c:gateway`, `p:gateway-redis`, `c:redis`, `c:toxiproxy`, `p:gateway-<K>`, and the impact set of K from the row above (one hop: the Gateway's 503 on `/api/v1/agents/enroll` is explained by `p:nodes-postgres`, never by `p:gateway-discord`) |
+| `gateway`, request path routed to a cluster with no lab service, or on no route | `c:gateway`, `p:gateway-redis`, `c:redis`, `c:toxiproxy` |
+
+Gateway route → cluster table (from `src/Dhadgar.Gateway/appsettings.json` `ReverseProxy:Routes`; L21 copies it into the static `GatewayRouteTable`; `GatewayRouteTableTests` reads the file and fails when the two differ): a path matches the most specific route whose `Match.Path` template matches (`/api/v1/agents/enroll` before `/api/v1/agents/{**catch-all}`, `/api/v1/identity/internal/...` before `/api/v1/identity/...`); the route's `ClusterId` names K. Verified 2026-10-27: `nodes` serves `/api/v1/agents/enroll`, `/api/v1/agents/{**catch-all}`, `/hubs/agent/{**catch-all}`, `/api/v1/organizations/{organizationId}/nodes/...` and `.../enrollment/...`. Clusters with no lab service (servers, tasks, files, console, mods, billing, secrets) excuse nothing beyond the Gateway's own set.
+
 Observation paths (R-OBSERVE, D-ML34): `db_query` and invariant SQL use `127.0.0.1:15432`; health probes, `http_request via=<service>` and `via=gateway` use the direct host ports; log followers use `docker logs`; RabbitMQ reads use 16672. Only `http_request via=agent_ingress`, `nodes_enroll_probe via=agent_ingress`, members and the fleet go through Toxiproxy.
 
 Target ids (`LabTargetRegistry`, persisted at `LabPaths.State\targets.json`):
@@ -669,12 +718,12 @@ A check error inside a row window turns that row's PASS or NEEDS_HUMAN into UNVE
 
 | Id | Invariant | How it is checked | Packet |
 | --- | --- | --- | --- |
-| I1 | No unhandled exception and no unexplained 5xx | Log lines at Error or Critical from `Microsoft.AspNetCore.Diagnostics.*` or `Dhadgar.ServiceDefaults` `GlobalExceptionHandler`, and any line containing `Unhandled exception`, always count. `Microsoft.AspNetCore.Hosting.Diagnostics` "Request finished" lines (every lab service runs with that category at Information) count when the status is 500, 501 or 505-599, and for 502, 503 and 504 only when no fault was active on any target in the 10 s before the line (`FaultBook` history): a 503 while a dependency is down is the designed answer, a 500 never is | L21 |
+| I1 | No unhandled exception and no unexplained 5xx | Log lines at Error or Critical from `Microsoft.AspNetCore.Diagnostics.*` or `Dhadgar.ServiceDefaults` `GlobalExceptionHandler`, and any line containing `Unhandled exception`, always count. `Microsoft.AspNetCore.Hosting.Diagnostics` "Request finished" lines (every lab service runs with that category at Information) count when the status is 500, 501 or 505-599, and for 502, 503 and 504 unless a fault on a target in the answering service's impact set (C10 `FaultImpactMap`, Gateway lines resolved through the route → cluster table) was active, or healed less than 10 s before the line (`FaultBook` history). A fault on any other target never excuses the line (D-ML46): a 503 while one of the service's own dependencies is down is the designed answer, a 500 never is. The violation records `excused_by: <fault_id>` when excused, for audit | L21 |
 | I2 | The outbox drains | Per service with an EF outbox: rows in `OutboxMessage` older than 60 s, and `OutboxState` rows not delivered after 60 s, count is zero (table and column names from the service's model snapshot) | L21 |
 | I3 | DB consistency | Every `[[check]]` in `docs/guides/uat-specs/invariants/<service>.toml` returns zero rows | L21, L23, L38 |
 | I4 | No secret in a log | Every raw log line is checked **before** redaction for vault values, the daemon token, PEM private key blocks, `Bearer <20+ chars>`, `Password=`/`Pwd=` with a value; the violation stores only the redacted line | L21 |
 | I5 | No orphans | Labelled containers not in the registry; RabbitMQ queues named `*_error` or `*_skipped` with messages; Toxiproxy toxics or disabled proxies with no `FaultBook` entry; members marked leased with no lease; leftover backup folders | L21, L30 |
-| I6 | No unexpected restart | A container's `RestartCount` or `State.StartedAt` changed, or a supervised process exited, with no fault, `svc_restart` or `member_reset` that explains it | L21 |
+| I6 | No unexpected restart | A container's `RestartCount` or `State.StartedAt` changed, or a supervised process exited, unless one of these on the same target explains it: a `fault_kill` or `fault_pause` on that container or member, an audited `svc_restart` of that service, or a `member_reset` of that member, each between 30 s before the change and 30 s after its heal. A fault on another target, or a Toxiproxy fault on the service's dependency, never explains a restart (a service that crashes when its database drops is the finding) | L21 |
 | I7 | No resource trend (soak only) | Memory, handle or fd and thread counts sampled every 30 s; a least-squares slope over the soak above the limits in `docs/guides/uat-specs/invariants/soak.toml` | L29 |
 
 Invariant TOML:
@@ -699,12 +748,20 @@ SQLite file `LabPaths.Results\lab-results.db`, `PRAGMA journal_mode=WAL`, schema
 
 ```sql
 create table schema_version (version integer not null);
-create table runs (run_id text primary key, kind text not null, -- uat|hunt|fuzz|chaos|soak|fleet|ui
+create table runs (run_id text primary key, kind text not null, -- uat|hunt|fuzz|chaos|soak|fleet|ui|history|twin|mutation|envelope|peer|version|ab
   label text, seed integer not null, build_id text, commit_sha text, dirty integer, started_at text, ended_at text,
-  overall text, bundle_path text not null);
+  overall text, -- pass|pass_with_known|incomplete|fail
+  fingerprint_sha256 text, fidelity text, bundle_path text not null);
 create table rows (run_id text not null, section text not null, row_id text not null, grade text not null, reason text,
-  seed integer not null, known_issue text, signature_id text, started_at text, ended_at text,
+  seed integer not null, known_issue text, signature_id text, -- primary signature, for bucketing
+  signatures_json text not null default '[]', -- every failure signature id of the row (Matching, below)
+  known_match text, -- null | <KI id> | claimed_mismatch | regressed:<KI id>
+  started_at text, ended_at text,
   primary key (run_id, section, row_id));
+create table pairs (experiment_id text not null, run_id text not null, role text not null, -- base|variant
+  partner_run_id text not null, relation text not null, held integer, primary key (experiment_id, run_id));
+create table coverage (run_id text not null, kind text not null, key text not null, hits integer not null,
+  primary key (run_id, kind, key)); -- C18 behavioural coverage (L52)
 create table faults (run_id text not null, fault_id text not null, kind text not null, target_id text not null,
   args_json text, started_at text, healed_at text, heal_reason text, primary key (run_id, fault_id));
 create table invariant_violations (run_id text not null, invariant_id text not null, service text not null,
@@ -728,8 +785,17 @@ Signature text, then `signature_id` = first 16 lowercase hex of SHA-256 over the
 | `http` | `http:<status>\|<errorCode or ->\|<METHOD>\|<route template>\|<fault kinds or none>` | route from the endpoint log line, else the path with GUIDs as `{id}` and digit runs as `{n}`; fault kinds sorted, joined with `+` |
 | `clause` | `clause:<section>/<row>/<clause id>\|<state>` | - |
 | `inv` | `inv:<invariant id>\|<service>\|<check id>` | - |
+| `hist` | `hist:<model>\|<rule id>\|<scenario>` | from L51; one per history rule violated (C19) |
+| `twin` | `twin:<experiment id>\|<pointer>` | from L53; one per `compare` pointer whose relation did not hold (C19) |
+| `peer` | `peer:<attack>\|<expected>\|<observed>` | from L58; one per attack whose required expectation failed (C19) |
+| `env` | `env:<envelope id>\|<cell id>\|metastable` | from L57; one per cell graded `metastable` (C20); `slow` cells produce no signature |
+| `ver` | `ver:<pair id>\|<row id>\|<grade>` | from L60; one per required mixed-version row that is not PASS (C20) |
 
-A failed row's signature is its first `exc`, else its first `http` with status 500-599, else its first failing `clause`.
+A failed row carries **every** failure signature it produced: each `exc`, each `http` with status 500-599, each NotHeld or Unverified clause, each unallowed violation inside its window and each **required** `hist` rule violated (a non-required one, such as E5 before D-ML49, stays in the row JSON `history.violations` with `required: false` and produces no signature). Its **primary** signature, used only for bucketing, is its first `exc`, else its first 5xx `http`, else its first failing `clause`, else its first `inv` or `hist`.
+
+Matching (D-ML46; fixes the "known issue by claim" defect). A row is a known failure only when every one of its signatures matches the same open issue; one unmatched signature makes the whole row new. An issue matches a signature when the signature text equals one of its `signatures`, or one of its `patterns` matches, **and** the row and signature are inside the issue's `scope` (every listed scope key must hold; an absent key does not narrow). The row's `known_issue` field is a claim, never a pass: when the claimed issue does not match, the row is new with reason `known_issue <id> claimed but signature <text> does not match` and `known_match = claimed_mismatch`. A match on a `fixed` issue is new with `known_match = regressed:<id>`. A standalone violation (outside any row) matches by the same rules on its one signature.
+
+Loader rules (`KnownIssues.Load` returns `Result` with every problem listed): an issue with neither `signatures` nor `patterns` is invalid; every pattern must start with `^(exc|http|clause|inv|hist|twin|peer|env|ver):` and is compiled with a 1 s timeout; a pattern that matches an empty string, or is `.*`/`.+` after the kind prefix, is invalid; duplicate ids are invalid.
 
 Known issues, `docs/guides/uat-specs/known-issues.toml`:
 
@@ -741,13 +807,19 @@ id = "KI-DV13"
 title = "Stub services and the Console hub have no auth (DV-13)"
 link = "docs/PROJECT-STATE.md"
 signatures = []                                   # exact signature texts
-patterns = ["^http:2\\d\\d\\|.*\\|/api/v1/(servers|tasks|files|mods|billing)/"]  # .NET regex over signature text
+patterns = ["^http:2\\d\\d\\|.*\\|/api/v1/(servers|tasks|files|mods|billing)/"]  # .NET regex over signature text, anchored with a kind prefix
 state = "open"                                    # open | fixed
+
+[issue.scope]                                     # optional; every listed key must hold
+sections = []                                     # spec sections the row may be in (empty = any)
+rows = []                                         # row ids (empty = any)
+services = ["gateway"]                            # the answering service (http, inv) or the logging service (exc)
+invariants = []                                   # invariant ids (inv signatures only)
 ```
 
 L26 seeds: `KI-DV13`, `KI-DV12` (localhost cookie domain), `KI-DV3` (refresh untested; removed when S-L9 passes), `KI-NOTIF-OUTBOX` (Notifications outbox tables missing), `KI-RABBIT-HOST` (compose `ConnectionStrings__RabbitMqHost` ignored), `KI-DISCORD-SECRETS-PORT` (fallback `:5080`), `KI-DELAYED-PLUGIN` (AppHost and compose lack the plugin), `KI-94` (`CommandValidator` signature check).
 
-Run summary: `new_failures` (FAIL, BLOCKED or UNVERIFIED rows and unallowed violations whose signature is not linked to an open known issue), `known_failures` (the rest of the failures). `overall`: `pass` (no failures, no unallowed violations), `pass_with_known` (only known failures), `fail` (any new failure). The evidence gate for status honesty is `pass` or `pass_with_known` with every known failure listed.
+Run summary: `new_failures` (FAIL, BLOCKED or UNVERIFIED rows and unallowed violations whose signature is not linked to an open known issue), `known_failures` (the rest of the failures). `overall` is C8's `RunOutcome.Compute`: `fail` (any new failure), else `incomplete` (a NEEDS_HUMAN or SKIPPED row, or no row ran), else `pass_with_known` (only known failures), else `pass`. The evidence gate for status honesty is `pass`, or `pass_with_known` with every known failure listed; `incomplete` is never evidence.
 
 Flake: the same row with the same seed and build graded differently across runs (`results_flake_check` reruns, or two ingested runs). A flaky signature gets state `flaky`; a flake is never a pass.
 
@@ -869,6 +941,292 @@ public sealed class FleetAgent : IAsyncDisposable    // one ServiceProvider buil
     public Task<Result> RunAsync(CancellationToken ct);  // hub connection and heartbeats until cancelled
 }
 ```
+
+### C18. Observations, identities, fingerprint, pairing, replay fidelity (reserved in L48)
+
+These are lab-internal types (namespace `Dhadgar.Lab.Observe`); nothing in a product project sees them, so they stay out of `Dhadgar.Contracts`. L48 ships every type, the sink, the files and the empty columns; later packets fill them. Names avoid C3's `Dhadgar.Lab.Audit.LabEvent`, which stays the audit event.
+
+```csharp
+namespace Dhadgar.Lab.Observe;
+
+// Logical actor: who did it, independent of process, container or connection.
+// lab | runner | driver | client:<n> | agent:<nnnn> | member:<id> | peer:<name> | tenant:<a|b>
+public static class ActorIds
+{
+    public const string Lab = "lab", Runner = "runner", Driver = "driver";
+    public static string Client(int n) => $"client:{n}";
+    public static string Agent(int index) => $"agent:{index:D4}";
+    public static Result<string> Validate(string actorId); // ^(lab|runner|driver|(client|agent|member|peer|tenant):[a-z0-9-]{1,32})$
+}
+
+// Logical operation: one attempt by one actor. A retry is a new OpId with CausedBy = the first.
+public readonly record struct OpId(string RunId, string Actor, long Seq)
+{
+    public override string ToString() => $"{RunId}/{Actor}/{Seq}";
+    public static Result<OpId> Parse(string text);
+}
+
+public enum ObservationKind { Invoke, Complete, FaultPrepare, FaultInject, FaultHeal, Observe, Note }
+public enum OpOutcome { Ok, Fail, Unknown }
+
+public sealed record LabObservation(
+    long Seq,                 // assigned by the sink: 1, 2, 3 ... per run, total order of Append calls
+    string RunId,
+    DateTimeOffset At,        // TimeProvider
+    string Actor,
+    string? OpId,             // set on Invoke and Complete, and on Observe lines caused by an op
+    ObservationKind Kind,
+    string Op,                // tool or operation name, e.g. "enroll", "fault_toxic_add", "proxy_upstream_completed"
+    JsonElement Args,         // redacted
+    OpOutcome? Outcome,       // Complete only
+    JsonElement Result,       // redacted; status, error code, ids
+    string? CausedBy);        // the OpId or fault id this line follows from
+
+public interface ILabObservationSink   // one singleton; one open writer per run
+{
+    Result BeginRun(string runId, string runFolder);     // opens <runFolder>\events.jsonl; a second BeginRun for the same id fails
+    Task<Result<long>> EndRunAsync(string runId, CancellationToken ct); // closes open ops as Unknown, flushes, returns the count
+    OpId NextOp(string runId, string actor);
+    Result<long> Append(LabObservation draft);  // ignores draft.Seq; assigns it; redacts; appends one line to events.jsonl; no open run -> failure
+    IReadOnlyList<LabObservation> Read(string runId, long afterSeq, int max);
+}
+
+public enum ReplayFidelity { Exact, ScheduleApproximate, EvidenceOnly }
+public sealed record PairInfo(string ExperimentId, string Role, string PartnerRunId, string Relation); // Role: base | variant
+
+public sealed record LabFingerprint(
+    int Schema, string Commit, bool Dirty, string? BuildId, string? Baseline, string? Mutant,
+    IReadOnlyDictionary<string, string> ImageDigests,           // image tag -> sha256 id
+    string LockFilesSha256,                                     // SHA-256 over sorted "<path>\n<sha256>\n" of every packages.lock.json in the build tree
+    IReadOnlyDictionary<string, string> EffectiveConfigSha256,  // service -> SHA-256 of its overlay plus lab env, secrets replaced by their refs
+    IReadOnlyList<SpecHash> Specs, string DaemonVersion, string ToxiproxyVersion,
+    ulong Seed, string Os, IReadOnlyDictionary<string, string> EngineVersions); // docker context -> server version
+public sealed record SpecHash(string File, string Sha256);
+public static class FingerprintHasher { public static string Sha256(LabFingerprint fingerprint); } // canonical JSON: sorted keys, no whitespace
+```
+
+Outcome rules (the history checker depends on them):
+
+| Situation | Outcome |
+| --- | --- |
+| A response was read (any status) | `Ok` for the status the op defines as success, else `Fail` with the status |
+| Connection refused, DNS or TLS failure, or the barrier refused before anything was forwarded | `Fail` (definitely not applied) |
+| The request was written, then a timeout, reset, abort or cancellation before the response was read | `Unknown` (may or may not have been applied) |
+| The client process or actor died with an op open | the recorder closes it as `Unknown` at run end |
+
+Every `Invoke` has exactly one `Complete` with the same OpId by the end of a run (the recorder closes stragglers as `Unknown`). Faults write `FaultPrepare`, `FaultInject`, `FaultHeal` with `CausedBy = fault_id`. A run holds at most 100,000 observations; the 100,001st becomes one `Note` `truncated`, later appends are dropped, and the run's fidelity becomes `EvidenceOnly`.
+
+Fidelity: `Exact` when every choice came from `LabRandom` and one actor ran at a time (plain `uat_run`); `ScheduleApproximate` when actors ran concurrently or timing toxics were active (history, chaos, soak, fleet, twins with faults); `EvidenceOnly` after truncation, a human attestation, or when the build in the fingerprint is gone. `uat_run {replay}` and `history_run {replay}` compare the stored fingerprint with the current one, list every difference in the replay's `run.json` `replay:{of, fingerprint_diff:[...], reproduced:true|false|null}`, and set `reproduced` by fidelity: `Exact` → the same grades and the same primary signatures; `ScheduleApproximate` → the original primary signature appears within 5 attempts; `EvidenceOnly` → `null`.
+
+Behavioural coverage (L52). Keys recorded per run in C12 `coverage`; a universe per kind gives the "unhit" list:
+
+| Kind | Key | Universe |
+| --- | --- | --- |
+| `route_status` | `<service> <METHOD> <route template> <status class>` (`2xx`, `4xx`, `5xx`), the path normalised to its template (GUIDs and digit runs matched against the universe's templates) | the templates in `src/Tools/Dhadgar.Lab/coverage-universe.json` × {`2xx`, `4xx`}; a `5xx` hit is listed but never part of the universe. Nodes' templates are kept equal to its `EndpointDataSource` by `NodesEndpointUniverseTests` in `tests/Dhadgar.Nodes.Tests` (it reads the file; no project reference); the Gateway's come from `GatewayRouteTable`; other services are added when their catalog ships |
+| `fault_target` | `<fault kind>@<target id>` | `fault_list_targets` × `faults_allowed` |
+| `error_code` | `<service>:<errorCode>` from problem+json bodies and hub error codes | `coverage-universe.json` `error_codes` (Nodes: the `AgentHubErrorCodes` constants and the problem `type` values in `src/Dhadgar.Nodes/Endpoints`, listed by L52) |
+| `invariant_check` | `<invariant>/<check id>` that ran without error | every registered invariant and I3 check |
+| `transition` | `<entity>:<from>-><to>` from successive `db_query` snapshots the runner takes at row ends (Node status, certificate active/revoked, token unused/used/revoked) | `coverage-universe.json` `transitions`: the designed transitions L52 lists from the Nodes code (`NodeStatus` assignments, certificate revocation, token use and revocation) |
+
+### C19. History, barrier proxy, twins, mutants and the adversarial peer
+
+```csharp
+namespace Dhadgar.Lab.History;
+
+public sealed record HistoryOp(string OpId, string Actor, string Key, string F, JsonElement Input,
+    long InvokeSeq, long? CompleteSeq, OpOutcome Outcome, JsonElement Output);   // from C18 observations
+public sealed record History(string RunId, string Scenario, IReadOnlyList<HistoryOp> Ops, JsonElement FinalState); // FinalState: db_query snapshot at run end
+
+public interface IHistoryModel<TState> where TState : IEquatable<TState>
+{
+    string Name { get; }
+    TState Initial(string key, JsonElement finalStateForKey);
+    // The sequential spec: may op take effect in state s, and with what output? Unknown ops may also never take effect.
+    bool TryStep(TState s, HistoryOp op, out TState next);
+    bool FinalMatches(TState s, JsonElement finalStateForKey);
+}
+
+public sealed record HistoryViolation(string Rule, IReadOnlyList<string> OpIds, string Detail);
+public sealed record CheckResult(string Verdict, IReadOnlyList<HistoryViolation> Violations, History? Minimal); // "linearizable" | "violation" | "unknown"
+
+public static class LinearizabilityChecker
+{
+    // Wing-Gong-Lowe search with memoised (linearized-set, state) pairs, per key. More than 12 ops on one key
+    // returns Verdict "unknown" with reason "history too long" (never a pass).
+    public static CheckResult Check<TState>(History history, IHistoryModel<TState> model, TimeSpan budget) where TState : IEquatable<TState>;
+    // Checker-level minimisation: delta-debugging over op subsets (complete ops only; unknown ops kept), deterministic.
+    public static History Minimise<TState>(History failing, IHistoryModel<TState> model, TimeSpan budget) where TState : IEquatable<TState>;
+}
+```
+
+`EnrollmentHistoryModel` (`History/Models/`; not L27's `Hunt/EnrollmentModel`, which is a CsCheck state model; key = token id; ops `enroll(public_key, hostname)`; state `Unused | Used(node_id, public_key) | Revoked`), today's product spec: `enroll` on `Unused` → `Ok(node_id)`, state `Used`; on `Used` or `Revoked` → `Fail(401)`. Under D-ML49 (if the owner rules yes), `enroll` on `Used(n, pk)` with the same `pk` → `Ok(n)`. Each op carries a seeded unique `Hostname` (`lab-<run>-<actor>-<seq>`), so the final state attributes every node row to the op that made it. Rules reported as violations:
+
+| Rule | Statement | Required |
+| --- | --- | --- |
+| E1 | At most one `Ok` per token | yes |
+| E2 | Every `Ok` node exists at the end with exactly one active certificate | yes |
+| E3 | A definite `Fail` op made no node row (its hostname is absent) | yes |
+| E4 | No `Fail(401)` whose `Complete` precedes the `Invoke` of the op that took effect (the token was refused before anyone used it) | yes |
+| E5 | After an `Unknown` op that took effect (its hostname exists), a retry by the same actor with the same key does not leave the actor without a node it holds a certificate for (no orphan) | no until D-ML49; linked to `KI-ENROLL-RETRY` |
+| E6 | A used token has `UsedByNodeId` equal to the one node its ops created; an unused token created no node | yes |
+
+Scenarios (`docs/guides/uat-specs/catalog/enroll-history.toml`, read by `history_run`, not by `uat_run`):
+
+| Id | Shape | Barrier rules |
+| --- | --- | --- |
+| `enroll-race` | 2 to 8 clients, one token, distinct keys | every client `hold_request(start)`; release when all arrived |
+| `enroll-race-pg-latency` | as above with a 200 ms latency toxic on `nodes-postgres` | as above |
+| `enroll-lost-response` | 1 client; its first enroll's response is dropped after Nodes answered; the client retries with the same key | first op `drop_response`; retry `pass` |
+| `enroll-lost-response-new-key` | as above; the retry uses a new key | as above |
+
+The barrier proxy (D-ML47):
+
+```csharp
+namespace Dhadgar.Lab.Barrier;
+public enum BarrierAction { Pass, HoldRequest, HoldResponse, DropResponse }
+public sealed record BarrierRule(string OpId, BarrierAction Action, string? Barrier, int HoldMs);
+public sealed class BarrierProxy : IAsyncDisposable
+{
+    // Binds 127.0.0.1:LabPorts.Barrier only; upstream must pass LabHosts.IsLabEndpoint; started by history_run, disposed at its end.
+    public static Task<Result<BarrierProxy>> StartAsync(Uri upstream, int port, ILabObservationSink sink, TimeProvider time, CancellationToken ct); // port: LabPorts.Barrier, or 0 in tests
+    public Result Arm(string runId, IReadOnlyList<BarrierRule> rules);
+    public Task<Result> WaitArrivedAsync(string barrier, int count, TimeSpan timeout, CancellationToken ct);
+    public Result Release(string barrier);
+}
+```
+
+Header `X-Lab-Op-Id: <OpId>` selects the rule and is removed before forwarding; a request without the header, or with an unknown OpId, is refused 400 (`lab.barrier.no_op`). `HoldRequest`: wait for the barrier's release (30 s max, then 504 `lab.barrier.timeout`), then forward. `HoldResponse`: forward, read the whole upstream response, write `Observe proxy_upstream_completed {status}` with `CausedBy = op`, wait `HoldMs` or the barrier, return it. `DropResponse`: forward, read the whole upstream response, write `proxy_upstream_completed`, then `HttpContext.Abort()`: the client sees a reset after sending, so its outcome is `Unknown`, while the history knows the server answered. Bodies are capped at 1 MiB; no redirects; plain HTTP only. Fallback for paths the proxy cannot carry (mTLS on 25443, after L41): a Toxiproxy `timeout` toxic with `timeout = 0` on `agent-ingress-tls` downstream, which holds data until removed; whether Nodes committed is then taken from `db_query`, not from the proxy. Assumption: Toxiproxy applies a newly added toxic to already-open connections (its README does not say; L51 checks it and records the answer).
+
+Twin experiments (`docs/guides/uat-specs/twins/<name>.toml`, read by `twin_run`):
+
+```toml
+schema = 1
+id = "enroll-latency-invariance"
+relation = "equal_outcome"          # equal_outcome | isolated
+seed = 42                           # both worlds use it
+[base]
+spec = "catalog/twin-enroll.toml"
+rows = ["enroll-once"]
+[variant]
+spec = "catalog/twin-enroll.toml"
+rows = ["enroll-once"]
+faults = [{ tool = "fault_toxic_add", args = { proxy = "p:nodes-postgres", toxic = "latency", stream = "downstream", attributes = { latency = 1500 } } }]
+# pre = { spec = "...", rows = ["..."] }   # optional, variant only: rows run on the reset stack before the compared rows (L56: tenant B acts first)
+[[compare]]
+pointer = "/rows/enroll-once/steps/enroll/status"
+[[compare]]
+pointer = "/rows/enroll-once/grade"
+```
+
+Pointers are RFC 6901 JSON pointers into a run projection `{rows:{<row id>:{grade, steps:{<step id>:{status, error_code, outcome}}, captures:{<var>:<value>}}}}`. A `[[compare]]` is either `pointer = "..."` (equal in both worlds) or `variant_pointers = ["...", "..."]` with `op = "disjoint"` (two lists in the variant world share no element); `disjoint` is allowed only under `isolated`. `equal_outcome`: every `compare` pointer has the same value in both worlds after normalisation (GUIDs, timestamps, durations and thumbprints masked). `isolated` (tenant flagship, L56): the variant world adds a second tenant's data and actions; tenant A's observed sets (`compare` pointers that name a list) are equal in both worlds, and tenant B never observes an id tenant A created. Both worlds run sequentially on a reset stack (`stack_reset_data`) with the same seed; each run's `run.json` carries `pair`. A relation that does not hold is a `twin:<experiment id>|<pointer>` failure (C12 kind `twin`) on both runs with the diff as evidence; it is never excused by a fault, because the variant's faults are the experiment. If any row named in `[base]` is not PASS, the relation is not evaluated: `held = null`, and the synthetic row `twin/<experiment id>` in both bundles is SKIPPED with reason `twin precondition: <row> <grade>`, so neither run's `overall` can be better than `incomplete` and the twin is never a pass; the failing base row keeps its own grade. When the relation is evaluated, the synthetic row is PASS (held) or FAIL (not held, with the `twin` signatures).
+
+Mutants (lab-only artifacts, D-ML51). `tools/lab/mutants/<id>/mutant.toml` plus `<id>/change.patch` (a `git diff` against the commit named in `base`):
+
+```toml
+schema = 1
+id = "M1-token-no-concurrency"
+kind = "product"                    # product | lab
+base = "<commit sha the patch applies to>"
+title = "Drop the UsedAt concurrency token"
+files = ["src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs"]
+services = ["nodes"]                # images rebuilt from the patched tree and started for the detector
+detector = { tool = "history_run", args = { scenario = "enroll-race", clients = 4 }, expect_pattern = "^hist:enrollment\\|(E1|E6)\\|enroll-race$" }
+```
+
+`expect_pattern` follows C12's pattern rules (kind prefix, 1 s timeout, never `.*`). A lab mutant (`kind = "lab"`) has `files` under `src/Tools/` and `detector = { test = "<fully qualified test name>" }` instead.
+
+| Id | Kind | Change | Expected detector |
+| --- | --- | --- | --- |
+| M1 | product | remove `.IsConcurrencyToken()` on `EnrollmentToken.UsedAt` (`EnrollmentTokenConfiguration.cs`) | `history_run enroll-race`: E1 or E6 |
+| M2 | product | drop `.Where(n => n.OrganizationId == organizationId)` in `NodeService.GetNodesAsync` | L56 tenant twin `isolated` |
+| M3 | product | `TenantScopedHandler` succeeds without comparing the route org with `org_id` | L56 cross-tenant row |
+| M4 | product | remove the `catch (DbUpdateConcurrencyException)` in `EnrollmentService` enrollment | `history_run enroll-race`: I1 500 |
+| M5 | product | log the plaintext enrollment token in `EnrollmentService` | I4 |
+| M6 | product | renewal skips superseding the presented certificate (`AgentEndpoints` renewal: the `if (!presentedWasInGrace)` block that sets `IsRevoked`, `RevokedAt` and `GraceUntil`) | L58 `peer_run stale-cert-after-renewal`: `^peer:stale-cert-after-renewal\|` (the old certificate stays usable after the grace shift) |
+| M7 | product | `EnrollmentService.GenerateUniqueNodeNameAsync` drops `n.OrganizationId == organizationId &&` from both queries (name uniqueness leaks across tenants) | L56 tenant twin, enrollment leg: tenant A's node name changes when tenant B enrolled the same hostname first |
+| LM1 | lab | `FaultBook` journals after inject | `FaultBook_JournalWrittenBeforeInject` |
+| LM2 | lab | `RecoverAsync` skips `Prepared` entries | `FaultBook_PreparedNeverInjected_HealSucceeds` |
+| LM3 | lab | lease end does not heal | `LeaseEnd_HealsAllFaults` |
+| LM4 | lab | `Tripwire.Check` always passes | `FaultTargetGuardTests` tripwire case |
+| LM5 | lab | `FaultImpactMap.Explains` returns true for any fault | `I1_503OnNodes_FaultOnDiscordWebhook_Counts` |
+| LM6 | lab | `KnownIssues.Match` honours the row's claim without matching | `Match_ClaimedIssueSignatureDiffers_IsNew` |
+| LM7 | lab | `RunOutcome.Compute` returns `pass` when no row ran | `Overall_AllSkipped_IsIncomplete` |
+| LM8 | lab | `db_query` reads through `nodes-postgres` instead of 15432 (R-OBSERVE) | `ObservationPathTests` (L55 adds it) |
+
+Mutant rules: a product mutant is built only by `lab_build {mutant}` from `git archive <HEAD of RepoRoot>` into `LabPaths.Builds\mutant-<id>-<build8>`, `git apply --check` then `git apply` there, never in a checkout; its images are tagged `meridian-lab/<project>:mutant-<id>-<build8>` with labels `meridian-lab=1` and `meridian-lab-mutant=<id>`, never with a plain build tag; `stack_status` and `StatusDto` show the mutant id while one runs; `mutation_run` ends with `svc_start` of the last plain build. A mutant's verdict is `detected` (the expected signal appeared), `detected_other` (another new failure appeared), `survived`, `stale` (`git apply --check` failed) or `unreachable` (the detector could not run; the verdict names the reason and a known issue, e.g. `KI-NODES-USER-AUTH` for M2 and M3 while Nodes accepts no user token, README F38). Gate MD (README) accepts only `detected`, `detected_other`, or `unreachable` with an open known issue. Lab mutants are applied only by `Dhadgar.Lab.SelfCheck` in a temp copy and judged by `dotnet test` of the named test (L55).
+
+Adversarial peer (L58; D-ML52). `Dhadgar.Lab.Peer` actors (`peer:<attack>`) use only identities the lab enrolled in this run and connect only to `127.0.0.1:25000`/`25443` (agent ingress) or `15040` (Nodes direct, for the hub-only cases); `PeerTargetGuard` refuses anything else with `[Lab.BlastRadius]`:
+
+| Attack | What the peer does | Expected now | Rule |
+| --- | --- | --- | --- |
+| `clone` | two hub connections with the same node certificate and key | D-ML53 (BlockedDecision); until ruled, observed only | D-ML53 |
+| `replay-enroll` | replays a captured successful enroll body | 401, no second node | E1, E6 |
+| `foreign-node-id` | node A's certificate calls `POST /api/v1/agents/{nodeB}/certificates/renew` | 403 or 404, B's certificates unchanged | yes |
+| `bad-protocol` | hub connect with `X-Agent-Protocol` `"0"`, `"999"` and missing | `"0"` and `"999"`: aborted, no group join. Missing: accepted, because `AgentHub.OnConnectedAsync` treats a missing header as current (`AgentHub.cs:37`); recorded, not failed | yes for `"0"` and `"999"` |
+| `post-revocation` | keeps an established hub connection open across a node decommission and a certificate revocation; one variant keeps heartbeating, one stays idle | heartbeating: the first `Heartbeat` after the change returns `HeartbeatFailed` or `NodeDecommissioned` and the hub aborts the connection (`AgentHub.cs:75-79`, `95-99`). Idle: the connection stays open, because nothing re-checks it without a heartbeat; observed only until D-ML54 | yes for heartbeating; D-ML54 for idle |
+| `stale-cert-after-renewal` | renews node A, then connects to the hub and calls renew with the old certificate twice: inside the grace window, and after `nodes_cert_time_shift fields=["grace_until"] shift_minutes=-120` on the old row | inside grace: accepted (Sprint 2's grace, D-S212, `AgentCertificateState.IsUsable`); after grace: hub connect refused and renew 401 `thumbprint_mismatch` | yes for "after grace" |
+| `oversize` | hub message of 65 KiB and an enroll body of 2 MiB | refused; I1 clean | yes |
+| `slowloris` | 50 connections sending headers 1 byte per second to the ingress | the Gateway sheds them; legitimate enroll still 201 within 10 s | yes |
+
+Peer identities: `nodes_enroll_probe` vaults the issued certificate PEM as `crt-N` beside `key-N` (L58 adds it; the result gains `cert_ref`). A peer builds its client certificate with `X509Certificate2.CreateFromPem(certPem, keyPem)` and, on Windows, re-imports it through a PKCS#12 export so `SslStream` can use the key; every exported buffer is zeroed. An attack's row JSON carries `{attack, required, expected, observed, held}`; a required attack that does not hold yields one `peer` signature (C12). A non-required one (`clone`, idle `post-revocation`) records `observed` and produces no signature.
+
+### C20. Envelopes, version pairs, synthetic game and guided mode (wave 9)
+
+Recovery envelopes (L57; D-ML61), `docs/guides/uat-specs/envelopes/<name>.toml`:
+
+```toml
+schema = 1
+id = "nodes-postgres-outage"
+workload = { kind = "fleet", scenario = "enroll_heartbeat" }      # fleet (L42) | spec = { spec = "...", rows = ["..."] } looped
+fault = { tool = "fault_proxy_disable", args = { proxy = "p:nodes-postgres" } }   # one C4 fault tool; heal_after_s is set per cell
+duration_s = [10, 30, 90]                                          # fault duration axis
+load = [10, 50, 100]                                               # fleet agents, or concurrent spec loops
+healthy = { success_ratio = 0.95, window_s = 30 }                  # ops that succeeded / ops attempted, over a sliding window
+recovered_s = 120                                                  # D-ML61
+metastable_floor_s = 360                                           # D-ML61; a cell's limit = max(floor, 3 x duration)
+```
+
+Cell id `d<duration>-l<load>`. Per cell, in seeded order: `stack_reset_data` → start the workload at the cell's load → warm-up 60 s, which must reach `healthy` (else the cell is `invalid`) → inject the fault with `heal_after_s = duration` → after the heal, the recovery time is the start of the first window in which `healthy` holds and C11 invariants are clean → stop the workload. Grades:
+
+| Cell grade | Rule | Synthetic row `envelope/<id>/<cell>` |
+| --- | --- | --- |
+| `recovered` | recovery time ≤ `recovered_s` | PASS |
+| `slow` | `recovered_s` < recovery time ≤ limit | PASS with reason `slow <n> s` (reported, never a signature) |
+| `metastable` | not healthy by the limit, with the fault healed | FAIL, one `env` signature (C12) |
+| `invalid` | warm-up never healthy, or the fault could not be injected or healed | SKIPPED with the reason (so `overall` is at best `incomplete`) |
+
+Required: no `metastable` cell. Workload success is read from the workload's own observations (fleet metrics, row grades), never from the faulted path's proxy. Shipped envelopes: `nodes-postgres-outage` (above), `ingress-storm` (`fault_proxy_disable p:agent-ingress`, fleet `enroll_heartbeat`), `nodes-kill` (`fault_kill c:nodes` with `restart_after_s = duration`, fleet `enroll_heartbeat`). A job runs at most 4 h; cells left over are `invalid` with reason `job budget`.
+
+Baselines and version pairs (L60, L61). `tools/lab/baselines.toml` names builds by commit; the repo has no git tags (F47):
+
+```toml
+schema = 1
+[baseline.sprint2]
+commit = "6df33384de62434bfaaf9777237740f1ac622e3a"   # Sprint 2 squash on main, PR #235
+[baseline.pre-sprint2]
+commit = "2d8e4d0b5c89b55072da7a4c6e1891972dfa4395"   # main before Sprint 2: no GraceUntil column, no agent hub
+```
+
+`lab_build {baseline}` builds from `git archive <commit>` into `LabPaths.Builds\baseline-<name>-<build8>` (the L54 mutant path without a patch) and tags images `meridian-lab/<project>:baseline-<name>-<build8>`. Version pairs, `docs/guides/uat-specs/versions/<name>.toml`:
+
+```toml
+schema = 1
+id = "old-agent-new-nodes"
+builds = { nodes = "head", gateway = "head", agent = "baseline:sprint2" }   # head | baseline:<name>, per service and for the agent
+spec = "docs/guides/uat-specs/agent-console.toml"
+rows = ["enroll", "heartbeat", "restart-no-reenroll"]
+required = true                      # false: rows are run and recorded, no ver signature (D-ML58, D-ML59 rows)
+# Optional, L61: a phase that runs first on the same data (no reset between), with its own builds and rows.
+# prepare = { builds = { nodes = "baseline:pre-sprint2" }, spec = "docs/guides/uat-specs/time.toml", rows = ["seed-node"] }
+# Optional, L61: kill a service once when its log shows a line, then restart it.
+# kill_on_log = { service = "nodes", pattern = "^Applying migrations for NodesDbContext", restart_after_s = 5, timeout_s = 120 }
+```
+
+`version_run`: `stack_reset_data` once at the start; builds any missing baseline; runs `prepare` if present (its builds, then its rows; a prepare row that is not PASS makes every main row SKIPPED with reason `prepare: <row> <grade>`); `svc_start` each service with its main build id (`kill_on_log` is armed before this start: the job tails the service's log, `fault_kill`s it on the first match with `restart_after_s`, and records `{matched, matched_at, killed}`; no match within `timeout_s` records `matched = false`, never a failure by itself); `agent_install {build_id}` for the agent; runs the rows with the fingerprint's `Baseline` set; then `svc_start` the head build of every service it changed (also on cancel and failure). A required row that is not PASS yields one `ver` signature (C12). `pattern` is a C12-style regex (1 s timeout, never `.*`) over the message text of the JSON log line.
+
+Synthetic game (L59). `src/Tools/Dhadgar.Lab.SyntheticGame` (console, lab-only): `--server-id <id> --port <p> --state <file>`; increments a counter every second and writes `{counter, at}` to the state file; answers `TICK\n` on `127.0.0.1:<port>` with `<counter>\n`; exits 0 on stdin `stop`. It runs inside a member under the agent's GameServerWrapper path (F36) or the agent's process manager, whichever the coder finds the agent uses (both if both exist). The probe mode `game-tick --server-id <id> --port <p>` reads it inside the member and prints `{alive, pid, counter, counter_at, restarts}` (the C7 `game` source). Continuity rows are `required = false` until D-ML56 is ruled.
+
+Guided mode (L62; D-ML57). `tools/lab/guided.toml`: `enabled = false` until an A/B passes. Under `mode = "guided"`, each choice the hunter or chaos scheduler makes is drawn from `LabRandom` with probability `random_share` (≥ 0.3), else weighted towards C18 coverage keys that are still unhit (weight 1 + 4 × unhit keys the choice can reach, from a static choice-to-keys map the packet writes). `guided_ab_run` runs `runs` jobs per arm with paired seeds (`seed + i` in both arms) and writes `{arm, runs, distinct_new_signatures, findings_per_100, coverage_hit}` per arm. Guided ships enabled only when its `findings_per_100` is strictly higher than random's; a tie or a loss leaves `enabled = false` and the report says so.
 
 ---
 
@@ -1278,7 +1636,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Files**
 
-1. `Nodes/NodesLabAdapter.cs`: real implementation. Construct `EnrollmentTokenService` with the context and whatever else its constructor needs (read it). If enrollment tokens need an organization row or the org must exist, seed `LabIds.OrganizationId` idempotently. `ShiftCertificateTimesAsync` updates `AgentCertificate` rows of the node: adds `shift` (negative) to the chosen fields; `GraceUntil` → `[Lab.Unavailable] needs Sprint 2` until L40. Production `createContext` uses `UseNpgsql(LabConnectionStrings.OwnerDirect("nodes"))` (the daemon's own writes go straight to Postgres, never through a fault proxy).
+1. `Nodes/NodesLabAdapter.cs`: real implementation. Construct `EnrollmentTokenService` with the context and whatever else its constructor needs (read it). If enrollment tokens need an organization row or the org must exist, seed `LabIds.OrganizationId` idempotently. `ShiftCertificateTimesAsync` updates `AgentCertificate` rows of the node: adds `shift` (negative) to the chosen fields, including `GraceUntil` (Sprint 2's column is on `main`, D-ML60; a null `GraceUntil` stays null). Production `createContext` uses `UseNpgsql(LabConnectionStrings.OwnerDirect("nodes"))` (the daemon's own writes go straight to Postgres, never through a fault proxy).
 1a. `Stack/LabDataReset.cs` and `stack_reset_data` in `Tools/Stack/StackTools.cs`: for each requested lab database, as `OwnerDirect(db)`, list `information_schema.tables` in schema `public` of type `BASE TABLE` except `__EFMigrationsHistory`, then one `TRUNCATE TABLE <list> RESTART IDENTITY CASCADE` with each name quoted by `NpgsqlCommandBuilder.QuoteIdentifier` (or `format('%I')` server side). Re-seeds `LabIds.OrganizationId` for Nodes. Refused while a job runs (`[Lab.JobRunning]`, after L27).
 2. `Nodes/EnrollProbe.cs`: build the key exactly as Nodes' `EnrollmentService.EnrollAsync` parses `PublicKey` (read it: algorithm, encoding, PEM or base64 SPKI); fixed lab hardware inventory (`HardwareInventoryRequest` with hostname `meridian-lab-probe`, plausible numbers); `AgentVersion = "meridian-lab"`.
 3. `Tools/Nodes/NodesTools.cs`: `nodes_token_mint`, `nodes_enroll_probe` (via `gateway` → `/api/v1/agents/enroll`, via `nodes` → `/agents/enroll`), `nodes_cert_time_shift`.
@@ -1357,7 +1715,7 @@ dotnet test <W>\tests\Dhadgar.Contracts.Tests\Dhadgar.Contracts.Tests.csproj -c 
 
 1. `Uat/Spec/UatSpec.cs`: records `UatSpec(int Schema, UatSection Section, IReadOnlyList<UatRow> Rows, string File, string Sha256)`, `UatSection(Id, Title, bool Sequential, IReadOnlyList<string> Requires, ulong? Seed, IReadOnlyList<string> AllowInvariants, IReadOnlyDictionary<string, JsonElement>? RequiresPool)`, `UatRow(Id, Title, Expected, IReadOnlyList<string> DependsOn, string? KnownIssue, bool ReuseMember, IReadOnlyList<string> AllowInvariants, IReadOnlyList<UatFault> Faults, IReadOnlyList<UatStep> Steps, IReadOnlyList<UatClause> Expect)`, `UatFault(string Id, string Tool, JsonElement Args, string Start, string Heal)`, `UatStep(string? Id, string? Tool, JsonElement? Args, IReadOnlyDictionary<string,string> Capture, int? WaitMs, string? ExpectError)`, `UatClause(Id, Text, Source, Op, JsonElement? Value, string? Pointer, string Since, int TimeoutMs, int PollMs, bool Required, IReadOnlyDictionary<string, JsonElement> SourceFields)`.
 2. `Uat/Spec/SpecLoader.cs`: `Tomlyn.Toml.ToModel` → `TomlTable` → records; TOML values converted to `JsonElement` for args and values. Line numbers from Tomlyn's syntax tree where available.
-3. `Uat/Spec/SpecValidator.cs`: schema must be 1; ids `[a-z0-9-]+` and unique; `depends_on` targets exist and come earlier; every row has at least one step and one required clause; step tools exist, are classified and are not `lab_lease_*`, `uat_*`, `fault_*`, `faults_active`, `job_*`, `hunt_*`, `fuzz_run`, `chaos_run`, `soak_run`, `fleet_run`, `results_*`, `triage_*`, `pool_acquire` or `pool_release`; no `lease_id` key in any args; `requires` entries in `docker`, `windows`, `windows_containers`, `network`; fault ids unique per row; fault `tool` is one of `fault_toxic_add`, `fault_proxy_disable`, `fault_partition`, `fault_kill`, `fault_pause`, `fault_disk_fill`, `fault_corrupt_file`, `fault_corrupt_registry`, `fault_db`; fault `args` validate against that tool's `InputSchema` (from the registry; `lease_id` excluded) and a `target` value has a C10 id form (`c:`, `p:`, `d:`, `f:`, `m:` or `${member}`); `start`/`heal` reference steps of the row; `since = fault_heal:<id>` names a fault of the row; `allow_invariants` ids are `I1`..`I7`; `known_issue` matches `^KI-[A-Z0-9-]+$` (existence is checked in L25); `requires_pool` keys are C13 `PoolConstraints` names; `${member}` only in sections with `requires_pool`; `expect_error` matches `^(Lab\.[A-Za-z]+|http:\d{3})$`; `source` known; source fields present (C7 table); `op` known and value shape right for it (`approx` two numbers, `any` list); `${...}` references resolvable (built-ins or captured earlier in the row); `${secret:...}` only in `http` bodies; `timeout_ms` ≤ 300000; `since = step:<id>` names a step of the row.
+3. `Uat/Spec/SpecValidator.cs`: schema must be 1; ids `[a-z0-9-]+` and unique; `depends_on` targets exist and come earlier; every row has at least one step and one required clause; step tools exist, are classified and are not `lab_lease_*`, `uat_*`, `fault_*`, `faults_active`, `job_*`, `hunt_*`, `fuzz_run`, `chaos_run`, `soak_run`, `fleet_run`, `results_*`, `triage_*`, `pool_acquire` or `pool_release`, and no tool whose gate is `OwnLease` (so the later `history_run`, `twin_run`, `mutation_run`, `envelope_run` and `peer_run` are refused without editing this list); no `lease_id` key in any args; `requires` entries in `docker`, `windows`, `windows_containers`, `network`; fault ids unique per row; fault `tool` is one of `fault_toxic_add`, `fault_proxy_disable`, `fault_partition`, `fault_kill`, `fault_pause`, `fault_disk_fill`, `fault_corrupt_file`, `fault_corrupt_registry`, `fault_db`; fault `args` validate against that tool's `InputSchema` (from the registry; `lease_id` excluded) and a `target` value has a C10 id form (`c:`, `p:`, `d:`, `f:`, `m:` or `${member}`); `start`/`heal` reference steps of the row; `since = fault_heal:<id>` names a fault of the row; `allow_invariants` ids are `I1`..`I7`; `known_issue` matches `^KI-[A-Z0-9-]+$` (existence is checked in L25); `requires_pool` keys are C13 `PoolConstraints` names; `${member}` only in sections with `requires_pool`; `expect_error` matches `^(Lab\.[A-Za-z]+|http:\d{3})$`; `source` known; source fields present (C7 table); `op` known and value shape right for it (`approx` two numbers, `any` list); `${...}` references resolvable (built-ins or captured earlier in the row); `${secret:...}` only in `http` bodies; `timeout_ms` ≤ 300000; `since = step:<id>` names a step of the row.
 4. `Tools/Uat/UatPlanTools.cs`: `uat_list_specs`, `uat_plan` (no lease; touches nothing).
 5. Tests: `SpecLoaderTests` (a full valid spec with a fault, a pool section and `expect_error`), `SpecValidatorTests` (one theory row per rule, each with a tiny invalid TOML string; includes "fault tool used as a step" and "`since = fault_heal:x` with no fault x"), `UatPlanToolTests` (lists `catalog/` specs too).
 
@@ -1420,13 +1778,13 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Files**
 
-1. `Uat/RowGrader.cs`: exactly C8.
+1. `Uat/RowGrader.cs`: exactly C8, including `RunOverall` and `RunOutcome.Compute` (until L25 every failure is passed with `IsKnown = false`).
 2. `Uat/UatRunner.cs`: `Task<Result<UatRunResult>> RunAsync(UatRunRequest request, IUatRunSink sink, CancellationToken ct)`. `plan_only` → validate and return without a lease. Order: sections as given, rows in file order (`sequential` true) or in order with dependencies respected; `requires` checked (`docker` via `stack_status`/docker probe, `windows` via OS, `windows_containers` via an `ICapabilityProbe` that answers false until L31, `network` true unless `Lab:Offline=true`); a missing capability → SKIPPED with the capability named; `wait_ms` steps; captures; `expect_error` (the step's error code or `http:<status>` equals it → the step counts as ok and its outcome is recorded; success → FAIL with `expected error <x>, got success`; another error → BLOCKED); clause evaluation after the last step. Until L22, a row with `[[row.fault]]` is BLOCKED with reason `faults arrive in L22`; until L30, a section with `requires_pool` has every row SKIPPED with reason `pool unavailable`. `run_id` = 6 hex chars from `RandomNumberGenerator`. `UatRunResult` carries `Seed`.
 3. `Uat/IUatRunSink.cs`: `RunStarted`, `RowFinished`, `RunFinished` (in-memory implementation here; L16 adds the bundle writer).
 4. `Tools/Uat/UatRunTool.cs`: `uat_run`.
-5. Tests: `RowGraderTests` (every row of the C8 table plus precedence combinations and "no required clause → UNVERIFIED"), `UatRunnerTests` with fake tools and sources (dependency failure → SKIPPED, step error → BLOCKED, own lease acquired and released, held lease → refused, lease lost mid-run → remaining rows BLOCKED, `expect_error` matched → PASS path, `expect_error` but success → FAIL, fault row → BLOCKED until L22, same seed → same `${seed}` and same runner choices), `LabRandomTests`.
+5. Tests: `RowGraderTests` (every row of the C8 table plus precedence combinations and "no required clause → UNVERIFIED"), `RunOutcomeTests` (`Overall_AllPass_IsPass`, `Overall_AllSkipped_IsIncomplete`, `Overall_NoRows_IsIncomplete`, `Overall_NeedsHuman_IsIncomplete`, `Overall_FailAndSkipped_IsFail`, `Overall_OnlyKnownAndSkipped_IsIncomplete`, `Overall_OnlyKnown_IsPassWithKnown`), `UatRunnerTests` with fake tools and sources (dependency failure → SKIPPED, step error → BLOCKED, own lease acquired and released, held lease → refused, lease lost mid-run → remaining rows BLOCKED, `expect_error` matched → PASS path, `expect_error` but success → FAIL, fault row → BLOCKED until L22, same seed → same `${seed}` and same runner choices), `LabRandomTests`.
 
-**Tests and why they fail when reverted:** `Grade_NoRequiredClauses_IsUnverified` and `Grade_PendingHuman_IsNeedsHuman` pin the PASS rule; `ExpectError_Success_IsFail` stops an expected-failure row from passing when the product stops failing the way the catalog says.
+**Tests and why they fail when reverted:** `Grade_NoRequiredClauses_IsUnverified` and `Grade_PendingHuman_IsNeedsHuman` pin the PASS rule; `Overall_AllSkipped_IsIncomplete` fails if a run where nothing ran reports `pass` (D-ML46); `ExpectError_Success_IsFail` stops an expected-failure row from passing when the product stops failing the way the catalog says.
 
 **Checks**
 
@@ -1450,7 +1808,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Files**
 
-1. `Uat/Bundle/BundleWriter.cs` (`IUatRunSink`): writes C9 files (every field, later-packet fields empty or zero: `overall` from `pass`/`fail` until L25, `violations` 0 until L21, `members` empty until L30); log slices for the run window from `logs/<process>.jsonl`; `repro\repro.toml` with `seed`, `build_id`, `specs` (`file`, `sha256`), `section`, `rows` filter and `label`. `uat_run {replay = <path>}` (wired here) loads it, refuses with `[Lab.InvalidArgument] spec changed since the run` when a sha256 differs, and runs with that seed and filter.
+1. `Uat/Bundle/BundleWriter.cs` (`IUatRunSink`): writes C9 files (every field, later-packet fields empty or zero: `overall` from `RunOutcome.Compute` with every failure new (`pass`, `incomplete` or `fail`) until L25, and recomputed by `uat_attest`; `violations` 0 until L21, `members` empty until L30); log slices for the run window from `logs/<process>.jsonl`; `repro\repro.toml` with `seed`, `build_id`, `specs` (`file`, `sha256`), `section`, `rows` filter and `label`. `uat_run {replay = <path>}` (wired here) loads it, refuses with `[Lab.InvalidArgument] spec changed since the run` when a sha256 differs, and runs with that seed and filter.
 2. `Uat/Bundle/LedgerRenderer.cs`: exactly the C9 `ledger.md` shape; "Saw" lists each clause `id: pointer observed (state)`; tables with spaces around pipes.
 3. `Uat/Bundle/SecretScanner.cs`: C9 patterns plus every vault value and the daemon token.
 4. `Tools/Uat/UatReportTools.cs`: `uat_report`, `uat_attest` (refuses non-`human` clauses with `[Lab.InvalidArgument]`; re-grades via `RowGrader`; rewrites the row JSON and `ledger.md`; records `{clause_id, verdict, note, at}`), `bundle_read`.
@@ -1474,7 +1832,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Depends on:** L16, L11. **Security review:** yes.
 - **Rules:**
   - R-HOST: the CLI talks only to `http://127.0.0.1:<port>`; token from `MERIDIAN_LAB_TOKEN`, never an argument.
-  - R-RESULT: exit 0 all PASS, 1 any FAIL/BLOCKED/UNVERIFIED, 2 config error, 4 NEEDS_HUMAN only.
+  - R-RESULT: the exit code is C8's for `overall`: 0 `pass`, 1 `fail`, 2 config or plan error, 4 `incomplete`, 5 `pass_with_known` (3 is the daemon's "already running"). `LabCliExitCodeTests` pins the map.
   - R-PATH, R-USING, R-NULL, R-XUNIT.
 
 **Contract excerpt:** C7 (spec), C8, C9; C16 (same MCP path as Claude).
@@ -1525,6 +1883,45 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Docs owed:** the agent and skill files are the docs.
 
+### L48. Observation stream, actor and op ids, fingerprint, pairing and fidelity (C18 reserved)
+
+- **Branch / worktree / commit:** `ml/l48-observe` / `meridian-lab-l48` / `feat(lab): ordered observation stream, reproducibility fingerprint and replay fidelity`
+- **Depends on:** L16 (parallel with L17 and L18). **Security review:** yes (every observation is evidence on disk).
+- **Rules:**
+  - R-LOG / R-ZERO: `Args` and `Result` pass through `Redactor` inside `Append`, before the line is written; `SecretScanner` adds `events.jsonl` and `fingerprint.json` to the files it scans.
+  - R-TIME: `At` comes from `TimeProvider`; `Seq` comes from the sink's per-run counter under one lock, never from the clock.
+  - R-PATH: `events_read` resolves `run_id` through the run index under `LabPaths.UatRuns` and `LabPaths.Jobs` (match on the folder's `run_id` in `run.json`); it never treats `run_id` as a path; `..`, separators or an unknown id → `[Lab.NotFound]`.
+  - R-ARGS / R-DOCKER: image digests via `docker --context <ctx> image inspect --format "{{.Id}}" <tag>` and engine versions via `docker --context <ctx> version --format "{{.Server.Version}}"`, both through `IDockerCli`.
+  - R-HOST: Toxiproxy's version from `GET http://127.0.0.1:18474/version` only.
+  - R-RESULT (a missing fingerprint part becomes `"unknown"` plus a warning in `run.json`, never a failed run), R-USING, R-DI (one singleton sink), R-NULL, R-XUNIT.
+
+**Contract excerpt:** C18 in full; C9 `events.jsonl`, `fingerprint.json`, `run.json` fields `fingerprint_sha256`, `fidelity`, `pair`, `replay`, `events`; C4 `events_read`, `http_request` `outcome`.
+
+**Files** (all under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `Observe/ActorIds.cs`, `Observe/OpId.cs`, `Observe/LabObservation.cs` (with `ObservationKind`, `OpOutcome`, `ReplayFidelity`, `PairInfo`): C18 exactly. JSON uses `JsonNamingPolicy.SnakeCaseLower` and string enums (`invoke`, `fault_prepare`, `schedule_approximate`).
+2. `Observe/LabObservationSink.cs` (`ILabObservationSink`, singleton): per run a `FileStream` (`FileMode.CreateNew`, `FileShare.Read`) and a `StreamWriter`; `Append` takes the run's lock, assigns `Seq = ++counter`, redacts, writes one line and calls `Flush()`; tracks open ops (`Invoke` without `Complete`); `EndRunAsync` appends a `Complete` with `Outcome = Unknown` and `Result = {"reason":"run ended"}` for each, then closes; the 100,001st append writes one `Note` `truncated` and later appends return a failure `[Lab.Truncated]` that callers ignore. `Read(runId, afterSeq, max)` reads the file (open or closed) and returns lines with `Seq > afterSeq`.
+3. `Observe/OutcomeClassifier.cs`: `static OpOutcome Classify(HttpResponseMessage? response, Exception? error)` per the C18 outcome table: a response → `Ok` or `Fail` by the op's success statuses (a parameter); `HttpRequestException` with `HttpRequestError.ConnectionError`, `NameResolutionError` or `SecureConnectionError` → `Fail`; any other `HttpRequestException`, `IOException`, `TaskCanceledException` or `OperationCanceledException` after `SendAsync` began → `Unknown`. `http_request` (L10 tool) returns `outcome` from it.
+4. `Observe/FingerprintBuilder.cs`: builds `LabFingerprint` for a run from the active build record (`commit`, `dirty`, `build_id`, images; `baseline` and `mutant` stay null until L60 and L54), the SHA-256 over sorted `"<relative path>\n<sha256>\n"` of every `packages.lock.json` in the build's source tree, each lab service adapter's effective environment (read how L09 adapters produce env; vault values replaced by `vault:<name>` before hashing), the run's specs, `DaemonVersion` (assembly informational version), Toxiproxy version, `Seed`, `RuntimeInformation.OSDescription` and the engine versions. `FingerprintHasher.Sha256` serialises with sorted keys, no whitespace, then SHA-256 lowercase hex.
+5. `Observe/FidelityRules.cs`: `static ReplayFidelity For(FidelityInput input)` with `public sealed record FidelityInput(bool ConcurrentActors, bool TimingFaults, bool Truncated, bool Attested, bool BuildPresent);` → `EvidenceOnly` if `Truncated`, `Attested` or `!BuildPresent`; else `ScheduleApproximate` if `ConcurrentActors` or `TimingFaults`; else `Exact`.
+6. `Observe/ReplayJudge.cs`: compares the stored and current fingerprints field by field (`fingerprint_diff`: one text per differing field, values hashed when they could hold paths) and decides `reproduced` per C18 using grades only (L25 adds primary signatures).
+7. `Uat/UatRunner.cs`: `BeginRun` at run start; each step is `NextOp(runId, "runner")`, an `Invoke` (`Op` = tool name, redacted args), the dispatch, then a `Complete` with the outcome (`http_request` and `nodes_enroll_probe`: their `outcome`; any other tool: `Ok` on success, `Fail` on error); `EndRunAsync` at run end.
+8. `Uat/Bundle/BundleWriter.cs`: `fingerprint.json` at run start; `run.json` `fingerprint_sha256`, `fidelity` (from `FidelityRules`; plain `uat_run` passes `ConcurrentActors = false`, `TimingFaults = false` until L22), `pair: null`, `replay` (set on replays), `events` (the count); `repro.toml` gains `fidelity` and `fingerprint_sha256`.
+9. `Tools/Observe/EventsReadTool.cs`: `events_read` (gate Open), filters `actor` and `kind`, `max` capped at 5000.
+10. `Program.cs` / DI: register the sink and builder; `LabDaemonServiceLifetimeTests` stays green.
+11. Tests under `tests/Dhadgar.Lab.Tests/Observe/`: `ActorIdsTests` (`Validate_Uppercase_Fails`, `Validate_ClientWithIndex_Ok`), `OpIdTests` (parse round trip; `Parse_MissingSeq_Fails`), `LabObservationSinkTests` (`Sink_ParallelAppends_SeqTotalOrder`: 8 tasks × 1000 appends → `Seq` 1..8000 with no gap or repeat, file lines in `Seq` order; `Sink_VaultValueInArgs_Redacted`; `Sink_OverCap_TruncatedNoteOnce`; `EndRun_OpenOp_ClosedUnknown`; `Append_NoOpenRun_Fails`), `OutcomeClassifierTests` (`ConnectionError_IsFail`, `ResponseEnded_IsUnknown`, `Cancelled_IsUnknown`, `Status401_IsFail`, `Status201_IsOk`), `FingerprintTests` (`SameInputs_SameHash`, `KeyOrder_DoesNotChangeHash`, `SecretValueChange_DoesNotChangeHash`, `LockFileChange_ChangesHash`), `FidelityRulesTests` (each row of the rule), `ReplayJudgeTests` (`Diff_ListsChangedImageDigest`), `EventsReadToolTests` (`RunIdWithDotDot_NotFound`).
+
+**Tests and why they fail when reverted:** `Sink_ParallelAppends_SeqTotalOrder` fails if `Seq` comes from the clock or is assigned outside the lock, which would let L50's checker order a completion before its invocation. `ResponseEnded_IsUnknown` fails if a request that may have committed is recorded as a failure, which would make the checker report false E3 violations. `SecretValueChange_DoesNotChangeHash` fails if a secret enters the fingerprint.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+```
+
+**Docs owed:** none (L45).
+
 ---
 
 ## Wave 4: faults, invariants and the first catalogs (no Sprint 2 dependency)
@@ -1533,14 +1930,15 @@ Every packet in this wave touches the blast-radius boundary, so every one gets a
 
 ### L19. Blast-radius guard, `FaultBook`, Toxiproxy faults; S-L7, BR
 
-- **Branch / worktree / commit:** `ml/l19-fault-core` / `meridian-lab-l19` / `feat(lab): blast-radius guard, fault book and toxiproxy faults`
-- **Depends on:** L08, L09. **Security review:** yes (blast radius).
+- **Branch / worktree / commit:** `ml/l19-fault-core` / `meridian-lab-l19` / `feat(lab): blast-radius guard, write-ahead fault book and toxiproxy faults`
+- **Depends on:** L08, L09, L48 (`ILabObservationSink`). **Security review:** yes (blast radius).
 - **Rules:**
   - R-BLAST: every mutating tool resolves its target through `FaultTargetGuard`; the three checks are separate injectable classes so each is tested alone.
   - R-DOCKER, R-OBSERVE (S-L7 reads `/readyz` on the direct port, never through a proxy).
   - R-HOST: the Toxiproxy API (`127.0.0.1:18474`) passes only through `LabHosts.IsLabInfraEndpoint`.
   - R-TIME: deadlines and the sweeper run on `TimeProvider`; tests use `FakeTimeProvider`.
-  - R-PATH: the journal is `LabPaths.State\faults.json`, written to a temp file then `File.Move(..., overwrite: true)`.
+  - R-PATH: the journal is `LabPaths.State\faults.json`, written durably: temp file in the same folder, `FileStream.Flush(flushToDisk: true)`, then `File.Move(..., overwrite: true)` (`FaultJournal.WriteAsync`).
+  - Write-ahead (D-ML46): the journal entry exists, state `Prepared`, **before** anything changes a target. A crash at any point leaves either nothing changed or a journal entry that recovery heals.
   - R-RESULT, R-LOG (fault args go through `Redactor` before the audit log), R-DI, R-NULL, R-XUNIT.
 
 **Contract excerpt:** C4 rows `fault_list_targets`, `faults_active`, `fault_toxic_add`, `fault_proxy_disable`, `fault_partition`, `fault_heal`, `fault_reset`, and `ActiveFault`; C10 "Toxiproxy proxies", "Target ids", "Blast-radius guard"; D-ML21, D-ML22. Toxiproxy API: `GET /proxies`; `POST /proxies/{name}` body `{"enabled": false|true}`; `POST /proxies/{name}/toxics` body `{name, type, stream, toxicity, attributes}`; `DELETE /proxies/{name}/toxics/{toxic}`; `POST /reset` (enables every proxy and removes every toxic).
@@ -1567,25 +1965,33 @@ Every packet in this wave touches the blast-radius boundary, so every one gets a
    public interface IFaultKind
    {
        string Kind { get; }
-       Task<Result<JsonElement>> InjectAsync(ResolvedTarget target, JsonElement args, string faultId, CancellationToken ct); // returns heal data for the journal
-       Task<Result> HealAsync(FaultJournalEntry entry, CancellationToken ct);  // idempotent: healing a healed fault is ok
+       // Computes everything heal needs (names, prior values, backups written to LabPaths.FaultBackups\<faultId>\) without changing the target.
+       Task<Result<JsonElement>> PrepareAsync(ResolvedTarget target, JsonElement args, string faultId, CancellationToken ct);
+       Task<Result> InjectAsync(ResolvedTarget target, JsonElement args, JsonElement healData, string faultId, CancellationToken ct);
+       // Idempotent, and safe when the fault was never injected or only partly injected ("not paused", "already running",
+       // "no such toxic", "file absent" are ok).
+       Task<Result> HealAsync(FaultJournalEntry entry, CancellationToken ct);
+       // Daemon start only, after journalled entries are healed: removes this kind's traces that no journal entry owns
+       // (a crash between inject and a lost journal write, or a journal file deleted by hand). Lab targets only, through the guard.
+       Task<Result<int>> ReconcileAsync(CancellationToken ct);
    }
+   public enum FaultState { Prepared, Active, Healing, HealFailed }
    public sealed record FaultJournalEntry(string FaultId, string Kind, string TargetId, JsonElement Args, JsonElement HealData,
-       DateTimeOffset StartedAt, DateTimeOffset Deadline);
+       FaultState State, DateTimeOffset StartedAt, DateTimeOffset Deadline, string? HealError);
    ```
 
-   `BeginAsync(kind, targetId, args, healAfterS, ct)`: guard, refuse a second active fault of the same kind on the same target (`[Lab.FaultActive] <fault_id>`), refuse more than 16 active faults, inject, journal, return `ActiveFault`. `heal_after_s` default 120, 1..900. `HealAsync(faultId, reason)`, `HealAllAsync(reason)`. A sweeper on a 1 s `TimeProvider` timer heals overdue faults. `StartAsync` runs `RecoverAsync`: heal every journalled entry, then `ToxiproxyClient.ResetAsync()`. `StopAsync` heals all. A heal error is retried once, then kept in the journal with `heal_error` and reported by `faults_active`. `IsFaulted(targetId)` is true while a fault on it is active or healed less than 10 s ago. History (last 500 entries with `healed_at` and reason) is kept in memory for I1 and I6 (L21). Lease end (`ILeaseEndHook`) heals all.
+   `BeginAsync(kind, targetId, args, healAfterS, ct)`, in this order: guard; refuse a second active fault of the same kind on the same target (`[Lab.FaultActive] <fault_id>`) and more than 16 active faults; `PrepareAsync`; journal the entry as `Prepared` (durable write); append a C18 `FaultPrepare` observation; `InjectAsync`; on success journal `Active`, append `FaultInject`, return `ActiveFault`; on failure run `HealAsync` on the entry (partial inject), drop it from the journal when the heal succeeds (else keep it `HealFailed`), and return the inject error. `heal_after_s` default 120, 1..900. `HealAsync(faultId, reason)`: journal `Healing`, heal, then drop the entry (or `HealFailed` with `heal_error`), append `FaultHeal`. `HealAllAsync(reason)`. A sweeper on a 1 s `TimeProvider` timer heals overdue faults. `StartAsync` runs `RecoverAsync`: heal every journalled entry in any state (`Prepared` too: prepare may have written backups, and inject may have started), then every registered kind's `ReconcileAsync` (the Toxiproxy kinds: `ToxiproxyClient.ResetAsync()`), and logs the counts. `StopAsync` heals all. A heal error is retried once, then kept in the journal with `heal_error` and reported by `faults_active`. `IsFaulted(targetId)` is true while a fault on it is active or healed less than 10 s ago. History (last 500 entries with `healed_at` and reason) is kept in memory for I1 and I6 (L21). Lease end (`ILeaseEndHook`) heals all.
 5. Fault kinds in `Faults/Kinds/`: `ToxicFault` (`toxic`), `ProxyDisableFault` (`proxy_disable`), `PartitionFault` (`partition`: every `ProxyCatalog` entry named `<from>-<to>` or `<to>-<from>`, disabled under one fault id; no such proxy → `[Lab.InvalidArgument] no proxy on that edge`).
 6. `Tools/Faults/FaultTools.cs`: the seven tools; mutating ones implement `IFaultTool { JsonElement SampleArgs(string targetId); }`; add them to `ToolPolicy` (gates per C4) and to `StatusDto.ActiveFaults`.
 7. Tests:
    - `FaultTargetGuardTests`: with fakes, each check refuses on its own while the other two pass (unregistered id; registered id whose inspect lacks the label; registered and labelled container named `dhadgar-gateway`; a named-volume mount); `m:host` refused.
    - `BlastRadiusTests`: reflect over the tool registry; every Leased tool whose input schema has a `target`, `proxy`, `member`, `database` or `file` property must implement `IFaultTool` (else the test fails naming it); call each with `SampleArgs` for `c:not-registered`, `p:not-a-proxy`, `d:postgres` and `m:host` and assert `Lab.BlastRadius` or `Lab.InvalidArgument`, never success.
-   - `FaultBookTests`: deadline heals at `heal_after_s`; lease end heals all; recovery heals a journalled entry and calls reset; second fault same kind and target → `FaultActive`; heal error retried once then reported; `IsFaulted` window.
+   - `FaultBookTests`: deadline heals at `heal_after_s`; lease end heals all; recovery heals a journalled entry and runs every `ReconcileAsync`; second fault same kind and target → `FaultActive`; heal error retried once then reported; `IsFaulted` window; `FaultBook_JournalWrittenBeforeInject` (a fake kind asserts, inside `InjectAsync`, that the journal file already holds the entry as `Prepared`); `FaultBook_CrashAfterInjectBeforeActive_RecoveryHeals` (a fake journal that throws on the `Active` write; a new `FaultBook` on the same state folder heals the target); `FaultBook_PreparedNeverInjected_HealSucceeds`; `FaultBook_InjectFails_PartialHealed`; `FaultJournal_TempThenMove` (no partial `faults.json` after an interrupted write).
    - `ToxicValidatorTests`.
    - `BlastRadiusDockerTests` (`RequiresDocker`): start `meridian-lab-decoy` (labelled, not registered) and `dhadgar-decoy` (unlabelled) from `alpine:3` with `sleep 600`; forge a registry entry `c:decoy` pointing at `dhadgar-decoy`'s id; `ResolveAsync` refuses both; both still running; the test removes them in `finally` by id.
    - `Seams/ToxiproxySeamTests.cs` (S-L7, `RequiresDocker`): stack up, Nodes up; `fault_proxy_disable nodes-postgres` → Nodes `/readyz` on 15040 not 200 within 30 s; `fault_heal` → 200 within 30 s; a 1000 ms latency toxic on `gateway-nodes` downstream → `GET /api/v1/agents/ca-certificate` via the Gateway's direct port takes at least 1000 ms; `fault_reset` leaves Toxiproxy with no toxics.
 
-**Tests and why they fail when reverted:** removing any one guard check turns its `FaultTargetGuardTests` case red; a new mutating tool without `IFaultTool` turns `BlastRadiusTests` red; dropping the lease-end hook turns `LeaseEnd_HealsAllFaults` red.
+**Tests and why they fail when reverted:** removing any one guard check turns its `FaultTargetGuardTests` case red; a new mutating tool without `IFaultTool` turns `BlastRadiusTests` red; dropping the lease-end hook turns `LeaseEnd_HealsAllFaults` red; moving the journal write after inject turns `FaultBook_JournalWrittenBeforeInject` red; dropping reconcile turns the crash test red.
 
 **Checks**
 
@@ -1613,6 +2019,17 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Files**
 
+Every kind implements L19's four members. Prepare records what heal needs and writes any backup; inject changes the target; heal is idempotent and tolerates a never-injected or partly injected target; reconcile (daemon start only) removes unowned traces, each found through `FaultTargetGuard` over the registry's lab targets, never by a name pattern alone:
+
+| Kind | Prepare | Heal tolerates | Reconcile |
+| --- | --- | --- | --- |
+| kill | record `RestartCount`, `StartedAt` | "already running" | start every registered lab container that is `exited` while the stack is `up` and no journal entry owns it; log each |
+| pause | - | "is not paused" | `docker unpause` every registered lab container in state `paused` |
+| disk_fill | read free space | absent `/tmp/.lab-fill` | `docker exec <id> rm -f /tmp/.lab-fill` on every running registered Linux service container |
+| corrupt_file | copy to `LabPaths.FaultBackups\<fault_id>\` and record SHA-256 | backup equal to the live file | for each backup folder with no journal entry: restore when the live file's hash differs from the recorded one, then delete the folder |
+| db | read current `datconnlimit` and `default_transaction_read_only` for the database | "already the default" | on every `meridian_lab_*` database: `ALTER DATABASE ... RESET default_transaction_read_only` and `CONNECTION LIMIT -1` |
+| lock_table | - | connection already gone | nothing (the session died with the daemon) |
+
 1. `Faults/Kinds/KillFault.cs`: `docker kill --signal <KILL|TERM>`; heal = `docker start <id>` (immediately at heal, or after `restart_after_s` when given, which also sets the deadline); the watchdog does not relaunch while `IsFaulted`.
 2. `Faults/Kinds/PauseFault.cs`: `docker pause` / `docker unpause`.
 3. `Faults/Kinds/DiskFillFault.cs`: mount must be `/tmp` for Linux services (C10); read free space with `docker exec <id> df -k --output=avail /tmp`; write `(avail - leave_kib)` KiB with `docker exec <id> fallocate -l <n>K /tmp/.lab-fill`, falling back to `dd if=/dev/zero of=/tmp/.lab-fill bs=1024 count=<n>` when fallocate fails; heal `docker exec <id> rm -f /tmp/.lab-fill`. Members return `[Lab.Unavailable] members arrive in L33`.
@@ -1623,9 +2040,9 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
    - `lock_table`: a dedicated `OwnerDirect(service)` connection runs `BEGIN; LOCK TABLE "<table>" IN ACCESS EXCLUSIVE MODE;` and is held by the fault until heal (`ROLLBACK`, dispose). After a daemon crash the connection is gone, so recovery heal is a no-op.
    - `read_only`: `ALTER DATABASE "<db>" SET default_transaction_read_only = on`, then terminate backends so new sessions pick it up; heal `ALTER DATABASE "<db>" RESET default_transaction_read_only`, then terminate backends again (pooled sessions keep the old setting otherwise). Record both terminations in the fault's args.
 6. `Tools/Faults/FaultTools.cs`: the five tools, each `IFaultTool` with `SampleArgs`.
-7. Tests: `KillFaultTests`, `PauseFaultTests`, `DiskFillFaultTests` (undeclared mount refused; exact `ArgumentList` for both paths), `CorruptFileFaultTests` (heal restores identical bytes; `garbage` with the same seed gives the same bytes; unknown logical name refused), `DbFaultTests` (`d:postgres`, `meridian_lab_x; drop` and an unknown table all refused before any SQL runs; `ALTER` text for a valid name is exact), `BlastRadiusTests` cases for the five new tools. Docker (`RequiresDocker`, `FaultKindsDockerTests`): kill Nodes then heal → `/readyz` 200 within 60 s; pause and unpause; fill `/tmp` and heal (free space back); `lock_table` on the Nodes nodes table blocks a `db_query` with a 2 s statement timeout, heal releases it; `read_only` makes an enroll probe fail and heal restores it.
+7. Tests: `KillFaultTests`, `PauseFaultTests`, `DiskFillFaultTests` (undeclared mount refused; exact `ArgumentList` for both paths), `ReconcileTests` (per kind with fakes: an unowned trace on a lab target is removed; the same trace on a non-lab container is never touched; a `CorruptFile` backup with no entry is restored and deleted; `Heal_NeverInjected_IsOk` for each kind), `CorruptFileFaultTests` (heal restores identical bytes; `garbage` with the same seed gives the same bytes; unknown logical name refused), `DbFaultTests` (`d:postgres`, `meridian_lab_x; drop` and an unknown table all refused before any SQL runs; `ALTER` text for a valid name is exact), `BlastRadiusTests` cases for the five new tools. Docker (`RequiresDocker`, `FaultKindsDockerTests`): kill Nodes then heal → `/readyz` 200 within 60 s; pause and unpause; fill `/tmp` and heal (free space back); `lock_table` on the Nodes nodes table blocks a `db_query` with a 2 s statement timeout, heal releases it; `read_only` makes an enroll probe fail and heal restores it.
 
-**Tests and why they fail when reverted:** `FaultDb_InjectedName_IsRefusedBeforeSql` fails if a name reaches SQL unvalidated; `CorruptFile_Heal_RestoresExactBytes` fails if the backup is skipped.
+**Tests and why they fail when reverted:** `FaultDb_InjectedName_IsRefusedBeforeSql` fails if a name reaches SQL unvalidated; `CorruptFile_Heal_RestoresExactBytes` fails if the backup is skipped; `Reconcile_NonLabContainer_Untouched` fails if reconcile bypasses the guard.
 
 **Checks**
 
@@ -1652,18 +2069,19 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 **Files**
 
 1. `Invariants/InvariantMonitor.cs` per C11; registered invariants run in parallel with a 30 s timeout each.
-2. `Invariants/I1UnhandledInvariant.cs`: reads the L07 log store for the window; C11's I1 rule including the fault-excused 502-504 (asks `FaultBook` history).
+2. `Invariants/I1UnhandledInvariant.cs`: reads the L07 log store for the window; C11's I1 rule including the fault-excused 502-504, excused only through `FaultImpactMap.Explains(service, path, fault)` over `FaultBook` history.
+2a. `Invariants/FaultImpactMap.cs` and `Invariants/GatewayRouteTable.cs` (C10 "Fault impact map"): `IReadOnlySet<string> ImpactSet(string service, string? requestPath)`; `bool Explains(string service, string? requestPath, FaultHistoryEntry fault, DateTimeOffset at)` (target in the set, and active at `at` or healed less than 10 s before). The service dependency cells come from `ProxyCatalog` (one source); the route table is a static array of `(pathPrefix, clusterId)` copied from `src/Dhadgar.Gateway/appsettings.json` `ReverseProxy:Routes`, most specific prefix first.
 3. `Invariants/I2OutboxInvariant.cs`: per service a `(database, outboxMessageTable, outboxStateTable, sentColumn)` entry; Nodes now (names from `src/Dhadgar.Nodes` model snapshot: `OutboxMessage`, `OutboxState`; read the snapshot for the exact column names); others are added by L34 and L36.
 4. `Invariants/I3DbChecksInvariant.cs`: loads `docs/guides/uat-specs/invariants/*.toml` (C11 format; `schema = 1`; the file `soak.toml` is I7's and is skipped here); each `[[check]]` runs read-only with `max_rows` 50; any row is a violation with the first five rows as evidence.
 5. `Invariants/I4SecretLeakInvariant.cs`: subscribes to `IRawLineObserver`; patterns per C11 plus every `SecretVault` value and the daemon token; queues violations with the redacted line.
 6. `Invariants/I5OrphanInvariant.cs`: `docker ps -a --filter label=meridian-lab=1` vs `LabTargetRegistry`; RabbitMQ `GET /api/queues` (management user from the vault) for queues ending `_error` or `_skipped` with `messages > 0`; Toxiproxy toxics and disabled proxies with no `FaultBook` entry; `LabPaths.FaultBackups` folders with no active fault. Members are added by L30.
-7. `Invariants/I6RestartInvariant.cs`: a baseline snapshot of `RestartCount` and `StartedAt` per registered container plus supervisor `ProcessExit` events; a change is excused by a `FaultBook` kill or pause, an audited `svc_start`, `svc_restart` or `stack_up`, or a `member_reset` in the window.
+7. `Invariants/I6RestartInvariant.cs`: a baseline snapshot of `RestartCount` and `StartedAt` per registered container plus supervisor `ProcessExit` events; a change is excused only by C11's I6 rule: a `fault_kill` or `fault_pause` whose target is that container, an audited `svc_start`, `svc_restart` or `stack_up` of that service, or a `member_reset` of that member, inside the 30 s margins. Any other fault, including one on the service's own dependency, does not excuse it.
 8. `Tools/Invariants/InvariantsCheckTool.cs` (`invariants_check`; `since` default = the last checkpoint); `Uat/Eval/InvariantSource.cs` (clause source `invariant`).
 9. `LabServices`: every service starts with `Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics=Information`.
 10. `UatRunner`: checkpoint at run start (window from daemon start) and at run end; `BundleWriter` writes `invariants.json` (violations and errors) and `run.json` `violations`. Per-row windows and grading are L22.
-11. Tests: one test class per invariant with fakes; `I4_PlantedVaultValue_ViolationIsRedacted` (the stored detail does not contain the value); `I6_RestartExplainedByFault_NoViolation` and `I6_UnexplainedRestart_Violation`; `I1_503DuringFault_Excused` and `I1_500DuringFault_Counts`; `Monitor_OneCheckThrowsOrFails_OthersStillRun`. S-L6 now also asserts `violations = 0` and no check errors.
+11. Tests: one test class per invariant with fakes; `I4_PlantedVaultValue_ViolationIsRedacted` (the stored detail does not contain the value); `I6_RestartExplainedByKillOnSameTarget_NoViolation`, `I6_UnexplainedRestart_Violation` and `I6_RestartDuringDependencyFault_Violation` (Nodes restarts while `nodes-postgres` is disabled: a finding, not an excuse); `I1_503OnNodes_FaultOnNodesPostgres_Excused`, `I1_503OnNodes_FaultOnDiscordWebhook_Counts`, `I1_503OnGateway_NodesProxyDown_Excused` (route `/api/v1/agents/...` → cluster `nodes`), `I1_503OnGateway_UnroutedPath_FaultOnNodes_Counts`, `I1_503_FaultHealed15sBefore_Counts` and `I1_500DuringFault_Counts`; `GatewayRouteTableTests` (every route in the Gateway's `appsettings.json` is in the table with the same cluster, so a new route fails the test until the table is updated); `Monitor_OneCheckThrowsOrFails_OthersStillRun`. S-L6 now also asserts `violations = 0` and no check errors.
 
-**Tests and why they fail when reverted:** `I4_PlantedVaultValue_ViolationIsRedacted` fails if the raw line is stored; `I1_500DuringFault_Counts` fails if faults excuse every 5xx.
+**Tests and why they fail when reverted:** `I4_PlantedVaultValue_ViolationIsRedacted` fails if the raw line is stored; `I1_500DuringFault_Counts` fails if faults excuse every 5xx; `I1_503OnNodes_FaultOnDiscordWebhook_Counts` fails if any fault anywhere excuses a 503 (D-ML46).
 
 **Checks**
 
@@ -1691,7 +2109,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 1. `Uat/RowExecutor.cs` (extracted from `UatRunner`): per row: open window → inject `before_steps` faults → steps, injecting `after_step:<id>` faults and healing `after_step:<id>` faults after that step → heal `after_steps` faults → heal anything left (row end) → settle `Lab:Uat:SettleMs` (default 5000) → clauses (the `fault_heal:<id>` anchor is the heal time) → invariant checkpoint for `[row_start, now]` → grade. An inject error → BLOCKED `fault <id>: <error>`, steps skipped, any injected faults still healed. A heal error → BLOCKED `heal <id>: <error>`, then `fault_reset`; if `faults_active` is not empty afterwards, every remaining row is BLOCKED `lab not clean`.
 2. `Uat/RowGrader.cs`: apply C8's invariant rule with the union of section and row `allow_invariants`; allowed violations stay in the row JSON with `allowed: true`.
 3. `UatRunner`: delete the "faults arrive in L22" branch; synthetic rows `invariants/<id>` (FAIL for violations, UNVERIFIED for check errors) for anything outside row windows.
-4. `Uat/Bundle/BundleWriter.cs` and `ReproWriter`: row `faults` with `fault_id`, `injected_at`, `healed_at`, `heal_error`; `repro.toml` gains `[[fault]]` entries `{row, id, tool, args (redacted), injected_ms, healed_ms}` relative to row start. Replay re-runs the rows; the timeline is evidence, not a schedule (the spec drives injection).
+4. `Uat/Bundle/BundleWriter.cs` and `ReproWriter`: row `faults` with `fault_id`, `injected_at`, `healed_at`, `heal_error`; `repro.toml` gains `[[fault]]` entries `{row, id, tool, args (redacted), injected_ms, healed_ms}` relative to row start. Replay re-runs the rows; the timeline is evidence, not a schedule (the spec drives injection). A run with any `fault_toxic_add` of `latency`, `bandwidth`, `slow_close` or `timeout`, or any `fault_pause`, passes `TimingFaults = true` to L48's `FidelityRules`, so its fidelity is `schedule_approximate`.
 5. `uat_report`: `violations` and per-row `violations`.
 6. Tests (`RowExecutorTests` with fake tools): `FaultRow_StepBlocks_FaultStillHealed`; `FaultRow_InjectFails_IsBlockedAndOthersHealed`; `HealFails_LabNotClean_RemainingRowsBlocked`; `Violation_NotAllowed_FailsPassRow`; `Violation_Allowed_RecordedNotFailed`; `CheckError_InRow_IsUnverified`; `Violation_OutsideRows_SyntheticRow`; `SinceFaultHeal_UsesHealTime`. Docker: `tests/Dhadgar.Lab.Tests/Uat/Specs/fault-smoke.toml` (one row: disable `nodes-postgres`; Nodes `/readyz` not 200; recovery clause `since = "fault_heal:pg"`, `timeout_ms = 30000`, status 200) passes in `FaultSmokeE2ETests` (`RequiresDocker`).
 
@@ -1778,6 +2196,143 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ---
 
+## Wave 4H: history checking (no Sprint 2 dependency)
+
+Jepsen-style histories over enrollment (D-ML47, D-ML48). L49 and L50 run in parallel; L51 needs both and turns S-L11 green. Every packet gets a `security-advisor` pass (the barrier proxy is a listener; history clients carry enrollment tokens). Base filter `F` as in wave 4.
+
+### L49. Barrier proxy; red S-L11
+
+- **Branch / worktree / commit:** `ml/l49-barrier` / `meridian-lab-l49` / `feat(lab): lab-only barrier proxy and red enrollment history seam`
+- **Depends on:** L48, L09, L10. **Security review:** yes (new listener).
+- **Rules:**
+  - R-HOST: the listener binds `IPAddress.Loopback` only, on `LabPorts.Barrier` (or port 0 when a test passes 0); `StartAsync` refuses any other port and any upstream that fails `LabHosts.IsLabEndpoint` (`[Lab.BlastRadius]`).
+  - Forwarding: `HttpClient` over `SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, UseCookies = false }`, one per proxy instance, disposed with it (R-USING). Hop-by-hop headers (`Connection`, `Keep-Alive`, `Transfer-Encoding`, `Upgrade`, `Proxy-*`, `TE`, `Trailer`) and `X-Lab-Op-Id` are never forwarded.
+  - R-LOG / R-ZERO: bodies are never logged; observations carry the status and the byte counts only.
+  - R-TIME: holds and the 30 s cap run on `TimeProvider`; tests use `FakeTimeProvider` where no socket timing is involved.
+  - R-RESULT, R-DI (the proxy is created per `history_run`, never registered as a singleton listener), R-NULL, R-XUNIT.
+
+**Contract excerpt:** C19 "The barrier proxy" in full; C10 "Lab-only HTTP barrier proxy"; C1 `LabPorts.Barrier = 25080`; C18 `ILabObservationSink`, `ObservationKind.Observe`.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `LabPorts.cs`: confirm `Barrier = 25080` is in `ServicePorts` (C1; L01 ships it) and add it if missing, so `LabHosts.IsLabEndpoint` accepts the barrier; nothing else changes.
+2. `Barrier/BarrierTypes.cs`: `BarrierAction`, `BarrierRule` per C19.
+3. `Barrier/BarrierProxy.cs`: `WebApplication.CreateSlimBuilder()`, `WebHost.ConfigureKestrel(k => { k.Listen(IPAddress.Loopback, port); k.Limits.MaxRequestBodySize = 1 << 20; })`, one catch-all `app.Map("/{**path}", HandleAsync)`. `StartAsync` returns the started proxy and its bound port (`BoundPort`, read from `IServerAddressesFeature`). `Arm(runId, rules)` replaces the rule set; `WaitArrivedAsync(barrier, count, timeout, ct)` completes when `count` held requests of that barrier have arrived; `Release(barrier)` lets them go. `HandleAsync`:
+   - read `X-Lab-Op-Id`; missing or not an armed `OpId` → 400 problem+json `type = "lab.barrier.no_op"`, nothing forwarded;
+   - write `Observe proxy_request_arrived {method, path, bytes}` (`CausedBy` = the op);
+   - `HoldRequest`: wait for the barrier, at most 30 s, then 504 `lab.barrier.timeout`;
+   - forward method, path, query, headers (minus the stripped set) and body to `upstream`; read the whole response (capped 1 MiB; over the cap → 502 `lab.barrier.too_large`);
+   - write `Observe proxy_upstream_completed {status, bytes}`;
+   - `HoldResponse`: wait `HoldMs` or the barrier, then copy status, headers and body back;
+   - `DropResponse`: write `Observe proxy_response_dropped`, then `HttpContext.Abort()`;
+   - `Pass`: copy back.
+4. `tests/Dhadgar.Lab.Tests/Barrier/BarrierProxyTests.cs` (a test upstream on port 0 built with `CreateSlimBuilder`; the proxy on port 0; real sockets):
+   - `HoldRequest_ReleasedTogether`: three requests on barrier `start`; `WaitArrivedAsync(start, 3)` completes; the upstream saw none; after `Release` it saw three.
+   - `DropResponse_UpstreamCompletedClientUnknown`: the upstream counts one call; the client's `SendAsync` throws `HttpRequestException` with `HttpRequestError.ResponseEnded` (or `IOException`), so L48's `OutcomeClassifier` returns `Unknown`; the sink holds `proxy_upstream_completed` with the upstream status.
+   - `NoOpHeader_Refused400`, `UnknownOpId_Refused400` (the upstream saw nothing).
+   - `OpHeader_StrippedBeforeUpstream`, `HopByHopHeaders_Stripped`.
+   - `NonLabUpstream_Refused` (`http://example.com`), `Port_NotBarrier_Refused` (port 25081).
+   - `HoldRequest_Timeout_504` (hold 30 s on a real clock is too slow: make the cap an internal constructor parameter set to 500 ms in this test only).
+   - `Body_Over1MiB_413`.
+5. `tests/Dhadgar.Lab.Tests/Seams/EnrollHistorySeamTests.cs` (S-L11, `[Trait("Seam","S-L11")]`, `RequiresDocker`): daemon in process with the stack up (S-L6's fixture); `history_run {scenario = "enroll-race", clients = 4, seed = 11}` through `LabToolDispatcher`; asserts success, `verdict = "linearizable"`, no required violation, and that the run's `events.jsonl` holds 4 `Invoke` and 4 `Complete` lines for actors `client:1`..`client:4`; then `history_run {scenario = "enroll-lost-response", seed = 12}` asserts `verdict` is not `unknown` and E1-E4 and E6 hold. Red now: `history_run` is not registered (`[Lab.UnknownTool]`).
+
+**Tests and why they fail when reverted:** `DropResponse_UpstreamCompletedClientUnknown` fails if the proxy drops before forwarding (the history would then wrongly know the op never ran). `OpHeader_StrippedBeforeUpstream` fails if lab metadata reaches the product. `NonLabUpstream_Refused` fails if the proxy can be pointed outside the lab.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&Seam!=S-L11&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L11"   # Docker running; expected red, record the failure line in the report
+```
+
+**Docs owed:** none (L45).
+
+### L50. Linearizability checker, enrollment model and rules, minimiser
+
+- **Branch / worktree / commit:** `ml/l50-history-checker` / `meridian-lab-l50` / `feat(lab): linearizability checker and enrollment history model`
+- **Depends on:** L48 (parallel with L49). **Security review:** yes (the verdicts gate mutants and findings).
+- **Rules:**
+  - Pure code: no Docker, no network, no clock (the budget is a `Stopwatch` deadline passed in, checked every 1024 search steps).
+  - Deterministic: the same history gives the same verdict, the same violations in the same order and the same minimal history. Iterate ops in `InvokeSeq` order; no `HashSet` iteration order in outputs.
+  - Never a false pass: a budget overrun, more than 12 ops on one key or a history the recorder could not build → `unknown` with a reason. `unknown` is never `linearizable`.
+  - R-RESULT (malformed observations → a failed `Result`, not an exception), R-NULL, R-XUNIT (CsCheck is already pinned for L27; add the `PackageReference` without a version if `Dhadgar.Lab.Tests` lacks it, R-CPM).
+
+**Contract excerpt:** C19 history types, `IHistoryModel<TState>`, `LinearizabilityChecker`, `EnrollmentHistoryModel`, rules E1-E6; C18 outcome rules (an `Unknown` op may take effect at any point after its invoke, or never); C12 signature `hist:<model>|<rule id>|<scenario>`.
+
+**Files** (under `src/Tools/Dhadgar.Lab/History/`)
+
+1. `HistoryTypes.cs`: C19's records.
+2. `HistoryRecorder.cs`: `static Result<History> FromObservations(string runId, string scenario, IReadOnlyList<LabObservation> obs, JsonElement finalState, Func<LabObservation, (string Key, string F, JsonElement Input)?> select)`: pairs `Invoke` and `Complete` by `OpId`; an `Invoke` with no `Complete` → `Outcome = Unknown`, `CompleteSeq = null`; a `Complete` with no `Invoke`, or two `Complete`s for one op → failure `[Lab.HistoryMalformed]`.
+3. `LinearizabilityChecker.cs`: Wing-Gong-Lowe per key. An op's interval is `[InvokeSeq, CompleteSeq]`; an `Unknown` op's return is +∞, and it may also be left unlinearized at the end (it never took effect). Memoise visited `(bitset of linearized ops, state)` pairs. At the end, the final state must satisfy `FinalMatches` for that key; this is what makes an `Unknown` op's effect decidable. Violation output: the smallest set of op ids the search could not order, as `HistoryViolation("linearizability", ...)`.
+4. `Minimiser.cs` (`LinearizabilityChecker.Minimise` calls it): ddmin over the `Ok`/`Fail` ops (Unknown ops kept), re-checking each candidate; stops at the budget; returns the smallest failing history found.
+5. `Models/EnrollmentHistoryModel.cs`: state `abstract record EnrollState` with `Unused`, `Used(string NodeName, string PublicKey)`, `Revoked`; `Initial` reads the token's row (`revoked` → `Revoked`, else `Unused`; the run starts from a fresh mint); `TryStep` per C19 with constructor flag `idempotentRetry` (false = today's spec; true = D-ML49 "yes"); `FinalMatches`: the token row's `used_at`/`used_by_node_id` and the set of node names created in the run agree with the state. Name `"enrollment"`.
+6. `Rules/EnrollmentRules.cs`: `static IReadOnlyList<HistoryViolation> Evaluate(History h)` for E1-E6 over the ops and `FinalState` (`{token:{id, used_at, used_by_node_id, revoked}, nodes:[{id, name, active_certs}]}`, built by L51). An op's node is the one whose `name` equals the op's sanitised hostname (lowercase; Nodes keeps `[a-z0-9-]`, `EnrollmentService.SanitizeNodeName`). `Required` per the C19 table, with E5 required only when the model's `idempotentRetry` is true.
+7. Tests (`tests/Dhadgar.Lab.Tests/History/`, histories written by hand as observation lists):
+   - `Check_TwoOkOneToken_Violation`, `Check_OkAndConcurrent401_Linearizable`, `Check_401BeforeAnyEffect_Violation` (E4: the 401's `Complete` precedes the winner's `Invoke`).
+   - `Check_UnknownTookEffect_RetryGets401_Linearizable_E5Orphan` (today's model: linearizable, and E5 reports an orphan, not required).
+   - `Check_UnknownTookEffect_IdempotentModel_RetryOk_Linearizable`, `Check_UnknownNoEffect_Linearizable`.
+   - `Check_13OpsOneKey_Unknown`, `Check_BudgetExceeded_Unknown` (budget `TimeSpan.Zero`).
+   - `Minimise_SixOps_ReducesToTwo`, `Recorder_InvokeWithoutComplete_Unknown`, `Recorder_DoubleComplete_Malformed`.
+   - `Rules_E3_FailedOpMadeNode_Violation`, `Rules_E6_UsedByMismatch_Violation`, `Rules_E2_TwoActiveCerts_Violation`.
+   - `SequentialHistories_AlwaysLinearizable` (CsCheck: generate 1..10 ops, apply the model sequentially, build non-overlapping intervals; the checker must say `linearizable`).
+
+**Tests and why they fail when reverted:** `Check_TwoOkOneToken_Violation` fails if the checker accepts two winners (M1 would survive). `Check_13OpsOneKey_Unknown` and `Check_BudgetExceeded_Unknown` fail if an unfinished search is reported as a pass. `Check_UnknownNoEffect_Linearizable` fails if an `Unknown` op is forced to take effect, which would report false E1 violations on every lost response.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~Dhadgar.Lab.Tests.History"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&Seam!=S-L11&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+```
+
+**Docs owed:** none (L45).
+
+### L51. `history_run`, enrollment scenarios, Toxiproxy timeout check; S-L11 green
+
+- **Branch / worktree / commit:** `ml/l51-history-run` / `meridian-lab-l51` / `feat(lab): enrollment history runs through the barrier proxy`
+- **Depends on:** L49, L50, L22, L11. **Security review:** yes (clients send real enrollment tokens).
+- **Rules:**
+  - R-CONTRACT: history clients send `Dhadgar.Contracts.Nodes.EnrollNodeRequest` and read `EnrollNodeResponse`; never a local copy.
+  - R-ZERO / R-USING: each client key is an `ECDsa.Create(ECCurve.NamedCurves.nistP256)` in a `using`; only `ExportSubjectPublicKeyInfo()` leaves it; the token plaintext is read from the vault into a `char[]`/`byte[]` that is zeroed after the body is serialised (record the unavoidable managed-string copy as a residual, as Sprint 2 did).
+  - R-LOG: request bodies go into `Invoke` args through `Redactor` (the token becomes `tok-N`).
+  - R-OBSERVE: the final state comes from `db_query` (direct 15432), never through `nodes-postgres`.
+  - R-SEED: client order, keys' labels and hostnames come from `LabRandom(seed, "history:<scenario>")`.
+  - R-BLAST: faults in a scenario go through `LabToolDispatcher` like L22 (one path, one guard).
+  - R-RESULT, R-TIME, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C4 `history_run`, `nodes_enroll_probe` (`hostname?`, `key_ref?`), `nodes_token_mint`; C19 scenarios, rules and barrier; C18 outcome rules and fidelity; C12 `hist` signatures and `runs.kind = history`; C1 `LabPorts.Barrier`, `LabPorts.AgentIngress`.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `docs/guides/uat-specs/catalog/enroll-history.toml`: `schema = 1`, one `[[scenario]]` per C19 row with `id`, `clients` (default; `history_run.clients` overrides for the race scenarios), `retry` (`none` | `same_key` | `new_key`), `first_op_action` (`hold_request` | `drop_response`), `faults` (C7 `[[row.fault]]` shape, `start = "before_steps"`).
+2. `History/HistoryScenario.cs` and its loader (Tomlyn, as L13; unknown keys refused).
+3. `History/HistoryClient.cs`: one actor `client:<n>`; hostname `lab-<run6>-c<n>-<seq>` (`run6` = the first six hex chars of the run id); `POST http://127.0.0.1:25080/api/v1/agents/enroll` with `X-Lab-Op-Id`; `Invoke` before `SendAsync` with `{hostname, key_label}` (never the key), `Complete` with `OutcomeClassifier` (success status 201) and `{status, node_id?, error_code?}`. Retry: a new `OpId` with `CausedBy` = the first op, same or new key per `retry`.
+4. `History/HistoryRunJob.cs`: `stack_reset_data {databases = ["nodes"]}` → `nodes_token_mint` → start `BarrierProxy` (upstream `http://127.0.0.1:{LabPorts.AgentIngress}`) → arm rules → inject faults → start clients → `WaitArrivedAsync` then `Release` → await clients (60 s cap; stragglers closed `Unknown` by `EndRunAsync`) → heal faults → final state by `db_query` (the token row; nodes whose name starts `lab-<run6>-` with their active certificate count; table and column names from the Nodes model snapshot) → `HistoryRecorder` → checker (budget 10 s) → `EnrollmentRules` → when `minimise` and the verdict is `violation`: `Minimise`, then reruns with `clients` halved down to 2 while the violation recurs, at most 20 reruns and inside the 300 s cap → bundle. Fidelity `schedule_approximate` (concurrent actors), via L48.
+5. `Uat/Bundle/BundleWriter.cs`: the history bundle is a normal run folder (`run.json` `kind = "history"`) with `history.json` (the `History`), `check.json` (`CheckResult`), `minimal.json` when minimised, and one synthetic row `history/<scenario>` whose JSON gains `history:{verdict, violations:[{rule, ops, required}]}`; the row grade is PASS for `linearizable` with no required violation, FAIL for a required violation, UNVERIFIED for `unknown`. L25 reads `history.violations` to emit `hist:` signatures.
+6. `Tools/History/HistoryRunTool.cs` (`history_run`, OwnLease; `replay` re-runs with the stored seed and compares through L48's `ReplayJudge`); register in `ToolPolicy`.
+7. `Nodes/NodesAdapter.cs` (L11): `nodes_enroll_probe` gains `hostname?` (`^[a-z0-9-]{1,48}$`, default `meridian-lab-probe`) and `key_ref?` (reuse a key the vault holds; new keys are stored as `key-N` and returned as `key_ref`).
+8. `docs/guides/uat-specs/known-issues.toml`: seed `KI-ENROLL-RETRY` (`signatures = ["hist:enrollment|E5|enroll-lost-response", "hist:enrollment|E5|enroll-lost-response-new-key"]`, `[issue.scope] sections = ["history"]`, title "A lost enroll response plus a retry leaves an orphan node and a 401 (D-ML49)"). It matches nothing while E5 is non-required (no signature is emitted); it exists so that the day D-ML49 makes E5 required, the failure is linked rather than new until the product changes.
+9. `tests/Dhadgar.Lab.Tests/Faults/ToxiproxyTimeoutToxicDockerTests.cs` (`RequiresDocker`): open a keep-alive connection through `agent-ingress`, send one request (200), add a `timeout` toxic with `timeout = 0`, send a second request on the same connection, assert it does not complete in 3 s, remove the toxic. If the assumption is false (the second request completes), delete the test, record "Toxiproxy does not apply new toxics to open connections" in the report, and leave the C19 fallback marked unverified; nothing else depends on it.
+10. Tests: `HistoryScenarioLoaderTests` (unknown key refused; every shipped scenario loads), `HistoryClientTests` (fake handler: body is `EnrollNodeRequest`; the token never appears in the `Invoke` args; `same_key` retry sends the same SPKI, `new_key` a different one), `HistoryRunJobTests` (fakes: a straggler is `Unknown`; a required violation grades the row FAIL; `unknown` grades UNVERIFIED; minimisation reruns stop at 20), `NodesEnrollProbeTests` (`Hostname_Invalid_Refused`).
+
+**Tests and why they fail when reverted:** S-L11 (`EnrollHistorySeamTests`) goes green here and fails if the history client and Nodes disagree on the route, the body or the status codes, or if the checker's model disagrees with Nodes' enrollment behaviour. `HistoryClientTests` fails if the token reaches the evidence. `HistoryRunJobTests` fails if `unknown` is graded PASS.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L11|FullyQualifiedName~ToxiproxyTimeoutToxicDockerTests"   # Docker running
+```
+
+Then, with the daemon from this worktree and the lease, one `history_run` of each scenario; record verdicts, violations and bundle paths in the report. A required violation on `enroll-race` is a finding for the orchestrator, not a spec to edit.
+
+**Docs owed:** none (L45).
+
+---
+
 ## Wave 5: results, triage and hunting (no Sprint 2 dependency)
 
 ### L25. Results DB, ingest, signatures, known-issue matching, `overall`, `results_query`
@@ -1795,14 +2350,20 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 **Files**
 
 1. `Results/ResultsDb.cs` (open, migrate, typed inserts and queries).
-2. `Results/SignatureBuilder.cs`: C12 table exactly; `exc` from the row's log slice (first exception block in the row window), `http` from step results and Hosting.Diagnostics lines, `clause`, `inv`; `SignatureId(text)`.
-3. `Results/KnownIssues.cs`: loads `docs/guides/uat-specs/known-issues.toml` (absent → empty); matches by the row's `known_issue` first, then exact signature text, then `patterns` (.NET regex, 1 s timeout).
-4. `Results/BundleIngestor.cs`: idempotent by `run_id`; inserts runs, rows, faults, violations, signatures (upsert, hits, first and last seen); detects flakes on ingest (same section, row, seed and build graded differently).
-5. `Uat/Bundle/BundleWriter.cs`: at run end, ingest, then compute `overall`, `new_failures`, `known_failures` (C12) and write them to `run.json` and `ledger.md`; `uat_report` returns them.
-6. `Tools/Results/ResultsQueryTool.cs` (`results_query`; views `runs`, `rows`, `buckets`, `flakes`, `trend` (per row and per signature: date, grade or hits), `known_issues`, `findings` (empty until L26)).
-7. Tests: `SignatureBuilderTests` (golden normalisation: compiler-generated frames, GUIDs and digits in routes, fault kinds sorted), `KnownIssuesTests`, `BundleIngestorTests` (ingest twice → one run), `OverallTests` (`pass`, `pass_with_known`, `fail`; an unallowed violation linked to no issue → `fail`), `FlakeOnIngestTests`.
+2. `Results/SignatureBuilder.cs`: C12 table exactly; `BuildAll(row)` returns every failure signature of the row (each exception block in the row window, each 5xx from step results and Hosting.Diagnostics lines, each failing clause, each unallowed violation, each required `hist` violation from the row JSON `history.violations` (L51), each `twin`, `peer`, `env` and `ver` entry once L53, L58, L57 and L60 write them) and `Primary(row)` the bucketing one; `SignatureId(text)`.
+3. `Results/KnownIssues.cs`: `static Result<KnownIssues> Load(string path)` with C12's loader rules (absent file → empty; every problem listed, none thrown); `KnownMatch Match(RowFailure row)` per C12 "Matching": all signatures, one open issue, scope checked, the row's `known_issue` treated as a claim that must match, `fixed` issue → `regressed:<id>`. Patterns are .NET regex with a 1 s timeout; a timeout counts as no match and is logged.
 
-**Tests and why they fail when reverted:** `Overall_UnlinkedViolation_IsFail` pins status honesty; `Signature_CompilerFrames_Normalised` keeps buckets stable across builds.
+   ```csharp
+   public sealed record RowFailure(string Section, string RowId, string? ClaimedKnownIssue, IReadOnlyList<FailureSignature> Signatures);
+   public sealed record FailureSignature(string Kind, string Text, string? Service, string? InvariantId);
+   public sealed record KnownMatch(string? IssueId, string State, string? Reason); // State: "known" | "new" | "claimed_mismatch" | "regressed"
+   ```
+4. `Results/BundleIngestor.cs`: idempotent by `run_id`; inserts runs (with `fingerprint_sha256`, `fidelity`), rows (with `signatures_json`, `known_match`), `pairs` when `run.json` has `pair`, faults, violations, signatures (upsert, hits, first and last seen); detects flakes on ingest (same section, row, seed and build graded differently).
+5. `Uat/Bundle/BundleWriter.cs`: at run end, ingest, then compute `overall`, `new_failures`, `known_failures` (C12) and write them to `run.json` and `ledger.md`; `uat_report` returns them. L48's `ReplayJudge` gains the C18 signature rule: an `exact` replay reproduces only with the same grades and the same primary signature per failed row; a `schedule_approximate` replay reproduces when the original primary signature appears in one of up to 5 attempts.
+6. `Tools/Results/ResultsQueryTool.cs` (`results_query`; views `runs`, `rows`, `buckets`, `flakes`, `trend` (per row and per signature: date, grade or hits), `known_issues`, `findings` (empty until L26)).
+7. Tests: `SignatureBuilderTests` (golden normalisation: compiler-generated frames, GUIDs and digits in routes, fault kinds sorted; `BuildAll` returns the 500 and the NotHeld clause of one row), `KnownIssuesTests` (`Match_ClaimedIssueSignatureDiffers_IsNew`, `Match_OneOfTwoSignaturesUnmatched_IsNew`, `Match_OutOfScopeService_IsNew`, `Match_FixedIssue_IsRegressed`, `Match_AllSignaturesSameIssue_IsKnown`, `Load_UnanchoredPattern_IsInvalid`, `Load_DotStarPattern_IsInvalid`, `Load_NoSignaturesNoPatterns_IsInvalid`), `BundleIngestorTests` (ingest twice → one run; `signatures_json` filled), `OverallTests` (`pass`, `pass_with_known`, `incomplete`, `fail`; an unallowed violation linked to no issue → `fail`; known failures plus a SKIPPED row → `incomplete`), `FlakeOnIngestTests`.
+
+**Tests and why they fail when reverted:** `Overall_UnlinkedViolation_IsFail` pins status honesty; `Match_ClaimedIssueSignatureDiffers_IsNew` and `Match_OneOfTwoSignaturesUnmatched_IsNew` fail if a claim or one matching signature hides a new failure (D-ML46); `Signature_CompilerFrames_Normalised` keeps buckets stable across builds.
 
 **Checks**
 
@@ -1828,7 +2389,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Files**
 
-1. `docs/guides/uat-specs/known-issues.toml`: the C12 seeds (`KI-DV13`, `KI-DV12`, `KI-DV3`, `KI-NOTIF-OUTBOX`, `KI-RABBIT-HOST`, `KI-DISCORD-SECRETS-PORT`, `KI-DELAYED-PLUGIN`, `KI-94`) with titles, links to `docs/PROJECT-STATE.md` or the issue, and patterns; add one entry per L23 finding the orchestrator has accepted as known (the brief lists them).
+1. `docs/guides/uat-specs/known-issues.toml`: the C12 seeds (`KI-DV13`, `KI-DV12`, `KI-DV3`, `KI-NOTIF-OUTBOX`, `KI-RABBIT-HOST`, `KI-DISCORD-SECRETS-PORT`, `KI-DELAYED-PLUGIN`, `KI-94`) with titles, links to `docs/PROJECT-STATE.md` or the issue, and patterns that pass C12's loader rules, each with a `scope` naming the service (and sections where known) so an issue cannot excuse the same text from another service; `KnownIssuesShippedFileTests` loads the shipped file and fails on any loader error; add one entry per L23 finding the orchestrator has accepted as known (the brief lists them).
 2. `Triage/TriageService.cs`: after each ingest, a signature never seen before becomes a `findings` row (`state new`, `repro_path` = the bundle's `repro.toml`); rewrites `LabPaths.Triage\ledger.md` (C12 columns; tables with spaces around pipes).
 3. `Triage/DraftWriter.cs`: C12 draft contents, ending with the line `Draft only. Filed by the owner after approval (D-ML28, D-ML42).`
 4. `Tools/Triage/TriageTools.cs`: `triage_show`, `triage_draft_issue`, `triage_mark`, `results_known_issue_set` (the KI id must exist in the file).
@@ -1955,6 +2516,170 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 ```
 
 **Docs owed:** none (L45).
+
+### L52. Behavioural coverage and `coverage_report`
+
+- **Branch / worktree / commit:** `ml/l52-coverage` / `meridian-lab-l52` / `feat(lab): behavioural coverage of routes, faults, error codes, invariants and transitions`
+- **Depends on:** L25, L23 (parallel with L26 to L29). **Security review:** no (read-only accounting over redacted evidence); the reviewer checks that `NodesEndpointUniverseTests` adds no product code and no project reference.
+- **Rules:**
+  - Lab isolation: `tests/Dhadgar.Nodes.Tests` reads `src/Tools/Dhadgar.Lab/coverage-universe.json` as a file found from the repo root (walk up to the folder holding `Dhadgar.sln`); it gains no `ProjectReference`. `LabIsolationTests` stays green.
+  - R-LOG: coverage keys hold templates, status classes, error codes and ids of checks only; never a path with a real id, a body or a header.
+  - R-OBSERVE: transition snapshots use `db_query` (direct 15432, reader role).
+  - R-RESULT, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C18 "Behavioural coverage" table; C12 `coverage` table; C4 `coverage_report`; C10 "Fault impact map" (`GatewayRouteTable`).
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `coverage-universe.json` (copied to output):
+
+   ```json
+   {
+     "schema": 1,
+     "services": {
+       "nodes":   { "routes": [ { "method": "POST", "template": "/api/v1/agents/enroll" } ], "error_codes": [ "invalid_token" ], "transitions": [ "node:Online->Degraded" ] },
+       "gateway": { "routes": [ { "method": "*", "template": "/api/v1/agents/{**catch-all}" } ], "error_codes": [], "transitions": [] }
+     }
+   }
+   ```
+
+   Fill Nodes' `routes` from its endpoint files (every `Map*` in `src/Dhadgar.Nodes/Endpoints/*.cs` and the hub path), with the public path as the Gateway exposes it; `error_codes` from the `ServiceResult.Fail` codes in `src/Dhadgar.Nodes/Services/*.cs`, the problem `type` values in the endpoints and `AgentHubErrorCodes`; `transitions` from every assignment to a `NodeStatus`, certificate `IsRevoked` and token `UsedAt`/`IsRevoked` in Nodes' services. Gateway `routes` are its YARP route prefixes from `GatewayRouteTable` with method `*`.
+2. `Coverage/CoverageUniverse.cs`: load and validate (unknown service or duplicate route → failure).
+3. `Coverage/PathTemplateMatcher.cs`: matches a concrete path to the most specific template (a `{name}` segment matches one segment; `{**x}` the rest); no match → key `<service> <METHOD> ?unmatched <class>` (listed, never in the universe).
+4. `Coverage/CoverageCollector.cs`: after each run, keys from the run's Hosting.Diagnostics lines in the L07 log store (`route_status`), the run's `faults` (`fault_target`), problem+json `type` or `errorCode` in step results and hub error codes in `hub` sources (`error_code`), the run's `invariants.json` checks that ran without error (`invariant_check`), and `TransitionSnapshotter` output (`transition`). Writes C12 `coverage` rows through `ResultsDb`.
+5. `Coverage/TransitionSnapshotter.cs`: at each row end, for Nodes: `select id, status from nodes`, `select id, is_revoked from agent_certificates`, `select id, used_at is not null, is_revoked from enrollment_tokens` (exact table and column names from the Nodes model snapshot); a changed value for the same id between consecutive snapshots is a transition `<entity>:<from>-><to>`.
+6. `Tools/Coverage/CoverageReportTool.cs` (`coverage_report`, Open): totals, hits and unhit keys per kind over runs since `since_run_id` (default: all); `5xx` and `?unmatched` keys listed under `outside_universe`.
+7. `tests/Dhadgar.Nodes.Tests/Lab/NodesEndpointUniverseTests.cs`: with `NodesWebApplicationFactory`, read every `RouteEndpoint` from `EndpointDataSource` (method from `HttpMethodMetadata`, template from `RoutePattern.RawText`, mapped to the public path by the same prefix rule the file uses); the set must equal the file's `nodes.routes`; the failure message lists missing and extra entries and says "update src/Tools/Dhadgar.Lab/coverage-universe.json".
+8. Tests (`tests/Dhadgar.Lab.Tests/Coverage/`): `PathTemplateMatcherTests` (GUID segment → `{nodeId}`; most specific template wins; unmatched listed), `CoverageCollectorTests` (a 503 counts as `5xx`, outside the universe; a 401 hits `4xx`), `CoverageUniverseTests` (the shipped file loads; every `transitions` entry names a known entity), `CoverageReportToolTests` (unhit = universe minus hits), `TransitionSnapshotterTests` (fake snapshots: `Online` then `Offline` → one transition).
+
+**Tests and why they fail when reverted:** `NodesEndpointUniverseTests` fails when a Nodes route is added without updating the universe, so "unhit" never silently shrinks. `CoverageCollectorTests` fails if a 5xx inflates coverage.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Nodes.Tests\Dhadgar.Nodes.Tests.csproj -c Release --filter "FullyQualifiedName~NodesEndpointUniverseTests"
+```
+
+**Docs owed:** none (L45).
+
+---
+
+## Wave 5E: experiments and planted defects (no Sprint 2 dependency)
+
+Twins (D-ML50), mutants (D-ML51) and the lab's own self-check. L53 and L54 run in parallel; L55 needs L54. Every packet gets a `security-advisor` pass (mutants build deliberately broken product images; self-check plants defects in the lab). Base filter `F`.
+
+### L53. Twin engine; red S-L12
+
+- **Branch / worktree / commit:** `ml/l53-twins` / `meridian-lab-l53` / `feat(lab): paired twin experiments with equal-outcome and isolation relations`
+- **Depends on:** L25, L22. **Security review:** yes (variant worlds inject faults).
+- **Rules:**
+  - R-BLAST / R-CONTRACT: variant faults are C4 fault tools dispatched through `LabToolDispatcher` by `RowExecutor`, exactly like spec faults; `TwinSpec` validation refuses any tool that is not a C4 fault tool.
+  - R-SEED: both worlds use the experiment's `seed` (or the call's `seed`); the variant's extra choices use the stream `twin:<id>:variant`.
+  - R-PATH: experiment files only under `docs/guides/uat-specs/twins/`; the name matches `^[a-z0-9-]{1,64}$`.
+  - R-RESULT, R-TIME, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C19 "Twin experiments" in full; C18 `PairInfo`; C12 `pairs`, signature kind `twin`; C4 `twin_run`, `stack_reset_data`.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `Twins/TwinSpec.cs` and loader (Tomlyn; unknown keys refused; `disjoint` outside `isolated` refused; each pointer parsed as RFC 6901; `[base]` rows must exist in the spec).
+2. `Twins/RunProjection.cs`: builds C19's projection from a finished run's row JSON (`grade`, step `status`, `error_code`, `outcome`, captures after redaction).
+3. `Twins/TwinComparer.cs`: masks GUIDs, ISO timestamps, `duration_ms` and 64-hex thumbprints in both values, then compares; `disjoint` compares two arrays from the variant; returns `held` and a diff list `[{pointer, base, variant}]`.
+4. `Uat/UatRunOverlay.cs`: `sealed record UatRunOverlay(IReadOnlyList<FaultSpec> ExtraFaults, string? PreSpec, IReadOnlyList<string> PreRows, PairInfo? Pair)`; `UatRunner` accepts it internally (not a tool argument): pre rows run first (graded, recorded), extra faults are added `before_steps` to every compared row, `Pair` goes to `run.json`.
+5. `Twins/TwinRunner.cs`: base: `stack_reset_data` → run `[base]` rows with `Pair(role = base)`; variant: `stack_reset_data` → run `[variant]` with the overlay; compare if every base row is PASS (else C19's precondition rule); write the synthetic row `twin/<id>` to both bundles; ingest both (L25 fills `pairs`).
+6. `Tools/Twins/TwinRunTool.cs` (`twin_run`, OwnLease).
+7. `docs/guides/uat-specs/catalog/twin-enroll.toml` (row `enroll-once`: mint, enroll via the Gateway, status 201, capture `node_id`) and `docs/guides/uat-specs/twins/enroll-latency-invariance.toml` (C19's example).
+8. `tests/Dhadgar.Lab.Tests/Seams/TenantTwinSeamTests.cs` (S-L12, `RequiresDocker`, `[Trait("Seam","S-L12")]`): `twin_run {experiment = "tenant-isolation-enroll", seed = 21}` must return `held = true`. Red now: the experiment file arrives in L56 (`[Lab.NotFound]`).
+9. Tests: `TwinSpecTests`, `TwinComparerTests` (`GuidsMasked_Equal`, `GradeDiffers_NotHeld`, `Disjoint_Overlap_NotHeld`), `TwinRunnerTests` with fakes (`Twin_PreconditionFailed_IsIncompleteNotPass`: base row FAIL → `held = null`, synthetic rows SKIPPED; `Twin_NotHeld_TwinSignatureOnBothRuns`), `TwinLatencyDockerTests` (`RequiresDocker`: `enroll-latency-invariance` holds).
+
+**Tests and why they fail when reverted:** `Twin_PreconditionFailed_IsIncompleteNotPass` fails if a broken base world reports "relation held" (the twin defect class: comparing two failures as equal). `Disjoint_Overlap_NotHeld` fails if a leak between tenants compares as isolated.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~TwinLatencyDockerTests"   # Docker running
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L12"   # Docker running; expected red, record the failure line
+```
+
+**Docs owed:** none (L45).
+
+### L54. Mutant infrastructure; M1, M4, M5
+
+- **Branch / worktree / commit:** `ml/l54-mutants` / `meridian-lab-l54` / `feat(lab): lab-only product mutants and mutation runs`
+- **Depends on:** L27, L51, L23 (parallel with L53). **Security review:** yes (deliberately broken product images; `git` processes).
+- **Rules:**
+  - Isolation (D-ML51): patches live only under `tools/lab/mutants/`; no product project, props file or workflow references that folder; a product mutant is applied only in a `git archive` copy under `LabPaths.Builds`; the coder **never commits a product change**: make each patch by editing the product file in the worktree, `git diff -- <file> > tools/lab/mutants/<id>/change.patch`, then `git checkout -- <file>`, and confirm `git status` shows only `tools/lab/` and `src/Tools/` changes before committing.
+  - R-ARGS: `git` runs with `ArgumentList` (`-C`, `<dir>`, `archive`, `--format=tar`, `HEAD`; `apply`, `--check`, `<patch>`); never a shell.
+  - R-PATH: extraction only into `LabPaths.Builds\mutant-<id>-<build8>\`; `TarFile.ExtractToDirectory` refuses entries outside it (check each entry's full path before writing, as `TarFile` does not reject `..` on every platform; assumption to verify in the packet).
+  - R-DOCKER: mutant images carry `meridian-lab-mutant=<id>`; the job refuses to start a mutant image outside `mutation_run`; it always ends with `svc_start` of the last plain build, also on cancel and failure.
+  - R-RESULT, R-USING (`Process`), R-TIME, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C19 "Mutants" in full (TOML, table, rules, verdicts); C4 `lab_build {mutant}`, `mutation_run`; C11 I5; README gate MD.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `tools/lab/mutants/M1-token-no-concurrency/`, `M4-no-concurrency-catch/`, `M5-token-logged/`: `mutant.toml` (C19; `base` = the worktree's HEAD) and `change.patch`. M1 detector `history_run enroll-race`; M4 detector `history_run enroll-race` with `expect_pattern = "^inv:I1\\|nodes\\|"`; M5 detector `uat_run lab-selftest.toml rows=["enroll-gateway"]` with `expect_pattern = "^inv:I4\\|nodes\\|"`. `tools/lab/mutants/README.md`: what a mutant is, how to refresh a stale patch, and that nothing here ships.
+2. `Mutants/MutantSpec.cs` and loader (kinds `product` and `lab`; `files` must exist at HEAD).
+3. `Mutants/MutantBuilder.cs`: `lab_build {mutant}` (extend L09's build tool): `git -C <RepoRoot> archive --format=tar HEAD` into a temp tar under `LabPaths.Builds`, extract, `git apply --check change.patch` then `git apply change.patch` with the extracted folder as working directory (outside any repo, `git apply` acts on plain files), then the normal locked restore and publish of `services` only; images tagged `meridian-lab/<project>:mutant-<id>-<build8>`. A failed `--check` → verdict `stale`, nothing built.
+4. `Mutants/MutationRunJob.cs` (`mutation_run`, job kind `mutation`): per mutant: build → `svc_start` the mutant images → run the detector through `LabToolDispatcher` (one attempt for `exact` fidelity, up to 5 for `schedule_approximate`) → verdict per C19 from the detector run's signatures (`detected` if one matches `expect_pattern`, `detected_other` if another new signature appeared, else `survived`; `unreachable` when the detector cannot run, with the reason and the open known issue) → `svc_start` the plain build. Writes `mutants.json` (`[{id, verdict, detector_run_ids, signatures, reason}]`) and `mutants.md`.
+5. `Invariants/I5OrphanInvariant.cs`: a container labelled `meridian-lab-mutant` while no `mutation` job runs is a violation.
+6. `tests/Dhadgar.Lab.Tests/LabIsolationTests.cs`: add `NoProductProjectReferencesMutants` (no `*.csproj`, `*.props`, `*.targets` or `.github/workflows/*` outside `src/Tools/` and `tests/Dhadgar.Lab*` mentions `tools/lab/mutants`) and `MutantPatchesTouchOnlyDeclaredFiles` (every `diff --git a/<p>` path is in the mutant's `files`; product mutants touch only `src/` outside `src/Tools/`; lab mutants only `src/Tools/`).
+7. `tests/Dhadgar.Lab.Tests/Mutants/MutantPatchesApplyTests.cs` (runs in CI; needs `git`): `git -C <repo root> apply --check <patch>` for every mutant; a failure names the mutant and points at the README's refresh steps. This is the early warning that a product change made a mutant stale.
+8. Tests: `MutantSpecTests`, `MutantBuilderTests` (fake process runner: exact `ArgumentList`; `--check` failure → `stale`; a tar entry with `..` refused), `MutationRunJobTests` (fakes: each verdict; plain build restored after a detector failure and after cancel), `I5_MutantImageOutsideJob_Violation`, `MutationDockerTests` (`RequiresDocker`, 30-minute timeout: `mutation_run {mutants = ["M1-token-no-concurrency"]}` → `detected`).
+
+**Tests and why they fail when reverted:** `MutationRunJob_DetectorFails_PlainBuildRestored` fails if a mutant can outlive its job. `MutantPatchesTouchOnlyDeclaredFiles` fails if a patch reaches beyond its declared files. `MutationDockerTests` fails if the history checker cannot see a missing concurrency token (then the verdict is `survived` and the orchestrator asks for a ruling; never weaken the mutant).
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~MutationDockerTests"   # Docker running
+git -C <W> status --porcelain   # only tools/lab/, src/Tools/ and tests/Dhadgar.Lab.Tests/ paths
+```
+
+Then, with the daemon and the lease, `mutation_run` for M1, M4 and M5; record each verdict in the report. `survived` is a finding for the orchestrator.
+
+**Docs owed:** `tools/lab/mutants/README.md` (above).
+
+### L55. `Dhadgar.Lab.SelfCheck`: lab mutants LM1-LM8 and crash recovery
+
+- **Branch / worktree / commit:** `ml/l55-selfcheck` / `meridian-lab-l55` / `feat(lab): self-check harness that plants defects in the lab itself`
+- **Depends on:** L54, L19, L21, L25, L03. **Security review:** yes (spawns `dotnet test` and a child daemon).
+- **Rules:**
+  - Lab isolation: `src/Tools/Dhadgar.Lab.SelfCheck` is a console project referenced by nothing; add it to the lab project set in `LabIsolationTests` and to the solution in the `Tools` folder.
+  - R-ARGS / R-USING: `git` and `dotnet` run with `ArgumentList` in `using var process`; `dotnet test <copy>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~<test>" --logger "trx;LogFileName=<id>.trx" --results-directory <dir>`.
+  - R-PATH: copies only under `%TEMP%\meridian-lab-selfcheck\<guid>\`, deleted at the end (kept with `--keep`).
+  - Judging: a lab mutant is `caught` only when the named test **ran** and **failed** in the TRX (`outcome="Failed"`); a build failure, zero tests run or a skipped test is `invalid`, never `caught`. A baseline pass over the unmodified copy runs first: every named test must pass there, else the whole self-check is `invalid`.
+  - R-RESULT, R-TIME, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C19 lab mutant rows LM1-LM8 and the `kind = "lab"` TOML; README gate LS; C11 I5; L19 `FaultBook` recovery; C3 lease book.
+
+**Files**
+
+1. `tools/lab/mutants/LM1-journal-after-inject/` … `LM8-db-query-through-proxy/`: `mutant.toml` (`kind = "lab"`, `detector = { test = "..." }` per the C19 table) and `change.patch` (made as in L54; this time the patched files are lab files, still never committed in patched form).
+2. `src/Tools/Dhadgar.Lab.SelfCheck/Dhadgar.Lab.SelfCheck.csproj` (console, `net10.0`, no package versions) and `Program.cs`: `selfcheck [--only <id>] [--keep] [--recovery]`; writes `selfcheck.json` (`[{id, test, verdict: caught|missed|invalid, detail}]`) and `selfcheck.md` under `LabPaths.Results\selfcheck\<timestamp>\`; exit code 0 only when every lab mutant is `caught`.
+3. `src/Tools/Dhadgar.Lab.SelfCheck/TrxReader.cs`: reads `UnitTestResult` `testName` and `outcome`.
+4. `tests/Dhadgar.Lab.Tests/ObservationPathTests.cs` (LM8's detector): the `db_query` tool's resolved connection uses port 15432 and the reader role, never a Toxiproxy port; `http_request` with `via = "direct"` resolves to the service's direct port.
+5. Recovery mode (`--recovery`): start a child daemon (`dotnet <copy>\...\Dhadgar.Lab.dll` with `MERIDIAN_LAB_HOME` set to a temp folder and its own port), acquire a lease, add a latency toxic on `nodes-postgres`, `Process.Kill(entireProcessTree: true)`, start a new child on the same home, then assert: the toxic is gone (Toxiproxy `GET /proxies`), `faults_active` is empty, no lease is held, I5 reports nothing, and the run that was open is not ingested as `pass`.
+6. Tests: `TrxReaderTests` (failed, passed, not run), `SelfCheckJudgeTests` (`BuildFailed_IsInvalidNotCaught`, `ZeroTestsRun_IsInvalid`, `BaselineFails_AllInvalid`), `LabMutantPatchesApplyTests` (CI, like L54's), `SelfCheckE2ETests` (`RequiresNetwork` for restore: `selfcheck --only LM1-journal-after-inject` → `caught`), `SelfCheckRecoveryTests` (`RequiresDocker`: the recovery mode passes).
+
+**Tests and why they fail when reverted:** `BuildFailed_IsInvalidNotCaught` fails if a patch that breaks the build counts as "the test caught it". `SelfCheckRecoveryTests` fails if a daemon crash leaves a toxic or a lease behind (the D-ML46 write-ahead fix, now proven end to end).
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab.SelfCheck\Dhadgar.Lab.SelfCheck.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet run --project <W>\src\Tools\Dhadgar.Lab.SelfCheck -c Release -- selfcheck   # every LM caught; attach selfcheck.md to the report
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~SelfCheckRecoveryTests"   # Docker running
+```
+
+**Docs owed:** `src/Tools/Dhadgar.Lab/README.md` section "Self-check" (what gate LS means and how to run it).
 
 ---
 
@@ -2279,16 +3004,57 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Docs owed:** none (L45).
 
+### L56. Tenant isolation twins; M2, M3, M7; S-L12 green
+
+- **Branch / worktree / commit:** `ml/l56-tenant-twin` / `meridian-lab-l56` / `test(lab): tenant isolation twin experiments and tenant mutants`
+- **Depends on:** L35, L53, L54, L11. **Security review:** yes (user tokens, a second tenant, product mutants).
+- **Rules:**
+  - Both tenants are lab-owned: organization ids `LabIds.OrganizationId` (A) and `LabIds.TenantBOrganizationId` (B), or organizations the lab created in its own Identity database; users are seeded lab users. Nothing reaches a real account.
+  - R-ZERO / R-LOG: bearer tokens go to the vault as `brr-N` and are redacted everywhere; `identity_user_token` never returns the token.
+  - Stop rule: if the Identity sign-in and exchange cannot produce a token with `org_id` for a lab user in the lab stack, stop after files 1 to 4 and 6, record the step that failed, and leave `tenant-isolation-http` and `identity_user_token` for a follow-up packet; S-L12 does not depend on them.
+  - Mutant patches as in L54 (never commit a product change).
+  - R-RESULT, R-SEED, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C19 twins (`isolated`, `pre`, `disjoint`, precondition rule) and mutants M2, M3, M7; C4 `nodes_token_mint` (`organization_id?`), `nodes_enroll_probe` (`hostname?`), `identity_user_token`, `twin_run`; C1 `LabIds`; README F38 and `KI-NODES-USER-AUTH`.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `Nodes/NodesLabAdapter.cs` and `Tools/Nodes/NodesTools.cs`: `nodes_token_mint` takes `organization_id?` per C4 and returns it; `stack_reset_data` re-seeds tenant B beside A where Nodes needs a seed row.
+2. `docs/guides/uat-specs/catalog/twin-tenant.toml` (section `twin-tenant`): row `tenant-a-enroll` (mint for A; `nodes_enroll_probe via=gateway hostname=tenant-shared-01` → 201; clause: the response `organization_id` equals A; `db_query` of A's node names and ids, captured as `a_node_name`, `a_node_names`, `a_node_ids`); row `tenant-b-enroll` (the same for B with the same hostname; captures `b_node_ids`).
+3. `docs/guides/uat-specs/twins/tenant-isolation-enroll.toml` (the flagship, S-L12): `relation = "isolated"`; `[base] rows = ["tenant-a-enroll"]`; `[variant] pre = { spec = "catalog/twin-tenant.toml", rows = ["tenant-b-enroll"] }`, `rows = ["tenant-a-enroll"]`; `[[compare]]` pointers `/rows/tenant-a-enroll/grade`, `/rows/tenant-a-enroll/steps/enroll/status`, `/rows/tenant-a-enroll/captures/a_node_name`, `/rows/tenant-a-enroll/captures/a_node_names`; `[[compare]] variant_pointers = ["/rows/tenant-a-enroll/captures/a_node_ids", "/rows/tenant-b-enroll/captures/b_node_ids"]`, `op = "disjoint"`. Today it holds: tenant A's node is named `tenant-shared-01` whether or not B used that hostname first (`GenerateUniqueNodeNameAsync` filters by organization).
+4. `tools/lab/mutants/M7-node-name-cross-tenant/` (`mutant.toml`, `change.patch`: drop `n.OrganizationId == organizationId &&` from both queries in `EnrollmentService.GenerateUniqueNodeNameAsync`); detector `twin_run tenant-isolation-enroll` with `expect_pattern = "^twin:tenant-isolation-enroll\\|/rows/tenant-a-enroll/captures/a_node_name$"` (under M7, A's node becomes `tenant-shared-01-1` in the variant).
+5. `Identity/IdentityUserTokenTool.cs` (`identity_user_token`): per tenant, a seeded lab user (credentials generated into the vault on first use); sign up or sign in through the Gateway's BetterAuth route, exchange through Identity for an access token carrying `org_id` (read the Panel flow from L35 and Identity's exchange endpoint for the exact calls); vault the token as `brr-N`; return `{bearer_ref, organization_id, user_id}`. `http_request` gains `bearer_ref?` (sets `Authorization: Bearer`, redacted in evidence).
+6. `docs/guides/uat-specs/twins/tenant-isolation-http.toml` and rows in `twin-tenant.toml`: `tenant-a-list` (`identity_user_token tenant=a`; `GET /api/v1/organizations/{A}/nodes` via the Gateway → 200; capture `a_listed_ids`), `tenant-b-cross` (B's token on A's path → 403 or 404, never 200). `[[compare]]` on `a_listed_ids` and `disjoint` between A's listed ids and B's node ids. **Expected today: incomplete.** Nodes accepts only its mTLS scheme (README F38), so `tenant-a-list` fails with 401 and the twin precondition rule makes the experiment `held = null`. Seed `KI-NODES-USER-AUTH` in `known-issues.toml` (`patterns = ["^http:401\\|.*\\|GET\\|/api/v1/organizations/\\{id\\}/nodes"]`, `[issue.scope] services = ["gateway", "nodes"]`, sections `["twin-tenant"]`).
+7. `tools/lab/mutants/M2-list-nodes-no-org/` and `M3-tenant-handler-always/` (patches per C19); detectors `twin_run tenant-isolation-http`. While F38 stands, `mutation_run` returns `unreachable` for both with reason "twin precondition: tenant-a-list FAIL" and known issue `KI-NODES-USER-AUTH`; gate MD accepts that only while the issue is open.
+8. Tests: `NodesTokenMintTests` (`OrganizationId_Unknown_Refused`, tenant B accepted), `IdentityUserTokenToolTests` (fake HTTP: token vaulted, never returned; `tenant` other than `a`/`b` refused), `TwinTenantSpecsTests` (both experiments load), and S-L12 (`TenantTwinSeamTests`, from L53) goes green.
+
+**Tests and why they fail when reverted:** S-L12 fails if tenant B's activity changes what tenant A sees in the enrollment path, or if the lab and Nodes disagree on tokens minted for a second organization. `mutation_run` M7 → `detected` proves S-L12 can fail.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L12|FullyQualifiedName~MutantPatchesApplyTests"   # Docker running
+git -C <W> status --porcelain   # only tools/lab/, src/Tools/, tests/Dhadgar.Lab.Tests/ and docs/guides/uat-specs/ paths
+```
+
+Then `twin_run tenant-isolation-http` (expect `held = null`, reason recorded) and `mutation_run {mutants = ["M7-node-name-cross-tenant", "M2-list-nodes-no-org", "M3-tenant-handler-always"]}`; verdicts in the report.
+
+**Docs owed:** none (L45).
+
 ---
 
-## Wave 8: Sprint 2 flows, the fleet and agent-protocol fuzzing (after Sprint 2's PR is on `main`)
+## Wave 8: Sprint 2 flows, the fleet and agent-protocol fuzzing
 
-**Wave 8 gate (orchestrator):** Sprint 2's PR is merged to `main`. A Sonnet `general-purpose` agent merges `origin/main` into `campaign/meridian-lab`, resolves conflicts (expected only in `Directory.Packages.props`, `Dhadgar.sln`, `src/Shared/Dhadgar.Contracts` and lock files; a conflict in an agent or Nodes source file is reported, not resolved by guess), runs `dotnet test` on `tests/Dhadgar.Lab.Tests` with the base filter green except S-L3, and runs S-L2, S-L6 and S-L8 locally. The architect then re-reads the merged Sprint 2 code and writes a ruling note `worknotes/W8-sprint2-deltas.md` listing every name in L39 to L44 that differs on `main` (hub method names, config keys, the `GraceUntil` column, the MSI path); packets use the ruling's names.
+Sprint 2 is on `main` (squash `6df3338`, PR #235, D-ML60), and `campaign/meridian-lab` is cut after it, so no merge is needed.
+
+**Wave 8 gate (orchestrator):** before dispatching L40 to L44, the architect re-reads the Sprint 2 code on the campaign branch and writes a ruling note `worknotes/W8-sprint2-deltas.md` listing every name in L39 to L44 that differs from this plan (hub method names, config keys, the `GraceUntil` column, the MSI path); packets use the ruling's names. L39 needs only L12 and the ruling and may be dispatched as soon as both exist, in any earlier wave's slot.
 
 ### L39. Agent consumes `AgentWindowsFootprint`; S-L3 green
 
 - **Branch / worktree / commit:** `ml/l39-footprint` / `meridian-lab-l39` / `refactor(agent-windows): take footprint names from Dhadgar.Contracts`
-- **Depends on:** wave 8 gate, L12. **Security review:** yes (agent project).
+- **Depends on:** L12 and the W8 ruling note. **Security review:** yes (agent project).
 - **Rules:** R-CONTRACT (names only from `AgentWindowsFootprint`; delete the local literals), R-NULL, R-XUNIT, R-CPM; no behaviour change.
 
 **Contract excerpt:** C5. If Sprint 2's merged names differ from C5 (for example the state file name), C5 changes to match the agent and the report says so: the agent is the source of truth for values, Contracts for location.
@@ -2317,7 +3083,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Files**
 
-1. `NodesLabAdapter.ShiftCertificateTimesAsync`: `GraceUntil` now updates `AgentCertificate.GraceUntil` (drop the `[Lab.Unavailable]` branch).
+1. `NodesLabAdapter.ShiftCertificateTimesAsync`: confirm L11's `GraceUntil` shift matches the column and the `IsUsable` rule named in the W8 ruling; change it only if the ruling lists a difference.
 2. Nodes AgentHub (path from the W8 ruling): if `OnConnectedAsync` and `OnDisconnectedAsync` do not already log structured events with the node id, add `LoggerMessage` events `AgentHubConnected` (EventId 4101) and `AgentHubDisconnected` (4102) with `NodeId`; a Nodes test asserts both (Nodes test conventions).
 3. `Uat/Eval/HubSource.cs` (filters Nodes container log lines by those EventIds and `NodeId`); `Uat/Eval/AgentLogSource.cs` (reads `logs_tail member:<id>` through the probe's `agent-log`, L32).
 4. Tests: `HubSourceTests`, `AgentLogSourceTests` (fixture lines), adapter grace shift test (InMemory).
@@ -2451,22 +3217,245 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ---
 
+## Wave 9: adversaries, envelopes, continuity and time
 
-## Wave 9: docs, live evidence, close-out
+The adversarial peer (D-ML52), recovery envelopes (D-ML61), gameplay continuity with a synthetic game (D-ML56 pending), baselines and mixed-version pairs (D-ML60), time rows (resurrection, interrupted migration, rollback) and guided mode (D-ML57). L57, L58, L60 and L62 can start in parallel once their dependencies are merged; L59 needs L43; L61 needs L60. Every packet gets a `security-advisor` pass. Base filter `F`. Clock-skew and reboot cases stay in the VM tier (D-ML31); a DB-restore resurrection needs a snapshot tool and is deferred (README scope).
+
+### L57. Recovery envelopes
+
+- **Branch / worktree / commit:** `ml/l57-envelope` / `meridian-lab-l57` / `feat(lab): recovery envelopes over fault duration and load`
+- **Depends on:** L42, L29, L21. **Security review:** yes (injects faults in a loop).
+- **Rules:**
+  - R-BLAST: the envelope's `fault` is validated exactly like a chaos plan step (C4 fault tools only, targets through `FaultTargetGuard`); `heal_after_s` is always set; the job heals at the end of each cell and on cancel or failure (in `finally`, through the same `FaultBook` heal path the lease-end hook uses, L19).
+  - R-SEED: cell order from `LabRandom(seed, "envelope:<id>")`; the fleet workload uses its own L42 streams.
+  - R-OBSERVE: success ratios come from the workload's observations (fleet per-second metrics, or row grades for `spec` workloads), never from the proxy that carries the fault.
+  - R-TIME: windows and limits measured with the injected `TimeProvider`; tests use `FakeTimeProvider`.
+  - R-PATH: envelope files only under `docs/guides/uat-specs/envelopes/`, name `^[a-z0-9-]{1,64}$`.
+  - R-RESULT, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C20 "Recovery envelopes" in full; C4 `envelope_run`; C12 kind `env`; C11 (invariants clean is part of `healthy`); D-ML61.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `Envelopes/EnvelopeSpec.cs` and loader (Tomlyn; unknown keys refused; axes non-empty, `duration_s` 5..600, `load` 1..1000, `success_ratio` 0.5..1.0, `metastable_floor_s` ≥ `recovered_s`).
+2. `Envelopes/RecoveryClock.cs`: `sealed class RecoveryClock(TimeProvider time, double successRatio, TimeSpan window)` with `void Record(DateTimeOffset at, bool ok)`, `void MarkInvariantViolation(DateTimeOffset at)` and `TimeSpan? RecoveredAfter(DateTimeOffset healedAt)`: the start of the first full window after `healedAt` whose ratio ≥ `successRatio` and with no invariant violation inside it.
+3. `Envelopes/EnvelopeGrader.cs`: `static CellGrade Grade(EnvelopeSpec spec, int durationS, bool warmupHealthy, bool injected, bool healed, TimeSpan? recoveredAfter)` per the C20 table; limit = `max(metastable_floor_s, 3 × duration)`.
+4. `Envelopes/EnvelopeJob.cs` (job kind `envelope`): per cell as C20 says; writes the synthetic rows `envelope/<id>/<cell>` into the job bundle, `envelope.json` (`[{cell, duration_s, load, grade, recovered_after_s, reason}]`) and `envelope.md` (a duration × load grid of grades); ingests (L25) so `env` signatures land; the 4 h budget marks the rest `invalid` with reason `job budget`.
+5. `Tools/Envelopes/EnvelopeRunTool.cs` (`envelope_run`, OwnLease; `cells` filters by id, unknown ids refused).
+6. `docs/guides/uat-specs/envelopes/nodes-postgres-outage.toml`, `ingress-storm.toml`, `nodes-kill.toml` (C20).
+7. Tests: `EnvelopeSpecTests`, `RecoveryClockTests` (`RatioReachedAfterHeal_RecoveredAtWindowStart`, `InvariantViolationInWindow_NotRecovered`), `EnvelopeGradeTests` (`NeverHealthyAfterHeal_IsMetastable`, `WarmupUnhealthy_IsInvalidNotPass`, `HealFailed_IsInvalid`, `SlowButRecovered_PassWithReason_NoSignature`), `EnvelopeScheduleTests` (same seed → same cell order), `EnvelopeJobTests` with fakes (cancel mid-cell → the cell's fault healed, remaining cells `invalid`), `EnvelopeDockerTests` (`RequiresDocker`, 20-minute timeout: `nodes-postgres-outage` with `cells = ["d10-l10"]` grades `recovered` or `slow`).
+
+**Tests and why they fail when reverted:** `WarmupUnhealthy_IsInvalidNotPass` fails if a stack that was never healthy counts as "recovered" (the same defect class as an all-skipped run reading `pass`). `NeverHealthyAfterHeal_IsMetastable` fails if the grader treats "fault healed" as "service recovered". `InvariantViolationInWindow_NotRecovered` fails if a window full of 5xx from a crash loop still counts as healthy because the workload retried.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~EnvelopeDockerTests"   # Docker running
+```
+
+Then, with the daemon and the lease, one full `envelope_run nodes-postgres-outage`; attach `envelope.md` to the report. A `metastable` cell is a finding for the orchestrator, not a reason to change the thresholds (D-ML61 is the owner's).
+
+**Docs owed:** none (L45).
+
+### L58. Adversarial peer; `nodes_decommission`; M6; S-L13
+
+- **Branch / worktree / commit:** `ml/l58-peer` / `meridian-lab-l58` / `feat(lab): adversarial peer against lab-enrolled identities`
+- **Depends on:** L41, L42, L54. **Security review:** yes (attack traffic, client certificates and keys, a Nodes adapter path that decommissions nodes).
+- **Rules:**
+  - D-ML52 scope: a peer uses only identities enrolled by `nodes_enroll_probe` in this run (their `key_ref`/`cert_ref` in the vault) and connects only to `127.0.0.1:25000`, `127.0.0.1:25443` or `127.0.0.1:15040`. `PeerTargetGuard.Check(Uri)` refuses any other host or port with `[Lab.BlastRadius]` before a socket opens; the peer never takes a URL from a tool argument.
+  - `nodes_decommission` accepts only a node id that this lease enrolled (the lease's enrolled-node set, filled by `nodes_enroll_probe`); any other id is `[Lab.BlastRadius]`.
+  - R-ZERO: private key bytes, PKCS#12 exports and their passwords are zeroed with `CryptographicOperations.ZeroMemory` after the `X509Certificate2` is built; certificates are disposed (`using`).
+  - R-CONTRACT: hub path, header and version from `AgentHubProtocol`; hub method names from `IAgentHub`; request and response types from `Dhadgar.Contracts.Nodes` (`EnrollNodeRequest`, `RenewCertificateRequest`); no local copies.
+  - R-HOST: SignalR client and `HttpClient` base addresses come only from `PeerTargetGuard`-approved URIs; certificate validation pins the lab TLS CA (L41), never `DangerousAcceptAnyServerCertificateValidator`.
+  - R-CPM: `Microsoft.AspNetCore.SignalR.Client` in `Dhadgar.Lab.csproj` with no version (it is already in `Directory.Packages.props` if Sprint 2's agent uses it; otherwise add it there after checking nuget.org for the latest stable, and say so in the report).
+  - R-RESULT, R-USING, R-TIME, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C19 "Adversarial peer" in full (table, peer identities, row JSON) and mutant M6; C4 `peer_run`, `nodes_decommission`, `nodes_enroll_probe` (`cert_ref`), `nodes_cert_time_shift`; C6 `DecommissionNodeAsync`; C12 kind `peer`; D-ML52, D-ML53, D-ML54.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `tests/Dhadgar.Lab.Tests/Seams/PeerSeamTests.cs` (S-L13, `RequiresDocker`, `[Trait("Seam","S-L13")]`), written first: `peer_run {attack = "all", seed = 31}`; every attack with `required = true` has `held = true`, and the job's signatures contain no `peer:` entry. Run it before the rest and record the red line (`[Lab.NotFound] peer_run`).
+2. `Peer/PeerTargetGuard.cs`; `Peer/PeerIdentity.cs` (`static Result<PeerIdentity> Load(SecretVault vault, string keyRef, string certRef)`: `X509Certificate2.CreateFromPem`, then on Windows `X509CertificateLoader.LoadPkcs12(cert.Export(X509ContentType.Pkcs12, pwd), pwd)` with a random `pwd`; zero the export and the password; `IDisposable`).
+3. `Peer/Attacks/*.cs`, one `IPeerAttack` per C19 row (`string Id`, `bool Required`, `Task<Result<PeerAttackResult>> RunAsync(PeerContext ctx, CancellationToken ct)`; `PeerAttackResult(string Attack, bool Required, string Expected, string Observed, bool? Held)`). `post-revocation` runs two variants (`heartbeating`, `idle`); `stale-cert-after-renewal` runs the inside-grace leg, calls `nodes_cert_time_shift fields=["grace_until"] shift_minutes=-120` on the old row, then the after-grace leg; `clone` and idle `post-revocation` set `Required = false` and `Held = null`.
+4. `Peer/PeerRunJob.cs` (job kind `peer`) and `Tools/Peer/PeerRunTool.cs` (`peer_run`): per attack, enroll fresh identities with `nodes_enroll_probe`, run, write the row JSON, emit `peer:<attack>|<variant>` signatures only for required attacks that did not hold.
+5. `Services/NodesLabAdapter.cs`: `DecommissionNodeAsync(Guid nodeId, CancellationToken ct)` per C6: build a scope from the adapter's own service provider and resolve `INodeService` (as L11 does for `IEnrollmentTokenService`; `NodeService` takes `NodesDbContext`, `IPublishEndpoint`, `IAuditService`, `TimeProvider`, `IOptions<NodesOptions>`, `ILogger<NodeService>`), call the product's `DecommissionNodeAsync` and map its result to `Result<NodeStatus>`. `Tools/Nodes/NodesDecommissionTool.cs` (`nodes_decommission`, C4).
+6. `Tools/Nodes/NodesEnrollProbeTool.cs`: vault the issued certificate PEM as `crt-N`; return `cert_ref`; record the node id in the lease's enrolled-node set.
+7. `tools/lab/mutants/M6-renew-no-supersede/` (`mutant.toml`, `change.patch` made as L54 says; detector `peer_run {attack = "stale-cert-after-renewal"}`, `expect_pattern = "^peer:stale-cert-after-renewal\\|"`).
+8. Tests: `PeerTargetGuardTests` (`127.0.0.1:15040` allowed; `127.0.0.1:5040`, `localhost:25000` by name resolution to another host, and any non-loopback refused), `PeerIdentityTests` (export buffer zeroed), `PeerRunJobTests` with fake attacks (`Peer_NonRequired_NoSignature`, `Peer_RequiredNotHeld_OneSignature`), `NodesDecommissionToolTests` (an id not enrolled in this lease → `[Lab.BlastRadius]`), adapter test (InMemory: decommission → every certificate revoked, `GraceUntil` null).
+
+**Tests and why they fail when reverted:** S-L13 is red while any required attack gets through or while the peer and Nodes disagree on hub path, header or DTOs. `Peer_NonRequired_NoSignature` fails if an observed-only behaviour (D-ML53, D-ML54 unruled) is reported as a regression. `NodesDecommissionToolTests` fails if the lab can decommission a node it did not create. `mutation_run M6` → `detected` proves the after-grace leg can see a renewal that no longer supersedes.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L13"   # Docker running; green at the end
+git -C <W> status --porcelain   # only tools/lab/, src/Tools/ and tests/Dhadgar.Lab.Tests/ paths
+```
+
+Then, with the daemon and the lease, `mutation_run {mutants = ["M6-renew-no-supersede"]}`; record the verdict and every attack's `observed` (clone and idle post-revocation feed D-ML53 and D-ML54).
+
+**Docs owed:** none (L45).
+
+### L59. Gameplay continuity with a synthetic game
+
+- **Branch / worktree / commit:** `ml/l59-continuity` / `meridian-lab-l59` / `test(lab): synthetic game and gameplay continuity rows`
+- **Depends on:** L43, L33. **Security review:** yes (runs a process under the agent's process manager and wrapper in members).
+- **Rules:**
+  - Lab isolation: `src/Tools/Dhadgar.Lab.SyntheticGame` is a console project referenced by nothing; add it to the lab project set in `LabIsolationTests` and to the solution's `Tools` folder. It binds `127.0.0.1` only.
+  - R-PATH: `--state` must be under `C:\lab\game\` inside the member; the program refuses anything else.
+  - R-ARGS / R-USING: the probe starts nothing; the agent starts the game. The probe's `game-tick` only connects and reads.
+  - Continuity rows are `required = false` until D-ML56 is ruled; every row still records `observed`.
+  - The agent has no command sender (F46): the game is started through the agent's own path that exists today (the coder reads `AgentPipeServer`, the wrapper and `IProcessManager` callers and uses the one L43's `gameserverwrapper.toml` uses). End-to-end start by a control-plane command is "not covered: no command sender (F46)" in the worknote.
+  - R-RESULT, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C20 "Synthetic game"; C7 `game` source; F44 (`KillOnJobClose`), F45 (wrapper pipe never reconnects); C4 `fault_proxy_disable`, `agent_kill`, `agent_stop`, `agent_start`; D-ML56.
+
+**Files**
+
+1. `src/Tools/Dhadgar.Lab.SyntheticGame/Dhadgar.Lab.SyntheticGame.csproj` (console, `net10.0`, no package versions) and `Program.cs` per C20 (counter, state file written atomically via temp file and rename, `TICK` listener, stdin `stop`).
+2. `src/Tools/Dhadgar.Lab.Probe/Modes/GameTickMode.cs` (`game-tick`) and `Modes/KillAgentMode.cs` (`kill-agent`: finds the agent process by the exe name in `AgentWindowsFootprint`, `Process.Kill(entireProcessTree: false)` on that one process, prints `{pid}`; refuses when zero or more than one process matches); `lab_build` publishes the game with the probe for Windows members. `Tools/Agents/AgentKillTool.cs` (`agent_kill`, C4): resolves `member` through `FaultTargetGuard`, runs the probe mode; added to `BlastRadiusTests`.
+3. `src/Tools/Dhadgar.Lab/Uat/Eval/GameSource.cs` (C7 `game`).
+4. `docs/guides/uat-specs/continuity.toml` (`requires_pool = { os = "windows", kind = "container" }`), rows in this order: `cp-disconnect` (start the game; `fault_proxy_disable p:agent-ingress heal_after_s=120`; during and after: `alive`, `counter` strictly increasing, `restarts = 0`; after heal: hub reconnected within 120 s), `agent-restart` (`agent_stop`, wait 30 s, `agent_start`: game alive? recorded), `agent-crash` (`agent_kill member`: under the process-manager path the game is expected to die with the agent's job object, F44; under the wrapper path it is expected to live and the wrapper's pipe is not re-attached, F45; both recorded).
+5. `docs/analysis/meridian-lab/worknotes/L59-continuity.md`: per row and path the observed behaviour, and the `cp-disconnect` result first; it is the evidence for D-ML56.
+6. Tests: `SyntheticGameTests` (counter increases; `TICK` answer; `stop` exits 0; `--state` outside the root refused), `GameSourceTests` (fixture JSON), `ShippedSpecsValidateTests` covers `continuity.toml`, `LabIsolationTests` passes with the new project.
+
+**Tests and why they fail when reverted:** `SyntheticGame_StateOutsideRoot_Refused` fails if the game writes wherever it is told. `LabIsolationTests` fails if a product project references the game.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab.SyntheticGame\Dhadgar.Lab.SyntheticGame.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet build <W>\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+```
+
+Then one `uat_run continuity.toml` in a Windows member; grades and `observed` in the report and the worknote.
+
+**Docs owed:** the worknote in file 5.
+
+### L60. Baselines and mixed-version pairs; S-L14
+
+- **Branch / worktree / commit:** `ml/l60-versions` / `meridian-lab-l60` / `feat(lab): baseline builds and mixed-version runs`
+- **Depends on:** L54, L43. **Security review:** yes (`git` processes, builds from archived trees).
+- **Rules:**
+  - Reuse L54's `MutantBuilder` archive path with no patch (`ArchiveBuilder` extracted from it if the coder needs to; the mutant path keeps its tests green). `git -C <RepoRoot> archive --format=tar <commit>`; the commit must be a full 40-hex SHA from `tools/lab/baselines.toml` and `git -C <RepoRoot> cat-file -e <commit>^{commit}` must succeed, else `[Lab.InvalidArgument] unknown baseline commit`.
+  - R-ARGS, R-PATH (only `LabPaths.Builds\baseline-<name>-<build8>\`; tar entries checked as in L54), R-USING, R-DOCKER (baseline images labelled `meridian-lab-baseline=<name>`; `version_run` always restores head builds in `finally`).
+  - A baseline build uses the archived tree's own `Directory.Packages.props` and lock files (locked RID-less restore, then `--no-restore`, D-S241); it never mixes head packages into an old tree.
+  - R-RESULT, R-TIME, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C20 "Baselines and version pairs" in full (including `prepare` and `kill_on_log`, which L61 uses); C4 `lab_build {baseline}`, `version_run`, `agent_install {build_id}`; C18 fingerprint `Baseline`; C12 kind `ver`; D-ML60.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `tests/Dhadgar.Lab.Tests/Seams/MixedVersionSeamTests.cs` (S-L14, `RequiresDocker` and `RequiresWindowsContainers`, `[Trait("Seam","S-L14")]`), written first: `version_run {pair = "old-agent-new-nodes"}`; the run's fingerprint shows the agent's image commit = `baseline.sprint2` and Nodes' = HEAD, and every row is PASS. Red now (`[Lab.NotFound] version_run`).
+2. `tools/lab/baselines.toml` (C20) and `Versions/BaselineCatalog.cs` (loader; names `^[a-z0-9-]{1,32}$`).
+3. `Build/LabBuildTool.cs`: the `baseline` argument per C4.
+4. `Versions/VersionPairSpec.cs` and loader (C20 keys; every `builds` value `head` or `baseline:<known name>`).
+5. `Versions/VersionRunJob.cs` (job kind `version`) and `Tools/Versions/VersionRunTool.cs` (`version_run`), with `prepare` and `kill_on_log` per C20.
+6. `docs/guides/uat-specs/versions/old-agent-new-nodes.toml` (C20) and `new-agent-old-nodes.toml` (`builds = { nodes = "baseline:sprint2", gateway = "baseline:sprint2", agent = "head" }`, same rows). Note in each file: while `baseline.sprint2` equals `main`, the pair runs one version on both sides; it starts to bite when the protocol changes.
+7. Tests: `BaselineCatalogTests` (short SHA refused), `VersionPairSpecTests`, `VersionRunJobTests` with fakes (`HeadRestoredAfterFailure`, `HeadRestoredAfterCancel`, `PrepareFailed_MainRowsSkipped`, `KillOnLog_NoMatch_RecordedNotFailed`, `RequiredRowFail_OneVerSignature`), `LabBuildToolTests` (exact `git` `ArgumentList` for a baseline).
+
+**Tests and why they fail when reverted:** S-L14 is red while an old agent and the head Nodes disagree, or while the fingerprint does not say which build ran (a mixed-version pass that cannot prove it ran mixed is worthless). `HeadRestoredAfterFailure` fails if a baseline build outlives its job.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+$env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L14"   # Docker running; green at the end
+```
+
+**Docs owed:** none (L45).
+
+### L61. Time rows: resurrection, interrupted migration, rollback
+
+- **Branch / worktree / commit:** `ml/l61-time` / `meridian-lab-l61` / `test(lab): resurrection, interrupted migration and rollback rows`
+- **Depends on:** L60, L58. **Security review:** yes (decommissions lab nodes; kills Nodes during migration).
+- **Rules:**
+  - Only TOML and catalog changes plus the `seed-node` helper rows; no new tool. If a row needs a tool C4 does not have, stop and report (the orchestrator asks for a ruling).
+  - The lab's Nodes runs with `ASPNETCORE_ENVIRONMENT=Development` (L09), so `AutoMigrateDatabaseAsync` applies migrations at start and logs `Applying migrations for NodesDbContext...` (`DatabaseMigrationExtensions.cs:39`); `kill_on_log` matches that line.
+  - Assumption to verify in the packet: the `pre-sprint2` Nodes starts with the head `NodesLabAdapter` environment. If it does not, the rows that need it are SKIPPED with reason `baseline config: <key>` and the report names the key.
+  - R-XUNIT (spec validation tests only).
+
+**Contract excerpt:** C20 version pairs (`prepare`, `kill_on_log`); C4 `nodes_decommission`, `agent_stop`, `agent_start`; C7 `hub`, `agent_log`, `db`; D-ML58, D-ML59.
+
+**Files**
+
+1. `docs/guides/uat-specs/time.toml`: rows `seed-node` (mint, enroll via the Gateway, capture `node_id`), `enroll-after` (a fresh enroll returns 201), and `resurrection` (`requires_pool = { os = "windows", kind = "container" }`: an agent in a member enrolls and connects; `agent_stop`; `nodes_decommission node_id`; `agent_start` with the same state; required clauses: the node's certificates are revoked in `db` and no `hub` connected event for the node within 120 s; recorded: what `agent_log` shows the agent doing). `resurrection` is `required = false` until D-ML58.
+2. `docs/guides/uat-specs/versions/interrupted-migration.toml`: `prepare = { builds = { nodes = "baseline:pre-sprint2" }, rows = ["seed-node"] }`; main `builds = { nodes = "head", gateway = "head" }` with `kill_on_log` on the migration line, `restart_after_s = 5`; rows `enroll-after` plus a `db` clause that `__EFMigrationsHistory` holds every migration in the head tree's `Data/Migrations/` (the coder lists them from the folder at HEAD into the row); `required = true`. The run records whether the kill landed (`matched`); a run where it did not is still graded, and the report says the kill missed.
+3. `docs/guides/uat-specs/versions/rollback-old-nodes-new-schema.toml`: `prepare = { builds = { nodes = "head" }, rows = ["seed-node"] }`; main `builds = { nodes = "baseline:pre-sprint2", gateway = "head" }`; rows: Nodes healthy, `enroll-after`; `required = false` until D-ML59.
+4. `ShippedSpecsValidateTests` covers the new files; `VersionPairSpecTests` gains the three files.
+
+**Tests and why they fail when reverted:** `ShippedSpecsValidateTests` fails if a time row lacks a required non-human clause or names an unknown tool.
+
+**Checks**
+
+```powershell
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~ShippedSpecsValidateTests|FullyQualifiedName~VersionPairSpecTests"
+```
+
+Then, with the daemon and the lease, `version_run` for `interrupted-migration` and `rollback-old-nodes-new-schema`, and `uat_run time.toml rows=["resurrection"]` in a Windows member; grades, `matched` and the observed agent behaviour in the report (they feed D-ML58 and D-ML59).
+
+**Docs owed:** none (L45).
+
+### L62. Guided mode and its A/B
+
+- **Branch / worktree / commit:** `ml/l62-guided` / `meridian-lab-l62` / `feat(lab): coverage-guided choices for the hunter and chaos, behind an a/b`
+- **Depends on:** L52, L29, L27. **Security review:** yes (changes which faults the chaos scheduler picks).
+- **Rules:**
+  - D-ML57: guided ships with `tools/lab/guided.toml` `enabled = false`; `mode = "guided"` is refused with `[Lab.InvalidArgument] guided mode disabled` while it is false, except inside `guided_ab_run`. `random_share` is clamped to 0.3..1.0; the chooser draws "random" first, with `LabRandom`, so the share is honoured exactly per draw.
+  - R-BLAST: guided changes only which choice is made from the plan's allowed set; it never adds a fault, target or duration the plan does not allow.
+  - R-SEED: guided draws use the stream `guided:<job>`; the A/B uses paired seeds `seed + i` in both arms.
+  - The flip of `enabled` is a commit only when the A/B shows a strictly higher `findings_per_100` for guided; a tie or a loss leaves it false and the worknote says so.
+  - R-RESULT, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C20 "Guided mode"; C4 `guided_ab_run`, the `mode?` and `random_share?` arguments on `hunt_model_run` and `chaos_run`; C18 coverage keys; C15; D-ML57.
+
+**Files** (under `src/Tools/Dhadgar.Lab/` unless named)
+
+1. `tools/lab/guided.toml` (`schema = 1`, `enabled = false`, `random_share = 0.3`).
+2. `Guided/ChoiceKeyMap.cs`: a static map from each hunter command and each chaos fault choice to the C18 coverage keys it can reach (written from L52's key list; a test fails if a key in the map is not a known key).
+3. `Guided/ICoverageView.cs` (`bool IsHit(string key)`, implemented over L52's coverage store) and `Guided/GuidedChooser.cs`: `T Choose<T>(IReadOnlyList<T> options, Func<T,string> choiceId, ICoverageView coverage)`: with probability `random_share` a uniform choice, else weight `1 + 4 × unhit keys` from `ChoiceKeyMap`.
+4. `Hunt/` and `Chaos/` call sites take `IChoiceStrategy` (random or guided); random stays the default and is byte-for-byte the old behaviour for a given seed.
+5. `Guided/GuidedAbJob.cs` (job kind `ab`) and `Tools/Guided/GuidedAbRunTool.cs` (`guided_ab_run`): writes `ab.json` and `ab.md` per C20.
+6. `docs/analysis/meridian-lab/worknotes/L62-guided-ab.md`: the A/B result and whether `enabled` flipped.
+7. Tests: `GuidedChooserTests` (`RandomShare_AtLeast30Percent`: 10 000 draws with a fixed seed and an all-hit coverage view; the uniform share is within 0.30 ± 0.02), `GuidedDisabled_Refused`, `RandomStrategy_SameSeed_SameChoicesAsBefore` (a recorded choice sequence from L27/L29 fixtures), `AbJob_TieLeavesDisabled`, `ChoiceKeyMap_KeysAreKnown`.
+
+**Tests and why they fail when reverted:** `RandomStrategy_SameSeed_SameChoicesAsBefore` fails if adding the strategy seam changed old replays (every earlier `repro.toml` would stop reproducing). `RandomShare_AtLeast30Percent` fails if guided can starve the random share. `AbJob_TieLeavesDisabled` fails if a non-win enables guided.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+```
+
+Then, with the daemon and the lease, one `guided_ab_run {job = "hunt_model_run", args = {model = "enrollment", iterations = 25}, runs = 100}`; record it in the worknote; flip `enabled` in a separate commit only on a strict win.
+
+**Docs owed:** the worknote in file 6.
+
+---
+
+## Wave 10: docs, live evidence, close-out
 
 ### L45. Docs: ADR, guides, catalog and triage guides, threat model (documentation-writer)
 
 - **Agent:** `documentation-writer`. **Branch / worktree / commit:** `ml/l45-docs` / `meridian-lab-l45` / `docs(lab): meridian-lab adr, guides, catalogs, triage and threat model`
-- **Depends on:** L44, L38. **Security review:** security-advisor read.
+- **Depends on:** L44, L38, L55-L62. **Security review:** security-advisor read.
 - **Rules:** tables with spaces around pipes; every code block names its language; Diátaxis placement per `docs/meta/`; no secrets or private IPs; check `docs/meta/doc-update-map.md`.
 
 **Files**
 
-1. `docs/adr/<next free number>-meridian-lab.md` from `docs/adr/TEMPLATE.md`: context (F1-F37), decision (D-ML1 to D-ML44, including the superseded D-ML12 and D-ML13), consequences; update `docs/adr/README.md`.
+1. `docs/adr/<next free number>-meridian-lab.md` from `docs/adr/TEMPLATE.md`: context (F1-F51), decision (D-ML1 to D-ML61, including the superseded D-ML12 and D-ML13, and each BlockedDecision as ruled or still open), consequences; update `docs/adr/README.md`.
 2. `docs/guides/meridian-lab.md` (how-to): install, start and stop, leases, Docker contexts, the pool, `lab_doctor`, faults and their limits, jobs, troubleshooting.
-3. `docs/guides/automated-uat.md` (reference): C7, C8, C9, C11 in prose and tables; how to write a row and a catalog row; the shipped specs table.
+3. `docs/guides/automated-uat.md` (reference): C7, C8, C9, C11 in prose and tables; how to write a row and a catalog row; the shipped specs table; history scenarios, twins, mutants and gates MD and LS, the peer, envelopes, version pairs and guided mode (C19, C20) with what each can and cannot prove.
 4. `docs/guides/lab-triage.md` (how-to): reading `overall`, buckets, known issues, replaying a `repro.toml`, approving a draft (D-ML42 as ruled).
-5. `docs/security/meridian-lab-threat-model.md`: assets, trust boundaries (Claude Code ↔ daemon, daemon ↔ Docker, lab ↔ dev stack, member ↔ host), each control and the test that pins it (BR, `LabIsolationTests`, `NoGitHubCallsTests`, `TokenNeverInArguments`, `WindowsPool_HostUnchanged`); "dev and lab only".
+5. `docs/security/meridian-lab-threat-model.md`: assets, trust boundaries (Claude Code ↔ daemon, daemon ↔ Docker, lab ↔ dev stack, member ↔ host), each control and the test that pins it (BR, `LabIsolationTests`, `NoGitHubCallsTests`, `TokenNeverInArguments`, `WindowsPool_HostUnchanged`, `NoProductProjectReferencesMutants`, `PeerTargetGuardTests`, `NodesDecommissionToolTests`); "dev and lab only".
 6. Links from `docs/guides/README.md`, `docs/testing/README.md`, `docs/security/README.md`.
 
 **Checks:** links resolve (Grep each relative link target).
@@ -2474,11 +3463,11 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 ### L46. Live runs by the UAT runner agent
 
 - **Agent:** the UAT runner (`uat-driver` through the `lab-uat` skill, D-ML44); not a packet-coder packet.
-- **Steps:** `lab_build` the campaign tip; `uat_run` `lab-selftest`, every catalog, `panel`, `cli`, `agent-container-enroll`, `agent-console`, `agent-service`, `agent-msi`, `gameserverwrapper`; one `hunt_model_run` (25 iterations), one `fuzz_run all` (200 cases), one `chaos_run nodes-enroll` (1800 s), one `soak_run` of `lab-selftest` (3600 s), one `fleet_run enroll_heartbeat` (200 agents, 600 s). Copy each `run.json`, `ledger.md` and the triage ledger to `docs/analysis/meridian-lab/worknotes/uat-<run_id>/` (redacted files only).
-- **Done when:** every `overall` is `pass` or `pass_with_known`, or each new failure has a draft and a follow-up packet or decision in the README.
+- **Steps:** `lab_build` the campaign tip; `uat_run` `lab-selftest`, every catalog, `panel`, `cli`, `agent-container-enroll`, `agent-console`, `agent-service`, `agent-msi`, `gameserverwrapper`; one `hunt_model_run` (25 iterations), one `fuzz_run all` (200 cases), one `chaos_run nodes-enroll` (1800 s), one `soak_run` of `lab-selftest` (3600 s), one `fleet_run enroll_heartbeat` (200 agents, 600 s); `history_run` `enroll-race` and `enroll-lost-response`; `twin_run` `enroll-latency-invariance` and `tenant-isolation-enroll`; `mutation_run` (all product mutants) and `selfcheck`; `envelope_run` for the three shipped envelopes; `peer_run all`; `version_run` `old-agent-new-nodes` and `new-agent-old-nodes`; `uat_run continuity.toml`; `coverage_report`. Copy each `run.json`, `ledger.md` and the triage ledger to `docs/analysis/meridian-lab/worknotes/uat-<run_id>/` (redacted files only).
+- **Done when:** every `overall` is `pass` or `pass_with_known`, or each new failure has a draft and a follow-up packet or decision in the README; gate MD and gate LS hold; `mutants.md`, `selfcheck.md`, `envelope.md` and `coverage_report` output are copied to the worknotes.
 
 ### L47. Close-out
 
 - **Agent:** `documentation-writer` for the docs, then `ops` for the board handoff. **Branch / worktree / commit:** `ml/l47-closeout` / `meridian-lab-l47` / `docs: close out meridian-lab campaign`
 - **Depends on:** campaign review `ship`, L46. **Security review:** security-advisor read.
-- **Files:** `docs/PROJECT-STATE.md` (the only packet that edits it): "meridian-lab: confirmed working" only for the parts with a green seam test (S-L1 to S-L10) and an L46 ledger in `worknotes/`; "code exists" for the rest. README status table to Done; RESUME to final state; a note for the orchestrator listing which Sprint 2 UAT legs the lab now covers (from the L43 worknote; the orchestrator updates the Sprint 2 ledger, this packet does not).
+- **Files:** `docs/PROJECT-STATE.md` (the only packet that edits it): "meridian-lab: confirmed working" only for the parts with a green seam test (S-L1 to S-L14) and, for mutants and the self-check, gates MD and LS and an L46 ledger in `worknotes/`; "code exists" for the rest. README status table to Done; RESUME to final state; a note for the orchestrator listing which Sprint 2 UAT legs the lab now covers (from the L43 worknote; the orchestrator updates the Sprint 2 ledger, this packet does not).
