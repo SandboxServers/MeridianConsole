@@ -117,14 +117,14 @@ internal sealed class PreflightChecks
 
     private static async Task<PreflightCheck> DockerAsync(CancellationToken ct)
     {
-        var result = await CommandRunner.RunAsync("docker", ["info", "--format", "{{.ServerVersion}}"], ToolTimeout, null, null, ct);
+        var result = await CommandRunner.RunAsync("docker", ["info", "--format", "{{.ServerVersion}}"], ToolTimeout, null, null, ct: ct);
         var ok = result.IsSuccess && result.Value.ExitCode == 0;
         return new PreflightCheck("docker", ok, ok ? "Docker server reachable" : "Docker is not running", true, true);
     }
 
     private static async Task<PreflightCheck> DevCertsAsync(CancellationToken ct)
     {
-        var result = await CommandRunner.RunAsync("dotnet", ["dev-certs", "https", "--check", "--trust"], ToolTimeout, null, null, ct);
+        var result = await CommandRunner.RunAsync("dotnet", ["dev-certs", "https", "--check", "--trust"], ToolTimeout, null, null, ct: ct);
         var ok = result.IsSuccess && result.Value.ExitCode == 0;
         return new PreflightCheck("devCerts", ok, ok ? "dev HTTPS certificate trusted" : "run 'dotnet dev-certs https --trust'", true, true);
     }
@@ -133,7 +133,7 @@ internal sealed class PreflightChecks
     {
         try
         {
-            var listener = new TcpListener(IPAddress.Loopback, 5672);
+            using var listener = new TcpListener(IPAddress.Loopback, 5672);
             listener.Start();
             listener.Stop();
             return new PreflightCheck("port5672", true, "port 5672 free", true, true);

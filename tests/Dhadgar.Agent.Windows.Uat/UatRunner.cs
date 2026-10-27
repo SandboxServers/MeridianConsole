@@ -137,7 +137,7 @@ internal static class UatRunner
         }
 
         var existing = await CommandRunner.RunAsync(
-            "docker", ["ps", "-a", "--filter", "name=meridian-uat-", "--format", "{{.Names}}"], GitTimeout, null, null, ct);
+            "docker", ["ps", "-a", "--filter", "name=meridian-uat-", "--format", "{{.Names}}"], GitTimeout, null, null, ct: ct);
         if (existing.IsFailure || existing.Value.ExitCode != 0)
         {
             return Refuse("stack-only refused: docker ps failed");
@@ -409,7 +409,7 @@ internal static class UatRunner
         var written = ResultsWriter.WriteCleanup(cleanup, paths.RunDir, new Redactor());
         if (written.IsFailure)
         {
-            Console.Error.WriteLine(written.Error);
+            await Console.Error.WriteLineAsync(written.Error);
             return UatExitCodes.InternalError;
         }
 
@@ -461,7 +461,7 @@ internal static class UatRunner
         var since = startedUtc.ToString("O", CultureInfo.InvariantCulture);
         var query = $"*[System[Provider[@Name='Meridian Console Agent'] and TimeCreated[@SystemTime>='{since}']]]";
         var result = await CommandRunner.RunAsync(
-            "wevtutil", ["qe", "Application", $"/q:{query}", "/f:text"], EventLogTimeout, redactor, null, CancellationToken.None);
+            "wevtutil", ["qe", "Application", $"/q:{query}", "/f:text"], EventLogTimeout, redactor, null, ct: CancellationToken.None);
         if (result.IsFailure || result.Value.ExitCode != 0)
         {
             warnings.Add("agent event export failed; logs\\eventlog.txt was not written");
@@ -471,7 +471,7 @@ internal static class UatRunner
         try
         {
             Directory.CreateDirectory(paths.Logs);
-            File.WriteAllText(
+            await File.WriteAllTextAsync(
                 Path.Combine(paths.Logs, "eventlog.txt"),
                 redactor.Redact(result.Value.StandardOutput),
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -702,7 +702,7 @@ internal static class UatRunner
         var written = ResultsWriter.Write(results, paths.RunDir, redactor);
         if (written.IsFailure)
         {
-            Console.Error.WriteLine(written.Error);
+            await Console.Error.WriteLineAsync(written.Error);
             return UatExitCodes.InternalError;
         }
 

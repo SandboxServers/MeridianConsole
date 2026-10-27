@@ -27,7 +27,7 @@ internal sealed class GitWorkTree : IWorkTree
     /// <inheritdoc />
     public async Task<Result<bool>> IsCleanAsync(string repoRoot, CancellationToken ct)
     {
-        var status = await CommandRunner.RunAsync("git", StatusArguments, GitTimeout, null, repoRoot, ct);
+        var status = await CommandRunner.RunAsync("git", StatusArguments, GitTimeout, null, repoRoot, ct: ct);
         if (status.IsFailure)
         {
             return Result<bool>.Failure($"[UAT.TreeCheck] git status failed: {status.Error}");

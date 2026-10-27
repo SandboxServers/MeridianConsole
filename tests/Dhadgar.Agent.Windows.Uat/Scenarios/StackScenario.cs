@@ -476,9 +476,22 @@ internal sealed class StackScenario : IUatScenario
             var found = store.Certificates.Find(X509FindType.FindByThumbprint, sha1Thumbprint, validOnly: false);
             try
             {
-                return found.Count == 1
-                    ? Result<X509Certificate2>.Success(new X509Certificate2(found[0]))
-                    : Result<X509Certificate2>.Failure($"[Store.My] {found.Count} certificates match the thumbprint");
+                if (found.Count != 1)
+                {
+                    return Result<X509Certificate2>.Failure($"[Store.My] {found.Count} certificates match the thumbprint");
+                }
+
+                X509Certificate2? certificate = new X509Certificate2(found[0]);
+                try
+                {
+                    var result = Result<X509Certificate2>.Success(certificate);
+                    certificate = null; // The caller owns the copy through the result.
+                    return result;
+                }
+                finally
+                {
+                    certificate?.Dispose();
+                }
             }
             finally
             {
@@ -549,7 +562,7 @@ internal sealed class StackScenario : IUatScenario
     private static async Task<string> ImageIdAsync(string container, CancellationToken ct)
     {
         var result = await CommandRunner.RunAsync(
-            "docker", ["inspect", "--format", "{{.Image}}", container], TimeSpan.FromSeconds(30), null, null, ct);
+            "docker", ["inspect", "--format", "{{.Image}}", container], TimeSpan.FromSeconds(30), null, null, ct: ct);
         return result.IsSuccess && result.Value.ExitCode == 0 ? result.Value.StandardOutput.Trim() : "unknown";
     }
 

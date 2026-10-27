@@ -169,21 +169,21 @@ internal sealed class StoreInspector : IStoreInspector
 
     private static bool IsCa(X509Certificate2 cert) => AgentCertificateMatcher.IsAgentCa(cert);
 
-    private static IReadOnlyList<StoreCert> ReadStore(StoreName name, StoreLocation location, Func<X509Certificate2, bool> keep)
+    private static List<StoreCert> ReadStore(StoreName name, StoreLocation location, Func<X509Certificate2, bool> keep)
     {
         using var store = new X509Store(name, location);
         store.Open(OpenFlags.ReadOnly);
         return Collect(store, keep);
     }
 
-    private static IReadOnlyList<StoreCert> ReadStore(string name, Func<X509Certificate2, bool> keep)
+    private static List<StoreCert> ReadStore(string name, Func<X509Certificate2, bool> keep)
     {
         using var store = new X509Store(name, StoreLocation.LocalMachine);
         store.Open(OpenFlags.ReadOnly);
         return Collect(store, keep);
     }
 
-    private static IReadOnlyList<StoreCert> Collect(X509Store store, Func<X509Certificate2, bool> keep)
+    private static List<StoreCert> Collect(X509Store store, Func<X509Certificate2, bool> keep)
     {
         var found = new List<StoreCert>();
         foreach (var cert in store.Certificates)
@@ -239,7 +239,7 @@ internal sealed class StoreInspector : IStoreInspector
     }
 
     /// <summary>Reads the URI entries of the subject alternative name with a DER reader.</summary>
-    private static IReadOnlyList<string> SanUris(X509Certificate2 cert)
+    private static List<string> SanUris(X509Certificate2 cert)
     {
         var uris = new List<string>();
         foreach (var extension in cert.Extensions)

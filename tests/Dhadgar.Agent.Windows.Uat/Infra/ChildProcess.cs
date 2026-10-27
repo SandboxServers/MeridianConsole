@@ -24,7 +24,7 @@ internal sealed partial class ChildProcess : IDisposable
     private readonly Process _process;
     private readonly StreamWriter _log;
     private readonly Task _pumps;
-    private readonly object _gate = new();
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
 
     private ChildProcess(Process process, StreamWriter log, Redactor redactor)
     {
@@ -118,7 +118,17 @@ internal sealed partial class ChildProcess : IDisposable
                 return Result<ChildProcess>.Failure(assigned.Error);
             }
 
-            return Result<ChildProcess>.Success(new ChildProcess(process, log, redactor));
+            ChildProcess? child = new ChildProcess(process, log, redactor);
+            try
+            {
+                var result = Result<ChildProcess>.Success(child);
+                child = null; // The caller owns the child through the result; finally must not dispose it.
+                return result;
+            }
+            finally
+            {
+                child?.Dispose();
+            }
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
         {
@@ -171,6 +181,7 @@ internal sealed partial class ChildProcess : IDisposable
 
         _log.Dispose();
         _process.Dispose();
+        _writeGate.Dispose();
     }
 
     private async Task PumpAsync(StreamReader reader, Redactor redactor)
@@ -178,9 +189,14 @@ internal sealed partial class ChildProcess : IDisposable
         while (await reader.ReadLineAsync() is { } line)
         {
             var redacted = redactor.Redact(line);
-            lock (_gate)
+            await _writeGate.WaitAsync();
+            try
             {
-                _log.WriteLine(redacted);
+                await _log.WriteLineAsync(redacted);
+            }
+            finally
+            {
+                _writeGate.Release();
             }
         }
     }

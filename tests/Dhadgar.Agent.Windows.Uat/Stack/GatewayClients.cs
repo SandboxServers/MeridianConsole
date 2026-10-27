@@ -21,7 +21,7 @@ internal static class GatewayClients
     /// </summary>
     public static HttpClient Create(X509Certificate2? clientCertificate = null, TimeSpan? timeout = null)
     {
-        var handler = new SocketsHttpHandler
+        SocketsHttpHandler? handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
             UseCookies = false,
@@ -36,12 +36,13 @@ internal static class GatewayClients
                     (_, _, _, _, _) => clientCertificate;
             }
 
-            return new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? ProbeTimeout };
+            var client = new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? ProbeTimeout };
+            handler = null; // The client owns the handler and disposes it with itself.
+            return client;
         }
-        catch
+        finally
         {
-            handler.Dispose();
-            throw;
+            handler?.Dispose();
         }
     }
 }

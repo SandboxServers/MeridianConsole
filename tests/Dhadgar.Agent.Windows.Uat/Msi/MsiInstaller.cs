@@ -149,7 +149,7 @@ internal sealed class MsiInstaller : IMsiInstaller
     }
 
     /// <summary>The last 40 redacted lines of an MSI log that mention a return value 3 or an error.</summary>
-    private IReadOnlyList<string> LogTail(string logPath)
+    private List<string> LogTail(string logPath)
     {
         if (!File.Exists(logPath))
         {
