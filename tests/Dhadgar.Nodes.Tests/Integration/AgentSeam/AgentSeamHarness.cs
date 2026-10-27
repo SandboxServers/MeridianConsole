@@ -88,11 +88,19 @@ public static class AgentSeamHarness
     /// <summary>
     /// Creates the real agent enrollment service over the given HTTP client factory and certificate store.
     /// </summary>
+    /// <param name="httpClientFactory">Routes the agent's requests to the host under test.</param>
+    /// <param name="store">The agent's certificate store.</param>
+    /// <param name="timeProvider">
+    /// The Nodes host's clock. The agent checks the issued certificate's validity on this clock, and the Nodes CA
+    /// stamps NotBefore from the same one, so a seam test must pass the host's TimeProvider, never the system clock (D-S234).
+    /// </param>
     public static AgentEnrollmentService CreateEnrollmentService(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         return new AgentEnrollmentService(
             store,
             httpClientFactory,
@@ -114,7 +122,10 @@ public static class AgentSeamHarness
     {
         var token = await CreateEnrollmentTokenAsync(factory, orgId);
         var store = new InMemoryCertificateStore();
-        var agent = CreateEnrollmentService(new TestServerClientFactory(factory.Server), store);
+        var agent = CreateEnrollmentService(
+            new TestServerClientFactory(factory.Server),
+            store,
+            factory.Services.GetRequiredService<TimeProvider>());
 
         var result = await agent.EnrollAsync(token);
         Xunit.Assert.True(result.IsSuccess, result.Error);
