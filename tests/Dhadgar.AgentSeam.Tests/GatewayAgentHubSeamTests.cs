@@ -98,7 +98,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
     {
         using var harness = new GatewayNodesHarness(_caDirectory);
         var (_, enrolledStore) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
-        var spoofed = Convert.ToBase64String(enrolledStore.ClientCertificate!.RawData);
+        var spoofed = Convert.ToBase64String(enrolledStore.StoredClientCertificate!.RawData);
 
         // No connection certificate. The header carries a valid enrolled certificate.
         using var http = new HttpClient(new HeaderInjectingHandler(
@@ -121,7 +121,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
         var orgId = Guid.NewGuid();
         var (agentA, storeA) = await harness.EnrollThroughGatewayAsync(orgId);
         var (agentB, storeB) = await harness.EnrollThroughGatewayAsync(orgId);
-        var bCertificate = Convert.ToBase64String(storeB.ClientCertificate!.RawData);
+        var bCertificate = Convert.ToBase64String(storeB.StoredClientCertificate!.RawData);
 
         var nodeBBefore = await ReadLastHeartbeatAsync(harness, agentB.NodeId);
         harness.NodesBase.TimeProvider.Advance(TimeSpan.FromMinutes(2));

@@ -67,24 +67,24 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
         using var harness = new GatewayNodesHarness(_caDirectory);
         var (enrolled, store) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
 
-        var oldThumbprint = DbThumbprint(store.ClientCertificate!);
-        var oldSpki = PublicKeySpki(store.ClientCertificate!);
-        using var oldCertificate = X509CertificateLoader.LoadCertificate(store.ClientCertificate!.RawData);
+        var oldThumbprint = DbThumbprint(store.StoredClientCertificate!);
+        var oldSpki = PublicKeySpki(store.StoredClientCertificate!);
+        using var oldCertificate = X509CertificateLoader.LoadCertificate(store.StoredClientCertificate!.RawData);
 
         // A second store holds the old certificate and key for the old-certificate ControlPlaneClient.
         var oldStore = new InMemoryCertificateStore();
-        await oldStore.StoreCertificateAsync(store.ClientCertificate!, TrackKey(store.PrivateKey!));
+        await oldStore.StoreCertificateAsync(store.StoredClientCertificate!, TrackKey(store.GetPrivateKey()!));
 
         // The agent's mTLS client reaches the Gateway with the current certificate on the TLS connection.
         var renewing = CreateRenewingAgent(
-            new TestServerClientFactory(harness.GatewayServer, stripApiPrefix: false, certificate: () => store.ClientCertificate),
+            new TestServerClientFactory(harness.GatewayServer, stripApiPrefix: false, certificate: () => store.StoredClientCertificate),
             store,
             enrolled,
             harness.NodesBase.TimeProvider);
         var renewal = await renewing.RenewCertificateAsync();
         Assert.True(renewal.IsSuccess, renewal.Error);
 
-        var newCertificate = store.ClientCertificate!;
+        var newCertificate = store.StoredClientCertificate!;
         var newSpki = PublicKeySpki(newCertificate);
         Assert.NotEqual(oldThumbprint, DbThumbprint(newCertificate));
         Assert.Equal(PrivateKeySpki(store), newSpki);
@@ -178,13 +178,13 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
 
     private static void AssertChainsToStoredCa(InMemoryCertificateStore store)
     {
-        Assert.NotNull(store.CaCertificate);
+        Assert.NotNull(store.StoredCaCertificate);
         using var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        chain.ChainPolicy.CustomTrustStore.Add(store.CaCertificate);
+        chain.ChainPolicy.CustomTrustStore.Add(store.StoredCaCertificate);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.VerificationTime = store.ClientCertificate!.NotBefore.AddMinutes(1);
-        Assert.True(chain.Build(store.ClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
+        chain.ChainPolicy.VerificationTime = store.StoredClientCertificate!.NotBefore.AddMinutes(1);
+        Assert.True(chain.Build(store.StoredClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
     }
 
     /// <summary>
