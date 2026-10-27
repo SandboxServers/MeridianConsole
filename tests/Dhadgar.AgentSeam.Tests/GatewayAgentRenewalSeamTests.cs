@@ -66,7 +66,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
         using var harness = new GatewayNodesHarness(_caDirectory);
         var (enrolled, store) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
 
-        var oldThumbprint = store.ClientCertificate!.Thumbprint;
+        var oldThumbprint = DbThumbprint(store.ClientCertificate!);
         var oldSpki = PublicKeySpki(store.ClientCertificate!);
         using var oldCertificate = X509CertificateLoader.LoadCertificate(store.ClientCertificate!.RawData);
 
@@ -84,7 +84,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
 
         var newCertificate = store.ClientCertificate!;
         var newSpki = PublicKeySpki(newCertificate);
-        Assert.NotEqual(oldThumbprint, newCertificate.Thumbprint);
+        Assert.NotEqual(oldThumbprint, DbThumbprint(newCertificate));
         Assert.Equal(PrivateKeySpki(store), newSpki);
         Assert.NotEqual(oldSpki, newSpki);
         AssertChainsToStoredCa(store);
@@ -94,7 +94,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
             var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
             var rows = await db.AgentCertificates.AsNoTracking().Where(c => c.NodeId == enrolled.NodeId).ToListAsync();
             Assert.Contains(rows, r => r.Thumbprint == oldThumbprint && r.IsRevoked);
-            Assert.Contains(rows, r => r.Thumbprint == newCertificate.Thumbprint && !r.IsRevoked);
+            Assert.Contains(rows, r => r.Thumbprint == DbThumbprint(newCertificate) && !r.IsRevoked);
         }
 
         // Hub negotiate through the Gateway: the new certificate and the old one (inside the window) get 200.
@@ -143,6 +143,13 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance));
     }
+
+    /// <summary>
+    /// The thumbprint format Nodes stores in <c>AgentCertificate.Thumbprint</c>: lowercase SHA-256 hex of the DER bytes.
+    /// <see cref="X509Certificate2.Thumbprint"/> is SHA-1 and uppercase, so it never matches a stored row.
+    /// </summary>
+    private static string DbThumbprint(X509Certificate2 certificate) =>
+        Convert.ToHexString(SHA256.HashData(certificate.RawData)).ToLowerInvariant();
 
     private static byte[] PublicKeySpki(X509Certificate2 certificate)
     {

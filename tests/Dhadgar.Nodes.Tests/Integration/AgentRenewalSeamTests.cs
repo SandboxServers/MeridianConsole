@@ -71,7 +71,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
 
         // Capture the enrolled identity before any renewal.
-        var oldThumbprint = store.ClientCertificate!.Thumbprint;
+        var oldThumbprint = DbThumbprint(store.ClientCertificate!);
         var oldSpki = PublicKeySpki(store.ClientCertificate!);
         var oldPrivateKey = TrackKey(store.PrivateKey!);
 
@@ -88,7 +88,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
 
         var newCertificate = store.ClientCertificate!;
         var newSpki = PublicKeySpki(newCertificate);
-        Assert.NotEqual(oldThumbprint, newCertificate.Thumbprint);
+        Assert.NotEqual(oldThumbprint, DbThumbprint(newCertificate));
         Assert.Equal(PrivateKeySpki(store), newSpki);
         Assert.NotEqual(oldSpki, newSpki);
         AssertChainsToStoredCa(store);
@@ -98,7 +98,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
 
         var rows = await ReadCertificateStateAsync(factory, enrolled.NodeId);
         Assert.Contains(rows, r => r.Thumbprint == oldThumbprint && r.IsRevoked);
-        Assert.Contains(rows, r => r.Thumbprint == newCertificate.Thumbprint && !r.IsRevoked);
+        Assert.Contains(rows, r => r.Thumbprint == DbThumbprint(newCertificate) && !r.IsRevoked);
 
         // Hub negotiate: the new certificate and the old one (inside the grace window) both get 200.
         Assert.Equal(HttpStatusCode.OK, await NegotiateWithCertificateAsync(factory, newCertificate));
@@ -137,7 +137,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
     {
         using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true, settings: GraceSettings);
         var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
-        var oldThumbprint = store.ClientCertificate!.Thumbprint;
+        var oldThumbprint = DbThumbprint(store.ClientCertificate!);
         using var oldCertificate = X509CertificateLoader.LoadCertificate(store.ClientCertificate!.RawData);
 
         // Only the first renewal client gets the dropping layer, so only the first renewal request is dropped.
@@ -162,14 +162,16 @@ public sealed class AgentRenewalSeamTests : IDisposable
         // Nodes commits the new certificate, but the response is lost, so the agent keeps the old one.
         var first = await renewing.RenewCertificateAsync();
         Assert.False(first.IsSuccess);
+        Assert.StartsWith("[Renewal.NetworkError]", first.Error);
         Assert.NotNull(dropper);
         Assert.Equal(1, dropper.DroppedCount);
-        Assert.Equal(oldThumbprint, store.ClientCertificate!.Thumbprint);
+        Assert.Equal(oldThumbprint, DbThumbprint(store.ClientCertificate!));
 
         var orphan = (await ReadCertificateStateAsync(factory, enrolled.NodeId))
-            .SingleOrDefault(r => r.Thumbprint != oldThumbprint && !r.IsRevoked);
-        Assert.NotNull(orphan);
-        var orphanThumbprint = orphan.Thumbprint;
+            .Where(r => r.Thumbprint != oldThumbprint && !r.IsRevoked)
+            .ToList();
+        Assert.Single(orphan);
+        var orphanThumbprint = orphan[0].Thumbprint;
 
         // Retry after 5 minutes (AgentCertificateRenewalPolicy.AgentRetryMinutes once P16 exists).
         _baseFactory.TimeProvider.Advance(TimeSpan.FromMinutes(5));
@@ -177,7 +179,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         Assert.True(second.IsSuccess, second.Error);
         Assert.Equal(1, dropper.DroppedCount);
 
-        var newThumbprint = store.ClientCertificate!.Thumbprint;
+        var newThumbprint = DbThumbprint(store.ClientCertificate!);
         Assert.NotEqual(oldThumbprint, newThumbprint);
         Assert.NotEqual(orphanThumbprint, newThumbprint);
 
@@ -265,6 +267,13 @@ public sealed class AgentRenewalSeamTests : IDisposable
         _keyCopies.Add(copy);
         return copy;
     }
+
+    /// <summary>
+    /// The thumbprint format Nodes stores in <c>AgentCertificate.Thumbprint</c>: lowercase SHA-256 hex of the DER bytes.
+    /// <see cref="X509Certificate2.Thumbprint"/> is SHA-1 and uppercase, so it never matches a stored row.
+    /// </summary>
+    private static string DbThumbprint(X509Certificate2 certificate) =>
+        Convert.ToHexString(SHA256.HashData(certificate.RawData)).ToLowerInvariant();
 
     private static byte[] PublicKeySpki(X509Certificate2 certificate)
     {
