@@ -39,8 +39,9 @@ A process cleanup cannot read is left running and reported, never killed.
 
 `-StackOnly` proves the control plane end to end without touching the machine outside Docker and the run
 folder. It needs no elevation and runs under `CLAUDECODE`. It refuses (exit 2) when Docker is down, port
-5672 is busy, the dev HTTPS certificate is not trusted (`dotnet dev-certs https --trust`), or a
-`meridian-uat-*` container already exists.
+5672 is busy, the dev HTTPS certificate is not trusted (`dotnet dev-certs https --trust`), a
+`meridian-uat-*` container already exists, or its run folder already exists (the driver creates the folder
+itself, so a planted or stale manifest never reaches cleanup).
 
 | Part | How it runs | Port |
 | --- | --- | --- |
