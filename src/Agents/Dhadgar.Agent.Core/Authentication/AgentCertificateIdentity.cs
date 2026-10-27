@@ -8,6 +8,17 @@ namespace Dhadgar.Agent.Core.Authentication;
 /// </summary>
 internal static class AgentCertificateIdentity
 {
+    /// <summary>How far a certificate's NotBefore may sit ahead of this machine's clock (Nodes stamps it on its own clock).</summary>
+    internal const int MaxClockSkewMinutes = 5;
+
+    /// <summary>
+    /// True when <paramref name="certificate"/> is usable at <paramref name="now"/>, allowing NotBefore up to
+    /// <see cref="MaxClockSkewMinutes"/> ahead. The one validity rule for enrollment, renewal and the stores (D-S235).
+    /// </summary>
+    internal static bool IsWithinValidity(X509Certificate2 certificate, DateTimeOffset now) =>
+        new DateTimeOffset(certificate.NotBefore) <= now.AddMinutes(MaxClockSkewMinutes)
+        && now < new DateTimeOffset(certificate.NotAfter);
+
     /// <summary>
     /// True when the certificate's only URI SAN is <paramref name="expectedUri"/>.
     /// </summary>
@@ -57,11 +68,14 @@ internal static class AgentCertificateIdentity
     }
 
     /// <summary>
-    /// Reads the URI names in the certificate's subjectAltName, for diagnostics only (a mismatch log names the certificate's node).
+    /// Reads the URI names in the certificate's subjectAltName. Returns false when the SAN is malformed; then
+    /// <paramref name="names"/> holds only the names read before the malformed element. Identity checks must treat
+    /// false as a failed check, so a truncated SAN can never classify a certificate.
     /// </summary>
-    internal static IReadOnlyList<string> ReadUriNames(X509Certificate2 certificate)
+    internal static bool TryReadUriNames(X509Certificate2 certificate, out IReadOnlyList<string> names)
     {
-        var names = new List<string>();
+        var read = new List<string>();
+        names = read;
         foreach (var extension in certificate.Extensions)
         {
             if (extension.Oid?.Value != "2.5.29.17")
@@ -77,7 +91,7 @@ internal static class AgentCertificateIdentity
                 {
                     if (sequence.PeekTag().HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 6)))
                     {
-                        names.Add(sequence.ReadCharacterString(
+                        read.Add(sequence.ReadCharacterString(
                             UniversalTagNumber.IA5String,
                             new Asn1Tag(TagClass.ContextSpecific, 6)));
                     }
@@ -89,11 +103,20 @@ internal static class AgentCertificateIdentity
             }
             catch (AsnContentException)
             {
-                // Stop at a malformed SAN; the names read so far are still useful for the log.
-                break;
+                return false;
             }
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the URI names in the certificate's subjectAltName, stopping at a malformed element. Used only for the
+    /// bootstrap mismatch log, which names the certificate's node. Identity checks use <see cref="TryReadUriNames"/>.
+    /// </summary>
+    internal static IReadOnlyList<string> ReadUriNames(X509Certificate2 certificate)
+    {
+        TryReadUriNames(certificate, out var names);
         return names;
     }
 }

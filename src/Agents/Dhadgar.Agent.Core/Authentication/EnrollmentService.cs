@@ -40,11 +40,6 @@ public sealed class EnrollmentService : IEnrollmentService
     /// </summary>
     private const int MaxErrorBodySize = 4 * 1024;
 
-    /// <summary>
-    /// How far a renewed certificate's NotBefore may sit ahead of this machine's clock.
-    /// </summary>
-    private const int MaxClockSkewMinutes = 5;
-
     private readonly ICertificateStore _certificateStore;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AgentOptions _options;
@@ -259,9 +254,7 @@ public sealed class EnrollmentService : IEnrollmentService
                         "[Enrollment.WrongIdentity] Certificate SAN does not match the enrolled node");
                 }
 
-                var enrollNow = _timeProvider.GetUtcNow();
-                if (new DateTimeOffset(cert.NotBefore) > enrollNow.AddMinutes(MaxClockSkewMinutes)
-                    || new DateTimeOffset(cert.NotAfter) <= enrollNow)
+                if (!AgentCertificateIdentity.IsWithinValidity(cert, _timeProvider.GetUtcNow()))
                 {
                     return Result<EnrollmentResult>.Failure(
                         "[Enrollment.InvalidValidity] Certificate is not currently valid");
@@ -505,9 +498,7 @@ public sealed class EnrollmentService : IEnrollmentService
 
                 // An expired or not-yet-valid certificate would be filtered out by the store on the next read,
                 // leaving the agent with no usable certificate and no way to renew
-                var now = _timeProvider.GetUtcNow();
-                if (new DateTimeOffset(newCert.NotBefore) > now.AddMinutes(MaxClockSkewMinutes)
-                    || new DateTimeOffset(newCert.NotAfter) <= now)
+                if (!AgentCertificateIdentity.IsWithinValidity(newCert, _timeProvider.GetUtcNow()))
                 {
                     _logger.LogError("Renewed certificate is outside its validity window for node {NodeId}", nodeId);
                     return Result<CertificateRenewalResult>.Failure(
