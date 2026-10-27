@@ -177,7 +177,7 @@ public sealed class AgentBootstrapServiceTests
         try
         {
             await WaitUntilAsync(() => h.ConnectCount >= 1);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => h.Time.HasPendingTimer);
 
             // ReconnectDelaySeconds (5) is the first backoff: no second attempt before it elapses.
             h.Time.Advance(TimeSpan.FromSeconds(4));
@@ -440,7 +440,7 @@ public sealed class AgentBootstrapServiceTests
         try
         {
             await WaitUntilAsync(() => h.EnrollCalls >= 1);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => h.Time.HasPendingTimer);
 
             // EnrollmentRetrySeconds (60) is the backoff: no second attempt before it elapses.
             h.Time.Advance(TimeSpan.FromSeconds(59));
