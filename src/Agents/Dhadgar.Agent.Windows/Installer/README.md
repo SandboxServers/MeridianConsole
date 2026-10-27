@@ -29,7 +29,7 @@ The project sets `InstallerPlatform` to `x64` (the agent reads the 64-bit regist
 ### From the solution root:
 
 ```powershell
-# First, build the agent (writes appsettings.json beside the exe) with the UAT build script;
+# Build the agent and the MSI with the UAT build script (it also builds the UAT driver, Nodes and Gateway);
 # it restores locked and RID-less, so it does not rewrite lock files (D-S241)
 pwsh -NoProfile -File scripts\uat\Build-AgentWindowsUat.ps1 -Verb run -Mode Msi
 ```
