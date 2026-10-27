@@ -79,6 +79,16 @@
     <Property Id="ARPHELPLINK" Value="https://docs.meridianconsole.com" />
 
     <!--
+      D-S242: msiexec's server session reports the Windows 8.1 values (VersionNT 603, WindowsBuild 9600)
+      on Windows 10 and 11, so a WindowsBuild row refuses every supported machine. Read the real build
+      number from the registry instead (REG_SZ, compared as an integer; empty when absent, so it fails closed).
+    -->
+    <Property Id="WINDOWS_BUILD_NUMBER" Secure="yes">
+      <RegistrySearch Id="WindowsBuildNumberSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+                      Name="CurrentBuildNumber" Type="raw" Bitness="always64" />
+    </Property>
+
+    <!--
       Refuse a non-HTTPS control plane endpoint before anything is written (case-insensitive prefix test).
       Skipped only on uninstall (REMOVE=ALL), so a bad stored value cannot block msiexec /x. Repair and
       REINSTALL runs are checked too.
@@ -90,8 +100,8 @@
     <Launch Condition="VersionNT64"
             Message="[ProductName] requires a 64-bit version of Windows." />
 
-    <!-- Prevent running on Windows older than Windows 10 (WindowsBuild 10240 = Windows 10 RTM) -->
-    <Launch Condition="Installed OR WindowsBuild &gt;= 10240"
+    <!-- Prevent running on Windows older than Windows 10 (build 10240 = Windows 10 RTM) -->
+    <Launch Condition="Installed OR WINDOWS_BUILD_NUMBER &gt;= 10240"
             Message="[ProductName] requires Windows 10 or later." />
 
     <!-- Check for administrator privileges -->

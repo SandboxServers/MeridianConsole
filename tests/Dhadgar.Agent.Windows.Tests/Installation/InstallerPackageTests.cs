@@ -44,9 +44,11 @@ public sealed class InstallerPackageTests
     public void PackageWxs_HklmRegistryKeys_UseAgentRegistryKeyPath()
     {
         var doc = LoadPackage();
+        // D-S242: the one read of an OS key; pinned by PackageWxs_WindowsBuildNumber_IsReadFromCurrentVersionInThe64BitView.
         var keys = doc.Descendants()
             .Where(e => (e.Name == Wix + "RegistryKey" || e.Name == Wix + "RegistrySearch")
-                        && (string?)e.Attribute("Root") == "HKLM")
+                        && (string?)e.Attribute("Root") == "HKLM"
+                        && (string?)e.Attribute("Id") != "WindowsBuildNumberSearch")
             .ToList();
 
         Assert.NotEmpty(keys);
@@ -95,14 +97,31 @@ public sealed class InstallerPackageTests
     }
 
     [Fact]
-    public void PackageWxs_LaunchConditions_UseWindowsBuildNotVersionNt()
+    public void PackageWxs_WindowsVersionCondition_UsesRegistryBuildNumber()
     {
         var conditions = LoadPackage().Descendants(Wix + "Launch")
             .Select(l => (string?)l.Attribute("Condition") ?? string.Empty)
             .ToList();
 
+        // D-S242: msiexec reports WindowsBuild 9600 and VersionNT 603 on Windows 10 and 11.
+        Assert.DoesNotContain(conditions, c => System.Text.RegularExpressions.Regex.IsMatch(c, @"\bWindowsBuild\b"));
         Assert.DoesNotContain(conditions, c => c.Contains("VersionNT >=", System.StringComparison.Ordinal));
-        Assert.Contains(conditions, c => c.Contains("WindowsBuild >= 10240", System.StringComparison.Ordinal));
+        Assert.Contains("Installed OR WINDOWS_BUILD_NUMBER >= 10240", conditions);
+    }
+
+    [Fact]
+    public void PackageWxs_WindowsBuildNumber_IsReadFromCurrentVersionInThe64BitView()
+    {
+        var property = Property(LoadPackage(), "WINDOWS_BUILD_NUMBER");
+        var search = Assert.Single(property.Elements(Wix + "RegistrySearch"));
+
+        Assert.Equal("yes", (string?)property.Attribute("Secure"));
+        Assert.Equal("WindowsBuildNumberSearch", (string?)search.Attribute("Id"));
+        Assert.Equal("HKLM", (string?)search.Attribute("Root"));
+        Assert.Equal(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", (string?)search.Attribute("Key"));
+        Assert.Equal("CurrentBuildNumber", (string?)search.Attribute("Name"));
+        Assert.Equal("raw", (string?)search.Attribute("Type"));
+        Assert.Equal("always64", (string?)search.Attribute("Bitness"));
     }
 
     [Fact]
