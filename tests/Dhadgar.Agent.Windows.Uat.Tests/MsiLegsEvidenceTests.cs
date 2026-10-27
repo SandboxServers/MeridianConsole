@@ -18,9 +18,14 @@ public sealed class MsiLegsEvidenceTests
 {
     private static readonly Uri Endpoint = new("https://localhost:5443/");
 
-    [Fact]
+    // The legs read the real HKLM registry and the event log (EventLog.SourceExists), which only Windows has.
+    private const string WindowsOnlyReason =
+        "Windows-only test: the MSI legs read the real registry and event log, which do not exist on non-Windows runners";
+
+    [SkippableFact]
     public async Task InstallAsync_A3010Warning_IsAddedToTheEvidenceWarnings()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), WindowsOnlyReason);
         var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
         var installer = new FakeInstaller(new MsiOutcome(3010, "msiexec /i <msi>", ["reboot requested (3010)"]));
 
@@ -34,9 +39,10 @@ public sealed class MsiLegsEvidenceTests
         Assert.Contains(warnings, w => w.Contains("reboot requested", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UninstallAsync_ResidueAndUninstallWarnings_AreAddedToTheEvidenceWarnings()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), WindowsOnlyReason);
         var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
         var installer = new FakeInstaller(new MsiOutcome(3010, "msiexec /x <product>", ["uninstall reboot requested"]));
         var store = new FakeStore(
@@ -50,9 +56,10 @@ public sealed class MsiLegsEvidenceTests
         Assert.Contains(warnings, w => w.Contains("certificate:AB12", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task InstallAsync_AnExistingWarningsListIsReusedNotReplaced()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), WindowsOnlyReason);
         // RunStepsAsync reuses the list the MSI install wrote, so the warnings from both steps end up in one list.
         var existing = new List<string> { "earlier" };
         var evidence = new Dictionary<string, object?>(StringComparer.Ordinal) { ["warnings"] = existing };

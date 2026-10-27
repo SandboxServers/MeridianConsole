@@ -99,18 +99,20 @@ public class MsiProductsTests
         Assert.True(result.IsFailure);
     }
 
-    [Fact]
+    [SkippableFact]
     public void RealInstaller_ListsTheUpgradeCodeWithoutAnError()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test: calls the real msi.dll, which does not exist on non-Windows runners");
         // Read-only against the real msi.dll: whatever is installed, the enumeration ends cleanly (259), never an error.
         var result = new MsiProducts().RelatedProducts(AgentWindowsFacts.MsiUpgradeCode);
 
         Assert.True(result.IsSuccess, result.Error);
     }
 
-    [Fact]
+    [SkippableFact]
     public void RealInstaller_AnUnusedUpgradeCodeListsNothing()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test: calls the real msi.dll, which does not exist on non-Windows runners");
         var result = new MsiProducts().RelatedProducts(Guid.NewGuid().ToString("D"));
 
         Assert.True(result.IsSuccess, result.Error);

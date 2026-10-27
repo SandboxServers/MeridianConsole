@@ -52,8 +52,9 @@ public class ServiceEnvironmentTests
     [Fact]
     public void StackImages_AreTheNodesAndGatewayBuilds()
     {
-        Assert.EndsWith(@"Dhadgar.Nodes\bin\Release\net10.0\Dhadgar.Nodes.exe", Paths.StackImages[0], StringComparison.OrdinalIgnoreCase);
-        Assert.EndsWith(@"Dhadgar.Gateway\bin\Release\net10.0\Dhadgar.Gateway.exe", Paths.StackImages[1], StringComparison.OrdinalIgnoreCase);
+        // Path.Combine keeps the test's separator the platform's, so the same suffix matches on Windows and Linux.
+        Assert.EndsWith(Path.Combine("Dhadgar.Nodes", "bin", "Release", "net10.0", "Dhadgar.Nodes.exe"), Paths.StackImages[0], StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Combine("Dhadgar.Gateway", "bin", "Release", "net10.0", "Dhadgar.Gateway.exe"), Paths.StackImages[1], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
