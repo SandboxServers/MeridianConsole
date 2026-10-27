@@ -1,3 +1,6 @@
+using System.Formats.Asn1;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Nodes.Data;
@@ -5,6 +8,7 @@ using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -18,7 +22,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     private readonly FakeTimeProvider _timeProvider;
     private readonly NodesOptions _options;
     private readonly IOptions<NodesOptions> _optionsWrapper;
-    private readonly List<NodesDbContext> _contexts = [];
+    private readonly List<ServiceProvider> _providers = [];
 
     public CertificateAuthorityServiceTests()
     {
@@ -39,9 +43,9 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var context in _contexts)
+        foreach (var provider in _providers)
         {
-            context.Dispose();
+            provider.Dispose();
         }
 
         try
@@ -57,31 +61,34 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         }
     }
 
-    private NodesDbContext CreateDbContext()
+    private ServiceProvider CreateDbServices(Action<IServiceCollection>? configure = null)
     {
-        var dbOptions = new DbContextOptionsBuilder<NodesDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-            .Options;
-        var context = new NodesDbContext(dbOptions);
-        _contexts.Add(context);
-        return context;
+        var databaseName = Guid.NewGuid().ToString();
+        var services = new ServiceCollection();
+        services.AddDbContext<NodesDbContext>(o => o
+            .UseInMemoryDatabase(databaseName)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+        configure?.Invoke(services);
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
+        return provider;
     }
 
-    private CertificateAuthorityService CreateService(ICaStorageProvider? storageProvider = null, NodesDbContext? dbContext = null)
+    private CertificateAuthorityService CreateService(
+        ICaStorageProvider? storageProvider = null,
+        ServiceProvider? dbServices = null,
+        IServiceScopeFactory? scopeFactory = null)
     {
         storageProvider ??= new LocalFileCaStorageProvider(
             _optionsWrapper,
             NullLogger<LocalFileCaStorageProvider>.Instance);
-
-        dbContext ??= CreateDbContext();
 
         return new CertificateAuthorityService(
             storageProvider,
             _optionsWrapper,
             _timeProvider,
             NullLogger<CertificateAuthorityService>.Instance,
-            dbContext);
+            scopeFactory ?? (dbServices ?? CreateDbServices()).GetRequiredService<IServiceScopeFactory>());
     }
 
     [Fact]
@@ -296,43 +303,6 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RenewCertificateAsync_GeneratesNewCertificate()
-    {
-        // Arrange
-        using var service = CreateService();
-        await service.InitializeAsync();
-        var nodeId = Guid.NewGuid();
-
-        var originalResult = await service.IssueCertificateAsync(nodeId);
-
-        // Act
-        var renewedResult = await service.RenewCertificateAsync(nodeId, originalResult.Thumbprint!);
-
-        // Assert
-        Assert.True(renewedResult.Success);
-        Assert.NotEqual(originalResult.Thumbprint, renewedResult.Thumbprint);
-        Assert.NotEqual(originalResult.SerialNumber, renewedResult.SerialNumber);
-    }
-
-    [Fact]
-    public async Task RenewCertificateAsync_NewCertificateHasSameNodeId()
-    {
-        // Arrange
-        using var service = CreateService();
-        await service.InitializeAsync();
-        var nodeId = Guid.NewGuid();
-
-        var originalResult = await service.IssueCertificateAsync(nodeId);
-
-        // Act
-        var renewedResult = await service.RenewCertificateAsync(nodeId, originalResult.Thumbprint!);
-
-        // Assert
-        using var cert = X509Certificate2.CreateFromPem(renewedResult.CertificatePem!);
-        Assert.Contains($"CN={nodeId}", cert.Subject, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task GetCaCertificatePemAsync_ReturnsValidPem()
     {
         // Arrange
@@ -398,10 +368,10 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         var result = await service.IssueCertificateAsync(nodeId);
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
 
         // Assert
-        Assert.True(isValid);
+        Assert.Equal(CertificateTrustStatus.Trusted, trust);
     }
 
     [Fact]
@@ -418,10 +388,10 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         var foreignPem = foreignCert.ExportCertificatePem();
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(foreignPem);
+        var trust = await service.ValidateCertificateAsync(foreignPem);
 
         // Assert
-        Assert.False(isValid);
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
     }
 
     [Fact]
@@ -457,8 +427,8 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task ValidateCertificateAsync_ReturnsFalseForRevokedCertificate()
     {
         // Arrange
-        var dbContext = CreateDbContext();
-        using var service = CreateService(dbContext: dbContext);
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -480,22 +450,92 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
             RevokedAt = DateTime.UtcNow,
             RevocationReason = "Test revocation"
         };
-        dbContext.AgentCertificates.Add(agentCert);
-        await dbContext.SaveChangesAsync();
+        using (var scope = dbServices.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            dbContext.AgentCertificates.Add(agentCert);
+            await dbContext.SaveChangesAsync();
+        }
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
 
         // Assert
-        Assert.False(isValid);
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
+    }
+
+    [Fact]
+    public async Task ValidateCertificate_RevokedInGrace_IsTrusted()
+    {
+        // Arrange - superseded by a renewal, still inside its grace window (D-S212)
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        await AddRevokedRowAsync(dbServices, nodeId, result, now.AddMinutes(-10), now.AddMinutes(20));
+
+        // Act
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        // Assert
+        Assert.Equal(CertificateTrustStatus.Trusted, trust);
+    }
+
+    [Fact]
+    public async Task ValidateCertificate_RevokedPastGrace_IsUntrusted()
+    {
+        // Arrange - the grace window closed one minute ago
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        await AddRevokedRowAsync(dbServices, nodeId, result, now.AddMinutes(-70), now.AddMinutes(-1));
+
+        // Act
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        // Assert
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
+    }
+
+    private static async Task AddRevokedRowAsync(
+        ServiceProvider dbServices,
+        Guid nodeId,
+        CertificateIssuanceResult result,
+        DateTime revokedAt,
+        DateTime graceUntil)
+    {
+        using var scope = dbServices.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        dbContext.AgentCertificates.Add(new AgentCertificate
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            Thumbprint = result.Thumbprint!,
+            SerialNumber = result.SerialNumber!,
+            NotBefore = result.NotBefore!.Value,
+            NotAfter = result.NotAfter!.Value,
+            IssuedAt = revokedAt,
+            IsRevoked = true,
+            RevokedAt = revokedAt,
+            RevocationReason = "Renewed - superseded by new certificate",
+            GraceUntil = graceUntil
+        });
+        await dbContext.SaveChangesAsync();
     }
 
     [Fact]
     public async Task ValidateCertificateAsync_ReturnsTrueForNonRevokedCertificateInDatabase()
     {
         // Arrange
-        var dbContext = CreateDbContext();
-        using var service = CreateService(dbContext: dbContext);
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -515,13 +555,211 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
             IssuedAt = DateTime.UtcNow,
             IsRevoked = false
         };
-        dbContext.AgentCertificates.Add(agentCert);
-        await dbContext.SaveChangesAsync();
+        using (var scope = dbServices.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            dbContext.AgentCertificates.Add(agentCert);
+            await dbContext.SaveChangesAsync();
+        }
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
 
         // Assert
-        Assert.True(isValid);
+        Assert.Equal(CertificateTrustStatus.Trusted, trust);
+    }
+
+    private static string CreateForeignPem()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest("CN=Foreign", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var foreignCert = request.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddYears(1));
+        return foreignCert.ExportCertificatePem();
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ConcurrentCallsOnOneInstance_AllTrusted()
+    {
+        var dbServices = CreateDbServices();
+        var counting = new CountingScopeFactory(dbServices.GetRequiredService<IServiceScopeFactory>());
+        using var service = CreateService(scopeFactory: counting);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+
+        using (var scope = dbServices.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            dbContext.AgentCertificates.Add(new AgentCertificate
+            {
+                Id = Guid.NewGuid(),
+                NodeId = nodeId,
+                Thumbprint = result.Thumbprint!,
+                SerialNumber = result.SerialNumber!,
+                NotBefore = result.NotBefore!.Value,
+                NotAfter = result.NotAfter!.Value,
+                IssuedAt = DateTime.UtcNow,
+                IsRevoked = false
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var pem = result.CertificatePem!;
+        var before = counting.Count;
+        var results = await Task.WhenAll(Enumerable.Range(0, 64)
+            .Select(_ => Task.Run(() => service.ValidateCertificateAsync(pem))));
+
+        Assert.All(results, r => Assert.Equal(CertificateTrustStatus.Trusted, r));
+        // Each validation opens its own scope: one per call, none shared or reused.
+        Assert.Equal(before + 64, counting.Count);
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_WhenRevocationLookupFails_ReturnsUnavailable()
+    {
+        var dbServices = CreateDbServices(s =>
+            s.AddScoped<NodesDbContext>(_ => throw new InvalidOperationException("database unavailable")));
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+        var result = await service.IssueCertificateAsync(Guid.NewGuid());
+        Assert.True(result.Success);
+
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        Assert.Equal(CertificateTrustStatus.Unavailable, trust);
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ForeignCertificate_DoesNotQueryDatabase()
+    {
+        var dbServices = CreateDbServices(s =>
+            s.AddScoped<NodesDbContext>(_ => throw new InvalidOperationException("database unavailable")));
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+
+        var trust = await service.ValidateCertificateAsync(CreateForeignPem());
+
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ForeignCertificateWithAiaUrl_DoesNotFetchIssuer()
+    {
+        // The client controls the certificate, so its AIA URL must never be fetched by the chain engine.
+        var port = GetFreeTcpPort();
+        var prefix = $"http://127.0.0.1:{port}/";
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(prefix);
+        listener.Start();
+        var requestCount = 0;
+        var accepting = Task.Run(async () =>
+        {
+            while (true)
+            {
+                HttpListenerContext context;
+                try
+                {
+                    context = await listener.GetContextAsync();
+                }
+                catch (HttpListenerException) when (!listener.IsListening)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
+
+                Interlocked.Increment(ref requestCount);
+                context.Response.StatusCode = 404;
+                context.Response.Close();
+            }
+        });
+
+        try
+        {
+            using var service = CreateService();
+            await service.InitializeAsync();
+
+            var trust = await service.ValidateCertificateAsync(CreateForeignPemWithAiaUrl(prefix + "ca.cer"));
+
+            Assert.Equal(CertificateTrustStatus.Untrusted, trust);
+        }
+        finally
+        {
+            listener.Stop();
+            await accepting;
+        }
+
+        Assert.Equal(0, Volatile.Read(ref requestCount));
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        using var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        return ((IPEndPoint)probe.LocalEndpoint).Port;
+    }
+
+    private static string CreateForeignPemWithAiaUrl(string caIssuersUrl)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        using var caKey = RSA.Create(2048);
+        var caRequest = new CertificateRequest("CN=Foreign Test CA", caKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        caRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(
+            certificateAuthority: true,
+            hasPathLengthConstraint: false,
+            pathLengthConstraint: 0,
+            critical: true));
+        caRequest.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
+            critical: true));
+        using var caCert = caRequest.CreateSelfSigned(now.AddMinutes(-5), now.AddYears(1));
+
+        using var leafKey = RSA.Create(2048);
+        var leafRequest = new CertificateRequest("CN=Foreign Agent", leafKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        leafRequest.CertificateExtensions.Add(new X509Extension(
+            "1.3.6.1.5.5.7.1.1", // id-pe-authorityInfoAccess
+            BuildCaIssuersAccessExtension(caIssuersUrl),
+            critical: false));
+
+        var serial = new byte[16];
+        RandomNumberGenerator.Fill(serial);
+        using var leaf = leafRequest.Create(caCert, now.AddMinutes(-5), now.AddDays(1), serial);
+        return leaf.ExportCertificatePem();
+    }
+
+    private static byte[] BuildCaIssuersAccessExtension(string url)
+    {
+        // AuthorityInfoAccessSyntax ::= SEQUENCE OF AccessDescription
+        // AccessDescription ::= SEQUENCE { accessMethod OID, accessLocation GeneralName (uniformResourceIdentifier [6]) }
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using (writer.PushSequence())
+        using (writer.PushSequence())
+        {
+            writer.WriteObjectIdentifier("1.3.6.1.5.5.7.48.2"); // id-ad-caIssuers
+            writer.WriteCharacterString(
+                UniversalTagNumber.IA5String,
+                url,
+                new Asn1Tag(TagClass.ContextSpecific, 6));
+        }
+
+        return writer.Encode();
+    }
+
+    /// <summary>Counts how many scopes the service opens, to prove one scope per lookup.</summary>
+    private sealed class CountingScopeFactory(IServiceScopeFactory inner) : IServiceScopeFactory
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public IServiceScope CreateScope()
+        {
+            Interlocked.Increment(ref _count);
+            return inner.CreateScope();
+        }
     }
 }

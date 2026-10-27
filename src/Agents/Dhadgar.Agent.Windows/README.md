@@ -272,7 +272,7 @@ The recommended installation method for production deployments:
 Invoke-WebRequest -Uri "https://releases.meridianconsole.com/agent/windows/latest/dhadgar-agent-windows.msi" -OutFile "dhadgar-agent-windows.msi"
 
 # Silent install
-msiexec /i dhadgar-agent-windows.msi /quiet /log install.log ENROLLMENT_TOKEN="your-token-here"
+msiexec /i dhadgar-agent-windows.msi /qn /l*v install.log ENROLLMENT_TOKEN="your-token-here" CONTROL_PLANE_ENDPOINT="https://<control-plane-host>"
 
 # Interactive install
 msiexec /i dhadgar-agent-windows.msi
@@ -408,8 +408,11 @@ Configuration is loaded in this order (later overrides earlier):
 1. `appsettings.json` (default configuration)
 2. `appsettings.{Environment}.json` (environment-specific)
 3. `appsettings.local.json` (local overrides, not version-controlled)
-4. Environment variables
-5. Command-line arguments
+4. Registry value `HKLM\SOFTWARE\Meridian Console\Agent\ControlPlaneEndpoint`, written by the MSI from `CONTROL_PLANE_ENDPOINT` (D-S230; overrides the JSON files for `Agent:ControlPlane:Endpoint` only)
+5. Environment variables
+6. Command-line arguments
+
+Install parameters: `ENROLLMENT_TOKEN` and `CONTROL_PLANE_ENDPOINT` (an `https://` URL). An MSI major upgrade keeps the endpoint when `CONTROL_PLANE_ENDPOINT` is omitted, and a value given on the command line wins. See `Installer/README.md`.
 
 ### Configuration Options
 
@@ -752,19 +755,35 @@ CredRead("MeridianConsole/Agent/ControlPlane", CRED_TYPE_GENERIC, 0, out credent
 
 ### Windows Certificate Store
 
-Agent certificates are stored in the Windows Certificate Store:
+The agent uses two machine stores (D-S219):
 
-- **Location**: `LocalMachine\My`
-- **Subject**: `CN=Meridian Console Agent, O={CustomerOrg}`
-- **Usage**: Client Authentication
+| Store | Holds | How it is found |
+|-------|-------|-----------------|
+| `LocalMachine\My` | The agent client certificate and its private key | Issuer is `Meridian Console Agent CA`, the subject is `CN={nodeId}, O=MeridianConsole`, a Nodes SPIFFE URI SAN is present, and the certificate is valid now (NotBefore may be up to 5 minutes ahead of this machine's clock) |
+| `LocalMachine\MeridianConsoleAgent` | The agent CA certificate (`Meridian Console Agent CA`) | Subject is `Meridian Console Agent CA` |
+
+The agent CA is **never** added to `LocalMachine\Root`. Root would make Windows trust anything that CA signs, machine-wide. An agent CA left in Root by an earlier version is removed the next time the agent stores its CA, and the removal is logged.
+
+Key material is PKCS#8 from enrollment. When a renewed certificate is stored, the new certificate is added first, then older agent certificates are removed, and each removed certificate's private key is deleted from the machine key container.
 
 ```powershell
 # View agent certificates
-Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Subject -like "*Meridian Console*"}
+Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Issuer -like "*Meridian Console Agent CA*"}
+
+# View the agent CA
+Get-ChildItem Cert:\LocalMachine\MeridianConsoleAgent
 
 # Export certificate (backup)
 Export-Certificate -Cert (Get-ChildItem Cert:\LocalMachine\My\THUMBPRINT) -FilePath "agent-backup.cer"
 ```
+
+### Enrollment Token
+
+The one-time enrollment token is read from `HKLM\SOFTWARE\Meridian Console\Agent\EnrollmentToken` (`REG_SZ`). The key is opened read-only. A missing key or value means no token is configured. The token is never logged. The agent's own cleanup removes the value once enrollment succeeds.
+
+### State File
+
+The agent identity (node ID, organization, enrollment time) is stored in `agent-state.json` under `StateDirectory`, which defaults to `%ProgramData%\Meridian Console\Agent`. The file has a protected DACL (D-S233): it is created with no inherited ACEs, and only SYSTEM, Administrators and the agent's account have access. A load trusts the file only when its owner is one of those accounts and no other account holds a write ACE. If the check fails, the load returns `[AgentState.Untrusted]`, and the agent does not adopt the file. To recover, stop the service, remove `agent-state.json`, and supply a new enrollment token.
 
 ### Windows Performance Counters (Planned)
 
@@ -1643,6 +1662,15 @@ dotnet test tests/Dhadgar.Agent.Windows.Tests --filter "Category!=Integration"
 ```
 
 ---
+
+### Verifying on Windows
+
+Unit tests cannot reach HKLM, the machine certificate stores or the service manager, so the agent is also
+checked on a real Windows machine by the UAT driver in `tests/Dhadgar.Agent.Windows.Uat`. Process mode
+(`scripts\uat\Invoke-AgentWindowsUat.ps1 -Mode Process -AcceptMachineChanges`, run by a person from an
+elevated shell) enrolls the published agent, checks its certificate store layout and state file, restarts it
+and confirms the second start does not consume a new enrollment token. It then cleans up after itself. The
+steps, the pass conditions and how to read the results are in `scripts/uat/README.md`.
 
 ## Related Documentation
 

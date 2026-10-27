@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
+using Dhadgar.Contracts.Nodes;
 
 namespace Dhadgar.Agent.Core.Configuration;
 
@@ -61,10 +62,10 @@ public sealed partial class SecurityOptions : IValidatableObject
     public bool EnableCertificateAutoRenewal { get; set; } = true;
 
     /// <summary>
-    /// Days before certificate expiry to trigger renewal.
+    /// Days before expiry at which the agent renews. Default and upper bound come from <see cref="AgentCertificateProfile"/>.
     /// </summary>
-    [Range(1, 30)]
-    public int CertificateRenewalThresholdDays { get; set; } = 14;
+    [Range(1, AgentCertificateProfile.ValidityDays)]
+    public int CertificateRenewalThresholdDays { get; set; } = AgentCertificateProfile.RenewalThresholdDays;
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

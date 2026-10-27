@@ -30,8 +30,14 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"nodes-tests-{Guid.NewGuid()}";
     public TestNodesEventPublisher EventPublisher { get; } = new();
+    public SaveChangesFaultInjector Faults { get; } = new();
     public FakeTimeProvider TimeProvider { get; } = new(DateTimeOffset.UtcNow);
     public TestCertificateAuthorityService CaService { get; private set; } = null!;
+
+    /// <summary>
+    /// Extra configuration for this factory's host, read when the host is built. Set before the first request.
+    /// </summary>
+    public Dictionary<string, string?> Settings { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -47,6 +53,7 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
                 ["RabbitMq:Username"] = "test-rabbit-user",
                 ["RabbitMq:Password"] = "test-rabbit-password"
             });
+            config.AddInMemoryCollection(Settings);
         });
 
         builder.ConfigureServices(services =>
@@ -61,7 +68,8 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             services.AddDbContext<NodesDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName)
                     .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-                    .UseInternalServiceProvider(efProvider));
+                    .UseInternalServiceProvider(efProvider)
+                    .AddInterceptors(Faults));
 
             // Remove all MassTransit services and replace with test publisher
             // This removes bus, health checks, and other MassTransit infrastructure
@@ -264,6 +272,31 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 }
 
 /// <summary>
+/// Injects failures into SaveChanges for tests that need a database-side conflict the InMemory provider never raises.
+/// </summary>
+public sealed class SaveChangesFaultInjector : SaveChangesInterceptor
+{
+    private volatile bool _throwConcurrency;
+
+    /// <summary>When true, the next SaveChanges call throws <see cref="DbUpdateConcurrencyException"/>.</summary>
+    public bool ThrowConcurrency
+    {
+        get => _throwConcurrency;
+        set => _throwConcurrency = value;
+    }
+
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        if (ThrowConcurrency)
+        {
+            throw new DbUpdateConcurrencyException("injected concurrency failure");
+        }
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+}
+
+/// <summary>
 /// Test authentication handler for integration tests.
 /// SECURITY: This is ONLY for testing - never use in production.
 /// </summary>
@@ -273,6 +306,7 @@ public sealed class TestNodesAuthHandler : AuthenticationHandler<AuthenticationS
     public const string UserIdHeader = "X-Test-User-Id";
     public const string OrgIdHeader = "X-Test-Org-Id";
     public const string NodeIdHeader = "X-Test-Node-Id";
+    public const string CertThumbprintHeader = "X-Test-Cert-Thumbprint";
 
     public TestNodesAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
@@ -309,6 +343,13 @@ public sealed class TestNodesAuthHandler : AuthenticationHandler<AuthenticationS
             Guid.TryParse(nodeIdValues.FirstOrDefault(), out var nodeId))
         {
             claims.Add(new Claim("node_id", nodeId.ToString()));
+        }
+
+        // Add the presented client certificate thumbprint (mTLS renewal identity)
+        if (Request.Headers.TryGetValue(CertThumbprintHeader, out var thumbprintValues) &&
+            !string.IsNullOrEmpty(thumbprintValues.FirstOrDefault()))
+        {
+            claims.Add(new Claim("certificate_thumbprint", thumbprintValues.First()!));
         }
 
         var identity = new ClaimsIdentity(claims, SchemeName);

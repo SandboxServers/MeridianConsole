@@ -3,6 +3,7 @@ using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Health;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Telemetry;
 using Dhadgar.Shared.Results;
 using Microsoft.AspNetCore.Http.Connections;
@@ -26,12 +27,17 @@ public sealed class SeamAgent : IDisposable
     {
         _gatewayHandler = gatewayHandler;
         Store = new InMemoryCertificateStore();
+        ClientCertificates = new ClientCertificateProvider(Store);
         HttpClients = new SeamHttpClientFactory(_gatewayHandler, Store);
     }
 
     internal InMemoryCertificateStore Store { get; }
 
     private SeamHttpClientFactory HttpClients { get; }
+
+    private ClientCertificateProvider ClientCertificates { get; }
+
+    private AgentIdentityProvider Identity { get; } = new();
 
     /// <summary>Enrolls through the Gateway with the real enrollment service.</summary>
     public Task<Result<EnrollmentResult>> EnrollAsync(string enrollmentToken, CancellationToken cancellationToken = default)
@@ -41,7 +47,9 @@ public sealed class SeamAgent : IDisposable
             HttpClients,
             Options.Create(new AgentOptions()),
             NullLogger<EnrollmentService>.Instance,
-            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance));
+            new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
+            ClientCertificates,
+            Identity);
 
         return enrollment.EnrollAsync(enrollmentToken, cancellationToken);
     }
@@ -52,10 +60,14 @@ public sealed class SeamAgent : IDisposable
     /// </summary>
     public ControlPlaneClient CreateControlPlaneClient(Guid? nodeId, Guid orgId)
     {
+        // Enrollment sets the identity; an explicit node ID covers callers that skipped enrollment.
+        if (nodeId.HasValue)
+        {
+            Identity.Set(new AgentIdentity(nodeId.Value, orgId, DateTimeOffset.UtcNow));
+        }
+
         var options = new AgentOptions
         {
-            NodeId = nodeId,
-            OrganizationId = orgId,
             ControlPlane = { Endpoint = "https://localhost" }
         };
 
@@ -65,11 +77,13 @@ public sealed class SeamAgent : IDisposable
             _meter,
             _activitySource,
             NullLogger<ControlPlaneClient>.Instance,
-            [new SeamHubConfigurator(Store, _gatewayHandler)]);
+            Identity,
+            configurators: [new SeamHubConfigurator(Store, _gatewayHandler)]);
     }
 
     public void Dispose()
     {
+        ClientCertificates.Dispose();
         _meter.Dispose();
         _activitySource.Dispose();
     }

@@ -41,7 +41,7 @@ public sealed class AgentEnrollmentThroughGatewaySeamTests
         Assert.NotNull(store.ClientCertificate);
         Assert.NotNull(store.PrivateKey);
         using var agentKey = ECDsa.Create();
-        agentKey.ImportECPrivateKey(store.PrivateKey, out _);
+        agentKey.ImportPkcs8PrivateKey(store.PrivateKey, out _);
         using var certKey = store.ClientCertificate.GetECDsaPublicKey();
         Assert.Equal(agentKey.ExportSubjectPublicKeyInfo(), certKey!.ExportSubjectPublicKeyInfo());
 

@@ -29,4 +29,4 @@ None yet.
 | `gateway-routing.md` | Gateway ↔ every service | code-exists | DL-333 |
 | `service-auth.md` | Service ↔ service, admin API key | code-exists | DL-334 |
 | `events.md` | Every bus publisher ↔ its consumers | code-exists | DL-335 |
-| `agent-hub.md` | Agent ↔ Nodes hub (heartbeat, commands) | planned; see `plans/agent-hub.md` | DL-501 |
+| `agent-hub.md` | Agent ↔ Nodes hub (heartbeat, commands) | mixed (heartbeat confirmed-working by seams S1 to S4; commands planned). Until the chapter exists, read [ADR-0008 as built](../../adr/0008-agent-transport-signalr.md#as-built-sprint-2) | DL-501 |

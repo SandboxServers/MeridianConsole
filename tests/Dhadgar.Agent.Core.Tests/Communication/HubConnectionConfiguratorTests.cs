@@ -4,6 +4,8 @@ using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
+using Dhadgar.Contracts.Nodes;
 using Dhadgar.Agent.Core.Telemetry;
 using Microsoft.AspNetCore.Http.Connections.Client;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,14 +28,16 @@ public sealed class HubConnectionConfiguratorTests
 
         await using var client = new ControlPlaneClient(
             Options.Create(options),
-            new NullCertificateStore(),
+            new SelfSignedCertificateStore(),
             meter,
             activitySource,
             NullLogger<ControlPlaneClient>.Instance,
-            [configurator]);
+            new AgentIdentityProvider(),
+            configurators: [configurator]);
 
-        // Nothing listens on port 1, so the connection fails; the hook runs while the connection is built.
-        await Assert.ThrowsAnyAsync<Exception>(() => client.ConnectAsync());
+        // Nothing listens on port 1, so ConnectAsync returns a failed Result; the hook runs while the connection is built.
+        var result = await client.ConnectAsync();
+        Assert.False(result.IsSuccess);
 
         Assert.True(configurator.WasInvoked);
     }
@@ -46,7 +50,6 @@ public sealed class HubConnectionConfiguratorTests
         using var activitySource = new AgentActivitySource();
         var options = new AgentOptions
         {
-            NodeId = Guid.NewGuid(),
             ControlPlane = new ControlPlaneOptions { Endpoint = "https://127.0.0.1:1" }
         };
 
@@ -56,10 +59,12 @@ public sealed class HubConnectionConfiguratorTests
             meter,
             activitySource,
             NullLogger<ControlPlaneClient>.Instance,
-            [configurator]);
+            new AgentIdentityProvider(),
+            configurators: [configurator]);
 
         // Nothing listens on port 1, so the connection fails after the hook has run.
-        await Assert.ThrowsAnyAsync<Exception>(() => client.ConnectAsync());
+        var result = await client.ConnectAsync();
+        Assert.False(result.IsSuccess);
 
         Assert.True(configurator.HeaderPresent);
         Assert.Equal(1, configurator.CertificateCount);
@@ -72,7 +77,6 @@ public sealed class HubConnectionConfiguratorTests
         using var activitySource = new AgentActivitySource();
         var options = new AgentOptions
         {
-            NodeId = Guid.NewGuid(),
             ControlPlane = new ControlPlaneOptions { Endpoint = "https://127.0.0.1:1" }
         };
 
@@ -82,10 +86,13 @@ public sealed class HubConnectionConfiguratorTests
             meter,
             activitySource,
             NullLogger<ControlPlaneClient>.Instance,
-            [new ActionConfigurator(o => o.Url = new Uri("http://127.0.0.1:1/hubs/agent"))]);
+            new AgentIdentityProvider(),
+            configurators: [new ActionConfigurator(o => o.Url = new Uri("http://127.0.0.1:1/hubs/agent"))]);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ConnectAsync());
-        Assert.Contains("HTTPS", ex.Message);
+        // ConnectAsync reports every connect fault as a failed Result (D-S24), so fail-closed means no connection.
+        var result = await client.ConnectAsync();
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ConnectionState.Failed, client.State);
     }
 
     [Fact]
@@ -95,7 +102,6 @@ public sealed class HubConnectionConfiguratorTests
         using var activitySource = new AgentActivitySource();
         var options = new AgentOptions
         {
-            NodeId = Guid.NewGuid(),
             ControlPlane = new ControlPlaneOptions { Endpoint = "https://127.0.0.1:1" }
         };
 
@@ -105,10 +111,12 @@ public sealed class HubConnectionConfiguratorTests
             meter,
             activitySource,
             NullLogger<ControlPlaneClient>.Instance,
-            [new ActionConfigurator(o => o.ClientCertificates = new X509CertificateCollection())]);
+            new AgentIdentityProvider(),
+            configurators: [new ActionConfigurator(o => o.ClientCertificates = new X509CertificateCollection())]);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ConnectAsync());
-        Assert.Contains("client certificate", ex.Message);
+        var result = await client.ConnectAsync();
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ConnectionState.Failed, client.State);
     }
 
     private sealed class ActionConfigurator(Action<HttpConnectionOptions> action) : IHubConnectionConfigurator
@@ -124,7 +132,7 @@ public sealed class HubConnectionConfiguratorTests
 
         public void Configure(HttpConnectionOptions options)
         {
-            HeaderPresent = options.Headers.ContainsKey("X-Node-Id");
+            HeaderPresent = options.Headers.ContainsKey(AgentHubProtocol.VersionHeader);
             CertificateCount = options.ClientCertificates?.Count;
         }
     }
@@ -164,25 +172,5 @@ public sealed class HubConnectionConfiguratorTests
         {
             WasInvoked = true;
         }
-    }
-
-    private sealed class NullCertificateStore : ICertificateStore
-    {
-        public X509Certificate2? GetClientCertificate() => null;
-
-        public Task StoreCertificateAsync(
-            X509Certificate2 certificate,
-            byte[] privateKey,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task RemoveCertificateAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public X509Certificate2? GetCaCertificate() => null;
-
-        public Task StoreCaCertificateAsync(
-            X509Certificate2 certificate,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public bool NeedsRenewal(int thresholdDays) => false;
     }
 }

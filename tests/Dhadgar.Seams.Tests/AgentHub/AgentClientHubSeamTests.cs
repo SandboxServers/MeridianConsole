@@ -37,7 +37,7 @@ public sealed class AgentClientHubSeamTests
         await using (var client = agent.CreateControlPlaneClient(nodeId, orgId))
         {
             await client.ConnectAsync();
-            await client.SendHeartbeatAsync(new HeartbeatPayload
+            await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(new HeartbeatPayload
             {
                 NodeId = nodeId,
                 AgentVersion = "seams",
@@ -47,7 +47,7 @@ public sealed class AgentClientHubSeamTests
                     TotalMemoryBytes = 8L * 1024 * 1024 * 1024,
                     AvailableMemoryBytes = 4L * 1024 * 1024 * 1024
                 }
-            });
+            }));
         }
 
         var deadline = DateTime.UtcNow.AddSeconds(5);

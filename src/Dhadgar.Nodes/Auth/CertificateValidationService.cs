@@ -83,6 +83,9 @@ public sealed record CertificateValidationResult
     /// </summary>
     public DateTime? NotAfter { get; init; }
 
+    /// <summary>Error code used when certificate trust cannot be determined (infrastructure fault).</summary>
+    public const string UnavailableErrorCode = "certificate_validation_unavailable";
+
     public static CertificateValidationResult Success(
         Guid nodeId,
         string spiffeId,
@@ -143,11 +146,12 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
         X509Certificate2 certificate,
         CancellationToken ct = default)
     {
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var now = _timeProvider.GetUtcNow();
 
-        // Check certificate validity period
-        var isExpired = certificate.NotAfter < now;
-        var notYetValid = certificate.NotBefore > now;
+        // D-S247: X509Certificate2.NotBefore/NotAfter are local times (DateTimeKind.Local). Compare instants,
+        // not wall-clock numbers, or the window shifts by the host's UTC offset (fail-open east of UTC).
+        var isExpired = new DateTimeOffset(certificate.NotAfter) < now;
+        var notYetValid = new DateTimeOffset(certificate.NotBefore) > now;
 
         if (notYetValid)
         {
@@ -183,9 +187,22 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
 
         // Validate certificate was signed by our CA
         var certPem = certificate.ExportCertificatePem();
-        var isSignedByOurCa = await _caService.ValidateCertificateAsync(certPem, ct);
+        var trust = await _caService.ValidateCertificateAsync(certPem, ct);
 
-        if (!isSignedByOurCa)
+        if (trust == CertificateTrustStatus.Unavailable)
+        {
+            _logger.LogError(
+                "Certificate trust could not be determined. Thumbprint: {Thumbprint}",
+                certificate.GetCertHashString());
+
+            return CertificateValidationResult.Fail(
+                CertificateValidationResult.UnavailableErrorCode,
+                "Certificate validation is temporarily unavailable",
+                notAfter: certificate.NotAfter);
+        }
+
+        // Only an explicit Trusted proceeds; Untrusted and any unknown value fail closed here.
+        if (trust != CertificateTrustStatus.Trusted)
         {
             _logger.LogWarning(
                 "Certificate not signed by our CA. Subject: {Subject}, Thumbprint: {Thumbprint}",
