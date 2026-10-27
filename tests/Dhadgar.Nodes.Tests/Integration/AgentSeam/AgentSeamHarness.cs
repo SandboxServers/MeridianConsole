@@ -8,6 +8,7 @@ using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,33 +32,43 @@ public static class AgentSeamHarness
     /// <param name="caDirectory">Directory for CA material. The caller owns cleanup.</param>
     /// <param name="enableMtls">When true, enables mTLS middleware options for the host.</param>
     /// <param name="configureMtls">Optional extra mTLS option changes, applied after <c>Enabled</c> is set.</param>
+    /// <param name="settings">Optional configuration overrides, such as <c>Mtls:RenewalGraceMinutes</c>.</param>
     public static WebApplicationFactory<Program> CreateFactoryWithRealCa(
         NodesWebApplicationFactory baseFactory,
         string caDirectory,
         bool enableMtls,
-        Action<MtlsOptions>? configureMtls = null)
+        Action<MtlsOptions>? configureMtls = null,
+        IReadOnlyDictionary<string, string?>? settings = null)
     {
-        return baseFactory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        return baseFactory.WithWebHostBuilder(builder =>
         {
-            services.Configure<NodesOptions>(o =>
+            if (settings is not null)
             {
-                o.CaStoragePath = caDirectory;
-                o.CaKeySize = 2048;
-            });
-            services.RemoveAll<ICaStorageProvider>();
-            services.RemoveAll<ICertificateAuthorityService>();
-            services.AddSingleton<ICaStorageProvider, LocalFileCaStorageProvider>();
-            services.AddSingleton<ICertificateAuthorityService, CertificateAuthorityService>();
-
-            if (enableMtls)
-            {
-                services.Configure<MtlsOptions>(o =>
-                {
-                    o.Enabled = true;
-                    configureMtls?.Invoke(o);
-                });
+                builder.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(settings));
             }
-        }));
+
+            builder.ConfigureTestServices(services =>
+            {
+                services.Configure<NodesOptions>(o =>
+                {
+                    o.CaStoragePath = caDirectory;
+                    o.CaKeySize = 2048;
+                });
+                services.RemoveAll<ICaStorageProvider>();
+                services.RemoveAll<ICertificateAuthorityService>();
+                services.AddSingleton<ICaStorageProvider, LocalFileCaStorageProvider>();
+                services.AddSingleton<ICertificateAuthorityService, CertificateAuthorityService>();
+
+                if (enableMtls)
+                {
+                    services.Configure<MtlsOptions>(o =>
+                    {
+                        o.Enabled = true;
+                        configureMtls?.Invoke(o);
+                    });
+                }
+            });
+        });
     }
 
     /// <summary>
