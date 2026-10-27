@@ -157,6 +157,8 @@ public class UatRunnerGuardTests : IDisposable
 
         Assert.NotEqual(UatExitCodes.Refused, exit);
         Assert.DoesNotContain("cleanup refused", err, StringComparison.Ordinal);
+        Assert.Contains("StopService:DhadgarAgent", actions.Calls);
+        Assert.Contains("DeleteService:DhadgarAgent", actions.Calls);
     }
 
     [Fact]
@@ -211,6 +213,8 @@ public class UatRunnerGuardTests : IDisposable
 
         Assert.NotEqual(UatExitCodes.Refused, exit);
         Assert.DoesNotContain("[Launch.Missing]", err, StringComparison.Ordinal);
+        Assert.Contains("StopService:DhadgarAgent", actions.Calls);
+        Assert.Contains("DeleteService:DhadgarAgent", actions.Calls);
     }
 
     [Fact]

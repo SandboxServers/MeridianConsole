@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Agent.Windows.Uat.Preflight;
 using Dhadgar.Agent.Windows.Uat.Results;
@@ -30,6 +31,44 @@ public class AgentRunTreeTests
             ["status", "--porcelain=v1", "--untracked-files=all", "--", ".", ":(exclude)docs", ":(exclude).claude"];
 
         Assert.Equal(expected, GitWorkTree.StatusArguments);
+    }
+
+    [Fact]
+    public void WrapperTreeCheck_PathspecMatchesDriver()
+    {
+        var scriptPath = FindWrapperScript();
+        Assert.NotNull(scriptPath);
+
+        var script = File.ReadAllText(scriptPath);
+        var match = Regex.Match(script, @"(?m)^\s*\$treeArgs\s*=\s*@\((.*)\)\s*$");
+        Assert.True(match.Success, "The wrapper's $treeArgs array was not found.");
+
+        // The wrapper prefixes '-C' and $repo; the rest must equal the driver's StatusArguments.
+        var items = match.Groups[1].Value
+            .Split(',', StringSplitOptions.TrimEntries)
+            .Where(item => item.Length > 0 && item != "$repo")
+            .Select(item => item.Trim('\''))
+            .ToArray();
+
+        string[] expected = ["-C", .. GitWorkTree.StatusArguments];
+        Assert.Equal(expected, items);
+    }
+
+    private static string? FindWrapperScript()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "scripts", "uat", "Invoke-AgentWindowsUat.ps1");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return null;
     }
 
     [Fact]

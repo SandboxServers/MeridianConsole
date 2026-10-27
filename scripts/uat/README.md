@@ -29,8 +29,10 @@ and the process-mode agent legs (P20: U0-U4 and U9). The `Service` and `Msi` mod
 The driver trusts the account that runs it. Anything running as that user can change the repo, the build
 or the driver that the elevated script builds and runs, so the driver does not try to defend against it.
 An agent run is trusted as much as the account that runs it: `CLAUDECODE` is a label that selects the agent
-rules and the record, not an authentication. The tree check ties an agent run to a commit: it builds only from a
-clean tree (`docs` and `.claude` excluded), so the run's `gitSha` names what was built.
+rules and the record, not an authentication. The tree check only vouches for an honest agent: for an honest agent
+it checks that tracked and untracked sources match HEAD at the start of the run (`docs` and `.claude` excluded).
+It does not detect ignored files, `skip-worktree` or `.git/info/exclude` entries, or planted build output, so
+`gitSha` and `agentRun.treeClean` attest only the git index of an honest agent (R7).
 
 Its guards stop driver bugs, a stale or foreign manifest, and PID reuse from touching anything the run
 did not create. Cleanup replays only these items: the named service, the agent registry key and its
