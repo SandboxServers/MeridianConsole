@@ -237,15 +237,15 @@ internal sealed class StackScenario : IUatScenario
             return Result.Success();
         }
 
-        return await RunAgentLegsAsync(context, job, nodesDb, gatewayBase, evidence, ct);
+        return await RunAgentLegsAsync(context, job, nodesDb, gatewayBase, ServiceHost.NodesBase(nodesPort), evidence, ct);
     }
 
     /// <summary>
-    /// The process-mode agent legs (P20 U2-U4) after the stack smoke. The legs use a new organization, so the smoke's
-    /// node is not counted as a node of the run's organization in U3.
+    /// The process-mode agent legs (P20 U2-U4) after the stack smoke, then the renewal legs (P21 U5-U8). The legs use a
+    /// new organization, so the smoke's node is not counted as a node of the run's organization in U3.
     /// </summary>
     private static async Task<Result> RunAgentLegsAsync(
-        RunContext context, JobObject job, NodesDb nodesDb, Uri gatewayBase, Dictionary<string, object?> evidence, CancellationToken ct)
+        RunContext context, JobObject job, NodesDb nodesDb, Uri gatewayBase, Uri nodesBase, Dictionary<string, object?> evidence, CancellationToken ct)
     {
         using var identity = WindowsIdentity.GetCurrent();
         var accountSid = identity.User?.Value;
@@ -274,8 +274,62 @@ internal sealed class StackScenario : IUatScenario
             organizationId, accountSid, config, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(60));
         evidence["legsOrganizationId"] = organizationId.ToString();
 
-        return await new AgentLegs(context.Paths, context.Manifest, deps, options).RunAsync(evidence, ct);
+        var legs = await new AgentLegs(context.Paths, context.Manifest, deps, options).RunAsync(evidence, ct);
+        if (legs.IsFailure || !Guid.TryParse(evidence["nodeId"] as string, out var nodeId))
+        {
+            return legs.IsFailure ? legs : Fail(evidence, "U5", "the node ID from U3 is missing");
+        }
+
+        // The renewal legs run after the agent is stopped (U4 leaves it stopped), with the same process object.
+        var renewalDeps = new RenewalLegsDeps(
+            new StoreInspector(),
+            agentProcess,
+            new NodesAgentLegsDb(() => nodesDb.Create()),
+            new GatewayRenewalTransport(gatewayBase, nodesBase),
+            OpenMachineCertificate,
+            CngKeyExists,
+            () => DateTime.UtcNow);
+        var renewalOptions = new RenewalLegsOptions(
+            organizationId,
+            nodeId,
+            Path.Combine(context.Paths.AgentPublish, "appsettings.json"),
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(90),
+            TimeSpan.FromSeconds(60));
+        return await new RenewalLegs(context.Paths, context.Manifest, renewalDeps, renewalOptions).RunAsync(evidence, ct);
     }
+
+    /// <summary>Opens a <c>LocalMachine\My</c> certificate with its key, by its SHA-1 thumbprint (P21 U5-U7).</summary>
+    private static Result<X509Certificate2> OpenMachineCertificate(string sha1Thumbprint)
+    {
+        try
+        {
+            using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+            store.Open(OpenFlags.ReadOnly);
+            var found = store.Certificates.Find(X509FindType.FindByThumbprint, sha1Thumbprint, validOnly: false);
+            try
+            {
+                return found.Count == 1
+                    ? Result<X509Certificate2>.Success(new X509Certificate2(found[0]))
+                    : Result<X509Certificate2>.Failure($"[Store.My] {found.Count} certificates match the thumbprint");
+            }
+            finally
+            {
+                foreach (var match in found)
+                {
+                    match.Dispose();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is CryptographicException or System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            return Result<X509Certificate2>.Failure($"[Store.My] open failed: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>True when the named CNG key still exists in the machine key store (P14 A2).</summary>
+    private static bool CngKeyExists(CngKeyInfo key) =>
+        CngKey.Exists(key.KeyName, new CngProvider(key.Provider), CngKeyOpenOptions.MachineKey);
 
     private static async Task<Result> HubHeartbeatAsync(
         int gatewayPort, X509Certificate2 certificate, Dictionary<string, object?> evidence, CancellationToken ct)

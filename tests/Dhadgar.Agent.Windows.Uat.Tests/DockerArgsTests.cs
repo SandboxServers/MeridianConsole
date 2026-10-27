@@ -25,6 +25,16 @@ public class DockerArgsTests
         Assert.Contains("meridian-uat=x", args);
     }
 
+    [Fact]
+    public void RabbitMqProbe_RunsAsTheBrokerUser_SoRootNeverCreatesTheCookie()
+    {
+        var args = DockerStack.RabbitMqProbeArguments("meridian-uat-mq-x");
+
+        Assert.Equal(
+            new[] { "exec", "--user", "rabbitmq", "meridian-uat-mq-x", "rabbitmq-diagnostics", "-q", "ping" },
+            args);
+    }
+
     private static void AssertEnvWithoutValue(IReadOnlyList<string> args, string name)
     {
         Assert.Contains(args, a => a == name);
