@@ -27,6 +27,12 @@ updates:
     directory: /src/Dhadgar.Scope
     schedule:
       interval: weekly
+    ignore:
+      # typescript-eslint 8.x supports TypeScript < 6.1, so the TypeScript 7
+      # update cannot resolve. Lift this when typescript-eslint supports 7.
+      - dependency-name: 'typescript'
+        versions:
+          - '>= 7.0.0'
     groups:
       scope-minor-patch:
         applies-to: version-updates
@@ -82,6 +88,10 @@ updates:
       - /.github/actions/*
     schedule:
       interval: weekly
+    ignore:
+      # Only published as a moving `v1` tag. Dependabot resolves it to the
+      # 2021 tag commit and proposes that as a "bump" (#207); update by hand.
+      - dependency-name: 'Azure/static-web-apps-deploy'
     groups:
       actions:
         patterns:
@@ -91,6 +101,17 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # MassTransit v9+ is commercially licensed; stay on 8.x until the
+      # OpenTransit switch (#195).
+      - dependency-name: 'MassTransit*'
+        update-types:
+          - version-update:semver-major
+      # Microsoft.AspNetCore.OpenApi 10.x requires Microsoft.OpenApi < 3.0
+      # (#216). Lift this when ASP.NET Core moves to OpenApi 3.
+      - dependency-name: 'Microsoft.OpenApi'
+        update-types:
+          - version-update:semver-major
     groups:
       nuget-minor-patch:
         applies-to: version-updates

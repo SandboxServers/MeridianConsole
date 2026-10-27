@@ -37,14 +37,14 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
       {/* Backdrop */}
       <div
         role="presentation"
-        className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm transition-opacity lg:hidden"
+        className="fixed inset-0 z-1000 bg-black/60 backdrop-blur-xs transition-opacity lg:hidden"
         onClick={onClose}
         onKeyDown={(e) => e.key === "Escape" && onClose()}
       />
 
       {/* Drawer */}
       <div
-        className="fixed inset-y-0 left-0 z-[1001] w-[min(92vw,380px)] overflow-y-auto border-r border-white/10 bg-slate-950/95 backdrop-blur-xl lg:hidden"
+        className="fixed inset-y-0 left-0 z-1001 w-[min(92vw,380px)] overflow-y-auto border-r border-white/10 bg-slate-950/95 backdrop-blur-xl lg:hidden"
         style={{ transform: isOpen ? "translateX(0)" : "translateX(-100%)" }}
       >
         {/* Header */}

@@ -1,24 +1,20 @@
 # CodeQL static analysis (SAST) for C#, TypeScript/JavaScript and the workflows
 # themselves. Results appear under Security > Code scanning.
 # Replaces the (disabled) security scan stage of azure-pipelines.yml.
+# Runs nightly against main rather than on every PR, so findings are triaged
+# from the Security tab instead of blocking merges.
 name: CodeQL
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-      - develop
   schedule:
-    - cron: '23 6 * * 1' # Mondays 06:23 UTC, to catch newly published queries
+    - cron: '23 6 * * *' # nightly, 06:23 UTC
+  workflow_dispatch:
 
 permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   analyze:

@@ -78,7 +78,7 @@ export function DbSchemaTreeView() {
             setSelectedService(e.target.value);
             setSelectedItem(null);
           }}
-          className="flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          className="flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white focus:border-indigo-500/50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/50"
         >
           {data.services.map((s) => (
             <option key={s.key} value={s.key}>
@@ -92,7 +92,7 @@ export function DbSchemaTreeView() {
           placeholder="Filter items..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white placeholder-white/50 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          className="flex-1 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm text-white placeholder-white/50 focus:border-indigo-500/50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/50"
         />
       </div>
 

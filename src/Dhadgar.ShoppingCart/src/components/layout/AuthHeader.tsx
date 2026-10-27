@@ -32,7 +32,7 @@ export default function AuthHeader() {
   if (isLoading) {
     return (
       <div className="flex items-center gap-4">
-        <span className="w-16 h-8 bg-panel-dark/50 rounded animate-pulse" />
+        <span className="w-16 h-8 bg-panel-dark/50 rounded-sm animate-pulse" />
         <span className="w-24 h-8 bg-panel-dark/50 rounded-full animate-pulse" />
       </div>
     );
