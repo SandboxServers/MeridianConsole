@@ -18,17 +18,15 @@ dotnet build
 
 # Build Release MSI
 dotnet build -c Release
-
-# Build for specific platform
-dotnet build -p:InstallerPlatform=x64
-dotnet build -p:InstallerPlatform=arm64
 ```
+
+The project sets `InstallerPlatform` to `x64` (the agent reads the 64-bit registry view), so no platform switch is needed.
 
 ### From the solution root:
 
 ```powershell
-# First, publish the agent
-dotnet publish src/Agents/Dhadgar.Agent.Windows -c Release -r win-x64 --self-contained
+# First, publish the agent (writes appsettings.json beside the exe)
+dotnet publish src/Agents/Dhadgar.Agent.Windows -c Release -r win-x64
 
 # Then build the installer
 dotnet build src/Agents/Dhadgar.Agent.Windows/Installer -c Release
@@ -36,10 +34,10 @@ dotnet build src/Agents/Dhadgar.Agent.Windows/Installer -c Release
 
 ## Output Location
 
-MSI files are output to:
+The MSI is output to:
 
 ```text
-bin\{Configuration}\{Platform}\en-US\MeridianConsoleAgent-{Version}-{Platform}.msi
+bin\Release\MeridianConsoleAgent.msi
 ```
 
 ## Installation
@@ -62,7 +60,7 @@ msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /norestart
 # SECURITY NOTE: Command-line arguments are visible in process listings (Get-Process),
 # command history, and audit logs. For production deployments, consider using a transform
 # file (.mst) or clearing command history after installation.
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet ENROLLMENT_TOKEN=your-token-here
+msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet ENROLLMENT_TOKEN=your-token-here CONTROL_PLANE_ENDPOINT=https://control.example.com
 
 # With logging
 msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /l*v install.log
@@ -93,6 +91,7 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 |----------|-------------|---------|
 | `INSTALLFOLDER` | Installation directory | `C:\Program Files\Meridian Console\Agent\` |
 | `ENROLLMENT_TOKEN` | One-time enrollment token from control plane | (empty) |
+| `CONTROL_PLANE_ENDPOINT` | Control plane URL; must be `https://`. Kept across major upgrades when omitted. Overrides `appsettings.json`; environment variables and the agent's command line still win. | (empty; `appsettings.json` value) |
 
 ## What Gets Installed
 
@@ -106,6 +105,8 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 - `C:\ProgramData\Meridian Console\Agent\` - Runtime data
 - `C:\ProgramData\Meridian Console\Agent\Servers\` - Game server files
 - `C:\ProgramData\Meridian Console\Agent\Temp\` - Temporary files
+
+The folders above and the `HKLM\SOFTWARE\Meridian Console\Agent` key (which holds the enrollment token) use protected-DACL SDDL: SYSTEM and Administrators only, with no inherited access.
 
 ### Windows Service
 

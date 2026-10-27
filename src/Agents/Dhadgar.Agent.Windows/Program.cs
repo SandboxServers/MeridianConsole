@@ -36,6 +36,9 @@ public static class Program
         {
             var builder = Host.CreateApplicationBuilder(args);
 
+            // Installer-written control plane endpoint (HKLM) overrides appsettings*.json; env vars and the command line still win (D-S230)
+            RegistryEndpointConfiguration.Apply(builder.Configuration, RegistryEndpointConfiguration.ReadFromRegistry);
+
             // Configure as Windows Service - MUST be called early
             builder.Services.AddWindowsService(options =>
             {

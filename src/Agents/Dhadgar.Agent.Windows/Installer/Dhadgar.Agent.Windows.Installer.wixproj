@@ -7,9 +7,9 @@
       dotnet build -c Release                - Build Release MSI
 
     IMPORTANT: Before building the installer, publish the agent:
-      dotnet publish ../Dhadgar.Agent.Windows.csproj -c Release -r win-x64 /publish
+      dotnet publish ../Dhadgar.Agent.Windows.csproj -c Release -r win-x64
 
-    The MSI will be output to: bin\$(Configuration)\en-US\
+    The MSI will be output to: bin\$(Configuration)\MeridianConsoleAgent.msi
 
     NOTE: This project only builds on Windows and is excluded from solution build.
     Build explicitly on Windows: dotnet build src/Agents/Dhadgar.Agent.Windows/Installer
@@ -19,6 +19,7 @@
     <!-- Output Configuration -->
     <OutputName>MeridianConsoleAgent</OutputName>
     <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
 
     <!-- Compression -->
     <DefaultCompressionLevel>high</DefaultCompressionLevel>
@@ -45,10 +46,6 @@
     <!-- Look for files in the publish output directory -->
     <BindPath Include="..\bin\Release\net10.0\win-x64\publish" Condition="'$(Configuration)' == 'Release'" />
     <BindPath Include="..\bin\Debug\net10.0\win-x64\publish" Condition="'$(Configuration)' == 'Debug'" />
-
-    <!-- Also look in the direct output directory for appsettings -->
-    <BindPath Include="..\bin\Release\net10.0\win-x64" Condition="'$(Configuration)' == 'Release'" />
-    <BindPath Include="..\bin\Debug\net10.0\win-x64" Condition="'$(Configuration)' == 'Debug'" />
 
     <!-- Local installer directory for License.rtf -->
     <BindPath Include="." />

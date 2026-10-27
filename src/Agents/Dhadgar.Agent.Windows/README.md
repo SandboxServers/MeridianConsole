@@ -408,8 +408,11 @@ Configuration is loaded in this order (later overrides earlier):
 1. `appsettings.json` (default configuration)
 2. `appsettings.{Environment}.json` (environment-specific)
 3. `appsettings.local.json` (local overrides, not version-controlled)
-4. Environment variables
-5. Command-line arguments
+4. Registry value `HKLM\SOFTWARE\Meridian Console\Agent\ControlPlaneEndpoint`, written by the MSI from `CONTROL_PLANE_ENDPOINT` (D-S230; overrides the JSON files for `Agent:ControlPlane:Endpoint` only)
+5. Environment variables
+6. Command-line arguments
+
+Install parameters: `ENROLLMENT_TOKEN` and `CONTROL_PLANE_ENDPOINT` (an `https://` URL). An MSI major upgrade keeps the endpoint when `CONTROL_PLANE_ENDPOINT` is omitted, and a value given on the command line wins. See `Installer/README.md`.
 
 ### Configuration Options
 
