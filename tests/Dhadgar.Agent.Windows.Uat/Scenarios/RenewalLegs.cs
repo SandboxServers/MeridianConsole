@@ -359,7 +359,7 @@ internal sealed class RenewalLegs
         {
             try
             {
-                var stopped = await _deps.Agent.StopAsync(ct);
+                var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
                 if (stopped.IsFailure)
                 {
                     state.Evidence["U6.agentStop"] = stopped.Error!;
@@ -594,7 +594,7 @@ internal sealed class RenewalLegs
         }
         finally
         {
-            var stopped = await _deps.Agent.StopAsync(ct);
+            var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
             if (stopped.IsFailure)
             {
                 state.Evidence["U8.agentStop"] = stopped.Error!;

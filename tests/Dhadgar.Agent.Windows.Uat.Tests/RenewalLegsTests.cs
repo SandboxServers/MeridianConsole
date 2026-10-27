@@ -217,6 +217,29 @@ public class RenewalLegsTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_WhenCancelledDuringU8_StillRecordsACertificateStoredAfterTheStop()
+    {
+        // Ctrl+C while U8 polls: the poll is cancelled, and the stop in the finally must still complete (CancellationToken.None),
+        // so the certificate the agent stores while it stops is recorded before the run ends.
+        using var cts = new CancellationTokenSource();
+        _world.OnRestart = w =>
+        {
+            w.Rows.Add(new CertRow(Guid.NewGuid(), "0000000000000000", false));
+            cts.Cancel();
+        };
+        _world.OnStop = w => w.AgentRenewsFromGrace();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => _world.Legs().RunAsync(new Dictionary<string, object?>(), cts.Token));
+
+        var c3Sha1 = Assert.Single(_world.My).Sha1Thumbprint;
+        var loaded = CleanupManifest.Load(_paths.Manifest);
+        Assert.True(loaded.IsSuccess, loaded.Error);
+        Assert.Contains(loaded.Value, entry => entry is CertificateEntry certificate
+            && string.Equals(certificate.ThumbprintSha1, c3Sha1, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task RunAsync_RemovesTheThresholdKey_EvenWhenStoppingTheAgentThrows()
     {
         _world.StopThrows = true;
@@ -453,6 +476,8 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentHost, IAgentLegsDb, 
             throw new InvalidOperationException("the agent process could not be stopped");
         }
 
+        // As the service host does while STOP_PENDING: a cancelled token aborts the stop before the agent is down.
+        ct.ThrowIfCancellationRequested();
         OnStop?.Invoke(this);
         return Task.FromResult(Result.Success());
     }

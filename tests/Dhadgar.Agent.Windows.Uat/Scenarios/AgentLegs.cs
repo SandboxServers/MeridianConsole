@@ -398,17 +398,17 @@ internal sealed class AgentLegs
             return Unmet("the agent certificate chains to the CA in the MeridianConsoleAgent store");
         }
 
-        if (_deps.Store.AgentCasInRoot().Count != 0)
-        {
-            return Unmet("no agent CA is in LocalMachine\\Root");
-        }
-
         // Service mode (P22): the decoy CA planted by U10 must be gone, removed by the agent (P14, D-S219). A pass
-        // condition, not a warning.
+        // condition, not a warning. It is checked before the generic Root check, which the decoy would also trip.
         if (_options.DecoyThumbprint is not null
             && _deps.Store.AgentCasInRoot().Any(c => string.Equals(c.Sha1Thumbprint, _options.DecoyThumbprint, StringComparison.OrdinalIgnoreCase)))
         {
             return Unmet("the decoy CA from U10 is no longer in LocalMachine\\Root");
+        }
+
+        if (_deps.Store.AgentCasInRoot().Count != 0)
+        {
+            return Unmet("no agent CA is in LocalMachine\\Root");
         }
 
         var acl = _deps.Store.StateFileAcl(statePath.Value);

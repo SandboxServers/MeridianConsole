@@ -57,4 +57,31 @@ public class ServiceCleanupEntriesTests : IDisposable
         Assert.Contains(entries, e => e is CertificateEntry { StoreLocation: "LocalMachine", StoreName: "Root" });
         Assert.Contains(entries, e => e is ServiceEntry { Name: AgentWindowsFacts.ServiceName });
     }
+
+    [SkippableFact]
+    public void RemoveMatchedCertificate_TlsLeafAndDecoy_AreRemoved()
+    {
+        // The second gate: the real removal check (IsDriverCertificate) must accept what P22 adds to Root, not only the allowlist.
+        Skip.IfNot(OperatingSystem.IsWindows());
+
+        var manifest = new CleanupManifest(_paths.Manifest);
+        var actions = new RecordingActions();
+        var tls = UatTlsCertificate.Create(_paths, "run-1", manifest, new Redactor(), actions);
+        var decoy = DecoyCa.Plant("run-1", manifest, actions);
+
+        Assert.True(tls.IsSuccess);
+        Assert.True(decoy.IsSuccess);
+        Assert.Equal(2, actions.Added.Count);
+
+        var removed = new List<string>();
+        foreach (var entry in actions.Added)
+        {
+            var result = WindowsMachineActions.RemoveMatchedCertificate(entry.Certificate, "Root", false, c => removed.Add(c.Thumbprint));
+            Assert.True(result.IsSuccess, result.Error);
+        }
+
+        Assert.Equal(2, removed.Count);
+        Assert.Contains(removed, t => string.Equals(t, tls.Value.ThumbprintSha1, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(removed, t => string.Equals(t, decoy.Value, StringComparison.OrdinalIgnoreCase));
+    }
 }

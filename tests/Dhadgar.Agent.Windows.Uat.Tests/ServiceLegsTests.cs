@@ -130,6 +130,7 @@ public class ServiceLegsTests : IDisposable
 
         Assert.True(result.IsFailure);
         Assert.StartsWith("U3:", result.Error!, StringComparison.Ordinal);
+        Assert.Contains("decoy CA from U10", result.Error!, StringComparison.Ordinal);
         Assert.Equal("fail", evidence["U3"]);
     }
 
