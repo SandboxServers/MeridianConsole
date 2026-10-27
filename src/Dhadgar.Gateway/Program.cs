@@ -221,21 +221,20 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
-    // SECURITY: Only use JWT claim for tenant identification - never trust client headers
-    // Unauthenticated requests fall back to IP-based limiting
+    // SECURITY: Keyed by the validated JWT's org_id (UseAuthentication has run), else by client IP. Never a header.
     options.AddPolicy("PerTenant", httpContext =>
     {
-        var tenantId = httpContext.User.FindFirst("org_id")?.Value
-                       ?? httpContext.Connection.RemoteIpAddress?.ToString()
-                       ?? "unknown";
+        var partitionKey = RateLimitPartitionKeys.Tenant(httpContext.User, httpContext.Connection.RemoteIpAddress);
 
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"tenant:{tenantId}",
-            factory: _ => new FixedWindowRateLimiterOptions
+        return RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey: partitionKey,
+            factory: _ => new TokenBucketRateLimiterOptions
             {
-                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:PermitLimit") ?? 100,
-                Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:WindowSeconds") ?? 60),
-                QueueLimit = 0
+                TokenLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:PermitLimit") ?? 100,
+                TokensPerPeriod = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:ReplenishPerSecond") ?? 50,
+                ReplenishmentPeriod = TimeSpan.FromSeconds(1),
+                QueueLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:QueueLimit") ?? 0,
+                AutoReplenishment = true
             });
     });
 
@@ -315,12 +314,13 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 // 6. CORS (for non-preflight requests)
 app.UseCors(CorsConfiguration.PolicyName);
 
-// 6. Authentication/authorization
+// 6. Authentication, then rate limiting, then authorization.
+//    Rate limiting runs after authentication so PerTenant can key on the validated org_id, and before
+//    authorization so requests that end in 401/403 (no JWT, no or wrong-issuer agent certificate) are counted
+//    too (D-S220, D-S228).
 app.UseAuthentication();
-app.UseAuthorization();
-
-// 7. Rate limiting (after auth so tenant/agent context is available)
 app.UseRateLimiter();
+app.UseAuthorization();
 
 // 8. Request enrichment WITH HEADER STRIPPING (runs after auth to inject validated claims)
 app.UseMiddleware<RequestEnrichmentMiddleware>();
@@ -383,8 +383,8 @@ app.MapDhadgarDefaultEndpoints();
 
 // YARP reverse proxy
 // YARP has already added each route's RateLimiterPolicy when this convention runs, and the last
-// EnableRateLimiting wins. Global is attached after the route policy (so it overrides it) except where
-// RouteRateLimiting says the route policy replaces Global (PerAgent; D-S26, D-S220).
+// EnableRateLimiting wins. Global is attached only to routes that name no policy (or "Default"), so it never
+// replaces a route's own policy (RouteRateLimiting.UsesGlobal; D-S228).
 app.MapReverseProxy()
     .ConfigureEndpoints((endpoint, route) =>
     {
