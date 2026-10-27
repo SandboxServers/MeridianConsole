@@ -1,7 +1,6 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
+using Dhadgar.Contracts.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -17,15 +16,8 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
     private readonly NodesOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CertificateAuthorityService> _logger;
-    private readonly Data.NodesDbContext _dbContext;
-
-    // SPIFFE ID format for agent certificates - cached for performance (CA1863)
-    private static readonly CompositeFormat SpiffeIdFormat = CompositeFormat.Parse("spiffe://meridianconsole.com/nodes/{0}");
-    private const string OrganizationName = "MeridianConsole";
-    private const string CaCommonName = "Meridian Console Agent CA";
-
-    // Agent/client certificates must be valid for exactly 90 days (security policy)
-    private const int AgentCertificateValidityDays = 90;
+    // Singleton: never hold a NodesDbContext. Each lookup gets its own scope (P17f).
+    private readonly IServiceScopeFactory _scopeFactory;
 
     // Cached CA certificate for performance
     private X509Certificate2? _caCertificate;
@@ -36,13 +28,13 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         IOptions<NodesOptions> options,
         TimeProvider timeProvider,
         ILogger<CertificateAuthorityService> logger,
-        Data.NodesDbContext dbContext)
+        IServiceScopeFactory scopeFactory)
     {
         _storageProvider = storageProvider;
         _options = options.Value;
         _timeProvider = timeProvider;
         _logger = logger;
-        _dbContext = dbContext;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task InitializeAsync(CancellationToken ct = default)
@@ -116,51 +108,6 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         }
     }
 
-    public async Task<CertificateIssuanceResult> RenewCertificateAsync(
-        Guid nodeId,
-        string currentCertificateThumbprint,
-        CancellationToken ct = default)
-    {
-        X509Certificate2? certificate = null;
-        RSA? privateKey = null;
-        try
-        {
-            await EnsureInitializedAsync(ct);
-
-            // Validation of current certificate is done at the endpoint level
-            // by checking the AgentCertificate table. Here we just issue a new cert.
-
-            (certificate, privateKey) = CreateClientCertificate(nodeId);
-
-            _logger.LogInformation(
-                "Certificate renewed for node {NodeId}. Old thumbprint: {OldThumbprint}, New thumbprint: {NewThumbprint}",
-                nodeId,
-                currentCertificateThumbprint,
-                certificate.Thumbprint);
-
-            return CreateIssuanceResult(certificate, privateKey, nodeId);
-        }
-        catch (OperationCanceledException)
-        {
-            throw; // Let cancellation propagate
-        }
-        catch (CryptographicException ex)
-        {
-            _logger.LogError(ex, "Cryptographic failure renewing certificate for node {NodeId}", nodeId);
-            return CertificateIssuanceResult.Fail("certificate_renewal_failed");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error renewing certificate for node {NodeId}", nodeId);
-            return CertificateIssuanceResult.Fail("certificate_renewal_failed");
-        }
-        finally
-        {
-            certificate?.Dispose();
-            privateKey?.Dispose();
-        }
-    }
-
     public async Task<CertificateIssuanceResult> IssueCertificateForPublicKeyAsync(
         Guid nodeId,
         string subjectPublicKeyInfoBase64,
@@ -188,7 +135,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             }
 
             var now = _timeProvider.GetUtcNow().UtcDateTime;
-            var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
+            var subject = new X500DistinguishedName($"CN={nodeId}, O={AgentCertificateProfile.Organization}");
             var request = new CertificateRequest(subject, publicKey, HashAlgorithmName.SHA256);
             AddClientCertificateExtensions(request, nodeId, keyUsage);
 
@@ -203,7 +150,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
                 _caCertificate.SubjectName,
                 signer,
                 now,
-                now.AddDays(AgentCertificateValidityDays),
+                now.AddDays(AgentCertificateProfile.ValidityDays),
                 serialBytes);
 
             var thumbprint = CalculateSha256Thumbprint(certificate);
@@ -316,8 +263,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
         // Subject Alternative Name with SPIFFE ID
         var sanBuilder = new SubjectAlternativeNameBuilder();
-        var spiffeId = string.Format(CultureInfo.InvariantCulture, SpiffeIdFormat, nodeId);
-        sanBuilder.AddUri(new Uri(spiffeId));
+        sanBuilder.AddUri(new Uri(AgentCertificateProfile.SpiffeId(nodeId)));
         request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
     }
 
@@ -327,35 +273,76 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         return await _storageProvider.GetCertificatePemAsync(ct);
     }
 
-    public async Task<bool> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
+    public async Task<CertificateTrustStatus> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
     {
         try
         {
             await EnsureInitializedAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Certificate validation unavailable: the CA certificate could not be loaded");
+            return CertificateTrustStatus.Unavailable;
+        }
 
-            using var certificate = X509Certificate2.CreateFromPem(certificatePem);
+        using var certificate = ParsePemCertificate(certificatePem);
+        if (certificate is null)
+        {
+            return CertificateTrustStatus.Untrusted;
+        }
 
-            // Calculate SHA-256 thumbprint to look up the certificate in the database
-            var thumbprint = CalculateSha256Thumbprint(certificate);
+        // Chain first: no database round trip, so certificates from a foreign CA never reach the database.
+        if (!IsIssuedByOurCa(certificate))
+        {
+            return CertificateTrustStatus.Untrusted;
+        }
 
-            // Check if the certificate is revoked in our database before performing chain validation
-            var agentCert = await _dbContext.AgentCertificates
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint, ct);
+        var thumbprint = CalculateSha256Thumbprint(certificate);
+        var (lookupSucceeded, agentCert) = await FindAgentCertificateAsync(thumbprint, ct);
+        if (!lookupSucceeded)
+        {
+            return CertificateTrustStatus.Unavailable;
+        }
 
-            if (agentCert is not null && agentCert.IsRevoked)
-            {
-                _logger.LogWarning(
-                    "Certificate validation failed: certificate {Thumbprint} is revoked (revoked at: {RevokedAt}, reason: {Reason})",
-                    thumbprint,
-                    agentCert.RevokedAt,
-                    agentCert.RevocationReason);
-                return false;
-            }
+        if (agentCert is not null && !AgentCertificateState.IsUsable(agentCert, _timeProvider.GetUtcNow().UtcDateTime))
+        {
+            _logger.LogWarning(
+                "Certificate validation failed: certificate {Thumbprint} is revoked (revoked at: {RevokedAt}, grace until: {GraceUntil}, reason: {Reason})",
+                thumbprint,
+                agentCert.RevokedAt,
+                agentCert.GraceUntil,
+                agentCert.RevocationReason);
+            return CertificateTrustStatus.Untrusted;
+        }
 
-            // Build certificate chain and validate against CA
+        return CertificateTrustStatus.Trusted;
+    }
+
+    /// <summary>
+    /// Parses a PEM certificate. Returns null (and logs) when the PEM cannot be parsed; the caller owns the result.
+    /// </summary>
+    private X509Certificate2? ParsePemCertificate(string certificatePem)
+    {
+        try
+        {
+            return X509Certificate2.CreateFromPem(certificatePem);
+        }
+        catch (Exception ex) when (ex is CryptographicException or ArgumentException)
+        {
+            _logger.LogWarning(ex, "Certificate validation failed: the certificate could not be parsed");
+            return null;
+        }
+    }
+
+    private bool IsIssuedByOurCa(X509Certificate2 certificate)
+    {
+        try
+        {
             using var chain = new X509Chain();
             chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            // The CA is supplied in ExtraStore, so no AIA or CDP download is ever needed. Block them so the
+            // client-supplied certificate cannot make this process send outbound requests.
+            chain.ChainPolicy.DisableCertificateDownloads = true;
             // Allow unknown CA (since our CA is self-signed and not in system trust store)
             // Ignore time validation (we handle expiration via database records)
             chain.ChainPolicy.VerificationFlags =
@@ -365,34 +352,41 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
             var isValid = chain.Build(certificate);
 
-            // Verify the certificate was actually signed by our CA
-            // A valid client certificate issued by our CA should have 2 chain elements:
-            // - The client certificate (index 0)
-            // - Our CA certificate (index 1)
+            // A valid client certificate issued by our CA has 2 chain elements:
+            // the client certificate (index 0) and our CA certificate (index 1).
             if (!isValid || chain.ChainElements.Count < 2)
             {
-                // Self-signed certificates or certificates not chaining to any CA
-                // are not valid (they should be issued by our CA)
                 return false;
             }
 
-            // Verify the issuing CA is our CA
             var issuer = chain.ChainElements[^1].Certificate;
             return issuer.Thumbprint == _caCertificate!.Thumbprint;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (CryptographicException ex)
         {
             _logger.LogWarning(ex, "Certificate validation failed due to cryptographic error");
             return false;
         }
-        catch (Exception ex)
+    }
+
+    private async Task<(bool Succeeded, Data.Entities.AgentCertificate? Row)> FindAgentCertificateAsync(
+        string thumbprint,
+        CancellationToken ct)
+    {
+        try
         {
-            _logger.LogWarning(ex, "Certificate validation failed");
-            return false;
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<Data.NodesDbContext>();
+            var row = await dbContext.AgentCertificates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint, ct);
+            return (true, row);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Infrastructure fault: report Unavailable (503), never Untrusted (401 invalid_issuer).
+            _logger.LogError(ex, "Certificate revocation lookup failed for {Thumbprint}", thumbprint);
+            return (false, null);
         }
     }
 
@@ -417,7 +411,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         using var rsa = RSA.Create(_options.CaKeySize);
 
         // Build the CA certificate request
-        var subject = new X500DistinguishedName($"CN={CaCommonName}, O={OrganizationName}");
+        var subject = new X500DistinguishedName($"CN={AgentCertificateProfile.CaCommonName}, O={AgentCertificateProfile.Organization}");
         var request = new CertificateRequest(subject, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
         // CA certificate extensions
@@ -457,7 +451,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         try
         {
             // Build the client certificate request
-            var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
+            var subject = new X500DistinguishedName($"CN={nodeId}, O={AgentCertificateProfile.Organization}");
             var request = new CertificateRequest(subject, clientKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
             AddClientCertificateExtensions(
@@ -472,7 +466,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
             // Sign with CA certificate - use fixed 90-day validity (security policy)
             var notBefore = now;
-            var notAfter = now.AddDays(AgentCertificateValidityDays);
+            var notAfter = now.AddDays(AgentCertificateProfile.ValidityDays);
 
             if (_caCertificate is null)
             {

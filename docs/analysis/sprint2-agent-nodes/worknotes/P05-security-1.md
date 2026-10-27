@@ -1,0 +1,21 @@
+# P05 security review, pass 1 (range 4405e8f..9116d2c)
+
+## Verdict
+
+fix
+
+The connection path is sound: HTTPS only, certificate required, no `X-Node-Id`, no certificate-validation callback, and the handler factory is only reachable from code. One low-severity fix is needed on the string content the agent now sends to Nodes.
+
+## Fix notes
+
+N1. src/Agents/Dhadgar.Agent.Core/Health/HeartbeatPayloadMapper.cs:57 (`Truncate`) and :36-38 (health issues), :46 (version) — The mapper bounds the length of agent-supplied strings but does not remove control characters. The Nodes hub (`AgentHeartbeatValidator.HasControlCharacter`, `Dhadgar.Nodes/Hubs/AgentHeartbeatValidator.cs:31,66`) rejects any `AgentVersion` or `HealthIssues` entry that contains a control character. Concrete input: `IHealthReporter.AddWarning("disk error\r\nat C:\\x")`, or any warning built from an exception message with a newline. Every heartbeat after that carries the string, so Nodes answers `invalid_heartbeat` every time. The node looks silent until `ClearWarnings` runs, and `HeartbeatService` only logs a Warning. The same gap is why P04 asked for control-character validation on agent-supplied strings: CR/LF forges log lines and NUL breaks Npgsql. `Truncate` can also cut a surrogate pair in half at index 256, which leaves a lone high surrogate. `JsonSerializer.Serialize` on the Nodes side (`HeartbeatService.cs:93`) can throw on that. — Change: add a `Sanitize(string)` step before `Truncate` that replaces each `char.IsControl(c)` with a space (or drops it), then truncates. If the cut would end on a high surrogate (`char.IsHighSurrogate(value[maxLength - 1])`), cut at `maxLength - 1`. Apply it to `AgentVersion` and every health issue, and drop issues that are empty after sanitizing. — verify: add mapper tests for `"a\r\nb"`, `"a\0b"` and a 255-character string followed by an emoji, and assert that no output character is `char.IsControl` and that `char.IsHighSurrogate` is never the last character. Then check each mapped value against `AgentHeartbeatValidator` in a seam test, so the two sides fail together if they disagree.
+
+## Not fixed
+
+- Pre-existing, not introduced here. `ControlPlaneClient.OnCommandReceived` (lines 376-440) still trusts an unsigned `CommandEnvelope` (#94). The NodeId check runs only `if (_options.NodeId.HasValue)` and the OrganizationId check only `if (_options.OrganizationId.HasValue)`. P05 now lets an agent connect with a certificate but no `NodeId`, so an agent in that state accepts commands addressed to any node or organization. Nothing subscribes to `CommandReceived` or calls `ConnectAsync` yet in `src/Agents`, so this is not reachable today. Decide before P11 or the commands packet that the handler fails closed when `NodeId` or `OrganizationId` is unset, and that a signature check is in place before anything dispatches a command.
+- Pre-existing. `ControlPlane.Endpoint` is not checked against a trusted-host allowlist before the client certificate is presented. It comes from local config, so it needs local admin to change. Low.
+- Informational. The `HubException` message is attached to the activity status (`activity.SetStatus(..., ex.Message)`, line 256), and the server controls that text. The returned Failure and the log message are fixed strings, which is good. Consider the same fixed text for the activity status.
+- Informational. If the hub answers `Acknowledged == false` for a revoked, expired or decommissioned certificate, the agent only logs a Warning and keeps the connection open. That is acceptable while Nodes aborts or ignores those connections (P04). P11 should decide the agent behaviour for a revoked certificate.
+- Checked and clean. HTTPS is enforced before any request. There is no `ServerCertificateCustomValidationCallback`, and `HttpMessageHandlerFactory` comes only from the code-constructed `ControlPlaneHubTransport`. The client certificate is required and disposed on reconnect. `X-Node-Id` is gone, so identity comes from the certificate. Heartbeat is typed, with no JSON-string serialization and no process or path data sent. The invocation timeout is kept. `Result` errors are fixed strings, with no secrets and no server text.
+
+security-review label needed

@@ -322,6 +322,42 @@ public sealed class NodeServiceTests
     }
 
     [Fact]
+    public async Task Decommission_EndsRenewalGrace()
+    {
+        // Arrange - a certificate superseded by a renewal, still inside its grace window (D-S212)
+        using var context = CreateContext();
+        var timeProvider = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-27T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+        var (service, _, _) = CreateService(context, timeProvider);
+        var node = await SeedNodeAsync(context);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        context.AgentCertificates.Add(new AgentCertificate
+        {
+            Id = Guid.NewGuid(),
+            NodeId = node.Id,
+            Thumbprint = "grace123",
+            SerialNumber = "003",
+            NotBefore = now.AddDays(-30),
+            NotAfter = now.AddDays(60),
+            IsRevoked = true,
+            RevokedAt = now.AddMinutes(-5),
+            RevocationReason = "Renewed - superseded by new certificate",
+            GraceUntil = now.AddMinutes(55),
+            IssuedAt = now.AddDays(-30)
+        });
+        await context.SaveChangesAsync();
+
+        // Act
+        var result = await service.DecommissionNodeAsync(TestOrgId, node.Id);
+
+        // Assert - the grace ends with the node; ValidateCertificateAsync reads the same usable rule
+        Assert.True(result.Success);
+        var cert = await context.AgentCertificates.SingleAsync(c => c.NodeId == node.Id);
+        Assert.True(cert.IsRevoked);
+        Assert.Null(cert.GraceUntil);
+        Assert.False(AgentCertificateState.IsUsable(cert, now));
+    }
+
+    [Fact]
     public async Task DecommissionNodeAsync_PublishesEvent()
     {
         // Arrange

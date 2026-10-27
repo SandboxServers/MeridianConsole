@@ -25,13 +25,61 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave17Routes()
+    public void ReverseProxyShouldHave18Routes()
     {
-        // 10 backend services + Better Auth + console hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 17 total
+        // 10 backend services + Better Auth + console hub route + agent hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 18 total
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(17, routes.Count);
+        Assert.Equal(18, routes.Count);
+    }
+
+    [Fact]
+    public void AgentHubRoute_ShouldMatchHubPathWithCertificatePolicyAndNoTransforms()
+    {
+        var route = _configuration.GetSection("ReverseProxy:Routes:agent-hub-route");
+
+        Assert.Equal("nodes", route.GetValue<string>("ClusterId"));
+        Assert.Equal("/hubs/agent/{**catch-all}", route.GetValue<string>("Match:Path"));
+        Assert.Equal("AgentCertificate", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.Empty(route.GetSection("Transforms").GetChildren());
+        Assert.Equal("true", route.GetValue<string>("Metadata:ForwardClientCertificate"));
+    }
+
+    [Fact]
+    public void AgentsRoute_ShouldRequireAgentCertificateAndForwardClientCertificate()
+    {
+        var route = _configuration.GetSection("ReverseProxy:Routes:agents-route");
+
+        Assert.Equal("AgentCertificate", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.Equal("true", route.GetValue<string>("Metadata:ForwardClientCertificate"));
+    }
+
+    [Fact]
+    public void AgentsEnrollRoute_ShouldStayAnonymousWithoutForwardingMetadata()
+    {
+        var route = _configuration.GetSection("ReverseProxy:Routes:agents-enroll-route");
+
+        Assert.Equal("Anonymous", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.False(route.GetSection("Metadata").Exists());
+    }
+
+    [Fact]
+    public void NodesCluster_ShouldHaveCookieSessionAffinity()
+    {
+        var affinity = _configuration.GetSection("ReverseProxy:Clusters:nodes:SessionAffinity");
+
+        Assert.True(affinity.GetValue<bool>("Enabled"));
+        Assert.Equal("Cookie", affinity.GetValue<string>("Policy"));
+        Assert.Equal(".Dhadgar.Nodes.Affinity", affinity.GetValue<string>("AffinityKeyName"));
+    }
+
+    [Fact]
+    public void AgentIngress_ShouldDefaultToNoCertificateMode()
+    {
+        var mode = _configuration["AgentIngress:ClientCertificateMode"];
+
+        Assert.Equal("NoCertificate", mode);
     }
 
     [Fact]
@@ -69,6 +117,7 @@ public class RouteConfigurationTests
     [InlineData("betterauth-route", "/api/v1/betterauth/{**catch-all}")]
     [InlineData("servers-route", "/api/v1/servers/{**catch-all}")]
     [InlineData("console-hub-route", "/hubs/console/{**catch-all}")]
+    [InlineData("agent-hub-route", "/hubs/agent/{**catch-all}")]
     public void RouteShouldHaveCorrectPathPattern(string routeName, string expectedPath)
     {
         var path = _configuration[$"ReverseProxy:Routes:{routeName}:Match:Path"];
@@ -118,6 +167,7 @@ public class RouteConfigurationTests
     [InlineData("identity-route", 10)]
     [InlineData("betterauth-route", 10)]
     [InlineData("servers-route", 20)]
+    [InlineData("agent-hub-route", 20)]
     [InlineData("nodes-org-route", 20)]
     [InlineData("enrollment-route", 20)]
     [InlineData("agents-enroll-route", 25)]

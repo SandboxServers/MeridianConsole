@@ -141,6 +141,8 @@
     <PackageVersion Include="WixToolset.Sdk" Version="5.0.2" />
     <PackageVersion Include="WixToolset.UI.wixext" Version="5.0.2" />
     <PackageVersion Include="WixToolset.Util.wixext" Version="5.0.2" />
+    <PackageVersion Include="WixToolset.Dtf.CustomAction" Version="5.0.2" />
+    <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
 
     <!-- Tests -->
     <!-- Direct pin: Microsoft.EntityFrameworkCore.Design 10.0.0 -> Microsoft.Build.Tasks.Core /

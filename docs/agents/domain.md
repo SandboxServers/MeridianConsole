@@ -48,6 +48,9 @@ For "what should I do next", the order is different: the user, then a Directive 
 | CI | `.github/workflows/` (`ci.yml` calls `_dotnet-build-test.yml`). The `azure-pipelines*.yml` files are manual-only. |
 | Deploy | `deploy/compose/` for beta. `deploy/kubernetes/` (Helm) is non-functional and deferred. |
 | Campaign state | `docs/analysis/<campaign>/RESUME.md`, then its `README.md` and `work-packets.md` |
+| Evidence for "confirmed working on Windows" | The recorded UAT runs in `docs/analysis/<campaign>/uat/` (for Sprint 2, [the UAT records](../analysis/sprint2-agent-nodes/uat/)); the raw `results.json` is under `.uat/` and is not committed |
+| How the agent hub was built | [ADR-0008 as built](../adr/0008-agent-transport-signalr.md#as-built-sprint-2), then the Gateway docs ([routing](../gateway-routing-reference.md), [authentication](../gateway-authentication.md)) |
+| The Windows installer | [windows-installer](../reference/agents/windows-installer.md) |
 | How Claude sessions work here | [ai-sdlc.md](ai-sdlc.md) and `.claude/agents/` |
 
 ## Repo map
@@ -57,7 +60,7 @@ For "what should I do next", the order is different: the user, then a Directive 
 | `src/Dhadgar.Gateway` | YARP gateway: the only public entry point for HTTP |
 | `src/Dhadgar.Identity` | Users, organizations, roles; issues platform tokens (OpenIddict) |
 | `src/Dhadgar.BetterAuth` | Node service for social login; exchanges into Identity tokens |
-| `src/Dhadgar.Nodes` | Node inventory, agent enrollment, the agent CA; the agent hub (in progress) |
+| `src/Dhadgar.Nodes` | Node inventory, agent enrollment, the agent CA; the agent hub at `/hubs/agent` (heartbeats built in Sprint 2; commands not yet) |
 | `src/Dhadgar.Secrets` | Secrets over Azure Key Vault |
 | `src/Dhadgar.Notifications`, `src/Dhadgar.Discord` | Outbound notifications |
 | `src/Dhadgar.Servers`, `Console`, `Mods`, `Tasks`, `Files`, `Billing` | Stubs. Their READMEs describe intent, not code. |

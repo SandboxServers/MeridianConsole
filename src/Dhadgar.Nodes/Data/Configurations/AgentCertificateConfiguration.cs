@@ -23,6 +23,10 @@ public sealed class AgentCertificateConfiguration : IEntityTypeConfiguration<Age
         builder.Property(c => c.RevocationReason)
             .HasMaxLength(500);
 
+        // PostgreSQL xmin-based optimistic concurrency (same convention as BaseEntity.RowVersion)
+        builder.Property(c => c.RowVersion)
+            .IsRowVersion();
+
         // Unique index on thumbprint for fast certificate validation
         builder.HasIndex(c => c.Thumbprint)
             .IsUnique()
