@@ -909,6 +909,32 @@ See [RequestLimitsMiddleware](#requestlimitsmiddleware) above for details.
 
 ---
 
+## Service JWT authentication
+
+`AddDhadgarJwtBearer` registers the JWT bearer scheme used by user-facing services (Gateway, Secrets, and others). `AddTenantScopedAuthorization` adds the same scheme plus the `TenantScoped` policy.
+
+```csharp
+builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment, "/hubs/console");
+```
+
+### Configuration keys
+
+| Key | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `Auth:Issuer` | Yes | none | Token issuer; also the OIDC authority |
+| `Auth:Audience` | Yes | none | Expected token audience |
+| `Auth:MetadataAddress` | No | `{Issuer}.well-known/openid-configuration` | Discovery address, for internal service discovery in Docker/K8s |
+| `Auth:InternalBaseUrl` | No | none | When set, discovery URLs under the issuer are rewritten to this base (local Docker only) |
+| `Auth:ClockSkewSeconds` | No | `60` | Allowed clock skew for token lifetime checks |
+
+A missing `Auth:Issuer` or `Auth:Audience` throws `InvalidOperationException` at registration, so the service fails at startup.
+
+### Hub-path query tokens
+
+Browsers cannot set an `Authorization` header on SignalR connections. For requests whose path starts with one of the hub prefixes passed to `AddDhadgarJwtBearer`, a missing `Authorization` header falls back to the `access_token` query value. Outside those prefixes the query value is ignored, so a token in a URL never authenticates an API request.
+
+Do not log the query string of hub requests, because it carries the token.
+
 ## Multi-Tenancy Support
 
 ### IOrganizationContext

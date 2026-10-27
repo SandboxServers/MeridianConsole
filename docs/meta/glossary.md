@@ -52,14 +52,18 @@ Seeded from CLAUDE.md, [PROJECT-STATE.md](../PROJECT-STATE.md), the ADRs and the
 | mTLS | Mutual TLS: both sides present certificates. Agents authenticate to the control plane with their client certificate. |
 | SPIFFE ID | The URI in an agent certificate's subject alternative name that identifies the node. Defined in `AgentCertificateProfile` (D-S21). |
 | `node_id` claim | The node identity taken from the client certificate. It is the only source of an agent's identity on the hub (D-S23). |
-| Agent hub | The SignalR hub at `/hubs/agent` in Nodes that agents hold open for heartbeats and commands ([ADR-0008](../adr/0008-agent-transport-signalr.md), D-S22). Planned in sprint 2. |
-| Heartbeat | The agent's periodic status report. It moves to the hub in sprint 2; the HTTP endpoint stays during migration (D-S28). |
+| Agent hub | The SignalR hub at `/hubs/agent` in Nodes that agents hold open for heartbeats and commands ([ADR-0008](../adr/0008-agent-transport-signalr.md), D-S22). Heartbeats work over it as of Sprint 2 ([as built](../adr/0008-agent-transport-signalr.md#as-built-sprint-2)); the command methods are not built. |
+| Heartbeat | The agent's periodic status report. Agents send it over the hub (Sprint 2). The old HTTP endpoint stays during migration (D-S28) and is still to be retired. |
 | `X-Agent-Protocol` | The header that carries the agent hub protocol version, currently `1` (D-S22). |
 | CommandEnvelope | `Agent.Core/Commands/CommandEnvelope.cs`. The wrapper around every command the control plane sends an agent. A security-review area. |
 | CommandValidator | Validates a `CommandEnvelope` before dispatch. Signature verification is not implemented and fails closed (#94). |
 | IControlPlaneClient | The agent's client interface to the control plane (`Agent.Core/Communication/`). A security-review area. |
 | Job Object | The Windows kernel object `WindowsProcessManager` uses to limit and contain game-server processes. |
-| Renewal grace | The short window in which an agent's old certificate stays usable after renewal (D-S212). |
+| Renewal grace | The window in which an agent's old certificate stays usable after renewal: `Mtls:RenewalGraceMinutes`, default 60, range 0 to 1440 (D-S212). |
+| Client-certificate forwarding | The Gateway terminates TLS for agents and passes the client certificate to Nodes in the `X-Client-Cert` header. The header is stripped on every route and set only on routes with `ForwardClientCertificate=true`. Nodes trusts it only from `TrustedProxies` (D-S210). |
+| Windows installer | The WiX v5 MSI that installs the Windows agent as the `DhadgarAgent` service. See [windows-installer](../reference/agents/windows-installer.md). |
+| Custom action (`HideTarget`) | A step an MSI runs during install. With `HideTarget="yes"` Windows Installer masks the action's data in logs. The enrollment token reaches HKLM only through such an action (D-S245). |
+| `WINDOWS_BUILD_NUMBER` | The installer property that holds the real Windows build, read from the registry, because msiexec reports Windows 8.1 values for `WindowsBuild` and `VersionNT` (D-S242). |
 
 ## Identity and auth
 
@@ -99,3 +103,4 @@ Seeded from CLAUDE.md, [PROJECT-STATE.md](../PROJECT-STATE.md), the ADRs and the
 | Packet | One prescriptive unit of campaign work, sized for one `packet-coder` session. |
 | Wave | A group of about six packets reviewed together. |
 | Ledger | A campaign's `README.md`, `work-packets.md` and `RESUME.md`. |
+| UAT run | A manual-check run of the Windows agent against a real Nodes and Gateway, in one of three modes (Process, Service, Msi). Each run writes a `results.json`; the library keeps a record of it under `docs/analysis/<campaign>/uat/`. Runs launched by an agent count as evidence only with `launchedBy = agent`, `elevated = true` and a clean tree (D-S224, D-S239). |

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Dhadgar.Agent.Windows.Uat.Tests</AssemblyName>
+    <RootNamespace>Dhadgar.Agent.Windows.Uat.Tests</RootNamespace>
+    <!--
+      CA1416: Tests for Windows-specific code intentionally use Windows APIs
+      CA2000: Test object disposal handled by test framework or explicit using statements
+    -->
+    <NoWarn>$(NoWarn);CA1416;CA2000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="Xunit.SkippableFact" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dhadgar.Agent.Windows.Uat\Dhadgar.Agent.Windows.Uat.csproj" />
+    <ProjectReference Include="..\..\src\Agents\Dhadgar.Agent.Windows\Dhadgar.Agent.Windows.csproj" />
+  </ItemGroup>
+</Project>

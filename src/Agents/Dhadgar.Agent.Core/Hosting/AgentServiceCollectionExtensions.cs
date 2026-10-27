@@ -1,10 +1,12 @@
 using System.Net.Http;
+using System.Net.Security;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Commands;
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Agent.Core.Health;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Process;
 using Dhadgar.Agent.Core.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,12 +36,38 @@ public static class AgentServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Identity - the node ID comes from the state store (or enrollment), never from configuration alone
+        services.PostConfigure<AgentOptions>(o =>
+        {
+            if (string.IsNullOrWhiteSpace(o.StateDirectory))
+            {
+                o.StateDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "Meridian Console",
+                    "Agent");
+            }
+        });
+        services.TryAddSingleton<IAgentIdentityProvider, AgentIdentityProvider>();
+        services.TryAddSingleton<IStateFileSecurity, PortableStateFileSecurity>();
+        services.TryAddSingleton<IAgentStateStore, FileAgentStateStore>();
+        services.TryAddSingleton<IPathValidator, PathValidator>();
+
+        // Startup - the enrollment token is read from configuration; time comes from TimeProvider so tests can drive it
+        services.TryAddSingleton<IEnrollmentTokenSource, ConfigurationEnrollmentTokenSource>();
+        services.TryAddSingleton(TimeProvider.System);
+
         // Authentication - IEnrollmentService requires ICertificateStore from platform-specific host
+        services.AddSingleton<IClientCertificateProvider, ClientCertificateProvider>();
         services.AddSingleton<IEnrollmentService, EnrollmentService>();
         services.AddSingleton<IHardwareInventoryCollector, HardwareInventoryCollector>();
 
         // Communication
+        services.TryAddSingleton(new ControlPlaneHubTransport());
         services.AddSingleton<IControlPlaneClient, ControlPlaneClient>();
+
+        // Startup: enrolls if needed, persists the identity, connects and renews. Registered before HeartbeatService
+        // so the identity is set before the heartbeat loop first waits on it.
+        services.AddHostedService<AgentBootstrapService>();
 
         // Health monitoring
         services.AddSingleton<IHealthReporter, HealthReporter>();
@@ -52,7 +80,6 @@ public static class AgentServiceCollectionExtensions
 
         // Files
         services.AddSingleton<IFileTransferService, FileTransferService>();
-        services.AddSingleton<IPathValidator, PathValidator>();
         services.AddSingleton<IFileIntegrityChecker, FileIntegrityChecker>();
 
         // Telemetry
@@ -103,30 +130,21 @@ public static class AgentServiceCollectionExtensions
         services.AddHttpClient("ControlPlaneMtls")
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {
-                var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
-                var certificateStore = sp.GetRequiredService<ICertificateStore>();
+                var provider = sp.GetRequiredService<IClientCertificateProvider>();
 
-                var handler = new HttpClientHandler
+                // The certificate is selected per handshake, so a renewal takes effect on the next
+                // connection without rebuilding the handler. PooledConnectionLifetime bounds how long
+                // a pooled connection keeps the certificate it was opened with.
+                return new SocketsHttpHandler
                 {
-                    AllowAutoRedirect = false
+                    AllowAutoRedirect = false,
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(1),
+                    SslOptions = new SslClientAuthenticationOptions
+                    {
+                        // A null return means no client certificate; the control plane answers 401.
+                        LocalCertificateSelectionCallback = (_, _, _, _, _) => provider.Current
+                    }
                 };
-
-                // Add client certificate for mTLS if available
-                var clientCert = certificateStore.GetClientCertificate();
-
-                // SECURITY: Enrolled agents MUST have a client certificate for mTLS
-                if (options.NodeId.HasValue && clientCert is null)
-                {
-                    throw new InvalidOperationException(
-                        "Client certificate is required for enrolled agents (NodeId is set)");
-                }
-
-                if (clientCert is not null)
-                {
-                    handler.ClientCertificates.Add(clientCert);
-                }
-
-                return handler;
             })
             .ConfigureHttpClient((sp, client) =>
             {
