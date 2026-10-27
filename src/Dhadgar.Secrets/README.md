@@ -451,8 +451,6 @@ src/Dhadgar.Secrets/
 │   ├── SecretWriteEndpoints.cs         # Write operations (PUT, DELETE, rotate)
 │   ├── CertificateEndpoints.cs         # Certificate management
 │   └── KeyVaultEndpoints.cs            # Key Vault CRUD operations
-├── Infrastructure/
-│   └── UrlRewritingDocumentRetriever.cs # OIDC metadata URL rewriting for Docker/K8s
 ├── Options/
 │   ├── SecretsOptions.cs               # Main configuration options
 │   └── SecretsReadinessOptions.cs      # Health check configuration

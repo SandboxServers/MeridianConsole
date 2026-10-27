@@ -12,8 +12,8 @@ using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Resilience;
+using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.IdentityModel.Tokens;
@@ -94,23 +94,7 @@ if (!string.IsNullOrEmpty(redisConnectionString))
 }
 
 // Authentication/authorization
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Authority = builder.Configuration["Auth:Issuer"];
-        options.Audience = builder.Configuration["Auth:Audience"];
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ClockSkew = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60)
-        };
-        options.RefreshOnIssuerKeyNotFound = true;
-    });
+builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment, "/hubs/console");
 
 builder.Services.AddAuthorization(options =>
 {
