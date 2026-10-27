@@ -118,6 +118,8 @@ The folders above (the parent folder carries an empty-mask Owner Rights ACE, so 
 - Startup Type: Automatic (Delayed Start)
 - Recovery: Restart on first 3 failures
 
+The service is installed by the same component as `Dhadgar.Agent.Windows.exe`: Windows Installer installs a service only from the component whose key path is the service's executable (D-S244).
+
 ### Event Log
 
 - Source: `Meridian Console Agent`

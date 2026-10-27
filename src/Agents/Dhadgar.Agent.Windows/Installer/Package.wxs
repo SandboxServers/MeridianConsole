@@ -118,7 +118,6 @@
 
       <ComponentGroupRef Id="AgentComponents" />
       <ComponentGroupRef Id="ConfigComponents" />
-      <ComponentRef Id="ServiceComponent" />
       <ComponentRef Id="EventLogComponent" />
       <ComponentRef Id="EnrollmentTokenComponent" />
 
@@ -157,12 +156,73 @@
   <Fragment>
     <ComponentGroup Id="AgentComponents" Directory="INSTALLFOLDER">
 
-      <!-- Main executable - self-contained single file -->
+      <!--
+        Main executable - self-contained single file. The service elements live here because Windows Installer
+        installs a ServiceInstall row only when its component's key path is the service's executable; in a
+        registry-keyed component InstallServices skips it and Wix4ExecServiceConfig fails with 0x80070424 (D-S244).
+      -->
       <Component Id="MainExecutableComponent" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
         <File Id="MainExecutable"
               Name="Dhadgar.Agent.Windows.exe"
               Source="Dhadgar.Agent.Windows.exe"
               KeyPath="yes" />
+
+        <!--
+          Service installation with recovery configuration.
+          SECURITY: Runs as LocalSystem which has full system access.
+          This is required for:
+          - Managing game server processes
+          - Accessing certificate stores
+          - Managing firewall rules
+        -->
+        <ServiceInstall Id="AgentServiceInstall"
+                        Name="DhadgarAgent"
+                        DisplayName="Meridian Console Agent"
+                        Description="Manages game servers for Meridian Console. Controls server processes, handles file transfers, and reports health to the control plane."
+                        Type="ownProcess"
+                        Start="auto"
+                        Account="LocalSystem"
+                        ErrorControl="normal"
+                        Vital="yes">
+
+          <!--
+            Service recovery configuration.
+
+            WIX LIMITATION: The util:ServiceConfig element only supports a single
+            RestartServiceDelayInSeconds value applied to all failure actions.
+            It cannot specify different delays per failure (5s/10s/30s progression).
+
+            RESOLUTION: The agent calls ServiceInstaller.ConfigureRecovery() on startup,
+            which uses sc.exe to configure proper progressive delays:
+            - First failure: restart after 5 seconds
+            - Second failure: restart after 10 seconds
+            - Third failure: restart after 30 seconds
+            - Reset failure count after 1 day (86400 seconds)
+
+            The WiX config below sets initial uniform 5-second delays as a baseline.
+            The agent's startup reconfiguration ensures correct progressive delays.
+            See: src/Agents/Dhadgar.Agent.Windows/Installation/ServiceInstaller.cs
+          -->
+          <util:ServiceConfig FirstFailureActionType="restart"
+                              SecondFailureActionType="restart"
+                              ThirdFailureActionType="restart"
+                              RestartServiceDelayInSeconds="5"
+                              ResetPeriodInDays="1" />
+
+        </ServiceInstall>
+
+        <!-- Service control during install/uninstall -->
+        <ServiceControl Id="AgentServiceControl"
+                        Name="DhadgarAgent"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
+
+        <!-- Install marker read by the UAT; not a key path (the exe is) -->
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
+          <RegistryValue Name="ServiceInstalled" Type="integer" Value="1" />
+        </RegistryKey>
       </Component>
 
     </ComponentGroup>
@@ -228,73 +288,6 @@
       </Component>
 
     </ComponentGroup>
-  </Fragment>
-
-  <!-- Windows Service installation -->
-  <Fragment>
-    <Component Id="ServiceComponent" Guid="F6A7B8C9-D0E1-2345-F012-678901234567" Directory="INSTALLFOLDER">
-
-      <!--
-        Service installation with recovery configuration.
-        SECURITY: Runs as LocalSystem which has full system access.
-        This is required for:
-        - Managing game server processes
-        - Accessing certificate stores
-        - Managing firewall rules
-      -->
-      <ServiceInstall Id="AgentServiceInstall"
-                      Name="DhadgarAgent"
-                      DisplayName="Meridian Console Agent"
-                      Description="Manages game servers for Meridian Console. Controls server processes, handles file transfers, and reports health to the control plane."
-                      Type="ownProcess"
-                      Start="auto"
-                      Account="LocalSystem"
-                      ErrorControl="normal"
-                      Vital="yes">
-
-        <!--
-          Service recovery configuration.
-
-          WIX LIMITATION: The util:ServiceConfig element only supports a single
-          RestartServiceDelayInSeconds value applied to all failure actions.
-          It cannot specify different delays per failure (5s/10s/30s progression).
-
-          RESOLUTION: The agent calls ServiceInstaller.ConfigureRecovery() on startup,
-          which uses sc.exe to configure proper progressive delays:
-          - First failure: restart after 5 seconds
-          - Second failure: restart after 10 seconds
-          - Third failure: restart after 30 seconds
-          - Reset failure count after 1 day (86400 seconds)
-
-          The WiX config below sets initial uniform 5-second delays as a baseline.
-          The agent's startup reconfiguration ensures correct progressive delays.
-          See: src/Agents/Dhadgar.Agent.Windows/Installation/ServiceInstaller.cs
-        -->
-        <util:ServiceConfig FirstFailureActionType="restart"
-                            SecondFailureActionType="restart"
-                            ThirdFailureActionType="restart"
-                            RestartServiceDelayInSeconds="5"
-                            ResetPeriodInDays="1" />
-
-      </ServiceInstall>
-
-      <!-- Service control during install/uninstall -->
-      <ServiceControl Id="AgentServiceControl"
-                      Name="DhadgarAgent"
-                      Start="install"
-                      Stop="both"
-                      Remove="uninstall"
-                      Wait="yes" />
-
-      <!-- Key path for this component -->
-      <RegistryValue Root="HKLM"
-                     Key="SOFTWARE\Meridian Console\Agent"
-                     Name="ServiceInstalled"
-                     Type="integer"
-                     Value="1"
-                     KeyPath="yes" />
-
-    </Component>
   </Fragment>
 
   <!-- Event Log registration -->

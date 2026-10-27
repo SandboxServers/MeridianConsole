@@ -134,6 +134,25 @@ public sealed class InstallerPackageTests
     }
 
     [Fact]
+    public void PackageWxs_ServiceInstall_IsInTheComponentWhoseKeyPathIsTheAgentExe()
+    {
+        var doc = LoadPackage();
+        var exeName = LoadAgentCsproj().Descendants("AssemblyName").Single().Value + ".exe";
+        var install = doc.Descendants(Wix + "ServiceInstall").Single();
+        var component = install.Parent;
+
+        // D-S244: Windows Installer installs a ServiceInstall row only from a component keyed by the service exe.
+        Assert.NotNull(component);
+        Assert.Equal(Wix + "Component", component.Name);
+        Assert.Null(component.Attribute("Condition"));
+        var keyPath = Assert.Single(component.Descendants(), e => (string?)e.Attribute("KeyPath") == "yes");
+        Assert.Equal(Wix + "File", keyPath.Name);
+        Assert.Equal(exeName, (string?)keyPath.Attribute("Name"));
+        Assert.Same(component, doc.Descendants(Wix + "ServiceControl").Single().Parent);
+        Assert.Single(install.Elements(Util + "ServiceConfig"));
+    }
+
+    [Fact]
     public void PackageWxs_EventSource_UsesProgramEventLogSourceName()
     {
         var source = LoadPackage().Descendants(Util + "EventSource").Single();
