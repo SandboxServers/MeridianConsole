@@ -70,4 +70,35 @@ public class ServiceEnvironmentTests
         Assert.Equal(ServiceHost.NodesEnvironment(Settings, Paths), nodes.Environment);
         Assert.Equal(ServiceHost.GatewayEnvironment(Settings), gateway.Environment);
     }
+
+    [Fact]
+    public void GatewayEnvironment_InServiceMode_AddsTheRunScopedPfx_AndKeepsTheUrls()
+    {
+        var tls = new GatewayTls(@"C:\repo\runs\run-1\tls\gateway.pfx", "pfxpw");
+        var env = ServiceHost.GatewayEnvironment(Settings with { Tls = tls });
+
+        Assert.Equal(@"C:\repo\runs\run-1\tls\gateway.pfx", env["Kestrel__Certificates__Default__Path"]);
+        Assert.Equal("pfxpw", env["Kestrel__Certificates__Default__Password"]);
+        Assert.Equal("https://localhost:15002", env["ASPNETCORE_URLS"]);
+        Assert.Equal("AllowCertificate", env["AgentIngress__ClientCertificateMode"]);
+    }
+
+    [Fact]
+    public void GatewayEnvironment_WithoutTls_ContainsNoKestrelCertificateKeys()
+    {
+        // Process mode and -StackOnly pass no TLS settings, so the Gateway keeps the user's dev certificate.
+        var env = ServiceHost.GatewayEnvironment(Settings);
+
+        Assert.DoesNotContain(env.Keys, k => k.StartsWith("Kestrel__Certificates__", StringComparison.Ordinal));
+        Assert.Null(Settings.Tls);
+    }
+
+    [Fact]
+    public void NodesEnvironment_NeverCarriesTheGatewayCertificate()
+    {
+        var tls = new GatewayTls(@"C:\repo\runs\run-1\tls\gateway.pfx", "pfxpw");
+        var env = ServiceHost.NodesEnvironment(Settings with { Tls = tls }, Paths);
+
+        Assert.DoesNotContain(env.Keys, k => k.StartsWith("Kestrel__Certificates__", StringComparison.Ordinal));
+    }
 }
