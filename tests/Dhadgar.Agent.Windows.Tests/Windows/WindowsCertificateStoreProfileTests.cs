@@ -109,8 +109,8 @@ public sealed class WindowsCertificateStoreProfileTests : IDisposable
 
         await store.StoreCertificateAsync(first.Certificate, first.Pkcs8);
 
-        string oldKeyName;
-        CngProvider oldProvider;
+        string? oldKeyName = null;
+        CngProvider? oldProvider = null;
         using (var oldStored = store.GetClientCertificate())
         {
             Assert.NotNull(oldStored);
@@ -120,6 +120,8 @@ public sealed class WindowsCertificateStoreProfileTests : IDisposable
             oldProvider = oldCng.Key.Provider;
         }
 
+        Assert.NotNull(oldKeyName);
+        Assert.NotNull(oldProvider);
         Assert.True(CngKey.Exists(oldKeyName, oldProvider, CngKeyOpenOptions.UserKey));
 
         await store.StoreCertificateAsync(renewal.Certificate, renewal.Pkcs8);
