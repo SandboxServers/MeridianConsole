@@ -169,4 +169,122 @@ public class CleanupEngineTests
         var firstDelete = actions.Calls.FindIndex(call => call.StartsWith("Delete", StringComparison.Ordinal));
         Assert.True(firstDelete > 1);
     }
+
+    [Fact]
+    public async Task UndoAsync_CertificateInCurrentUserOrForeignStore_IsRefused()
+    {
+        var actions = new RecordingActions();
+        CleanupEntry[] entries =
+        [
+            new CertificateEntry("LocalMachine", "Disallowed", "AAAA"),
+            new CertificateEntry("CurrentUser", "Root", "BBBB"),
+        ];
+
+        var report = await new CleanupEngine(actions, _paths).UndoAsync(entries, CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Equal(2, report.Failed.Count);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ForeignCertStore_IsRefused()
+    {
+        var actions = new RecordingActions();
+
+        var report = await new CleanupEngine(actions, _paths).UndoAsync([new CertStoreEntry("My", false)], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Single(report.Failed);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ForeignEventSource_IsRefused()
+    {
+        var actions = new RecordingActions();
+        CleanupEntry[] entries = [new EventSourceEntry("Application", false), new EventSourceEntry("", false)];
+
+        var report = await new CleanupEngine(actions, _paths).UndoAsync(entries, CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Equal(2, report.Failed.Count);
+    }
+
+    [Fact]
+    public async Task UndoAsync_CngKeyWithForeignProviderOrName_IsRefused()
+    {
+        var actions = new RecordingActions();
+        CleanupEntry[] entries =
+        [
+            new CngKeyEntry("key", "Some Other Provider", true),
+            new CngKeyEntry("..\\x", "Microsoft Software Key Storage Provider", true),
+            new CngKeyEntry("TSSecKeySet1", "Microsoft Software Key Storage Provider", true),
+        ];
+
+        var report = await new CleanupEngine(actions, _paths).UndoAsync(entries, CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Equal(3, report.Failed.Count);
+    }
+
+    [Fact]
+    public async Task UndoAsync_CngKeyWithUatPrefix_IsDeleted()
+    {
+        var actions = new RecordingActions();
+
+        await new CleanupEngine(actions, _paths)
+            .UndoAsync([new CngKeyEntry("meridian-uat-key", "Microsoft Software Key Storage Provider", true)], CancellationToken.None);
+
+        Assert.Equal(["DeleteCngKey:meridian-uat-key"], actions.Calls);
+    }
+
+    [Fact]
+    public async Task UndoAsync_RegistryValueWithForeignName_IsRefused()
+    {
+        var actions = new RecordingActions();
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new RegistryValueEntry(@"SOFTWARE\Meridian Console\Agent", "Other", false)], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Single(report.Failed);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ProcessImageOutsideRunFolder_IsRefusedAndNotKilled()
+    {
+        var actions = new RecordingActions();
+        actions.ProcessImages[3] = @"C:\Windows\System32\svchost.exe";
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new ProcessEntry(3, DateTime.UtcNow, "svchost")], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Single(report.Failed);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ProcessImageUnreadable_IsRefusedAndNotKilled()
+    {
+        var actions = new RecordingActions();
+        actions.UnreadableProcesses.Add(5);
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new ProcessEntry(5, DateTime.UtcNow, "agent")], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Single(report.Failed);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ProcessImageUnderRunFolder_IsKilled()
+    {
+        var actions = new RecordingActions();
+        actions.ProcessImages[4] = Path.Combine(_paths.RunDir, "agent", "Dhadgar.Agent.Windows.exe");
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new ProcessEntry(4, DateTime.UtcNow, "agent")], CancellationToken.None);
+
+        Assert.Contains("KillProcess:4", actions.Calls);
+        Assert.Empty(report.Failed);
+    }
 }

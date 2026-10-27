@@ -17,6 +17,12 @@ internal interface IMachineActions
     /// <summary>Kills a process tree if a process with this PID and start time still runs.</summary>
     Result KillProcess(int pid, DateTime startTimeUtc);
 
+    /// <summary>
+    /// Reads the image path of a process with this PID and start time. Success with a null value means the
+    /// process is gone or the PID was reused (nothing to kill). A failure means the image could not be read.
+    /// </summary>
+    Result<string?> GetProcessImagePath(int pid, DateTime startTimeUtc);
+
     /// <summary>Stops a service and waits up to 30 seconds for STOPPED.</summary>
     Result StopService(string name);
 

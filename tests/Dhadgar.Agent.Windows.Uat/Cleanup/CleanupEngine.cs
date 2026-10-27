@@ -22,6 +22,8 @@ internal sealed class CleanupEngine
     private const string HklmHive = "HKLM";
     private const string KeyStorageProvider = "Microsoft Software Key Storage Provider";
     private const string PlatformCryptoProvider = "Microsoft Platform Crypto Provider";
+    private const string CngKeyPrefix = "meridian-uat-";
+    private const string DotnetHostRelativePath = @"dotnet\dotnet.exe";
     private static readonly Regex ContainerNamePattern = new(@"^meridian-uat-[a-z0-9][a-z0-9_.-]*\z", RegexOptions.CultureInvariant);
     private static readonly Regex CngKeyNamePattern = new(@"^[A-Za-z0-9_.{}-]{1,128}\z", RegexOptions.CultureInvariant);
 
@@ -49,7 +51,7 @@ internal sealed class CleanupEngine
                 case ServiceEntry service when Reject(entry) is null:
                     QuiesceIgnoringResult(() => _actions.StopService(service.Name));
                     break;
-                case ProcessEntry process:
+                case ProcessEntry process when Reject(entry) is null:
                     QuiesceIgnoringResult(() => _actions.KillProcess(process.Pid, process.StartTimeUtc));
                     break;
             }
@@ -94,11 +96,12 @@ internal sealed class CleanupEngine
     /// call. Directories and files are checked by <see cref="DeleteGuarded"/>; processes by their PID and start time.
     /// Add a new kind here when a packet adds one.
     /// </summary>
-    private static Result? Reject(CleanupEntry entry)
+    private Result? Reject(CleanupEntry entry)
     {
         var allowed = entry switch
         {
             ServiceEntry s => string.Equals(s.Name, AgentWindowsFacts.ServiceName, StringComparison.Ordinal),
+            ProcessEntry p => ProcessImageAllowed(p),
             RegistryKeyEntry k => string.Equals(k.Hive, HklmHive, StringComparison.Ordinal) && IsAgentKey(k.Path),
             RegistryValueEntry v => IsAgentKey(v.Path)
                 && string.Equals(v.Name, AgentWindowsFacts.EnrollmentTokenValueName, StringComparison.Ordinal),
@@ -108,6 +111,7 @@ internal sealed class CleanupEngine
             EventSourceEntry e => string.Equals(e.Source, AgentWindowsFacts.EventLogSourceName, StringComparison.Ordinal),
             ContainerEntry c => ContainerNamePattern.IsMatch(c.Name),
             CngKeyEntry k => k.Provider is KeyStorageProvider or PlatformCryptoProvider
+                && k.KeyName.StartsWith(CngKeyPrefix, StringComparison.Ordinal)
                 && CngKeyNamePattern.IsMatch(k.KeyName),
             _ => true,
         };
@@ -115,6 +119,36 @@ internal sealed class CleanupEngine
         return allowed
             ? null
             : Result.Failure($"manifest entry refused: {EntryKind(entry)} {Identity(entry)} is not a UAT-managed item");
+    }
+
+    /// <summary>
+    /// A process is killable only if its image is under the run folder or is the dotnet host. A PID that is gone,
+    /// or reused by a process with another start time, is allowed: the kill is a no-op. An image that cannot be
+    /// read is refused (fail closed), so a SYSTEM process cannot be killed through a forged manifest line.
+    /// </summary>
+    private bool ProcessImageAllowed(ProcessEntry process)
+    {
+        var probe = _actions.GetProcessImagePath(process.Pid, process.StartTimeUtc);
+        if (probe.IsFailure)
+        {
+            return false;
+        }
+
+        var image = probe.Value;
+        if (image is null)
+        {
+            return true;
+        }
+
+        return _runPaths.Validate(image).IsSuccess || IsDotnetHost(image);
+    }
+
+    private static bool IsDotnetHost(string image)
+    {
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var installed = Path.Combine(programFiles, DotnetHostRelativePath);
+        return string.Equals(image, installed, StringComparison.OrdinalIgnoreCase)
+            || (Environment.ProcessPath is { } self && string.Equals(image, self, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsAgentKey(string path) =>

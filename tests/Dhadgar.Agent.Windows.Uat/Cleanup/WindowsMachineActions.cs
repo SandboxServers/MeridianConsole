@@ -89,6 +89,33 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     }
 
     /// <inheritdoc />
+    public Result<string?> GetProcessImagePath(int pid, DateTime startTimeUtc)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            if (Math.Abs((process.StartTime.ToUniversalTime() - startTimeUtc).TotalSeconds) > 1)
+            {
+                return Result<string?>.Success(null); // PID reused by another process.
+            }
+
+            return Result<string?>.Success(process.MainModule?.FileName);
+        }
+        catch (ArgumentException)
+        {
+            return Result<string?>.Success(null); // No such process.
+        }
+        catch (InvalidOperationException)
+        {
+            return Result<string?>.Success(null); // Exited between lookup and read.
+        }
+        catch (Win32Exception ex)
+        {
+            return Result<string?>.Failure($"could not read the image of process {pid}: {ex.Message}");
+        }
+    }
+
+    /// <inheritdoc />
     public Result StopService(string name)
     {
         var stop = RunSc(["stop", name]);

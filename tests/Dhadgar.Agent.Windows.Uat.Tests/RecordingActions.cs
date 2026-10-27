@@ -22,6 +22,22 @@ internal sealed class RecordingActions : IMachineActions
 
     public Result KillProcess(int pid, DateTime startTimeUtc) => Record($"KillProcess:{pid}");
 
+    /// <summary>Image paths by PID. A PID not listed reports the test host's own image, which the engine allows.</summary>
+    public Dictionary<int, string?> ProcessImages { get; } = [];
+
+    /// <summary>PIDs whose image cannot be read: the probe fails.</summary>
+    public HashSet<int> UnreadableProcesses { get; } = [];
+
+    public Result<string?> GetProcessImagePath(int pid, DateTime startTimeUtc)
+    {
+        if (UnreadableProcesses.Contains(pid))
+        {
+            return Result<string?>.Failure($"fake: image of {pid} unreadable");
+        }
+
+        return Result<string?>.Success(ProcessImages.TryGetValue(pid, out var image) ? image : Environment.ProcessPath);
+    }
+
     public Result StopService(string name) => Record($"StopService:{name}");
 
     public Result DeleteService(string name) => Record($"DeleteService:{name}");
