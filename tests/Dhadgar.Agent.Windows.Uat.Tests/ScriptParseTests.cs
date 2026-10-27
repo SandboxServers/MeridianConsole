@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Xunit;
 
 namespace Dhadgar.Agent.Windows.Uat.Tests;
@@ -25,10 +24,10 @@ public sealed class ScriptParseTests
     [SkippableFact]
     public async Task UatScripts_ParseWithoutErrors()
     {
-        var pwsh = ResolvePwsh();
+        var pwsh = PwshScript.ResolvePwsh();
         Skip.If(pwsh is null, "pwsh is not on PATH.");
 
-        var scripts = Directory.GetFiles(Path.Combine(FindRepoRoot(), "scripts", "uat"), "*.ps1");
+        var scripts = Directory.GetFiles(Path.Combine(PwshScript.FindRepoRoot(), "scripts", "uat"), "*.ps1");
         Assert.NotEmpty(scripts);
 
         var helperDir = Path.Combine(Path.GetTempPath(), "dhadgar-parse-" + Guid.NewGuid().ToString("N"));
@@ -58,64 +57,7 @@ public sealed class ScriptParseTests
 
     private static async Task<(int ExitCode, string Output)> RunParserAsync(string pwsh, string helper, string script)
     {
-        var startInfo = new ProcessStartInfo(pwsh)
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        startInfo.ArgumentList.Add("-NoProfile");
-        startInfo.ArgumentList.Add("-NonInteractive");
-        startInfo.ArgumentList.Add("-File");
-        startInfo.ArgumentList.Add(helper);
-        startInfo.ArgumentList.Add(script);
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("pwsh did not start.");
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            throw;
-        }
-
-        return (process.ExitCode, await stdout + await stderr);
-    }
-
-    private static string? ResolvePwsh()
-    {
-        var names = OperatingSystem.IsWindows() ? new[] { "pwsh.exe" } : new[] { "pwsh" };
-        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        foreach (var dir in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            foreach (var name in names)
-            {
-                var candidate = Path.Combine(dir, name);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Dhadgar.sln")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Dhadgar.sln not found above the test output folder.");
+        var (exitCode, stdout, stderr) = await PwshScript.RunAsync(pwsh, helper, new[] { script }, TimeSpan.FromMinutes(2));
+        return (exitCode, stdout + stderr);
     }
 }
