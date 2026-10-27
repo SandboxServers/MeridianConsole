@@ -6,6 +6,7 @@ using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Dhadgar.Nodes.Tests.Integration;
@@ -295,13 +296,130 @@ public sealed class CertificateRenewalIntegrationTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    private async Task<(Node Node, AgentCertificate Certificate)> SeedNodeWithCertificateAsync()
+    [Fact]
+    public async Task Renew_SetsGraceOnPresentedCertificate()
     {
-        using var scope = _factory.Services.CreateScope();
+        // Arrange - the default grace window (60 minutes) applies to the superseded certificate
+        // A factory of its own: these tests advance its clock, which the shared factory must not see.
+        await using var graceFactory = new NodesWebApplicationFactory();
+        var (node, originalCert) = await SeedNodeWithCertificateAsync(graceFactory);
+        var client = graceFactory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        var now = graceFactory.TimeProvider.GetUtcNow().UtcDateTime;
+
+        // Act
+        var response = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var scope = graceFactory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        var superseded = await db.AgentCertificates.FindAsync(originalCert.Id);
+        Assert.NotNull(superseded);
+        Assert.True(superseded.IsRevoked);
+        Assert.Equal(now.AddMinutes(AgentCertificateRenewalPolicy.DefaultGraceMinutes), superseded.GraceUntil);
+    }
+
+    [Fact]
+    public async Task Renew_FromCertificateInGrace_Succeeds_AndHardRevokesOrphan()
+    {
+        // Arrange - the first renewal's response is "lost": the agent renews again with the old certificate
+        // A factory of its own: these tests advance its clock, which the shared factory must not see.
+        await using var graceFactory = new NodesWebApplicationFactory();
+        var (node, originalCert) = await SeedNodeWithCertificateAsync(graceFactory);
+        var client = graceFactory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        var spki = Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo());
+
+        var firstRenewedAt = graceFactory.TimeProvider.GetUtcNow().UtcDateTime;
+        var first = await client.PostAsJsonAsync($"/agents/{node.Id}/certificates/renew", new RenewCertificateRequest(spki));
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var firstResult = await first.Content.ReadFromJsonAsync<RenewCertificateResponse>();
+        Assert.NotNull(firstResult);
+        graceFactory.TimeProvider.Advance(TimeSpan.FromMinutes(10));
+
+        // Act
+        var second = await client.PostAsJsonAsync($"/agents/{node.Id}/certificates/renew", new RenewCertificateRequest(spki));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var scope = graceFactory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        var superseded = await db.AgentCertificates.FindAsync(originalCert.Id);
+        Assert.NotNull(superseded);
+
+        // The first renewal's row was superseded by the second renewal: hard revoked, no grace.
+        var firstNew = await db.AgentCertificates.SingleAsync(c => c.Thumbprint == firstResult.CertificateThumbprint);
+        Assert.NotEqual(originalCert.Id, firstNew.Id);
+        Assert.True(firstNew.IsRevoked);
+        Assert.Null(firstNew.GraceUntil);
+
+        // The old row's grace is not extended by the second renewal: it still ends 60 minutes after the first renewal.
+        Assert.Equal(firstRenewedAt.AddMinutes(AgentCertificateRenewalPolicy.DefaultGraceMinutes), superseded.GraceUntil);
+    }
+
+    [Fact]
+    public async Task Renew_FromCertificatePastGrace_Returns401ThumbprintMismatch()
+    {
+        // Arrange
+        // A factory of its own: these tests advance its clock, which the shared factory must not see.
+        await using var graceFactory = new NodesWebApplicationFactory();
+        var (node, originalCert) = await SeedNodeWithCertificateAsync(graceFactory);
+        var client = graceFactory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        var spki = Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo());
+        var first = await client.PostAsJsonAsync($"/agents/{node.Id}/certificates/renew", new RenewCertificateRequest(spki));
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        // Act - 61 minutes later the old certificate is past its grace window
+        graceFactory.TimeProvider.Advance(TimeSpan.FromMinutes(61));
+        var response = await client.PostAsJsonAsync($"/agents/{node.Id}/certificates/renew", new RenewCertificateRequest(spki));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains("thumbprint_mismatch", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Renew_GraceZero_RevokesImmediately()
+    {
+        // Arrange - Mtls:RenewalGraceMinutes=0 means immediate revoke
+        await using var graceFactory = new NodesWebApplicationFactory();
+        graceFactory.Settings["Mtls:RenewalGraceMinutes"] = "0";
+        var (node, originalCert) = await SeedNodeWithCertificateAsync(graceFactory);
+        var client = graceFactory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+
+        // Act
+        var response = await client.PostAsJsonAsync(
+            $"/agents/{node.Id}/certificates/renew",
+            new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var scope = graceFactory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        var superseded = await db.AgentCertificates.FindAsync(originalCert.Id);
+        Assert.NotNull(superseded);
+        Assert.True(superseded.IsRevoked);
+        Assert.Null(superseded.GraceUntil);
+    }
+
+    private async Task<(Node Node, AgentCertificate Certificate)> SeedNodeWithCertificateAsync(
+        NodesWebApplicationFactory? factory = null)
+    {
+        var host = factory ?? _factory;
+        using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
         await db.Database.EnsureCreatedAsync();
 
-        var now = _factory.TimeProvider.GetUtcNow().UtcDateTime;
+        var now = host.TimeProvider.GetUtcNow().UtcDateTime;
 
         var node = new Node
         {

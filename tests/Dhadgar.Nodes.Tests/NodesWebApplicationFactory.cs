@@ -34,6 +34,11 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
     public FakeTimeProvider TimeProvider { get; } = new(DateTimeOffset.UtcNow);
     public TestCertificateAuthorityService CaService { get; private set; } = null!;
 
+    /// <summary>
+    /// Extra configuration for this factory's host, read when the host is built. Set before the first request.
+    /// </summary>
+    public Dictionary<string, string?> Settings { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -48,6 +53,7 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
                 ["RabbitMq:Username"] = "test-rabbit-user",
                 ["RabbitMq:Password"] = "test-rabbit-password"
             });
+            config.AddInMemoryCollection(Settings);
         });
 
         builder.ConfigureServices(services =>

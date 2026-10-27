@@ -414,6 +414,11 @@ dotnet ef database update \
 
 **Note:** Migrations are auto-applied in Development mode.
 
+Recent migrations:
+
+- `20261027130000_AddMassTransitOutboxEntities` creates the MassTransit outbox and inbox tables (`InboxState`, `OutboxState`, `OutboxMessage`). `NodesDbContext` registered them earlier, but no migration created them (P16-ruling-1).
+- `20261027130100_AddAgentCertificateGraceUntil` adds the nullable `GraceUntil` column to `agent_certificates` (renewal grace window, D-S212).
+
 ---
 
 ## Events and Messaging
@@ -555,6 +560,15 @@ Policies on agent endpoints use the `AgentMtls` scheme (`AgentMtlsAuthentication
 - **Extended Key Usage:** Client Authentication (OID 1.3.6.1.5.5.7.3.2)
 - **Key Size:** 2048-bit RSA (client), 4096-bit RSA (CA)
 
+### Certificate Renewal and Grace Window
+
+Renewal (`POST /agents/{nodeId}/certificates/renew`) supersedes the presented certificate, but keeps it usable for a short grace window (D-S212), so an agent whose renewal response was lost can renew again with the certificate it still holds.
+
+- **Setting:** `Mtls:RenewalGraceMinutes` (default `60`, from `AgentCertificateRenewalPolicy.DefaultGraceMinutes`). `0` revokes immediately. The value must be in `0..1440`; startup fails otherwise.
+- **Usable rule:** a certificate row is usable when it is not revoked, or when its `GraceUntil` is in the future. `AgentCertificateState.IsUsable` is the only implementation. Certificate validation, the hub's connect and per-heartbeat check, and the renew endpoint all use it.
+- **Renew from grace:** a certificate in grace may renew. Its `GraceUntil` is not extended. Any other row of the node that is still active or in grace is hard-revoked with no grace.
+- **Decommission:** ends any renewal grace on the node's certificates at once.
+
 ### Rate Limiting
 
 Applied at Gateway level:
@@ -656,7 +670,7 @@ docker run -p 5040:8080 \
 Agents hold a persistent SignalR connection to the Nodes service for heartbeats.
 
 - **Path:** `/hubs/agent` (`AgentHubProtocol.Path`). The Gateway routes the same path.
-- **Auth:** the hub is mapped with `RequireAuthorization("AgentPolicy")`, and mTLS must be enabled. The node ID is taken only from the `node_id` claim of the client certificate, never from the payload. A certificate that is revoked, or past its `NotAfter` time (unless `AllowExpiredCertificates` is set), is refused at connect, and a heartbeat on an open connection is refused and the connection is closed.
+- **Auth:** the hub is mapped with `RequireAuthorization("AgentPolicy")`, and mTLS must be enabled. The node ID is taken only from the `node_id` claim of the client certificate, never from the payload. A certificate that is revoked and outside its renewal grace, or past its `NotAfter` time (unless `AllowExpiredCertificates` is set), is refused at connect, and a heartbeat on an open connection is refused and the connection is closed. The hub applies the same usable rule on connect and on every heartbeat, so a certificate in grace keeps its hub connection until `GraceUntil`.
 - **Protocol header:** `X-Agent-Protocol`. Only `1` is accepted. A missing header is treated as `1`. Any other value aborts the connection.
 - **`Heartbeat(AgentHeartbeat)`:** returns `AgentHeartbeatAck`. Limits are enforced by `AgentHeartbeatValidator` before any database write:
 

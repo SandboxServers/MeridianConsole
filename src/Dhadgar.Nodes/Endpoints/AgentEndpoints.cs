@@ -1,9 +1,11 @@
 using Dhadgar.Contracts.Nodes;
+using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 // Alias local models to avoid ambiguity with Contracts types
 using LocalEnrollNodeRequest = Dhadgar.Nodes.Models.EnrollNodeRequest;
@@ -147,6 +149,7 @@ public static class AgentEndpoints
         ICertificateAuthorityService caService,
         IPublishEndpoint publishEndpoint,
         TimeProvider timeProvider,
+        IOptions<MtlsOptions> mtlsOptions,
         ILogger<Program> logger,
         CancellationToken ct = default)
     {
@@ -194,26 +197,32 @@ public static class AgentEndpoints
             return ProblemDetailsHelper.BadRequest("invalid_public_key");
         }
 
-        // Find the current certificate and validate the thumbprint
-        var currentCert = await dbContext.AgentCertificates
-            .Where(c => c.NodeId == nodeId && !c.IsRevoked)
-            .OrderByDescending(c => c.IssuedAt)
-            .FirstOrDefaultAsync(ct);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
-        if (currentCert is null)
+        // Load the node's active rows and the rows still in renewal grace (D-S212), so an agent whose renewal
+        // response was lost can renew again with the certificate it still holds.
+        var nodeRows = await dbContext.AgentCertificates
+            .Where(c => c.NodeId == nodeId && (!c.IsRevoked || c.GraceUntil != null))
+            .ToListAsync(ct);
+
+        if (nodeRows.Count == 0)
         {
             return ProblemDetailsHelper.NotFound("certificate_not_found",
                 "No active certificate found for this node.");
         }
 
-        if (!string.Equals(currentCert.Thumbprint, presented, StringComparison.OrdinalIgnoreCase))
+        // The presented certificate must be usable: the one grace-aware predicate (D-S212, wave1-ruling-1).
+        var currentCert = nodeRows.FirstOrDefault(c =>
+            string.Equals(c.Thumbprint, presented, StringComparison.OrdinalIgnoreCase)
+            && AgentCertificateState.IsUsable(c, now));
+
+        if (currentCert is null)
         {
             logger.LogWarning(
-                "Certificate renewal failed for node {NodeId}: thumbprint mismatch. " +
-                "Expected: {Expected}, Provided: {Provided}",
-                nodeId, currentCert.Thumbprint, presented);
+                "Certificate renewal failed for node {NodeId}: presented thumbprint {Provided} is not a usable certificate of this node.",
+                nodeId, presented);
             return ProblemDetailsHelper.Unauthorized("thumbprint_mismatch",
-                "The provided certificate thumbprint does not match the current certificate.");
+                "The provided certificate thumbprint does not match a usable certificate.");
         }
 
         // Issue new certificate bound to the agent-held public key
@@ -225,8 +234,6 @@ public static class AgentEndpoints
                 ? ProblemDetailsHelper.BadRequest("invalid_public_key")
                 : ProblemDetailsHelper.BadRequest("certificate_renewal_failed");
         }
-
-        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         // Create new certificate record
         var newCert = new Data.Entities.AgentCertificate
@@ -243,10 +250,25 @@ public static class AgentEndpoints
 
         dbContext.AgentCertificates.Add(newCert);
 
-        // Revoke old certificate
-        currentCert.IsRevoked = true;
-        currentCert.RevokedAt = now;
-        currentCert.RevocationReason = "Renewed - superseded by new certificate";
+        // Presented certificate: superseded now, usable for the grace window (D-S212). A certificate already in grace
+        // keeps its GraceUntil, because grace is never extended.
+        var grace = TimeSpan.FromMinutes(mtlsOptions.Value.RenewalGraceMinutes);
+        var presentedWasInGrace = currentCert.IsRevoked;
+        if (!presentedWasInGrace)
+        {
+            currentCert.IsRevoked = true;
+            currentCert.RevokedAt = now;
+            currentCert.RevocationReason = "Renewed - superseded by new certificate";
+            currentCert.GraceUntil = grace > TimeSpan.Zero ? now + grace : null;
+        }
+
+        // Every other row of the node is hard-revoked: no grace.
+        var hardRevokedCount = 0;
+        foreach (var other in nodeRows.Where(r => r.Id != currentCert.Id))
+        {
+            AgentCertificateState.RevokeWithoutGrace(other, now, "Superseded by a later renewal");
+            hardRevokedCount++;
+        }
 
         // Publish events before SaveChangesAsync to use MassTransit outbox for atomic persistence
         await publishEndpoint.Publish(
@@ -277,8 +299,9 @@ public static class AgentEndpoints
         }
 
         logger.LogInformation(
-            "Certificate renewed for node {NodeId}. Old: {OldThumbprint}, New: {NewThumbprint}",
-            nodeId, currentCert.Thumbprint, certResult.Thumbprint);
+            "Certificate renewed for node {NodeId}. Old: {OldThumbprint}, New: {NewThumbprint}, " +
+            "PresentedWasInGrace: {PresentedWasInGrace}, HardRevoked: {HardRevoked}",
+            nodeId, currentCert.Thumbprint, certResult.Thumbprint, presentedWasInGrace, hardRevokedCount);
 
         // Map to Contracts DTO for API response (DateTime -> DateTimeOffset)
         var contractsResponse = new Dhadgar.Contracts.Nodes.RenewCertificateResponse(

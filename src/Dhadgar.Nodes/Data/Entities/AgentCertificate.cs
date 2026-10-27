@@ -36,6 +36,12 @@ public sealed class AgentCertificate
     [MaxLength(500)]
     public string? RevocationReason { get; set; }
 
+    /// <summary>
+    /// Set only when this certificate was superseded by a renewal (D-S212). Until this UTC time the
+    /// certificate still authenticates and may renew, although IsRevoked is true. Null means no grace.
+    /// </summary>
+    public DateTime? GraceUntil { get; set; }
+
     /// <summary>When this certificate was issued.</summary>
     public DateTime IssuedAt { get; set; }
 

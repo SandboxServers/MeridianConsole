@@ -14,7 +14,7 @@ namespace Dhadgar.Nodes.Hubs;
 /// </summary>
 /// <remarks>
 /// The certificate is validated when the connection is accepted, but a WebSocket can outlive it. Each
-/// heartbeat therefore re-checks revocation (against <c>AgentCertificates</c>) and expiry (the
+/// heartbeat therefore re-checks usability (revocation with grace, against <c>AgentCertificates</c>) and expiry (the
 /// <c>certificate_not_after</c> claim set by <see cref="MtlsMiddleware"/>).
 /// </remarks>
 public sealed class AgentHub(
@@ -104,8 +104,8 @@ public sealed class AgentHub(
         Guid.TryParse(Context.User?.FindFirst(AgentHubProtocol.NodeIdClaim)?.Value, out nodeId);
 
     /// <summary>
-    /// False when the connection's certificate has been revoked, or has passed its NotAfter time and
-    /// expired certificates are not allowed.
+    /// False when the connection's certificate is no longer usable (revoked and outside its renewal grace, D-S212),
+    /// or has passed its NotAfter time and expired certificates are not allowed.
     /// </summary>
     private async Task<bool> IsCertificateCurrentAsync(CancellationToken ct)
     {
@@ -125,10 +125,11 @@ public sealed class AgentHub(
             return false;
         }
 
-        var revoked = await dbContext.AgentCertificates
+        var row = await dbContext.AgentCertificates
             .AsNoTracking()
-            .AnyAsync(c => c.Thumbprint == thumbprint && c.IsRevoked, ct);
+            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint, ct);
 
-        return !revoked;
+        // No row: same as mTLS validation (Trusted). A row: the one grace-aware predicate (D-S212).
+        return row is null || AgentCertificateState.IsUsable(row, timeProvider.GetUtcNow().UtcDateTime);
     }
 }
