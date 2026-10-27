@@ -4,6 +4,7 @@ using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Agent.Windows.Uat.Preflight;
 using Dhadgar.Agent.Windows.Uat.Probe;
 using Dhadgar.Agent.Windows.Uat.Results;
+using Dhadgar.Agent.Windows.Uat.Scenarios;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Uat;
@@ -18,9 +19,14 @@ internal static class UatRunner
     private const int SchemaVersion = 1;
     private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>Scenarios built so far. Empty until P19.</summary>
+    /// <summary>Scenarios built so far: the stack and enrollment smoke (P19) for each mode.</summary>
     internal static IReadOnlyDictionary<string, IUatScenario> ScenarioRegistry { get; } =
-        new Dictionary<string, IUatScenario>(StringComparer.Ordinal);
+        new Dictionary<string, IUatScenario>(StringComparer.Ordinal)
+        {
+            ["process"] = new StackScenario("process"),
+            ["service"] = new StackScenario("service"),
+            ["msi"] = new StackScenario("msi"),
+        };
 
     /// <summary>Runs a verb against the real machine.</summary>
     public static Task<int> RunAsync(UatArgs args, CancellationToken ct)
@@ -44,7 +50,7 @@ internal static class UatRunner
         {
             "preflight" => await PreflightVerbAsync(args, paths, actions, probe, launchedByAgent, ct),
             "cleanup" => await CleanupVerbAsync(args, paths, actions, probe, launchedByAgent),
-            "stack-only" => Refuse("stack-only is not built yet (P19)"),
+            "stack-only" => await StackOnlyVerbAsync(args, paths, actions, probe, launchedByAgent, ct),
             _ => await RunVerbAsync(args, paths, actions, probe, launchedByAgent, scenarios, ct),
         };
     }
@@ -75,6 +81,77 @@ internal static class UatRunner
         var overall = pass ? "pass" : "fail";
         return await PersistAsync(args, paths, started, "preflight", null, [step], CleanupSummary.NotRun(),
             [], overall, pass ? UatExitCodes.Pass : UatExitCodes.Fail, launchedByAgent, actions, new Redactor());
+    }
+
+    /// <summary>
+    /// The stack-only smoke (P19): needs no elevation and allows CLAUDECODE. Refuses when Docker is down, port 5672
+    /// is busy, the dev certificate is untrusted, or a <c>meridian-uat-*</c> container exists. Changes nothing outside
+    /// Docker and the run folder.
+    /// </summary>
+    private static async Task<int> StackOnlyVerbAsync(
+        UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent, CancellationToken ct)
+    {
+        var preflight = await new PreflightChecks(probe, actions, paths.RunDir, null, launchedByAgent)
+            .RunAsync(PreflightMode.StackOnly, ct);
+        if (!preflight.PassesFor(PreflightMode.StackOnly))
+        {
+            var failed = preflight.Checks.Where(c => c.RequiredFor(PreflightMode.StackOnly) && !c.Passed)
+                .Select(c => $"{c.Name}: {c.Detail}");
+            return Refuse("stack-only refused: " + string.Join("; ", failed));
+        }
+
+        var existing = await CommandRunner.RunAsync(
+            "docker", ["ps", "-a", "--filter", "name=meridian-uat-", "--format", "{{.Names}}"], GitTimeout, null, null, ct);
+        if (existing.IsFailure || existing.Value.ExitCode != 0)
+        {
+            return Refuse("stack-only refused: docker ps failed");
+        }
+
+        var names = existing.Value.StandardOutput.Trim();
+        if (names.Length > 0)
+        {
+            return Refuse("stack-only refused: meridian-uat container exists: " + names.ReplaceLineEndings(", "));
+        }
+
+        var started = DateTime.UtcNow;
+        Directory.CreateDirectory(paths.RunDir);
+        var steps = new StepRecorder();
+        var warnings = new List<string>();
+        var manifest = new CleanupManifest(paths.Manifest);
+        var redactor = new Redactor();
+        string? internalError = null;
+        CleanupSummary cleanup;
+
+        try
+        {
+            var scenario = new StackScenario("stack-only");
+            var context = new RunContext(paths, args.RunId, "stack-only", manifest, redactor);
+            await steps.RunAsync("U1", "stack-only", c => scenario.RunAsync(context, c), ct);
+        }
+#pragma warning disable CA1031 // Internal errors are recorded, then cleanup still runs (exit 4).
+        catch (Exception ex)
+        {
+            internalError = $"{ex.GetType().FullName}: {ex.Message}";
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            cleanup = await CleanupGuardedAsync(paths, actions, probe, warnings);
+        }
+
+        if (internalError is not null)
+        {
+            warnings.Add("internal error: " + internalError);
+        }
+
+        var overall = internalError is not null ? "fail" : Overall(steps.Steps, cleanup);
+        var exitCode = cleanup.Status == "footprint-left" ? UatExitCodes.FootprintLeft
+            : internalError is not null ? UatExitCodes.InternalError
+            : overall == "pass" ? UatExitCodes.Pass
+            : UatExitCodes.Fail;
+
+        return await PersistAsync(args, paths, started, "stack-only", null, steps.Steps, cleanup, warnings,
+            overall, exitCode, launchedByAgent, actions, redactor);
     }
 
     private static async Task<int> RunVerbAsync(
