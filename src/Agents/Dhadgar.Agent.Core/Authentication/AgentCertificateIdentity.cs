@@ -8,6 +8,17 @@ namespace Dhadgar.Agent.Core.Authentication;
 /// </summary>
 internal static class AgentCertificateIdentity
 {
+    /// <summary>How far a certificate's NotBefore may sit ahead of this machine's clock (Nodes stamps it on its own clock).</summary>
+    internal const int MaxClockSkewMinutes = 5;
+
+    /// <summary>
+    /// True when <paramref name="certificate"/> is usable at <paramref name="now"/>, allowing NotBefore up to
+    /// <see cref="MaxClockSkewMinutes"/> ahead. The one validity rule for enrollment, renewal and the stores (D-S235).
+    /// </summary>
+    internal static bool IsWithinValidity(X509Certificate2 certificate, DateTimeOffset now) =>
+        new DateTimeOffset(certificate.NotBefore) <= now.AddMinutes(MaxClockSkewMinutes)
+        && now < new DateTimeOffset(certificate.NotAfter);
+
     /// <summary>
     /// True when the certificate's only URI SAN is <paramref name="expectedUri"/>.
     /// </summary>

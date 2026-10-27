@@ -2,6 +2,7 @@ using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Shared.Results;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Hosting;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Process;
 using Dhadgar.Agent.Windows.Installation;
 using Dhadgar.Agent.Windows.IPC;
@@ -49,6 +50,9 @@ public static class Program
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
+            // Register the enrollment token source before AddAgentCore, so Core's TryAdd keeps this one (D-S232)
+            builder.Services.AddSingleton<IEnrollmentTokenSource, RegistryEnrollmentTokenSource>();
+
             // Add Agent.Core services (requires ICertificateStore and IProcessManager)
             builder.Services.AddAgentCore();
 
@@ -88,13 +92,12 @@ public static class Program
             // Register AgentPipeServer factory - requires NodeId which may not be known until enrollment
             builder.Services.AddSingleton<IAgentPipeServer>(sp =>
             {
-                var agentOptions = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
                 var logger = sp.GetRequiredService<ILogger<AgentPipeServer>>();
                 var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
 
-                // Use NodeId if enrolled, otherwise use a placeholder GUID
+                // Use the enrolled NodeId from the identity provider, otherwise a placeholder GUID
                 // (pipe server won't be started until after enrollment anyway)
-                var nodeId = agentOptions.NodeId ?? Guid.Empty;
+                var nodeId = sp.GetRequiredService<IAgentIdentityProvider>().Current?.NodeId ?? Guid.Empty;
 
                 return new AgentPipeServer(nodeId, logger, timeProvider);
             });
@@ -153,9 +156,10 @@ public static class Program
             return Result.Failure("Control plane endpoint must use HTTPS");
         }
 
+        var identity = scope.ServiceProvider.GetRequiredService<IAgentIdentityProvider>().Current;
         logger.LogInformation(
             "Windows Agent starting. NodeId: {NodeId}, ControlPlane: {Endpoint}",
-            options.NodeId?.ToString() ?? "(not enrolled)",
+            identity?.NodeId.ToString() ?? "(not enrolled)",
             uri.Host);
 
         // Configure service recovery with progressive delays (5s/10s/30s).
