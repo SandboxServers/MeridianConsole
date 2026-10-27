@@ -46,7 +46,7 @@ MeridianConsole (codename Dhadgar) is a multi-tenant control plane for game serv
 | [testing/](testing/README.md) | "How do we test, and what proves a seam works?" | explanation, reference |
 | [adr/](adr/README.md) | "Why did we decide X?" | ADR |
 | [plans/](plans/README.md) | "What are we building next, on what fixed path?" | plan |
-| [agents/](agents/ai-sdlc.md) | "How do Claude sessions work in this repo?" | how-to |
+| [agents/](agents/README.md) | "How do Claude sessions work in this repo?" | how-to |
 | [analysis/](analysis/README.md) | Campaign ledgers. Working files, not library docs. | none |
 | [archive/](archive/README.md) | Superseded docs kept for history. | none |
 | [meta/](meta/README.md) | "How do I write a doc for this library?" | reference |
