@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Communication;
@@ -39,6 +40,49 @@ public class ControlPlaneClientTests
         Assert.Equal(ConnectionState.Failed, client.State);
     }
 
+    [Fact]
+    public async Task ConnectAsync_CertificateStoreThrows_ReturnsFailure_NoThrow()
+    {
+        using var meter = new AgentMeter();
+        using var activity = new AgentActivitySource();
+        await using var client = CreateClient("https://localhost", new ThrowingCertificateStore(), meter, activity);
+
+        var result = await client.ConnectAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[ControlPlane.ConnectFailed]", result.Error);
+        Assert.Contains("CryptographicException", result.Error);
+        Assert.DoesNotContain("store fault", result.Error);
+        Assert.Equal(ConnectionState.Failed, client.State);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_InvalidEndpoint_ReturnsFailure_NoThrow()
+    {
+        using var meter = new AgentMeter();
+        using var activity = new AgentActivitySource();
+        await using var client = CreateClient("not a uri", new StubCertificateStore(), meter, activity);
+
+        var result = await client.ConnectAsync();
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[ControlPlane.InvalidEndpoint]", result.Error);
+        Assert.Equal(ConnectionState.Failed, client.State);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_CallerCancelledDuringConnect_Throws()
+    {
+        using var meter = new AgentMeter();
+        using var activity = new AgentActivitySource();
+        using var cts = new CancellationTokenSource();
+        await using var client = CreateClient("https://localhost", new CancellingCertificateStore(cts), meter, activity);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ConnectAsync(cts.Token));
+
+        Assert.Equal(ConnectionState.Failed, client.State);
+    }
+
     private static ControlPlaneClient CreateClient(
         string endpoint,
         ICertificateStore store,
@@ -56,6 +100,50 @@ public class ControlPlaneClientTests
             meter,
             activity,
             NullLogger<ControlPlaneClient>.Instance);
+    }
+
+    private sealed class ThrowingCertificateStore : ICertificateStore
+    {
+        public X509Certificate2? GetClientCertificate() => throw new CryptographicException("store fault");
+
+        public Task StoreCertificateAsync(
+            X509Certificate2 certificate,
+            byte[] privateKey,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task RemoveCertificateAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public X509Certificate2? GetCaCertificate() => null;
+
+        public Task StoreCaCertificateAsync(
+            X509Certificate2 certificate,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public bool NeedsRenewal(int thresholdDays) => false;
+    }
+
+    private sealed class CancellingCertificateStore(CancellationTokenSource cts) : ICertificateStore
+    {
+        public X509Certificate2? GetClientCertificate()
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        }
+
+        public Task StoreCertificateAsync(
+            X509Certificate2 certificate,
+            byte[] privateKey,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task RemoveCertificateAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public X509Certificate2? GetCaCertificate() => null;
+
+        public Task StoreCaCertificateAsync(
+            X509Certificate2 certificate,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public bool NeedsRenewal(int thresholdDays) => false;
     }
 
     /// <summary>
