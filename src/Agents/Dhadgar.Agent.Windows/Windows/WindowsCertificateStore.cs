@@ -53,6 +53,12 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     private const int PfxPasswordBytes = 32;
 
     /// <summary>
+    /// Test seam: runs with the re-imported certificate just before it is added to <c>My</c>. A throw here simulates a
+    /// failed store write, so the persisted key cleanup can be tested (N1).
+    /// </summary>
+    internal Action<X509Certificate2>? BeforeStoreAdd { get; init; }
+
+    /// <summary>
     /// Creates the store. <paramref name="location"/> is <see cref="StoreLocation.LocalMachine"/> in production;
     /// tests use <see cref="StoreLocation.CurrentUser"/> so they do not need Administrator.
     /// </summary>
@@ -161,13 +167,16 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
         lock (_storeLock)
         {
             using var store = new X509Store(StoreName.My, _location);
+            var stored = false;
 
             try
             {
                 store.Open(OpenFlags.ReadWrite);
 
                 // Add first, so a crash leaves two certificates rather than none
+                BeforeStoreAdd?.Invoke(certWithKey);
                 store.Add(certWithKey);
+                stored = true;
 
                 // Set friendly name after adding (Windows-specific)
                 SetFriendlyName(store, certWithKey.Thumbprint, CertificateFriendlyName);
@@ -194,6 +203,15 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             {
                 _logger.LogError(ex, "Failed to store client certificate in {Location}\\My", _location);
                 throw;
+            }
+            finally
+            {
+                // N1: a key persisted for a certificate that never reached the store would stay on disk with nothing
+                // to find it, and each failed retry would leak one more container. Delete it unless the add happened.
+                if (!stored)
+                {
+                    DeletePrivateKey(certWithKey);
+                }
             }
         }
 

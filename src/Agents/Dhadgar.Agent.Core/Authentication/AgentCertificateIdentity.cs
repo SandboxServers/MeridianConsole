@@ -68,11 +68,14 @@ internal static class AgentCertificateIdentity
     }
 
     /// <summary>
-    /// Reads the URI names in the certificate's subjectAltName, for diagnostics only (a mismatch log names the certificate's node).
+    /// Reads the URI names in the certificate's subjectAltName. Returns false when the SAN is malformed; then
+    /// <paramref name="names"/> holds only the names read before the malformed element. Identity checks must treat
+    /// false as a failed check, so a truncated SAN can never classify a certificate.
     /// </summary>
-    internal static IReadOnlyList<string> ReadUriNames(X509Certificate2 certificate)
+    internal static bool TryReadUriNames(X509Certificate2 certificate, out IReadOnlyList<string> names)
     {
-        var names = new List<string>();
+        var read = new List<string>();
+        names = read;
         foreach (var extension in certificate.Extensions)
         {
             if (extension.Oid?.Value != "2.5.29.17")
@@ -88,7 +91,7 @@ internal static class AgentCertificateIdentity
                 {
                     if (sequence.PeekTag().HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 6)))
                     {
-                        names.Add(sequence.ReadCharacterString(
+                        read.Add(sequence.ReadCharacterString(
                             UniversalTagNumber.IA5String,
                             new Asn1Tag(TagClass.ContextSpecific, 6)));
                     }
@@ -100,11 +103,20 @@ internal static class AgentCertificateIdentity
             }
             catch (AsnContentException)
             {
-                // Stop at a malformed SAN; the names read so far are still useful for the log.
-                break;
+                return false;
             }
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the URI names in the certificate's subjectAltName, stopping at a malformed element. Used only for the
+    /// bootstrap mismatch log, which names the certificate's node. Identity checks use <see cref="TryReadUriNames"/>.
+    /// </summary>
+    internal static IReadOnlyList<string> ReadUriNames(X509Certificate2 certificate)
+    {
+        TryReadUriNames(certificate, out var names);
         return names;
     }
 }

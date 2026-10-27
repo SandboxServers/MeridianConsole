@@ -153,7 +153,7 @@ public sealed class WindowsCertificateStoreProfileTests : IDisposable
         // A certificate with a private key that is not an agent certificate
         using var unrelatedKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var unrelatedRequest = new CertificateRequest("CN=unrelated-service", unrelatedKey, HashAlgorithmName.SHA256);
-        using var unrelatedSelfSigned = unrelatedRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
+        using var unrelatedSelfSigned = unrelatedRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(60));
         var unrelatedPfx = unrelatedSelfSigned.Export(X509ContentType.Pfx, "unused-test-password");
         using var unrelated = X509CertificateLoader.LoadPkcs12(
             unrelatedPfx,
@@ -167,10 +167,48 @@ public sealed class WindowsCertificateStoreProfileTests : IDisposable
             my.Add(unrelated);
         }
 
+        // A real agent certificate with an earlier NotAfter: it must be the one returned, not the
+        // longer-lived unrelated certificate that a HasPrivateKey-only matcher would pick.
         var store = new WindowsCertificateStore(_logger, location: Location);
+        var agent = IssueLeaf(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(10));
+        await store.StoreCertificateAsync(agent.Certificate, agent.Pkcs8);
+
         using var found = store.GetClientCertificate();
 
-        Assert.NotEqual(unrelated.Thumbprint, found?.Thumbprint);
+        Assert.NotNull(found);
+        Assert.Equal(agent.Certificate.Thumbprint, found.Thumbprint);
+    }
+
+    [SkippableFact]
+    public void StoreCertificate_FailedAdd_DeletesPersistedKey()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test");
+
+        // The re-imported certificate persists its key before the store is written. When the add fails, that key
+        // must not stay on disk (N1): the failure is injected through the BeforeStoreAdd seam.
+        string? keyName = null;
+        CngProvider? provider = null;
+        var keyExistedBeforeFailure = false;
+        var store = new WindowsCertificateStore(_logger, location: Location)
+        {
+            BeforeStoreAdd = cert =>
+            {
+                using var ecdsa = cert.GetECDsaPrivateKey() as ECDsaCng;
+                keyName = ecdsa?.Key.KeyName;
+                provider = ecdsa?.Key.Provider;
+                keyExistedBeforeFailure = keyName is not null && provider is not null
+                    && CngKey.Exists(keyName, provider, CngKeyOpenOptions.UserKey);
+                throw new CryptographicException("Simulated failure while adding the certificate to the store");
+            },
+        };
+        var agent = IssueLeaf(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(10));
+
+        Assert.Throws<CryptographicException>(() => { _ = store.StoreCertificateAsync(agent.Certificate, agent.Pkcs8); });
+
+        Assert.True(keyExistedBeforeFailure);
+        Assert.NotNull(keyName);
+        Assert.NotNull(provider);
+        Assert.False(CngKey.Exists(keyName, provider, CngKeyOpenOptions.UserKey));
     }
 
     private (X509Certificate2 Certificate, byte[] Pkcs8) IssueLeaf(DateTimeOffset notBefore, DateTimeOffset notAfter)

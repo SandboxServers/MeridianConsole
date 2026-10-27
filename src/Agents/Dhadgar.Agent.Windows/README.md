@@ -780,7 +780,7 @@ The one-time enrollment token is read from `HKLM\SOFTWARE\Meridian Console\Agent
 
 ### State File
 
-The agent identity (node ID, organization, enrollment time) is stored in `agent-state.json` under `StateDirectory`, which defaults to `%ProgramData%\Meridian Console\Agent`. On Windows the file gets a protected ACL: SYSTEM, Administrators and the agent's account only.
+The agent identity (node ID, organization, enrollment time) is stored in `agent-state.json` under `StateDirectory`, which defaults to `%ProgramData%\Meridian Console\Agent`. A Windows-specific protected ACL for this file is not in place yet (D-S233, planned); until then the file inherits the directory's ACL.
 
 ### Windows Performance Counters (Planned)
 

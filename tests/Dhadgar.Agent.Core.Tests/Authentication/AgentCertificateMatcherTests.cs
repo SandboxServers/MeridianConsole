@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Contracts.Nodes;
 using Xunit;
@@ -134,6 +135,26 @@ public sealed class AgentCertificateMatcherTests : IDisposable
     /// Issues certificates shaped like Nodes' agent CA output: the CA is named by
     /// <see cref="AgentCertificateProfile.CaCommonName"/>, leaves are CN={nodeId}, O=MeridianConsole with a SPIFFE URI SAN.
     /// </summary>
+    [Fact]
+    public void MalformedSanAfterSpiffeUri_IsNotAnAgentIdentity()
+    {
+        // A valid Nodes SPIFFE URI GeneralName (context [6]), then a second [6] element whose declared length
+        // runs past the end of the extension. A partial read must not classify the certificate as an agent.
+        var uri = Encoding.ASCII.GetBytes(AgentCertificateProfile.SpiffeId(Guid.NewGuid()));
+        var validElement = new byte[] { 0x86, (byte)uri.Length }.Concat(uri).ToArray();
+        var truncatedElement = new byte[] { 0x86, 0x20 };
+        var sanContent = validElement.Concat(truncatedElement).ToArray();
+        var sanExtension = new byte[] { 0x30, (byte)sanContent.Length }.Concat(sanContent).ToArray();
+
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest($"CN={AgentCertificateProfile.CaCommonName}", key, HashAlgorithmName.SHA256);
+        request.CertificateExtensions.Add(new X509Extension("2.5.29.17", sanExtension, critical: false));
+        using var selfSigned = request.CreateSelfSigned(_now.AddMinutes(-1), _now.AddDays(30));
+        var certificate = Track(X509CertificateLoader.LoadCertificate(selfSigned.RawData));
+
+        Assert.False(AgentCertificateMatcher.IsAgentClientIdentity(certificate));
+        Assert.False(AgentCertificateMatcher.IsAgentClientCertificate(certificate, _now));
+    }
     private sealed class NodesStyleIssuer : IDisposable
     {
         private readonly ECDsa _caKey = ECDsa.Create(ECCurve.NamedCurves.nistP384);

@@ -24,11 +24,18 @@ public static class AgentCertificateMatcher
     /// True when <paramref name="certificate"/> is an agent client certificate by identity: issued under the agent CA
     /// name and carrying a Nodes SPIFFE URI SAN. Validity time is not checked.
     /// </summary>
-    public static bool IsAgentClientIdentity(X509Certificate2 certificate) =>
-        string.Equals(certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: true),
-            AgentCertificateProfile.CaCommonName, StringComparison.Ordinal)
-        && AgentCertificateIdentity.ReadUriNames(certificate)
-            .Any(uri => uri.StartsWith(AgentCertificateProfile.SpiffeNodeIdPrefix, StringComparison.Ordinal));
+    public static bool IsAgentClientIdentity(X509Certificate2 certificate)
+    {
+        if (!string.Equals(certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: true),
+                AgentCertificateProfile.CaCommonName, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // A malformed SAN fails the check: a partial list must not classify the certificate (fail closed).
+        return AgentCertificateIdentity.TryReadUriNames(certificate, out var uris)
+            && uris.Any(uri => uri.StartsWith(AgentCertificateProfile.SpiffeNodeIdPrefix, StringComparison.Ordinal));
+    }
 
     /// <summary>
     /// True when <paramref name="certificate"/> is an agent client certificate that is also valid at
