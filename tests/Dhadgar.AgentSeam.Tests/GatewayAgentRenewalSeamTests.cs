@@ -5,6 +5,7 @@ using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Health;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Telemetry;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
@@ -134,17 +135,17 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
         EnrollmentResult enrolled,
         TimeProvider timeProvider)
     {
+        var identity = new AgentIdentityProvider();
+        identity.Set(new AgentIdentity(enrolled.NodeId, enrolled.OrganizationId, DateTimeOffset.UtcNow));
+
         return new AgentEnrollmentService(
             store,
             httpClientFactory,
-            Options.Create(new AgentOptions
-            {
-                NodeId = enrolled.NodeId,
-                OrganizationId = enrolled.OrganizationId
-            }),
+            Options.Create(new AgentOptions()),
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
             new ClientCertificateProvider(store),
+            identity,
             enrollmentTokenCleanup: null,
             timeProvider: timeProvider);
     }
@@ -233,17 +234,19 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
         AgentMeter meter,
         AgentActivitySource activity)
     {
+        var identity = new AgentIdentityProvider();
+        identity.Set(new AgentIdentity(enrolled.NodeId, enrolled.OrganizationId, DateTimeOffset.UtcNow));
+
         return new ControlPlaneClient(
             Options.Create(new AgentOptions
             {
-                NodeId = enrolled.NodeId,
-                OrganizationId = enrolled.OrganizationId,
                 ControlPlane = { Endpoint = "https://localhost" }
             }),
             store,
             meter,
             activity,
             NullLogger<ControlPlaneClient>.Instance,
+            identity,
             new ControlPlaneHubTransport
             {
                 HttpMessageHandlerFactory = CertificateInjectingHandlerFactory(gatewayServer),

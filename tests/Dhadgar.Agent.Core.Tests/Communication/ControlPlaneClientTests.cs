@@ -3,6 +3,7 @@ using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Telemetry;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -89,17 +90,19 @@ public class ControlPlaneClientTests
         AgentMeter meter,
         AgentActivitySource activity)
     {
+        var identity = new AgentIdentityProvider();
+        identity.Set(new AgentIdentity(Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow));
+
         return new ControlPlaneClient(
             Options.Create(new AgentOptions
             {
-                NodeId = Guid.NewGuid(),
-                OrganizationId = Guid.NewGuid(),
                 ControlPlane = { Endpoint = endpoint }
             }),
             store,
             meter,
             activity,
-            NullLogger<ControlPlaneClient>.Instance);
+            NullLogger<ControlPlaneClient>.Instance,
+            identity);
     }
 
     private sealed class ThrowingCertificateStore : ICertificateStore

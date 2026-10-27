@@ -4,6 +4,7 @@ using System.Text.Json;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Commands;
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Telemetry;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Shared.Results;
@@ -25,6 +26,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
     private readonly AgentActivitySource _activitySource;
     private readonly ILogger<ControlPlaneClient> _logger;
     private readonly ControlPlaneHubTransport _transport;
+    private readonly IAgentIdentityProvider _identity;
 
     private HubConnection? _hubConnection;
     private ConnectionState _state = ConnectionState.Disconnected;
@@ -42,6 +44,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         AgentMeter meter,
         AgentActivitySource activitySource,
         ILogger<ControlPlaneClient> logger,
+        IAgentIdentityProvider identityProvider,
         ControlPlaneHubTransport? transport = null)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
@@ -49,6 +52,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         _meter = meter ?? throw new ArgumentNullException(nameof(meter));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _identity = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
         _transport = transport ?? new ControlPlaneHubTransport();
     }
 
@@ -242,7 +246,8 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             return Result<AgentHeartbeatAck>.Failure("[ControlPlane.NotConnected] Cannot send heartbeat: not connected");
         }
 
-        using var activity = _activitySource.StartHeartbeat(_options.NodeId ?? Guid.Empty);
+        var nodeId = _identity.Current?.NodeId;
+        using var activity = _activitySource.StartHeartbeat(nodeId ?? Guid.Empty);
 
         try
         {
@@ -252,7 +257,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             var ack = await _hubConnection.InvokeAsync<AgentHeartbeatAck>(
                 nameof(IAgentHub.Heartbeat), heartbeat, cts.Token);
             _meter.RecordHeartbeatSent();
-            _logger.LogDebug("Heartbeat sent for node {NodeId}", _options.NodeId);
+            _logger.LogDebug("Heartbeat sent for node {NodeId}", nodeId);
             return Result<AgentHeartbeatAck>.Success(ack);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -421,22 +426,23 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             }
 
             // Security: Validate NodeId matches this agent's NodeId
-            if (_options.NodeId.HasValue && envelope.NodeId != _options.NodeId.Value)
+            var identity = _identity.Current;
+            if (identity is not null && envelope.NodeId != identity.NodeId)
             {
                 _logger.LogWarning(
                     "Rejected command {CommandId}: NodeId mismatch (expected {ExpectedNodeId}, received {ReceivedNodeId})",
-                    envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
+                    envelope.CommandId, identity.NodeId, envelope.NodeId);
                 return;
             }
 
             // Security: Validate OrganizationId matches this agent's OrganizationId (multi-tenant isolation)
             // SECURITY: Reject Guid.Empty as invalid - prevents bypass via empty OrganizationId
-            if (_options.OrganizationId.HasValue &&
-                (envelope.OrganizationId == Guid.Empty || envelope.OrganizationId != _options.OrganizationId.Value))
+            if (identity is not null &&
+                (envelope.OrganizationId == Guid.Empty || envelope.OrganizationId != identity.OrganizationId))
             {
                 _logger.LogWarning(
                     "Rejected command {CommandId}: OrganizationId invalid or mismatch (expected {ExpectedOrgId}, received {ReceivedOrgId})",
-                    envelope.CommandId, _options.OrganizationId.Value,
+                    envelope.CommandId, identity.OrganizationId,
                     envelope.OrganizationId == Guid.Empty ? "(empty)" : envelope.OrganizationId.ToString());
                 return;
             }

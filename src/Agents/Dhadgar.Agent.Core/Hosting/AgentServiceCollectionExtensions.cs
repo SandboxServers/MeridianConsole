@@ -6,6 +6,7 @@ using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Agent.Core.Health;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Process;
 using Dhadgar.Agent.Core.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,21 @@ public static class AgentServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Identity - the node ID comes from the state store (or enrollment), never from configuration alone
+        services.PostConfigure<AgentOptions>(o =>
+        {
+            if (string.IsNullOrWhiteSpace(o.StateDirectory))
+            {
+                o.StateDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "Meridian Console",
+                    "Agent");
+            }
+        });
+        services.TryAddSingleton<IAgentIdentityProvider, AgentIdentityProvider>();
+        services.TryAddSingleton<IAgentStateStore, FileAgentStateStore>();
+        services.TryAddSingleton<IPathValidator, PathValidator>();
+
         // Authentication - IEnrollmentService requires ICertificateStore from platform-specific host
         services.AddSingleton<IClientCertificateProvider, ClientCertificateProvider>();
         services.AddSingleton<IEnrollmentService, EnrollmentService>();
@@ -55,7 +71,6 @@ public static class AgentServiceCollectionExtensions
 
         // Files
         services.AddSingleton<IFileTransferService, FileTransferService>();
-        services.AddSingleton<IPathValidator, PathValidator>();
         services.AddSingleton<IFileIntegrityChecker, FileIntegrityChecker>();
 
         // Telemetry

@@ -29,6 +29,12 @@ public sealed class AgentOptions : IValidatableObject
     public string? NodeName { get; set; }
 
     /// <summary>
+    /// Directory that holds the agent identity state file (<c>agent-state.json</c>).
+    /// Defaults to <c>%ProgramData%\Meridian Console\Agent</c> when empty.
+    /// </summary>
+    public string StateDirectory { get; set; } = string.Empty;
+
+    /// <summary>
     /// Control plane connection settings.
     /// </summary>
     [Required]
@@ -55,30 +61,20 @@ public sealed class AgentOptions : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        // If enrolled (NodeId set), additional validations are required
-        if (NodeId.HasValue)
+        // NodeId and OrganizationId identify a tenant together, so they are set together or not at all.
+        // The client certificate is held by the platform certificate store, not by these options.
+        if (NodeId.HasValue != OrganizationId.HasValue)
         {
-            // OrganizationId must also be set for tenant isolation
-            if (!OrganizationId.HasValue)
-            {
-                yield return new ValidationResult(
-                    $"{nameof(OrganizationId)} is required for enrolled agents to ensure tenant isolation",
-                    [nameof(OrganizationId)]);
-            }
+            yield return new ValidationResult(
+                $"{nameof(NodeId)} and {nameof(OrganizationId)} must both be set or both be null",
+                [nameof(NodeId), nameof(OrganizationId)]);
+        }
 
-            // Either CertificateThumbprint or (CertificatePath + PrivateKeyPath) must be configured
-            var hasThumbprint = !string.IsNullOrEmpty(Security.CertificateThumbprint);
-            var hasCertPath = !string.IsNullOrEmpty(Security.CertificatePath);
-            var hasKeyPath = !string.IsNullOrEmpty(Security.PrivateKeyPath);
-
-            if (!hasThumbprint && !hasCertPath && !hasKeyPath)
-            {
-                yield return new ValidationResult(
-                    "Enrolled agents must have certificate configuration. " +
-                    $"Specify either {nameof(SecurityOptions.CertificateThumbprint)} or " +
-                    $"both {nameof(SecurityOptions.CertificatePath)} and {nameof(SecurityOptions.PrivateKeyPath)}.",
-                    [nameof(Security)]);
-            }
+        if (!string.IsNullOrWhiteSpace(StateDirectory) && !Path.IsPathRooted(StateDirectory))
+        {
+            yield return new ValidationResult(
+                $"{nameof(StateDirectory)} must be an absolute path when set",
+                [nameof(StateDirectory)]);
         }
     }
 }

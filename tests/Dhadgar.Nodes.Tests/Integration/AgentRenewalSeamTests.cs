@@ -5,6 +5,7 @@ using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Health;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Telemetry;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
@@ -281,14 +282,11 @@ public sealed class AgentRenewalSeamTests : IDisposable
         return new AgentEnrollmentService(
             store,
             httpClientFactory,
-            Options.Create(new AgentOptions
-            {
-                NodeId = enrolled.NodeId,
-                OrganizationId = enrolled.OrganizationId
-            }),
+            Options.Create(new AgentOptions()),
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
             new ClientCertificateProvider(store),
+            IdentityFor(enrolled),
             enrollmentTokenCleanup: null,
             timeProvider: timeProvider);
     }
@@ -378,6 +376,16 @@ public sealed class AgentRenewalSeamTests : IDisposable
         Assert.True(result.Value.Acknowledged, result.Value.ErrorCode);
     }
 
+    /// <summary>
+    /// The identity an enrolled agent holds after enrollment. Set through the provider, not through options.
+    /// </summary>
+    private static AgentIdentityProvider IdentityFor(EnrollmentResult enrolled)
+    {
+        var identity = new AgentIdentityProvider();
+        identity.Set(new AgentIdentity(enrolled.NodeId, enrolled.OrganizationId, DateTimeOffset.UtcNow));
+        return identity;
+    }
+
     private static ControlPlaneClient CreateAgentClient(
         WebApplicationFactory<Program> factory,
         EnrollmentResult enrolled,
@@ -388,14 +396,13 @@ public sealed class AgentRenewalSeamTests : IDisposable
         return new ControlPlaneClient(
             Options.Create(new AgentOptions
             {
-                NodeId = enrolled.NodeId,
-                OrganizationId = enrolled.OrganizationId,
                 ControlPlane = { Endpoint = "https://localhost" }
             }),
             store,
             meter,
             activity,
             NullLogger<ControlPlaneClient>.Instance,
+            IdentityFor(enrolled),
             new ControlPlaneHubTransport
             {
                 HttpMessageHandlerFactory = CertificateInjectingHandlerFactory(factory.Server),

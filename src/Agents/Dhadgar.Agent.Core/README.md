@@ -426,6 +426,20 @@ The agent must handle disconnection gracefully:
 
 ---
 
+## Identity and state
+
+The agent's identity (`NodeId`, `OrganizationId`, `EnrolledAt`) lives in `IAgentIdentityProvider`, not in `AgentOptions`. Runtime code reads `Current` or waits on `WaitForIdentityAsync`, and the heartbeat loop starts once an identity is set (#101).
+
+- **File:** `agent-state.json` in `AgentOptions.StateDirectory`. The default is `%ProgramData%\Meridian Console\Agent`. `StateDirectory` must be an absolute path with no `..` segments. The file path is checked with `IPathValidator` against that directory before any read or write.
+- **Format:** `{ "nodeId", "organizationId", "enrolledAt" }` in System.Text.Json web defaults. The file holds no secrets. The client certificate and its private key stay in the platform certificate store.
+- **Writes:** saved to `agent-state.json.tmp`, then moved over the final file. The directory is created if missing.
+- **Reads:** capped at 64 KB.
+- **Corrupt file:** bad JSON, a `Guid.Empty` ID or an oversize file gives `Failure("[AgentState.Corrupt] …")`. The agent never re-enrolls silently.
+- **Missing file:** gives `Failure("[AgentState.Missing] …")`. The shared `Result<T>` cannot carry a successful null, so callers treat this code as "not enrolled yet".
+- **Changing identity:** setting the same `NodeId` again succeeds. A different `NodeId` gives `Failure("[AgentIdentity.Changed] restart required")`.
+
+---
+
 ## Authentication
 
 ### Current State

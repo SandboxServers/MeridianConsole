@@ -1,5 +1,6 @@
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,17 +14,20 @@ public sealed class HeartbeatService : BackgroundService
 {
     private readonly IControlPlaneClient _controlPlaneClient;
     private readonly IHealthReporter _healthReporter;
+    private readonly IAgentIdentityProvider _identity;
     private readonly IOptionsMonitor<AgentOptions> _optionsMonitor;
     private readonly ILogger<HeartbeatService> _logger;
 
     public HeartbeatService(
         IControlPlaneClient controlPlaneClient,
         IHealthReporter healthReporter,
+        IAgentIdentityProvider identity,
         IOptionsMonitor<AgentOptions> optionsMonitor,
         ILogger<HeartbeatService> logger)
     {
         _controlPlaneClient = controlPlaneClient ?? throw new ArgumentNullException(nameof(controlPlaneClient));
         _healthReporter = healthReporter ?? throw new ArgumentNullException(nameof(healthReporter));
+        _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _optionsMonitor = optionsMonitor ?? throw new ArgumentNullException(nameof(optionsMonitor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -32,11 +36,16 @@ public sealed class HeartbeatService : BackgroundService
     {
         _logger.LogInformation("Heartbeat service started");
 
-        // Wait for enrollment - use CurrentValue to detect runtime changes
-        while (!_optionsMonitor.CurrentValue.NodeId.HasValue && !stoppingToken.IsCancellationRequested)
+        // Wait until an identity is set (enrollment or the state store). Waiting on the provider
+        // rather than AgentOptions.NodeId is the #101 fix: options never gain a NodeId at runtime.
+        try
         {
-            _logger.LogDebug("Waiting for agent enrollment before starting heartbeat...");
-            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            await _identity.WaitForIdentityAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Heartbeat service stopped before an identity was set");
+            return;
         }
 
         var interval = TimeSpan.FromSeconds(_optionsMonitor.CurrentValue.ControlPlane.HeartbeatIntervalSeconds);

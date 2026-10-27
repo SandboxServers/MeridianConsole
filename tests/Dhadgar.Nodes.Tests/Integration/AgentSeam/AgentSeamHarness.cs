@@ -3,6 +3,7 @@ using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Health;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Services;
@@ -99,6 +100,7 @@ public static class AgentSeamHarness
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
             new ClientCertificateProvider(store),
+            new AgentIdentityProvider(),
             enrollmentTokenCleanup: null,
             timeProvider: timeProvider);
     }

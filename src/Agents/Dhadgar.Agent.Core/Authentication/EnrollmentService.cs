@@ -5,6 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Health;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
@@ -52,12 +53,14 @@ public sealed class EnrollmentService : IEnrollmentService
     private readonly IEnrollmentTokenCleanup? _enrollmentTokenCleanup;
     private readonly IHardwareInventoryCollector _hardwareInventory;
     private readonly IClientCertificateProvider _clientCertificateProvider;
+    private readonly IAgentIdentityProvider _identity;
     private readonly TimeProvider _timeProvider;
 
     /// <param name="clientCertificateProvider">
     /// Invalidated after enrollment and renewal attempts that change the certificate store, so the
     /// mTLS handshake picks up the new key material. Must be the same instance the handshake handler reads.
     /// </param>
+    /// <param name="identityProvider">Source of the enrolled node ID. Enrollment state is read from here, not from options.</param>
     /// <param name="enrollmentTokenCleanup">Optional cleanup of the consumed enrollment token.</param>
     /// <param name="timeProvider">Clock for the renewed certificate validity check. Defaults to <see cref="TimeProvider.System"/>.</param>
     public EnrollmentService(
@@ -67,6 +70,7 @@ public sealed class EnrollmentService : IEnrollmentService
         ILogger<EnrollmentService> logger,
         IHardwareInventoryCollector hardwareInventory,
         IClientCertificateProvider clientCertificateProvider,
+        IAgentIdentityProvider identityProvider,
         IEnrollmentTokenCleanup? enrollmentTokenCleanup = null,
         TimeProvider? timeProvider = null)
     {
@@ -76,6 +80,7 @@ public sealed class EnrollmentService : IEnrollmentService
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _clientCertificateProvider = clientCertificateProvider ?? throw new ArgumentNullException(nameof(clientCertificateProvider));
+        _identity = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
         _enrollmentTokenCleanup = enrollmentTokenCleanup;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -87,7 +92,7 @@ public sealed class EnrollmentService : IEnrollmentService
     {
         get
         {
-            if (!_options.NodeId.HasValue)
+            if (_identity.Current is null)
             {
                 return false;
             }
@@ -345,14 +350,14 @@ public sealed class EnrollmentService : IEnrollmentService
     public async Task<Result<CertificateRenewalResult>> RenewCertificateAsync(
         CancellationToken cancellationToken = default)
     {
-        // NodeId comes from options; P11 replaces this with the identity provider
-        if (!_options.NodeId.HasValue)
+        var identity = _identity.Current;
+        if (identity is null)
         {
             return Result<CertificateRenewalResult>.Failure(
                 "[Renewal.NotEnrolled] Agent is not enrolled");
         }
 
-        var nodeId = _options.NodeId.Value;
+        var nodeId = identity.NodeId;
 
         // SECURITY: Use 'using' to ensure certificate is disposed after use
         using var currentCert = _certificateStore.GetClientCertificate();
