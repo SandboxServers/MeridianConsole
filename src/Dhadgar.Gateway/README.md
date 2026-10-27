@@ -430,14 +430,10 @@ Routes are configured in `appsettings.json` under `ReverseProxy:Routes`. Each ro
 | `identity-internal-block` | `/api/v1/identity/internal/{**catch-all}` | identity | **DenyAll** | - | - |
 | `betterauth-route` | `/api/v1/betterauth/{**catch-all}` | betterauth | Anonymous | Auth | - |
 | `identity-route` | `/api/v1/identity/{**catch-all}` | identity | Anonymous | Auth | PathRemovePrefix |
-| `billing-route` | `/api/v1/billing/{**catch-all}` | billing | TenantScoped | PerTenant | PathRemovePrefix |
 | `servers-route` | `/api/v1/servers/{**catch-all}` | servers | TenantScoped | PerTenant | PathRemovePrefix |
 | `nodes-route` | `/api/v1/nodes/{**catch-all}` | nodes | TenantScoped | PerTenant | PathRemovePrefix |
-| `tasks-route` | `/api/v1/tasks/{**catch-all}` | tasks | TenantScoped | PerTenant | PathRemovePrefix |
-| `files-route` | `/api/v1/files/{**catch-all}` | files | TenantScoped | PerTenant | PathRemovePrefix |
 | `console-api-route` | `/api/v1/console/{**catch-all}` | console | TenantScoped | PerTenant | PathRemovePrefix |
 | `console-hub-route` | `/hubs/console/{**catch-all}` | console | TenantScoped | PerTenant | - |
-| `mods-route` | `/api/v1/mods/{**catch-all}` | mods | TenantScoped | PerTenant | PathRemovePrefix |
 | `notifications-route` | `/api/v1/notifications/{**catch-all}` | notifications | TenantScoped | PerTenant | PathRemovePrefix |
 | `firewall-route` | `/api/v1/firewall/{**catch-all}` | firewall | TenantScoped | PerTenant | PathRemovePrefix |
 | `secrets-route` | `/api/v1/secrets/{**catch-all}` | secrets | TenantScoped | PerTenant | PathRemovePrefix |
@@ -521,13 +517,9 @@ All clusters share common configuration:
 |---------|---------|------------------|
 | betterauth | Dhadgar.Identity | 5130 |
 | identity | Dhadgar.Identity | 5010 |
-| billing | Dhadgar.Billing | 5020 |
 | servers | Dhadgar.Servers | 5030 |
 | nodes | Dhadgar.Nodes | 5040 |
-| tasks | Dhadgar.Tasks | 5050 |
-| files | Dhadgar.Files | 5060 |
 | console | Dhadgar.Console | 5070 |
-| mods | Dhadgar.Mods | 5080 |
 | notifications | Dhadgar.Notifications | 5090 |
 | secrets | Dhadgar.Secrets | 5110 |
 | discord | Dhadgar.Discord | 5120 |

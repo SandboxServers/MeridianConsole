@@ -25,13 +25,13 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave18Routes()
+    public void ReverseProxyShouldHave14Routes()
     {
-        // 10 backend services + Better Auth + console hub route + agent hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 18 total
+        // 6 backend service routes (identity, servers, console, notifications, secrets, discord) + Better Auth + console hub route + agent hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 14 total (billing, tasks, files, mods are parked, D-03)
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(18, routes.Count);
+        Assert.Equal(14, routes.Count);
     }
 
     [Fact]
@@ -83,24 +83,20 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave12Clusters()
+    public void ReverseProxyShouldHave8Clusters()
     {
-        // 11 backend services + Better Auth (agents uses nodes cluster)
+        // 8 active backend clusters (billing, tasks, files, mods are parked, D-03; agents uses nodes cluster)
         var clustersSection = _configuration.GetSection("ReverseProxy:Clusters");
         var clusters = clustersSection.GetChildren().ToList();
 
-        Assert.Equal(12, clusters.Count);
+        Assert.Equal(8, clusters.Count);
     }
 
     [Theory]
     [InlineData("identity", "5010")]
-    [InlineData("billing", "5020")]
     [InlineData("servers", "5030")]
     [InlineData("nodes", "5040")]
-    [InlineData("tasks", "5050")]
-    [InlineData("files", "5060")]
     [InlineData("console", "5070")]
-    [InlineData("mods", "5080")]
     [InlineData("notifications", "5090")]
     [InlineData("secrets", "5110")]
     [InlineData("discord", "5120")]
