@@ -146,11 +146,12 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
         X509Certificate2 certificate,
         CancellationToken ct = default)
     {
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var now = _timeProvider.GetUtcNow();
 
-        // Check certificate validity period
-        var isExpired = certificate.NotAfter < now;
-        var notYetValid = certificate.NotBefore > now;
+        // D-S247: X509Certificate2.NotBefore/NotAfter are local times (DateTimeKind.Local). Compare instants,
+        // not wall-clock numbers, or the window shifts by the host's UTC offset (fail-open east of UTC).
+        var isExpired = new DateTimeOffset(certificate.NotAfter) < now;
+        var notYetValid = new DateTimeOffset(certificate.NotBefore) > now;
 
         if (notYetValid)
         {

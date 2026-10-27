@@ -499,7 +499,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 | `CaKeyPassword` | auto-generated | Password for CA private key |
 | `CaKeySize` | 4096 | RSA key size for CA |
 | `CaValidityYears` | 10 | CA certificate validity |
-| `ClientKeySize` | 2048 | RSA key size for client certs |
+| `ClientKeySize` | 2048 | RSA key size for the legacy server-key issuance path (IssueCertificateAsync); not used by enrollment or renewal |
 | `CertificateValidityDays` | 90 | Agent certificate validity |
 | `AzureKeyVaultUrl` | - | Azure Key Vault URL (production) |
 | `AzureKeyVaultCaCertName` | "meridian-agent-ca" | CA certificate name in KV |
@@ -524,7 +524,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 Agents authenticate using mutual TLS (mTLS):
 
 1. **Enrollment Token** - Admin creates one-time token (default: 1 hour validity)
-2. **Agent Enrollment** - Agent presents token, receives mTLS certificate
+2. **Agent Enrollment** - Agent presents token, receives mTLS certificate. The token is consumed by a conditional write at the enrollment's save: of two requests with the same token, only the first to save enrolls; the other gets `invalid_token`, and no node or certificate row is kept for it (D-S246).
 3. **Heartbeat Auth** - Agent uses certificate for all subsequent requests
 4. **Certificate Renewal** - Auto-renewal before expiration (90 days default). The agent generates a new key pair and sends only its public key (base64 SubjectPublicKeyInfo) in `RenewCertificateRequest.PublicKey`. Nodes issues a certificate bound to that key. The current thumbprint comes only from the mTLS client certificate (`certificate_thumbprint` claim), never from the body. No private key or PKCS#12 bundle is created or returned. The response carries the new certificate PEM, the CA PEM, and the validity window. Errors: 401 `certificate_required` or `thumbprint_mismatch`, 400 `invalid_public_key` or `certificate_renewal_failed`, 403 `forbidden` when the certificate's node does not match the URL.
 5. **Revocation** - Certificates can be revoked via API
@@ -558,7 +558,7 @@ Policies on agent endpoints use the `AgentMtls` scheme (`AgentMtlsAuthentication
 
 - **SPIFFE ID:** `spiffe://meridianconsole.com/nodes/{nodeId}`
 - **Extended Key Usage:** Client Authentication (OID 1.3.6.1.5.5.7.3.2)
-- **Key Size:** 2048-bit RSA (client), 4096-bit RSA (CA)
+- **Key:** generated and held by the agent (ECDSA P-384; Nodes also accepts ECDSA P-256 and RSA of 2048 bits or more). Nodes never sees the private key. The CA key is 4096-bit RSA.
 
 ### Certificate Renewal and Grace Window
 
@@ -575,8 +575,8 @@ Applied at Gateway level:
 
 | Policy | Limit | Scope |
 |:-------|:------|:------|
-| `PerTenant` | 100 req/sec | Organization |
-| `PerAgent` | 500 req/60sec | Per agent |
+| `PerTenant` | Token bucket: 100 burst, 50 per second refill | `org_id` claim when authenticated, else client IP (IPv6 /64) |
+| `PerAgent` | 500 requests per 60 seconds (fixed window) | Client IP (IPv6 /64) |
 
 ### Audit Logging
 

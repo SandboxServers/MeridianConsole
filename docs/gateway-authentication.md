@@ -47,7 +47,8 @@ The Gateway uses Authority-based JWT validation, meaning it fetches JWKS (JSON W
 |--------|-------------|-------|
 | `Anonymous` | No authentication required | Health checks, public endpoints |
 | `TenantScoped` | Requires valid JWT with `org_id` claim | Most API routes |
-| `Agent` | Requires valid JWT with `client_type: agent` | Agent-specific endpoints |
+| `Agent` | Requires valid JWT with `client_type: agent` (defined; no route uses it since D-S26) | Reserved |
+| `AgentCertificate` | Requires a TLS client certificate whose issuer CN is `AgentCertificateProfile.CaCommonName`; Nodes validates the rest (D-S25) | `agents-route`, `agent-hub-route` |
 | `DenyAll` | Always denies access | Internal endpoint blocking |
 
 ### Route Authorization
