@@ -24,7 +24,9 @@ internal sealed record NodeRow(Guid Id, NodeStatus Status, DateTime? LastHeartbe
 /// <param name="Id">The row ID.</param>
 /// <param name="Thumbprint">The stored SHA-256 thumbprint.</param>
 /// <param name="IsRevoked">True when the certificate is revoked.</param>
-internal sealed record CertRow(Guid Id, string Thumbprint, bool IsRevoked);
+/// <param name="GraceUntil">The renewal grace end (D-S212), when the row has one.</param>
+/// <param name="RevocationReason">Why the row was revoked, when it was.</param>
+internal sealed record CertRow(Guid Id, string Thumbprint, bool IsRevoked, DateTime? GraceUntil = null, string? RevocationReason = null);
 
 /// <summary>An enrollment token row as the legs read it.</summary>
 /// <param name="Id">The token ID.</param>
@@ -82,7 +84,7 @@ internal sealed class NodesAgentLegsDb : IAgentLegsDb
             await using var db = _createContext();
             var rows = await db.AgentCertificates.AsNoTracking()
                 .Where(c => c.NodeId == nodeId)
-                .Select(c => new CertRow(c.Id, c.Thumbprint, c.IsRevoked))
+                .Select(c => new CertRow(c.Id, c.Thumbprint, c.IsRevoked, c.GraceUntil, c.RevocationReason))
                 .ToListAsync(ct);
             return Result<IReadOnlyList<CertRow>>.Success(rows);
         }
