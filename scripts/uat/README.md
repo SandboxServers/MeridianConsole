@@ -4,7 +4,7 @@ The Windows agent UAT proves the agent on a real Windows machine: it enrolls, st
 heartbeats and cleans up after itself. The driver is `tests/Dhadgar.Agent.Windows.Uat`. The entry
 point is `scripts/uat/Invoke-AgentWindowsUat.ps1`.
 
-This README covers the skeleton delivered by P18: `-Preflight`, `-StackOnly` (not built yet, P19),
+This README covers the skeleton delivered by P18: `-Preflight`, `-StackOnly` (P19),
 `-CleanupOnly`, and the guards of `-Mode Process`. Scenario steps and the `Service` and `Msi` modes
 are added by later packets.
 
@@ -35,12 +35,48 @@ processes whose image is under the run folder or is the Nodes or Gateway build t
 
 A process cleanup cannot read is left running and reported, never killed.
 
+## The local stack and `-StackOnly` (P19)
+
+`-StackOnly` proves the control plane end to end without touching the machine outside Docker and the run
+folder. It needs no elevation and runs under `CLAUDECODE`. It refuses (exit 2) when Docker is down, port
+5672 is busy, the dev HTTPS certificate is not trusted (`dotnet dev-certs https --trust`), or a
+`meridian-uat-*` container already exists.
+
+| Part | How it runs | Port |
+| --- | --- | --- |
+| PostgreSQL 16 | Docker container `meridian-uat-pg-<runId>`, database `dhadgar_nodes_uat` | free loopback port |
+| RabbitMQ 3 | Docker container `meridian-uat-mq-<runId>` | **5672** (fixed) |
+| Nodes | child process from `src\Dhadgar.Nodesin\Release
+et10.0`, plain HTTP on 127.0.0.1 | free loopback port |
+| Gateway | child process from `src\Dhadgar.Gatewayin\Release
+et10.0`, HTTPS on `localhost` | free loopback port |
+
+RabbitMQ must be on 5672 because `RabbitMqOptions` has no port setting. Stop a dev-compose RabbitMQ first.
+Containers bind to 127.0.0.1 only and carry the label `meridian-uat=<runId>`. Passwords are 24 random
+bytes as hex, reach Docker and the services through the environment (never the command line) and are
+redacted from every log and result.
+
+U1 starts the containers, Nodes and the Gateway and records ports, image IDs and process IDs. The smoke
+then runs these sub-steps, recorded as evidence of U1:
+
+- **S-mint:** mints a single-use token through the real `EnrollmentTokenService`.
+- **S-enroll:** `POST /api/v1/agents/enroll` through the Gateway (expects 201); checks the certificate's
+  SPIFFE SAN and public key.
+- **S-negotiate:** `POST /hubs/agent/negotiate`: 200 with the certificate, 401 without.
+- **S-hub-ws:** a SignalR connection over WebSockets only, with the certificate, then a heartbeat that
+  must be acknowledged. This is the first run of the WebSocket upgrade through YARP.
+- **S-db:** the node row, the token's `UsedAt` and `UsedByNodeId`, and the node's `LastHeartbeat`.
+
+Cleanup removes the containers and processes. A passing run exits 0 with `cleanup.status = clean`, and
+`docker ps -a --filter label=meridian-uat` prints nothing. Build Nodes and the Gateway in Release first
+(the script does this unless `-NoBuild`).
+
 ## Parameters
 
 | Call | What it does |
 | --- | --- |
 | `Invoke-AgentWindowsUat.ps1` or `-Preflight` | Checks the machine and writes `U0`. Changes nothing. |
-| `-StackOnly` | Starts the local stack (P19). Not built yet: the driver exits 2. |
+| `-StackOnly` | Starts the local stack and runs the enrollment smoke (P19). Needs no elevation. |
 | `-Mode Process -AcceptMachineChanges` | Runs the scenario as a child process (elevated, machine-changing). |
 | `-Mode Service -AcceptMachineChanges` | Runs the scenario as a Windows service (P22, not built yet). |
 | `-Mode Msi -AcceptMachineChanges` | Installs the MSI (P23, not built yet). The script refuses. |
