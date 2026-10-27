@@ -126,13 +126,73 @@ public class AgentCertificateForwardingTests
     }
 
     [Fact]
-    public async Task NonAgentRoute_StillLimitedByGlobal_NotByRoutePolicy()
+    public async Task AgentRoute_WithoutCertificate_FloodIsRateLimited()
     {
         using var app = CreateApp(out var capture, new[]
         {
-            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:PermitLimit", "2"),
-            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:WindowSeconds", "60"),
-            new KeyValuePair<string, string?>("RateLimiting:Policies:Auth:PermitLimit", "100"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "2"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:WindowSeconds", "60"),
+        });
+        var remoteIp = IPAddress.Parse("203.0.113.40");
+        var statuses = new List<HttpStatusCode>();
+        HttpResponseMessage? lastResponse = null;
+
+        try
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
+                var response = await SendAsync(app, request, certificate: null, remoteIp);
+                lastResponse?.Dispose();
+                lastResponse = response;
+                statuses.Add(response.StatusCode);
+            }
+
+            Assert.Equal(
+                new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.TooManyRequests },
+                statuses);
+            Assert.True(lastResponse!.Headers.Contains("Retry-After"), "Expected a Retry-After header on the 429.");
+            Assert.Empty(capture.Requests);
+        }
+        finally
+        {
+            lastResponse?.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task AgentRoute_WrongIssuerCertificate_FloodIsRateLimited()
+    {
+        using var app = CreateApp(out var capture, new[]
+        {
+            new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "2"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:WindowSeconds", "60"),
+        });
+        var remoteIp = IPAddress.Parse("203.0.113.41");
+        var statuses = new List<HttpStatusCode>();
+
+        using var foreignCertificate = CreateCertificate(ForeignIssuerCommonName);
+        for (var i = 0; i < 3; i++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
+            using var response = await SendAsync(app, request, foreignCertificate, remoteIp);
+            statuses.Add(response.StatusCode);
+        }
+
+        Assert.Equal(
+            new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.TooManyRequests },
+            statuses);
+        Assert.Empty(capture.Requests);
+    }
+
+    [Fact]
+    public async Task NonAgentRoute_LimitedByRoutePolicy_NotByGlobal()
+    {
+        using var app = CreateApp(out var capture, new[]
+        {
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Auth:PermitLimit", "2"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Auth:WindowSeconds", "60"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:PermitLimit", "100"),
         });
         var remoteIp = IPAddress.Parse("203.0.113.20");
         var statuses = new List<HttpStatusCode>();
@@ -148,6 +208,31 @@ public class AgentCertificateForwardingTests
             new[] { HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.TooManyRequests },
             statuses);
         Assert.Equal(2, capture.Requests.Count);
+    }
+
+    [Fact]
+    public async Task NonAgentRoute_GlobalExhausted_RoutePolicyStillAllows()
+    {
+        using var app = CreateApp(out var capture, new[]
+        {
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:PermitLimit", "1"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:WindowSeconds", "60"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Auth:PermitLimit", "100"),
+        });
+        var remoteIp = IPAddress.Parse("203.0.113.21");
+        var statuses = new List<HttpStatusCode>();
+
+        for (var i = 0; i < 3; i++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity/.well-known/openid-configuration");
+            using var response = await SendAsync(app, request, certificate: null, remoteIp);
+            statuses.Add(response.StatusCode);
+        }
+
+        Assert.Equal(
+            new[] { HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK },
+            statuses);
+        Assert.Equal(3, capture.Requests.Count);
     }
 
     [Fact]

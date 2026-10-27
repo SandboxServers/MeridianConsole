@@ -9,10 +9,14 @@ public class RateLimitingBehaviorTests
 {
     [Theory]
     [InlineData(null, true)]
-    [InlineData("Auth", true)]
-    [InlineData("PerTenant", true)]
+    [InlineData("", true)]
+    [InlineData("  ", true)]
+    [InlineData("Default", true)]
+    [InlineData("default", true)]
+    [InlineData("Auth", false)]
+    [InlineData("PerTenant", false)]
     [InlineData("PerAgent", false)]
-    public void RouteRateLimiting_UsesGlobal_OnlyPerAgentReplacesGlobal(string? routePolicy, bool expected) =>
+    public void RouteRateLimiting_UsesGlobal_OnlyForRoutesWithoutPolicy(string? routePolicy, bool expected) =>
         Assert.Equal(expected, RouteRateLimiting.UsesGlobal(routePolicy));
 
     [Theory]
