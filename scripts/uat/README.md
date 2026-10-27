@@ -247,8 +247,7 @@ pwsh -NoProfile -File scripts\uat\Invoke-AgentWindowsUat.ps1 -CleanupOnly .uat\a
 
 Cleanup reads the manifest, stops and removes what the run created, and writes
 `cleanup-results.json`. It exits 0 when the footprint is clean and 3 when something is left. Entries
-that were already present before the run (`existedBefore`) are never deleted. Running cleanup twice is
-safe.
+that were already present before the run (`existedBefore`) are never deleted. Running cleanup twice is safe. An item that is already gone counts as undone, including a file whose folder an earlier pass removed (D-S243). The run-folder and allowlist checks still run first.
 
 If the manifest is missing, cleanup treats it as empty, undoes nothing, and reports
 `footprint-left` if the machine probe still finds UAT items. If the manifest is unreadable

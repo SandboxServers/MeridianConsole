@@ -323,4 +323,56 @@ public class WindowsMachineActionsTests
 
         Assert.True(result.IsSuccess, result.Error);
     }
+
+    [SkippableFact]
+    public void DeleteFile_ParentFolderGone_IsSuccess()
+    {
+        // D-S243: an earlier cleanup pass removed the folder, so the file under it is already undone.
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test");
+        var path = Path.Combine(Path.GetTempPath(), "uat-p35-" + Guid.NewGuid().ToString("N"), "tls", "gateway.pfx");
+
+        var result = new WindowsMachineActions().DeleteFile(path);
+
+        Assert.True(result.IsSuccess, result.Error);
+    }
+
+    [SkippableFact]
+    public void DeleteFile_FileMissingParentExists_IsSuccess()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test");
+        var folder = Directory.CreateTempSubdirectory("uat-p35-");
+        try
+        {
+            var result = new WindowsMachineActions().DeleteFile(Path.Combine(folder.FullName, "never-created.pfx"));
+
+            Assert.True(result.IsSuccess, result.Error);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [SkippableFact]
+    public void DeleteFile_FileLockedOpen_IsFailure()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test");
+        var folder = Directory.CreateTempSubdirectory("uat-p35-");
+        try
+        {
+            var file = Path.Combine(folder.FullName, "locked.pfx");
+            using (var stream = new FileStream(file, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+            {
+                var result = new WindowsMachineActions().DeleteFile(file);
+
+                Assert.True(result.IsFailure);
+                Assert.StartsWith("file delete failed", result.Error, StringComparison.Ordinal);
+                Assert.True(File.Exists(file));
+            }
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
 }

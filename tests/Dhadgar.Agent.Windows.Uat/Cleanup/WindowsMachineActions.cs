@@ -506,7 +506,13 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     {
         try
         {
-            File.Delete(path);
+            File.Delete(path);   // silent when the file is missing but its folder exists
+            return Result.Success();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // D-S243: the folder is gone, so the file is too (an earlier pass removed the folder). Already undone.
+            // CleanupEngine.DeleteGuarded validated the path before this call; that allowlist is unchanged.
             return Result.Success();
         }
         catch (IOException ex)
