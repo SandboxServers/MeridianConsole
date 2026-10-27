@@ -453,7 +453,7 @@ Agents reach Nodes through two routes that authenticate with the agent's TLS cli
 - Kestrel requests client certificates per `AgentIngress:ClientCertificateMode` (`NoCertificate` by default, `AllowCertificate` in the dev compose file). When a certificate is allowed, Kestrel accepts any certificate at TLS level. Nodes is the validator (D-S25): it checks the chain, SPIFFE ID and revocation. The Gateway only checks the issuer and forwards.
 - Routes with `"Metadata": { "ForwardClientCertificate": "true" }` forward the certificate to Nodes as base64 DER in the `X-Client-Cert` header.
 - **Strip-everywhere rule:** the Gateway removes any incoming `X-Client-Cert` header on every route, including routes that do not forward. A caller cannot spoof the header to Nodes.
-- The `PerAgent` rate limiter keys requests that carry a client certificate by its SHA-256 thumbprint (`agent-cert:{hash}`). Other requests keep the `sub`-or-IP key.
+- The `PerAgent` rate limiter keys every request by client IP (`agent-ip:{ip}`, IPv6 reduced to /64), never by the certificate. The Gateway does not validate the certificate, so a certificate-derived key could be forged to get a fresh bucket per request. Agents behind one NAT address share the limit (`RateLimiting:Policies:PerAgent:PermitLimit`, default 500 per 60 s).
 - Production ingress and trust settings are out of scope for this config. See D-S210 (`docs/analysis/sprint2-agent-nodes`).
 
 ```json
@@ -538,28 +538,28 @@ All clusters share common configuration:
 ### Policies
 
 **Global Policy**
-- Applied to ALL proxied requests via `MapReverseProxy().RequireRateLimiting("Global")`
+- Attached to every proxied route except those whose `RateLimiterPolicy` is `PerAgent` (`RouteRateLimiting.UsesGlobal`). ASP.NET Core enforces only the last rate-limit policy on an endpoint, so on those routes `Global` is the only limiter that runs.
 - Fixed window limiter
 - Default: 1000 requests per 60 seconds
 - Partition key: `"global"` (shared across all clients)
 
 **Auth Policy**
-- Applied to authentication endpoints (identity, betterauth)
+- Configured on its routes but **not enforced**: `Global` overrides it (owner decision D-S220 pending)
 - Fixed window limiter with **IPv6 /64 prefix normalization**
 - Default: 30 requests per 60 seconds per IP
 - Partition key: IP address (or /64 prefix for IPv6)
 
 **PerTenant Policy**
-- Applied to most tenant-scoped API routes
+- Configured on its routes but **not enforced**: `Global` overrides it (owner decision D-S220 pending)
 - Fixed window limiter
 - Default: 100 requests per 60 seconds per tenant
 - Partition key: `org_id` claim from JWT, falls back to IP address
 
 **PerAgent Policy**
-- Applied to agent API routes
+- Enforced on `agents-route` and `agent-hub-route`, where it replaces `Global`
 - Fixed window limiter
-- Default: 500 requests per 60 seconds per agent
-- Partition key: `sub` claim from JWT, falls back to IP address
+- Default: 500 requests per 60 seconds per client IP
+- Partition key: client IP (IPv6 /64 prefix), the same key as the Auth policy
 
 ### IPv6 Security Considerations
 
@@ -673,6 +673,7 @@ The Gateway trusts `X-Forwarded-For` headers only from Cloudflare IP ranges:
 |--------|--------------|
 | `TenantScoped` | Authenticated user required |
 | `Agent` | Authenticated user + `client_type=agent` claim |
+| `AgentCertificate` | TLS client certificate whose issuer CN is `AgentCertificateProfile.CaCommonName` (Nodes validates the rest) |
 | `DenyAll` | Always fails (blocks internal endpoints) |
 
 ---

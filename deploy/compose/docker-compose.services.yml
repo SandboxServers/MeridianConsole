@@ -114,11 +114,15 @@ services:
       dockerfile: src/Dhadgar.Nodes/Dockerfile
     environment:
       <<: *service-env
-      # dev only; production ingress and trust: D-S210 (docs/analysis/sprint2-agent-nodes)
+      # dev only; production ingress and trust: D-S210 (docs/analysis/sprint2-agent-nodes).
+      # Nodes trusts X-Client-Cert from the whole Docker bridge pool, so any container on this
+      # network, or any host process (host traffic arrives from the bridge gateway), can present
+      # an agent's certificate. The host port is therefore bound to loopback only; never publish
+      # it beyond 127.0.0.1.
       Mtls__ForwardedCertificate__Enabled: "true"
       Mtls__ForwardedCertificate__TrustedProxies__0: "172.16.0.0/12"
     ports:
-      - "5040:8080"
+      - "127.0.0.1:5040:8080"
     depends_on: *service-depends
     restart: unless-stopped
 

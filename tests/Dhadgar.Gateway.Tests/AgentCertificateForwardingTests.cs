@@ -99,22 +99,121 @@ public class AgentCertificateForwardingTests
         Assert.False(proxied.HasHeader(AgentCertificateProfile.ForwardedCertificateHeader));
     }
 
-    private WebApplicationFactory<Program> CreateApp(out CaptureHandler capture)
+    [Fact]
+    public async Task PerAgent_ForgedIssuerCertificatePerRequest_IsRateLimitedByIp()
+    {
+        using var app = CreateApp(out var capture, new[]
+        {
+            new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "3"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:WindowSeconds", "60"),
+        });
+        var remoteIp = IPAddress.Parse("203.0.113.10");
+        var statuses = new List<HttpStatusCode>();
+
+        for (var i = 0; i < 4; i++)
+        {
+            // A fresh self-signed "agent CA" and leaf per request is the forgery.
+            using var forged = CreateCertificate(AgentCertificateProfile.CaCommonName);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
+            using var response = await SendAsync(app, request, forged, remoteIp);
+            statuses.Add(response.StatusCode);
+        }
+
+        Assert.Equal(
+            new[] { HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.TooManyRequests },
+            statuses);
+        Assert.Equal(3, capture.Requests.Count);
+    }
+
+    [Fact]
+    public async Task NonAgentRoute_StillLimitedByGlobal_NotByRoutePolicy()
+    {
+        using var app = CreateApp(out var capture, new[]
+        {
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:PermitLimit", "2"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:WindowSeconds", "60"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Auth:PermitLimit", "100"),
+        });
+        var remoteIp = IPAddress.Parse("203.0.113.20");
+        var statuses = new List<HttpStatusCode>();
+
+        for (var i = 0; i < 3; i++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity/.well-known/openid-configuration");
+            using var response = await SendAsync(app, request, certificate: null, remoteIp);
+            statuses.Add(response.StatusCode);
+        }
+
+        Assert.Equal(
+            new[] { HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.TooManyRequests },
+            statuses);
+        Assert.Equal(2, capture.Requests.Count);
+    }
+
+    [Fact]
+    public async Task AgentRoute_NotLimitedByGlobal()
+    {
+        using var app = CreateApp(out var capture, new[]
+        {
+            new KeyValuePair<string, string?>("RateLimiting:Policies:Global:PermitLimit", "2"),
+            new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "100"),
+        });
+        var remoteIp = IPAddress.Parse("203.0.113.30");
+
+        for (var i = 0; i < 3; i++)
+        {
+            using var cert = CreateCertificate(AgentCertificateProfile.CaCommonName);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
+            using var response = await SendAsync(app, request, cert, remoteIp);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        Assert.Equal(3, capture.Requests.Count);
+    }
+
+    [Fact]
+    public async Task HubRoute_SpoofedHeaderWithRealCertificate_ForwardsRealCertificate()
+    {
+        using var cert = CreateCertificate(AgentCertificateProfile.CaCommonName);
+        using var app = CreateApp(out var capture);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
+        request.Headers.TryAddWithoutValidation(AgentCertificateProfile.ForwardedCertificateHeader, "abc");
+
+        using var response = await SendAsync(app, request, cert);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var proxied = Assert.Single(capture.Requests);
+        Assert.Single(proxied.Headers[AgentCertificateProfile.ForwardedCertificateHeader]);
+        Assert.Equal(Convert.ToBase64String(cert.RawData), proxied.Header(AgentCertificateProfile.ForwardedCertificateHeader));
+    }
+
+    private WebApplicationFactory<Program> CreateApp(out CaptureHandler capture, IEnumerable<KeyValuePair<string, string?>>? extraSettings = null)
     {
         var handler = new CaptureHandler();
         capture = handler;
 
         return _factory.WithWebHostBuilder(builder =>
         {
+            foreach (var setting in extraSettings ?? Array.Empty<KeyValuePair<string, string?>>())
+            {
+                builder.UseSetting(setting.Key, setting.Value);
+            }
+
             builder.ConfigureAppConfiguration((_, config) =>
             {
-                config.AddInMemoryCollection(new[]
+                var settings = new List<KeyValuePair<string, string?>>
                 {
                     new KeyValuePair<string, string?>("ReverseProxy:Clusters:nodes:Destinations:d1:Address", NodesDestination),
                     new KeyValuePair<string, string?>("ReverseProxy:Clusters:nodes:HealthCheck:Active:Enabled", "false"),
                     new KeyValuePair<string, string?>("ReverseProxy:Clusters:identity:Destinations:d1:Address", "http://identity.test/"),
                     new KeyValuePair<string, string?>("ReverseProxy:Clusters:identity:HealthCheck:Active:Enabled", "false"),
-                });
+                };
+                if (extraSettings is not null)
+                {
+                    settings.AddRange(extraSettings);
+                }
+
+                config.AddInMemoryCollection(settings);
             });
 
             builder.ConfigureTestServices(services =>
@@ -137,10 +236,18 @@ public class AgentCertificateForwardingTests
     private static async Task<HttpResponseMessage> SendAsync(
         WebApplicationFactory<Program> app,
         HttpRequestMessage request,
-        X509Certificate2? certificate)
+        X509Certificate2? certificate,
+        IPAddress? remoteIp = null)
     {
         // The handler presents the certificate as the connection's client certificate (Kestrel would set it on TLS).
-        var handler = app.Server.CreateHandler(ctx => ctx.Connection.ClientCertificate = certificate);
+        var handler = app.Server.CreateHandler(ctx =>
+        {
+            ctx.Connection.ClientCertificate = certificate;
+            if (remoteIp is not null)
+            {
+                ctx.Connection.RemoteIpAddress = remoteIp;
+            }
+        });
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
 
         return await client.SendAsync(request);
