@@ -13,9 +13,11 @@ using Dhadgar.Shared.Results;
 namespace Dhadgar.Agent.Windows.Uat;
 
 /// <summary>
-/// Dispatches the verbs and owns the guard chain (D-S225). <c>run</c> refuses before any machine change
-/// unless it is elevated, has <c>--accept-machine-changes</c>, is not launched by an agent (CLAUDECODE),
-/// has no agent footprint, and passes preflight for run. Cleanup and results always run in <c>finally</c>.
+/// Dispatches the verbs and owns the guard chain (D-S225, D-S239). <c>run</c> refuses before any machine change
+/// unless it is elevated, has <c>--accept-machine-changes</c>, has no run folder already in use, and passes preflight
+/// for run. An agent run (CLAUDECODE set, a label and not authentication) also needs a clean tree and never
+/// <c>-NoBuild</c>, and writes <c>launch.json</c>; an agent cleanup works only on a folder whose <c>launch.json</c>
+/// says <c>agent</c>. Cleanup and results always run in <c>finally</c>.
 /// </summary>
 internal static class UatRunner
 {
@@ -36,7 +38,7 @@ internal static class UatRunner
     public static Task<int> RunAsync(UatArgs args, CancellationToken ct)
     {
         var launchedByAgent = Environment.GetEnvironmentVariable("CLAUDECODE") is not null;
-        return RunWithAsync(args, new WindowsMachineActions(), new MachineProbe(), launchedByAgent, ScenarioRegistry, ct);
+        return RunWithAsync(args, new WindowsMachineActions(), new MachineProbe(), launchedByAgent, new GitWorkTree(), ScenarioRegistry, ct);
     }
 
     /// <summary>Runs a verb with explicit machine seams, so the guards and cleanup can be tested with fakes.</summary>
@@ -45,6 +47,7 @@ internal static class UatRunner
         IMachineActions actions,
         IMachineProbe probe,
         bool launchedByAgent,
+        IWorkTree workTree,
         IReadOnlyDictionary<string, IUatScenario> scenarios,
         CancellationToken ct)
     {
@@ -52,10 +55,10 @@ internal static class UatRunner
         Console.WriteLine($"run folder: {paths.RunDir}");
         return args.Verb switch
         {
-            "preflight" => await PreflightVerbAsync(args, paths, actions, probe, launchedByAgent, ct),
+            "preflight" => await PreflightVerbAsync(args, paths, actions, probe, launchedByAgent, workTree, ct),
             "cleanup" => await CleanupVerbAsync(args, paths, actions, probe, launchedByAgent),
-            "stack-only" => await StackOnlyVerbAsync(args, paths, actions, probe, launchedByAgent, ct),
-            _ => await RunVerbAsync(args, paths, actions, probe, launchedByAgent, scenarios, ct),
+            "stack-only" => await StackOnlyVerbAsync(args, paths, actions, probe, launchedByAgent, workTree, ct),
+            _ => await RunVerbAsync(args, paths, actions, probe, launchedByAgent, workTree, scenarios, ct),
         };
     }
 
@@ -65,12 +68,30 @@ internal static class UatRunner
         return UatExitCodes.Refused;
     }
 
+    /// <summary>
+    /// The tree check for an agent run (D-S239). Null for a user run, which never asks git. Otherwise the check's result,
+    /// so the run guard can quote a failure.
+    /// </summary>
+    private static async Task<Result<bool>?> TreeCheckAsync(bool launchedByAgent, IWorkTree workTree, string repoRoot, CancellationToken ct)
+    {
+        if (!launchedByAgent)
+        {
+            return null;
+        }
+
+        return await workTree.IsCleanAsync(repoRoot, ct);
+    }
+
+    /// <summary>The tree state for preflight and the record: null for user runs and when the check failed; else the clean value.</summary>
+    private static bool? TreeState(Result<bool>? check) => check is { IsSuccess: true } clean ? clean.Value : null;
+
     private static async Task<int> PreflightVerbAsync(
-        UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent, CancellationToken ct)
+        UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent, IWorkTree workTree, CancellationToken ct)
     {
         Directory.CreateDirectory(paths.RunDir);
+        var treeClean = TreeState(await TreeCheckAsync(launchedByAgent, workTree, args.RepoRoot, ct));
         var started = DateTime.UtcNow;
-        var report = await new PreflightChecks(probe, actions, paths.RunDir, null, launchedByAgent)
+        var report = await new PreflightChecks(probe, actions, paths.RunDir, null, launchedByAgent, treeClean)
             .RunAsync(PreflightMode.Preflight, ct);
 
         var pass = report.PassesFor(PreflightMode.Run);
@@ -84,16 +105,16 @@ internal static class UatRunner
         var step = new StepResult("U0", "Preflight", pass ? "pass" : "fail", evidence, null, 0);
         var overall = pass ? "pass" : "fail";
         return await PersistAsync(args, paths, started, "preflight", null, [step], CleanupSummary.NotRun(),
-            [], overall, pass ? UatExitCodes.Pass : UatExitCodes.Fail, launchedByAgent, actions, new Redactor());
+            [], overall, pass ? UatExitCodes.Pass : UatExitCodes.Fail, launchedByAgent, treeClean, actions, new Redactor());
     }
 
     /// <summary>
-    /// The stack-only smoke (P19): needs no elevation and allows CLAUDECODE. Refuses when Docker is down, port 5672
-    /// is busy, the dev certificate is untrusted, or a <c>meridian-uat-*</c> container exists. Changes nothing outside
-    /// Docker and the run folder.
+    /// The stack-only smoke (P19): needs no elevation and is allowed under CLAUDECODE (D-S239). Refuses when Docker is down, port 5672
+    /// is busy, the dev certificate is untrusted, or a <c>meridian-uat-*</c> container exists. Writes <c>launch.json</c>
+    /// and changes nothing outside Docker and the run folder.
     /// </summary>
     private static async Task<int> StackOnlyVerbAsync(
-        UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent, CancellationToken ct)
+        UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent, IWorkTree workTree, CancellationToken ct)
     {
         // The manifest is then written only by this process: a planted or stale manifest must never reach cleanup (N1).
         if (Directory.Exists(paths.RunDir))
@@ -101,7 +122,8 @@ internal static class UatRunner
             return Refuse("stack-only refused: run folder already exists");
         }
 
-        var preflight = await new PreflightChecks(probe, actions, paths.RunDir, null, launchedByAgent)
+        var treeClean = TreeState(await TreeCheckAsync(launchedByAgent, workTree, args.RepoRoot, ct));
+        var preflight = await new PreflightChecks(probe, actions, paths.RunDir, null, launchedByAgent, treeClean)
             .RunAsync(PreflightMode.StackOnly, ct);
         if (!preflight.PassesFor(PreflightMode.StackOnly))
         {
@@ -125,6 +147,12 @@ internal static class UatRunner
 
         var started = DateTime.UtcNow;
         Directory.CreateDirectory(paths.RunDir);
+        var launch = await WriteLaunchAsync(paths, args, "stack-only", null, launchedByAgent, actions.IsElevated(), started);
+        if (launch is not null)
+        {
+            return Refuse("stack-only refused: " + launch);
+        }
+
         var steps = new StepRecorder();
         var warnings = new List<string>();
         var manifest = new CleanupManifest(paths.Manifest);
@@ -161,7 +189,7 @@ internal static class UatRunner
             : UatExitCodes.Fail;
 
         return await PersistAsync(args, paths, started, "stack-only", null, steps.Steps, cleanup, warnings,
-            overall, exitCode, launchedByAgent, actions, redactor);
+            overall, exitCode, launchedByAgent, treeClean, actions, redactor);
     }
 
     private static async Task<int> RunVerbAsync(
@@ -170,15 +198,11 @@ internal static class UatRunner
         IMachineActions actions,
         IMachineProbe probe,
         bool launchedByAgent,
+        IWorkTree workTree,
         IReadOnlyDictionary<string, IUatScenario> scenarios,
         CancellationToken ct)
     {
-        // Guard chain: every refusal happens before the first machine change or manifest entry.
-        if (launchedByAgent)
-        {
-            return Refuse("run refused: CLAUDECODE is set; only the user launches run (D-S225)");
-        }
-
+        // Guard chain: every refusal happens before the first machine change, launch record or manifest entry.
         if (!args.AcceptMachineChanges)
         {
             return Refuse("run refused: --accept-machine-changes is missing");
@@ -189,13 +213,30 @@ internal static class UatRunner
             return Refuse("run refused: not elevated");
         }
 
+        var tree = await TreeCheckAsync(launchedByAgent, workTree, args.RepoRoot, ct);
+        var treeClean = TreeState(tree);
+        if (tree is { IsFailure: true } failed)
+        {
+            return Refuse($"run refused: tree check failed (D-S239): {failed.Error}");
+        }
+
+        if (treeClean == false)
+        {
+            return Refuse("run refused: agent run needs a clean tree (D-S239)");
+        }
+
+        if (LaunchRecord.Exists(paths) || File.Exists(paths.Manifest))
+        {
+            return Refuse("run refused: the run folder was already used");
+        }
+
         var footprint = probe.Scan();
         if (!footprint.IsEmpty)
         {
             return Refuse("run refused: agent footprint present: " + string.Join(", ", footprint.Items));
         }
 
-        var preflight = await new PreflightChecks(probe, actions, paths.RunDir, args.Mode, launchedByAgent)
+        var preflight = await new PreflightChecks(probe, actions, paths.RunDir, args.Mode, launchedByAgent, treeClean)
             .RunAsync(PreflightMode.Run, ct);
         if (!preflight.PassesFor(PreflightMode.Run))
         {
@@ -204,6 +245,12 @@ internal static class UatRunner
 
         var started = DateTime.UtcNow;
         Directory.CreateDirectory(paths.RunDir);
+        var launch = await WriteLaunchAsync(paths, args, "run", args.Mode, launchedByAgent, actions.IsElevated(), started);
+        if (launch is not null)
+        {
+            return Refuse("run refused: " + launch);
+        }
+
         var steps = new StepRecorder();
         var warnings = new List<string>();
         var manifest = new CleanupManifest(paths.Manifest);
@@ -268,18 +315,12 @@ internal static class UatRunner
             : UatExitCodes.Fail;
 
         return await PersistAsync(args, paths, started, "run", args.Mode, allSteps, cleanup, warnings,
-            overall, exitCode, launchedByAgent, actions, redactor);
+            overall, exitCode, launchedByAgent, treeClean, actions, redactor);
     }
 
     private static async Task<int> CleanupVerbAsync(
         UatArgs args, RunPaths paths, IMachineActions actions, IMachineProbe probe, bool launchedByAgent)
     {
-        // D-S225: an agent may not run cleanup. This is checked before the manifest is read.
-        if (launchedByAgent)
-        {
-            return Refuse("cleanup refused: CLAUDECODE is set; only the user runs cleanup (D-S225)");
-        }
-
         var given = Path.GetFullPath(args.RunDir!).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (!string.Equals(given, paths.RunDir.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
         {
@@ -289,6 +330,22 @@ internal static class UatRunner
         if (!Directory.Exists(paths.RunDir))
         {
             return Refuse("cleanup refused: run folder does not exist");
+        }
+
+        // D-S239: an agent may clean up only a folder whose launch.json says it was launched by an agent. This is checked
+        // before the manifest is read.
+        if (launchedByAgent)
+        {
+            var launch = LaunchRecord.Load(paths);
+            if (launch.IsFailure)
+            {
+                return Refuse($"cleanup refused: {launch.Error}; the user runs this cleanup (D-S239)");
+            }
+
+            if (launch.Value.LaunchedBy != "agent" || launch.Value.RunId != args.RunId)
+            {
+                return Refuse("cleanup refused: not an agent run; the user runs this cleanup (D-S239)");
+            }
         }
 
         if (!actions.IsElevated())
@@ -566,6 +623,7 @@ internal static class UatRunner
         string overall,
         int exitCode,
         bool launchedByAgent,
+        bool? agentTreeClean,
         IMachineActions actions,
         Redactor redactor)
     {
@@ -587,7 +645,8 @@ internal static class UatRunner
             exitCode,
             steps,
             cleanup,
-            warnings);
+            warnings,
+            launchedByAgent ? new AgentRunInfo("D-S239", "CLAUDECODE", agentTreeClean == true) : null);
 
         var written = ResultsWriter.Write(results, paths.RunDir, redactor);
         if (written.IsFailure)
@@ -598,6 +657,21 @@ internal static class UatRunner
 
         Console.WriteLine($"results: {Path.Combine(paths.RunDir, "results.json")}");
         return exitCode;
+    }
+
+    /// <summary>
+    /// Writes <c>launch.json</c> (D-S239) before the first manifest entry. Returns null when written, else the refusal
+    /// text. The record is never overwritten.
+    /// </summary>
+    private static async Task<string?> WriteLaunchAsync(
+        RunPaths paths, UatArgs args, string verb, string? mode, bool launchedByAgent, bool elevated, DateTime started)
+    {
+        var head = await CommandRunner.RunAsync("git", ["rev-parse", "HEAD"], GitTimeout, null, args.RepoRoot);
+        var sha = head.IsSuccess && head.Value.ExitCode == 0 ? head.Value.StandardOutput.Trim() : "unknown";
+        var record = new LaunchRecord(
+            SchemaVersion, args.RunId, verb, mode, launchedByAgent ? "agent" : "user", elevated, sha, started);
+        var written = LaunchRecord.Write(paths, record);
+        return written.IsFailure ? written.Error : null;
     }
 
     private static async Task<(string Sha, bool Dirty)> ReadGitAsync(string repoRoot)

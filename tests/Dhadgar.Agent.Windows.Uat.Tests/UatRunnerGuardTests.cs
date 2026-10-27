@@ -1,5 +1,7 @@
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Agent.Windows.Uat.Probe;
+using Dhadgar.Agent.Windows.Uat.Results;
+using Dhadgar.Shared.Results;
 using Xunit;
 
 namespace Dhadgar.Agent.Windows.Uat.Tests;
@@ -23,14 +25,77 @@ public class UatRunnerGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task Run_ClaudeCodeSet_RefusesWithoutManifestEntry()
+    public async Task Run_AgentElevatedCleanTree_ReachesFootprintGuard()
+    {
+        var actions = new RecordingActions();
+        var probe = new FakeProbe("service:DhadgarAgent");
+        var tree = new FakeWorkTree(Result<bool>.Success(true));
+
+        var (exit, err) = await RunRunCapturedAsync(actions, probe, launchedByAgent: true, tree);
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("agent footprint present", err, StringComparison.Ordinal);
+        Assert.DoesNotContain("D-S239", err, StringComparison.Ordinal);
+        Assert.DoesNotContain("D-S225", err, StringComparison.Ordinal);
+        Assert.Equal(1, tree.Calls);
+        Assert.False(File.Exists(new RunPaths(_repo, RunId).Manifest));
+        Assert.False(LaunchRecord.Exists(new RunPaths(_repo, RunId)));
+        Assert.Empty(actions.Calls);
+    }
+
+    [Fact]
+    public async Task Run_AgentNotElevated_Refused()
+    {
+        var actions = new RecordingActions { Elevated = false };
+        var tree = new FakeWorkTree(Result<bool>.Success(true));
+
+        var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: true, tree);
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("not elevated", err, StringComparison.Ordinal);
+        Assert.Equal(0, tree.Calls);
+        Assert.False(File.Exists(new RunPaths(_repo, RunId).Manifest));
+        Assert.Empty(actions.Calls);
+    }
+
+    [Fact]
+    public async Task Run_AgentDirtyTree_RefusedWithoutManifest()
     {
         var actions = new RecordingActions();
 
-        var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: true);
+        var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: true, new FakeWorkTree(Result<bool>.Success(false)));
 
         Assert.Equal(UatExitCodes.Refused, exit);
-        Assert.Contains("CLAUDECODE is set", err, StringComparison.Ordinal);
+        Assert.Contains("clean tree (D-S239)", err, StringComparison.Ordinal);
+        Assert.False(File.Exists(new RunPaths(_repo, RunId).Manifest));
+        Assert.False(LaunchRecord.Exists(new RunPaths(_repo, RunId)));
+        Assert.Empty(actions.Calls);
+    }
+
+    [Fact]
+    public async Task Run_AgentTreeCheckFails_Refused()
+    {
+        var actions = new RecordingActions();
+        var failed = Result<bool>.Failure("[UAT.TreeCheck] git status failed: exit 128");
+
+        var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: true, new FakeWorkTree(failed));
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("tree check failed", err, StringComparison.Ordinal);
+        Assert.False(File.Exists(new RunPaths(_repo, RunId).Manifest));
+        Assert.Empty(actions.Calls);
+    }
+
+    [Fact]
+    public async Task Run_UserDirtyTree_IsNotAskedAndReachesFootprintGuard()
+    {
+        var actions = new RecordingActions();
+        var probe = new FakeProbe("service:DhadgarAgent");
+
+        var (exit, err) = await RunRunCapturedAsync(actions, probe, launchedByAgent: false, new ThrowingWorkTree());
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("agent footprint present", err, StringComparison.Ordinal);
         Assert.False(File.Exists(new RunPaths(_repo, RunId).Manifest));
         Assert.Empty(actions.Calls);
     }
@@ -40,7 +105,7 @@ public class UatRunnerGuardTests : IDisposable
     {
         var actions = new RecordingActions { Elevated = false };
 
-        var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: false);
+        var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: false, new ThrowingWorkTree());
 
         Assert.Equal(UatExitCodes.Refused, exit);
         Assert.Contains("not elevated", err, StringComparison.Ordinal);
@@ -54,7 +119,7 @@ public class UatRunnerGuardTests : IDisposable
         var actions = new RecordingActions();
         var probe = new FakeProbe("service:DhadgarAgent");
 
-        var (exit, err) = await RunRunCapturedAsync(actions, probe, launchedByAgent: false);
+        var (exit, err) = await RunRunCapturedAsync(actions, probe, launchedByAgent: false, new ThrowingWorkTree());
 
         Assert.Equal(UatExitCodes.Refused, exit);
         Assert.Contains("agent footprint present", err, StringComparison.Ordinal);
@@ -62,16 +127,94 @@ public class UatRunnerGuardTests : IDisposable
         Assert.Empty(actions.Calls);
     }
 
+    [Theory]
+    [InlineData("launch")]
+    [InlineData("manifest")]
+    public async Task Run_RunFolderAlreadyUsed_Refused(string existing)
+    {
+        var paths = new RunPaths(_repo, RunId);
+        Directory.CreateDirectory(paths.RunDir);
+        var file = existing == "launch" ? Path.Combine(paths.RunDir, LaunchRecord.FileName) : paths.Manifest;
+        File.WriteAllText(file, "{}");
+        var actions = new RecordingActions();
+
+        var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: false, new ThrowingWorkTree());
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("already used", err, StringComparison.Ordinal);
+        Assert.Equal("{}", File.ReadAllText(file));
+        Assert.Empty(actions.Calls);
+    }
+
     [Fact]
-    public async Task Cleanup_ClaudeCodeSet_RefusesAndTouchesNothing()
+    public async Task Cleanup_AgentOnAgentRunFolder_Proceeds()
     {
         var actions = new RecordingActions();
         WriteServiceManifest();
+        WriteLaunch("agent", RunId);
+
+        var (exit, err) = await RunCleanupCapturedAsync(actions, launchedByAgent: true);
+
+        Assert.NotEqual(UatExitCodes.Refused, exit);
+        Assert.DoesNotContain("cleanup refused", err, StringComparison.Ordinal);
+        Assert.Contains("StopService:DhadgarAgent", actions.Calls);
+        Assert.Contains("DeleteService:DhadgarAgent", actions.Calls);
+    }
+
+    [Fact]
+    public async Task Cleanup_AgentOnUserRunFolder_Refused()
+    {
+        var actions = new RecordingActions();
+        WriteServiceManifest();
+        WriteLaunch("user", RunId);
+        var manifestBefore = File.ReadAllText(new RunPaths(_repo, RunId).Manifest);
+
+        var (exit, err) = await RunCleanupCapturedAsync(actions, launchedByAgent: true);
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("not an agent run", err, StringComparison.Ordinal);
+        Assert.Equal(manifestBefore, File.ReadAllText(new RunPaths(_repo, RunId).Manifest));
+        Assert.Empty(actions.Calls);
+    }
+
+    [Fact]
+    public async Task Cleanup_AgentWithoutLaunchRecord_Refused()
+    {
+        var actions = new RecordingActions();
+        WriteServiceManifest();
+
+        var (exit, err) = await RunCleanupCapturedAsync(actions, launchedByAgent: true);
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("[Launch.Missing]", err, StringComparison.Ordinal);
+        Assert.Empty(actions.Calls);
+    }
+
+    [Fact]
+    public async Task Cleanup_AgentLaunchRecordForOtherRun_Refused()
+    {
+        var actions = new RecordingActions();
+        WriteServiceManifest();
+        WriteLaunch("agent", "20261027-000000-0000");
 
         var (exit, _) = await RunCleanupCapturedAsync(actions, launchedByAgent: true);
 
         Assert.Equal(UatExitCodes.Refused, exit);
         Assert.Empty(actions.Calls);
+    }
+
+    [Fact]
+    public async Task Cleanup_UserWithoutLaunchRecord_Proceeds()
+    {
+        var actions = new RecordingActions();
+        WriteServiceManifest();
+
+        var (exit, err) = await RunCleanupCapturedAsync(actions, launchedByAgent: false);
+
+        Assert.NotEqual(UatExitCodes.Refused, exit);
+        Assert.DoesNotContain("[Launch.Missing]", err, StringComparison.Ordinal);
+        Assert.Contains("StopService:DhadgarAgent", actions.Calls);
+        Assert.Contains("DeleteService:DhadgarAgent", actions.Calls);
     }
 
     [Fact]
@@ -98,6 +241,7 @@ public class UatRunnerGuardTests : IDisposable
             actions,
             new FakeProbe(),
             launchedByAgent: true,
+            new ThrowingWorkTree(),
             new Dictionary<string, IUatScenario>(StringComparer.Ordinal),
             CancellationToken.None));
 
@@ -113,8 +257,16 @@ public class UatRunnerGuardTests : IDisposable
         File.WriteAllText(new RunPaths(_repo, RunId).Manifest, "{\"kind\":\"service\",\"name\":\"DhadgarAgent\"}\n");
     }
 
-    private Task<(int Exit, string Err)> RunRunCapturedAsync(RecordingActions actions, IMachineProbe probe, bool launchedByAgent) =>
-        CaptureAsync(() => RunRunAsync(actions, probe, launchedByAgent));
+    private void WriteLaunch(string launchedBy, string runId)
+    {
+        var paths = new RunPaths(_repo, RunId);
+        Directory.CreateDirectory(paths.RunDir);
+        var record = new LaunchRecord(1, runId, "run", "process", launchedBy, true, "0123456789abcdef", DateTime.UtcNow);
+        Assert.True(LaunchRecord.Write(paths, record).IsSuccess);
+    }
+
+    private Task<(int Exit, string Err)> RunRunCapturedAsync(RecordingActions actions, IMachineProbe probe, bool launchedByAgent, IWorkTree tree) =>
+        CaptureAsync(() => RunRunAsync(actions, probe, launchedByAgent, tree));
 
     private Task<(int Exit, string Err)> RunCleanupCapturedAsync(RecordingActions actions, bool launchedByAgent)
     {
@@ -124,6 +276,7 @@ public class UatRunnerGuardTests : IDisposable
             actions,
             new FakeProbe(),
             launchedByAgent,
+            new ThrowingWorkTree(),
             new Dictionary<string, IUatScenario>(StringComparer.Ordinal),
             CancellationToken.None));
     }
@@ -144,7 +297,7 @@ public class UatRunnerGuardTests : IDisposable
         }
     }
 
-    private Task<int> RunRunAsync(RecordingActions actions, IMachineProbe probe, bool launchedByAgent)
+    private Task<int> RunRunAsync(RecordingActions actions, IMachineProbe probe, bool launchedByAgent, IWorkTree tree)
     {
         var args = new UatArgs("run", _repo, RunId, "process", AcceptMachineChanges: true, RunDir: null);
         return UatRunner.RunWithAsync(
@@ -152,6 +305,7 @@ public class UatRunnerGuardTests : IDisposable
             actions,
             probe,
             launchedByAgent,
+            tree,
             new Dictionary<string, IUatScenario>(StringComparer.Ordinal),
             CancellationToken.None);
     }
@@ -159,5 +313,24 @@ public class UatRunnerGuardTests : IDisposable
     private sealed class FakeProbe(params string[] items) : IMachineProbe
     {
         public Footprint Scan() => new(items);
+    }
+
+    /// <summary>A tree check that returns a fixed result and counts its calls.</summary>
+    private sealed class FakeWorkTree(Result<bool> result) : IWorkTree
+    {
+        public int Calls { get; private set; }
+
+        public Task<Result<bool>> IsCleanAsync(string repoRoot, CancellationToken ct)
+        {
+            Calls++;
+            return Task.FromResult(result);
+        }
+    }
+
+    /// <summary>A tree check that must never run: a user run does not depend on git (D-S239).</summary>
+    private sealed class ThrowingWorkTree : IWorkTree
+    {
+        public Task<Result<bool>> IsCleanAsync(string repoRoot, CancellationToken ct) =>
+            throw new InvalidOperationException("the tree check must not run for this call");
     }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
 
 namespace Dhadgar.Agent.Windows.Uat.Results;
@@ -24,6 +25,9 @@ internal sealed record CleanupSummary(
     public static CleanupSummary NotRun() => new("not-run", 0, [], [], [], []);
 }
 
+/// <summary>The agent-run object of <c>results.json</c>, present only when <c>launchedBy</c> is <c>agent</c> (D-S239).</summary>
+internal sealed record AgentRunInfo(string Authority, string DetectedBy, bool TreeClean);
+
 /// <summary>The schema of <c>results.json</c> (schemaVersion 1).</summary>
 internal sealed record UatResults(
     int SchemaVersion,
@@ -42,4 +46,5 @@ internal sealed record UatResults(
     int ExitCode,
     IReadOnlyList<StepResult> Steps,
     CleanupSummary Cleanup,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentRunInfo? AgentRun = null);
