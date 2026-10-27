@@ -1,10 +1,13 @@
+using System.Net.WebSockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Commands;
 using Dhadgar.Agent.Core.Configuration;
-using Dhadgar.Agent.Core.Health;
 using Dhadgar.Agent.Core.Telemetry;
+using Dhadgar.Contracts.Nodes;
+using Dhadgar.Shared.Results;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -49,14 +52,14 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         _transport = transport ?? new ControlPlaneHubTransport();
     }
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task<Result> ConnectAsync(CancellationToken cancellationToken = default)
     {
         await _connectionLock.WaitAsync(cancellationToken);
         try
         {
             if (_state == ConnectionState.Connected || _state == ConnectionState.Connecting)
             {
-                return;
+                return Result.Success();
             }
 
             SetState(ConnectionState.Connecting);
@@ -66,11 +69,11 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             // Security: Require HTTPS for control plane communication
             if (baseUri.Scheme != Uri.UriSchemeHttps)
             {
-                throw new InvalidOperationException(
-                    $"Control plane endpoint must use HTTPS. Current scheme: {baseUri.Scheme}");
+                return Refuse(
+                    $"[ControlPlane.InsecureEndpoint] Control plane endpoint must use HTTPS. Current scheme: {baseUri.Scheme}");
             }
 
-            var endpoint = new Uri(baseUri, "/hubs/agent");
+            var endpoint = new Uri(baseUri, AgentHubProtocol.Path);
             _logger.LogInformation("Connecting to control plane at {Endpoint}", endpoint);
 
             // Dispose existing connection and certificate before creating new one
@@ -90,6 +93,13 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             // Get client certificate and track it for disposal
             _clientCertificate = _certificateStore.GetClientCertificate();
 
+            // Security: Require a client certificate for every hub connection (mTLS). The node is identified
+            // by the certificate on the Nodes side, so no node ID header is sent (D-S23).
+            if (_clientCertificate is not { } clientCert)
+            {
+                return Refuse("[ControlPlane.NoCertificate] No client certificate is available. Enroll the agent first.");
+            }
+
             var builder = new HubConnectionBuilder()
                 .WithUrl(endpoint, options =>
                 {
@@ -99,25 +109,8 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                         options.HttpMessageHandlerFactory = handlerFactory;
                     }
 
-                    // Configure mTLS if certificate is available
-                    var clientCert = _clientCertificate;
-
-                    // Security: Require client certificate when NodeId is set (enrolled agent)
-                    if (_options.NodeId.HasValue)
-                    {
-                        if (clientCert is null)
-                        {
-                            throw new InvalidOperationException(
-                                "Client certificate is required for enrolled agents (NodeId is set)");
-                        }
-                        options.ClientCertificates = [clientCert];
-                        options.Headers["X-Node-Id"] = _options.NodeId.Value.ToString();
-                    }
-                    else if (clientCert is not null)
-                    {
-                        // Not enrolled yet, but have a cert (e.g., during enrollment)
-                        options.ClientCertificates = [clientCert];
-                    }
+                    options.ClientCertificates = [clientCert];
+                    options.Headers[AgentHubProtocol.VersionHeader] = AgentHubProtocol.CurrentVersion;
                 })
                 .WithAutomaticReconnect(new RetryPolicy(_options.ControlPlane))
                 .ConfigureLogging(logging =>
@@ -137,17 +130,38 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             _hubConnection.Reconnected += OnReconnected;
 
             // Register server-to-client methods
-            _hubConnection.On<string>("ReceiveCommand", OnCommandReceived);
-            _hubConnection.On<string>("ReceivePing", OnPingReceived);
+            _hubConnection.On<string>(nameof(IAgentHubClient.ReceiveCommand), OnCommandReceived);
+            _hubConnection.On<string>(nameof(IAgentHubClient.ReceivePing), OnPingReceived);
 
             // Connect with timeout
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(_options.ControlPlane.ConnectionTimeoutSeconds));
 
-            await _hubConnection.StartAsync(cts.Token);
+            try
+            {
+                await _hubConnection.StartAsync(cts.Token);
+            }
+            catch (HttpRequestException ex)
+            {
+                var status = ex.StatusCode is { } code ? $" (HTTP {(int)code})" : string.Empty;
+                return ConnectFailed($"transport error{status}", ex);
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                return ConnectFailed("timed out", ex);
+            }
+            catch (WebSocketException ex)
+            {
+                return ConnectFailed("WebSocket error", ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ConnectFailed("hub start failed", ex);
+            }
 
             SetState(ConnectionState.Connected);
             _logger.LogInformation("Connected to control plane");
+            return Result.Success();
         }
         catch (Exception ex)
         {
@@ -159,6 +173,26 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         {
             _connectionLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Refuses a connection attempt before any hub connection exists. Sets state to Failed.
+    /// </summary>
+    private Result Refuse(string error)
+    {
+        _logger.LogWarning("Control plane connection refused: {Error}", error);
+        SetState(ConnectionState.Failed, error);
+        return Result.Failure(error);
+    }
+
+    /// <summary>
+    /// Maps a failed hub start to a Failure result. Sets state to Failed.
+    /// </summary>
+    private Result ConnectFailed(string detail, Exception ex)
+    {
+        _logger.LogWarning(ex, "Failed to connect to control plane: {Detail}", detail);
+        SetState(ConnectionState.Failed, detail);
+        return Result.Failure($"[ControlPlane.ConnectFailed] {detail}");
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
@@ -185,40 +219,49 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         }
     }
 
-    public async Task SendHeartbeatAsync(HeartbeatPayload payload, CancellationToken cancellationToken = default)
+    public async Task<Result<AgentHeartbeatAck>> SendHeartbeatAsync(
+        AgentHeartbeat heartbeat,
+        CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(payload);
+        ArgumentNullException.ThrowIfNull(heartbeat);
 
         if (_hubConnection?.State != HubConnectionState.Connected)
         {
-            _logger.LogWarning("Cannot send heartbeat: not connected");
-            return;
+            return Result<AgentHeartbeatAck>.Failure("[ControlPlane.NotConnected] Cannot send heartbeat: not connected");
         }
 
-        using var activity = _activitySource.StartHeartbeat(payload.NodeId);
+        using var activity = _activitySource.StartHeartbeat(_options.NodeId ?? Guid.Empty);
 
         try
         {
-            var json = JsonSerializer.Serialize(payload);
             // SECURITY: Use explicit invocation timeout to prevent hanging on slow/unresponsive server
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(_options.ControlPlane.InvocationTimeoutSeconds));
-            await _hubConnection.InvokeAsync("Heartbeat", json, cts.Token);
+            var ack = await _hubConnection.InvokeAsync<AgentHeartbeatAck>(
+                nameof(IAgentHub.Heartbeat), heartbeat, cts.Token);
             _meter.RecordHeartbeatSent();
-            _logger.LogDebug("Heartbeat sent for node {NodeId}", payload.NodeId);
+            _logger.LogDebug("Heartbeat sent for node {NodeId}", _options.NodeId);
+            return Result<AgentHeartbeatAck>.Success(ack);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, "Invocation timeout");
             _logger.LogWarning("Heartbeat invocation timed out after {Timeout}s",
                 _options.ControlPlane.InvocationTimeoutSeconds);
-            throw;
+            return Result<AgentHeartbeatAck>.Failure(
+                $"[ControlPlane.Timeout] Heartbeat invocation timed out after {_options.ControlPlane.InvocationTimeoutSeconds}s");
         }
-        catch (Exception ex)
+        catch (HubException ex)
         {
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
-            _logger.LogError(ex, "Failed to send heartbeat");
-            throw;
+            _logger.LogWarning(ex, "Control plane hub rejected the heartbeat");
+            return Result<AgentHeartbeatAck>.Failure("[ControlPlane.HubError] Control plane hub returned an error for the heartbeat");
+        }
+        catch (InvalidOperationException ex)
+        {
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
+            _logger.LogWarning(ex, "Heartbeat invocation failed: connection not active");
+            return Result<AgentHeartbeatAck>.Failure("[ControlPlane.NotConnected] Connection dropped during heartbeat");
         }
     }
 

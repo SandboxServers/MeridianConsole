@@ -294,6 +294,14 @@ Responsible for all communication with the Meridian Console control plane.
 - Manage authentication tokens and certificate rotation
 - Send telemetry and receive commands
 
+**Current implementation (agent hub):**
+
+- `ConnectAsync(CancellationToken)` returns `Result`. It connects to `AgentHubProtocol.Path` (`/hubs/agent`) over HTTPS with the client certificate and sends the `X-Agent-Protocol` header (`AgentHubProtocol.CurrentVersion`). The agent never sends `X-Node-Id`: Nodes takes the node ID from the certificate.
+- Failures return `Result.Failure` with a `[ControlPlane.*]` code: `InsecureEndpoint`, `NoCertificate`, `ConnectFailed`. Caller cancellation still throws.
+- `SendHeartbeatAsync(AgentHeartbeat, CancellationToken)` returns `Result<AgentHeartbeatAck>`. It invokes `IAgentHub.Heartbeat` with the typed contract. A rejected heartbeat is a success with `Acknowledged == false` and an `ErrorCode`. Failures use `[ControlPlane.NotConnected]`, `[ControlPlane.Timeout]` or `[ControlPlane.HubError]`.
+- `HeartbeatPayloadMapper.ToContract` clamps the metrics and bounds the version, the health issues and the active game server count to `AgentHeartbeatLimits`.
+- `SendCommandResultAsync` and `SendTelemetryAsync` are not served by Nodes yet (D-S29).
+
 #### ICommandHandler
 
 Interface for handling specific command types from the control plane.
