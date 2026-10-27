@@ -117,6 +117,25 @@ public class AgentMtlsSchemeTests
         Assert.DoesNotContain(proxy, exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1441)]
+    public void AddMtlsAuthentication_RenewalGraceOutsideRange_Throws(int graceMinutes)
+    {
+        // Arrange - the renewal grace is bounded to 0..1440 minutes (D-S212)
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Mtls:RenewalGraceMinutes"] = graceMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        });
+        var services = new ServiceCollection();
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            services.AddMtlsAuthentication(configuration);
+        });
+    }
+
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values)
     {
         return new ConfigurationBuilder()

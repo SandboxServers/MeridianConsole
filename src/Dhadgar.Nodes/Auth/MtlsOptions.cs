@@ -34,6 +34,14 @@ public sealed class MtlsOptions
     public bool AllowExpiredCertificates { get; set; }
 
     /// <summary>
+    /// Minutes a certificate stays usable after a renewal supersedes it (D-S212), so an agent whose
+    /// renewal response was lost can renew again with the presented certificate. 0 means immediate revoke.
+    /// Must be between 0 and <see cref="AgentCertificateRenewalPolicy.MaxGraceMinutes"/>.
+    /// Default: <see cref="AgentCertificateRenewalPolicy.DefaultGraceMinutes"/>.
+    /// </summary>
+    public int RenewalGraceMinutes { get; set; } = AgentCertificateRenewalPolicy.DefaultGraceMinutes;
+
+    /// <summary>
     /// Whether to strictly require a client certificate on protected endpoints.
     /// When true, requests without a certificate will be rejected with 401.
     /// When false and mTLS is enabled, requests without a certificate are logged but allowed.

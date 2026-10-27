@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
+using Dhadgar.Contracts.Nodes;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
@@ -297,6 +298,17 @@ public static class MtlsMiddlewareExtensions
                         "and a prefix length of 0 is not allowed. See D-S210.");
                 }
             }
+        }
+
+        // Renewal grace (D-S212): 0 revokes immediately; anything longer than the maximum is refused at start.
+        var graceMinutes = configuration
+            .GetSection(MtlsOptions.SectionName)
+            .GetValue<int?>("RenewalGraceMinutes") ?? AgentCertificateRenewalPolicy.DefaultGraceMinutes;
+        if (graceMinutes < 0 || graceMinutes > AgentCertificateRenewalPolicy.MaxGraceMinutes)
+        {
+            throw new InvalidOperationException(
+                $"'{MtlsOptions.SectionName}:RenewalGraceMinutes' must be between 0 and " +
+                $"{AgentCertificateRenewalPolicy.MaxGraceMinutes}. See D-S212.");
         }
 
         services.AddScoped<ICertificateValidationService, CertificateValidationService>();

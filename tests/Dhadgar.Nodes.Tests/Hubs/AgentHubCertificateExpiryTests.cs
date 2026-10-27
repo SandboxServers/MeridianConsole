@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Data;
+using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Hubs;
 using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Services;
@@ -86,6 +87,65 @@ public sealed class AgentHubCertificateExpiryTests
 
         Assert.False(ack.Acknowledged);
         context.Received(1).Abort();
+    }
+
+    [Fact]
+    public async Task Heartbeat_CertificateInGrace_IsAcknowledged()
+    {
+        // Revoked by a renewal, still inside its grace window (D-S212): the hub keeps the connection.
+        var time = new FakeTimeProvider(Now);
+        using var db = CreateContext();
+        var heartbeats = CreateHeartbeatService();
+        var nodeId = Guid.NewGuid();
+        await SeedRevokedCertificateAsync(db, nodeId, graceUntil: Now.UtcDateTime.AddMinutes(50));
+        var context = CreateHubContext(nodeId, Now.AddDays(1), includeNotAfter: true);
+        using var hub = CreateHub(db, heartbeats, allowExpired: false, time, context);
+
+        var ack = await hub.Heartbeat(ValidHeartbeat);
+
+        Assert.True(ack.Acknowledged);
+        context.DidNotReceive().Abort();
+        await heartbeats.Received(1).ProcessHeartbeatAsync(
+            Arg.Any<Guid>(), Arg.Any<HeartbeatRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Heartbeat_CertificatePastGrace_IsRefusedAndAborted()
+    {
+        // The grace window closed one minute ago: the hub refuses the connection's heartbeat.
+        var time = new FakeTimeProvider(Now);
+        using var db = CreateContext();
+        var heartbeats = CreateHeartbeatService();
+        var nodeId = Guid.NewGuid();
+        await SeedRevokedCertificateAsync(db, nodeId, graceUntil: Now.UtcDateTime.AddMinutes(-1));
+        var context = CreateHubContext(nodeId, Now.AddDays(1), includeNotAfter: true);
+        using var hub = CreateHub(db, heartbeats, allowExpired: false, time, context);
+
+        var ack = await hub.Heartbeat(ValidHeartbeat);
+
+        Assert.False(ack.Acknowledged);
+        Assert.Equal(AgentHubErrorCodes.HeartbeatFailed, ack.ErrorCode);
+        context.Received(1).Abort();
+        await heartbeats.DidNotReceive().ProcessHeartbeatAsync(
+            Arg.Any<Guid>(), Arg.Any<HeartbeatRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    private static async Task SeedRevokedCertificateAsync(NodesDbContext db, Guid nodeId, DateTime graceUntil)
+    {
+        db.AgentCertificates.Add(new AgentCertificate
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            Thumbprint = "abc",
+            SerialNumber = "01",
+            NotBefore = Now.UtcDateTime.AddDays(-1),
+            NotAfter = Now.UtcDateTime.AddDays(89),
+            IssuedAt = Now.UtcDateTime.AddDays(-1),
+            IsRevoked = true,
+            RevokedAt = Now.UtcDateTime.AddMinutes(-10),
+            GraceUntil = graceUntil,
+        });
+        await db.SaveChangesAsync();
     }
 
     private static NodesDbContext CreateContext()

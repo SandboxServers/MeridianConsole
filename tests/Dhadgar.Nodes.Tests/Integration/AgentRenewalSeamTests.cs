@@ -217,15 +217,9 @@ public sealed class AgentRenewalSeamTests : IDisposable
     }
 
     /// <summary>
-    /// Snapshot of one <c>AgentCertificate</c> row. <c>GraceUntil</c> is read through <see cref="ReadGraceUntil"/>.
+    /// Snapshot of one <c>AgentCertificate</c> row.
     /// </summary>
     private sealed record CertificateRow(string Thumbprint, bool IsRevoked, DateTime? GraceUntil);
-
-    // Reads AgentCertificate.GraceUntil by name, so the test compiles before P16 adds the property.
-    private static DateTime? ReadGraceUntil(NodesDbContext db, AgentCertificate row) =>
-        db.Model.FindEntityType(typeof(AgentCertificate))?.FindProperty("GraceUntil") is null
-            ? null
-            : db.Entry(row).Property<DateTime?>("GraceUntil").CurrentValue;
 
     private static async Task<List<CertificateRow>> ReadCertificateStateAsync(
         WebApplicationFactory<Program> factory,
@@ -234,7 +228,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
         var rows = await db.AgentCertificates.Where(c => c.NodeId == nodeId).ToListAsync();
-        return rows.Select(row => new CertificateRow(row.Thumbprint, row.IsRevoked, ReadGraceUntil(db, row))).ToList();
+        return rows.Select(row => new CertificateRow(row.Thumbprint, row.IsRevoked, row.GraceUntil)).ToList();
     }
 
     /// <summary>

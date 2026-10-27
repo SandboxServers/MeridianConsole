@@ -28,6 +28,9 @@ namespace Dhadgar.Nodes.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("GraceUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsRevoked")
                         .HasColumnType("boolean");
 

@@ -311,12 +311,13 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
                 return CertificateTrustStatus.Unavailable;
             }
 
-            if (agentCert is not null && agentCert.IsRevoked)
+            if (agentCert is not null && !AgentCertificateState.IsUsable(agentCert, _timeProvider.GetUtcNow().UtcDateTime))
             {
                 _logger.LogWarning(
-                    "Certificate validation failed: certificate {Thumbprint} is revoked (revoked at: {RevokedAt}, reason: {Reason})",
+                    "Certificate validation failed: certificate {Thumbprint} is revoked (revoked at: {RevokedAt}, grace until: {GraceUntil}, reason: {Reason})",
                     thumbprint,
                     agentCert.RevokedAt,
+                    agentCert.GraceUntil,
                     agentCert.RevocationReason);
                 return CertificateTrustStatus.Untrusted;
             }

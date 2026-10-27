@@ -465,6 +465,72 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateCertificate_RevokedInGrace_IsTrusted()
+    {
+        // Arrange - superseded by a renewal, still inside its grace window (D-S212)
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        await AddRevokedRowAsync(dbServices, nodeId, result, now.AddMinutes(-10), now.AddMinutes(20));
+
+        // Act
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        // Assert
+        Assert.Equal(CertificateTrustStatus.Trusted, trust);
+    }
+
+    [Fact]
+    public async Task ValidateCertificate_RevokedPastGrace_IsUntrusted()
+    {
+        // Arrange - the grace window closed one minute ago
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        await AddRevokedRowAsync(dbServices, nodeId, result, now.AddMinutes(-70), now.AddMinutes(-1));
+
+        // Act
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        // Assert
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
+    }
+
+    private static async Task AddRevokedRowAsync(
+        ServiceProvider dbServices,
+        Guid nodeId,
+        CertificateIssuanceResult result,
+        DateTime revokedAt,
+        DateTime graceUntil)
+    {
+        using var scope = dbServices.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        dbContext.AgentCertificates.Add(new AgentCertificate
+        {
+            Id = Guid.NewGuid(),
+            NodeId = nodeId,
+            Thumbprint = result.Thumbprint!,
+            SerialNumber = result.SerialNumber!,
+            NotBefore = result.NotBefore!.Value,
+            NotAfter = result.NotAfter!.Value,
+            IssuedAt = revokedAt,
+            IsRevoked = true,
+            RevokedAt = revokedAt,
+            RevocationReason = "Renewed - superseded by new certificate",
+            GraceUntil = graceUntil
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task ValidateCertificateAsync_ReturnsTrueForNonRevokedCertificateInDatabase()
     {
         // Arrange
