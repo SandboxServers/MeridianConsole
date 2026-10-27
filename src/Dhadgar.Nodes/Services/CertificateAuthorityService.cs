@@ -18,6 +18,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
     private readonly ILogger<CertificateAuthorityService> _logger;
     // Singleton: never hold a NodesDbContext. Each lookup gets its own scope (P17f).
     private readonly IServiceScopeFactory _scopeFactory;
+
     // Cached CA certificate for performance
     private X509Certificate2? _caCertificate;
     private readonly SemaphoreSlim _initLock = new(1, 1);
