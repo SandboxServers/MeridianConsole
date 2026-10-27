@@ -71,14 +71,14 @@ msiexec /i MeridianConsoleAgent.msi /qn /l*v install.log
 The installer supports in-place upgrades. Simply run the new MSI:
 
 ```powershell
-msiexec /i MeridianConsoleAgent-NewVersion.msi /quiet
+msiexec /i MeridianConsoleAgent-NewVersion.msi /qn
 ```
 
 ### Uninstall
 
 ```powershell
 # Via Add/Remove Programs, or:
-msiexec /x {ProductCode} /quiet
+msiexec /x {ProductCode} /qn
 
 # Or by UpgradeCode (recommended for automation):
 # Find installed product first
@@ -102,11 +102,12 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 
 ### Directories
 
+- `C:\ProgramData\Meridian Console\` - Parent of the agent data folders; created and owned by the installer so a standard user cannot pre-create it and keep ownership
 - `C:\ProgramData\Meridian Console\Agent\` - Runtime data
 - `C:\ProgramData\Meridian Console\Agent\Servers\` - Game server files
 - `C:\ProgramData\Meridian Console\Agent\Temp\` - Temporary files
 
-The folders above and the `HKLM\SOFTWARE\Meridian Console\Agent` key (which holds the enrollment token) use protected-DACL SDDL: SYSTEM and Administrators only, with no inherited access.
+The folders above (the parent folder carries an empty-mask Owner Rights ACE, so an owner has no implicit WRITE_DAC) and the `HKLM\SOFTWARE\Meridian Console\Agent` key (which holds the enrollment token) use protected-DACL SDDL: SYSTEM and Administrators only, with no inherited access.
 
 ### Windows Service
 
