@@ -245,6 +245,33 @@ internal static class MsiLegs
     }
 
     /// <summary>
+    /// Appends the pre-install manifest entries with <paramref name="appendEntries"/>, and only when that succeeds runs
+    /// <see cref="InstallAsync"/>. The entries therefore always precede the <c>msiexec</c> call. A failed append fails U11a.
+    /// </summary>
+    public static async Task<Result> PrepareAndInstallAsync(
+        Func<Result> appendEntries,
+        IMsiInstaller installer,
+        IServiceControl service,
+        IMsiProducts products,
+        string msiPath,
+        MintedToken token,
+        Uri endpoint,
+        TimeSpan window,
+        TimeSpan pollInterval,
+        Dictionary<string, object?> evidence,
+        CancellationToken ct)
+    {
+        var appended = appendEntries();
+        if (appended.IsFailure)
+        {
+            evidence[InstallStepName] = "fail";
+            return Result.Failure($"{InstallStepName}: manifest entries could not be recorded: {appended.Error}");
+        }
+
+        return await InstallAsync(installer, service, products, msiPath, token, endpoint, window, pollInterval, evidence, ct);
+    }
+
+    /// <summary>
     /// Runs U11a: <c>msiexec /i</c> through <paramref name="installer"/>, then polls the machine until the checks pass or
     /// <paramref name="window"/> ends (60 s in a real run). Records the install under <c>msi</c> in <paramref name="evidence"/>.
     /// </summary>

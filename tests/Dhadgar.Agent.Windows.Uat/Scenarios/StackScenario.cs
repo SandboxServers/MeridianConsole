@@ -7,6 +7,7 @@ using System.Security.Principal;
 using Dhadgar.Agent.Windows.Uat.Agent;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
 using Dhadgar.Agent.Windows.Uat.Infra;
+using Dhadgar.Agent.Windows.Uat.Msi;
 using Dhadgar.Agent.Windows.Uat.Probe;
 using Dhadgar.Agent.Windows.Uat.Service;
 using Dhadgar.Agent.Windows.Uat.Stack;
@@ -27,6 +28,8 @@ namespace Dhadgar.Agent.Windows.Uat.Scenarios;
 internal sealed class StackScenario : IUatScenario
 {
     private static readonly TimeSpan HubStartTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MsiTokenLifetime = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan MsiInstallWindow = TimeSpan.FromSeconds(60);
     private const int AgentHeartbeatSeconds = 10;
     private const int AgentConnectionCheckSeconds = 10;
 
@@ -91,6 +94,7 @@ internal sealed class StackScenario : IUatScenario
         // U10 runs before U1 in service mode, because the Gateway needs the run-scoped TLS certificate at start (P22).
         ServiceRun? serviceRun = null;
         GatewayTls? tls = null;
+        ServiceSetupOutcome? msiSetup = null;
         if (context.Mode == "service")
         {
             var setUp = await SetUpServiceAsync(context, gatewayBase, evidence);
@@ -101,6 +105,19 @@ internal sealed class StackScenario : IUatScenario
 
             serviceRun = setUp.Value;
             tls = new GatewayTls(setUp.Value.Setup.Tls.PfxPath, setUp.Value.Setup.Tls.Password);
+        }
+        else if (context.Mode == "msi")
+        {
+            // U10 in MSI mode (P23): the TLS leaf and the decoy only; the MSI creates the service.
+            var setup = await ServiceSetup.RunTlsOnlyAsync(
+                context.Paths, context.RunId, context.Manifest, context.Redactor, new WindowsMachineActions(), RootSnapshot.Take, evidence);
+            if (setup.IsFailure)
+            {
+                return Result.Failure(setup.Error!);
+            }
+
+            msiSetup = setup.Value;
+            tls = new GatewayTls(setup.Value.Tls.PfxPath, setup.Value.Tls.Password);
         }
 
         var settings = new StackSettings(
@@ -253,6 +270,11 @@ internal sealed class StackScenario : IUatScenario
         }
 
         evidence["S-db"] = "pass";
+        if (context.Mode == "msi")
+        {
+            return await RunMsiLegsAsync(context, nodesDb, gatewayBase, msiSetup!, evidence, ct);
+        }
+
         if (context.Mode is not ("process" or "service"))
         {
             return Result.Success();
@@ -275,6 +297,83 @@ internal sealed class StackScenario : IUatScenario
         return setup.IsSuccess
             ? Result<ServiceRun>.Success(new ServiceRun(control, setup.Value))
             : Result<ServiceRun>.Failure(setup.Error!);
+    }
+
+    /// <summary>
+    /// The MSI legs (P23) after the stack smoke: U11a (the manifest entries, then <c>msiexec /i</c> with a 10-minute
+    /// token), U3 and U4 against the installed service, U5-U8 skipped, then U11b (<c>msiexec /x</c>). The driver never
+    /// runs <c>msiexec</c> in a coder session; this runs only inside the user's <c>-Mode Msi</c> run.
+    /// </summary>
+    private static async Task<Result> RunMsiLegsAsync(
+        RunContext context, NodesDb nodesDb, Uri gatewayBase, ServiceSetupOutcome setup,
+        Dictionary<string, object?> evidence, CancellationToken ct)
+    {
+        var msiPath = FindMsi(context.Paths);
+        if (msiPath.IsFailure)
+        {
+            return Fail(evidence, MsiLegs.InstallStepName, msiPath.Error!);
+        }
+
+        var organizationId = Guid.NewGuid();
+        evidence["legsOrganizationId"] = organizationId.ToString();
+        var minter = new TokenMinter(() => nodesDb.Create(), context.RunId, context.Redactor);
+        var minted = await minter.MintAsync(organizationId, "uat-msi", ct, MsiTokenLifetime);
+        if (minted.IsFailure)
+        {
+            return Fail(evidence, MsiLegs.InstallStepName, minted.Error!);
+        }
+
+        var control = new ServiceControl(context.Paths, context.Manifest, context.Redactor);
+        var products = new MsiProducts();
+        var installer = new MsiInstaller(context.Paths, context.Redactor);
+        var installed = await MsiLegs.PrepareAndInstallAsync(
+            () => MsiLegs.AppendPreInstallEntries(context.Manifest, msiPath.Value),
+            installer, control, products, msiPath.Value, minted.Value, gatewayBase,
+            MsiInstallWindow, TimeSpan.FromSeconds(2), evidence, ct);
+        if (installed.IsFailure)
+        {
+            return installed;
+        }
+
+        var systemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null).Value;
+        var deps = new AgentLegsDeps(
+            new RegistryToken(context.Manifest),
+            new StoreInspector(),
+            new ServiceAgentHost(control, context.Manifest, writesEntries: false),
+            new NodesAgentLegsDb(() => nodesDb.Create()),
+            (label, c) => minter.MintAsync(organizationId, label, c));
+        var options = new AgentLegsOptions(
+            organizationId, systemSid, BuildAgentConfig(context, gatewayBase), TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(90), setup.DecoyThumbprint, AgentDirectories.MachineAgentDirectory);
+        var legs = await new AgentLegs(context.Paths, context.Manifest, deps, options).RunMsiAsync(evidence, minted.Value, ct);
+        if (legs.IsFailure)
+        {
+            return legs;
+        }
+
+        foreach (var step in new[] { "U5", "U6", "U7", "U8" })
+        {
+            evidence[step] = "skipped: covered by process and service modes";
+        }
+
+        return await MsiLegs.UninstallAsync(installer, control, products, new StoreInspector(), msiPath.Value, evidence);
+    }
+
+    /// <summary>The one MSI the run script copied to <c>&lt;runDir&gt;\msi\</c>.</summary>
+    private static Result<string> FindMsi(RunPaths paths)
+    {
+        if (!Directory.Exists(paths.Msi))
+        {
+            return Result<string>.Failure("the msi folder is missing; the run script copies the built MSI to <runDir>\\msi");
+        }
+
+        var files = Directory.GetFiles(paths.Msi, "*.msi");
+        if (files.Length != 1)
+        {
+            return Result<string>.Failure($"expected one MSI in the msi folder, found {files.Length}");
+        }
+
+        return paths.Validate(files[0]);
     }
 
     private static AgentConfig BuildAgentConfig(RunContext context, Uri gatewayBase) => new(

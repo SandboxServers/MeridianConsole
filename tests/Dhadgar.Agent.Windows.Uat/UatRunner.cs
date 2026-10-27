@@ -315,8 +315,30 @@ internal static class UatRunner
             : UatExitCodes.Fail;
 
         var serviceRun = args.Mode == "service" ? ServiceInfoFor(allSteps) : null;
+        var msiRun = args.Mode == "msi" ? MsiInfoFor(allSteps) : null;
         return await PersistAsync(args, paths, started, "run", args.Mode, allSteps, cleanup, warnings,
-            overall, exitCode, launchedByAgent, treeClean, actions, redactor, serviceRun);
+            overall, exitCode, launchedByAgent, treeClean, actions, redactor, serviceRun, msiRun);
+    }
+
+    /// <summary>
+    /// The msi object of <c>results.json</c> (P23), read from the <c>msi</c> evidence the MSI legs wrote under U1.
+    /// A part the run did not reach is null, -1 or empty.
+    /// </summary>
+    internal static MsiRunInfo MsiInfoFor(IReadOnlyList<StepResult> steps)
+    {
+        var evidence = steps.FirstOrDefault(s => s.Id == "U1")?.Evidence;
+        var msi = evidence is not null && evidence.TryGetValue("msi", out var value) ? value as IReadOnlyDictionary<string, object?> : null;
+        if (msi is null)
+        {
+            return new MsiRunInfo(null, null, -1, -1, []);
+        }
+
+        return new MsiRunInfo(
+            msi.GetValueOrDefault("productCode") as string,
+            msi.GetValueOrDefault("productVersion") as string,
+            msi.GetValueOrDefault("installExitCode") is int install ? install : -1,
+            msi.GetValueOrDefault("uninstallExitCode") is int uninstall ? uninstall : -1,
+            msi.GetValueOrDefault("residue") is IEnumerable<string> residue ? residue.ToList() : []);
     }
 
     /// <summary>
@@ -647,7 +669,8 @@ internal static class UatRunner
         bool? agentTreeClean,
         IMachineActions actions,
         Redactor redactor,
-        ServiceRunInfo? serviceRun = null)
+        ServiceRunInfo? serviceRun = null,
+        MsiRunInfo? msiRun = null)
     {
         var (sha, dirty) = await ReadGitAsync(args.RepoRoot);
         var results = new UatResults(
@@ -669,7 +692,8 @@ internal static class UatRunner
             cleanup,
             warnings,
             launchedByAgent ? new AgentRunInfo("D-S239", "CLAUDECODE", agentTreeClean == true) : null,
-            serviceRun);
+            serviceRun,
+            msiRun);
 
         var written = ResultsWriter.Write(results, paths.RunDir, redactor);
         if (written.IsFailure)

@@ -71,6 +71,80 @@ internal static class ServiceSetup
         return outcome;
     }
 
+    /// <summary>
+    /// U10 in MSI mode (P23): the run-scoped TLS leaf and the decoy CA only. The agent's <c>appsettings.json</c> is not
+    /// edited and no service is created: the MSI installs the service. Pass when both thumbprints are in <c>Root</c>.
+    /// The returned outcome has an empty binary path.
+    /// </summary>
+    public static Task<Result<ServiceSetupOutcome>> RunTlsOnlyAsync(
+        RunPaths paths,
+        string runId,
+        CleanupManifest manifest,
+        Redactor redactor,
+        IMachineActions machine,
+        Func<Result<RootSnapshot>> readRoot,
+        Dictionary<string, object?> evidence)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(redactor);
+        ArgumentNullException.ThrowIfNull(machine);
+        ArgumentNullException.ThrowIfNull(readRoot);
+        ArgumentNullException.ThrowIfNull(evidence);
+
+        var outcome = PlantTlsAndDecoy(paths, runId, manifest, redactor, machine, readRoot);
+        if (outcome.IsFailure)
+        {
+            evidence[StepName] = "fail";
+            return Task.FromResult(Result<ServiceSetupOutcome>.Failure($"{StepName}: {outcome.Error}"));
+        }
+
+        evidence["tlsThumbprint"] = outcome.Value.Tls.ThumbprintSha1;
+        evidence["decoyThumbprint"] = outcome.Value.DecoyThumbprint;
+        evidence[StepName] = "pass";
+        return Task.FromResult(outcome);
+    }
+
+    private static Result<ServiceSetupOutcome> PlantTlsAndDecoy(
+        RunPaths paths,
+        string runId,
+        CleanupManifest manifest,
+        Redactor redactor,
+        IMachineActions machine,
+        Func<Result<RootSnapshot>> readRoot)
+    {
+        var tls = UatTlsCertificate.Create(paths, runId, manifest, redactor, machine);
+        if (tls.IsFailure)
+        {
+            return Result<ServiceSetupOutcome>.Failure(tls.Error!);
+        }
+
+        var decoy = DecoyCa.Plant(runId, manifest, machine);
+        if (decoy.IsFailure)
+        {
+            return Result<ServiceSetupOutcome>.Failure(decoy.Error!);
+        }
+
+        var root = readRoot();
+        if (root.IsFailure)
+        {
+            return Result<ServiceSetupOutcome>.Failure(root.Error!);
+        }
+
+        var inRoot = root.Value.Thumbprints;
+        if (!inRoot.Contains(tls.Value.ThumbprintSha1, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<ServiceSetupOutcome>.Failure("the TLS leaf is not in LocalMachine\\Root");
+        }
+
+        if (!inRoot.Contains(decoy.Value, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<ServiceSetupOutcome>.Failure("the decoy CA is not in LocalMachine\\Root");
+        }
+
+        return Result<ServiceSetupOutcome>.Success(new ServiceSetupOutcome(tls.Value, decoy.Value, string.Empty));
+    }
+
     private static async Task<Result<ServiceSetupOutcome>> SetUpAsync(
         RunPaths paths,
         string runId,
