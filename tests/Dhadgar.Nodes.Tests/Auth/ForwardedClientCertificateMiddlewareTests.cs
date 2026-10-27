@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Tests.TestHelpers;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -19,7 +21,9 @@ public class ForwardedClientCertificateMiddlewareTests
     {
         // Arrange
         using var source = TestCertificateFactory.CreateSelfSignedCertificate();
+        var connectionTls = new SharedConnectionTls();
         var context = CreateContext("10.42.1.5", Convert.ToBase64String(source.RawData));
+        context.Features.Set<ITlsConnectionFeature>(connectionTls);
         X509Certificate2? seenByNext = null;
         var sut = CreateSut(enabled: true, next: _ =>
         {
@@ -33,46 +37,84 @@ public class ForwardedClientCertificateMiddlewareTests
         // Assert
         Assert.NotNull(seenByNext);
         Assert.Equal(source.Thumbprint, seenByNext.Thumbprint);
-        Assert.Null(context.Connection.ClientCertificate);
+        Assert.Null(connectionTls.ClientCertificate);
         Assert.False(context.Request.Headers.ContainsKey(HeaderName));
     }
 
     [Fact]
-    public async Task InvokeAsync_SameConnectionNextRequest_SeesOnlyItsOwnForwardedCertificate()
+    public async Task InvokeAsync_SequentialRequestsOnSharedConnection_EachSeesOnlyItsOwnForwardedCertificate()
     {
-        // Arrange: two requests over one connection (keep-alive or HTTP/2), each forwarding a different agent certificate.
+        // Arrange: two requests over one connection (keep-alive), each forwarding a different agent certificate.
         using var first = TestCertificateFactory.CreateSelfSignedCertificate();
         using var second = TestCertificateFactory.CreateSelfSignedCertificate();
-        var context = CreateContext("10.42.1.5", Convert.ToBase64String(first.RawData));
+        var connectionTls = new SharedConnectionTls();
+        var firstRequest = CreateContext("10.42.1.5", Convert.ToBase64String(first.RawData));
+        var secondRequest = CreateContext("10.42.1.5", Convert.ToBase64String(second.RawData));
+        firstRequest.Features.Set<ITlsConnectionFeature>(connectionTls);
+        secondRequest.Features.Set<ITlsConnectionFeature>(connectionTls);
         X509Certificate2? seenByFirst = null;
         X509Certificate2? seenBySecond = null;
-        var callCount = 0;
-        var sut = CreateSut(enabled: true, next: _ =>
+        var sut = CreateSut(enabled: true, next: ctx =>
         {
-            callCount++;
-            if (callCount == 1)
+            if (ReferenceEquals(ctx, firstRequest))
             {
-                seenByFirst = context.Connection.ClientCertificate;
+                seenByFirst = ctx.Connection.ClientCertificate;
             }
             else
             {
-                seenBySecond = context.Connection.ClientCertificate;
+                seenBySecond = ctx.Connection.ClientCertificate;
             }
 
             return Task.CompletedTask;
         });
 
         // Act
-        await sut.InvokeAsync(context);
-        context.Request.Headers[HeaderName] = Convert.ToBase64String(second.RawData);
-        await sut.InvokeAsync(context);
+        await sut.InvokeAsync(firstRequest);
+        await sut.InvokeAsync(secondRequest);
 
         // Assert
         Assert.NotNull(seenByFirst);
         Assert.Equal(first.Thumbprint, seenByFirst.Thumbprint);
         Assert.NotNull(seenBySecond);
         Assert.Equal(second.Thumbprint, seenBySecond.Thumbprint);
-        Assert.Null(context.Connection.ClientCertificate);
+        Assert.Null(connectionTls.ClientCertificate);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ConcurrentStreamsOnOneConnection_EachNextReadsItsOwnCertificate()
+    {
+        // Arrange: two HTTP/2 streams share one connection. Both are in flight before either reaches next.
+        using var first = TestCertificateFactory.CreateSelfSignedCertificate();
+        using var second = TestCertificateFactory.CreateSelfSignedCertificate();
+        var connectionTls = new SharedConnectionTls();
+        var streamA = CreateContext("10.42.1.5", Convert.ToBase64String(first.RawData));
+        var streamB = CreateContext("10.42.1.5", Convert.ToBase64String(second.RawData));
+        streamA.Features.Set<ITlsConnectionFeature>(connectionTls);
+        streamB.Features.Set<ITlsConnectionFeature>(connectionTls);
+
+        var bothInFlight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inFlight = 0;
+        var seen = new ConcurrentDictionary<HttpContext, X509Certificate2?>();
+        var sut = CreateSut(enabled: true, next: async ctx =>
+        {
+            if (Interlocked.Increment(ref inFlight) == 2)
+            {
+                bothInFlight.SetResult();
+            }
+
+            await bothInFlight.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            seen[ctx] = await ctx.Connection.GetClientCertificateAsync(CancellationToken.None);
+        });
+
+        // Act
+        await Task.WhenAll(sut.InvokeAsync(streamA), sut.InvokeAsync(streamB));
+
+        // Assert
+        Assert.NotNull(seen[streamA]);
+        Assert.Equal(first.Thumbprint, seen[streamA]!.Thumbprint);
+        Assert.NotNull(seen[streamB]);
+        Assert.Equal(second.Thumbprint, seen[streamB]!.Thumbprint);
+        Assert.Null(connectionTls.ClientCertificate);
     }
 
     [Fact]
@@ -256,5 +298,16 @@ public class ForwardedClientCertificateMiddlewareTests
             next ?? (_ => Task.CompletedTask),
             Options.Create(options),
             NullLogger<ForwardedClientCertificateMiddleware>.Instance);
+    }
+
+    /// <summary>
+    /// Stands in for the connection-level TLS feature that Kestrel shares across every stream of one connection.
+    /// </summary>
+    private sealed class SharedConnectionTls : ITlsConnectionFeature
+    {
+        public X509Certificate2? ClientCertificate { get; set; }
+
+        public Task<X509Certificate2?> GetClientCertificateAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(ClientCertificate);
     }
 }

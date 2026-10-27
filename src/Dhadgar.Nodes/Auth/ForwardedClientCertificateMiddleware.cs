@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Contracts.Nodes;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 
@@ -12,10 +13,11 @@ namespace Dhadgar.Nodes.Auth;
 /// <see cref="AgentCertificateProfile.ForwardedCertificateHeader"/> header (D-S25, C6).
 /// </summary>
 /// <remarks>
-/// The header is always removed from the request. It is used as the connection's client certificate
+/// The header is always removed from the request. It is used as the client certificate of that request
 /// only when all of these hold: forwarding is enabled, the remote address is inside a trusted proxy CIDR,
 /// there is exactly one header value of at most <see cref="ForwardedCertificateOptions.MaxHeaderLength"/>
 /// characters, the connection has no certificate of its own, and the value parses as base64 DER.
+/// The connection itself is never written, because HTTP/2 streams share it.
 /// Chain, SPIFFE and revocation checks stay in <see cref="MtlsMiddleware"/> and
 /// <see cref="ICertificateValidationService"/>. Production trust model: D-S210.
 /// </remarks>
@@ -43,46 +45,37 @@ public sealed class ForwardedClientCertificateMiddleware
         var headerValues = context.Request.Headers[AgentCertificateProfile.ForwardedCertificateHeader];
         context.Request.Headers.Remove(AgentCertificateProfile.ForwardedCertificateHeader);
 
-        var accepted = false;
         if (_options.Enabled && headerValues.Count > 0)
         {
-            accepted = TryAcceptCertificate(context, headerValues);
+            TryAcceptCertificate(context, headerValues);
         }
 
-        try
-        {
-            await _next(context);
-        }
-        finally
-        {
-            // The connection can outlive this request (keep-alive, HTTP/2 streams), so a forwarded
-            // certificate must never stay on it for the next request, which may come from another agent.
-            if (accepted)
-            {
-                context.Connection.ClientCertificate = null;
-            }
-        }
+        await _next(context);
     }
 
     /// <summary>
-    /// Sets the forwarded certificate on the connection when every acceptance rule holds.
+    /// Attaches the forwarded certificate to this request when every acceptance rule holds.
     /// </summary>
-    /// <returns>True when this request set <c>Connection.ClientCertificate</c>, so the caller must clear it.</returns>
-    private bool TryAcceptCertificate(HttpContext context, StringValues headerValues)
+    /// <remarks>
+    /// The certificate is set on the request's feature collection, never on <c>Connection.ClientCertificate</c>.
+    /// HTTP/2 streams share one connection, so a connection-level write would let a concurrent stream from another
+    /// agent read this certificate. The request feature dies with the request.
+    /// </remarks>
+    private void TryAcceptCertificate(HttpContext context, StringValues headerValues)
     {
         if (!IsTrustedProxy(context.Connection.RemoteIpAddress))
         {
             _logger.LogWarning(
                 "Ignored forwarded client certificate from untrusted address {RemoteIp}",
                 context.Connection.RemoteIpAddress);
-            return false;
+            return;
         }
 
         if (headerValues.Count != 1)
         {
             _logger.LogWarning("Ignored forwarded client certificate: expected one header value, got {Count}",
                 headerValues.Count);
-            return false;
+            return;
         }
 
         var value = headerValues[0];
@@ -90,13 +83,14 @@ public sealed class ForwardedClientCertificateMiddleware
         {
             _logger.LogWarning("Ignored forwarded client certificate: header length {Length} is not accepted",
                 value?.Length ?? 0);
-            return false;
+            return;
         }
 
-        // A certificate from the TLS handshake always wins over a forwarded one.
-        if (context.Connection.ClientCertificate is not null)
+        // A certificate from the TLS handshake always wins over a forwarded one. The feature is read from the
+        // request features, so no ConnectionInfo cache is filled that would hide the feature set below.
+        if (context.Features.Get<ITlsConnectionFeature>()?.ClientCertificate is not null)
         {
-            return false;
+            return;
         }
 
         X509Certificate2? certificate = null;
@@ -108,20 +102,19 @@ public sealed class ForwardedClientCertificateMiddleware
         catch (FormatException)
         {
             _logger.LogWarning("Ignored forwarded client certificate: value is not base64");
-            return false;
+            return;
         }
         catch (CryptographicException)
         {
             _logger.LogWarning("Ignored forwarded client certificate: value is not a DER certificate");
-            return false;
+            return;
         }
 
         context.Response.RegisterForDispose(certificate);
-        context.Connection.ClientCertificate = certificate;
+        context.Features.Set<ITlsConnectionFeature>(new ForwardedTlsConnectionFeature(certificate));
 
         _logger.LogDebug("Accepted forwarded client certificate from trusted proxy {RemoteIp}",
             context.Connection.RemoteIpAddress);
-        return true;
     }
 
     private bool IsTrustedProxy(IPAddress? remoteAddress)
@@ -158,5 +151,16 @@ public sealed class ForwardedClientCertificateMiddleware
         }
 
         return networks;
+    }
+
+    /// <summary>
+    /// Presents the forwarded certificate as the client certificate of one request only.
+    /// </summary>
+    private sealed class ForwardedTlsConnectionFeature(X509Certificate2 certificate) : ITlsConnectionFeature
+    {
+        public X509Certificate2? ClientCertificate { get; set; } = certificate;
+
+        public Task<X509Certificate2?> GetClientCertificateAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(ClientCertificate);
     }
 }
