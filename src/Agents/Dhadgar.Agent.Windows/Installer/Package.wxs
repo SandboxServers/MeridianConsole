@@ -8,7 +8,8 @@
     Approval: PR-104-AGENT-INSTALLER
     Notes: Registry key and data-folder ACLs are protected-DACL SDDL (core PermissionEx,
            MsiLockPermissionsEx): SYSTEM and Administrators only. EnrollmentToken is stored
-           in HKLM under that ACL.
+           in HKLM under that ACL, written only by the hidden deferred custom action WriteEnrollmentToken
+           (D-S245), never through the Registry table.
 
     IMPORTANT: This installer runs on customer hardware with elevated privileges.
     All custom actions must be reviewed for security implications.
@@ -108,6 +109,33 @@
     <Launch Condition="Privileged"
             Message="[ProductName] requires administrator privileges to install." />
 
+    <!--
+      Enrollment token (D-S245). Hidden="yes" masks the property, but NOT a formatted table value: a Registry row
+      with [ENROLLMENT_TOKEN] puts the token in every /l*v log (RegAddValue/RegRemoveValue script ops). So the token
+      reaches HKLM only through these actions: a HideTarget setter copies it into the hidden data of a HideTarget,
+      deferred, no-impersonate DTF action. Rollback and uninstall delete the value. Never add a Registry, IniFile or
+      Environment row, or a deferred action without HideTarget, that formats ENROLLMENT_TOKEN.
+    -->
+    <Binary Id="AgentInstallerActions"
+            SourceFile="$(Dhadgar.Agent.Windows.InstallerActions.TargetDir)Dhadgar.Agent.Windows.InstallerActions.CA.dll" />
+    <CustomAction Id="SetWriteEnrollmentToken" Property="WriteEnrollmentToken" Value="[ENROLLMENT_TOKEN]"
+                  HideTarget="yes" />
+    <CustomAction Id="WriteEnrollmentToken" BinaryRef="AgentInstallerActions" DllEntry="WriteEnrollmentToken"
+                  Execute="deferred" Impersonate="no" Return="check" HideTarget="yes" />
+    <CustomAction Id="RollbackEnrollmentToken" BinaryRef="AgentInstallerActions" DllEntry="DeleteEnrollmentToken"
+                  Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="DeleteEnrollmentToken" BinaryRef="AgentInstallerActions" DllEntry="DeleteEnrollmentToken"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="SetWriteEnrollmentToken" Before="RollbackEnrollmentToken"
+              Condition="ENROLLMENT_TOKEN AND NOT REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="RollbackEnrollmentToken" Before="WriteEnrollmentToken"
+              Condition="ENROLLMENT_TOKEN AND NOT REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="WriteEnrollmentToken" After="WriteRegistryValues"
+              Condition="ENROLLMENT_TOKEN AND NOT REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="DeleteEnrollmentToken" Before="RemoveRegistryValues" Condition="REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+
     <!-- Define Feature hierarchy -->
     <Feature Id="CoreFeature"
              Title="Agent Service"
@@ -119,7 +147,6 @@
       <ComponentGroupRef Id="AgentComponents" />
       <ComponentGroupRef Id="ConfigComponents" />
       <ComponentRef Id="EventLogComponent" />
-      <ComponentRef Id="EnrollmentTokenComponent" />
 
     </Feature>
 
@@ -281,9 +308,12 @@
 
       <!-- Installation path registry key -->
       <Component Id="InstallPathComponent" Guid="F0A1B2C3-D4E5-6789-0ABC-DEF123456789" Directory="INSTALLFOLDER">
-        <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
+        <!-- The agent key's ACL: SYSTEM and Administrators only, protected from inheritance (MsiLockPermissionsEx).
+             Unconditional, so the key is protected whether or not a token is passed (D-S245). -->
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent" ForceCreateOnInstall="yes">
           <RegistryValue Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
           <RegistryValue Name="Version" Type="string" Value="[ProductVersion]" />
+          <PermissionEx Sddl="D:P(A;OICI;KA;;;SY)(A;OICI;KA;;;BA)" />
         </RegistryKey>
       </Component>
 
@@ -303,23 +333,6 @@
                         EventMessageFile="[#MainExecutable]"
                         KeyPath="yes" />
 
-    </Component>
-  </Fragment>
-
-  <!-- Enrollment Token Component -->
-  <Fragment>
-    <!--
-      Component to write enrollment token if provided via command line.
-      Usage: msiexec /i Agent.msi ENROLLMENT_TOKEN=your-token-here
-      The agent reads this from registry on first startup for enrollment.
-    -->
-    <Component Id="EnrollmentTokenComponent" Guid="18A9B0C1-D2E3-4567-89AB-CDEF01234567" Directory="INSTALLFOLDER"
-               Condition="ENROLLMENT_TOKEN">
-      <RegistryKey Id="EnrollmentTokenKey" Root="HKLM" Key="SOFTWARE\Meridian Console\Agent" ForceCreateOnInstall="yes">
-        <RegistryValue Name="EnrollmentToken" Type="string" Value="[ENROLLMENT_TOKEN]" KeyPath="yes" />
-        <!-- ACL: SYSTEM and Administrators only, protected from inheritance (MsiLockPermissionsEx, Windows Installer 5.0) -->
-        <PermissionEx Sddl="D:P(A;OICI;KA;;;SY)(A;OICI;KA;;;BA)" />
-      </RegistryKey>
     </Component>
   </Fragment>
 

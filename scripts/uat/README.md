@@ -175,7 +175,7 @@ agent under D-S239. Coders never run it.
   certificates in `LocalMachine\My`, the `MeridianConsoleAgent` store, `%ProgramData%\Meridian Console\Agent`
   and the event source. U11b lists them in `results.json` `msi.residue`, and the final cleanup removes them.
 - **D-S229 token note:** the token is on the `msiexec` command line for the duration of the install. It is visible to
-  administrators only, is single-use and lives 10 minutes. The MSI log masks it (the property is `Hidden="yes"`), and
+  administrators only, is single-use and lives 10 minutes. The MSI never formats it into a logged table: a hidden custom action writes it (D-S245; the run `20261027-192738-7347` found the old Registry row logging it in `RegAddValue`), and
   U9 proves this by scanning every file under `logs\` (including `msi-install.log` and `msi-uninstall.log`),
   UTF-16 files too, for the token. The command line recorded in the run is redacted.
 - **Results:** `results.json` gets an `msi` object (`productCode`, `productVersion`, `installExitCode`,
