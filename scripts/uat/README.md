@@ -5,7 +5,9 @@ heartbeats and cleans up after itself. The driver is `tests/Dhadgar.Agent.Window
 point is `scripts/uat/Invoke-AgentWindowsUat.ps1`.
 
 This README covers `-Preflight`, `-StackOnly` (P19), `-CleanupOnly`, the guards of `-Mode Process`,
-and the process-mode agent legs (P20: U0-U4 and U9). The `Service` mode (P22) is described below; `Msi` is added by a later packet.
+and the process-mode agent legs (P20: U0-U4 and U9). The `Service` mode (P22) and the `Msi` mode (P23) are described below.
+
+Owed to the user run (never run by a coder): in MSI mode U10, U11a, U3, U4, U11b and U9, about 6 minutes.
 
 ## Who runs what (D-S225, D-S239)
 
@@ -150,6 +152,35 @@ password found is a warning only, and the file is rewritten too. Last, U9 delete
   `service` key. U9 is unchanged: the event-log export (`eventlog.txt`) is the agent's log in this mode.
 - **Path rule:** the run folder path must have no spaces (P18), because `binPath=` is passed to `sc.exe`.
 
+## MSI mode: the installed agent (P23, D-S223)
+
+`-Mode Msi -AcceptMachineChanges` installs `MeridianConsoleAgent.msi`, proves the installed `DhadgarAgent`
+service enrolls and restarts, then uninstalls it and checks what is left. The script publishes the agent without `-o`
+(the MSI harvests `bin\Release\net10.0\win-x64\publish`), builds the `.wixproj` in Release and copies the MSI to
+`<runDir>\msi\`. The driver never runs `msiexec` for anything but U11a and U11b. Run it yourself from an elevated
+PowerShell 7.4+ shell; automated coders never run it.
+
+- **Step order:** U0 → U10 (TLS leaf and decoy only, no service) → U1 → **U11a** → U3 → U4 → U5-U8 (skipped) → **U11b** → U9.
+- **Why U5-U8 are skipped:** renewal and grace are properties of the agent code, not of how it is installed. Process
+  and service modes already prove them, and they cost about 7 minutes of grace waits. The results show them as
+  `skipped: covered by process and service modes`.
+- **U11a "MSI install":** mints token T1 (10-minute lifetime), then runs `msiexec /i ... /qn /l*v` with
+  `ENROLLMENT_TOKEN=<token>` as a single argument. Pass: exit 0 (3010 is a warning), exactly one product for the
+  UpgradeCode, the `DhadgarAgent` service exists as LocalSystem, and the install-time registry value is set.
+  The manifest holds an `msiProduct` entry before msiexec runs, so a crash mid-install is still undone.
+- **U3 and U4** run against the installed service exactly as in service mode (first start, then restart with T2).
+- **U11b "MSI uninstall":** removes the product by product code. Pass: exit 0, the service and the install folder
+  are gone, and the product is no longer registered.
+- **Residue (warnings, not failures):** the uninstall does not remove what the agent itself created at run time: its
+  certificates in `LocalMachine\My`, the `MeridianConsoleAgent` store, `%ProgramData%\Meridian Console\Agent`
+  and the event source. U11b lists them in `results.json` `msi.residue`, and the final cleanup removes them.
+- **D-S229 token note:** the token is on the `msiexec` command line for the duration of the install. It is visible to
+  administrators only, is single-use and lives 10 minutes. The MSI log masks it (the property is `Hidden="yes"`), and
+  U9 proves this by scanning every file under `logs\` (including `msi-install.log` and `msi-uninstall.log`),
+  UTF-16 files too, for the token. The command line recorded in the run is redacted.
+- **Results:** `results.json` gets an `msi` object (`productCode`, `productVersion`, `installExitCode`,
+  `uninstallExitCode`, `residue`). Other modes have no `msi` key. `results.md` lists the same under the table.
+
 ## Reading `results.md`
 
 `results.md` has one header block (verb, mode, overall result and exit code, cleanup status, git
@@ -166,7 +197,7 @@ its condition, and steps after it show `skipped`. `results.json` holds the same 
 | `-StackOnly` | Starts the local stack and runs the enrollment smoke (P19). Needs no elevation. |
 | `-Mode Process -AcceptMachineChanges` | Runs the stack, the agent legs U2-U4 and the renewal legs U5-U8 as a child process (elevated, machine-changing). It takes about 12 minutes, because U7 waits out the 5-minute grace. |
 | `-Mode Service -AcceptMachineChanges` | Runs the scenario as the `DhadgarAgent` LocalSystem service with a run-scoped localhost TLS root (P22, see Service mode). |
-| `-Mode Msi -AcceptMachineChanges` | Installs the MSI (P23, not built yet). The script refuses. |
+| `-Mode Msi -AcceptMachineChanges` | Builds and installs the MSI, runs U3 and U4 against the installed service, uninstalls it and checks the residue (P23, see MSI mode). It takes about 6 minutes. |
 | `-CleanupOnly <runFolder>` | Undoes the changes recorded in that run's manifest. Use it after a crash. |
 | `-NoBuild` | Skips `dotnet build` and `dotnet publish`. The driver exe must already exist. |
 
