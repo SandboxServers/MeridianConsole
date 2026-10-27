@@ -76,9 +76,11 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
         await oldStore.StoreCertificateAsync(store.StoredClientCertificate!, TrackKey(store.GetPrivateKey()!));
 
         // The agent's mTLS client reaches the Gateway with the current certificate on the TLS connection.
+        using var certificateProvider = new ClientCertificateProvider(store);
         var renewing = CreateRenewingAgent(
             new TestServerClientFactory(harness.GatewayServer, stripApiPrefix: false, certificate: () => store.StoredClientCertificate),
             store,
+            certificateProvider,
             enrolled,
             harness.NodesBase.TimeProvider);
         var renewal = await renewing.RenewCertificateAsync();
@@ -132,6 +134,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
     private static AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
+        ClientCertificateProvider certificateProvider,
         EnrollmentResult enrolled,
         TimeProvider timeProvider)
     {
@@ -144,7 +147,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
             Options.Create(new AgentOptions()),
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
-            new ClientCertificateProvider(store),
+            certificateProvider,
             identity,
             enrollmentTokenCleanup: null,
             timeProvider: timeProvider);
@@ -207,7 +210,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
     /// <summary>
     /// Connect step. <see cref="IControlPlaneClient.ConnectAsync"/> returns a <c>Result</c>; a refused connection fails here.
     /// </summary>
-    private static async Task ConnectAgentAsync(IControlPlaneClient client)
+    private static async Task ConnectAgentAsync(ControlPlaneClient client)
     {
         var result = await client.ConnectAsync();
         Assert.True(result.IsSuccess, result.Error);
@@ -216,7 +219,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
     /// <summary>
     /// Heartbeat step. The payload is mapped to the typed contract, and the ack must be accepted.
     /// </summary>
-    private static async Task SendAgentHeartbeatAsync(IControlPlaneClient client, HeartbeatPayload payload)
+    private static async Task SendAgentHeartbeatAsync(ControlPlaneClient client, HeartbeatPayload payload)
     {
         var result = await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(payload));
         Assert.True(result.IsSuccess, result.Error);
