@@ -173,11 +173,12 @@ Use `security-review` label on PRs.
 
 Full guide: [docs/agents/ai-sdlc.md](docs/agents/ai-sdlc.md).
 
-- **Campaigns** (multi-service or multi-PR work) run under `claude --agent orchestrator`, which dispatches `architect`, `packet-coder`, `packet-reviewer`, `security-advisor` and `ops` from `.claude/agents/`. The process is the `campaign-packet` skill; ledgers live in `docs/analysis/<campaign>/`.
+- **Campaigns** (multi-service or multi-PR work) run under `claude --agent orchestrator`, which dispatches `architect`, `packet-coder`, `packet-reviewer`, `security-advisor`, `documentation-writer` and `ops` from `.claude/agents/`. The process is the `campaign-packet` skill; ledgers live in `docs/analysis/<campaign>/`.
 - **Direct work** runs under `claude --agent hands-on` or a plain `claude` session. Ship with the `ship-pr` skill.
 - **Contract first.** Types shared between services, or a service and an agent, live only in `src/Shared/Dhadgar.Contracts`. Every changed seam gets a test that runs both sides together and fails while they disagree.
 - **Status honesty.** `docs/PROJECT-STATE.md` says "confirmed working" only with a passing seam test or a recorded manual check; otherwise "code exists".
 - **Worktrees** go under `.claude/worktrees/<name>`. Never `git worktree prune`; the `shell_guard.py` hook refuses it, and refuses plain shell reads in favour of Read/Grep (`# guard-ok` bypasses).
+- **Docs library:** start at [docs/README.md](docs/README.md); writing rules are in `docs/meta/`, and [docs/agents/domain.md](docs/agents/domain.md) says where things live and which source wins. When you change code, check `docs/meta/doc-update-map.md`.
 - `.planning/` is legacy input, not the plan of record.
 
 ---

@@ -14,6 +14,7 @@ The orchestrator dispatches, decides and keeps the ledger. It reads no source, w
 | Design, contract, packet slicing, rulings | `architect` | `README.md`, `work-packets.md`, `RESUME.md`, ruling notes |
 | Worktrees, commits, pushes, PRs, merges, board posts | `ops` | nothing; one-line return |
 | One packet, one worktree | `packet-coder` | a local commit and a report file |
+| One doc packet (docs only), doc review or close-out doc sweep | `documentation-writer` | edited docs and a report file; `ops` commits |
 | Review a packet, a wave or the campaign (read-only) | `packet-reviewer` | a report with numbered fix notes |
 | Security pass on security-review areas (read-only) | `security-advisor` | a report with numbered fix notes |
 | Apply a review's fix notes | `packet-coder` (fresh) | a fix commit and a report file |
@@ -74,7 +75,7 @@ One pass is one fresh, read-only `packet-reviewer`. It returns `verdict=ship`, `
 2. `fix` on pass 1 or 2: a fresh `packet-coder` with "review fix, pass N of 3" and the report path; then a fresh reviewer for pass N+1 with the previous report's path.
 3. `fix` on pass 3, or `decision`: escalate (below).
 
-A packet in a security-review area also gets a parallel `security-advisor` pass with the same verdict words and its own report path; the fix brief names both reports, and the loop is done only when both say `ship`.
+A packet in a security-review area, or a doc packet that touches `docs/security/` or whose report lists docs under "Needs security-advisor read", also gets a parallel `security-advisor` pass with the same verdict words and its own report path; the fix brief names both reports, and the loop is done only when both say `ship`.
 
 The wave reviewer looks only for what one packet's review cannot see: contract drift between packets, duplicated helpers, two packets editing one file, merge-order hazards (`git merge-tree`). The campaign reviewer looks for docs that no longer match behaviour, decisions with nothing behind them, and the status lines the close-out owes. A wave of one packet has no wave loop.
 
