@@ -1,6 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Agent.Core.Authentication;
+using Dhadgar.Agent.Windows.Uat.Msi;
 using Microsoft.Win32;
 
 namespace Dhadgar.Agent.Windows.Uat.Probe;
@@ -70,6 +71,22 @@ internal sealed class MachineProbe : IMachineProbe
         if (Directory.Exists(AgentDirectories.MachineAgentDirectory))
         {
             items.Add($"directory:{AgentDirectories.MachineAgentDirectory}");
+        }
+
+        if (Directory.Exists(AgentDirectories.MachineProgramFilesAgentDirectory))
+        {
+            items.Add($"directory:{AgentDirectories.MachineProgramFilesAgentDirectory}");
+        }
+
+        // An installer that cannot be asked leaves the product unproven, so the footprint says so rather than "none".
+        var related = new MsiProducts().RelatedProducts(AgentWindowsFacts.MsiUpgradeCode);
+        if (related.IsFailure)
+        {
+            items.Add("msiProduct:unreadable");
+        }
+        else if (related.Value.Count > 0)
+        {
+            items.Add($"msiProduct:{AgentWindowsFacts.MsiUpgradeCode}");
         }
 
         items.AddRange(ListUatContainers().Select(name => $"container:{name}"));

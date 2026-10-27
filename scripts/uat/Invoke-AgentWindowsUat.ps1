@@ -1,7 +1,7 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-    Runs the Windows agent UAT driver (Preflight, StackOnly, Run or Cleanup).
+    Runs the Windows agent UAT driver (Preflight, StackOnly, Run or Cleanup). Run modes are Process, Service and Msi.
 
 .DESCRIPTION
     Anyone may run -Preflight and -StackOnly. -Mode changes this machine (services, HKLM,
@@ -36,6 +36,7 @@ $driverExe = Join-Path $repo 'tests\Dhadgar.Agent.Windows.Uat\bin\Release\net10.
 $nodesProject = Join-Path $repo 'src\Dhadgar.Nodes\Dhadgar.Nodes.csproj'
 $gatewayProject = Join-Path $repo 'src\Dhadgar.Gateway\Dhadgar.Gateway.csproj'
 $agentProject = Join-Path $repo 'src\Agents\Dhadgar.Agent.Windows\Dhadgar.Agent.Windows.csproj'
+$installerProject = Join-Path $repo 'src\Agents\Dhadgar.Agent.Windows\Installer\Dhadgar.Agent.Windows.Installer.wixproj'
 
 function New-RunId {
     $stamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss', [System.Globalization.CultureInfo]::InvariantCulture)
@@ -64,11 +65,6 @@ try {
         [Console]::Error.WriteLine('run changes this machine: pass -AcceptMachineChanges')
         exit 2
     }
-    if ($verb -eq 'run' -and $Mode -eq 'Msi') {
-        [Console]::Error.WriteLine('-Mode Msi is built in P23 and is not available yet.')
-        exit 2
-    }
-
     # Cheap guards run before the build and the run folder, so a refused call changes nothing.
     # The driver repeats them and stays authoritative.
     if ($verb -eq 'run' -and (Test-Path env:CLAUDECODE)) {
@@ -123,10 +119,46 @@ try {
             Invoke-DotNet -Arguments @('build', $nodesProject, '-c', 'Release')
             Invoke-DotNet -Arguments @('build', $gatewayProject, '-c', 'Release')
         }
-        if ($verb -eq 'run') {
+        if ($verb -eq 'run' -and $Mode -eq 'Msi') {
+            # Stale output from an earlier build or branch is git-ignored and would be harvested into the MSI, so the
+            # publish folder and the installer's Release output are deleted first. Both are checked to be under the repo.
+            foreach ($stale in @(
+                    (Join-Path (Split-Path -Parent $agentProject) 'bin\Release\net10.0\win-x64\publish'),
+                    (Join-Path (Split-Path -Parent $installerProject) 'bin\Release'))) {
+                $resolvedStale = [System.IO.Path]::GetFullPath($stale)
+                $repoPrefix = $repo.TrimEnd('\') + '\'
+                if (-not $resolvedStale.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    [Console]::Error.WriteLine("Refusing to delete $resolvedStale: it is not under $repo.")
+                    exit 4
+                }
+                if (Test-Path -LiteralPath $resolvedStale) {
+                    Remove-Item -LiteralPath $resolvedStale -Recurse -Force
+                }
+            }
+
+            # The MSI harvests the default publish folder (bin\Release\net10.0\win-x64\publish), so no -o (P23).
+            Invoke-DotNet -Arguments @('publish', $agentProject, '-c', 'Release', '-r', 'win-x64')
+            Invoke-DotNet -Arguments @('build', $installerProject, '-c', 'Release')
+        }
+        elseif ($verb -eq 'run') {
             $agentOut = Join-Path $runDir 'agent'
             Invoke-DotNet -Arguments @('publish', $agentProject, '-c', 'Release', '-r', 'win-x64', '-o', $agentOut)
         }
+    }
+
+    if ($verb -eq 'run' -and $Mode -eq 'Msi') {
+        # Copy the freshly built MSI into the run folder; the driver installs only from <runDir>\msi.
+        # Exactly one candidate is accepted: more than one means stale output, which must not be installed (P23 review).
+        $installerRelease = Join-Path (Split-Path -Parent $installerProject) 'bin\Release'
+        $msiCandidates = @(Get-ChildItem -LiteralPath $installerRelease -Filter 'MeridianConsoleAgent.msi' -Recurse -File -ErrorAction SilentlyContinue)
+        if ($msiCandidates.Count -ne 1) {
+            [Console]::Error.WriteLine("Expected one MeridianConsoleAgent.msi under $installerRelease, found $($msiCandidates.Count). Run without -NoBuild.")
+            exit 4
+        }
+        $builtMsi = $msiCandidates[0]
+        $msiDir = Join-Path $runDir 'msi'
+        [System.IO.Directory]::CreateDirectory($msiDir) | Out-Null
+        Copy-Item -LiteralPath $builtMsi.FullName -Destination (Join-Path $msiDir 'MeridianConsoleAgent.msi')
     }
 
     if (-not (Test-Path -LiteralPath $driverExe -PathType Leaf)) {

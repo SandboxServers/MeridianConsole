@@ -79,4 +79,10 @@ internal interface IMachineActions
 
     /// <summary>Deletes an event log source.</summary>
     Result DeleteEventSource(string source);
+
+    /// <summary>
+    /// Uninstalls every product that the upgrade code lists (<c>msiexec /x</c>). Exit 1605 (unknown product) counts as
+    /// success, so a second run finds nothing and does nothing (idempotent).
+    /// </summary>
+    Result UninstallMsiProduct(string upgradeCode);
 }

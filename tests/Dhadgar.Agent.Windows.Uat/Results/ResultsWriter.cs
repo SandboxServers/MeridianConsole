@@ -110,9 +110,22 @@ internal static class ResultsWriter
         sb.AppendLine("| --- | --- | --- | --- | --- |");
         foreach (var step in r.Steps)
         {
-            var evidence = string.Join("; ", step.Evidence.Select(kv => $"{kv.Key}={kv.Value}"));
+            // The msi evidence object is listed under the table instead (P23).
+            var evidence = string.Join("; ", step.Evidence.Where(kv => kv.Key != "msi").Select(kv => $"{kv.Key}={kv.Value}"));
             var detail = string.IsNullOrEmpty(step.Message) ? evidence : $"{step.Message}; {evidence}".TrimEnd(' ', ';');
             sb.AppendLine($"| {step.Id} | {step.Name} | {step.Status} | {Cell(detail)} | {step.DurationMs} ms |");
+        }
+
+        if (r.Msi is not null)
+        {
+            sb.AppendLine();
+            sb.AppendLine("MSI:");
+            sb.AppendLine();
+            sb.AppendLine($"- Product code: {r.Msi.ProductCode ?? "none"}; version: {r.Msi.ProductVersion ?? "none"}");
+            sb.AppendLine($"- Install exit code: {r.Msi.InstallExitCode}; uninstall exit code: {r.Msi.UninstallExitCode}");
+            sb.AppendLine(r.Msi.Residue.Count == 0
+                ? "- Residue: none"
+                : "- Residue: " + string.Join("; ", r.Msi.Residue));
         }
 
         return sb.ToString();

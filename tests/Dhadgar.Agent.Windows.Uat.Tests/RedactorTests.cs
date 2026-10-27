@@ -85,4 +85,48 @@ public class RedactorTests
 
         await Task.WhenAll(adder, reader);
     }
+
+    [Fact]
+    public void Scan_FindsATokenInAUtf16LeFileWithABom()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "uat-scan-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "msi-install.log");
+            File.WriteAllText(path, "first line\r\nMSI token ENROLLMENT_TOKEN=tok-msi-1 here\r\n", System.Text.Encoding.Unicode);
+            var redactor = new Redactor();
+            redactor.AddSecret("tok-msi-1", SecretKind.EnrollmentToken);
+
+            var hits = redactor.Scan(path);
+
+            Assert.Equal([new SecretHit(2, SecretKind.EnrollmentToken)], hits);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Scan_FindsATokenInAUtf8FileWithoutABom()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "uat-scan-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "msi-cleanup.log");
+            File.WriteAllText(path, "tok-utf8-2 on line one\n", new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var redactor = new Redactor();
+            redactor.AddSecret("tok-utf8-2", SecretKind.EnrollmentToken);
+
+            var hits = redactor.Scan(path);
+
+            Assert.Equal([new SecretHit(1, SecretKind.EnrollmentToken)], hits);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

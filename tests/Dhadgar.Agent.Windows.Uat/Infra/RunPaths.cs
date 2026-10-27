@@ -38,6 +38,9 @@ internal sealed class RunPaths
     /// <summary>TLS material for service and MSI modes.</summary>
     public string Tls => Path.Combine(RunDir, "tls");
 
+    /// <summary>The folder the run script copies the built MSI into (MSI mode, P23).</summary>
+    public string Msi => Path.Combine(RunDir, "msi");
+
     /// <summary>Published agent folder.</summary>
     public string AgentPublish => Path.Combine(RunDir, "agent");
 

@@ -323,6 +323,40 @@ public class AgentLegsTests : IDisposable
     }
 
     [Fact]
+    public async Task RunMsiAsync_LeavesTheServiceRunningAtTheEnd()
+    {
+        var manifest = Manifest();
+        var world = new LegWorld(_paths, manifest);
+        var installToken = await world.MintAsync("uat-msi-install", CancellationToken.None);
+        Assert.True(installToken.IsSuccess, installToken.Error);
+        world.Write(installToken.Value.PlainText);
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        var result = await Legs(world, manifest).RunMsiAsync(evidence, installToken.Value, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("pass", evidence["U4"]);
+        // U4 stops and restarts the agent once; the step-end stop (RunAsync's finally) must not run, so the
+        // service is still running when U11b uninstalls the product.
+        Assert.Equal(1, world.Calls.Count(call => call == "agent.stop"));
+        Assert.True(world.Calls.LastIndexOf("agent.stop") < world.Calls.LastIndexOf("agent.start"));
+    }
+
+    [Fact]
+    public async Task RunAsync_StopsTheAgentAtTheEnd()
+    {
+        var manifest = Manifest();
+        var world = new LegWorld(_paths, manifest);
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        var result = await Legs(world, manifest).RunAsync(evidence, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        // U4's own stop plus the step-end stop.
+        Assert.Equal(2, world.Calls.Count(call => call == "agent.stop"));
+    }
+
+    [Fact]
     public async Task RunAsync_ReadsRecoveryWarningAfterStop()
     {
         var manifest = Manifest();

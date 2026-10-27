@@ -136,6 +136,7 @@ internal sealed record AgentLegsDeps(
 /// <param name="FirstStartTimeout">How long U3 polls for its conditions (90 s in a real run).</param>
 /// <param name="RestartTimeout">How long U4 polls for its conditions (60 s in a real run).</param>
 /// <param name="DecoyThumbprint">Service mode only (P22): the decoy CA thumbprint from U10, which U3 requires to be absent from <c>Root</c>.</param>
+/// <param name="StateDirectory">The folder that holds <c>agent-state.json</c>; null means the run's agent state folder (P23 uses the MSI default).</param>
 internal sealed record AgentLegsOptions(
     Guid OrganizationId,
     string AgentAccountSid,
@@ -143,7 +144,8 @@ internal sealed record AgentLegsOptions(
     TimeSpan PollInterval,
     TimeSpan FirstStartTimeout,
     TimeSpan RestartTimeout,
-    string? DecoyThumbprint = null);
+    string? DecoyThumbprint = null,
+    string? StateDirectory = null);
 
 /// <summary>
 /// The agent legs after the stack (P20 U2-U4): a token written to the registry, a first start that enrolls the node
@@ -175,33 +177,67 @@ internal sealed class AgentLegs
     }
 
     /// <summary>Runs U2, U3 and U4 in order and stops at the first failing step. Writes <c>U2</c>-<c>U4</c> and evidence into <paramref name="evidence"/>.</summary>
-    public async Task<Result> RunAsync(Dictionary<string, object?> evidence, CancellationToken ct)
-    {
-        var warnings = new List<string>();
-        evidence["warnings"] = warnings;
-        var state = new LegState(evidence);
-        try
+    public Task<Result> RunAsync(Dictionary<string, object?> evidence, CancellationToken ct) =>
+        RunStepsAsync(evidence, null, async (state, token) =>
         {
-            var u2 = await U2TokenAsync(state, ct);
+            var u2 = await U2TokenAsync(state, token);
             if (u2.IsFailure)
             {
                 return u2;
             }
 
-            var u3 = await U3FirstStartAsync(state, ct);
+            var u3 = await U3FirstStartAsync(state, token);
             if (u3.IsFailure)
             {
                 return u3;
             }
 
-            return await U4RestartAsync(state, ct);
+            return await U4RestartAsync(state, token);
+        }, ct);
+
+    /// <summary>
+    /// The MSI leg's U3 and U4 (P23). The MSI installed the agent and enrolled it with <paramref name="installToken"/>
+    /// (T1, minted for U11a), so U2 does not run and U3 does not edit the installed configuration.
+    /// </summary>
+    public Task<Result> RunMsiAsync(Dictionary<string, object?> evidence, MintedToken installToken, CancellationToken ct) =>
+        RunStepsAsync(evidence, installToken, async (state, token) =>
+        {
+            var u3 = await U3FirstStartAsync(state, token, applyConfig: false);
+            if (u3.IsFailure)
+            {
+                return u3;
+            }
+
+            return await U4RestartAsync(state, token);
+        }, ct, stopAgentAtEnd: false);
+
+    private async Task<Result> RunStepsAsync(
+        Dictionary<string, object?> evidence,
+        MintedToken? installToken,
+        Func<LegState, CancellationToken, Task<Result>> steps,
+        CancellationToken ct,
+        bool stopAgentAtEnd = true)
+    {
+        // Reuse a list an earlier step already wrote (the MSI install warnings), so none is lost.
+        var warnings = evidence.TryGetValue("warnings", out var existing) && existing is List<string> list
+            ? list
+            : new List<string>();
+        evidence["warnings"] = warnings;
+        var state = new LegState(evidence) { Token1 = installToken };
+        try
+        {
+            return await steps(state, ct);
         }
         finally
         {
-            var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
-            if (stopped.IsFailure)
+            // The MSI leg (RunMsiAsync) leaves the service running so U11b uninstalls a running service.
+            if (stopAgentAtEnd)
             {
-                warnings.Add($"agent stop: {stopped.Error}");
+                var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
+                if (stopped.IsFailure)
+                {
+                    warnings.Add($"agent stop: {stopped.Error}");
+                }
             }
 
             // The recovery warning is read from agent.log only where the host has a console log (process mode).
@@ -261,13 +297,16 @@ internal sealed class AgentLegs
         return Result.Success();
     }
 
-    private async Task<Result> U3FirstStartAsync(LegState state, CancellationToken ct)
+    private async Task<Result> U3FirstStartAsync(LegState state, CancellationToken ct, bool applyConfig = true)
     {
-        var applied = new AgentPublishConfig(_paths).Apply(
-            Path.Combine(_paths.AgentPublish, AppSettingsFileName), _options.Config);
-        if (applied.IsFailure)
+        if (applyConfig)
         {
-            return Fail(state.Evidence, "U3", applied.Error!);
+            var applied = new AgentPublishConfig(_paths).Apply(
+                Path.Combine(_paths.AgentPublish, AppSettingsFileName), _options.Config);
+            if (applied.IsFailure)
+            {
+                return Fail(state.Evidence, "U3", applied.Error!);
+            }
         }
 
         var prepared = await _deps.Agent.PrepareAsync(ct);
@@ -310,7 +349,7 @@ internal sealed class AgentLegs
             return Result<Check>.Failure(recorded.Error!);
         }
 
-        var statePath = _paths.Validate(Path.Combine(_paths.AgentState, StateFileName));
+        var statePath = StatePath();
         if (statePath.IsFailure)
         {
             return Result<Check>.Failure(statePath.Error!);
@@ -548,7 +587,7 @@ internal sealed class AgentLegs
             return Unmet("the certificate row count is unchanged");
         }
 
-        var statePath = _paths.Validate(Path.Combine(_paths.AgentState, StateFileName));
+        var statePath = StatePath();
         if (statePath.IsFailure)
         {
             return Result<Check>.Failure(statePath.Error!);
@@ -650,6 +689,22 @@ internal sealed class AgentLegs
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// The state file path. The run's agent state folder is validated against the run folder; the MSI leg's state
+    /// folder is the machine folder <c>%ProgramData%\Meridian Console\Agent</c>, which only that folder check accepts.
+    /// </summary>
+    private Result<string> StatePath()
+    {
+        if (_options.StateDirectory is null)
+        {
+            return _paths.Validate(Path.Combine(_paths.AgentState, StateFileName));
+        }
+
+        return AgentDirectories.IsMachineAgentDirectory(_options.StateDirectory)
+            ? Result<string>.Success(Path.Combine(_options.StateDirectory, StateFileName))
+            : Result<string>.Failure("the MSI state folder is not the machine agent folder");
     }
 
     private static Result Fail(Dictionary<string, object?> evidence, string step, string message)

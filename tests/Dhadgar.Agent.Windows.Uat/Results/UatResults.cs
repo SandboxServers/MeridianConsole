@@ -34,6 +34,17 @@ internal sealed record AgentRunInfo(string Authority, string DetectedBy, bool Tr
 /// </summary>
 internal sealed record ServiceRunInfo(string Name, string Account, bool DecoyRemoved, bool TlsRootRemovedAtCleanup);
 
+/// <summary>
+/// The msi object of <c>results.json</c>, present only in MSI mode (P23, D-S223). A value the run did not reach is null
+/// (the exit codes are -1 and the residue is empty). <c>Residue</c> lists what the uninstall left behind, as warnings.
+/// </summary>
+internal sealed record MsiRunInfo(
+    string? ProductCode,
+    string? ProductVersion,
+    int InstallExitCode,
+    int UninstallExitCode,
+    IReadOnlyList<string> Residue);
+
 /// <summary>The schema of <c>results.json</c> (schemaVersion 1).</summary>
 internal sealed record UatResults(
     int SchemaVersion,
@@ -54,4 +65,5 @@ internal sealed record UatResults(
     CleanupSummary Cleanup,
     IReadOnlyList<string> Warnings,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentRunInfo? AgentRun = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ServiceRunInfo? Service = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ServiceRunInfo? Service = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MsiRunInfo? Msi = null);

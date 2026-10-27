@@ -24,4 +24,16 @@ internal static class AgentWindowsFacts
 
     /// <summary>Registry value holding the enrollment token (<c>AgentRegistry.EnrollmentTokenValueName</c>).</summary>
     public const string EnrollmentTokenValueName = "EnrollmentToken";
+
+    /// <summary>Registry value holding the control plane endpoint, written by the MSI (D-S230).</summary>
+    public const string ControlPlaneEndpointValueName = "ControlPlaneEndpoint";
+
+    /// <summary>The MSI's UpgradeCode (<c>Package/@UpgradeCode</c> in <c>Package.wxs</c>), which finds the installed product.</summary>
+    public const string MsiUpgradeCode = "8A3B4E6F-1D2C-4A5B-9E0F-7C8D6B5A4E3F";
+
+    /// <summary>The MSI public property that carries the enrollment token (<c>msiexec ENROLLMENT_TOKEN=...</c>).</summary>
+    public const string MsiTokenProperty = "ENROLLMENT_TOKEN";
+
+    /// <summary>The MSI public property that carries the control plane endpoint (<c>msiexec CONTROL_PLANE_ENDPOINT=...</c>).</summary>
+    public const string MsiEndpointProperty = "CONTROL_PLANE_ENDPOINT";
 }
