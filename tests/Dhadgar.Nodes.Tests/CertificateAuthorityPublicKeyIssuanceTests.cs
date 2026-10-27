@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Services;
 using Microsoft.EntityFrameworkCore;
@@ -125,6 +126,31 @@ public sealed class CertificateAuthorityPublicKeyIssuanceTests : IDisposable
             Guid.NewGuid(), Convert.ToBase64String(rsa.ExportSubjectPublicKeyInfo()));
 
         Assert.True(result.Success, result.Error);
+    }
+
+    [Fact]
+    public async Task IssuedCertificate_MatchesSharedProfile()
+    {
+        using var service = CreateService();
+        using var agentKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var nodeId = Guid.NewGuid();
+
+        var result = await service.IssueCertificateForPublicKeyAsync(
+            nodeId, Convert.ToBase64String(agentKey.ExportSubjectPublicKeyInfo()));
+        Assert.True(result.Success, result.Error);
+
+        using var cert = X509Certificate2.CreateFromPem(result.CertificatePem!);
+
+        // The Windows store and the Gateway find agent certificates through this profile
+        Assert.Equal(AgentCertificateProfile.CaCommonName, cert.GetNameInfo(X509NameType.SimpleName, forIssuer: true));
+        Assert.Contains($"O={AgentCertificateProfile.Organization}", cert.Subject, StringComparison.Ordinal);
+
+        var san = cert.Extensions.Single(e => e.Oid?.Value == "2.5.29.17");
+        Assert.Contains(AgentCertificateProfile.SpiffeId(nodeId), san.Format(false), StringComparison.Ordinal);
+
+        Assert.Equal(
+            TimeSpan.FromDays(AgentCertificateProfile.ValidityDays),
+            result.NotAfter!.Value - result.NotBefore!.Value);
     }
 
     public static TheoryData<string> RejectedKeys()
