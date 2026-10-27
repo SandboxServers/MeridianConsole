@@ -441,7 +441,24 @@ Routes are configured in `appsettings.json` under `ReverseProxy:Routes`. Each ro
 | `firewall-route` | `/api/v1/firewall/{**catch-all}` | firewall | TenantScoped | PerTenant | PathRemovePrefix |
 | `secrets-route` | `/api/v1/secrets/{**catch-all}` | secrets | TenantScoped | PerTenant | PathRemovePrefix |
 | `discord-route` | `/api/v1/discord/{**catch-all}` | discord | TenantScoped | PerTenant | PathRemovePrefix |
-| `agents-route` | `/api/v1/agents/{**catch-all}` | nodes | **Agent** | PerAgent | PathRemovePrefix |
+| `agents-route` | `/api/v1/agents/{**catch-all}` | nodes | **AgentCertificate** | PerAgent | PathRemovePrefix |
+| `agent-hub-route` | `/hubs/agent/{**catch-all}` | nodes | **AgentCertificate** | PerAgent | - |
+
+### Agent Ingress
+
+Agents reach Nodes through two routes that authenticate with the agent's TLS client certificate instead of a JWT:
+
+- `agents-route` (`/api/v1/agents/*`) and `agent-hub-route` (`/hubs/agent/*`) use the `AgentCertificate` policy. It passes only when the presented certificate's issuer CN is the agent CA (`AgentCertificateProfile.CaCommonName`). Anything else is answered 401 and never proxied.
+- `agents-enroll-route` (`/api/v1/agents/enroll`) stays `Anonymous`. It carries no forwarding metadata.
+- Kestrel requests client certificates per `AgentIngress:ClientCertificateMode` (`NoCertificate` by default, `AllowCertificate` in the dev compose file). When a certificate is allowed, Kestrel accepts any certificate at TLS level. Nodes is the validator (D-S25): it checks the chain, SPIFFE ID and revocation. The Gateway only checks the issuer and forwards.
+- Routes with `"Metadata": { "ForwardClientCertificate": "true" }` forward the certificate to Nodes as base64 DER in the `X-Client-Cert` header.
+- **Strip-everywhere rule:** the Gateway removes any incoming `X-Client-Cert` header on every route, including routes that do not forward. A caller cannot spoof the header to Nodes.
+- The `PerAgent` rate limiter keys requests that carry a client certificate by its SHA-256 thumbprint (`agent-cert:{hash}`). Other requests keep the `sub`-or-IP key.
+- Production ingress and trust settings are out of scope for this config. See D-S210 (`docs/analysis/sprint2-agent-nodes`).
+
+```json
+"AgentIngress": { "ClientCertificateMode": "NoCertificate" }
+```
 
 ### Cluster Configuration
 

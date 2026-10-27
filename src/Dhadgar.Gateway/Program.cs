@@ -1,7 +1,9 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
 using Dhadgar.Gateway;
+using Dhadgar.Gateway.Agents;
 using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
 using Dhadgar.Gateway.Options;
@@ -15,6 +17,7 @@ using Dhadgar.ServiceDefaults.Resilience;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -32,6 +35,19 @@ builder.WebHost.ConfigureKestrel(options =>
     options.AddServerHeader = false;
     // Default 10 MB request body limit; Files service has its own 5-minute timeout for large uploads
     options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
+
+    // Agent client certificates. Kestrel accepts any client certificate at TLS level because Nodes is the
+    // validator (D-S25): chain, SPIFFE and revocation are checked by Nodes, the Gateway only forwards.
+    var agentCertMode = builder.Configuration.GetValue("AgentIngress:ClientCertificateMode", ClientCertificateMode.NoCertificate);
+    options.ConfigureHttpsDefaults(https =>
+    {
+        https.ClientCertificateMode = agentCertMode;
+        if (agentCertMode != ClientCertificateMode.NoCertificate)
+        {
+            // Chain, SPIFFE and revocation are validated by Nodes (D-S25); the Gateway only forwards.
+            https.AllowAnyClientCertificate();
+        }
+    });
 });
 
 if (!builder.Environment.IsEnvironment("Testing"))
@@ -111,6 +127,14 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("client_type", "agent");
     });
 
+    // The TLS client certificate must be issued by the agent CA. Nodes validates the rest of the chain and the SPIFFE ID.
+    options.AddPolicy("AgentCertificate", policy =>
+    {
+        policy.RequireAssertion(ctx => ctx.Resource is HttpContext h
+            && h.Connection.ClientCertificate is { } c
+            && AgentCertificateForwarding.IsAgentIssued(c));
+    });
+
     // SECURITY: DenyAll policy for blocking internal endpoints from external access
     options.AddPolicy("DenyAll", policy =>
     {
@@ -119,7 +143,9 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    // Applies to every route: the forwarded certificate header is stripped on all of them (C6).
+    .AddTransforms(AgentCertificateForwarding.Apply);
 
 // HttpClient for diagnostics endpoints
 builder.Services.AddHttpClient();
@@ -242,12 +268,13 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("PerAgent", httpContext =>
     {
-        var agentId = httpContext.User.FindFirst("sub")?.Value
-                      ?? httpContext.Connection.RemoteIpAddress?.ToString()
-                      ?? "unknown";
+        // Requests carrying an agent client certificate are keyed by its hash; everything else keeps the sub-or-IP key.
+        var partitionKey = httpContext.Connection.ClientCertificate is { } clientCertificate
+            ? $"agent-cert:{clientCertificate.GetCertHashString(HashAlgorithmName.SHA256)}"
+            : $"agent:{httpContext.User.FindFirst("sub")?.Value ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"agent:{agentId}",
+            partitionKey: partitionKey,
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerAgent:PermitLimit") ?? 500,
