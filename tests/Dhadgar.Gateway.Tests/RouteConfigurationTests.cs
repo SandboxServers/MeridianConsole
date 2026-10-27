@@ -25,34 +25,78 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave17Routes()
+    public void ReverseProxyShouldHave14Routes()
     {
-        // 10 backend services + Better Auth + console hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 17 total
+        // 6 backend service routes (identity, servers, console, notifications, secrets, discord) + Better Auth + console hub route + agent hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 14 total (billing, tasks, files, mods are parked, D-03)
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(17, routes.Count);
+        Assert.Equal(14, routes.Count);
     }
 
     [Fact]
-    public void ReverseProxyShouldHave12Clusters()
+    public void AgentHubRoute_ShouldMatchHubPathWithCertificatePolicyAndNoTransforms()
     {
-        // 11 backend services + Better Auth (agents uses nodes cluster)
+        var route = _configuration.GetSection("ReverseProxy:Routes:agent-hub-route");
+
+        Assert.Equal("nodes", route.GetValue<string>("ClusterId"));
+        Assert.Equal("/hubs/agent/{**catch-all}", route.GetValue<string>("Match:Path"));
+        Assert.Equal("AgentCertificate", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.Empty(route.GetSection("Transforms").GetChildren());
+        Assert.Equal("true", route.GetValue<string>("Metadata:ForwardClientCertificate"));
+    }
+
+    [Fact]
+    public void AgentsRoute_ShouldRequireAgentCertificateAndForwardClientCertificate()
+    {
+        var route = _configuration.GetSection("ReverseProxy:Routes:agents-route");
+
+        Assert.Equal("AgentCertificate", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.Equal("true", route.GetValue<string>("Metadata:ForwardClientCertificate"));
+    }
+
+    [Fact]
+    public void AgentsEnrollRoute_ShouldStayAnonymousWithoutForwardingMetadata()
+    {
+        var route = _configuration.GetSection("ReverseProxy:Routes:agents-enroll-route");
+
+        Assert.Equal("Anonymous", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.False(route.GetSection("Metadata").Exists());
+    }
+
+    [Fact]
+    public void NodesCluster_ShouldHaveCookieSessionAffinity()
+    {
+        var affinity = _configuration.GetSection("ReverseProxy:Clusters:nodes:SessionAffinity");
+
+        Assert.True(affinity.GetValue<bool>("Enabled"));
+        Assert.Equal("Cookie", affinity.GetValue<string>("Policy"));
+        Assert.Equal(".Dhadgar.Nodes.Affinity", affinity.GetValue<string>("AffinityKeyName"));
+    }
+
+    [Fact]
+    public void AgentIngress_ShouldDefaultToNoCertificateMode()
+    {
+        var mode = _configuration["AgentIngress:ClientCertificateMode"];
+
+        Assert.Equal("NoCertificate", mode);
+    }
+
+    [Fact]
+    public void ReverseProxyShouldHave8Clusters()
+    {
+        // 8 active backend clusters (billing, tasks, files, mods are parked, D-03; agents uses nodes cluster)
         var clustersSection = _configuration.GetSection("ReverseProxy:Clusters");
         var clusters = clustersSection.GetChildren().ToList();
 
-        Assert.Equal(12, clusters.Count);
+        Assert.Equal(8, clusters.Count);
     }
 
     [Theory]
     [InlineData("identity", "5010")]
-    [InlineData("billing", "5020")]
     [InlineData("servers", "5030")]
     [InlineData("nodes", "5040")]
-    [InlineData("tasks", "5050")]
-    [InlineData("files", "5060")]
     [InlineData("console", "5070")]
-    [InlineData("mods", "5080")]
     [InlineData("notifications", "5090")]
     [InlineData("secrets", "5110")]
     [InlineData("discord", "5120")]
@@ -69,6 +113,7 @@ public class RouteConfigurationTests
     [InlineData("betterauth-route", "/api/v1/betterauth/{**catch-all}")]
     [InlineData("servers-route", "/api/v1/servers/{**catch-all}")]
     [InlineData("console-hub-route", "/hubs/console/{**catch-all}")]
+    [InlineData("agent-hub-route", "/hubs/agent/{**catch-all}")]
     public void RouteShouldHaveCorrectPathPattern(string routeName, string expectedPath)
     {
         var path = _configuration[$"ReverseProxy:Routes:{routeName}:Match:Path"];
@@ -118,6 +163,7 @@ public class RouteConfigurationTests
     [InlineData("identity-route", 10)]
     [InlineData("betterauth-route", 10)]
     [InlineData("servers-route", 20)]
+    [InlineData("agent-hub-route", 20)]
     [InlineData("nodes-org-route", 20)]
     [InlineData("enrollment-route", 20)]
     [InlineData("agents-enroll-route", 25)]
@@ -151,6 +197,30 @@ public class RouteConfigurationTests
             .GetValue<bool>($"ReverseProxy:Clusters:{clusterName}:HealthCheck:Active:Enabled");
 
         Assert.True(healthCheckEnabled);
+    }
+
+    /// <summary>
+    /// Nodes maps its endpoints at the root (/agents/*, /organizations/{id}/nodes/*, ...)
+    /// with no path base, so every Gateway route into the nodes cluster must strip /api/v1.
+    /// Without this, agent enrollment and all node management 404 through the Gateway.
+    /// </summary>
+    [Theory]
+    [InlineData("agents-enroll-route", "/api/v1/agents/enroll", "/agents/enroll")]
+    [InlineData("agents-route", "/api/v1/agents/3f2a/heartbeat", "/agents/3f2a/heartbeat")]
+    [InlineData("nodes-org-route", "/api/v1/organizations/abc/nodes/xyz", "/organizations/abc/nodes/xyz")]
+    [InlineData("enrollment-route", "/api/v1/organizations/abc/enrollment/tokens", "/organizations/abc/enrollment/tokens")]
+    public void NodesRoutes_ShouldForwardToNodesRootPaths(string routeName, string publicPath, string expectedDownstream)
+    {
+        var route = _configuration.GetSection($"ReverseProxy:Routes:{routeName}");
+        Assert.Equal("nodes", route.GetValue<string>("ClusterId"));
+
+        var prefix = route.GetSection("Transforms").GetChildren()
+            .Select(t => t.GetValue<string>("PathRemovePrefix"))
+            .SingleOrDefault(p => p is not null);
+
+        Assert.NotNull(prefix);
+        Assert.StartsWith(prefix, publicPath, StringComparison.Ordinal);
+        Assert.Equal(expectedDownstream, publicPath[prefix.Length..]);
     }
 
     private static string GetGatewayAppSettingsPath()

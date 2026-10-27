@@ -212,6 +212,37 @@ public class MtlsMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_ValidationUnavailable_Returns503ProblemJson()
+    {
+        // Arrange
+        using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat", certificate);
+        var nextCalled = false;
+        var next = new RequestDelegate(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var validationService = Substitute.For<ICertificateValidationService>();
+        validationService.ValidateClientCertificateAsync(Arg.Any<X509Certificate2>(), Arg.Any<CancellationToken>())
+            .Returns(CertificateValidationResult.Fail(CertificateValidationResult.UnavailableErrorCode, "x"));
+
+        var sut = new MtlsMiddleware(
+            next,
+            Options.Create(new MtlsOptions { Enabled = true }),
+            NullLogger<MtlsMiddleware>.Instance);
+
+        // Act
+        await sut.InvokeAsync(context, validationService);
+
+        // Assert
+        Assert.False(nextCalled);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        Assert.StartsWith("application/problem+json", context.Response.ContentType, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task InvokeAsync_ValidCertificate_StoresNodeIdInContext()
     {
         // Arrange
@@ -282,6 +313,61 @@ public class MtlsMiddlewareTests
         Assert.Equal("abc123thumbprint", context.User.FindFirst("certificate_thumbprint")?.Value);
     }
 
+    [Fact]
+    public async Task InvokeAsync_HubNegotiateWithoutCertificate_Returns401ProblemJson()
+    {
+        // Arrange
+        var context = CreateHttpContext("/hubs/agent/negotiate");
+        var nextCalled = false;
+        var next = new RequestDelegate(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var sut = new MtlsMiddleware(
+            next,
+            Options.Create(new MtlsOptions { Enabled = true, RequireClientCertificate = true }),
+            NullLogger<MtlsMiddleware>.Instance);
+
+        // Act
+        await sut.InvokeAsync(context, Substitute.For<ICertificateValidationService>());
+
+        // Assert
+        Assert.False(nextCalled);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Equal("application/problem+json", context.Response.ContentType);
+
+        context.Response.Body.Position = 0;
+        using var body = await System.Text.Json.JsonDocument.ParseAsync(context.Response.Body);
+        Assert.Equal("certificate_required", body.RootElement.GetProperty("errorCode").GetString());
+        Assert.Equal(401, body.RootElement.GetProperty("status").GetInt32());
+    }
+
+    [Fact]
+    public async Task InvokeAsync_HubLookalikePath_PassesThrough()
+    {
+        // Arrange
+        var context = CreateHttpContext("/hubs/agentx");
+        var nextCalled = false;
+        var next = new RequestDelegate(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var sut = new MtlsMiddleware(
+            next,
+            Options.Create(new MtlsOptions { Enabled = true, RequireClientCertificate = true }),
+            NullLogger<MtlsMiddleware>.Instance);
+
+        // Act
+        await sut.InvokeAsync(context, Substitute.For<ICertificateValidationService>());
+
+        // Assert
+        Assert.True(nextCalled);
+    }
+
     private static DefaultHttpContext CreateHttpContext(string path, X509Certificate2? certificate = null)
     {
         var context = new DefaultHttpContext();
@@ -350,6 +436,24 @@ public class CertificateValidationServiceTests
     }
 
     [Fact]
+    public async Task ValidateClientCertificateAsync_CaUnavailable_ReturnsUnavailableNotInvalidIssuer()
+    {
+        // Arrange
+        using var certificate = CreateCertificateWithSpiffeId(Guid.NewGuid());
+        var caService = Substitute.For<ICertificateAuthorityService>();
+        caService.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(CertificateTrustStatus.Unavailable);
+        var service = CreateService(caService: caService);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.False(result.IsValid);
+        Assert.Equal(CertificateValidationResult.UnavailableErrorCode, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task ValidateClientCertificateAsync_ExpiredCertificateButAllowed_ContinuesValidation()
     {
         // Arrange
@@ -383,12 +487,79 @@ public class CertificateValidationServiceTests
         Assert.Equal("certificate_not_yet_valid", result.ErrorCode);
     }
 
+    // D-S247 (campaign-security-1 N2): X509Certificate2 validity times are local. Compared with a UTC DateTime,
+    // the window shifts by the host's UTC offset. On a UTC host these pass with or without the fix; on a host
+    // at least 30 minutes off UTC, reverting the comparison fails at least one of them.
+    [Fact]
+    public async Task ValidateClientCertificateAsync_ExpiredThirtyMinutesAgo_IsExpiredInAnyTimeZone()
+    {
+        // Arrange
+        var now = _timeProvider.GetUtcNow();
+        using var certificate = CreateCertificateWithValidity(now.AddDays(-1), now.AddMinutes(-30));
+        var service = CreateService(allowExpired: false);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.Equal("certificate_expired", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ValidateClientCertificateAsync_ValidForThirtyMoreMinutes_IsNotExpiredInAnyTimeZone()
+    {
+        // Arrange
+        var now = _timeProvider.GetUtcNow();
+        using var certificate = CreateCertificateWithValidity(now.AddMinutes(-30), now.AddMinutes(30));
+        var service = CreateService(allowExpired: false);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.NotEqual("certificate_expired", result.ErrorCode);
+        Assert.NotEqual("certificate_not_yet_valid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ValidateClientCertificateAsync_ValidInThirtyMinutes_IsNotYetValidInAnyTimeZone()
+    {
+        // Arrange
+        var now = _timeProvider.GetUtcNow();
+        using var certificate = CreateCertificateWithValidity(now.AddMinutes(30), now.AddDays(1));
+        var service = CreateService(allowExpired: false);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.Equal("certificate_not_yet_valid", result.ErrorCode);
+    }
+
     [Fact]
     public async Task ValidateClientCertificateAsync_InvalidIssuer_ReturnsFailure()
     {
         // Arrange
         using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
         var caService = CreateMockCaService(validatesTo: false);
+        var service = CreateService(caService: caService);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_issuer", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ValidateClientCertificateAsync_DefaultTrustStatus_FailsClosedAsInvalidIssuer()
+    {
+        // Arrange: an un-configured or zeroed trust status must never be treated as Trusted.
+        using var certificate = CreateCertificateWithClientAuthEkuButNoSpiffe();
+        var caService = Substitute.For<ICertificateAuthorityService>();
+        caService.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(default(CertificateTrustStatus));
         var service = CreateService(caService: caService);
 
         // Act
@@ -520,7 +691,7 @@ public class CertificateValidationServiceTests
     {
         var mock = Substitute.For<ICertificateAuthorityService>();
         mock.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(validatesTo);
+            .Returns(validatesTo ? CertificateTrustStatus.Trusted : CertificateTrustStatus.Untrusted);
         return mock;
     }
 
@@ -546,6 +717,18 @@ public class CertificateValidationServiceTests
             RSASignaturePadding.Pkcs1);
 
         return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(1), DateTimeOffset.UtcNow.AddDays(2));
+    }
+
+    private static X509Certificate2 CreateCertificateWithValidity(DateTimeOffset notBefore, DateTimeOffset notAfter)
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=ValidityWindow",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+
+        return request.CreateSelfSigned(notBefore, notAfter);
     }
 
     private static X509Certificate2 CreateCertificateWithoutClientAuthEku()
@@ -649,7 +832,7 @@ public class MtlsMiddlewareIntegrationTests
         // - 401 (invalid token)
         // - 400 (validation error)
         // - 500 (internal error in handler - still proves mTLS didn't block)
-        // The key test is that we don't get a 401 with "missing_client_certificate" error
+        // The key test is that we don't get a 401 with "certificate_required" error
         Assert.True(
             response.StatusCode == HttpStatusCode.Unauthorized ||
             response.StatusCode == HttpStatusCode.BadRequest ||
@@ -660,7 +843,7 @@ public class MtlsMiddlewareIntegrationTests
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Assert.DoesNotContain("missing_client_certificate", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("certificate_required", content, StringComparison.Ordinal);
         }
     }
 

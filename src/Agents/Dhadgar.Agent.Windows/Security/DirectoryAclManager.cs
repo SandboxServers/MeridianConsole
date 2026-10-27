@@ -306,25 +306,23 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             var directoryInfo = new DirectoryInfo(directoryPath);
             var security = directoryInfo.GetAccessControl();
 
-            NTAccount serviceAccount;
-            try
-            {
-                serviceAccount = new NTAccount(serviceAccountName);
-            }
-            catch (ArgumentException)
+            var serviceSid = ResolveServiceAccountSid(serviceAccountName);
+            if (serviceSid is null)
             {
                 return Result<bool>.Success(false);
             }
 
+            // Compare by SID, not name: when the service has not started yet, setup
+            // grants access to the computed service SID, which has no name to match.
             var rules = security.GetAccessRules(
                 includeExplicit: true,
                 includeInherited: false,
-                targetType: typeof(NTAccount));
+                targetType: typeof(SecurityIdentifier));
 
             // Check Deny ACEs first - they take precedence over Allow
             foreach (FileSystemAccessRule rule in rules)
             {
-                if (rule.IdentityReference.Value.Equals(serviceAccountName, StringComparison.OrdinalIgnoreCase) &&
+                if (serviceSid.Equals(rule.IdentityReference) &&
                     rule.AccessControlType == AccessControlType.Deny &&
                     rule.FileSystemRights.HasFlag(FileSystemRights.FullControl))
                 {
@@ -336,7 +334,7 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
             // Now check for Allow ACEs
             foreach (FileSystemAccessRule rule in rules)
             {
-                if (rule.IdentityReference.Value.Equals(serviceAccountName, StringComparison.OrdinalIgnoreCase) &&
+                if (serviceSid.Equals(rule.IdentityReference) &&
                     rule.AccessControlType == AccessControlType.Allow &&
                     rule.FileSystemRights.HasFlag(FileSystemRights.FullControl))
                 {
@@ -523,6 +521,33 @@ public sealed partial class DirectoryAclManager : IDirectoryAclManager
         {
             _logger.LogError(ex, "Failed to set ACLs on {Path}", directoryPath);
             return Result.Failure($"[ACL.FallbackFailed] Failed to set directory ACLs: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Resolves the SID for a service account: the mapped SID when Windows knows the
+    /// account, otherwise the computed Virtual Service Account SID for "NT SERVICE\" names
+    /// (the same SID <see cref="SetupServerDirectoryWithServiceSid"/> grants).
+    /// </summary>
+    private SecurityIdentifier? ResolveServiceAccountSid(string serviceAccountName)
+    {
+        try
+        {
+            return (SecurityIdentifier)new NTAccount(serviceAccountName).Translate(typeof(SecurityIdentifier));
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        catch (IdentityNotMappedException)
+        {
+            const string servicePrefix = @"NT SERVICE\";
+            if (!serviceAccountName.StartsWith(servicePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return ComputeVirtualServiceAccountSid(serviceAccountName[servicePrefix.Length..]);
         }
     }
 

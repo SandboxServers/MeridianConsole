@@ -8,18 +8,21 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/react": "^6.0.1",
+    "@astrojs/react": "^7.1.1",
     "@dhadgar/shared-auth": "file:../Dhadgar.SharedAuth",
-    "astro": "^7.4.1",
+    "astro": "^7.4.2",
     "clsx": "^2.1.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "autoprefixer": "^10.4.20",
-    "tailwindcss": "^3.4.16",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22.23.4"
   }
 }

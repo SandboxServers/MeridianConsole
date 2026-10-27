@@ -3,17 +3,15 @@ using Dhadgar.Secrets;
 using Dhadgar.Secrets.Authorization;
 using Dhadgar.Secrets.Audit;
 using Dhadgar.Secrets.Endpoints;
-using Dhadgar.Secrets.Infrastructure;
 using Dhadgar.Secrets.Options;
 using Dhadgar.Secrets.Readiness;
 using Dhadgar.Secrets.Services;
 using SecretsHello = Dhadgar.Secrets.Hello;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Errors;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Dhadgar.ServiceDefaults.Security;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 
@@ -62,52 +60,7 @@ builder.Services.Configure<SecretsReadinessOptions>(builder.Configuration.GetSec
 builder.Services.AddMemoryCache();
 
 // Authentication/authorization
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var issuer = builder.Configuration["Auth:Issuer"];
-        var metadataAddress = builder.Configuration["Auth:MetadataAddress"];
-        var internalBaseUrl = builder.Configuration["Auth:InternalBaseUrl"]; // e.g., http://identity:8080
-
-        options.Authority = issuer;
-        options.Audience = builder.Configuration["Auth:Audience"];
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-
-        // Support separate MetadataAddress for internal service discovery in Docker/K8s
-        // Token issuer remains external URL but JWKS is fetched from internal address
-        if (!string.IsNullOrWhiteSpace(metadataAddress))
-        {
-            options.MetadataAddress = metadataAddress;
-        }
-
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = issuer, // Explicitly set to match token issuer
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ClockSkew = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60)
-        };
-        options.RefreshOnIssuerKeyNotFound = true;
-
-        // For local dev/Docker: use a document retriever that rewrites external URLs to internal
-        // This is needed because the OIDC metadata returns external URLs for jwks_uri
-        // which containers can't reach in local Docker environments
-        if (!string.IsNullOrWhiteSpace(internalBaseUrl) && !string.IsNullOrWhiteSpace(issuer))
-        {
-            var docRetriever = new UrlRewritingDocumentRetriever(issuer, internalBaseUrl)
-            {
-                RequireHttps = !builder.Environment.IsDevelopment()
-            };
-
-            options.ConfigurationManager = new Microsoft.IdentityModel.Protocols.ConfigurationManager<Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfiguration>(
-                metadataAddress ?? $"{issuer}.well-known/openid-configuration",
-                new Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfigurationRetriever(),
-                docRetriever);
-        }
-    });
+builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment);
 
 builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks()

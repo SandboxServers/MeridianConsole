@@ -42,7 +42,16 @@ public sealed record EnrollNodeRequest(
     string Platform,
 
     [Required(ErrorMessage = "Hardware information is required")]
-    HardwareInventoryDto Hardware);
+    HardwareInventoryDto Hardware,
+
+    // Base64 DER SubjectPublicKeyInfo of the agent-generated key pair. The CA signs this key;
+    // the private key never leaves the agent. Max length covers RSA-4096 SPKI with headroom.
+    [Required(ErrorMessage = "PublicKey is required")]
+    [StringLength(2048, MinimumLength = 1, ErrorMessage = "PublicKey must be between 1 and 2048 characters")]
+    string PublicKey,
+
+    [StringLength(64, ErrorMessage = "AgentVersion cannot exceed 64 characters")]
+    string? AgentVersion = null);
 
 /// <summary>
 /// Hardware inventory sent during enrollment.
@@ -84,27 +93,9 @@ public sealed record NetworkInterfaceDto(
 /// </summary>
 public sealed record EnrollNodeResponse(
     Guid NodeId,
+    Guid OrganizationId,
     string CertificateThumbprint,
     string Certificate,
-    string? Pkcs12Base64 = null,
-    string? Pkcs12Password = null,
-    DateTime? NotBefore = null,
-    DateTime? NotAfter = null);
-
-/// <summary>
-/// Request to renew an agent's certificate.
-/// </summary>
-public sealed record RenewCertificateRequest(
-    [Required(ErrorMessage = "Current certificate thumbprint is required")]
-    string CurrentThumbprint);
-
-/// <summary>
-/// Response to a successful certificate renewal.
-/// </summary>
-public sealed record RenewCertificateResponse(
-    string CertificateThumbprint,
-    string Certificate,
-    string Pkcs12Base64,
-    string Pkcs12Password,
+    string CaCertificate,
     DateTime NotBefore,
     DateTime NotAfter);

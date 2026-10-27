@@ -158,12 +158,17 @@ public sealed class EnrollmentService : IEnrollmentService
             UpdatedAt = now
         };
 
-        // Generate real X.509 certificate using the CA service
-        var certResult = await _caService.IssueCertificateAsync(node.Id, ct);
+        // Issue an X.509 client certificate bound to the agent's own public key.
+        // The private key stays on the agent; we never generate or transmit it.
+        var certResult = await _caService.IssueCertificateForPublicKeyAsync(node.Id, request.PublicKey, ct);
         if (!certResult.Success)
         {
+            var failureReason = certResult.Error == "invalid_public_key"
+                ? "invalid_public_key"
+                : "certificate_generation_failed";
+
             _logger.LogError("Failed to issue certificate for node {NodeId}: {Error}", node.Id, certResult.Error);
-            NodesMetrics.RecordEnrollmentFailure(platform, "certificate_generation_failed");
+            NodesMetrics.RecordEnrollmentFailure(platform, failureReason);
 
             // Audit the failed enrollment attempt
             await _auditService.LogAsync(
@@ -174,11 +179,13 @@ public sealed class EnrollmentService : IEnrollmentService
                 new { Platform = platform, Hostname = request.Hardware.Hostname },
                 resourceName: nodeName,
                 organizationId: token.OrganizationId,
-                failureReason: "certificate_generation_failed",
+                failureReason: failureReason,
                 ct: ct);
 
-            return ServiceResult.Fail<LocalEnrollNodeResponse>("certificate_generation_failed");
+            return ServiceResult.Fail<LocalEnrollNodeResponse>(failureReason);
         }
+
+        var caCertificatePem = await _caService.GetCaCertificatePemAsync(ct);
 
         var certificate = new AgentCertificate
         {
@@ -211,7 +218,35 @@ public sealed class EnrollmentService : IEnrollmentService
             new AgentCertificateIssued(node.Id, certResult.Thumbprint!, certResult.NotAfter!.Value),
             ct);
 
-        await _dbContext.SaveChangesAsync(ct);
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // D-S246: another request consumed this one-time token after ValidateTokenAsync read it. The token
+            // UPDATE carries "UsedAt" IS NULL, so this whole save rolled back: no Node, no AgentCertificate row,
+            // and the certificate issued above is never returned. The audit service saves through this same
+            // DbContext, so drop the rejected entities first or the audit would re-send them.
+            _dbContext.ChangeTracker.Clear();
+
+            _logger.LogWarning(
+                "Enrollment failed: token {TokenId} was consumed by a concurrent enrollment",
+                token.Id);
+            NodesMetrics.RecordEnrollmentFailure(platform, "invalid_token");
+
+            await _auditService.LogAsync(
+                AuditActions.EnrollmentFailed,
+                ResourceTypes.Node,
+                null,
+                AuditOutcome.Failure,
+                new { Platform = platform, Hostname = request.Hardware.Hostname, TokenId = token.Id },
+                organizationId: token.OrganizationId,
+                failureReason: "invalid_token",
+                ct: ct);
+
+            return ServiceResult.Fail<LocalEnrollNodeResponse>("invalid_token");
+        }
 
         _logger.LogInformation(
             "Node {NodeId} enrolled for organization {OrganizationId}, platform: {Platform}, cert thumbprint: {Thumbprint}",
@@ -254,12 +289,12 @@ public sealed class EnrollmentService : IEnrollmentService
 
         var response = new LocalEnrollNodeResponse(
             node.Id,
+            token.OrganizationId,
             certResult.Thumbprint!,
             certResult.CertificatePem!,
-            certResult.Pkcs12Base64,
-            certResult.Pkcs12Password,
-            certResult.NotBefore,
-            certResult.NotAfter);
+            caCertificatePem,
+            certResult.NotBefore!.Value,
+            certResult.NotAfter!.Value);
 
         return ServiceResult.Ok(response);
     }

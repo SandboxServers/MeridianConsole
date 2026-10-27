@@ -4,7 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Text.Json;
-using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Telemetry;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
@@ -48,23 +48,23 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
     private readonly ConcurrentDictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ICommandValidator _validator;
-    private readonly AgentOptions _options;
     private readonly AgentMeter _meter;
     private readonly AgentActivitySource _activitySource;
     private readonly ILogger<CommandDispatcher> _logger;
+    private readonly IAgentIdentityProvider _identity;
 
     public CommandDispatcher(
         ICommandValidator validator,
-        IOptions<AgentOptions> options,
         AgentMeter meter,
         AgentActivitySource activitySource,
-        ILogger<CommandDispatcher> logger)
+        ILogger<CommandDispatcher> logger,
+        IAgentIdentityProvider identityProvider)
     {
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _meter = meter ?? throw new ArgumentNullException(nameof(meter));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _identity = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
     }
 
     public void RegisterHandler(ICommandHandler handler)
@@ -121,20 +121,21 @@ public sealed class CommandDispatcher : ICommandDispatcher
 
         // Resolve nodeId - SECURITY: fail-closed, require enrollment and matching NodeId
         Guid resolvedNodeId;
-        if (_options.NodeId.HasValue)
+        var identity = _identity.Current;
+        if (identity is not null)
         {
             // Agent is enrolled - require envelope.NodeId to match
             if (envelope.NodeId == Guid.Empty)
             {
                 _logger.LogWarning(
                     "Command {CommandId} rejected: envelope has empty NodeId but agent is enrolled as {EnrolledNodeId}",
-                    envelope.CommandId, _options.NodeId.Value);
+                    envelope.CommandId, identity.NodeId);
                 _meter.RecordCommandExecuted(metricCommandType, success: false);
                 var now = DateTimeOffset.UtcNow;
                 return Result<CommandResult>.Success(new CommandResult
                 {
                     CommandId = envelope.CommandId,
-                    NodeId = _options.NodeId.Value,
+                    NodeId = identity.NodeId,
                     Status = CommandResultStatus.Rejected,
                     StartedAt = now,
                     CompletedAt = now,
@@ -144,17 +145,17 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 });
             }
 
-            if (envelope.NodeId != _options.NodeId.Value)
+            if (envelope.NodeId != identity.NodeId)
             {
                 _logger.LogWarning(
                     "Command {CommandId} rejected: NodeId mismatch (expected {ExpectedNodeId}, received {ReceivedNodeId})",
-                    envelope.CommandId, _options.NodeId.Value, envelope.NodeId);
+                    envelope.CommandId, identity.NodeId, envelope.NodeId);
                 _meter.RecordCommandExecuted(metricCommandType, success: false);
                 var now = DateTimeOffset.UtcNow;
                 return Result<CommandResult>.Success(new CommandResult
                 {
                     CommandId = envelope.CommandId,
-                    NodeId = _options.NodeId.Value,
+                    NodeId = identity.NodeId,
                     Status = CommandResultStatus.Rejected,
                     StartedAt = now,
                     CompletedAt = now,
@@ -164,7 +165,7 @@ public sealed class CommandDispatcher : ICommandDispatcher
                 });
             }
 
-            resolvedNodeId = _options.NodeId.Value;
+            resolvedNodeId = identity.NodeId;
         }
         else
         {

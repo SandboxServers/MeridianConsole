@@ -155,6 +155,7 @@ public sealed class EnrollmentApiIntegrationTests
         var enrollRequest = new EnrollNodeRequest(
             Token: created.Token,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "test-server",
                 OsVersion: "Ubuntu 22.04",

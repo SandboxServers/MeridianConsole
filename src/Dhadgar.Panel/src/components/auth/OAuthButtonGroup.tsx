@@ -37,7 +37,7 @@ export default function OAuthButtonGroup({
             'font-body text-text-primary',
             'transition-all duration-200',
             'hover:border-text-secondary hover:bg-glow-line/20',
-            'focus:outline-none focus:ring-2 focus:ring-cyber-cyan/50 focus:ring-offset-2 focus:ring-offset-space-dark',
+            'focus:outline-hidden focus:ring-2 focus:ring-cyber-cyan/50 focus:ring-offset-2 focus:ring-offset-space-dark',
             'disabled:opacity-50 disabled:cursor-not-allowed',
             loadingProvider === provider.id && 'animate-pulse'
           )}
@@ -68,7 +68,7 @@ export default function OAuthButtonGroup({
               />
             </svg>
           ) : (
-            <ProviderIcon provider={provider.id} className="w-5 h-5 flex-shrink-0" />
+            <ProviderIcon provider={provider.id} className="w-5 h-5 shrink-0" />
           )}
           {!compact && (
             <span className="flex-1 text-left">

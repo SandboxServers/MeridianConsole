@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Nodes.Services;
 
 namespace Dhadgar.Nodes.Tests;
@@ -77,13 +78,67 @@ public sealed class TestCertificateAuthorityService : ICertificateAuthorityServi
             password));
     }
 
-    public Task<CertificateIssuanceResult> RenewCertificateAsync(
+    public Task<CertificateIssuanceResult> IssueCertificateForPublicKeyAsync(
         Guid nodeId,
-        string currentCertificateThumbprint,
+        string subjectPublicKeyInfoBase64,
         CancellationToken ct = default)
     {
-        // For renewal, we just issue a new certificate
-        return IssueCertificateAsync(nodeId, ct);
+        if (!_isInitialized)
+        {
+            return Task.FromResult(CertificateIssuanceResult.Fail("CA not initialized"));
+        }
+
+        PublicKey publicKey;
+        try
+        {
+            publicKey = PublicKey.CreateFromSubjectPublicKeyInfo(
+                Convert.FromBase64String(subjectPublicKeyInfoBase64), out _);
+            using var rsa = publicKey.GetRSAPublicKey();
+            if (rsa is not null && rsa.KeySize < 2048)
+            {
+                return Task.FromResult(CertificateIssuanceResult.Fail("invalid_public_key"));
+            }
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException or ArgumentException)
+        {
+            return Task.FromResult(CertificateIssuanceResult.Fail("invalid_public_key"));
+        }
+
+        X509Certificate2? leaf = null;
+        try
+        {
+            // Real signing against an ephemeral CA, so the issued certificate is bound to the request key.
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
+            using var caKey = RSA.Create(2048);
+            var caRequest = new CertificateRequest("CN=Test Agent CA", caKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            caRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+            caRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
+            using var caCert = caRequest.CreateSelfSigned(now.AddDays(-1), now.AddYears(1));
+
+            var leafRequest = new CertificateRequest(
+                new X500DistinguishedName($"CN={nodeId}"), publicKey, HashAlgorithmName.SHA256);
+            leafRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+            leafRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
+            leafRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid("1.3.6.1.5.5.7.3.2")], true));
+
+            var serialBytes = RandomNumberGenerator.GetBytes(16);
+            serialBytes[0] &= 0x7F;
+            var signer = X509SignatureGenerator.CreateForRSA(caKey, RSASignaturePadding.Pkcs1);
+            leaf = leafRequest.Create(caCert.SubjectName, signer, now, now.AddDays(_certificateValidityDays), serialBytes);
+
+            var thumbprint = Convert.ToHexString(SHA256.HashData(leaf.RawData)).ToLowerInvariant();
+            var serialNumber = Convert.ToHexString(leaf.GetSerialNumber().Reverse().ToArray()).ToLowerInvariant();
+            return Task.FromResult(CertificateIssuanceResult.Ok(
+                thumbprint,
+                serialNumber,
+                now,
+                now.AddDays(_certificateValidityDays),
+                leaf.ExportCertificatePem()));
+        }
+        finally
+        {
+            leaf?.Dispose();
+        }
     }
 
     public Task<string> GetCaCertificatePemAsync(CancellationToken ct = default)
@@ -99,9 +154,11 @@ public sealed class TestCertificateAuthorityService : ICertificateAuthorityServi
             "-----END CERTIFICATE-----");
     }
 
-    public Task<bool> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
+    public Task<CertificateTrustStatus> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
     {
         // In tests, we consider a certificate valid if it contains our fake header
-        return Task.FromResult(certificatePem.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal));
+        return Task.FromResult(certificatePem.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal)
+            ? CertificateTrustStatus.Trusted
+            : CertificateTrustStatus.Untrusted);
     }
 }

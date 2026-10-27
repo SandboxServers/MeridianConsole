@@ -1,11 +1,24 @@
 using System;
 using System.Net;
+using Dhadgar.Gateway.Services;
 using Xunit;
 
 namespace Dhadgar.Gateway.Tests;
 
 public class RateLimitingBehaviorTests
 {
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("  ", true)]
+    [InlineData("Default", true)]
+    [InlineData("default", true)]
+    [InlineData("Auth", false)]
+    [InlineData("PerTenant", false)]
+    [InlineData("PerAgent", false)]
+    public void RouteRateLimiting_UsesGlobal_OnlyForRoutesWithoutPolicy(string? routePolicy, bool expected) =>
+        Assert.Equal(expected, RouteRateLimiting.UsesGlobal(routePolicy));
+
     [Theory]
     [InlineData("192.168.1.1", "192.168.1.1")]
     [InlineData("10.0.0.1", "10.0.0.1")]
@@ -22,7 +35,7 @@ public class RateLimitingBehaviorTests
     [InlineData("2001:db8:85a3::8a2e:370:7334", "2001:db8:85a3::")] // Standard IPv6
     [InlineData("2001:db8:85a3:1234:5678:9abc:def0:1234", "2001:db8:85a3:1234::")] // Different /64
     [InlineData("2001:db8::", "2001:db8::")] // Already a /64 prefix
-    [InlineData("fe80::1", "fe80::")] // Link-local
+    [InlineData("fe80::1", "unknown-linklocal")] // Link-local
     public void IPv6Address_Uses64Prefix_ForRateLimitPartition(string inputIp, string expectedPartition)
     {
         var ip = IPAddress.Parse(inputIp);
@@ -88,26 +101,14 @@ public class RateLimitingBehaviorTests
         Assert.NotEqual(partitionKeyV4, partitionKeyV6);
     }
 
-    /// <summary>
-    /// Mirrors the rate limit partition key logic in Program.cs
-    /// </summary>
+    [Fact]
+    public void LinkLocalIpv6_ReturnsLinkLocalBucket_ForRateLimitPartition()
+    {
+        Assert.Equal("unknown-linklocal", GetRateLimitPartitionKey(IPAddress.Parse("fe80::1")));
+    }
+
     private static string GetRateLimitPartitionKey(IPAddress? ip)
     {
-        if (ip == null)
-        {
-            return "unknown";
-        }
-        else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
-                 !ip.IsIPv4MappedToIPv6)
-        {
-            // Use /64 prefix for IPv6 to prevent rotation attacks
-            var bytes = ip.GetAddressBytes();
-            Array.Clear(bytes, 8, 8); // Zero out host portion
-            return new IPAddress(bytes).ToString();
-        }
-        else
-        {
-            return ip.ToString();
-        }
+        return RateLimitPartitionKeys.ClientIp(ip);
     }
 }

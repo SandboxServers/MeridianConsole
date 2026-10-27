@@ -1,8 +1,7 @@
-using System.Buffers;
 using System.Runtime.Versioning;
+using System.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using Dhadgar.Agent.Core.Authentication;
 using Microsoft.Extensions.Logging;
 
@@ -10,13 +9,15 @@ namespace Dhadgar.Agent.Windows.Windows;
 
 /// <summary>
 /// Windows implementation of certificate storage using the Windows Certificate Store.
-/// Uses LocalMachine\My for client certificates and LocalMachine\Root for CA certificates.
+/// Uses <c>My</c> for the agent client certificate and the custom machine store <see cref="CaStoreName"/>
+/// for the agent CA certificate.
 /// </summary>
 /// <remarks>
 /// SECURITY CRITICAL:
 /// - This class manages mTLS certificates for agent authentication
-/// - Certificates are stored in LocalMachine stores (requires Administrator)
-/// - Private keys use PKCS#8 or PEM format
+/// - Certificates are stored in machine stores by default (requires Administrator)
+/// - The agent CA is never added to LocalMachine\Root (D-S219): Root would make Windows trust anything it signs
+/// - Private keys are PKCS#8 DER, and are deleted from disk when the certificate they belong to is replaced (A2)
 /// - Certificate and key sizes are validated to prevent memory exhaustion
 /// - Only partial thumbprints are logged to avoid leaking sensitive data
 ///
@@ -26,6 +27,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 {
     private readonly ILogger<WindowsCertificateStore> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly StoreLocation _location;
     private readonly object _storeLock = new();
     private volatile bool _disposed;
 
@@ -36,26 +38,38 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     internal const int MaxCertificateSize = 16 * 1024;
 
     /// <summary>
+    /// Name of the custom store that holds the agent CA certificate (D-S219). Every store operation on the CA uses it.
+    /// </summary>
+    internal const string CaStoreName = "MeridianConsoleAgent";
+
+    /// <summary>
     /// Friendly name used to identify Meridian Console Agent certificates.
     /// </summary>
     private const string CertificateFriendlyName = "Meridian Console Agent";
 
     /// <summary>
-    /// Subject name for client certificates.
+    /// Number of random bytes behind the throwaway PFX password used during the key import round trip.
     /// </summary>
-    private const string ClientSubjectName = "CN=dhadgar-agent";
+    private const int PfxPasswordBytes = 32;
 
     /// <summary>
-    /// Subject name for CA certificates.
+    /// Test seam: runs with the re-imported certificate just before it is added to <c>My</c>. A throw here simulates a
+    /// failed store write, so the persisted key cleanup can be tested (N1).
     /// </summary>
-    private const string CaSubjectName = "CN=Meridian Console CA";
+    internal Action<X509Certificate2>? BeforeStoreAdd { get; init; }
 
+    /// <summary>
+    /// Creates the store. <paramref name="location"/> is <see cref="StoreLocation.LocalMachine"/> in production;
+    /// tests use <see cref="StoreLocation.CurrentUser"/> so they do not need Administrator.
+    /// </summary>
     public WindowsCertificateStore(
         ILogger<WindowsCertificateStore> logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        StoreLocation location = StoreLocation.LocalMachine)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _location = location;
     }
 
     /// <inheritdoc />
@@ -65,31 +79,19 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 
         lock (_storeLock)
         {
-            using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+            using var store = new X509Store(StoreName.My, _location);
 
             try
             {
                 store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
 
-                var now = _timeProvider.GetUtcNow().UtcDateTime;
+                var now = _timeProvider.GetUtcNow();
                 X509Certificate2? bestCert = null;
 
                 foreach (var cert in store.Certificates)
                 {
-                    // Filter: must have private key, be valid, and match our subject
-                    if (!cert.HasPrivateKey)
-                    {
-                        cert.Dispose();
-                        continue;
-                    }
-
-                    if (!IsValidCertificate(cert, now))
-                    {
-                        cert.Dispose();
-                        continue;
-                    }
-
-                    if (!MatchesSubject(cert, ClientSubjectName))
+                    // Filter: must have private key, and be an agent client certificate valid now (Nodes profile)
+                    if (!cert.HasPrivateKey || !AgentCertificateMatcher.IsAgentClientCertificate(cert, now))
                     {
                         cert.Dispose();
                         continue;
@@ -123,13 +125,17 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             }
             catch (CryptographicException ex)
             {
-                _logger.LogError(ex, "Failed to access certificate store LocalMachine\\My");
+                _logger.LogError(ex, "Failed to access certificate store {Location}\\My", _location);
                 return null;
             }
         }
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The new certificate is added before any older agent certificate is removed, so a crash part-way leaves two
+    /// certificates rather than none. Each removed certificate's private key is deleted first (A2).
+    /// </remarks>
     public Task StoreCertificateAsync(
         X509Certificate2 certificate,
         byte[] privateKey,
@@ -155,26 +161,38 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
                 nameof(certificate));
         }
 
-        // Import the private key and combine with certificate
-        using var certWithKey = ImportCertificateWithKey(certificate, privateKey);
+        // Import the PKCS#8 key and combine it with the certificate
+        using var certWithKey = ImportPkcs8Certificate(certificate, privateKey, _location);
 
         lock (_storeLock)
         {
-            using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+            using var store = new X509Store(StoreName.My, _location);
+            var stored = false;
 
             try
             {
                 store.Open(OpenFlags.ReadWrite);
 
-                // Remove any existing certificates with the same subject to avoid duplicates
-                RemoveExistingCertificates(store, ClientSubjectName);
-
-                // Create a new certificate with the friendly name set
-                // Note: FriendlyName can only be set on certificates in a store on Windows
+                // Add first, so a crash leaves two certificates rather than none
+                BeforeStoreAdd?.Invoke(certWithKey);
                 store.Add(certWithKey);
+                stored = true;
 
                 // Set friendly name after adding (Windows-specific)
                 SetFriendlyName(store, certWithKey.Thumbprint, CertificateFriendlyName);
+
+                // Then remove the other agent certificates, whatever their validity time
+                var newThumbprint = certWithKey.Thumbprint;
+                var removed = RemoveCertificates(
+                    store,
+                    cert => AgentCertificateMatcher.IsAgentClientIdentity(cert)
+                        && !string.Equals(cert.Thumbprint, newThumbprint, StringComparison.OrdinalIgnoreCase),
+                    deleteKeys: true);
+
+                if (removed > 0)
+                {
+                    _logger.LogInformation("Replaced {Count} older agent certificate(s) in store", removed);
+                }
 
                 _logger.LogInformation(
                     "Stored client certificate with thumbprint {Thumbprint}, expires {NotAfter:O}",
@@ -183,8 +201,17 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             }
             catch (CryptographicException ex)
             {
-                _logger.LogError(ex, "Failed to store client certificate in LocalMachine\\My");
+                _logger.LogError(ex, "Failed to store client certificate in {Location}\\My", _location);
                 throw;
+            }
+            finally
+            {
+                // N1: a key persisted for a certificate that never reached the store would stay on disk with nothing
+                // to find it, and each failed retry would leak one more container. Delete it unless the add happened.
+                if (!stored)
+                {
+                    DeletePrivateKey(certWithKey);
+                }
             }
         }
 
@@ -198,13 +225,13 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 
         lock (_storeLock)
         {
-            using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+            using var store = new X509Store(StoreName.My, _location);
 
             try
             {
                 store.Open(OpenFlags.ReadWrite);
 
-                var removed = RemoveExistingCertificates(store, ClientSubjectName);
+                var removed = RemoveCertificates(store, AgentCertificateMatcher.IsAgentClientIdentity, deleteKeys: false);
 
                 if (removed > 0)
                 {
@@ -217,7 +244,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             }
             catch (CryptographicException ex)
             {
-                _logger.LogError(ex, "Failed to remove client certificate from LocalMachine\\My");
+                _logger.LogError(ex, "Failed to remove client certificate from {Location}\\My", _location);
                 throw;
             }
         }
@@ -232,24 +259,18 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 
         lock (_storeLock)
         {
-            using var store = new X509Store(StoreName.Root, StoreLocation.LocalMachine);
+            using var store = new X509Store(CaStoreName, _location);
 
             try
             {
                 store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
 
-                var now = _timeProvider.GetUtcNow().UtcDateTime;
+                var now = _timeProvider.GetUtcNow();
                 X509Certificate2? bestCert = null;
 
                 foreach (var cert in store.Certificates)
                 {
-                    if (!IsValidCertificate(cert, now))
-                    {
-                        cert.Dispose();
-                        continue;
-                    }
-
-                    if (!MatchesSubject(cert, CaSubjectName))
+                    if (!AgentCertificateMatcher.IsAgentCa(cert) || !AgentCertificateMatcher.IsWithinValidity(cert, now))
                     {
                         cert.Dispose();
                         continue;
@@ -283,7 +304,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             }
             catch (CryptographicException ex)
             {
-                _logger.LogError(ex, "Failed to access certificate store LocalMachine\\Root");
+                _logger.LogError(ex, "Failed to access certificate store {Location}\\{Store}", _location, CaStoreName);
                 return null;
             }
         }
@@ -291,10 +312,8 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 
     /// <inheritdoc />
     /// <remarks>
-    /// CA5380 is suppressed because adding the control plane's CA certificate to the
-    /// trusted root store is an intentional and necessary part of agent enrollment.
-    /// The CA is controlled by the Meridian Console control plane and is required
-    /// for mTLS authentication.
+    /// The CA goes to the custom store <see cref="CaStoreName"/>, never to LocalMachine\Root (D-S219). Any copy an
+    /// earlier version put in Root is removed first.
     /// </remarks>
     public Task StoreCaCertificateAsync(
         X509Certificate2 certificate,
@@ -314,20 +333,18 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
 
         lock (_storeLock)
         {
-            using var store = new X509Store(StoreName.Root, StoreLocation.LocalMachine);
+            RemoveAgentCaFromRoot();
+
+            using var store = new X509Store(CaStoreName, _location);
 
             try
             {
                 store.Open(OpenFlags.ReadWrite);
 
-                // Remove any existing CA certificates with the same subject
-                RemoveExistingCertificates(store, CaSubjectName);
+                // Remove any existing agent CA certificates before adding the new one
+                RemoveCertificates(store, AgentCertificateMatcher.IsAgentCa, deleteKeys: false);
 
-                // CA5380: Adding to root store is intentional - this is the control plane's CA
-                // required for mTLS authentication between agent and control plane
-#pragma warning disable CA5380
                 store.Add(certificate);
-#pragma warning restore CA5380
 
                 // Set friendly name after adding
                 SetFriendlyName(store, certificate.Thumbprint, CertificateFriendlyName + " CA");
@@ -339,7 +356,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             }
             catch (CryptographicException ex)
             {
-                _logger.LogError(ex, "Failed to store CA certificate in LocalMachine\\Root");
+                _logger.LogError(ex, "Failed to store CA certificate in {Location}\\{Store}", _location, CaStoreName);
                 throw;
             }
         }
@@ -391,216 +408,141 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     }
 
     /// <summary>
-    /// Imports a certificate with its private key from PEM or PKCS#8 format.
+    /// Combines a certificate with its PKCS#8 private key and re-imports it with persisted key storage.
     /// </summary>
     /// <remarks>
-    /// SECURITY: This method uses ArrayPool and Span to avoid creating immutable strings
-    /// containing private key data. All temporary buffers are cleared before returning.
+    /// SECURITY: The key is tried as ECDSA first, then RSA. The PFX round trip is required because the Windows store
+    /// needs the key persisted in a key container; the PFX bytes and the random password are cleared before returning.
     /// </remarks>
-    private static X509Certificate2 ImportCertificateWithKey(
+    private static X509Certificate2 ImportPkcs8Certificate(
         X509Certificate2 certificate,
-        byte[] privateKeyBytes)
+        byte[] pkcs8,
+        StoreLocation location)
     {
-        // SECURITY: Check for PEM format using byte comparison instead of string conversion
-        // This avoids creating an immutable string containing private key data
-        ReadOnlySpan<byte> pemHeader = "-----BEGIN"u8;
-        var isPem = privateKeyBytes.AsSpan().IndexOf(pemHeader) >= 0;
-
-        char[]? charBuffer = null;
-
-        try
+        using var ecdsa = ECDsa.Create();
+        if (TryImportPkcs8(ecdsa, pkcs8))
         {
-            // For PEM parsing, we need characters but use a pooled buffer that can be cleared
-            ReadOnlySpan<char> keyChars = ReadOnlySpan<char>.Empty;
-
-            if (isPem)
-            {
-                // SECURITY: Use ArrayPool for char buffer so we can clear it after use
-                charBuffer = ArrayPool<char>.Shared.Rent(privateKeyBytes.Length);
-                var charCount = Encoding.UTF8.GetChars(privateKeyBytes, charBuffer);
-                keyChars = charBuffer.AsSpan(0, charCount);
-            }
-
-            // Try RSA first, then ECDSA
-            var certWithKey = TryImportWithRsaOrEcdsa(certificate, privateKeyBytes, keyChars, isPem);
-
-            // Export and re-import to ensure the certificate is persisted properly
-            // This is necessary for Windows certificate store operations
-            return ExportAndReimportCertificate(certWithKey);
-        }
-        finally
-        {
-            // SECURITY: Clear and return the char buffer to the pool
-            if (charBuffer is not null)
-            {
-                CryptographicOperations.ZeroMemory(
-                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(charBuffer.AsSpan()));
-                ArrayPool<char>.Shared.Return(charBuffer);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Tries to import a private key as RSA or ECDSA and combine with certificate.
-    /// </summary>
-    private static X509Certificate2 TryImportWithRsaOrEcdsa(
-        X509Certificate2 certificate,
-        byte[] privateKeyBytes,
-        ReadOnlySpan<char> keyChars,
-        bool isPem)
-    {
-        // Try RSA first
-        var (rsaCert, rsaSuccess) = TryImportWithRsa(certificate, privateKeyBytes, keyChars, isPem);
-        if (rsaSuccess)
-        {
-            return rsaCert!;
+            using var withEcdsaKey = certificate.CopyWithPrivateKey(ecdsa);
+            return ExportAndReimportCertificate(withEcdsaKey, location);
         }
 
-        // Try ECDSA if RSA failed
-        var (ecdsaCert, ecdsaSuccess) = TryImportWithEcdsa(certificate, privateKeyBytes, keyChars, isPem);
-        if (ecdsaSuccess)
+        using var rsa = RSA.Create();
+        if (TryImportPkcs8(rsa, pkcs8))
         {
-            return ecdsaCert!;
+            using var withRsaKey = certificate.CopyWithPrivateKey(rsa);
+            return ExportAndReimportCertificate(withRsaKey, location);
         }
 
         throw new CryptographicException("Failed to import private key - unsupported key type or invalid format");
     }
 
+    private static bool TryImportPkcs8(ECDsa key, byte[] pkcs8)
+    {
+        try
+        {
+            key.ImportPkcs8PrivateKey(pkcs8, out _);
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryImportPkcs8(RSA key, byte[] pkcs8)
+    {
+        try
+        {
+            key.ImportPkcs8PrivateKey(pkcs8, out _);
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
-    /// Exports the certificate to PFX and re-imports with proper storage flags.
+    /// Exports the certificate with its key to PFX under a random password and re-imports it with persisted key storage.
     /// </summary>
     /// <remarks>
-    /// SECURITY: The Exportable flag is intentional here - the Windows certificate
-    /// store requires it to persist the private key properly for mTLS operations.
-    /// The key is protected by Windows DPAPI and machine-level ACLs.
+    /// SECURITY: The Exportable flag is left off on the re-import. The key is protected by Windows DPAPI and
+    /// machine-level ACLs. The PFX bytes and the password are cleared in <c>finally</c>.
     /// </remarks>
-    private static X509Certificate2 ExportAndReimportCertificate(X509Certificate2 certWithKey)
+    private static X509Certificate2 ExportAndReimportCertificate(X509Certificate2 certWithKey, StoreLocation location)
     {
+        var password = NewPfxPassword();
         byte[]? pfxBytes = null;
         try
         {
-            pfxBytes = certWithKey.Export(X509ContentType.Pfx);
-            certWithKey.Dispose();
+            // SecureString keeps the password out of managed string memory; the runtime exposes no char[] export overload
+            using var securePassword = new SecureString();
+            foreach (var character in password)
+            {
+                securePassword.AppendChar(character);
+            }
 
-            var finalCert = new X509Certificate2(
+            securePassword.MakeReadOnly();
+            pfxBytes = certWithKey.Export(X509ContentType.Pfx, securePassword);
+
+            var keySet = location == StoreLocation.CurrentUser
+                ? X509KeyStorageFlags.UserKeySet
+                : X509KeyStorageFlags.MachineKeySet;
+
+            return new X509Certificate2(
                 pfxBytes,
-                (string?)null,
-                X509KeyStorageFlags.MachineKeySet |
-                X509KeyStorageFlags.PersistKeySet |
-                X509KeyStorageFlags.Exportable);
-
-            return finalCert;
+                password.AsSpan(),
+                keySet | X509KeyStorageFlags.PersistKeySet);
         }
         finally
         {
-            // SECURITY: Clear the PFX bytes from memory
+            // SECURITY: Clear the PFX bytes and the password from memory
             if (pfxBytes is not null)
             {
                 CryptographicOperations.ZeroMemory(pfxBytes);
             }
+
+            Array.Clear(password);
         }
     }
 
     /// <summary>
-    /// Attempts to import a private key as RSA and combine with certificate.
+    /// Generates a random PFX password of <see cref="PfxPasswordBytes"/> bytes' worth of entropy, as characters
+    /// so the caller can clear it.
     /// </summary>
-    /// <param name="certificate">The certificate to combine with the key.</param>
-    /// <param name="privateKeyBytes">The raw private key bytes (used for PKCS#8).</param>
-    /// <param name="keyChars">The key as characters (used for PEM). Can be empty if not PEM.</param>
-    /// <param name="isPem">True if the key is in PEM format.</param>
-    /// <returns>A tuple containing the certificate with key (if successful) and a success flag.</returns>
-    private static (X509Certificate2? Certificate, bool Success) TryImportWithRsa(
-        X509Certificate2 certificate,
-        byte[] privateKeyBytes,
-        ReadOnlySpan<char> keyChars,
-        bool isPem)
+    private static char[] NewPfxPassword()
     {
-        using var rsaKey = RSA.Create();
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+        var randomBytes = RandomNumberGenerator.GetBytes(PfxPasswordBytes);
         try
         {
-            if (isPem)
+            var password = new char[PfxPasswordBytes];
+            for (var i = 0; i < password.Length; i++)
             {
-                rsaKey.ImportFromPem(keyChars);
-            }
-            else
-            {
-                rsaKey.ImportPkcs8PrivateKey(privateKeyBytes, out _);
+                // 64-character alphabet, so each byte's low six bits pick one character
+                password[i] = alphabet[randomBytes[i] & 0x3F];
             }
 
-            return (certificate.CopyWithPrivateKey(rsaKey), true);
+            return password;
         }
-        catch (CryptographicException)
+        finally
         {
-            return (null, false);
+            CryptographicOperations.ZeroMemory(randomBytes);
         }
     }
 
     /// <summary>
-    /// Attempts to import a private key as ECDSA and combine with certificate.
+    /// Removes the certificates in the store that match <paramref name="matches"/>.
     /// </summary>
-    /// <param name="certificate">The certificate to combine with the key.</param>
-    /// <param name="privateKeyBytes">The raw private key bytes (used for PKCS#8).</param>
-    /// <param name="keyChars">The key as characters (used for PEM). Can be empty if not PEM.</param>
-    /// <param name="isPem">True if the key is in PEM format.</param>
-    /// <returns>A tuple containing the certificate with key (if successful) and a success flag.</returns>
-    private static (X509Certificate2? Certificate, bool Success) TryImportWithEcdsa(
-        X509Certificate2 certificate,
-        byte[] privateKeyBytes,
-        ReadOnlySpan<char> keyChars,
-        bool isPem)
-    {
-        using var ecdsaKey = ECDsa.Create();
-
-        try
-        {
-            if (isPem)
-            {
-                ecdsaKey.ImportFromPem(keyChars);
-            }
-            else
-            {
-                ecdsaKey.ImportPkcs8PrivateKey(privateKeyBytes, out _);
-            }
-
-            return (certificate.CopyWithPrivateKey(ecdsaKey), true);
-        }
-        catch (CryptographicException)
-        {
-            return (null, false);
-        }
-    }
-
-    /// <summary>
-    /// Checks if a certificate is currently valid (not expired and not yet future).
-    /// </summary>
-    private static bool IsValidCertificate(X509Certificate2 certificate, DateTime utcNow)
-    {
-        var notBeforeUtc = certificate.NotBefore.ToUniversalTime();
-        var notAfterUtc = certificate.NotAfter.ToUniversalTime();
-
-        return notBeforeUtc <= utcNow && notAfterUtc > utcNow;
-    }
-
-    /// <summary>
-    /// Checks if a certificate's subject matches the expected subject name.
-    /// </summary>
-    private static bool MatchesSubject(X509Certificate2 certificate, string expectedSubject)
-    {
-        // Use SimpleName to get just the CN value for comparison
-        var simpleName = certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
-        var expectedCn = expectedSubject.StartsWith("CN=", StringComparison.OrdinalIgnoreCase)
-            ? expectedSubject[3..]
-            : expectedSubject;
-
-        return string.Equals(simpleName, expectedCn, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Removes all certificates matching the given subject from the store.
-    /// </summary>
+    /// <param name="store">An open store with write access.</param>
+    /// <param name="matches">Selects the certificates to remove.</param>
+    /// <param name="deleteKeys">
+    /// When true, each certificate's persisted private key is deleted before the certificate is removed (A2).
+    /// A key that cannot be deleted is logged and does not stop the removal.
+    /// </param>
     /// <returns>The number of certificates removed.</returns>
-    private int RemoveExistingCertificates(X509Store store, string subjectName)
+    private int RemoveCertificates(X509Store store, Func<X509Certificate2, bool> matches, bool deleteKeys)
     {
         var removed = 0;
         var certsToRemove = new List<X509Certificate2>();
@@ -611,7 +553,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             // Disposing only releases the managed wrapper; it does NOT remove certs from the store.
             foreach (var cert in store.Certificates)
             {
-                if (MatchesSubject(cert, subjectName))
+                if (matches(cert))
                 {
                     certsToRemove.Add(cert);
                 }
@@ -626,6 +568,11 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
             {
                 try
                 {
+                    if (deleteKeys)
+                    {
+                        DeletePrivateKey(cert);
+                    }
+
                     store.Remove(cert);
                     removed++;
 
@@ -651,6 +598,70 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
         }
 
         return removed;
+    }
+
+    /// <summary>
+    /// Deletes the persisted private key of a certificate that is being replaced (A2). Without this, every renewal
+    /// leaves the key of a revoked certificate in the machine key container.
+    /// </summary>
+    /// <remarks>
+    /// A failure is logged at Warning with the thumbprint and does not fail the store operation.
+    /// </remarks>
+    private void DeletePrivateKey(X509Certificate2 certificate)
+    {
+        try
+        {
+            using var ecdsa = certificate.GetECDsaPrivateKey();
+            if (ecdsa is ECDsaCng ecdsaCng)
+            {
+                ecdsaCng.Key.Delete();
+                return;
+            }
+
+            using var rsa = certificate.GetRSAPrivateKey();
+            if (rsa is RSACng rsaCng)
+            {
+                rsaCng.Key.Delete();
+            }
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to delete the private key of certificate with thumbprint {Thumbprint}",
+                GetPartialThumbprint(certificate.Thumbprint));
+        }
+    }
+
+    /// <summary>
+    /// Removes agent CA certificates that an earlier version stored in LocalMachine\Root (D-S219).
+    /// </summary>
+    /// <remarks>
+    /// Runs once per CA store operation; it logs what it removed. A failure (for example no write access to Root)
+    /// is logged at Warning and does not stop the CA from being stored in its own store.
+    /// </remarks>
+    private void RemoveAgentCaFromRoot()
+    {
+        try
+        {
+            using var root = new X509Store(StoreName.Root, _location);
+            root.Open(OpenFlags.ReadWrite);
+
+            var removed = RemoveCertificates(root, AgentCertificateMatcher.IsAgentCa, deleteKeys: false);
+
+            if (removed > 0)
+            {
+                _logger.LogWarning(
+                    "Removed {Count} agent CA certificate(s) from {Location}\\Root; the agent CA is kept in {Store}",
+                    removed,
+                    _location,
+                    CaStoreName);
+            }
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogWarning(ex, "Could not check {Location}\\Root for an earlier agent CA", _location);
+        }
     }
 
     /// <summary>

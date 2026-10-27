@@ -19,6 +19,11 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
         builder.Property(rt => rt.DeviceInfo)
             .HasMaxLength(500);
 
+        // Concurrency token: rotation does UPDATE ... WHERE "RevokedAt" IS NULL, so two
+        // parallel redemptions of the same refresh token can't both succeed.
+        builder.Property(rt => rt.RevokedAt)
+            .IsConcurrencyToken();
+
         builder.HasIndex(rt => rt.TokenHash)
             .IsUnique()
             .HasDatabaseName("ix_refresh_tokens_token_hash");

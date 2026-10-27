@@ -35,7 +35,7 @@
   </Target>
 
   <!-- Run npm build -->
-  <Target Name="NpmBuild" AfterTargets="NpmInstall" Inputs="$(PanelProjectDir)\src\**\*;$(PanelProjectDir)\public\**\*;$(PanelProjectDir)\package.json;$(PanelProjectDir)\astro.config.mjs;$(PanelProjectDir)\tailwind.config.mjs" Outputs="$(BuildOutputDir)\server\entry.mjs">
+  <Target Name="NpmBuild" AfterTargets="NpmInstall" Inputs="$(PanelProjectDir)\src\**\*;$(PanelProjectDir)\public\**\*;$(PanelProjectDir)\package.json;$(PanelProjectDir)\astro.config.mjs" Outputs="$(BuildOutputDir)\server\entry.mjs">
     <Message Importance="high" Text="Building Astro SSR site for Dhadgar.Panel..." />
     <Exec Command="$(NpmCommand) run build" WorkingDirectory="$(PanelProjectDir)" />
   </Target>

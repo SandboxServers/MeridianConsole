@@ -37,16 +37,14 @@ services:
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       ReverseProxy__Clusters__betterauth__Destinations__d1__Address: http://betterauth:8080/
       ReverseProxy__Clusters__identity__Destinations__d1__Address: http://identity:8080/
-      ReverseProxy__Clusters__billing__Destinations__d1__Address: http://billing:8080/
       ReverseProxy__Clusters__servers__Destinations__d1__Address: http://servers:8080/
       ReverseProxy__Clusters__nodes__Destinations__d1__Address: http://nodes:8080/
-      ReverseProxy__Clusters__tasks__Destinations__d1__Address: http://tasks:8080/
-      ReverseProxy__Clusters__files__Destinations__d1__Address: http://files:8080/
       ReverseProxy__Clusters__console__Destinations__d1__Address: http://console:8080/
-      ReverseProxy__Clusters__mods__Destinations__d1__Address: http://mods:8080/
       ReverseProxy__Clusters__notifications__Destinations__d1__Address: http://notifications:8080/
       ReverseProxy__Clusters__secrets__Destinations__d1__Address: http://secrets:8080/
       ReverseProxy__Clusters__discord__Destinations__d1__Address: http://discord:8080/
+      # dev only; production ingress and trust: D-S210 (docs/analysis/sprint2-agent-nodes)
+      AgentIngress__ClientCertificateMode: "AllowCertificate"
     ports:
       - "443:443"
       - "5000:8080"
@@ -86,16 +84,6 @@ services:
     depends_on: *service-depends-redis
     restart: unless-stopped
 
-  billing:
-    build:
-      context: ../..
-      dockerfile: src/Dhadgar.Billing/Dockerfile
-    environment: *service-env
-    ports:
-      - "5020:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
   servers:
     build:
       context: ../..
@@ -110,29 +98,17 @@ services:
     build:
       context: ../..
       dockerfile: src/Dhadgar.Nodes/Dockerfile
-    environment: *service-env
+    environment:
+      <<: *service-env
+      # dev only; production ingress and trust: D-S210 (docs/analysis/sprint2-agent-nodes).
+      # Nodes trusts X-Client-Cert from the whole Docker bridge pool, so any container on this
+      # network, or any host process (host traffic arrives from the bridge gateway), can present
+      # an agent's certificate. The host port is therefore bound to loopback only; never publish
+      # it beyond 127.0.0.1.
+      Mtls__ForwardedCertificate__Enabled: "true"
+      Mtls__ForwardedCertificate__TrustedProxies__0: "172.16.0.0/12"
     ports:
-      - "5040:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
-  tasks:
-    build:
-      context: ../..
-      dockerfile: src/Dhadgar.Tasks/Dockerfile
-    environment: *service-env
-    ports:
-      - "5050:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
-  files:
-    build:
-      context: ../..
-      dockerfile: src/Dhadgar.Files/Dockerfile
-    environment: *service-env
-    ports:
-      - "5060:8080"
+      - "127.0.0.1:5040:8080"
     depends_on: *service-depends
     restart: unless-stopped
 
@@ -143,16 +119,6 @@ services:
     environment: *service-env
     ports:
       - "5070:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
-  mods:
-    build:
-      context: ../..
-      dockerfile: src/Dhadgar.Mods/Dockerfile
-    environment: *service-env
-    ports:
-      - "5080:8080"
     depends_on: *service-depends
     restart: unless-stopped
 
@@ -246,8 +212,14 @@ services:
       EXCHANGE_TOKEN_AUDIENCE: https://dev.meridianconsole.com/api/v1/identity/exchange
       EXCHANGE_TOKEN_ISSUER: https://dev.meridianconsole.com/api/v1/betterauth
       EXCHANGE_TOKEN_KID: betterauth-exchange-v1
+      # Requests arrive through the Gateway, which sets one X-Forwarded-For
+      # entry with the real client IP; trust that one hop so the /exchange
+      # rate limit is per client, not one shared bucket. Callers that reach
+      # BetterAuth directly could spoof the header, so the host port below is
+      # bound to loopback only; the Gateway uses the compose network.
+      TRUST_PROXY: "1"
     ports:
-      - "5130:8080"
+      - "127.0.0.1:5130:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -270,19 +242,6 @@ services:
       PORT: 8080
     ports:
       - "4321:8080"
-    depends_on:
-      - gateway
-    restart: unless-stopped
-
-  shoppingcart:
-    build:
-      context: ../..
-      dockerfile: src/Dhadgar.ShoppingCart/Dockerfile
-      args:
-        PUBLIC_GATEWAY_URL: https://dev.meridianconsole.com
-        PUBLIC_BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
-    ports:
-      - "4322:8080"
     depends_on:
       - gateway
     restart: unless-stopped

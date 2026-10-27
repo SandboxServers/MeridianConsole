@@ -43,15 +43,28 @@ public record EnrollmentTokenResponse(
     bool IsRevoked);
 
 /// <summary>
-/// Request from an agent to enroll with the platform.
+/// Request from an agent to enroll with the platform (<c>POST /agents/enroll</c>,
+/// public path <c>/api/v1/agents/enroll</c>).
 /// </summary>
-/// <param name="Token">The enrollment token.</param>
+/// <remarks>
+/// This is the single wire contract for enrollment: <c>Dhadgar.Agent.Core</c> sends it and
+/// <c>Dhadgar.Nodes</c> binds it. The agent generates its key pair locally and sends only
+/// the public key; the private key never leaves the agent's machine.
+/// </remarks>
+/// <param name="Token">The one-time enrollment token.</param>
 /// <param name="Platform">Operating system platform (linux or windows).</param>
 /// <param name="Hardware">Hardware inventory collected from the machine.</param>
+/// <param name="PublicKey">
+/// Base64-encoded DER SubjectPublicKeyInfo of the agent's key pair (ECDSA P-256/P-384 or
+/// RSA ≥ 2048). The issued client certificate is bound to this key.
+/// </param>
+/// <param name="AgentVersion">Agent build version, for diagnostics.</param>
 public record EnrollNodeRequest(
     string Token,
     string Platform,
-    HardwareInventoryRequest Hardware);
+    HardwareInventoryRequest Hardware,
+    string PublicKey,
+    string? AgentVersion = null);
 
 /// <summary>
 /// Hardware inventory sent during agent enrollment.
@@ -82,44 +95,41 @@ public record NetworkInterfaceInfo(
     IReadOnlyList<string>? IpAddresses);
 
 /// <summary>
-/// Response to a successful agent enrollment containing credentials.
+/// Response to a successful agent enrollment.
 /// </summary>
-/// <param name="NodeId">The assigned node identifier.</param>
-/// <param name="CertificateThumbprint">Thumbprint of the issued certificate.</param>
-/// <param name="Certificate">PEM-encoded certificate.</param>
-/// <param name="Pkcs12Base64">Base64-encoded PKCS#12 bundle (certificate + key).</param>
-/// <param name="Pkcs12Password">Password for the PKCS#12 bundle.</param>
+/// <param name="NodeId">The assigned node identifier. The agent must persist this.</param>
+/// <param name="OrganizationId">The organization that owns the node. The agent must persist this.</param>
+/// <param name="CertificateThumbprint">SHA-256 thumbprint of the issued client certificate.</param>
+/// <param name="Certificate">PEM-encoded client certificate, bound to the request's public key.</param>
+/// <param name="CaCertificate">PEM-encoded agent CA certificate, for the agent's trust store.</param>
 /// <param name="NotBefore">Certificate validity start.</param>
 /// <param name="NotAfter">Certificate validity end.</param>
 public record EnrollNodeResponse(
-    string NodeId,
+    Guid NodeId,
+    Guid OrganizationId,
     string CertificateThumbprint,
     string Certificate,
-    string? Pkcs12Base64 = null,
-    string? Pkcs12Password = null,
-    DateTimeOffset? NotBefore = null,
-    DateTimeOffset? NotAfter = null);
+    string CaCertificate,
+    DateTimeOffset NotBefore,
+    DateTimeOffset NotAfter);
 
 /// <summary>
-/// Request to renew an agent's certificate.
+/// Request from an agent to renew its client certificate (<c>POST /agents/{nodeId}/certificates/renew</c>,
+/// public path <c>/api/v1/agents/{nodeId}/certificates/renew</c>). Sent over mTLS with the current
+/// certificate; the current thumbprint is taken from that certificate, not from the body.
 /// </summary>
-/// <param name="CurrentThumbprint">Thumbprint of the certificate being renewed.</param>
-public record RenewCertificateRequest(
-    string CurrentThumbprint);
+/// <param name="PublicKey">Base64 DER SubjectPublicKeyInfo of a NEW key pair generated on the agent.</param>
+public record RenewCertificateRequest(string PublicKey);
 
-/// <summary>
-/// Response to a successful certificate renewal.
-/// </summary>
-/// <param name="CertificateThumbprint">Thumbprint of the new certificate.</param>
-/// <param name="Certificate">PEM-encoded new certificate.</param>
-/// <param name="Pkcs12Base64">Base64-encoded PKCS#12 bundle.</param>
-/// <param name="Pkcs12Password">Password for the PKCS#12 bundle.</param>
-/// <param name="NotBefore">Certificate validity start.</param>
-/// <param name="NotAfter">Certificate validity end.</param>
+/// <summary>Response to a successful renewal. No private key or PKCS#12 is ever returned.</summary>
+/// <param name="CertificateThumbprint">SHA-256 thumbprint of the new certificate.</param>
+/// <param name="Certificate">PEM-encoded new certificate, bound to the request's public key.</param>
+/// <param name="CaCertificate">PEM-encoded agent CA certificate.</param>
+/// <param name="NotBefore">Validity start.</param>
+/// <param name="NotAfter">Validity end.</param>
 public record RenewCertificateResponse(
     string CertificateThumbprint,
     string Certificate,
-    string Pkcs12Base64,
-    string Pkcs12Password,
+    string CaCertificate,
     DateTimeOffset NotBefore,
     DateTimeOffset NotAfter);

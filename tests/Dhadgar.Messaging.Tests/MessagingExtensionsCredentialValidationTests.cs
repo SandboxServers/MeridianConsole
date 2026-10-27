@@ -12,7 +12,8 @@ namespace Dhadgar.Messaging.Tests;
 /// check is not sufficient because cleared appsettings values are "" (not null).
 /// Validation runs at bus creation, which is what host startup does — the tests trigger
 /// it by resolving <see cref="IBusControl"/> (the bus is created but never started, so
-/// no broker connection is attempted).
+/// no broker connection is attempted). Providers are disposed asynchronously, as the host
+/// does, because MassTransit registers services that only implement IAsyncDisposable.
 /// </summary>
 public class MessagingExtensionsCredentialValidationTests
 {
@@ -41,9 +42,9 @@ public class MessagingExtensionsCredentialValidationTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void AddDhadgarMessaging_MissingOrBlankUsername_ThrowsNamingConfigKey(string? username)
+    public async Task AddDhadgarMessaging_MissingOrBlankUsername_ThrowsNamingConfigKey(string? username)
     {
-        using var provider = BuildProvider(BuildConfiguration(username, "valid-password"));
+        await using var provider = BuildProvider(BuildConfiguration(username, "valid-password"));
 
         var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IBusControl>());
 
@@ -54,9 +55,9 @@ public class MessagingExtensionsCredentialValidationTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void AddDhadgarMessaging_MissingOrBlankPassword_ThrowsNamingConfigKey(string? password)
+    public async Task AddDhadgarMessaging_MissingOrBlankPassword_ThrowsNamingConfigKey(string? password)
     {
-        using var provider = BuildProvider(BuildConfiguration("valid-user", password));
+        await using var provider = BuildProvider(BuildConfiguration("valid-user", password));
 
         var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IBusControl>());
 
@@ -64,12 +65,12 @@ public class MessagingExtensionsCredentialValidationTests
     }
 
     [Fact]
-    public void AddDhadgarMessaging_MissingRabbitMqSection_ThrowsNamingConfigKey()
+    public async Task AddDhadgarMessaging_MissingRabbitMqSection_ThrowsNamingConfigKey()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>())
             .Build();
-        using var provider = BuildProvider(config);
+        await using var provider = BuildProvider(config);
 
         var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IBusControl>());
 
@@ -77,9 +78,9 @@ public class MessagingExtensionsCredentialValidationTests
     }
 
     [Fact]
-    public void AddDhadgarMessaging_ValidCredentials_BusCreationSucceeds()
+    public async Task AddDhadgarMessaging_ValidCredentials_BusCreationSucceeds()
     {
-        using var provider = BuildProvider(BuildConfiguration("valid-user", "valid-password"));
+        await using var provider = BuildProvider(BuildConfiguration("valid-user", "valid-password"));
 
         var bus = provider.GetRequiredService<IBusControl>();
 

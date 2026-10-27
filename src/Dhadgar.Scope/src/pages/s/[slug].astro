@@ -78,8 +78,6 @@ const SectionComponent = sectionComponents[slug!];
       total={sections.length}
     />
 
-    <div class="scope-prose">
-      {SectionComponent && <SectionComponent />}
-    </div>
+    <div class="scope-prose">{SectionComponent && <SectionComponent />}</div>
   </MainLayout>
 </BaseLayout>

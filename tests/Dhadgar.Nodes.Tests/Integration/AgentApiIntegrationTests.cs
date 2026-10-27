@@ -37,6 +37,7 @@ public sealed class AgentApiIntegrationTests
         var request = new EnrollNodeRequest(
             Token: token,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "test-server",
                 OsVersion: "Ubuntu 22.04",
@@ -66,6 +67,7 @@ public sealed class AgentApiIntegrationTests
         var request = new EnrollNodeRequest(
             Token: token,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "event-test-server",
                 OsVersion: "Ubuntu 22.04",
@@ -90,6 +92,7 @@ public sealed class AgentApiIntegrationTests
         var request = new EnrollNodeRequest(
             Token: "invalid-token-that-does-not-exist",
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "test-server",
                 OsVersion: "Ubuntu 22.04",
@@ -118,6 +121,7 @@ public sealed class AgentApiIntegrationTests
         var request = new EnrollNodeRequest(
             Token: token,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "test-server",
                 OsVersion: "Ubuntu 22.04",
@@ -140,6 +144,7 @@ public sealed class AgentApiIntegrationTests
         var request = new EnrollNodeRequest(
             Token: token,
             Platform: "macos", // Invalid platform
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "test-server",
                 OsVersion: "macOS 14",
@@ -162,6 +167,7 @@ public sealed class AgentApiIntegrationTests
         var request = new EnrollNodeRequest(
             Token: token,
             Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
             Hardware: new HardwareInventoryDto(
                 Hostname: "test-server",
                 OsVersion: "Ubuntu 22.04",
