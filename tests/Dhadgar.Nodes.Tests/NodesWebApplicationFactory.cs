@@ -30,6 +30,7 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"nodes-tests-{Guid.NewGuid()}";
     public TestNodesEventPublisher EventPublisher { get; } = new();
+    public SaveChangesFaultInjector Faults { get; } = new();
     public FakeTimeProvider TimeProvider { get; } = new(DateTimeOffset.UtcNow);
     public TestCertificateAuthorityService CaService { get; private set; } = null!;
 
@@ -61,7 +62,8 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             services.AddDbContext<NodesDbContext>(options =>
                 options.UseInMemoryDatabase(_databaseName)
                     .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-                    .UseInternalServiceProvider(efProvider));
+                    .UseInternalServiceProvider(efProvider)
+                    .AddInterceptors(Faults));
 
             // Remove all MassTransit services and replace with test publisher
             // This removes bus, health checks, and other MassTransit infrastructure
@@ -260,6 +262,24 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             LastHeartbeat = TimeProvider.GetUtcNow().UtcDateTime,
             CreatedAt = TimeProvider.GetUtcNow().UtcDateTime
         };
+    }
+}
+
+/// <summary>
+/// Injects failures into SaveChanges for tests that need a database-side conflict the InMemory provider never raises.
+/// </summary>
+public sealed class SaveChangesFaultInjector : SaveChangesInterceptor
+{
+    public volatile bool ThrowConcurrency;
+
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        if (ThrowConcurrency)
+        {
+            throw new DbUpdateConcurrencyException("injected concurrency failure");
+        }
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 }
 

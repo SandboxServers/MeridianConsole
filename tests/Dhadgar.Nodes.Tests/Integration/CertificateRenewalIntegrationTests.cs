@@ -201,6 +201,53 @@ public sealed class CertificateRenewalIntegrationTests
     }
 
     [Fact]
+    public void AgentCertificate_RowVersion_IsConcurrencyToken()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        var property = db.Model.FindEntityType(typeof(AgentCertificate))!.FindProperty(nameof(AgentCertificate.RowVersion));
+        Assert.NotNull(property);
+        Assert.True(property.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public async Task Renew_ConcurrencyConflict_Returns401AndKeepsCurrentCertificate()
+    {
+        // Arrange
+        var (node, originalCert) = await SeedNodeWithCertificateAsync();
+        var client = _factory.CreateAgentClient(node.Id);
+        client.DefaultRequestHeaders.Add(TestNodesAuthHandler.CertThumbprintHeader, originalCert.Thumbprint);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+
+        // Act - the save fails as if another request had changed the current certificate first
+        HttpResponseMessage response;
+        _factory.Faults.ThrowConcurrency = true;
+        try
+        {
+            response = await client.PostAsJsonAsync(
+                $"/agents/{node.Id}/certificates/renew",
+                new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo())));
+        }
+        finally
+        {
+            _factory.Faults.ThrowConcurrency = false;
+        }
+
+        // Assert - rejected, no certificate returned, and the original certificate is still the active one
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("thumbprint_mismatch", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("BEGIN CERTIFICATE", body, StringComparison.Ordinal);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+        var stored = await db.AgentCertificates.FindAsync(originalCert.Id);
+        Assert.NotNull(stored);
+        Assert.False(stored.IsRevoked);
+        Assert.Equal(1, db.AgentCertificates.Count(c => c.NodeId == node.Id));
+    }
+
+    [Fact]
     public async Task Renew_NodeNotFound_ReturnsNotFound()
     {
         // Arrange
