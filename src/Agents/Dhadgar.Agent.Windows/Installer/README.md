@@ -62,6 +62,7 @@ msiexec /i MeridianConsoleAgent.msi /qn /norestart
 # SECURITY NOTE: Command-line arguments are visible in process listings (Get-Process),
 # command history, and audit logs. For production deployments, consider using a transform
 # file (.mst) or clearing command history after installation.
+# The MSI log never contains the token, even with /l*v: it is written by a hidden custom action (D-S245).
 msiexec /i MeridianConsoleAgent.msi /qn ENROLLMENT_TOKEN=your-token-here CONTROL_PLANE_ENDPOINT=https://control.example.com
 
 # With logging
@@ -92,7 +93,7 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 | Property | Description | Default |
 |----------|-------------|---------|
 | `INSTALLFOLDER` | Installation directory | `C:\Program Files\Meridian Console\Agent\` |
-| `ENROLLMENT_TOKEN` | One-time enrollment token from control plane | (empty) |
+| `ENROLLMENT_TOKEN` | One-time enrollment token from the control plane. Written to HKLM\SOFTWARE\Meridian Console\Agent\EnrollmentToken by a hidden custom action, never through the Registry table, so no MSI log holds it (D-S245). Deleted on rollback and uninstall. | (empty) |
 | `CONTROL_PLANE_ENDPOINT` | Control plane URL; must be `https://`. Kept across major upgrades when omitted. Overrides `appsettings.json`; environment variables and the agent's command line still win. | (empty; `appsettings.json` value) |
 
 ## What Gets Installed
@@ -109,7 +110,7 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 - `C:\ProgramData\Meridian Console\Agent\Servers\` - Game server files
 - `C:\ProgramData\Meridian Console\Agent\Temp\` - Temporary files
 
-The folders above (the parent folder carries an empty-mask Owner Rights ACE, so an owner has no implicit WRITE_DAC) and the `HKLM\SOFTWARE\Meridian Console\Agent` key (which holds the enrollment token) use protected-DACL SDDL: SYSTEM and Administrators only, with no inherited access.
+The folders above (the parent folder carries an empty-mask Owner Rights ACE, so an owner has no implicit WRITE_DAC) and the `HKLM\SOFTWARE\Meridian Console\Agent` key (which holds the enrollment token; protected on every install, with or without a token) use protected-DACL SDDL: SYSTEM and Administrators only, with no inherited access.
 
 ### Windows Service
 
@@ -117,6 +118,8 @@ The folders above (the parent folder carries an empty-mask Owner Rights ACE, so 
 - Display Name: `Meridian Console Agent`
 - Startup Type: Automatic (Delayed Start)
 - Recovery: Restart on first 3 failures
+
+The service is installed by the same component as `Dhadgar.Agent.Windows.exe`: Windows Installer installs a service only from the component whose key path is the service's executable (D-S244).
 
 ### Event Log
 
@@ -211,6 +214,10 @@ Run the installer as Administrator.
 
 ## Development
 
+### Custom actions
+
+The installer's only custom actions are in `src/Agents/Dhadgar.Agent.Windows.InstallerActions` (DTF, net462). They write the enrollment token, and delete it on rollback and uninstall. The wixproj builds them through a project reference; the project is not in `Dhadgar.sln`. MakeSfxCA wraps the AnyCPU assembly in the x64 host (`Platform=x64`) and fails on paths of 260 characters or more. A secret installer property must never be formatted into a Registry, IniFile or Environment row, or into a deferred action without `HideTarget`: `Hidden="yes"` does not mask those in `/l*v` logs (D-S245).
+
 ### Debugging Custom Actions
 
 Enable verbose logging:
@@ -244,5 +251,5 @@ A least-privilege service account would lack the permissions for these operation
 - The MSI requires administrator privileges to install
 - Certificates are stored in the Windows Certificate Store (LocalMachine)
 - All custom actions run elevated during install/uninstall
-- Enrollment tokens are stored in registry with SDDL ACLs restricting access to SYSTEM and Administrators only
+- Enrollment tokens are stored in the registry under a protected SDDL ACL (SYSTEM and Administrators only). They are written by a hidden custom action, so MSI logs never contain them. An administrator who sets the Windows Installer `Debug` policy to 7 opts in to logging otherwise masked values, the command line included.
 - After uninstall, residual artifacts (certificates, firewall rules, game server data) require manual cleanup -- see Package.wxs comments for details

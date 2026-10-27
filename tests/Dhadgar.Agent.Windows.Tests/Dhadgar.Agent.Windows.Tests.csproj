@@ -24,4 +24,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Agents\Dhadgar.Agent.Windows\Dhadgar.Agent.Windows.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Installer custom action <-> agent seam (D-S245): the CA's key and value name are pinned against AgentRegistry -->
+    <Compile Include="..\..\src\Agents\Dhadgar.Agent.Windows.InstallerActions\EnrollmentTokenData.cs"
+             Link="Installation\EnrollmentTokenData.cs" />
+  </ItemGroup>
 </Project>
