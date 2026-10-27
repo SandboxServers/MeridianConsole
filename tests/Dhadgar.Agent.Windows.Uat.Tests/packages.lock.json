@@ -8,6 +8,17 @@
         "resolved": "10.1.0",
         "contentHash": "SlYCIHnBYxINSUpR75SiM5JEmnx11pqT+Ac/C/fUqTTA0dLPl9eYzmFXKKuxmQhL3ZdTQl4PBD3YdAxAauaKLQ=="
       },
+      "Microsoft.EntityFrameworkCore.InMemory": {
+        "type": "Direct",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "g70gixwkCTNuM6lMfElDzU9mtYVX6CYZ6ZhFbxZlvQv7Y9fRHmypflGHj3ivFARSlLgYuGmeEY9ebctOcHqp1w==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "10.0.14",
+          "Microsoft.Extensions.Caching.Memory": "10.0.14",
+          "Microsoft.Extensions.Logging": "10.0.14"
+        }
+      },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
         "requested": "[18.11.0, )",
@@ -887,7 +898,8 @@
           "Dhadgar.Agent.Core": "[1.0.0, )",
           "Dhadgar.Contracts": "[1.0.0, )",
           "Dhadgar.Nodes": "[1.0.0, )",
-          "Dhadgar.Shared": "[1.0.0, )"
+          "Dhadgar.Shared": "[1.0.0, )",
+          "Microsoft.AspNetCore.SignalR.Client": "[10.0.14, )"
         }
       },
       "dhadgar.contracts": {
