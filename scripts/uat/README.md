@@ -137,7 +137,7 @@ its condition, and steps after it show `skipped`. `results.json` holds the same 
 | --- | --- |
 | `Invoke-AgentWindowsUat.ps1` or `-Preflight` | Checks the machine and writes `U0`. Changes nothing. |
 | `-StackOnly` | Starts the local stack and runs the enrollment smoke (P19). Needs no elevation. |
-| `-Mode Process -AcceptMachineChanges` | Runs the stack and the agent legs U2-U4 as a child process (elevated, machine-changing). |
+| `-Mode Process -AcceptMachineChanges` | Runs the stack, the agent legs U2-U4 and the renewal legs U5-U8 as a child process (elevated, machine-changing). It takes about 12 minutes, because U7 waits out the 5-minute grace. |
 | `-Mode Service -AcceptMachineChanges` | Runs the scenario as a Windows service (P22, not built yet). |
 | `-Mode Msi -AcceptMachineChanges` | Installs the MSI (P23, not built yet). The script refuses. |
 | `-CleanupOnly <runFolder>` | Undoes the changes recorded in that run's manifest. Use it after a crash. |

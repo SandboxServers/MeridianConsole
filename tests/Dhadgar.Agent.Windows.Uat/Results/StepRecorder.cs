@@ -34,7 +34,13 @@ internal sealed class StepRecorder
             var outcome = await body(ct);
             step = outcome.IsSuccess
                 ? Make(id, name, "pass", outcome.Value, null, clock)
-                : Make(id, name, "fail", null, outcome.Error, clock);
+                : Make(
+                    id,
+                    name,
+                    outcome.Error!.Contains("[Probe.Transport]", StringComparison.Ordinal) ? "inconclusive" : "fail",
+                    null,
+                    outcome.Error,
+                    clock);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

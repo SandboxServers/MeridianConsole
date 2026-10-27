@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using Dhadgar.Agent.Windows.Uat.Agent;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
 using Dhadgar.Agent.Windows.Uat.Infra;
@@ -76,6 +77,10 @@ internal sealed class GatewayRenewalTransport : IRenewalTransport
         catch (Exception ex) when (IsTransport(ex, ct))
         {
             return Result<RenewCertificateResponse>.Failure($"[Probe.Transport] {Describe(ex)}");
+        }
+        catch (JsonException ex)
+        {
+            return Result<RenewCertificateResponse>.Failure($"[Renewal.Empty] the renew response body is not valid JSON ({ex.GetType().Name})");
         }
     }
 
@@ -226,6 +231,8 @@ internal sealed class RenewalLegs
         }
         finally
         {
+            // Every path to here has stopped the agent, so a certificate it stored after the last poll is recorded now.
+            RecordAfterStop(evidence, "final");
             foreach (var disposable in _owned)
             {
                 disposable.Dispose();
@@ -350,16 +357,24 @@ internal sealed class RenewalLegs
         }
         finally
         {
-            var stopped = await _deps.Agent.StopAsync();
-            if (stopped.IsFailure)
+            try
             {
-                state.Evidence["U6.agentStop"] = stopped.Error!;
-            }
+                var stopped = await _deps.Agent.StopAsync();
+                if (stopped.IsFailure)
+                {
+                    state.Evidence["U6.agentStop"] = stopped.Error!;
+                }
 
-            var reset = appSettings.SetRenewalThreshold(_options.AppSettingsPath, null);
-            if (reset.IsFailure && body.IsSuccess)
+                RecordAfterStop(state.Evidence, "U6");
+            }
+            finally
             {
-                body = Fail(state.Evidence, "U6", $"the renewal threshold key could not be removed: {reset.Error}");
+                // The reset runs even when the stop throws, so the 90-day threshold never stays in the published file.
+                var reset = appSettings.SetRenewalThreshold(_options.AppSettingsPath, null);
+                if (reset.IsFailure && body.IsSuccess)
+                {
+                    body = Fail(state.Evidence, "U6", $"the renewal threshold key could not be removed: {reset.Error}");
+                }
             }
         }
 
@@ -505,6 +520,20 @@ internal sealed class RenewalLegs
             return Fail(state.Evidence, "U7", $"C3 through the Gateway must return 200, got {c3Probe.Value}");
         }
 
+        // A control: inside its grace Nodes must accept C1 through the forwarded header. Without it, a 401 after the
+        // grace could come from a broken forwarded-certificate path rather than from the expiry.
+        var c1InGrace = await _deps.Transport.NodesNegotiateForwardedAsync(state.C1!, ct);
+        if (c1InGrace.IsFailure)
+        {
+            return FailProbe(state.Evidence, "U7", c1InGrace.Error!);
+        }
+
+        state.Evidence["U7.c1NodesInGrace"] = c1InGrace.Value;
+        if (c1InGrace.Value != HttpOk)
+        {
+            return Fail(state.Evidence, "U7", $"C1 inside its grace must return 200 from Nodes (the forwarded-certificate path), got {c1InGrace.Value}");
+        }
+
         var deadline = state.C1GraceUntil!.Value + GraceExpiryMargin;
         state.Evidence["U7.waitUntil"] = deadline.ToString("O");
         while (_deps.UtcNow() < deadline)
@@ -570,6 +599,8 @@ internal sealed class RenewalLegs
             {
                 state.Evidence["U8.agentStop"] = stopped.Error!;
             }
+
+            RecordAfterStop(state.Evidence, "U8");
         }
 
         if (polled.IsFailure)
@@ -698,6 +729,26 @@ internal sealed class RenewalLegs
         }
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Records a certificate the agent stored after its last poll (D-S238), once the agent is stopped. A failure is noted
+    /// in the evidence by its type, never thrown, so the step's own result is kept.
+    /// </summary>
+    private void RecordAfterStop(Dictionary<string, object?> evidence, string step)
+    {
+        try
+        {
+            var recorded = RecordMachineCertificates(_deps.Store.AgentCertificatesInMy());
+            if (recorded.IsFailure)
+            {
+                evidence[$"{step}.certificateRecord"] = recorded.Error!;
+            }
+        }
+        catch (Exception ex) when (ex is CryptographicException or UnauthorizedAccessException or IOException)
+        {
+            evidence[$"{step}.certificateRecord"] = ex.GetType().Name;
+        }
     }
 
     private static CertRow? FindRow(IReadOnlyList<CertRow> rows, string sha256) =>

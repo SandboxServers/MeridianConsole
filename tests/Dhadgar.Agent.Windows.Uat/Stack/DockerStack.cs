@@ -62,6 +62,13 @@ internal sealed class DockerStack
         "rabbitmq:3-management",
     ];
 
+    /// <summary>
+    /// The RabbitMQ readiness probe's <c>docker exec</c> arguments. It runs as the broker user: a root exec creates
+    /// <c>/var/lib/rabbitmq/.erlang.cookie</c> as root before the broker reads it, and the broker then exits (P19 defect).
+    /// </summary>
+    public static IReadOnlyList<string> RabbitMqProbeArguments(string name) =>
+        ["exec", "--user", "rabbitmq", name, "rabbitmq-diagnostics", "-q", "ping"];
+
     /// <summary>Starts Postgres on <paramref name="hostPort"/> and waits until <c>pg_isready</c> succeeds.</summary>
     public async Task<Result> StartPostgresAsync(int hostPort, string password, CancellationToken ct)
     {
@@ -86,7 +93,7 @@ internal sealed class DockerStack
             return started;
         }
 
-        return await WaitReadyAsync(RabbitMqName, ["exec", RabbitMqName, "rabbitmq-diagnostics", "-q", "ping"], ct);
+        return await WaitReadyAsync(RabbitMqName, RabbitMqProbeArguments(RabbitMqName), ct);
     }
 
     private async Task<Result> StartAsync(

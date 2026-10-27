@@ -180,6 +180,56 @@ public class RenewalLegsTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_U7_FailsWhenNodesRefusesC1InsideItsGrace()
+    {
+        _world.OnFirstStart = w =>
+        {
+            w.AgentRenewsFromGrace();
+            w.NodesStatus = 401;
+        };
+
+        var (result, evidence) = await RunLegsAsync();
+
+        AssertFailedAt(result, evidence, "U7", "inside its grace");
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsACertificateStoredAfterTheLastPoll_AndCleanupUndoesIt()
+    {
+        // The agent never renews during U6, so every poll times out; C3 appears only when the agent stops (after the last poll).
+        _world.KeyStillExists = true;
+        _world.OnFirstStart = _ => { };
+        _world.OnStop = w => w.AgentRenewsFromGrace();
+
+        var (result, _) = await RunLegsAsync();
+        Assert.True(result.IsFailure);
+
+        var c3Sha1 = Assert.Single(_world.My).Sha1Thumbprint;
+        var loaded = CleanupManifest.Load(_paths.Manifest);
+        Assert.True(loaded.IsSuccess, loaded.Error);
+        Assert.Contains(loaded.Value, entry => entry is CertificateEntry certificate
+            && string.Equals(certificate.ThumbprintSha1, c3Sha1, StringComparison.OrdinalIgnoreCase));
+
+        var report = await new CleanupEngine(new RecordingActions(), _paths).UndoAsync(loaded.Value, CancellationToken.None);
+
+        Assert.Empty(report.Failed);
+        Assert.Equal(loaded.Value.Count, report.Undone);
+    }
+
+    [Fact]
+    public async Task RunAsync_RemovesTheThresholdKey_EvenWhenStoppingTheAgentThrows()
+    {
+        _world.StopThrows = true;
+
+        var evidence = new Dictionary<string, object?>();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _world.Legs().RunAsync(evidence, CancellationToken.None));
+
+        var json = JsonNode.Parse(File.ReadAllText(_world.AppSettingsPath))!;
+        Assert.Null(json["Agent"]?["Security"]?["CertificateRenewalThresholdDays"]);
+        Assert.Equal(1, json["Agent"]?["Security"]?["Other"]?.GetValue<int>());
+    }
+
+    [Fact]
     public async Task RunAsync_U8_FailsWhenANewRowAppears()
     {
         _world.OnRestart = w => w.Rows.Add(new CertRow(Guid.NewGuid(), "0000000000000000", false));
@@ -292,6 +342,12 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
     /// <summary>What the agent does on a later start (U8). Default: nothing beyond the heartbeat.</summary>
     public Action<RenewalWorld>? OnRestart { get; set; }
 
+    /// <summary>What the agent does while it stops, after the process is down (a certificate stored after the last poll).</summary>
+    public Action<RenewalWorld>? OnStop { get; set; }
+
+    /// <summary>When set, stopping the agent throws, as a <c>Process.Kill</c> failure does.</summary>
+    public bool StopThrows { get; set; }
+
     public int Starts { get; private set; }
 
     /// <summary>The threshold value in the appsettings file at each agent start.</summary>
@@ -380,6 +436,12 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
     public Task<Result> StopAsync()
     {
         _running = false;
+        if (StopThrows)
+        {
+            throw new InvalidOperationException("the agent process could not be stopped");
+        }
+
+        OnStop?.Invoke(this);
         return Task.FromResult(Result.Success());
     }
 
@@ -406,7 +468,14 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
         var request = new CertificateRequest("CN=renewed", subjectKey, HashAlgorithmName.SHA384);
         // Validity is real time: the CA was created on the real clock, and no step reads a certificate's validity.
         var notBefore = DateTimeOffset.UtcNow.AddDays(-1);
+        // Capped at the CA's own NotAfter: X.509 times have whole-second precision, so a clock read taken later than the
+        // CA's creation would otherwise run past the issuer and CreateCertificate would throw.
         var notAfter = DateTimeOffset.UtcNow.AddDays(30);
+        var issuerEnd = new DateTimeOffset(_ca.NotAfter.ToUniversalTime()).AddDays(-1);
+        if (notAfter > issuerEnd)
+        {
+            notAfter = issuerEnd;
+        }
         using var issued = request.Create(_ca, notBefore, notAfter, [0x01, 0x02, 0x03, 0x04]);
         C2Sha256 = Sha256Hex(issued);
         SetRow(C2Sha256, isRevoked: false, grace: null, reason: null);
