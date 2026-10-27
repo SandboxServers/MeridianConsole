@@ -575,8 +575,9 @@ Applied at Gateway level:
 
 | Policy | Limit | Scope |
 |:-------|:------|:------|
-| `PerTenant` | Token bucket: 100 burst, 50 per second refill | `org_id` claim when authenticated, else client IP (IPv6 /64) |
-| `PerAgent` | 500 requests per 60 seconds (fixed window) | Client IP (IPv6 /64) |
+| `Auth` | 30 req/60sec (fixed window) | Client IP, shared by login, Identity and `/api/v1/agents/enroll` |
+| `PerTenant` | 100-token bucket, refills 50/sec | Organization (authenticated) or client IP (unauthenticated) |
+| `PerAgent` | 500 req/60sec (fixed window) | Client IP (IPv6 /64), never the certificate (D-S26) |
 
 ### Audit Logging
 

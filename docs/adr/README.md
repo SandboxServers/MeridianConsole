@@ -15,7 +15,7 @@ ADRs document significant architectural decisions, their context, and consequenc
 | [0005](0005-microservices-per-domain.md) | Microservices per Domain Boundary | Accepted |
 | [0006](0006-postgresql-as-primary-database.md) | PostgreSQL as Primary Database | Accepted |
 | [0007](0007-agent-security-model.md) | Agent Security Model | Accepted (partially implemented) |
-| [0008](0008-agent-transport-signalr.md) | SignalR Hub as Agent Transport | Accepted (implementation pending) |
+| [0008](0008-agent-transport-signalr.md) | SignalR Hub as Agent Transport | Accepted. Implemented in Sprint 2 except commands and the Redis backplane ([as built](0008-agent-transport-signalr.md#as-built-sprint-2), draft) |
 
 ## Creating a New ADR
 
