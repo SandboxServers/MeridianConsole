@@ -135,13 +135,15 @@ internal sealed record AgentLegsDeps(
 /// <param name="PollInterval">Delay between condition polls (2 s in a real run).</param>
 /// <param name="FirstStartTimeout">How long U3 polls for its conditions (90 s in a real run).</param>
 /// <param name="RestartTimeout">How long U4 polls for its conditions (60 s in a real run).</param>
+/// <param name="DecoyThumbprint">Service mode only (P22): the decoy CA thumbprint from U10, which U3 requires to be absent from <c>Root</c>.</param>
 internal sealed record AgentLegsOptions(
     Guid OrganizationId,
     string AgentAccountSid,
     AgentConfig Config,
     TimeSpan PollInterval,
     TimeSpan FirstStartTimeout,
-    TimeSpan RestartTimeout);
+    TimeSpan RestartTimeout,
+    string? DecoyThumbprint = null);
 
 /// <summary>
 /// The agent legs after the stack (P20 U2-U4): a token written to the registry, a first start that enrolls the node
@@ -399,6 +401,14 @@ internal sealed class AgentLegs
         if (_deps.Store.AgentCasInRoot().Count != 0)
         {
             return Unmet("no agent CA is in LocalMachine\\Root");
+        }
+
+        // Service mode (P22): the decoy CA planted by U10 must be gone, removed by the agent (P14, D-S219). A pass
+        // condition, not a warning.
+        if (_options.DecoyThumbprint is not null
+            && _deps.Store.AgentCasInRoot().Any(c => string.Equals(c.Sha1Thumbprint, _options.DecoyThumbprint, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Unmet("the decoy CA from U10 is no longer in LocalMachine\\Root");
         }
 
         var acl = _deps.Store.StateFileAcl(statePath.Value);

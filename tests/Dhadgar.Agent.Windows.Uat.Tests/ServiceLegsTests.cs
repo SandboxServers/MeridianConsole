@@ -106,6 +106,47 @@ public class ServiceLegsTests : IDisposable
         Assert.Equal("fail", evidence["U10"]);
     }
 
+    [Fact]
+    public async Task U3_InServiceMode_FailsWhenTheDecoyIsStillInRoot()
+    {
+        var manifest = new CleanupManifest(_paths.Manifest);
+        var world = new LegWorld(_paths, manifest)
+        {
+            OnStart = w =>
+            {
+                if (w.StartCount == 1)
+                {
+                    w.Root.Add(new StoreCert(
+                        "CN=Meridian Console Agent CA, O=UAT decoy run-1", w.CaSha1, w.CaSha256, [], DateTime.UtcNow,
+                        DateTime.UtcNow.AddDays(1), false, null));
+                }
+            },
+        };
+        var options = AgentLegsTests.Options(_paths, world.OrganizationId) with { DecoyThumbprint = world.CaSha1 };
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        var result = await new AgentLegs(_paths, manifest, new AgentLegsDeps(world, world, world, world, world.MintAsync), options)
+            .RunAsync(evidence, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("U3:", result.Error!, StringComparison.Ordinal);
+        Assert.Equal("fail", evidence["U3"]);
+    }
+
+    [Fact]
+    public async Task U3_InServiceMode_PassesWhenTheDecoyIsGone()
+    {
+        var manifest = new CleanupManifest(_paths.Manifest);
+        var world = new LegWorld(_paths, manifest);
+        var options = AgentLegsTests.Options(_paths, world.OrganizationId) with { DecoyThumbprint = world.CaSha1 };
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        await new AgentLegs(_paths, manifest, new AgentLegsDeps(world, world, world, world, world.MintAsync), options)
+            .RunAsync(evidence, CancellationToken.None);
+
+        Assert.Equal("pass", evidence["U3"]);
+    }
+
     /// <summary>Runs U10 with the recording machine; the fake Root holds the TLS leaf and, optionally, the decoy.</summary>
     private Task<Result<ServiceSetupOutcome>> RunAsync(Dictionary<string, object?> evidence, bool rootIncludesDecoy)
     {
