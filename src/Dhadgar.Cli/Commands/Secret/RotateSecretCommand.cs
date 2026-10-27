@@ -19,9 +19,10 @@ public sealed class RotateSecretCommand
 
         if (!force)
         {
-            var confirm = AnsiConsole.Confirm(
+            var confirm = await AnsiConsole.ConfirmAsync(
                 $"[yellow]Are you sure you want to rotate secret '[cyan]{secretName}[/cyan]'?[/]\n" +
-                $"[dim]This will generate a new value and invalidate the old one.[/]");
+                $"[dim]This will generate a new value and invalidate the old one.[/]",
+                cancellationToken: ct);
 
             if (!confirm)
             {

@@ -89,9 +89,9 @@ The ShoppingCart application is currently in a functional wireframe state with t
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | [Astro](https://astro.build) | 5.1.1 | Static site generation, hybrid rendering |
-| [React](https://react.dev) | 18.3.1 | Interactive UI components |
+| [React](https://react.dev) | 19.3.1 | Interactive UI components |
 | [TypeScript](https://typescriptlang.org) | 5.7.2 | Type-safe JavaScript |
-| [Tailwind CSS](https://tailwindcss.com) | 3.4.16 | Utility-first CSS framework |
+| [Tailwind CSS](https://tailwindcss.com) | 4.3.3 | Utility-first CSS framework |
 
 ### Key Dependencies
 
@@ -99,7 +99,7 @@ The ShoppingCart application is currently in a functional wireframe state with t
 |---------|---------|
 | `@dhadgar/shared-auth` | Shared OAuth client and provider configuration |
 | `@astrojs/react` | React integration for Astro |
-| `@astrojs/tailwind` | Tailwind CSS integration for Astro |
+| `@tailwindcss/vite` | Tailwind CSS 4 Vite plugin |
 | `clsx` | Conditional CSS class composition |
 
 ### .NET Integration
@@ -210,7 +210,7 @@ Dhadgar.ShoppingCart/
 │   │   └── profile.astro          # User profile page
 │   │
 │   └── styles/                    # Global styles
-│       └── global.css             # Tailwind imports + custom CSS
+│       └── global.css             # Tailwind import, @theme tokens + custom CSS
 │
 ├── _swa_publish/                  # Build output directory
 │   └── wwwroot/                   # Static files for deployment
@@ -219,7 +219,6 @@ Dhadgar.ShoppingCart/
 ├── Dhadgar.ShoppingCart.csproj    # .NET build shim
 ├── env.d.ts                       # TypeScript environment types
 ├── package.json                   # npm dependencies and scripts
-├── tailwind.config.mjs            # Tailwind CSS configuration
 └── tsconfig.json                  # TypeScript configuration
 ```
 
@@ -726,7 +725,7 @@ interface LinkedAccount {
 
 ### Tailwind Configuration
 
-The project uses a customized Tailwind CSS configuration (`tailwind.config.mjs`) with:
+The project uses Tailwind CSS 4's CSS-first configuration: the theme lives in the `@theme` block of `src/styles/global.css` (there is no `tailwind.config.mjs` or PostCSS config), with:
 
 #### Custom Colors
 
@@ -898,7 +897,10 @@ For production, set these in Azure Static Web Apps configuration.
 
 ```javascript
 export default defineConfig({
-  integrations: [react(), tailwind()],
+  integrations: [react()],
+  vite: {
+    plugins: [tailwindcss()]  // Tailwind CSS 4 (@tailwindcss/vite)
+  },
   output: 'static',        // Static site generation
   build: {
     assets: '_assets'      // Asset directory name

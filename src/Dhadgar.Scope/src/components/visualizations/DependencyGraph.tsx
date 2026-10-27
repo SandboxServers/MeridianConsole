@@ -418,7 +418,7 @@ export function DependencyGraph() {
             onClick={() => setDrawerOpen(false)}
             onKeyDown={(e) => e.key === "Escape" && setDrawerOpen(false)}
           />
-          <div className="fixed bottom-0 left-0 right-0 z-50 hidden max-h-[70vh] overflow-auto rounded-t-2xl border-t border-white/10 bg-slate-950/90 p-4 shadow-2xl backdrop-blur md:block lg:hidden">
+          <div className="fixed bottom-0 left-0 right-0 z-50 hidden max-h-[70vh] overflow-auto rounded-t-2xl border-t border-white/10 bg-slate-950/90 p-4 shadow-2xl backdrop-blur-sm md:block lg:hidden">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-white/80">Details</span>
               <button
