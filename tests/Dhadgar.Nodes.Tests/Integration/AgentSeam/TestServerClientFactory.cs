@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.TestHost;
 
 namespace Dhadgar.Nodes.Tests.Integration.AgentSeam;
@@ -26,15 +27,34 @@ public sealed class StripApiPrefixHandler : DelegatingHandler
 /// the Gateway strips /api/v1 (pinned by Gateway RouteConfigurationTests), reproduced here
 /// when <paramref name="stripApiPrefix"/> is true.
 /// </summary>
-public sealed class TestServerClientFactory(TestServer server, bool stripApiPrefix = true) : IHttpClientFactory
+/// <param name="server">The TestServer to route requests to.</param>
+/// <param name="stripApiPrefix">When true, strips <c>/api/v1</c> the way the Gateway does.</param>
+/// <param name="certificate">
+/// Optional source of the client certificate the agent's <c>ControlPlaneMtls</c> client presents on the
+/// TLS connection. Read on every request, so it follows the store's current certificate.
+/// </param>
+/// <param name="wrapMtlsHandler">Optional handler layer placed around the <c>ControlPlaneMtls</c> handler.</param>
+public sealed class TestServerClientFactory(
+    TestServer server,
+    bool stripApiPrefix = true,
+    Func<X509Certificate2?>? certificate = null,
+    Func<HttpMessageHandler, HttpMessageHandler>? wrapMtlsHandler = null) : IHttpClientFactory
 {
     /// <inheritdoc />
     public HttpClient CreateClient(string name)
     {
         // Ownership passes to the HttpClient (disposeHandler: true) and then to the agent,
         // which disposes the client after each request.
+        var isMtls = string.Equals(name, "ControlPlaneMtls", StringComparison.Ordinal);
 #pragma warning disable CA2000
-        HttpMessageHandler handler = server.CreateHandler();
+        HttpMessageHandler handler = isMtls && certificate is not null
+            ? server.CreateHandler(ctx => ctx.Connection.ClientCertificate = certificate())
+            : server.CreateHandler();
+        if (isMtls && wrapMtlsHandler is not null)
+        {
+            handler = wrapMtlsHandler(handler);
+        }
+
         if (stripApiPrefix)
         {
             handler = new StripApiPrefixHandler { InnerHandler = handler };
