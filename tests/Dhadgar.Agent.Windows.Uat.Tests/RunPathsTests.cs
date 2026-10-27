@@ -48,4 +48,18 @@ public class RunPathsTests
 
         Assert.True(paths.Validate(Path.Combine("logs", "process.log")).IsFailure);
     }
+    [Fact]
+    public void StackImages_AreTheNodesAndGatewayReleaseBuilds()
+    {
+        var paths = new RunPaths(Repo, RunId);
+        var repo = Path.GetFullPath(Repo);
+
+        Assert.Equal(
+            [
+                Path.Combine(repo, "src", "Dhadgar.Nodes", "bin", "Release", "net10.0", "Dhadgar.Nodes.exe"),
+                Path.Combine(repo, "src", "Dhadgar.Gateway", "bin", "Release", "net10.0", "Dhadgar.Gateway.exe"),
+            ],
+            paths.StackImages);
+        Assert.All(paths.StackImages, image => Assert.True(paths.Validate(image).IsFailure));
+    }
 }

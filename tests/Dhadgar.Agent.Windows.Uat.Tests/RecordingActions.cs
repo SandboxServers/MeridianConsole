@@ -22,20 +22,29 @@ internal sealed class RecordingActions : IMachineActions
 
     public Result KillProcess(int pid, DateTime startTimeUtc) => Record($"KillProcess:{pid}");
 
-    /// <summary>Image paths by PID. A PID not listed reports the test host's own image, which the engine allows.</summary>
-    public Dictionary<int, string?> ProcessImages { get; } = [];
+    /// <summary>Image paths of running processes by PID. A PID not listed is not running.</summary>
+    public Dictionary<int, string> ProcessImages { get; } = [];
 
     /// <summary>PIDs whose image cannot be read: the probe fails.</summary>
     public HashSet<int> UnreadableProcesses { get; } = [];
 
-    public Result<string?> GetProcessImagePath(int pid, DateTime startTimeUtc)
+    /// <summary>PIDs whose probe throws an <see cref="IOException"/>.</summary>
+    public HashSet<int> ThrowingProcesses { get; } = [];
+
+    public Result<ProcessImage> GetProcessImage(int pid, DateTime startTimeUtc)
     {
-        if (UnreadableProcesses.Contains(pid))
+        if (ThrowingProcesses.Contains(pid))
         {
-            return Result<string?>.Failure($"fake: image of {pid} unreadable");
+            throw new IOException($"fake: probe of {pid} threw");
         }
 
-        return Result<string?>.Success(ProcessImages.TryGetValue(pid, out var image) ? image : Environment.ProcessPath);
+        if (UnreadableProcesses.Contains(pid))
+        {
+            return Result<ProcessImage>.Failure($"fake: image of {pid} unreadable");
+        }
+
+        return Result<ProcessImage>.Success(
+            ProcessImages.TryGetValue(pid, out var image) ? ProcessImage.Running(image) : ProcessImage.NotRunning);
     }
 
     public Result StopService(string name) => Record($"StopService:{name}");

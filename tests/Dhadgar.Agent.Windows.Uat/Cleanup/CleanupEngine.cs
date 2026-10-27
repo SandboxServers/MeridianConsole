@@ -14,7 +14,7 @@ internal sealed record CleanupReport(int Undone, IReadOnlyList<CleanupFailure> F
 /// Undoes a manifest. First a quiesce pass stops every service and kills every process (newest first),
 /// then every entry is undone in reverse order. One failure does not stop the rest. Entries with
 /// <c>existedBefore: true</c> are never deleted. Running it twice gives the same calls (idempotent).
-/// The manifest is untrusted input: <see cref="Reject"/> refuses any named item the driver does not own.
+/// The manifest is untrusted input: <see cref="Reject"/> refuses any item the driver does not own (D-S237).
 /// </summary>
 internal sealed class CleanupEngine
 {
@@ -23,7 +23,6 @@ internal sealed class CleanupEngine
     private const string KeyStorageProvider = "Microsoft Software Key Storage Provider";
     private const string PlatformCryptoProvider = "Microsoft Platform Crypto Provider";
     private const string CngKeyPrefix = "meridian-uat-";
-    private const string DotnetHostRelativePath = @"dotnet\dotnet.exe";
     private static readonly Regex ContainerNamePattern = new(@"^meridian-uat-[a-z0-9][a-z0-9_.-]*\z", RegexOptions.CultureInvariant);
     private static readonly Regex CngKeyNamePattern = new(@"^[A-Za-z0-9_.{}-]{1,128}\z", RegexOptions.CultureInvariant);
 
@@ -44,17 +43,22 @@ internal sealed class CleanupEngine
         var undone = 0;
 
         // Quiesce: a running service or agent process would hold its key, store or folder.
+        // Reject runs inside the guard, so a probe that throws cannot abort cleanup; the undo pass records it.
         foreach (var entry in entries.Reverse())
         {
-            switch (entry)
+            if (entry is not (ServiceEntry or ProcessEntry))
             {
-                case ServiceEntry service when Reject(entry) is null:
-                    QuiesceIgnoringResult(() => _actions.StopService(service.Name));
-                    break;
-                case ProcessEntry process when Reject(entry) is null:
-                    QuiesceIgnoringResult(() => _actions.KillProcess(process.Pid, process.StartTimeUtc));
-                    break;
+                continue;
             }
+
+            QuiesceIgnoringResult(() => Reject(entry) is not null
+                ? Result.Success()
+                : entry switch
+                {
+                    ServiceEntry service => _actions.StopService(service.Name),
+                    ProcessEntry process => _actions.KillProcess(process.Pid, process.StartTimeUtc),
+                    _ => Result.Success(),
+                });
         }
 
         foreach (var entry in entries.Reverse())
@@ -122,33 +126,31 @@ internal sealed class CleanupEngine
     }
 
     /// <summary>
-    /// A process is killable only if its image is under the run folder or is the dotnet host. A PID that is gone,
-    /// or reused by a process with another start time, is allowed: the kill is a no-op. An image that cannot be
-    /// read is refused (fail closed), so a SYSTEM process cannot be killed through a forged manifest line.
+    /// A process may be killed only if it is not the driver itself and its image is under the run folder or is one
+    /// of <see cref="RunPaths.StackImages"/>. A process that no longer runs (gone, or its PID reused) is allowed:
+    /// the kill re-checks the start time and is a no-op. An image that cannot be read is refused (fail closed).
     /// </summary>
     private bool ProcessImageAllowed(ProcessEntry process)
     {
-        var probe = _actions.GetProcessImagePath(process.Pid, process.StartTimeUtc);
+        if (process.Pid == Environment.ProcessId)
+        {
+            return false;
+        }
+
+        var probe = _actions.GetProcessImage(process.Pid, process.StartTimeUtc);
         if (probe.IsFailure)
         {
             return false;
         }
 
         var image = probe.Value;
-        if (image is null)
+        if (!image.IsRunning)
         {
             return true;
         }
 
-        return _runPaths.Validate(image).IsSuccess || IsDotnetHost(image);
-    }
-
-    private static bool IsDotnetHost(string image)
-    {
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var installed = Path.Combine(programFiles, DotnetHostRelativePath);
-        return string.Equals(image, installed, StringComparison.OrdinalIgnoreCase)
-            || (Environment.ProcessPath is { } self && string.Equals(image, self, StringComparison.OrdinalIgnoreCase));
+        return _runPaths.Validate(image.Path).IsSuccess
+            || _runPaths.StackImages.Any(allowed => string.Equals(allowed, image.Path, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsAgentKey(string path) =>

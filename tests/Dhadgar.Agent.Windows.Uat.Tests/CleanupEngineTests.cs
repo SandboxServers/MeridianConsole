@@ -215,7 +215,7 @@ public class CleanupEngineTests
         var actions = new RecordingActions();
         CleanupEntry[] entries =
         [
-            new CngKeyEntry("key", "Some Other Provider", true),
+            new CngKeyEntry("meridian-uat-key", "Some Other Provider", true),
             new CngKeyEntry("..\\x", "Microsoft Software Key Storage Provider", true),
             new CngKeyEntry("TSSecKeySet1", "Microsoft Software Key Storage Provider", true),
         ];
@@ -285,6 +285,75 @@ public class CleanupEngineTests
             .UndoAsync([new ProcessEntry(4, DateTime.UtcNow, "agent")], CancellationToken.None);
 
         Assert.Contains("KillProcess:4", actions.Calls);
+        Assert.Empty(report.Failed);
+    }
+    private static readonly RegistryValueEntry TokenValue = new(@"SOFTWARE\Meridian Console\Agent", "EnrollmentToken", false);
+
+    [Fact]
+    public async Task UndoAsync_ProcessNotRunning_IsAllowedAndOthersUndone()
+    {
+        var actions = new RecordingActions();
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([TokenValue, new ProcessEntry(8, DateTime.UtcNow, "agent")], CancellationToken.None);
+
+        Assert.Contains("KillProcess:8", actions.Calls);
+        Assert.Contains(@"DeleteRegistryValue:SOFTWARE\Meridian Console\Agent\EnrollmentToken", actions.Calls);
+        Assert.Empty(report.Failed);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ProcessProbeThrows_DoesNotAbortCleanup()
+    {
+        var actions = new RecordingActions();
+        actions.ThrowingProcesses.Add(9);
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([TokenValue, new ProcessEntry(9, DateTime.UtcNow, "agent")], CancellationToken.None);
+
+        Assert.Equal([@"DeleteRegistryValue:SOFTWARE\Meridian Console\Agent\EnrollmentToken"], actions.Calls);
+        var failure = Assert.Single(report.Failed);
+        Assert.Equal("process", failure.Kind);
+    }
+
+    [Fact]
+    public async Task UndoAsync_DriverOwnProcess_IsRefused()
+    {
+        var actions = new RecordingActions();
+        actions.ProcessImages[Environment.ProcessId] = Path.Combine(_paths.RunDir, "agent", "x.exe");
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new ProcessEntry(Environment.ProcessId, DateTime.UtcNow, "self")], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Single(report.Failed);
+    }
+
+    [Fact]
+    public async Task UndoAsync_DotnetHostImage_IsRefused()
+    {
+        var actions = new RecordingActions();
+        actions.ProcessImages[6] = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new ProcessEntry(6, DateTime.UtcNow, "dotnet")], CancellationToken.None);
+
+        Assert.Empty(actions.Calls);
+        Assert.Single(report.Failed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task UndoAsync_StackImage_IsKilled(int index)
+    {
+        var actions = new RecordingActions();
+        actions.ProcessImages[7] = _paths.StackImages[index];
+
+        var report = await new CleanupEngine(actions, _paths)
+            .UndoAsync([new ProcessEntry(7, DateTime.UtcNow, "stack")], CancellationToken.None);
+
+        Assert.Contains("KillProcess:7", actions.Calls);
         Assert.Empty(report.Failed);
     }
 }

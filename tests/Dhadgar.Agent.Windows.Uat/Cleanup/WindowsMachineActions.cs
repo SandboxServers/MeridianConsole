@@ -89,29 +89,32 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     }
 
     /// <inheritdoc />
-    public Result<string?> GetProcessImagePath(int pid, DateTime startTimeUtc)
+    public Result<ProcessImage> GetProcessImage(int pid, DateTime startTimeUtc)
     {
         try
         {
             using var process = Process.GetProcessById(pid);
             if (Math.Abs((process.StartTime.ToUniversalTime() - startTimeUtc).TotalSeconds) > 1)
             {
-                return Result<string?>.Success(null); // PID reused by another process.
+                return Result<ProcessImage>.Success(ProcessImage.NotRunning); // PID reused by another process.
             }
 
-            return Result<string?>.Success(process.MainModule?.FileName);
+            var image = process.MainModule?.FileName;
+            return string.IsNullOrEmpty(image)
+                ? Result<ProcessImage>.Failure($"could not read the image of process {pid}")
+                : Result<ProcessImage>.Success(ProcessImage.Running(image));
         }
         catch (ArgumentException)
         {
-            return Result<string?>.Success(null); // No such process.
+            return Result<ProcessImage>.Success(ProcessImage.NotRunning); // No such process.
         }
         catch (InvalidOperationException)
         {
-            return Result<string?>.Success(null); // Exited between lookup and read.
+            return Result<ProcessImage>.Success(ProcessImage.NotRunning); // Exited between lookup and read.
         }
         catch (Win32Exception ex)
         {
-            return Result<string?>.Failure($"could not read the image of process {pid}: {ex.Message}");
+            return Result<ProcessImage>.Failure($"could not read the image of process {pid}: {ex.Message}");
         }
     }
 

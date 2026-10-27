@@ -11,11 +11,26 @@ internal sealed class RunPaths
     /// <summary>Creates the paths for one run.</summary>
     public RunPaths(string repoRoot, string runId)
     {
-        RunDir = Path.GetFullPath(Path.Combine(repoRoot, ".uat", "agent-windows", runId));
+        RepoRoot = Path.GetFullPath(repoRoot);
+        RunDir = Path.GetFullPath(Path.Combine(RepoRoot, ".uat", "agent-windows", runId));
+        StackImages =
+        [
+            Path.Combine(RepoRoot, "src", "Dhadgar.Nodes", "bin", "Release", "net10.0", "Dhadgar.Nodes.exe"),
+            Path.Combine(RepoRoot, "src", "Dhadgar.Gateway", "bin", "Release", "net10.0", "Dhadgar.Gateway.exe"),
+        ];
     }
+
+    /// <summary>The repository root (full path).</summary>
+    public string RepoRoot { get; }
 
     /// <summary>The run folder.</summary>
     public string RunDir { get; }
+
+    /// <summary>
+    /// The only process images outside <see cref="RunDir"/> that cleanup may kill: the Nodes and Gateway builds the
+    /// stack starts (D-S237). A packet that starts another child outside the run folder adds it here, with a test.
+    /// </summary>
+    public IReadOnlyList<string> StackImages { get; }
 
     /// <summary>Certificate authority material (Nodes CA storage).</summary>
     public string Ca => Path.Combine(RunDir, "ca");

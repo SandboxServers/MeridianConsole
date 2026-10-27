@@ -21,6 +21,19 @@ are added by later packets.
 - The UAT needs RabbitMQ on 127.0.0.1:5672 and a Docker engine for the local stack. Preflight
   reports both.
 
+## Threat model (D-S237)
+
+The driver trusts the account that runs it. Anything running as that user can change the repo, the build
+or the driver that the elevated script builds and runs, so the driver does not try to defend against it.
+
+Its guards stop driver bugs, a stale or foreign manifest, and PID reuse from touching anything the run
+did not create. Cleanup replays only these items: the named service, the agent registry key and its
+`EnrollmentToken` value, agent and UAT certificates in `LocalMachine` `Root`, `My` and
+`MeridianConsoleAgent`, the `MeridianConsoleAgent` store, the agent event source, `meridian-uat-*`
+containers and CNG keys, files and folders under the run folder (plus the machine agent folder), and
+processes whose image is under the run folder or is the Nodes or Gateway build the stack starts.
+
+A process cleanup cannot read is left running and reported, never killed.
 ## Parameters
 
 | Call | What it does |
