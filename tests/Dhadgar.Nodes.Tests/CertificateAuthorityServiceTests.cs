@@ -1,3 +1,6 @@
+using System.Formats.Asn1;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Nodes.Data;
@@ -71,7 +74,10 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         return provider;
     }
 
-    private CertificateAuthorityService CreateService(ICaStorageProvider? storageProvider = null, ServiceProvider? dbServices = null)
+    private CertificateAuthorityService CreateService(
+        ICaStorageProvider? storageProvider = null,
+        ServiceProvider? dbServices = null,
+        IServiceScopeFactory? scopeFactory = null)
     {
         storageProvider ??= new LocalFileCaStorageProvider(
             _optionsWrapper,
@@ -82,8 +88,9 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
             _optionsWrapper,
             _timeProvider,
             NullLogger<CertificateAuthorityService>.Instance,
-            (dbServices ?? CreateDbServices()).GetRequiredService<IServiceScopeFactory>());
+            scopeFactory ?? (dbServices ?? CreateDbServices()).GetRequiredService<IServiceScopeFactory>());
     }
+
     [Fact]
     public async Task InitializeAsync_CreatesNewCa_WhenNoExistingCa()
     {
@@ -545,7 +552,8 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task ValidateCertificateAsync_ConcurrentCallsOnOneInstance_AllTrusted()
     {
         var dbServices = CreateDbServices();
-        using var service = CreateService(dbServices: dbServices);
+        var counting = new CountingScopeFactory(dbServices.GetRequiredService<IServiceScopeFactory>());
+        using var service = CreateService(scopeFactory: counting);
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
         var result = await service.IssueCertificateAsync(nodeId);
@@ -569,10 +577,13 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         }
 
         var pem = result.CertificatePem!;
+        var before = counting.Count;
         var results = await Task.WhenAll(Enumerable.Range(0, 64)
             .Select(_ => Task.Run(() => service.ValidateCertificateAsync(pem))));
 
         Assert.All(results, r => Assert.Equal(CertificateTrustStatus.Trusted, r));
+        // Each validation opens its own scope: one per call, none shared or reused.
+        Assert.Equal(before + 64, counting.Count);
     }
 
     [Fact]
@@ -601,5 +612,132 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         var trust = await service.ValidateCertificateAsync(CreateForeignPem());
 
         Assert.Equal(CertificateTrustStatus.Untrusted, trust);
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ForeignCertificateWithAiaUrl_DoesNotFetchIssuer()
+    {
+        // The client controls the certificate, so its AIA URL must never be fetched by the chain engine.
+        var port = GetFreeTcpPort();
+        var prefix = $"http://127.0.0.1:{port}/";
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(prefix);
+        listener.Start();
+        var requestCount = 0;
+        var accepting = Task.Run(async () =>
+        {
+            while (true)
+            {
+                HttpListenerContext context;
+                try
+                {
+                    context = await listener.GetContextAsync();
+                }
+                catch (HttpListenerException) when (!listener.IsListening)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
+
+                Interlocked.Increment(ref requestCount);
+                context.Response.StatusCode = 404;
+                context.Response.Close();
+            }
+        });
+
+        try
+        {
+            using var service = CreateService();
+            await service.InitializeAsync();
+
+            var trust = await service.ValidateCertificateAsync(CreateForeignPemWithAiaUrl(prefix + "ca.cer"));
+
+            Assert.Equal(CertificateTrustStatus.Untrusted, trust);
+        }
+        finally
+        {
+            listener.Stop();
+            await accepting;
+        }
+
+        Assert.Equal(0, Volatile.Read(ref requestCount));
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        try
+        {
+            return ((IPEndPoint)probe.LocalEndpoint).Port;
+        }
+        finally
+        {
+            probe.Stop();
+        }
+    }
+
+    private static string CreateForeignPemWithAiaUrl(string caIssuersUrl)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        using var caKey = RSA.Create(2048);
+        var caRequest = new CertificateRequest("CN=Foreign Test CA", caKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        caRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(
+            certificateAuthority: true,
+            hasPathLengthConstraint: false,
+            pathLengthConstraint: 0,
+            critical: true));
+        caRequest.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
+            critical: true));
+        using var caCert = caRequest.CreateSelfSigned(now.AddMinutes(-5), now.AddYears(1));
+
+        using var leafKey = RSA.Create(2048);
+        var leafRequest = new CertificateRequest("CN=Foreign Agent", leafKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        leafRequest.CertificateExtensions.Add(new X509Extension(
+            "1.3.6.1.5.5.7.1.1", // id-pe-authorityInfoAccess
+            BuildCaIssuersAccessExtension(caIssuersUrl),
+            critical: false));
+
+        var serial = new byte[16];
+        RandomNumberGenerator.Fill(serial);
+        using var leaf = leafRequest.Create(caCert, now.AddMinutes(-5), now.AddDays(1), serial);
+        return leaf.ExportCertificatePem();
+    }
+
+    private static byte[] BuildCaIssuersAccessExtension(string url)
+    {
+        // AuthorityInfoAccessSyntax ::= SEQUENCE OF AccessDescription
+        // AccessDescription ::= SEQUENCE { accessMethod OID, accessLocation GeneralName (uniformResourceIdentifier [6]) }
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using (writer.PushSequence())
+        using (writer.PushSequence())
+        {
+            writer.WriteObjectIdentifier("1.3.6.1.5.5.7.48.2"); // id-ad-caIssuers
+            writer.WriteCharacterString(
+                UniversalTagNumber.IA5String,
+                url,
+                new Asn1Tag(TagClass.ContextSpecific, 6));
+        }
+
+        return writer.Encode();
+    }
+
+    /// <summary>Counts how many scopes the service opens, to prove one scope per lookup.</summary>
+    private sealed class CountingScopeFactory(IServiceScopeFactory inner) : IServiceScopeFactory
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public IServiceScope CreateScope()
+        {
+            Interlocked.Increment(ref _count);
+            return inner.CreateScope();
+        }
     }
 }

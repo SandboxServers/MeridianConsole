@@ -504,6 +504,24 @@ public class CertificateValidationServiceTests
     }
 
     [Fact]
+    public async Task ValidateClientCertificateAsync_DefaultTrustStatus_FailsClosedAsInvalidIssuer()
+    {
+        // Arrange: an un-configured or zeroed trust status must never be treated as Trusted.
+        using var certificate = CreateCertificateWithClientAuthEkuButNoSpiffe();
+        var caService = Substitute.For<ICertificateAuthorityService>();
+        caService.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(default(CertificateTrustStatus));
+        var service = CreateService(caService: caService);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_issuer", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task ValidateClientCertificateAsync_MissingClientAuthEku_ReturnsFailure()
     {
         // Arrange

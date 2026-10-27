@@ -199,7 +199,7 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
                 "Certificate validation is temporarily unavailable",
                 notAfter: certificate.NotAfter);
         }
-
+        // Only an explicit Trusted proceeds; Untrusted and any unknown value fail closed here.
         if (trust != CertificateTrustStatus.Trusted)
         {
             _logger.LogWarning(

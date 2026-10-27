@@ -67,12 +67,12 @@ public interface ICertificateAuthorityService
 /// <summary>Outcome of <see cref="ICertificateAuthorityService.ValidateCertificateAsync"/>.</summary>
 public enum CertificateTrustStatus
 {
+    /// <summary>Unreadable, not issued by this CA, or revoked. The zero value, so a default is never trusted.</summary>
+    Untrusted = 0,
     /// <summary>Issued by this CA and not revoked.</summary>
-    Trusted,
-    /// <summary>Unreadable, not issued by this CA, or revoked.</summary>
-    Untrusted,
+    Trusted = 1,
     /// <summary>Trust could not be determined (CA not loaded, or the revocation lookup failed). Fail closed.</summary>
-    Unavailable
+    Unavailable = 2
 }
 
 /// <summary>

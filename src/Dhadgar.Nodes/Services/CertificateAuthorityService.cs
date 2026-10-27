@@ -18,7 +18,6 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
     private readonly ILogger<CertificateAuthorityService> _logger;
     // Singleton: never hold a NodesDbContext. Each lookup gets its own scope (P17f).
     private readonly IServiceScopeFactory _scopeFactory;
-
     // Cached CA certificate for performance
     private X509Certificate2? _caCertificate;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -343,7 +342,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
         using (certificate)
         {
-            // Chain first: pure CPU, so certificates from a foreign CA never reach the database.
+            // Chain first: no database round trip, so certificates from a foreign CA never reach the database.
             if (!IsIssuedByOurCa(certificate))
             {
                 return CertificateTrustStatus.Untrusted;
@@ -376,6 +375,9 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         {
             using var chain = new X509Chain();
             chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            // The CA is supplied in ExtraStore, so no AIA or CDP download is ever needed. Block them so the
+            // client-supplied certificate cannot make this process send outbound requests.
+            chain.ChainPolicy.DisableCertificateDownloads = true;
             // Allow unknown CA (since our CA is self-signed and not in system trust store)
             // Ignore time validation (we handle expiration via database records)
             chain.ChainPolicy.VerificationFlags =
@@ -422,6 +424,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             return (false, null);
         }
     }
+
     private async Task EnsureInitializedAsync(CancellationToken ct)
     {
         if (_caCertificate is null)
