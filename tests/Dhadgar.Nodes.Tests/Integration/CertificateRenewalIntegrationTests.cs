@@ -335,10 +335,12 @@ public sealed class CertificateRenewalIntegrationTests
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
         var spki = Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo());
 
+        var firstRenewedAt = graceFactory.TimeProvider.GetUtcNow().UtcDateTime;
         var first = await client.PostAsJsonAsync($"/agents/{node.Id}/certificates/renew", new RenewCertificateRequest(spki));
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         var firstResult = await first.Content.ReadFromJsonAsync<RenewCertificateResponse>();
         Assert.NotNull(firstResult);
+        graceFactory.TimeProvider.Advance(TimeSpan.FromMinutes(10));
 
         // Act
         var second = await client.PostAsJsonAsync($"/agents/{node.Id}/certificates/renew", new RenewCertificateRequest(spki));
@@ -349,8 +351,6 @@ public sealed class CertificateRenewalIntegrationTests
         var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
         var superseded = await db.AgentCertificates.FindAsync(originalCert.Id);
         Assert.NotNull(superseded);
-        var graceBefore = superseded.GraceUntil;
-        Assert.NotNull(graceBefore);
 
         // The first renewal's row was superseded by the second renewal: hard revoked, no grace.
         var firstNew = await db.AgentCertificates.SingleAsync(c => c.Thumbprint == firstResult.CertificateThumbprint);
@@ -358,8 +358,8 @@ public sealed class CertificateRenewalIntegrationTests
         Assert.True(firstNew.IsRevoked);
         Assert.Null(firstNew.GraceUntil);
 
-        // The old row's grace is not extended by the second renewal.
-        Assert.Equal(graceBefore, superseded.GraceUntil);
+        // The old row's grace is not extended by the second renewal: it still ends 60 minutes after the first renewal.
+        Assert.Equal(firstRenewedAt.AddMinutes(AgentCertificateRenewalPolicy.DefaultGraceMinutes), superseded.GraceUntil);
     }
 
     [Fact]
