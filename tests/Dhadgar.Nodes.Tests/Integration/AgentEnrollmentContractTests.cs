@@ -47,7 +47,8 @@ public sealed class AgentEnrollmentContractTests : IDisposable
         var orgId = Guid.NewGuid();
         var token = await CreateEnrollmentTokenAsync(factory, orgId);
         var store = new InMemoryCertificateStore();
-        var agent = CreateAgent(factory, store);
+        using var certificateProvider = new ClientCertificateProvider(store);
+        var agent = CreateAgent(factory, store, certificateProvider);
 
         var result = await agent.EnrollAsync(token);
 
@@ -66,21 +67,21 @@ public sealed class AgentEnrollmentContractTests : IDisposable
         }
 
         // Agent holds a client cert bound to the private key it generated locally...
-        Assert.NotNull(store.ClientCertificate);
-        Assert.NotNull(store.PrivateKey);
+        Assert.NotNull(store.StoredClientCertificate);
+        Assert.NotNull(store.GetPrivateKey());
         using var agentKey = ECDsa.Create();
-        agentKey.ImportPkcs8PrivateKey(store.PrivateKey, out _);
-        using var certKey = store.ClientCertificate.GetECDsaPublicKey();
+        agentKey.ImportPkcs8PrivateKey(store.GetPrivateKey(), out _);
+        using var certKey = store.StoredClientCertificate.GetECDsaPublicKey();
         Assert.Equal(agentKey.ExportSubjectPublicKeyInfo(), certKey!.ExportSubjectPublicKeyInfo());
 
         // ...that chains to the CA it was given.
-        Assert.NotNull(store.CaCertificate);
+        Assert.NotNull(store.StoredCaCertificate);
         using var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        chain.ChainPolicy.CustomTrustStore.Add(store.CaCertificate);
+        chain.ChainPolicy.CustomTrustStore.Add(store.StoredCaCertificate);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.VerificationTime = store.ClientCertificate.NotBefore.AddMinutes(1);
-        Assert.True(chain.Build(store.ClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
+        chain.ChainPolicy.VerificationTime = store.StoredClientCertificate.NotBefore.AddMinutes(1);
+        Assert.True(chain.Build(store.StoredClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
     }
 
     [Fact]
@@ -89,8 +90,12 @@ public sealed class AgentEnrollmentContractTests : IDisposable
         using var factory = CreateFactoryWithRealCa();
         var token = await CreateEnrollmentTokenAsync(factory, Guid.NewGuid());
 
-        var first = await CreateAgent(factory, new InMemoryCertificateStore()).EnrollAsync(token);
-        var second = await CreateAgent(factory, new InMemoryCertificateStore()).EnrollAsync(token);
+        var firstStore = new InMemoryCertificateStore();
+        using var firstProvider = new ClientCertificateProvider(firstStore);
+        var secondStore = new InMemoryCertificateStore();
+        using var secondProvider = new ClientCertificateProvider(secondStore);
+        var first = await CreateAgent(factory, firstStore, firstProvider).EnrollAsync(token);
+        var second = await CreateAgent(factory, secondStore, secondProvider).EnrollAsync(token);
 
         Assert.True(first.IsSuccess, first.Error);
         Assert.False(second.IsSuccess);
@@ -108,7 +113,7 @@ public sealed class AgentEnrollmentContractTests : IDisposable
         var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
 
         Assert.NotEqual(Guid.Empty, enrolled.NodeId);
-        Assert.NotNull(store.ClientCertificate);
+        Assert.NotNull(store.StoredClientCertificate);
     }
     private Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> CreateFactoryWithRealCa()
     {
@@ -117,11 +122,13 @@ public sealed class AgentEnrollmentContractTests : IDisposable
 
     private static AgentEnrollmentService CreateAgent(
         Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory,
-        ICertificateStore store)
+        ICertificateStore store,
+        ClientCertificateProvider certificateProvider)
     {
         return AgentSeamHarness.CreateEnrollmentService(
             new TestServerClientFactory(factory.Server),
             store,
-            factory.Services.GetRequiredService<TimeProvider>());
+            factory.Services.GetRequiredService<TimeProvider>(),
+            certificateProvider);
     }
 }

@@ -36,12 +36,8 @@ public sealed class ServiceLifetimeTests : IDisposable
     [Fact]
     public void NodesHost_WithScopeValidation_HasNoSingletonCapturingScopedServices()
     {
-        using var factory = AgentSeamHarness.CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true)
-            .WithWebHostBuilder(b => b.UseDefaultServiceProvider(o =>
-            {
-                o.ValidateScopes = true;
-                o.ValidateOnBuild = true;
-            }));
+        using var factory = AgentSeamHarness.CreateFactoryWithRealCa(
+            _baseFactory, _caDirectory, enableMtls: true, validateScopes: true);
 
         // Building the host runs ValidateOnBuild; resolving from the root provider runs ValidateScopes.
         var ca = factory.Services.GetRequiredService<ICertificateAuthorityService>();

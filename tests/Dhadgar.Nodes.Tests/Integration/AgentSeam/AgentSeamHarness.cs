@@ -7,6 +7,7 @@ using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
@@ -34,18 +35,29 @@ public static class AgentSeamHarness
     /// <param name="enableMtls">When true, enables mTLS middleware options for the host.</param>
     /// <param name="configureMtls">Optional extra mTLS option changes, applied after <c>Enabled</c> is set.</param>
     /// <param name="settings">Optional configuration overrides, such as <c>Mtls:RenewalGraceMinutes</c>.</param>
+    /// <param name="validateScopes">When true, the host's default service provider validates scopes and build-time registrations.</param>
     public static WebApplicationFactory<Program> CreateFactoryWithRealCa(
         NodesWebApplicationFactory baseFactory,
         string caDirectory,
         bool enableMtls,
         Action<MtlsOptions>? configureMtls = null,
-        IReadOnlyDictionary<string, string?>? settings = null)
+        IReadOnlyDictionary<string, string?>? settings = null,
+        bool validateScopes = false)
     {
         return baseFactory.WithWebHostBuilder(builder =>
         {
             if (settings is not null)
             {
                 builder.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(settings));
+            }
+
+            if (validateScopes)
+            {
+                builder.UseDefaultServiceProvider(o =>
+                {
+                    o.ValidateScopes = true;
+                    o.ValidateOnBuild = true;
+                });
             }
 
             builder.ConfigureTestServices(services =>
@@ -94,12 +106,17 @@ public static class AgentSeamHarness
     /// The Nodes host's clock. The agent checks the issued certificate's validity on this clock, and the Nodes CA
     /// stamps NotBefore from the same one, so a seam test must pass the host's TimeProvider, never the system clock (D-S234).
     /// </param>
+    /// <param name="certificateProvider">
+    /// The agent's certificate provider over <paramref name="store"/>. The caller owns it and disposes it.
+    /// </param>
     public static AgentEnrollmentService CreateEnrollmentService(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ClientCertificateProvider certificateProvider)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(certificateProvider);
 
         return new AgentEnrollmentService(
             store,
@@ -107,7 +124,7 @@ public static class AgentSeamHarness
             Options.Create(new AgentOptions()),
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
-            new ClientCertificateProvider(store),
+            certificateProvider,
             new AgentIdentityProvider(),
             enrollmentTokenCleanup: null,
             timeProvider: timeProvider);
@@ -122,10 +139,12 @@ public static class AgentSeamHarness
     {
         var token = await CreateEnrollmentTokenAsync(factory, orgId);
         var store = new InMemoryCertificateStore();
+        using var certificateProvider = new ClientCertificateProvider(store);
         var agent = CreateEnrollmentService(
             new TestServerClientFactory(factory.Server),
             store,
-            factory.Services.GetRequiredService<TimeProvider>());
+            factory.Services.GetRequiredService<TimeProvider>(),
+            certificateProvider);
 
         var result = await agent.EnrollAsync(token);
         Xunit.Assert.True(result.IsSuccess, result.Error);

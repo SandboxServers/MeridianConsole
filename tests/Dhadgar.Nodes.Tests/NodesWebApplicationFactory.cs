@@ -276,7 +276,14 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 /// </summary>
 public sealed class SaveChangesFaultInjector : SaveChangesInterceptor
 {
-    public volatile bool ThrowConcurrency;
+    private volatile bool _throwConcurrency;
+
+    /// <summary>When true, the next SaveChanges call throws <see cref="DbUpdateConcurrencyException"/>.</summary>
+    public bool ThrowConcurrency
+    {
+        get => _throwConcurrency;
+        set => _throwConcurrency = value;
+    }
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
