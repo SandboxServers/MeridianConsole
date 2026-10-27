@@ -20,15 +20,74 @@ public class ForwardedClientCertificateMiddlewareTests
         // Arrange
         using var source = TestCertificateFactory.CreateSelfSignedCertificate();
         var context = CreateContext("10.42.1.5", Convert.ToBase64String(source.RawData));
-        var sut = CreateSut(enabled: true);
+        X509Certificate2? seenByNext = null;
+        var sut = CreateSut(enabled: true, next: _ =>
+        {
+            seenByNext = context.Connection.ClientCertificate;
+            return Task.CompletedTask;
+        });
 
         // Act
         await sut.InvokeAsync(context);
 
         // Assert
-        using var accepted = context.Connection.ClientCertificate;
-        Assert.NotNull(accepted);
-        Assert.Equal(source.Thumbprint, accepted.Thumbprint);
+        Assert.NotNull(seenByNext);
+        Assert.Equal(source.Thumbprint, seenByNext.Thumbprint);
+        Assert.Null(context.Connection.ClientCertificate);
+        Assert.False(context.Request.Headers.ContainsKey(HeaderName));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_SameConnectionNextRequest_SeesOnlyItsOwnForwardedCertificate()
+    {
+        // Arrange: two requests over one connection (keep-alive or HTTP/2), each forwarding a different agent certificate.
+        using var first = TestCertificateFactory.CreateSelfSignedCertificate();
+        using var second = TestCertificateFactory.CreateSelfSignedCertificate();
+        var context = CreateContext("10.42.1.5", Convert.ToBase64String(first.RawData));
+        X509Certificate2? seenByFirst = null;
+        X509Certificate2? seenBySecond = null;
+        var callCount = 0;
+        var sut = CreateSut(enabled: true, next: _ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                seenByFirst = context.Connection.ClientCertificate;
+            }
+            else
+            {
+                seenBySecond = context.Connection.ClientCertificate;
+            }
+
+            return Task.CompletedTask;
+        });
+
+        // Act
+        await sut.InvokeAsync(context);
+        context.Request.Headers[HeaderName] = Convert.ToBase64String(second.RawData);
+        await sut.InvokeAsync(context);
+
+        // Assert
+        Assert.NotNull(seenByFirst);
+        Assert.Equal(first.Thumbprint, seenByFirst.Thumbprint);
+        Assert.NotNull(seenBySecond);
+        Assert.Equal(second.Thumbprint, seenBySecond.Thumbprint);
+        Assert.Null(context.Connection.ClientCertificate);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ZeroPrefixTrustedProxy_IsNotTrusted()
+    {
+        // Arrange: startup validation is bypassed here on purpose; the middleware must still refuse a /0 entry.
+        using var source = TestCertificateFactory.CreateSelfSignedCertificate();
+        var context = CreateContext("10.42.1.5", Convert.ToBase64String(source.RawData));
+        var sut = CreateSut(enabled: true, trustedProxies: ["0.0.0.0/0", "::/0"]);
+
+        // Act
+        await sut.InvokeAsync(context);
+
+        // Assert
+        Assert.Null(context.Connection.ClientCertificate);
         Assert.False(context.Request.Headers.ContainsKey(HeaderName));
     }
 
@@ -150,15 +209,19 @@ public class ForwardedClientCertificateMiddlewareTests
         // Arrange
         using var source = TestCertificateFactory.CreateSelfSignedCertificate();
         var context = CreateContext("::ffff:10.42.1.5", Convert.ToBase64String(source.RawData));
-        var sut = CreateSut(enabled: true);
+        X509Certificate2? seenByNext = null;
+        var sut = CreateSut(enabled: true, next: _ =>
+        {
+            seenByNext = context.Connection.ClientCertificate;
+            return Task.CompletedTask;
+        });
 
         // Act
         await sut.InvokeAsync(context);
 
         // Assert
-        using var accepted = context.Connection.ClientCertificate;
-        Assert.NotNull(accepted);
-        Assert.Equal(source.Thumbprint, accepted.Thumbprint);
+        Assert.NotNull(seenByNext);
+        Assert.Equal(source.Thumbprint, seenByNext.Thumbprint);
     }
 
     private static DefaultHttpContext CreateContext(string remoteAddress, string? headerValue)
@@ -176,14 +239,15 @@ public class ForwardedClientCertificateMiddlewareTests
     private static ForwardedClientCertificateMiddleware CreateSut(
         bool enabled,
         int maxHeaderLength = 16384,
-        RequestDelegate? next = null)
+        RequestDelegate? next = null,
+        List<string>? trustedProxies = null)
     {
         var options = new MtlsOptions
         {
             ForwardedCertificate = new ForwardedCertificateOptions
             {
                 Enabled = enabled,
-                TrustedProxies = [TrustedCidr],
+                TrustedProxies = trustedProxies ?? [TrustedCidr],
                 MaxHeaderLength = maxHeaderLength
             }
         };

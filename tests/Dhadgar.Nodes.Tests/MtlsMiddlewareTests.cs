@@ -306,6 +306,11 @@ public class MtlsMiddlewareTests
         Assert.False(nextCalled);
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
         Assert.Equal("application/problem+json", context.Response.ContentType);
+
+        context.Response.Body.Position = 0;
+        using var body = await System.Text.Json.JsonDocument.ParseAsync(context.Response.Body);
+        Assert.Equal("certificate_required", body.RootElement.GetProperty("errorCode").GetString());
+        Assert.Equal(401, body.RootElement.GetProperty("status").GetInt32());
     }
 
     [Fact]
@@ -699,7 +704,7 @@ public class MtlsMiddlewareIntegrationTests
         // - 401 (invalid token)
         // - 400 (validation error)
         // - 500 (internal error in handler - still proves mTLS didn't block)
-        // The key test is that we don't get a 401 with "missing_client_certificate" error
+        // The key test is that we don't get a 401 with "certificate_required" error
         Assert.True(
             response.StatusCode == HttpStatusCode.Unauthorized ||
             response.StatusCode == HttpStatusCode.BadRequest ||
@@ -710,7 +715,7 @@ public class MtlsMiddlewareIntegrationTests
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Assert.DoesNotContain("missing_client_certificate", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("certificate_required", content, StringComparison.Ordinal);
         }
     }
 

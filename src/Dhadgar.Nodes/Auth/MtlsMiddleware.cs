@@ -91,7 +91,7 @@ public sealed class MtlsMiddleware
                     "No client certificate provided for protected endpoint {Path}",
                     path);
 
-                await MtlsProblemWriter.WriteUnauthorizedAsync(context, "missing_client_certificate",
+                await MtlsProblemWriter.WriteUnauthorizedAsync(context, "certificate_required",
                     "A client certificate is required for this endpoint");
                 return;
             }
@@ -272,11 +272,13 @@ public static class MtlsMiddlewareExtensions
 
             foreach (var proxy in forwardedOptions.TrustedProxies)
             {
-                if (!IPNetwork.TryParse(proxy, out _))
+                // A /0 prefix matches every peer, so any client could present a forwarded certificate.
+                if (!IPNetwork.TryParse(proxy, out var network) || network.PrefixLength == 0)
                 {
                     throw new InvalidOperationException(
                         $"'{MtlsOptions.SectionName}:ForwardedCertificate:TrustedProxies' contains an invalid CIDR. " +
-                        "Each entry must be an IP address with a prefix length, for example 10.42.0.0/16. See D-S210.");
+                        "Each entry must be an IP address with a prefix length, for example 10.42.0.0/16, " +
+                        "and a prefix length of 0 is not allowed. See D-S210.");
                 }
             }
         }

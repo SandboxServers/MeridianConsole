@@ -93,6 +93,30 @@ public class AgentMtlsSchemeTests
         });
     }
 
+    [Theory]
+    [InlineData("0.0.0.0/0")]
+    [InlineData("::/0")]
+    public void AddMtlsAuthentication_ForwardedEnabledWithZeroPrefixProxy_Throws(string proxy)
+    {
+        // Arrange
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Mtls:ForwardedCertificate:Enabled"] = "true",
+            ["Mtls:ForwardedCertificate:TrustedProxies:0"] = proxy
+        });
+        var services = new ServiceCollection();
+
+        // Act
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+        {
+            services.AddMtlsAuthentication(configuration);
+        });
+
+        // Assert
+        Assert.Contains("prefix length of 0 is not allowed", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(proxy, exception.Message, StringComparison.Ordinal);
+    }
+
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values)
     {
         return new ConfigurationBuilder()

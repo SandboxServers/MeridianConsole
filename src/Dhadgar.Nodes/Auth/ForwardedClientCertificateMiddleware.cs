@@ -43,29 +43,46 @@ public sealed class ForwardedClientCertificateMiddleware
         var headerValues = context.Request.Headers[AgentCertificateProfile.ForwardedCertificateHeader];
         context.Request.Headers.Remove(AgentCertificateProfile.ForwardedCertificateHeader);
 
+        var accepted = false;
         if (_options.Enabled && headerValues.Count > 0)
         {
-            TryAcceptCertificate(context, headerValues);
+            accepted = TryAcceptCertificate(context, headerValues);
         }
 
-        await _next(context);
+        try
+        {
+            await _next(context);
+        }
+        finally
+        {
+            // The connection can outlive this request (keep-alive, HTTP/2 streams), so a forwarded
+            // certificate must never stay on it for the next request, which may come from another agent.
+            if (accepted)
+            {
+                context.Connection.ClientCertificate = null;
+            }
+        }
     }
 
-    private void TryAcceptCertificate(HttpContext context, StringValues headerValues)
+    /// <summary>
+    /// Sets the forwarded certificate on the connection when every acceptance rule holds.
+    /// </summary>
+    /// <returns>True when this request set <c>Connection.ClientCertificate</c>, so the caller must clear it.</returns>
+    private bool TryAcceptCertificate(HttpContext context, StringValues headerValues)
     {
         if (!IsTrustedProxy(context.Connection.RemoteIpAddress))
         {
             _logger.LogWarning(
                 "Ignored forwarded client certificate from untrusted address {RemoteIp}",
                 context.Connection.RemoteIpAddress);
-            return;
+            return false;
         }
 
         if (headerValues.Count != 1)
         {
             _logger.LogWarning("Ignored forwarded client certificate: expected one header value, got {Count}",
                 headerValues.Count);
-            return;
+            return false;
         }
 
         var value = headerValues[0];
@@ -73,13 +90,13 @@ public sealed class ForwardedClientCertificateMiddleware
         {
             _logger.LogWarning("Ignored forwarded client certificate: header length {Length} is not accepted",
                 value?.Length ?? 0);
-            return;
+            return false;
         }
 
         // A certificate from the TLS handshake always wins over a forwarded one.
         if (context.Connection.ClientCertificate is not null)
         {
-            return;
+            return false;
         }
 
         X509Certificate2? certificate = null;
@@ -91,12 +108,12 @@ public sealed class ForwardedClientCertificateMiddleware
         catch (FormatException)
         {
             _logger.LogWarning("Ignored forwarded client certificate: value is not base64");
-            return;
+            return false;
         }
         catch (CryptographicException)
         {
             _logger.LogWarning("Ignored forwarded client certificate: value is not a DER certificate");
-            return;
+            return false;
         }
 
         context.Response.RegisterForDispose(certificate);
@@ -104,6 +121,7 @@ public sealed class ForwardedClientCertificateMiddleware
 
         _logger.LogDebug("Accepted forwarded client certificate from trusted proxy {RemoteIp}",
             context.Connection.RemoteIpAddress);
+        return true;
     }
 
     private bool IsTrustedProxy(IPAddress? remoteAddress)
@@ -132,7 +150,8 @@ public sealed class ForwardedClientCertificateMiddleware
         var networks = new List<IPNetwork>();
         foreach (var entry in entries)
         {
-            if (IPNetwork.TryParse(entry, out var network))
+            // A /0 prefix would trust every peer, so it is skipped even when startup validation was bypassed.
+            if (IPNetwork.TryParse(entry, out var network) && network.PrefixLength > 0)
             {
                 networks.Add(network);
             }
