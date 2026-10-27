@@ -538,7 +538,7 @@ All clusters share common configuration:
 ### Policies
 
 **Global Policy**
-- Attached to every proxied route except those whose `RateLimiterPolicy` is `PerAgent` (`RouteRateLimiting.UsesGlobal`). ASP.NET Core enforces only the last rate-limit policy on an endpoint, so on those routes `Global` is the only limiter that runs.
+- Attached to every proxied route except those whose `RateLimiterPolicy` is `PerAgent` (`RouteRateLimiting.UsesGlobal`). ASP.NET Core enforces only the last rate-limit policy on an endpoint, so on every other route `Global` is the only limiter that runs, and on `PerAgent` routes `PerAgent` is.
 - Fixed window limiter
 - Default: 1000 requests per 60 seconds
 - Partition key: `"global"` (shared across all clients)
