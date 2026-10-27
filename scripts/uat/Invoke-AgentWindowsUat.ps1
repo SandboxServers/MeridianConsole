@@ -128,7 +128,7 @@ try {
                 $resolvedStale = [System.IO.Path]::GetFullPath($stale)
                 $repoPrefix = $repo.TrimEnd('\') + '\'
                 if (-not $resolvedStale.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-                    [Console]::Error.WriteLine("Refusing to delete $resolvedStale: it is not under $repo.")
+                    [Console]::Error.WriteLine("Refusing to delete ${resolvedStale}: it is not under $repo.")
                     exit 4
                 }
                 if (Test-Path -LiteralPath $resolvedStale) {
