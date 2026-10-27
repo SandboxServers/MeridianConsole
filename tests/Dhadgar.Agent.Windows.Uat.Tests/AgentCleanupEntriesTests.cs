@@ -13,7 +13,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// The seam between the legs' manifest entries and the cleanup allowlist (D-S238). Every entry a process-mode run
 /// appends comes from a producer list and goes through the real <see cref="CleanupEngine"/>.
 /// </summary>
-public class AgentCleanupEntriesTests : IDisposable
+public sealed class AgentCleanupEntriesTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-entries-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -25,6 +25,7 @@ public class AgentCleanupEntriesTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

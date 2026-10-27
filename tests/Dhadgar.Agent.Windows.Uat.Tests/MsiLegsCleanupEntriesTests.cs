@@ -9,7 +9,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// The seam between the MSI leg's pre-install entries and the cleanup allowlist (P23). Every entry goes through the
 /// real <see cref="CleanupEngine"/> with <see cref="RecordingActions"/> as the machine.
 /// </summary>
-public class MsiLegsCleanupEntriesTests : IDisposable
+public sealed class MsiLegsCleanupEntriesTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-msi-entries-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -21,6 +21,7 @@ public class MsiLegsCleanupEntriesTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

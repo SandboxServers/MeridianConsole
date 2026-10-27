@@ -62,7 +62,7 @@ internal sealed class StepRecorder
     }
 
     /// <summary>Records a step that did not run.</summary>
-    public StepResult Skip(string id, string name, string message) =>
+    public static StepResult Skip(string id, string name, string message) =>
         new(id, name, "skipped", new Dictionary<string, object?>(), message, 0);
 
     /// <summary>Records a step that did not run and adds it to the list.</summary>

@@ -138,7 +138,7 @@ public sealed class ForwardedClientCertificateMiddleware
         return false;
     }
 
-    private static IReadOnlyList<IPNetwork> ParseTrustedProxies(IEnumerable<string> entries)
+    private static List<IPNetwork> ParseTrustedProxies(IEnumerable<string> entries)
     {
         var networks = new List<IPNetwork>();
         foreach (var entry in entries)

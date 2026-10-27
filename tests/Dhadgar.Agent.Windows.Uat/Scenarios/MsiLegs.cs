@@ -324,7 +324,7 @@ internal static class MsiLegs
             check = EvaluateInstall(facts, endpoint.AbsoluteUri);
             if (check.IsSuccess || DateTime.UtcNow >= deadline)
             {
-                msi["productCode"] = facts.RelatedProducts.FirstOrDefault();
+                msi["productCode"] = facts.RelatedProducts.Count > 0 ? facts.RelatedProducts[0] : null;
                 msi["productVersion"] = facts.RelatedProducts.Count == 1
                     && products.ProductVersion(facts.RelatedProducts[0]) is { IsSuccess: true } version
                     ? version.Value
@@ -482,7 +482,7 @@ internal static class MsiLegs
             related.IsFailure ? related.Error : null);
     }
 
-    private static IReadOnlyDictionary<string, string?> ReadAgentRegistry()
+    private static Dictionary<string, string?> ReadAgentRegistry()
     {
         var values = new Dictionary<string, string?>(StringComparer.Ordinal);
         using var key = Registry.LocalMachine.OpenSubKey(AgentKeyPath);

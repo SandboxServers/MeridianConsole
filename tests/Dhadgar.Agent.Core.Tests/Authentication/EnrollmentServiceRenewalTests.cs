@@ -14,6 +14,8 @@ namespace Dhadgar.Agent.Core.Tests.Authentication;
 public sealed class EnrollmentServiceRenewalTests : IDisposable
 {
     private static readonly Guid NodeId = Guid.Parse("6f1c2b3a-4d5e-4f60-8a71-92b3c4d5e6f7");
+    private static readonly System.Text.Json.JsonSerializerOptions WebJsonOptions =
+        new(System.Text.Json.JsonSerializerDefaults.Web);
 
     private readonly TestAgentCa _ca = new();
     private readonly ECDsa _currentKey = ECDsa.Create(ECCurve.NamedCurves.nistP384);
@@ -27,7 +29,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     [Fact]
     public async Task RenewalRequestBody_IsExactlyCamelCasePublicKey()
     {
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
             Renewed(_ca.Issue(AgentCertificateTestJson.ReadPublicKey(body), Spiffe(NodeId))));
         var sut = BuildSut(handler, out var store, out _);
 
@@ -46,7 +48,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     public async Task PemResponse_IsDecodedAndStored()
     {
         X509Certificate2? issued = null;
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
         {
             issued = _ca.Issue(AgentCertificateTestJson.ReadPublicKey(body), Spiffe(NodeId));
             return Renewed(issued);
@@ -68,7 +70,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     public async Task StoredKeyBytes_LoadWithImportPkcs8PrivateKey_AndMatchTheCertificate()
     {
         X509Certificate2? issued = null;
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
         {
             issued = _ca.Issue(AgentCertificateTestJson.ReadPublicKey(body), Spiffe(NodeId));
             return Renewed(issued);
@@ -92,7 +94,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     public async Task KeyMismatchResponse_FailsWithoutStoring()
     {
         using var otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-        var handler = new ScriptedHttpHandler((_, _) =>
+        using var handler = new ScriptedHttpHandler((_, _) =>
             Renewed(_ca.Issue(otherKey.ExportSubjectPublicKeyInfo(), Spiffe(NodeId))));
         var sut = BuildSut(handler, out var store, out var provider);
 
@@ -108,7 +110,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     public async Task WrongSpiffeIdentity_FailsWithoutStoring()
     {
         var otherNode = Guid.Parse("11111111-2222-4333-8444-555555555555");
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
             Renewed(_ca.Issue(AgentCertificateTestJson.ReadPublicKey(body), Spiffe(otherNode))));
         var sut = BuildSut(handler, out var store, out var provider);
 
@@ -124,7 +126,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     [Fact]
     public async Task UnauthorizedProblemResponse_ReportsThumbprintMismatch()
     {
-        var handler = new ScriptedHttpHandler((_, _) => AgentCertificateTestJson.Json(
+        using var handler = new ScriptedHttpHandler((_, _) => AgentCertificateTestJson.Json(
             HttpStatusCode.Unauthorized,
             "{\"type\":\"about:blank\",\"title\":\"Unauthorized\",\"status\":401,\"errorCode\":\"thumbprint_mismatch\"}",
             "application/problem+json"));
@@ -140,7 +142,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     [Fact]
     public async Task OversizedResponse_Fails()
     {
-        var handler = new ScriptedHttpHandler((_, _) =>
+        using var handler = new ScriptedHttpHandler((_, _) =>
         {
             var content = new ByteArrayContent(new byte[2 * 1024 * 1024]);
             content.Headers.ContentLength = 2 * 1024 * 1024;
@@ -159,7 +161,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     [Fact]
     public async Task AfterSuccess_TheHandshakeProviderIsInvalidated()
     {
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
             Renewed(_ca.Issue(AgentCertificateTestJson.ReadPublicKey(body), Spiffe(NodeId))));
         var sut = BuildSut(handler, out var store, out var provider);
 
@@ -182,7 +184,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
 
         return AgentCertificateTestJson.Json(
             HttpStatusCode.OK,
-            System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+            System.Text.Json.JsonSerializer.Serialize(response, WebJsonOptions));
     }
 
     [Fact]
@@ -191,7 +193,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
         // 30 05 86 09 41: a GeneralName [6] claiming 9 bytes with only 1 present. Loads as a certificate,
         // but reading the SAN throws AsnContentException, which must become a wrong-identity failure.
         var malformedSan = new byte[] { 0x30, 0x05, 0x86, 0x09, 0x41 };
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
             Renewed(_ca.Issue(
                 AgentCertificateTestJson.ReadPublicKey(body),
                 Spiffe(NodeId),
@@ -209,7 +211,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     [Fact]
     public async Task ExpiredResponse_FailsWithoutStoring()
     {
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
             Renewed(_ca.Issue(
                 AgentCertificateTestJson.ReadPublicKey(body),
                 Spiffe(NodeId),
@@ -228,7 +230,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     [Fact]
     public async Task NotYetValidResponse_FailsWithoutStoring()
     {
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
             Renewed(_ca.Issue(
                 AgentCertificateTestJson.ReadPublicKey(body),
                 Spiffe(NodeId),
@@ -247,7 +249,7 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
     [Fact]
     public async Task StoreThrows_StillInvalidatesTheProvider()
     {
-        var handler = new ScriptedHttpHandler((_, body) =>
+        using var handler = new ScriptedHttpHandler((_, body) =>
             Renewed(_ca.Issue(AgentCertificateTestJson.ReadPublicKey(body), Spiffe(NodeId))));
         var sut = BuildSut(handler, out var store, out var provider);
         store.StoreException = new CryptographicException("store failed part-way");

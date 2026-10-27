@@ -109,7 +109,7 @@ internal sealed class DockerStack
             return recorded;
         }
 
-        var output = await CommandRunner.RunAsync("docker", arguments, ReadyBudget, _redactor, null, ct, environment);
+        var output = await CommandRunner.RunAsync("docker", arguments, ReadyBudget, _redactor, null, environment, ct);
         if (output.IsFailure)
         {
             return Result.Failure($"docker run {name} failed: {output.Error}");
@@ -126,7 +126,7 @@ internal sealed class DockerStack
         while (clock.Elapsed < ReadyBudget)
         {
             ct.ThrowIfCancellationRequested();
-            var check = await CommandRunner.RunAsync("docker", probe, CommandTimeout, _redactor, null, ct);
+            var check = await CommandRunner.RunAsync("docker", probe, CommandTimeout, _redactor, null, ct: ct);
             if (check.IsSuccess && check.Value.ExitCode == 0)
             {
                 return Result.Success();
@@ -135,7 +135,7 @@ internal sealed class DockerStack
             await Task.Delay(PollInterval, ct);
         }
 
-        var logs = await CommandRunner.RunAsync("docker", ["logs", "--tail", "20", name], CommandTimeout, _redactor, null, ct);
+        var logs = await CommandRunner.RunAsync("docker", ["logs", "--tail", "20", name], CommandTimeout, _redactor, null, ct: ct);
         var tail = logs.IsSuccess ? Redact(logs.Value.StandardOutput + logs.Value.StandardError) : "logs unavailable";
         return Result.Failure($"{name} was not ready within 120 s; last 20 log lines:\n{tail}");
     }

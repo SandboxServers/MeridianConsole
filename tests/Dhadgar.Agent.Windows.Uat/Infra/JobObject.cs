@@ -33,7 +33,29 @@ internal sealed partial class JobObject : IDisposable
 
         // Wrap the raw handle before anything else can fail, so an early return still closes it.
         var handle = new JobHandle(raw);
-        var job = new JobObject(handle);
+        var configured = ConfigureKillOnJobClose(handle);
+        if (configured.IsFailure)
+        {
+            handle.Dispose();
+            return Result<JobObject>.Failure(configured.Error);
+        }
+
+        JobObject? job = new JobObject(handle);
+        try
+        {
+            var result = Result<JobObject>.Success(job);
+            job = null; // The caller owns the job through the result; finally must not dispose it.
+            return result;
+        }
+        finally
+        {
+            job?.Dispose();
+        }
+    }
+
+    /// <summary>Sets the KILL_ON_JOB_CLOSE limit on the job handle.</summary>
+    private static Result ConfigureKillOnJobClose(JobHandle handle)
+    {
         var info = new JobObjectExtendedLimitInformation
         {
             BasicLimitInformation = new JobObjectBasicLimitInformation { LimitFlags = JobObjectLimitKillOnJobClose },
@@ -46,16 +68,15 @@ internal sealed partial class JobObject : IDisposable
             Marshal.StructureToPtr(info, ptr, fDeleteOld: false);
             if (!SetInformationJobObject(handle.DangerousGetHandle(), ExtendedLimitInformationClass, ptr, (uint)size))
             {
-                job.Dispose();
-                return Result<JobObject>.Failure($"SetInformationJobObject failed with Win32 error {Marshal.GetLastPInvokeError()}");
+                return Result.Failure($"SetInformationJobObject failed with Win32 error {Marshal.GetLastPInvokeError()}");
             }
+
+            return Result.Success();
         }
         finally
         {
             Marshal.FreeHGlobal(ptr);
         }
-
-        return Result<JobObject>.Success(job);
     }
 
     /// <summary>Assigns a started process to this job.</summary>
@@ -73,16 +94,24 @@ internal sealed partial class JobObject : IDisposable
         _handle.Dispose();
     }
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
     [LibraryImport("kernel32.dll", EntryPoint = "CreateJobObjectW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr CreateJobObjectW(IntPtr attributes, string? name);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetInformationJobObject(IntPtr job, int infoClass, IntPtr info, uint length);
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

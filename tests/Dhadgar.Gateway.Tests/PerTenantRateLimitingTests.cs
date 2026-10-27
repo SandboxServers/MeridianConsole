@@ -39,14 +39,14 @@ public class PerTenantRateLimitingTests
     [Fact]
     public async Task PerTenantRoute_Unauthenticated_FloodIsRateLimited()
     {
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
         var remoteIp = IPAddress.Parse("203.0.113.50");
         var statuses = new List<HttpStatusCode>();
 
         for (var i = 0; i < 3; i++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, TenantRoute);
-            using var response = await SendAsync(app, request, remoteIp);
+            using var response = await SendTenantRouteAsync(app, remoteIp);
             statuses.Add(response.StatusCode);
         }
 
@@ -59,15 +59,14 @@ public class PerTenantRateLimitingTests
     [Fact]
     public async Task PerTenant_SameOrgFromTwoIps_SharesBucket()
     {
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
         var statuses = new List<HttpStatusCode>();
         var ips = new[] { "203.0.113.51", "203.0.113.52", "203.0.113.53" };
 
         foreach (var ip in ips)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, TenantRoute);
-            request.Headers.TryAddWithoutValidation(OrgHeader, "org-a");
-            using var response = await SendAsync(app, request, IPAddress.Parse(ip));
+            using var response = await SendTenantRouteAsync(app, IPAddress.Parse(ip), "org-a");
             statuses.Add(response.StatusCode);
         }
 
@@ -80,15 +79,14 @@ public class PerTenantRateLimitingTests
     [Fact]
     public async Task PerTenant_TwoOrgsFromOneIp_SeparateBuckets()
     {
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
         var remoteIp = IPAddress.Parse("203.0.113.54");
         var statuses = new List<HttpStatusCode>();
 
         foreach (var org in new[] { "org-a", "org-a", "org-b" })
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, TenantRoute);
-            request.Headers.TryAddWithoutValidation(OrgHeader, org);
-            using var response = await SendAsync(app, request, remoteIp);
+            using var response = await SendTenantRouteAsync(app, remoteIp, org);
             statuses.Add(response.StatusCode);
         }
 
@@ -106,10 +104,8 @@ public class PerTenantRateLimitingTests
         Assert.Equal(3, capture.Requests.Count);
     }
 
-    private WebApplicationFactory<Program> CreateApp(out CaptureHandler capture)
+    private WebApplicationFactory<Program> CreateApp(CaptureHandler capture)
     {
-        var handler = new CaptureHandler();
-        capture = handler;
 
         return _factory.WithWebHostBuilder(builder =>
         {
@@ -126,7 +122,7 @@ public class PerTenantRateLimitingTests
 
             builder.ConfigureTestServices(services =>
             {
-                services.AddSingleton<IForwarderHttpClientFactory>(new CaptureForwarderHttpClientFactory(handler));
+                services.AddSingleton<IForwarderHttpClientFactory>(new CaptureForwarderHttpClientFactory(capture));
                 services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, TestOrgAuthHandler>("Test", _ => { });
                 services.PostConfigure<AuthenticationOptions>(o =>
                 {
@@ -136,6 +132,23 @@ public class PerTenantRateLimitingTests
                 });
             });
         });
+    }
+
+    /// <summary>
+    /// Sends one GET to the tenant route. The request is created and disposed here, so loops do not own a disposable.
+    /// </summary>
+    private static async Task<HttpResponseMessage> SendTenantRouteAsync(
+        WebApplicationFactory<Program> app,
+        IPAddress remoteIp,
+        string? org = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, TenantRoute);
+        if (org is not null)
+        {
+            request.Headers.TryAddWithoutValidation(OrgHeader, org);
+        }
+
+        return await SendAsync(app, request, remoteIp);
     }
 
     private static async Task<HttpResponseMessage> SendAsync(
@@ -159,7 +172,7 @@ public class PerTenantRateLimitingTests
     {
         private readonly List<CapturedRequest> _requests = [];
 
-        public IReadOnlyList<CapturedRequest> Requests => _requests;
+        public List<CapturedRequest> Requests => _requests;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -173,18 +186,20 @@ public class PerTenantRateLimitingTests
         }
     }
 
-    private sealed class CaptureForwarderHttpClientFactory(CaptureHandler handler) : IForwarderHttpClientFactory
+    private sealed class CaptureForwarderHttpClientFactory(CaptureHandler handler) : IForwarderHttpClientFactory, IDisposable
     {
         private readonly HttpMessageInvoker _invoker = new(handler);
 
         public HttpMessageInvoker CreateClient(ForwarderHttpClientContext context) => _invoker;
+
+        public void Dispose() => _invoker.Dispose();
     }
 
     /// <summary>
     /// Test-only authentication. Succeeds when the request carries <c>X-Test-Org-Id</c>, with the org as the
     /// <c>org_id</c> claim; otherwise reports no result so the request stays unauthenticated.
     /// </summary>
-    private sealed class TestOrgAuthHandler(
+    public sealed class TestOrgAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder)

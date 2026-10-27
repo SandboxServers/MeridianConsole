@@ -108,10 +108,12 @@ public sealed class GatewayNodesHarness : IDisposable
     {
         var token = await CreateEnrollmentTokenAsync(orgId);
         var store = new InMemoryCertificateStore();
+        using var certificateProvider = new ClientCertificateProvider(store);
         var agent = AgentSeamHarness.CreateEnrollmentService(
             new TestServerClientFactory(GatewayServer, stripApiPrefix: false),
             store,
-            NodesBase.TimeProvider);
+            NodesBase.TimeProvider,
+            certificateProvider);
 
         var result = await agent.EnrollAsync(token);
         Xunit.Assert.True(result.IsSuccess, result.Error);

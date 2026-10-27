@@ -285,44 +285,52 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             return CertificateTrustStatus.Unavailable;
         }
 
-        X509Certificate2 certificate;
+        using var certificate = ParsePemCertificate(certificatePem);
+        if (certificate is null)
+        {
+            return CertificateTrustStatus.Untrusted;
+        }
+
+        // Chain first: no database round trip, so certificates from a foreign CA never reach the database.
+        if (!IsIssuedByOurCa(certificate))
+        {
+            return CertificateTrustStatus.Untrusted;
+        }
+
+        var thumbprint = CalculateSha256Thumbprint(certificate);
+        var (lookupSucceeded, agentCert) = await FindAgentCertificateAsync(thumbprint, ct);
+        if (!lookupSucceeded)
+        {
+            return CertificateTrustStatus.Unavailable;
+        }
+
+        if (agentCert is not null && !AgentCertificateState.IsUsable(agentCert, _timeProvider.GetUtcNow().UtcDateTime))
+        {
+            _logger.LogWarning(
+                "Certificate validation failed: certificate {Thumbprint} is revoked (revoked at: {RevokedAt}, grace until: {GraceUntil}, reason: {Reason})",
+                thumbprint,
+                agentCert.RevokedAt,
+                agentCert.GraceUntil,
+                agentCert.RevocationReason);
+            return CertificateTrustStatus.Untrusted;
+        }
+
+        return CertificateTrustStatus.Trusted;
+    }
+
+    /// <summary>
+    /// Parses a PEM certificate. Returns null (and logs) when the PEM cannot be parsed; the caller owns the result.
+    /// </summary>
+    private X509Certificate2? ParsePemCertificate(string certificatePem)
+    {
         try
         {
-            certificate = X509Certificate2.CreateFromPem(certificatePem);
+            return X509Certificate2.CreateFromPem(certificatePem);
         }
         catch (Exception ex) when (ex is CryptographicException or ArgumentException)
         {
             _logger.LogWarning(ex, "Certificate validation failed: the certificate could not be parsed");
-            return CertificateTrustStatus.Untrusted;
-        }
-
-        using (certificate)
-        {
-            // Chain first: no database round trip, so certificates from a foreign CA never reach the database.
-            if (!IsIssuedByOurCa(certificate))
-            {
-                return CertificateTrustStatus.Untrusted;
-            }
-
-            var thumbprint = CalculateSha256Thumbprint(certificate);
-            var (lookupSucceeded, agentCert) = await FindAgentCertificateAsync(thumbprint, ct);
-            if (!lookupSucceeded)
-            {
-                return CertificateTrustStatus.Unavailable;
-            }
-
-            if (agentCert is not null && !AgentCertificateState.IsUsable(agentCert, _timeProvider.GetUtcNow().UtcDateTime))
-            {
-                _logger.LogWarning(
-                    "Certificate validation failed: certificate {Thumbprint} is revoked (revoked at: {RevokedAt}, grace until: {GraceUntil}, reason: {Reason})",
-                    thumbprint,
-                    agentCert.RevokedAt,
-                    agentCert.GraceUntil,
-                    agentCert.RevocationReason);
-                return CertificateTrustStatus.Untrusted;
-            }
-
-            return CertificateTrustStatus.Trusted;
+            return null;
         }
     }
 

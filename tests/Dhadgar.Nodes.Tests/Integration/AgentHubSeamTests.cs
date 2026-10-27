@@ -132,7 +132,8 @@ public sealed class AgentHubSeamTests : IDisposable
     public async Task Negotiate_WithoutCertificate_Returns401ProblemJson()
     {
         using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
-        using var http = new HttpClient(CertificateInjectingHandlerFactory(factory.Server)(new HttpClientHandler()));
+        using var handler = new HttpClientHandler();
+        using var http = new HttpClient(CertificateInjectingHandlerFactory(factory.Server)(handler));
 
         using var response = await PostNegotiateAsync(http);
 
@@ -214,7 +215,7 @@ public sealed class AgentHubSeamTests : IDisposable
     /// <summary>
     /// Connect step. <see cref="IControlPlaneClient.ConnectAsync"/> returns a <c>Result</c>; a refused connection fails here.
     /// </summary>
-    private static async Task ConnectAgentAsync(IControlPlaneClient client)
+    private static async Task ConnectAgentAsync(ControlPlaneClient client)
     {
         var result = await client.ConnectAsync();
         Assert.True(result.IsSuccess, result.Error);
@@ -224,7 +225,7 @@ public sealed class AgentHubSeamTests : IDisposable
     /// Heartbeat step. <see cref="IControlPlaneClient.SendHeartbeatAsync"/> takes the typed contract heartbeat
     /// and returns a <c>Result&lt;AgentHeartbeatAck&gt;</c>; the payload is mapped here.
     /// </summary>
-    private static async Task SendAgentHeartbeatAsync(IControlPlaneClient client, HeartbeatPayload payload)
+    private static async Task SendAgentHeartbeatAsync(ControlPlaneClient client, HeartbeatPayload payload)
     {
         var result = await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(payload));
         Assert.True(result.IsSuccess, result.Error);

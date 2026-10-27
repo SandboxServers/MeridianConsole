@@ -7,7 +7,7 @@ using Xunit;
 namespace Dhadgar.Agent.Windows.Uat.Tests;
 
 /// <summary>The keyless decoy agent CA (D-S219): it matches the agent's CA rule, has no key, and its manifest entry comes first.</summary>
-public class DecoyCaTests : IDisposable
+public sealed class DecoyCaTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-decoy-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -23,6 +23,7 @@ public class DecoyCaTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
 using Dhadgar.Contracts.Nodes;
 
@@ -126,7 +127,7 @@ public sealed class ForwardedCertificateOptions
     /// CIDR ranges (for example "10.42.0.0/16") of the proxies allowed to forward a client certificate.
     /// Required and non-empty when <see cref="Enabled"/> is true. Pointer: D-S210.
     /// </summary>
-    public List<string> TrustedProxies { get; set; } = [];
+    public Collection<string> TrustedProxies { get; set; } = [];
 
     /// <summary>
     /// Maximum length, in characters, of the forwarded header value. Longer values are ignored.

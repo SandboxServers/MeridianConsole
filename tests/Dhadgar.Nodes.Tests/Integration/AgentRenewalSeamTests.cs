@@ -39,6 +39,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
     private readonly NodesWebApplicationFactory _baseFactory;
     private readonly string _caDirectory = Path.Combine(Path.GetTempPath(), $"agent-renewal-seam-ca-{Guid.NewGuid()}");
     private readonly List<byte[]> _keyCopies = [];
+    private readonly List<ClientCertificateProvider> _certificateProviders = [];
 
     public AgentRenewalSeamTests(NodesWebApplicationFactory factory)
     {
@@ -48,6 +49,11 @@ public sealed class AgentRenewalSeamTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var provider in _certificateProviders)
+        {
+            provider.Dispose();
+        }
+
         foreach (var key in _keyCopies)
         {
             CryptographicOperations.ZeroMemory(key);
@@ -72,30 +78,30 @@ public sealed class AgentRenewalSeamTests : IDisposable
         var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
 
         // Capture the enrolled identity before any renewal.
-        var oldThumbprint = DbThumbprint(store.ClientCertificate!);
-        var oldSpki = PublicKeySpki(store.ClientCertificate!);
-        var oldPrivateKey = TrackKey(store.PrivateKey!);
+        var oldThumbprint = DbThumbprint(store.StoredClientCertificate!);
+        var oldSpki = PublicKeySpki(store.StoredClientCertificate!);
+        var oldPrivateKey = TrackKey(store.GetPrivateKey()!);
 
         // A second store holds the old certificate and key, so the old certificate can keep talking to the hub.
         var oldStore = new InMemoryCertificateStore();
-        await oldStore.StoreCertificateAsync(store.ClientCertificate!, store.PrivateKey!);
+        await oldStore.StoreCertificateAsync(store.StoredClientCertificate!, store.GetPrivateKey()!);
 
         var renewing = CreateRenewingAgent(
-            new TestServerClientFactory(factory.Server, certificate: () => store.ClientCertificate),
+            new TestServerClientFactory(factory.Server, certificate: () => store.StoredClientCertificate),
             store,
             enrolled,
             _baseFactory.TimeProvider);
         var renewal = await renewing.RenewCertificateAsync();
         Assert.True(renewal.IsSuccess, renewal.Error);
 
-        var newCertificate = store.ClientCertificate!;
+        var newCertificate = store.StoredClientCertificate!;
         var newSpki = PublicKeySpki(newCertificate);
         Assert.NotEqual(oldThumbprint, DbThumbprint(newCertificate));
         Assert.Equal(PrivateKeySpki(store), newSpki);
         Assert.NotEqual(oldSpki, newSpki);
         AssertChainsToStoredCa(store);
 
-        var newPrivateKey = TrackKey(store.PrivateKey!);
+        var newPrivateKey = TrackKey(store.GetPrivateKey()!);
         Assert.False(newPrivateKey.AsSpan().SequenceEqual(oldPrivateKey));
 
         var rows = await ReadCertificateStateAsync(factory, enrolled.NodeId);
@@ -104,7 +110,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
 
         // Hub negotiate: the new certificate and the old one (inside the grace window) both get 200.
         Assert.Equal(HttpStatusCode.OK, await NegotiateWithCertificateAsync(factory, newCertificate));
-        Assert.Equal(HttpStatusCode.OK, await NegotiateWithCertificateAsync(factory, oldStore.ClientCertificate!));
+        Assert.Equal(HttpStatusCode.OK, await NegotiateWithCertificateAsync(factory, oldStore.StoredClientCertificate!));
 
         // A real client on the old certificate connects and is acknowledged inside the window. Only this test
         // proves the hub itself accepts a certificate in grace, not just MtlsMiddleware.
@@ -122,7 +128,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
             // 61 minutes after renewal the grace window has closed: the old certificate is refused,
             // the new one still works, and the old-certificate client is no longer acknowledged.
             _baseFactory.TimeProvider.Advance(TimeSpan.FromMinutes(61));
-            Assert.Equal(HttpStatusCode.Unauthorized, await NegotiateWithCertificateAsync(factory, oldStore.ClientCertificate!));
+            Assert.Equal(HttpStatusCode.Unauthorized, await NegotiateWithCertificateAsync(factory, oldStore.StoredClientCertificate!));
             Assert.Equal(HttpStatusCode.OK, await NegotiateWithCertificateAsync(factory, newCertificate));
 
             var expired = await oldClient.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(new HeartbeatPayload
@@ -139,15 +145,15 @@ public sealed class AgentRenewalSeamTests : IDisposable
     {
         using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true, settings: GraceSettings);
         var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
-        var oldThumbprint = DbThumbprint(store.ClientCertificate!);
-        using var oldCertificate = X509CertificateLoader.LoadCertificate(store.ClientCertificate!.RawData);
+        var oldThumbprint = DbThumbprint(store.StoredClientCertificate!);
+        using var oldCertificate = X509CertificateLoader.LoadCertificate(store.StoredClientCertificate!.RawData);
 
         // Only the first renewal client gets the dropping layer, so only the first renewal request is dropped.
         ResponseDroppingHandler? dropper = null;
         var renewing = CreateRenewingAgent(
             new TestServerClientFactory(
                 factory.Server,
-                certificate: () => store.ClientCertificate,
+                certificate: () => store.StoredClientCertificate,
                 wrapMtlsHandler: inner =>
                 {
                     if (dropper is not null)
@@ -168,7 +174,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         Assert.StartsWith("[Renewal.NetworkError]", first.Error);
         Assert.NotNull(dropper);
         Assert.Equal(1, dropper.DroppedCount);
-        Assert.Equal(oldThumbprint, DbThumbprint(store.ClientCertificate!));
+        Assert.Equal(oldThumbprint, DbThumbprint(store.StoredClientCertificate!));
 
         var orphan = (await ReadCertificateStateAsync(factory, enrolled.NodeId))
             .Where(r => r.Thumbprint != oldThumbprint && !r.IsRevoked)
@@ -182,7 +188,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         Assert.True(second.IsSuccess, second.Error);
         Assert.Equal(1, dropper.DroppedCount);
 
-        var newThumbprint = DbThumbprint(store.ClientCertificate!);
+        var newThumbprint = DbThumbprint(store.StoredClientCertificate!);
         Assert.NotEqual(oldThumbprint, newThumbprint);
         Assert.NotEqual(orphanThumbprint, newThumbprint);
 
@@ -212,7 +218,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
         await ConnectAgentAsync(client);
 
         var renewing = CreateRenewingAgent(
-            new TestServerClientFactory(factory.Server, certificate: () => store.ClientCertificate),
+            new TestServerClientFactory(factory.Server, certificate: () => store.StoredClientCertificate),
             store,
             enrolled,
             _baseFactory.TimeProvider);
@@ -273,7 +279,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
     /// Builds the real agent enrollment service with the enrolled node identity, so renewal is not refused as
     /// "not enrolled". The identity comes from <see cref="AgentIdentityProvider"/>, as in the real host.
     /// </summary>
-    private static AgentEnrollmentService CreateRenewingAgent(
+    private AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
         EnrollmentResult enrolled,
@@ -285,10 +291,20 @@ public sealed class AgentRenewalSeamTests : IDisposable
             Options.Create(new AgentOptions()),
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
-            new ClientCertificateProvider(store),
+            TrackCertificateProvider(store),
             IdentityFor(enrolled),
             enrollmentTokenCleanup: null,
             timeProvider: timeProvider);
+    }
+
+    /// <summary>
+    /// Creates a certificate provider over <paramref name="store"/> that this test class disposes in <see cref="Dispose"/>.
+    /// </summary>
+    private ClientCertificateProvider TrackCertificateProvider(ICertificateStore store)
+    {
+        var provider = new ClientCertificateProvider(store);
+        _certificateProviders.Add(provider);
+        return provider;
     }
 
     /// <summary>
@@ -329,13 +345,13 @@ public sealed class AgentRenewalSeamTests : IDisposable
 
     private static void AssertChainsToStoredCa(InMemoryCertificateStore store)
     {
-        Assert.NotNull(store.CaCertificate);
+        Assert.NotNull(store.StoredCaCertificate);
         using var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        chain.ChainPolicy.CustomTrustStore.Add(store.CaCertificate);
+        chain.ChainPolicy.CustomTrustStore.Add(store.StoredCaCertificate);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.VerificationTime = store.ClientCertificate!.NotBefore.AddMinutes(1);
-        Assert.True(chain.Build(store.ClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
+        chain.ChainPolicy.VerificationTime = store.StoredClientCertificate!.NotBefore.AddMinutes(1);
+        Assert.True(chain.Build(store.StoredClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
     }
 
     /// <summary>
@@ -360,7 +376,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
     /// <summary>
     /// Connect step. <see cref="IControlPlaneClient.ConnectAsync"/> returns a <c>Result</c>; a refused connection fails here.
     /// </summary>
-    private static async Task ConnectAgentAsync(IControlPlaneClient client)
+    private static async Task ConnectAgentAsync(ControlPlaneClient client)
     {
         var result = await client.ConnectAsync();
         Assert.True(result.IsSuccess, result.Error);
@@ -369,7 +385,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
     /// <summary>
     /// Heartbeat step. The payload is mapped to the typed contract, and the ack must be accepted.
     /// </summary>
-    private static async Task SendAgentHeartbeatAsync(IControlPlaneClient client, HeartbeatPayload payload)
+    private static async Task SendAgentHeartbeatAsync(ControlPlaneClient client, HeartbeatPayload payload)
     {
         var result = await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(payload));
         Assert.True(result.IsSuccess, result.Error);

@@ -93,7 +93,7 @@ public class ControlPlaneClientTests
     {
         using var meter = new AgentMeter();
         using var activity = new AgentActivitySource();
-        var hub = new FakeLongPollingHub();
+        using var hub = new FakeLongPollingHub();
         var store = new FreshCertificateStore();
         await using var client = CreateClient(
             "https://localhost",
@@ -228,7 +228,7 @@ public class ControlPlaneClientTests
         public X509Certificate2? GetClientCertificate()
         {
             Calls++;
-            var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             var request = new CertificateRequest("CN=agent-test", key, HashAlgorithmName.SHA256);
             return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
         }

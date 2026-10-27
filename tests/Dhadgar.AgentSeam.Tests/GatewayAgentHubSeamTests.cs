@@ -85,7 +85,8 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
     public async Task Hub_WithoutClientCertificate_IsRejectedAtGateway()
     {
         using var harness = new GatewayNodesHarness(_caDirectory);
-        using var http = new HttpClient(CertificateInjectingHandlerFactory(harness.GatewayServer)(new HttpClientHandler()));
+        using var handler = new HttpClientHandler();
+        using var http = new HttpClient(CertificateInjectingHandlerFactory(harness.GatewayServer)(handler));
 
         using var response = await PostNegotiateAsync(http);
 
@@ -98,7 +99,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
     {
         using var harness = new GatewayNodesHarness(_caDirectory);
         var (_, enrolledStore) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
-        var spoofed = Convert.ToBase64String(enrolledStore.ClientCertificate!.RawData);
+        var spoofed = Convert.ToBase64String(enrolledStore.StoredClientCertificate!.RawData);
 
         // No connection certificate. The header carries a valid enrolled certificate.
         using var http = new HttpClient(new HeaderInjectingHandler(
@@ -121,7 +122,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
         var orgId = Guid.NewGuid();
         var (agentA, storeA) = await harness.EnrollThroughGatewayAsync(orgId);
         var (agentB, storeB) = await harness.EnrollThroughGatewayAsync(orgId);
-        var bCertificate = Convert.ToBase64String(storeB.ClientCertificate!.RawData);
+        var bCertificate = Convert.ToBase64String(storeB.StoredClientCertificate!.RawData);
 
         var nodeBBefore = await ReadLastHeartbeatAsync(harness, agentB.NodeId);
         harness.NodesBase.TimeProvider.Advance(TimeSpan.FromMinutes(2));
@@ -159,7 +160,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
     /// <summary>
     /// Connect step. <see cref="IControlPlaneClient.ConnectAsync"/> returns a <c>Result</c>; a refused connection fails here.
     /// </summary>
-    private static async Task ConnectAgentAsync(IControlPlaneClient client)
+    private static async Task ConnectAgentAsync(ControlPlaneClient client)
     {
         var result = await client.ConnectAsync();
         Assert.True(result.IsSuccess, result.Error);
@@ -168,7 +169,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
     /// <summary>
     /// Heartbeat step. The payload is mapped to the typed contract, and the ack must be accepted.
     /// </summary>
-    private static async Task SendAgentHeartbeatAsync(IControlPlaneClient client, HeartbeatPayload payload)
+    private static async Task SendAgentHeartbeatAsync(ControlPlaneClient client, HeartbeatPayload payload)
     {
         var result = await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(payload));
         Assert.True(result.IsSuccess, result.Error);

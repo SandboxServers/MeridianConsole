@@ -99,7 +99,7 @@ internal sealed class MachineProbe : IMachineProbe
         return result.IsSuccess && result.Value.ExitCode == 0;
     }
 
-    private static IReadOnlyList<string> ListUatContainers()
+    private static List<string> ListUatContainers()
     {
         var result = CommandRunner.RunAsync(
             "docker",

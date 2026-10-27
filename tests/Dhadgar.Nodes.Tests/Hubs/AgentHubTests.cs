@@ -300,7 +300,7 @@ public sealed class AgentHubTests : IDisposable
         Assert.True(typeof(IAgentHub).IsAssignableFrom(typeof(AgentHub)));
     }
 
-    private HubConnection CreateHubConnection(
+    private static HubConnection CreateHubConnection(
         WebApplicationFactory<Program> factory,
         X509Certificate2? cert,
         string? protocolVersion = null)

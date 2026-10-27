@@ -21,19 +21,28 @@ internal static class GatewayClients
     /// </summary>
     public static HttpClient Create(X509Certificate2? clientCertificate = null, TimeSpan? timeout = null)
     {
-        var handler = new SocketsHttpHandler
+        SocketsHttpHandler? handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
             UseCookies = false,
         };
 
-        if (clientCertificate is not null)
+        try
         {
-            handler.SslOptions.ClientCertificates = new X509CertificateCollection { clientCertificate };
-            handler.SslOptions.LocalCertificateSelectionCallback =
-                (_, _, _, _, _) => clientCertificate;
-        }
+            if (clientCertificate is not null)
+            {
+                handler.SslOptions.ClientCertificates = new X509CertificateCollection { clientCertificate };
+                handler.SslOptions.LocalCertificateSelectionCallback =
+                    (_, _, _, _, _) => clientCertificate;
+            }
 
-        return new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? ProbeTimeout };
+            var client = new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? ProbeTimeout };
+            handler = null; // The client owns the handler and disposes it with itself.
+            return client;
+        }
+        finally
+        {
+            handler?.Dispose();
+        }
     }
 }

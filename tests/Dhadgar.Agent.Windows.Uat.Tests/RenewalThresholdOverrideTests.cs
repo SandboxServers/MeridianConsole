@@ -9,7 +9,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// U6 lowers the renewal threshold to 90 days so the agent renews at start (<see cref="RenewalLegs.RenewalThresholdDays"/>).
 /// The key must be removed again after U6, whether U6 passes or fails, so the published config is left as it was built.
 /// </summary>
-public class RenewalThresholdOverrideTests : IDisposable
+public sealed class RenewalThresholdOverrideTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-threshold-" + Guid.NewGuid().ToString("N"));
     private readonly RenewalWorld _world;
@@ -21,6 +21,7 @@ public class RenewalThresholdOverrideTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         _world.Dispose();
         if (Directory.Exists(_repo))
         {

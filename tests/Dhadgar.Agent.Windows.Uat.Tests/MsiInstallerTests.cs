@@ -11,7 +11,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// The <c>msiexec</c> argument lists, the token handling and the exit-code rules of <see cref="MsiInstaller"/>, with a
 /// fake for <c>msiexec</c>. No test runs an installer.
 /// </summary>
-public class MsiInstallerTests : IDisposable
+public sealed class MsiInstallerTests : IDisposable
 {
     private const string Token = "uat-enrollment-token-7f3a9c";
 
@@ -29,6 +29,7 @@ public class MsiInstallerTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);
@@ -37,7 +38,7 @@ public class MsiInstallerTests : IDisposable
 
     private string MsiPath => Path.Combine(_paths.RunDir, "msi", "Dhadgar.Agent.Windows.msi");
 
-    private MintedToken Minted => new(Guid.NewGuid(), Token);
+    private static MintedToken Minted => new(Guid.NewGuid(), Token);
 
     private MsiInstaller Installer(int exitCode, string? stdout = null) => new(_paths, _redactor, args =>
     {

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Contracts.Nodes;
@@ -289,7 +290,7 @@ public class ForwardedClientCertificateMiddlewareTests
             ForwardedCertificate = new ForwardedCertificateOptions
             {
                 Enabled = enabled,
-                TrustedProxies = trustedProxies ?? [TrustedCidr],
+                TrustedProxies = new Collection<string>(trustedProxies ?? [TrustedCidr]),
                 MaxHeaderLength = maxHeaderLength
             }
         };

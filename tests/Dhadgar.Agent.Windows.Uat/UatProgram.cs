@@ -11,7 +11,7 @@ internal static class UatProgram
         var parsed = UatArgs.Parse(args);
         if (!parsed.IsSuccess)
         {
-            Console.Error.WriteLine(parsed.Error);
+            await Console.Error.WriteLineAsync(parsed.Error);
             return UatExitCodes.Refused;
         }
 

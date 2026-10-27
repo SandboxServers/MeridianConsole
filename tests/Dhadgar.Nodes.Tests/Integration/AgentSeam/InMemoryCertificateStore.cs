@@ -10,39 +10,44 @@ namespace Dhadgar.Nodes.Tests.Integration.AgentSeam;
 /// </summary>
 public sealed class InMemoryCertificateStore : ICertificateStore
 {
-    /// <summary>The stored client certificate (no private key), or null.</summary>
-    public X509Certificate2? ClientCertificate { get; private set; }
+    private byte[]? _privateKey;
 
-    /// <summary>The raw private key bytes the agent stored (PKCS#8 or SEC1 EC), or null.</summary>
-    public byte[]? PrivateKey { get; private set; }
+    /// <summary>The stored client certificate (no private key), or null.</summary>
+    public X509Certificate2? StoredClientCertificate { get; private set; }
 
     /// <summary>The stored CA certificate, or null.</summary>
-    public X509Certificate2? CaCertificate { get; private set; }
+    public X509Certificate2? StoredCaCertificate { get; private set; }
+
+    /// <summary>
+    /// Returns the raw private key bytes the agent stored (PKCS#8 or SEC1 EC), or null. The array is the store's own
+    /// copy: callers that keep it must copy it, and must not modify it.
+    /// </summary>
+    public byte[]? GetPrivateKey() => _privateKey;
 
     /// <summary>
     /// Returns a new certificate object carrying the stored private key. The caller owns it and must dispose it.
     /// </summary>
     public X509Certificate2? GetClientCertificate()
     {
-        if (ClientCertificate is null || PrivateKey is null)
+        if (StoredClientCertificate is null || _privateKey is null)
         {
-            return ClientCertificate is null
+            return StoredClientCertificate is null
                 ? null
-                : X509CertificateLoader.LoadCertificate(ClientCertificate.RawData);
+                : X509CertificateLoader.LoadCertificate(StoredClientCertificate.RawData);
         }
 
-        using var publicOnly = X509CertificateLoader.LoadCertificate(ClientCertificate.RawData);
+        using var publicOnly = X509CertificateLoader.LoadCertificate(StoredClientCertificate.RawData);
         using var key = ECDsa.Create();
         try
         {
             // P10 switches the agent to PKCS#8; accept the legacy SEC1 form as well.
             try
             {
-                key.ImportPkcs8PrivateKey(PrivateKey, out _);
+                key.ImportPkcs8PrivateKey(_privateKey, out _);
             }
             catch (CryptographicException)
             {
-                key.ImportECPrivateKey(PrivateKey, out _);
+                key.ImportECPrivateKey(_privateKey, out _);
             }
 
             return publicOnly.CopyWithPrivateKey(key);
@@ -56,26 +61,26 @@ public sealed class InMemoryCertificateStore : ICertificateStore
     /// <inheritdoc />
     public Task StoreCertificateAsync(X509Certificate2 certificate, byte[] privateKey, CancellationToken cancellationToken = default)
     {
-        ClientCertificate = X509CertificateLoader.LoadCertificate(certificate.RawData);
-        PrivateKey = (byte[])privateKey.Clone(); // caller zeroes its copy
+        StoredClientCertificate = X509CertificateLoader.LoadCertificate(certificate.RawData);
+        _privateKey = (byte[])privateKey.Clone(); // caller zeroes its copy
         return Task.CompletedTask;
     }
 
     /// <inheritdoc />
     public Task RemoveCertificateAsync(CancellationToken cancellationToken = default)
     {
-        ClientCertificate = null;
-        PrivateKey = null;
+        StoredClientCertificate = null;
+        _privateKey = null;
         return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public X509Certificate2? GetCaCertificate() => CaCertificate;
+    public X509Certificate2? GetCaCertificate() => StoredCaCertificate;
 
     /// <inheritdoc />
     public Task StoreCaCertificateAsync(X509Certificate2 certificate, CancellationToken cancellationToken = default)
     {
-        CaCertificate = X509CertificateLoader.LoadCertificate(certificate.RawData);
+        StoredCaCertificate = X509CertificateLoader.LoadCertificate(certificate.RawData);
         return Task.CompletedTask;
     }
 

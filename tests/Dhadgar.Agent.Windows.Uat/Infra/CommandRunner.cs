@@ -20,8 +20,8 @@ internal static class CommandRunner
         TimeSpan timeout,
         Redactor? redactor = null,
         string? workingDirectory = null,
-        CancellationToken ct = default,
-        IReadOnlyDictionary<string, string>? environment = null)
+        IReadOnlyDictionary<string, string>? environment = null,
+        CancellationToken ct = default)
     {
         var psi = new ProcessStartInfo(fileName)
         {

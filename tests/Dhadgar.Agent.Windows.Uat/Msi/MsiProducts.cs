@@ -82,8 +82,12 @@ internal sealed partial class MsiProducts : IMsiProducts
     internal static string Braced(string guid) =>
         guid.StartsWith('{') ? guid : "{" + guid.ToUpperInvariant() + "}";
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
     [LibraryImport("msi.dll", EntryPoint = "MsiEnumRelatedProductsW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint MsiEnumRelatedProductsW(string upgradeCode, uint reserved, uint index, char[] productCode);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
     [LibraryImport("msi.dll", EntryPoint = "MsiGetProductInfoW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint MsiGetProductInfoW(string productCode, string property, char[] value, ref uint valueSize);

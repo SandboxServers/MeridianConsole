@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Dhadgar.Agent.Windows.Uat.Tests;
 
-public class AgentPublishConfigTests : IDisposable
+public sealed class AgentPublishConfigTests : IDisposable
 {
     private const string RunId = "20261027-142233-9f3a";
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-repo-" + Guid.NewGuid().ToString("N"));
@@ -30,6 +30,7 @@ public class AgentPublishConfigTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

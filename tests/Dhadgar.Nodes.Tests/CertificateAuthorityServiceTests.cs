@@ -569,7 +569,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         Assert.Equal(CertificateTrustStatus.Trusted, trust);
     }
 
-    private string CreateForeignPem()
+    private static string CreateForeignPem()
     {
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=Foreign", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -697,16 +697,9 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
     private static int GetFreeTcpPort()
     {
-        var probe = new TcpListener(IPAddress.Loopback, 0);
+        using var probe = new TcpListener(IPAddress.Loopback, 0);
         probe.Start();
-        try
-        {
-            return ((IPEndPoint)probe.LocalEndpoint).Port;
-        }
-        finally
-        {
-            probe.Stop();
-        }
+        return ((IPEndPoint)probe.LocalEndpoint).Port;
     }
 
     private static string CreateForeignPemWithAiaUrl(string caIssuersUrl)

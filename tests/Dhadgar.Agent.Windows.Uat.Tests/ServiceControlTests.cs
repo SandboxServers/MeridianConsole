@@ -6,7 +6,7 @@ using Xunit;
 namespace Dhadgar.Agent.Windows.Uat.Tests;
 
 /// <summary>The <c>sc.exe</c> wrapper with a fake tool runner: exact arguments, refusals before any call, and <c>qc</c> parsing.</summary>
-public class ServiceControlTests : IDisposable
+public sealed class ServiceControlTests : IDisposable
 {
     private const string QcSample = """
         [SC] QueryServiceConfig SUCCESS
@@ -38,6 +38,7 @@ public class ServiceControlTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

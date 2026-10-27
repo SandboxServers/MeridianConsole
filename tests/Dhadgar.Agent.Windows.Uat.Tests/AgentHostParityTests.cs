@@ -13,13 +13,14 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// fake machine state, make the same calls and reach the same steps. The one difference is the agent.log read,
 /// which only the process host has (<see cref="IAgentHost.ConsoleLogPath"/>).
 /// </summary>
-public class AgentHostParityTests : IDisposable
+public sealed class AgentHostParityTests : IDisposable
 {
     private const string RunId = "20261027-142233-9f3a";
     private readonly string _root = Path.Combine(Path.GetTempPath(), "uat-parity-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_root))
         {
             Directory.Delete(_root, recursive: true);

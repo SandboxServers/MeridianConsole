@@ -9,7 +9,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// Every manifest append in the legs happens before the machine reads that depend on it. The fake world records the
 /// number of certificate and CNG key entries in the real manifest file at each call.
 /// </summary>
-public class ManifestOrderTests : IDisposable
+public sealed class ManifestOrderTests : IDisposable
 {
     private const string RunId = "20261027-142233-9f3b";
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-order-" + Guid.NewGuid().ToString("N"));
@@ -25,6 +25,7 @@ public class ManifestOrderTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);

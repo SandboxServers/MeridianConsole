@@ -67,24 +67,26 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
         using var harness = new GatewayNodesHarness(_caDirectory);
         var (enrolled, store) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
 
-        var oldThumbprint = DbThumbprint(store.ClientCertificate!);
-        var oldSpki = PublicKeySpki(store.ClientCertificate!);
-        using var oldCertificate = X509CertificateLoader.LoadCertificate(store.ClientCertificate!.RawData);
+        var oldThumbprint = DbThumbprint(store.StoredClientCertificate!);
+        var oldSpki = PublicKeySpki(store.StoredClientCertificate!);
+        using var oldCertificate = X509CertificateLoader.LoadCertificate(store.StoredClientCertificate!.RawData);
 
         // A second store holds the old certificate and key for the old-certificate ControlPlaneClient.
         var oldStore = new InMemoryCertificateStore();
-        await oldStore.StoreCertificateAsync(store.ClientCertificate!, TrackKey(store.PrivateKey!));
+        await oldStore.StoreCertificateAsync(store.StoredClientCertificate!, TrackKey(store.GetPrivateKey()!));
 
         // The agent's mTLS client reaches the Gateway with the current certificate on the TLS connection.
+        using var certificateProvider = new ClientCertificateProvider(store);
         var renewing = CreateRenewingAgent(
-            new TestServerClientFactory(harness.GatewayServer, stripApiPrefix: false, certificate: () => store.ClientCertificate),
+            new TestServerClientFactory(harness.GatewayServer, stripApiPrefix: false, certificate: () => store.StoredClientCertificate),
             store,
+            certificateProvider,
             enrolled,
             harness.NodesBase.TimeProvider);
         var renewal = await renewing.RenewCertificateAsync();
         Assert.True(renewal.IsSuccess, renewal.Error);
 
-        var newCertificate = store.ClientCertificate!;
+        var newCertificate = store.StoredClientCertificate!;
         var newSpki = PublicKeySpki(newCertificate);
         Assert.NotEqual(oldThumbprint, DbThumbprint(newCertificate));
         Assert.Equal(PrivateKeySpki(store), newSpki);
@@ -132,6 +134,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
     private static AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,
         ICertificateStore store,
+        ClientCertificateProvider certificateProvider,
         EnrollmentResult enrolled,
         TimeProvider timeProvider)
     {
@@ -144,7 +147,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
             Options.Create(new AgentOptions()),
             NullLogger<AgentEnrollmentService>.Instance,
             new HardwareInventoryCollector(NullLogger<HardwareInventoryCollector>.Instance),
-            new ClientCertificateProvider(store),
+            certificateProvider,
             identity,
             enrollmentTokenCleanup: null,
             timeProvider: timeProvider);
@@ -178,13 +181,13 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
 
     private static void AssertChainsToStoredCa(InMemoryCertificateStore store)
     {
-        Assert.NotNull(store.CaCertificate);
+        Assert.NotNull(store.StoredCaCertificate);
         using var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        chain.ChainPolicy.CustomTrustStore.Add(store.CaCertificate);
+        chain.ChainPolicy.CustomTrustStore.Add(store.StoredCaCertificate);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.VerificationTime = store.ClientCertificate!.NotBefore.AddMinutes(1);
-        Assert.True(chain.Build(store.ClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
+        chain.ChainPolicy.VerificationTime = store.StoredClientCertificate!.NotBefore.AddMinutes(1);
+        Assert.True(chain.Build(store.StoredClientCertificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
     }
 
     /// <summary>
@@ -207,7 +210,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
     /// <summary>
     /// Connect step. <see cref="IControlPlaneClient.ConnectAsync"/> returns a <c>Result</c>; a refused connection fails here.
     /// </summary>
-    private static async Task ConnectAgentAsync(IControlPlaneClient client)
+    private static async Task ConnectAgentAsync(ControlPlaneClient client)
     {
         var result = await client.ConnectAsync();
         Assert.True(result.IsSuccess, result.Error);
@@ -216,7 +219,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
     /// <summary>
     /// Heartbeat step. The payload is mapped to the typed contract, and the ack must be accepted.
     /// </summary>
-    private static async Task SendAgentHeartbeatAsync(IControlPlaneClient client, HeartbeatPayload payload)
+    private static async Task SendAgentHeartbeatAsync(ControlPlaneClient client, HeartbeatPayload payload)
     {
         var result = await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(payload));
         Assert.True(result.IsSuccess, result.Error);

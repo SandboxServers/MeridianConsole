@@ -8,16 +8,17 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 
 /// <summary>Tests that change the global console error writer are not run in parallel.</summary>
 [CollectionDefinition("Console", DisableParallelization = true)]
-public class ConsoleCollection;
+public class ConsoleGroup;
 
 [Collection("Console")]
-public class UatRunnerGuardTests : IDisposable
+public sealed class UatRunnerGuardTests : IDisposable
 {
     private const string RunId = "20261027-142233-9f3a";
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-guard-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         if (Directory.Exists(_repo))
         {
             Directory.Delete(_repo, recursive: true);
@@ -135,14 +136,14 @@ public class UatRunnerGuardTests : IDisposable
         var paths = new RunPaths(_repo, RunId);
         Directory.CreateDirectory(paths.RunDir);
         var file = existing == "launch" ? Path.Combine(paths.RunDir, LaunchRecord.FileName) : paths.Manifest;
-        File.WriteAllText(file, "{}");
+        await File.WriteAllTextAsync(file, "{}");
         var actions = new RecordingActions();
 
         var (exit, err) = await RunRunCapturedAsync(actions, new FakeProbe(), launchedByAgent: false, new ThrowingWorkTree());
 
         Assert.Equal(UatExitCodes.Refused, exit);
         Assert.Contains("already used", err, StringComparison.Ordinal);
-        Assert.Equal("{}", File.ReadAllText(file));
+        Assert.Equal("{}", await File.ReadAllTextAsync(file));
         Assert.Empty(actions.Calls);
     }
 
@@ -167,13 +168,13 @@ public class UatRunnerGuardTests : IDisposable
         var actions = new RecordingActions();
         WriteServiceManifest();
         WriteLaunch("user", RunId);
-        var manifestBefore = File.ReadAllText(new RunPaths(_repo, RunId).Manifest);
+        var manifestBefore = await File.ReadAllTextAsync(new RunPaths(_repo, RunId).Manifest);
 
         var (exit, err) = await RunCleanupCapturedAsync(actions, launchedByAgent: true);
 
         Assert.Equal(UatExitCodes.Refused, exit);
         Assert.Contains("not an agent run", err, StringComparison.Ordinal);
-        Assert.Equal(manifestBefore, File.ReadAllText(new RunPaths(_repo, RunId).Manifest));
+        Assert.Equal(manifestBefore, await File.ReadAllTextAsync(new RunPaths(_repo, RunId).Manifest));
         Assert.Empty(actions.Calls);
     }
 

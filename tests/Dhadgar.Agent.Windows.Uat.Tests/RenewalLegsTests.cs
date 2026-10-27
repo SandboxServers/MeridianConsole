@@ -17,7 +17,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// The renewal legs U5-U8 against <see cref="RenewalWorld"/>: the machine store, the database, the transport and the agent
 /// are fakes, so every step's pass and failure rule is exercised without a real store or Gateway.
 /// </summary>
-public class RenewalLegsTests : IDisposable
+public sealed class RenewalLegsTests : IDisposable
 {
     private readonly string _repo = Path.Combine(Path.GetTempPath(), "uat-renew-" + Guid.NewGuid().ToString("N"));
     private readonly RunPaths _paths;
@@ -31,6 +31,7 @@ public class RenewalLegsTests : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         _world.Dispose();
         if (Directory.Exists(_repo))
         {
@@ -276,7 +277,7 @@ public class RenewalLegsTests : IDisposable
         var evidence = new Dictionary<string, object?>();
         await Assert.ThrowsAsync<InvalidOperationException>(() => _world.Legs().RunAsync(evidence, CancellationToken.None));
 
-        var json = JsonNode.Parse(File.ReadAllText(_world.AppSettingsPath))!;
+        var json = JsonNode.Parse(await File.ReadAllTextAsync(_world.AppSettingsPath))!;
         Assert.Null(json["Agent"]?["Security"]?["CertificateRenewalThresholdDays"]);
         Assert.Equal(1, json["Agent"]?["Security"]?["Other"]?.GetValue<int>());
     }
@@ -572,6 +573,7 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentHost, IAgentLegsDb, 
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         foreach (var entry in _machine.Values)
         {
             entry.Certificate.Dispose();
