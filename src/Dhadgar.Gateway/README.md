@@ -241,7 +241,8 @@ dotnet user-secrets set "Auth:SigningKey" "your-development-signing-key"
       },
       "PerTenant": {
         "PermitLimit": 100,
-        "WindowSeconds": 60
+        "ReplenishPerSecond": 50,
+        "QueueLimit": 0
       },
       "PerAgent": {
         "PermitLimit": 500,
@@ -371,10 +372,10 @@ Request
 8. UseAuthentication         - JWT validation
    |
    v
-9. UseAuthorization          - Policy enforcement
+9. UseRateLimiter           - Rate limit enforcement (after authentication so PerTenant sees the validated org_id, before authorization so rejected requests are counted)
    |
    v
-10. UseRateLimiter           - Rate limit enforcement (after auth for tenant context)
+10. UseAuthorization        - Policy enforcement
    |
    v
 11. RequestEnrichmentMiddleware - Strips spoofed headers, injects JWT claims
@@ -535,28 +536,28 @@ All clusters share common configuration:
 
 ## Rate Limiting
 
+Pipeline order is UseAuthentication, UseRateLimiter, UseAuthorization (D-S228): a request that ends in 401/403 is still counted, so a flood gets 429 before 401.
+
 ### Policies
 
 **Global Policy**
-- Attached to every proxied route except those whose `RateLimiterPolicy` is `PerAgent` (`RouteRateLimiting.UsesGlobal`). ASP.NET Core enforces only the last rate-limit policy on an endpoint, so on every other route `Global` is the only limiter that runs, and on `PerAgent` routes `PerAgent` is.
+- Attached only to routes with no `RateLimiterPolicy` (or YARP's `Default`), today only `identity-internal-block` (`RouteRateLimiting.UsesGlobal`). ASP.NET Core enforces only the last rate-limit policy on an endpoint, so every other route is limited by its own policy and not by Global.
 - Fixed window limiter
 - Default: 1000 requests per 60 seconds
 - Partition key: `"global"` (shared across all clients)
 
 **Auth Policy**
-- Configured on its routes but **not enforced**: `Global` overrides it (owner decision D-S220 pending)
+- Enforced on betterauth-route, identity-route and agents-enroll-route. Shared bucket per client IP (D-S228).
 - Fixed window limiter with **IPv6 /64 prefix normalization**
 - Default: 30 requests per 60 seconds per IP
 - Partition key: IP address (or /64 prefix for IPv6)
 
 **PerTenant Policy**
-- Configured on its routes but **not enforced**: `Global` overrides it (owner decision D-S220 pending)
-- Fixed window limiter
-- Default: 100 requests per 60 seconds per tenant
-- Partition key: `org_id` claim from JWT, falls back to IP address
+- Token bucket: `PermitLimit` (default 100) is the burst size, refilled by `ReplenishPerSecond` (default 50) tokens per second, `QueueLimit` 0
+- Partition key: `tenant-org:<org_id>` when the validated JWT carries `org_id`, else `tenant-ip:<client IP, IPv6 /64>`; never a header
 
 **PerAgent Policy**
-- Enforced on `agents-route` and `agent-hub-route`, where it replaces `Global`
+- Enforced on `agents-route` and `agent-hub-route`, where it is the route's only limiter
 - Fixed window limiter
 - Default: 500 requests per 60 seconds per client IP
 - Partition key: client IP (IPv6 /64 prefix), the same key as the Auth policy

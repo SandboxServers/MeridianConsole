@@ -98,10 +98,10 @@ Backend services should **only** trust these headers when set by the Gateway, ne
 
 | Policy | Target | Limits | Partitioning |
 |--------|--------|--------|--------------|
-| `Global` | All requests | 1000/min | Per IP |
+| `Global` | Routes with no rate-limit policy | 1000/min | Single shared bucket |
 | `Auth` | Authentication routes | 30/min | Per IP (/64 for IPv6) |
-| `PerTenant` | Tenant API routes | 600/min | Per Tenant ID |
-| `PerAgent` | Agent routes | 300/min | Per Agent ID |
+| `PerTenant` | Tenant API routes | 100 burst, 50/sec refill (token bucket) | org_id when authenticated, else client IP |
+| `PerAgent` | Agent routes | 500/min | Client IP (/64 for IPv6) |
 
 ### IPv6 Rate Limiting
 

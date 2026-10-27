@@ -159,10 +159,12 @@ Rate limiting is configured in `src/Dhadgar.Gateway/appsettings.json` under `Rat
 
 | Policy | Limit | Window/Replenish | Partitioning | Use Case |
 |--------|-------|------------------|--------------|----------|
-| `Global` | 1000 requests | 60 seconds (fixed) | Per IP | DDoS protection |
+| `Global` | 1000 requests | 60 seconds (fixed) | Single shared bucket (routes without a policy only) | DDoS protection |
 | `Auth` | 30 requests | 60 seconds (fixed) | Per IP (/64 for IPv6) | Brute force prevention |
-| `PerTenant` | 100 burst, 50/sec replenish | Token bucket | Per Tenant ID | Fair usage |
-| `PerAgent` | 500 requests | 60 seconds (fixed) | Per Agent ID | Agent operations |
+| `PerTenant` | 100 burst, 50/sec replenish | Token bucket | org_id when authenticated, else client IP | Fair usage |
+| `PerAgent` | 500 requests | 60 seconds (fixed) | Per client IP (/64 for IPv6) | Agent operations |
+
+Each route is limited by its own policy; Global applies only to a route with no `RateLimiterPolicy`. The limiter runs after authentication and before authorization, so rejected requests are counted.
 
 ### Configuration
 

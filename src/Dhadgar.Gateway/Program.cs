@@ -383,8 +383,8 @@ app.MapDhadgarDefaultEndpoints();
 
 // YARP reverse proxy
 // YARP has already added each route's RateLimiterPolicy when this convention runs, and the last
-// EnableRateLimiting wins. Global is attached after the route policy (so it overrides it) except where
-// RouteRateLimiting says the route policy replaces Global (PerAgent; D-S26, D-S220).
+// EnableRateLimiting wins. Global is attached only to routes that name no policy (or "Default"), so it never
+// replaces a route's own policy (RouteRateLimiting.UsesGlobal; D-S228).
 app.MapReverseProxy()
     .ConfigureEndpoints((endpoint, route) =>
     {
