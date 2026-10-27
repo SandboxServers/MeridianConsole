@@ -323,9 +323,6 @@ public class AgentCertificateForwardingTests
     }
 
     /// <summary>
-    /// Sends one POST to the agent hub route with a freshly issued forged certificate.
-    /// </summary>
-    /// <summary>
     /// Sends one GET for the OpenID configuration document, unauthenticated. The request is disposed here.
     /// </summary>
     private static async Task<HttpResponseMessage> GetOpenIdConfigurationAsync(
@@ -336,6 +333,9 @@ public class AgentCertificateForwardingTests
         return await SendAsync(app, request, certificate: null, remoteIp);
     }
 
+    /// <summary>
+    /// Sends one POST to the agent hub route with a freshly issued forged certificate.
+    /// </summary>
     private static async Task<HttpResponseMessage> PostForgedNegotiateAsync(
         WebApplicationFactory<Program> app,
         IPAddress remoteIp)
