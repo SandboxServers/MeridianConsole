@@ -39,6 +39,7 @@ public static class AgentServiceCollectionExtensions
         services.AddSingleton<IHardwareInventoryCollector, HardwareInventoryCollector>();
 
         // Communication
+        services.TryAddSingleton(new ControlPlaneHubTransport());
         services.AddSingleton<IControlPlaneClient, ControlPlaneClient>();
 
         // Health monitoring

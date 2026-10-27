@@ -21,6 +21,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
     private readonly AgentMeter _meter;
     private readonly AgentActivitySource _activitySource;
     private readonly ILogger<ControlPlaneClient> _logger;
+    private readonly ControlPlaneHubTransport _transport;
 
     private HubConnection? _hubConnection;
     private ConnectionState _state = ConnectionState.Disconnected;
@@ -37,13 +38,15 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         ICertificateStore certificateStore,
         AgentMeter meter,
         AgentActivitySource activitySource,
-        ILogger<ControlPlaneClient> logger)
+        ILogger<ControlPlaneClient> logger,
+        ControlPlaneHubTransport? transport = null)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _certificateStore = certificateStore ?? throw new ArgumentNullException(nameof(certificateStore));
         _meter = meter ?? throw new ArgumentNullException(nameof(meter));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _transport = transport ?? new ControlPlaneHubTransport();
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -90,6 +93,12 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             var builder = new HubConnectionBuilder()
                 .WithUrl(endpoint, options =>
                 {
+                    options.Transports = _transport.Transports;
+                    if (_transport.HttpMessageHandlerFactory is { } handlerFactory)
+                    {
+                        options.HttpMessageHandlerFactory = handlerFactory;
+                    }
+
                     // Configure mTLS if certificate is available
                     var clientCert = _clientCertificate;
 
