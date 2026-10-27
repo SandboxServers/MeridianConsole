@@ -60,6 +60,18 @@ internal sealed class RecordingActions : IMachineActions
     public Result RemoveCertificate(string storeLocation, string storeName, string thumbprintSha1) =>
         Record($"RemoveCertificate:{storeLocation}\\{storeName}\\{thumbprintSha1}");
 
+    /// <summary>
+    /// Records each add. The caller disposes the certificate after the add, so the fake keeps its own copy and the
+    /// private-key state seen at the moment of the add (<c>PrivateKeyAtAdd</c>).
+    /// </summary>
+    public List<(string StoreLocation, string StoreName, System.Security.Cryptography.X509Certificates.X509Certificate2 Certificate, bool PrivateKeyAtAdd)> Added { get; } = [];
+
+    public Result AddCertificate(string storeLocation, string storeName, System.Security.Cryptography.X509Certificates.X509Certificate2 certificate)
+    {
+        Added.Add((storeLocation, storeName, System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadCertificate(certificate.RawData), certificate.HasPrivateKey));
+        return Record($"AddCertificate:{storeLocation}\\{storeName}\\{certificate.Thumbprint}");
+    }
+
     public Result DeleteCngKey(string keyName, string provider, bool machineKey) => Record($"DeleteCngKey:{keyName}");
 
     public Result UnregisterCertStore(string storeName) => Record($"UnregisterCertStore:{storeName}");

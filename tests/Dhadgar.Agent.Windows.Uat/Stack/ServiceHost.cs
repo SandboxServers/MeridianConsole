@@ -8,7 +8,15 @@ using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Uat.Stack;
 
+/// <summary>
+/// The run's TLS PFX for the Gateway (P22). Set only in service and MSI modes; null in process mode and <c>-StackOnly</c>.
+/// </summary>
+/// <param name="PfxPath">The run-scoped <c>&lt;runDir&gt;\tls\gateway.pfx</c>.</param>
+/// <param name="Password">The PFX password; it goes only into the Gateway environment.</param>
+internal sealed record GatewayTls(string PfxPath, string Password);
+
 /// <summary>The ports and passwords one run's services are started with (P19).</summary>
+/// <param name="Tls">The Gateway's run-scoped certificate (P22), or null for the user's dev certificate.</param>
 internal sealed record StackSettings(
     int PostgresPort,
     int RabbitMqPort,
@@ -16,7 +24,8 @@ internal sealed record StackSettings(
     int GatewayPort,
     string PostgresPassword,
     string RabbitMqPassword,
-    string CaPassword);
+    string CaPassword,
+    GatewayTls? Tls = null);
 
 /// <summary>
 /// Runs Nodes and the Gateway as children of the run (P19). Both are started from their published images
@@ -90,15 +99,27 @@ internal sealed class ServiceHost : IDisposable
         return env;
     }
 
-    /// <summary>The Gateway environment, per the UAT contract's stack table (process mode and <c>-StackOnly</c>).</summary>
-    public static IReadOnlyDictionary<string, string> GatewayEnvironment(StackSettings s) =>
-        new Dictionary<string, string>(StringComparer.Ordinal)
+    /// <summary>
+    /// The Gateway environment, per the UAT contract's stack table. Service and MSI modes add the run's TLS PFX
+    /// (<c>Kestrel__Certificates__Default__*</c>, P22); process mode and <c>-StackOnly</c> never do.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> GatewayEnvironment(StackSettings s)
+    {
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
             ["ASPNETCORE_URLS"] = $"https://localhost:{s.GatewayPort}",
             ["AgentIngress__ClientCertificateMode"] = "AllowCertificate",
             ["ReverseProxy__Clusters__nodes__Destinations__d1__Address"] = $"http://127.0.0.1:{s.NodesPort}/",
         };
+        if (s.Tls is not null)
+        {
+            env["Kestrel__Certificates__Default__Path"] = s.Tls.PfxPath;
+            env["Kestrel__Certificates__Default__Password"] = s.Tls.Password;
+        }
+
+        return env;
+    }
 
     /// <summary>The Nodes child spec: the image from <see cref="RunPaths.StackImages"/>, its folder, and the Nodes environment (N5).</summary>
     internal static ChildSpec NodesSpec(StackSettings settings, RunPaths paths) =>

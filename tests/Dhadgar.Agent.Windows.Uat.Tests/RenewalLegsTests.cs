@@ -217,6 +217,58 @@ public class RenewalLegsTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_WhenCancelledDuringU8_StillRecordsACertificateStoredAfterTheStop()
+    {
+        // Security N1, U8 side: Ctrl+C while U8 polls. The poll is cancelled, and the stop in the finally must still complete
+        // (CancellationToken.None), so the certificate the agent stores while it stops is recorded before the run ends.
+        // OnStop also runs at U6's stop, so the certificate in My when U8 starts is captured: the stop must replace it.
+        using var cts = new CancellationTokenSource();
+        string? inMyAtU8Start = null;
+        _world.OnRestart = w =>
+        {
+            inMyAtU8Start = w.My.Count == 1 ? w.My[0].Sha1Thumbprint : null;
+            w.Rows.Add(new CertRow(Guid.NewGuid(), "0000000000000000", false));
+            cts.Cancel();
+        };
+        _world.OnStop = w => w.AgentRenewsFromGrace();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => _world.Legs().RunAsync(new Dictionary<string, object?>(), cts.Token));
+
+        // The same certificate still alone in My means U8's stop was aborted before the agent stored its certificate.
+        var stored = Assert.Single(_world.My).Sha1Thumbprint;
+        Assert.NotNull(inMyAtU8Start);
+        Assert.NotEqual(inMyAtU8Start, stored);
+        var loaded = CleanupManifest.Load(_paths.Manifest);
+        Assert.True(loaded.IsSuccess, loaded.Error);
+        Assert.Contains(loaded.Value, entry => entry is CertificateEntry certificate
+            && string.Equals(certificate.ThumbprintSha1, stored, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenCancelledDuringU6_StillRecordsACertificateStoredAfterTheStop()
+    {
+        // Security N1, U6 side: Ctrl+C while U6 polls. The agent does not renew on start, so the first poll is unmet and its
+        // delay throws. The stop in U6's finally must still complete (CancellationToken.None), so the certificate the agent
+        // stores while it stops replaces C1 in My and is recorded before the run ends.
+        using var cts = new CancellationTokenSource();
+        _world.OnFirstStart = _ => cts.Cancel();
+        _world.OnStop = w => w.AgentRenewsFromGrace();
+        var c1Sha1 = _world.C1Store!.Sha1Thumbprint;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => _world.Legs().RunAsync(new Dictionary<string, object?>(), cts.Token));
+
+        // C1 still alone in My means U6's stop was aborted before the agent stored its certificate.
+        var stored = Assert.Single(_world.My).Sha1Thumbprint;
+        Assert.NotEqual(c1Sha1, stored);
+        var loaded = CleanupManifest.Load(_paths.Manifest);
+        Assert.True(loaded.IsSuccess, loaded.Error);
+        Assert.Contains(loaded.Value, entry => entry is CertificateEntry certificate
+            && string.Equals(certificate.ThumbprintSha1, stored, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task RunAsync_RemovesTheThresholdKey_EvenWhenStoppingTheAgentThrows()
     {
         _world.StopThrows = true;
@@ -261,7 +313,7 @@ public class RenewalLegsTests : IDisposable
 /// The Nodes side of U5 revokes C1 with a grace and creates C2 (active). The agent's first start is its renewal from
 /// grace (C3 replaces C1 in My, C2 is hard-revoked); later starts only refresh the heartbeat.
 /// </summary>
-internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsDb, IRenewalTransport, IDisposable
+internal sealed class RenewalWorld : IStoreInspector, IAgentHost, IAgentLegsDb, IRenewalTransport, IDisposable
 {
     private const string SupersededReason = "Superseded by a later renewal";
     private const string KeyProvider = "Microsoft Software Key Storage Provider";
@@ -415,6 +467,18 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
 
     public int? ProcessId => _running ? AgentPid : null;
 
+    public string Mode => "process";
+
+    /// <inheritdoc />
+    public string? ConsoleLogPath => null;
+
+    /// <inheritdoc />
+    public Task<Result> PrepareAsync(CancellationToken ct) => Task.FromResult(Result.Success());
+
+    /// <inheritdoc />
+    public Task<Result> StartAsync(CancellationToken ct) => Task.FromResult(Start());
+
+    /// <summary>Starts the fake agent; <see cref="StartAsync"/> wraps it.</summary>
     public Result Start()
     {
         Starts++;
@@ -433,7 +497,7 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
         return Result.Success();
     }
 
-    public Task<Result> StopAsync()
+    public Task<Result> StopAsync(CancellationToken ct)
     {
         _running = false;
         if (StopThrows)
@@ -441,6 +505,8 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
             throw new InvalidOperationException("the agent process could not be stopped");
         }
 
+        // As the service host does while STOP_PENDING: a cancelled token aborts the stop before the agent is down.
+        ct.ThrowIfCancellationRequested();
         OnStop?.Invoke(this);
         return Task.FromResult(Result.Success());
     }

@@ -87,6 +87,31 @@ public class ResultsWriterTests
         }
     }
 
+    [Fact]
+    public void Write_ServiceObject_IsWrittenOnlyWhenPresent()
+    {
+        var step = new StepResult("s1", "Step", "pass", new Dictionary<string, object?>(), null, 5);
+
+        try
+        {
+            var processRun = ResultsWriter.Write(Results(step, []), _dir, new Redactor());
+            Assert.True(processRun.IsSuccess);
+            Assert.DoesNotContain("\"service\"", File.ReadAllText(Path.Combine(_dir, "results.json")), StringComparison.Ordinal);
+
+            var serviceRun = Results(step, []) with { Service = new ServiceRunInfo("DhadgarAgent", "LocalSystem", true, false) };
+            var written = ResultsWriter.Write(serviceRun, _dir, new Redactor());
+            Assert.True(written.IsSuccess);
+            var text = File.ReadAllText(Path.Combine(_dir, "results.json"));
+            Assert.Contains("\"service\"", text, StringComparison.Ordinal);
+            Assert.Contains("\"decoyRemoved\"", text, StringComparison.Ordinal);
+            Assert.Contains("\"tlsRootRemovedAtCleanup\"", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(_dir, recursive: true);
+        }
+    }
+
     private static UatResults Results(StepResult step, IReadOnlyList<string> warnings) => new(
         1,
         "20261027-142233-9f3a",

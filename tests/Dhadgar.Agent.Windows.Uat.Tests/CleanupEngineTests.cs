@@ -34,6 +34,31 @@ public class CleanupEngineTests
     }
 
     [Fact]
+    public async Task Undo_ServiceAndProcessEntries_AreQuiescedBeforeAnyOtherUndo()
+    {
+        var actions = new RecordingActions();
+        actions.ProcessImages[4242] = Path.Combine(_paths.AgentPublish, "Dhadgar.Agent.Windows.exe");
+        CleanupEntry[] entries =
+        [
+            new ProcessEntry(4242, DateTime.UtcNow.AddMinutes(-2), "agent"),
+            new ServiceEntry(AgentWindowsFacts.ServiceName),
+        ];
+
+        var report = await new CleanupEngine(actions, _paths).UndoAsync(entries, CancellationToken.None);
+
+        Assert.Empty(report.Failed);
+        Assert.Equal(
+            [
+                "StopService:DhadgarAgent",   // quiesce: newest first, stop not delete
+                "KillProcess:4242",           // quiesce
+                "StopService:DhadgarAgent",   // undo: service first (newest entry)
+                "DeleteService:DhadgarAgent", // after StopService
+                "KillProcess:4242",           // undo: process last
+            ],
+            actions.Calls);
+    }
+
+    [Fact]
     public async Task UndoAsync_OneFailure_StillUndoesOthersAndReportsIt()
     {
         var actions = new RecordingActions();

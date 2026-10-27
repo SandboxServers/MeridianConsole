@@ -147,7 +147,7 @@ internal sealed class GatewayRenewalTransport : IRenewalTransport
 /// <param name="UtcNow">The clock (UTC).</param>
 internal sealed record RenewalLegsDeps(
     IStoreInspector Store,
-    IAgentProcess Agent,
+    IAgentHost Agent,
     IAgentLegsDb Db,
     IRenewalTransport Transport,
     Func<string, Result<X509Certificate2>> OpenMachineCertificate,
@@ -359,7 +359,7 @@ internal sealed class RenewalLegs
         {
             try
             {
-                var stopped = await _deps.Agent.StopAsync();
+                var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
                 if (stopped.IsFailure)
                 {
                     state.Evidence["U6.agentStop"] = stopped.Error!;
@@ -394,7 +394,7 @@ internal sealed class RenewalLegs
             return Fail(state.Evidence, "U6", "no LastHeartbeat baseline for the node");
         }
 
-        var started = _deps.Agent.Start();
+        var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
             return Fail(state.Evidence, "U6", started.Error!);
@@ -580,7 +580,7 @@ internal sealed class RenewalLegs
         var rowsBefore = rows.Value.Count;
         state.Evidence["U8.certificateRowsBefore"] = rowsBefore;
 
-        var started = _deps.Agent.Start();
+        var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
             return Fail(state.Evidence, "U8", started.Error!);
@@ -594,7 +594,7 @@ internal sealed class RenewalLegs
         }
         finally
         {
-            var stopped = await _deps.Agent.StopAsync();
+            var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
             if (stopped.IsFailure)
             {
                 state.Evidence["U8.agentStop"] = stopped.Error!;
