@@ -11,4 +11,7 @@ internal static class AgentRegistry
 
     /// <summary>Registry value name for the enrollment token (REG_SZ).</summary>
     internal const string EnrollmentTokenValueName = "EnrollmentToken";
+
+    /// <summary>Registry value name for the control plane endpoint (REG_SZ), written by the installer (D-S230).</summary>
+    internal const string ControlPlaneEndpointValueName = "ControlPlaneEndpoint";
 }

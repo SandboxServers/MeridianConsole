@@ -6,15 +6,17 @@
     Reviewed: 2026-02-02
     Reviewer: Claude Code (automated security analysis)
     Approval: PR-104-AGENT-INSTALLER
-    Notes: Registry ACLs use SDDL restricting to SYSTEM and Administrators only.
-           EnrollmentToken stored in HKLM with restricted permissions.
+    Notes: Registry key and data-folder ACLs are protected-DACL SDDL (core PermissionEx,
+           MsiLockPermissionsEx): SYSTEM and Administrators only. EnrollmentToken is stored
+           in HKLM under that ACL.
 
     IMPORTANT: This installer runs on customer hardware with elevated privileges.
     All custom actions must be reviewed for security implications.
 
     Install commands:
-      msiexec /i MeridianConsoleAgent.msi /quiet                                    - Silent install
-      msiexec /i MeridianConsoleAgent.msi /quiet ENROLLMENT_TOKEN=xxx              - With enrollment token
+      msiexec /i MeridianConsoleAgent.msi /qn                                                        - Silent install
+      msiexec /i MeridianConsoleAgent.msi /qn ENROLLMENT_TOKEN=<token> CONTROL_PLANE_ENDPOINT=https://<host>
+                                                                                                     - With enrollment token and control plane endpoint
 
     Upgrade:
       msiexec /i MeridianConsoleAgent-NewVersion.msi /quiet                        - In-place upgrade
@@ -39,8 +41,7 @@
            Codepage="1252"
            Scope="perMachine"
            InstallerVersion="500"
-           Compressed="yes"
-           Platform="x64">
+           Compressed="yes">
 
     <!-- Summary Information -->
     <SummaryInformation Keywords="Installer,MSI"
@@ -57,16 +58,40 @@
 
     <!-- Define properties -->
     <Property Id="ENROLLMENT_TOKEN" Secure="yes" Hidden="yes" />
+    <Property Id="CMDLINE_CONTROL_PLANE_ENDPOINT" Secure="yes" />
+
+    <!--
+      CONTROL_PLANE_ENDPOINT: the command line value wins; otherwise the value the previous install wrote to
+      HKLM (kept across major upgrades) is remembered. AppSearch reads the registry; the SetProperty pair restores
+      the command line value after it (D-S230).
+    -->
+    <Property Id="CONTROL_PLANE_ENDPOINT" Secure="yes">
+      <RegistrySearch Id="ControlPlaneEndpointSearch" Root="HKLM" Key="SOFTWARE\Meridian Console\Agent"
+                      Name="ControlPlaneEndpoint" Type="raw" Bitness="always64" />
+    </Property>
+    <SetProperty Id="CMDLINE_CONTROL_PLANE_ENDPOINT" Value="[CONTROL_PLANE_ENDPOINT]" Before="AppSearch"
+                 Sequence="first" Condition="CONTROL_PLANE_ENDPOINT" />
+    <SetProperty Id="CONTROL_PLANE_ENDPOINT" Value="[CMDLINE_CONTROL_PLANE_ENDPOINT]" After="AppSearch"
+                 Sequence="first" Condition="CMDLINE_CONTROL_PLANE_ENDPOINT" />
+
     <Property Id="ARPURLINFOABOUT" Value="https://www.meridianconsole.com" />
     <Property Id="ARPURLUPDATEINFO" Value="https://www.meridianconsole.com/downloads" />
     <Property Id="ARPHELPLINK" Value="https://docs.meridianconsole.com" />
+
+    <!--
+      Refuse a non-HTTPS control plane endpoint before anything is written (case-insensitive prefix test).
+      Skipped only on uninstall (REMOVE=ALL), so a bad stored value cannot block msiexec /x. Repair and
+      REINSTALL runs are checked too.
+    -->
+    <Launch Condition="REMOVE=&quot;ALL&quot; OR NOT CONTROL_PLANE_ENDPOINT OR (CONTROL_PLANE_ENDPOINT ~&lt;&lt; &quot;https://&quot;)"
+            Message="CONTROL_PLANE_ENDPOINT must be an https:// URL." />
 
     <!-- Prevent running on 32-bit Windows -->
     <Launch Condition="VersionNT64"
             Message="[ProductName] requires a 64-bit version of Windows." />
 
-    <!-- Prevent running on Windows older than Windows 10 -->
-    <Launch Condition="VersionNT &gt;= 1000"
+    <!-- Prevent running on Windows older than Windows 10 (WindowsBuild 10240 = Windows 10 RTM) -->
+    <Launch Condition="Installed OR WindowsBuild &gt;= 10240"
             Message="[ProductName] requires Windows 10 or later." />
 
     <!-- Check for administrator privileges -->
@@ -144,11 +169,20 @@
               KeyPath="yes" />
       </Component>
 
+      <!--
+        Parent of the agent data folders. Owned here so a standard user cannot pre-create it and keep ownership
+        (an owner holds WRITE_DAC; the OW ACE with an empty mask removes that implicit right on every folder below).
+      -->
+      <Component Id="MeridianDataFolderComponent" Guid="29749030-80CB-4553-8E2D-88D9B53D53DA" Directory="MeridianDataFolder">
+        <CreateFolder>
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
+        </CreateFolder>
+      </Component>
+
       <!-- Create data directories with appropriate permissions -->
       <Component Id="DataDirectoriesComponent" Guid="C3D4E5F6-A7B8-9012-CDEF-345678901234" Directory="AgentDataFolder">
         <CreateFolder>
-          <Permission User="SYSTEM" GenericAll="yes" />
-          <Permission User="Administrators" GenericAll="yes" />
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
         </CreateFolder>
         <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
           <RegistryValue Name="DataPath" Type="string" Value="[AgentDataFolder]" KeyPath="yes" />
@@ -157,16 +191,22 @@
 
       <Component Id="ServersDirectoryComponent" Guid="D4E5F6A7-B8C9-0123-DEF0-456789012345" Directory="ServersDataFolder">
         <CreateFolder>
-          <Permission User="SYSTEM" GenericAll="yes" />
-          <Permission User="Administrators" GenericAll="yes" />
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
         </CreateFolder>
       </Component>
 
       <Component Id="TempDirectoryComponent" Guid="E5F6A7B8-C9D0-1234-EF01-567890123456" Directory="TempDataFolder">
         <CreateFolder>
-          <Permission User="SYSTEM" GenericAll="yes" />
-          <Permission User="Administrators" GenericAll="yes" />
+          <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;;;;OW)" />
         </CreateFolder>
+      </Component>
+
+      <!-- Control plane endpoint from the CONTROL_PLANE_ENDPOINT property; the agent reads it from HKLM (D-S230) -->
+      <Component Id="ControlPlaneEndpointComponent" Guid="8CE88767-0287-40E3-909C-94C93E608007" Directory="INSTALLFOLDER"
+                 Condition="CONTROL_PLANE_ENDPOINT">
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
+          <RegistryValue Name="ControlPlaneEndpoint" Type="string" Value="[CONTROL_PLANE_ENDPOINT]" KeyPath="yes" />
+        </RegistryKey>
       </Component>
 
       <!-- Installation path registry key -->
@@ -270,12 +310,12 @@
       Usage: msiexec /i Agent.msi ENROLLMENT_TOKEN=your-token-here
       The agent reads this from registry on first startup for enrollment.
     -->
-    <Component Id="EnrollmentTokenComponent" Guid="18A9B0C1-D2E3-4567-89AB-CDEF01234567" Directory="INSTALLFOLDER">
-      <Condition>ENROLLMENT_TOKEN</Condition>
-      <RegistryKey Root="HKLM" Key="SOFTWARE\Meridian Console\Agent">
+    <Component Id="EnrollmentTokenComponent" Guid="18A9B0C1-D2E3-4567-89AB-CDEF01234567" Directory="INSTALLFOLDER"
+               Condition="ENROLLMENT_TOKEN">
+      <RegistryKey Id="EnrollmentTokenKey" Root="HKLM" Key="SOFTWARE\Meridian Console\Agent" ForceCreateOnInstall="yes">
         <RegistryValue Name="EnrollmentToken" Type="string" Value="[ENROLLMENT_TOKEN]" KeyPath="yes" />
-        <!-- ACL: SYSTEM and Administrators only, protected from inheritance -->
-        <util:PermissionEx Sddl="D:P(A;OICI;KA;;;SY)(A;OICI;KA;;;BA)" />
+        <!-- ACL: SYSTEM and Administrators only, protected from inheritance (MsiLockPermissionsEx, Windows Installer 5.0) -->
+        <PermissionEx Sddl="D:P(A;OICI;KA;;;SY)(A;OICI;KA;;;BA)" />
       </RegistryKey>
     </Component>
   </Fragment>
@@ -289,16 +329,20 @@
     repurposed if the host is later reassigned.
 
     Residual artifacts requiring manual cleanup:
-    1. Certificates in LocalMachine\My (agent mTLS certificates)
-    2. Certificates in LocalMachine\Root (Meridian Console CA certificate)
+    1. Agent client certificates in LocalMachine\My: those issued by CN=Meridian Console Agent CA, each with a
+       persisted machine key
+    2. The Meridian Console Agent CA, which lives in the custom store MeridianConsoleAgent (never in Root)
     3. Firewall rules created by the agent
     4. Game server data in C:\ProgramData\Meridian Console\Agent\Servers
     5. Game server Windows Services (MeridianGS_*) if service isolation was enabled
+    6. Agent state in C:\ProgramData\Meridian Console\Agent\agent-state.json and the event source "Meridian Console Agent"
 
     To clean up manually, run as Administrator in PowerShell:
-      # Remove certificates
-      Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -like '*dhadgar-agent*' } | Remove-Item
-      Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*Meridian Console CA*' } | Remove-Item
+      # Remove agent client certificates
+      Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Issuer -like '*CN=Meridian Console Agent CA*' } | Remove-Item
+
+      # Remove the agent CA from its custom store
+      Get-ChildItem Cert:\LocalMachine\MeridianConsoleAgent | Where-Object { $_.Subject -like '*CN=Meridian Console Agent CA*' } | Remove-Item
 
       # Remove firewall rules
       netsh advfirewall firewall delete rule name=all program="C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe"
