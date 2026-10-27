@@ -42,7 +42,7 @@ public sealed class AgentCertificateMatcherTests : IDisposable
     public void CommonNameFromAnotherIssuer_DoesNotMatch()
     {
         // Same CN the old store matched on, but issued by its own CA and carrying a SPIFFE SAN
-        var certificate = Track(_nodes.IssueSelfSigned(
+        var certificate = Track(NodesStyleIssuer.IssueSelfSigned(
             "dhadgar-agent",
             Guid.NewGuid(),
             notBefore: _now.AddMinutes(-1),
@@ -207,7 +207,7 @@ public sealed class AgentCertificateMatcherTests : IDisposable
         }
 
         /// <summary>Issues a self-signed certificate under <paramref name="commonName"/> with a Nodes-style SPIFFE SAN.</summary>
-        public X509Certificate2 IssueSelfSigned(string commonName, Guid nodeId, DateTimeOffset notBefore, DateTimeOffset notAfter)
+        public static X509Certificate2 IssueSelfSigned(string commonName, Guid nodeId, DateTimeOffset notBefore, DateTimeOffset notAfter)
         {
             using var otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             var request = new CertificateRequest(

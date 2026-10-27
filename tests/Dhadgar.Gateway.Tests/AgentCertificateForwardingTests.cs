@@ -35,7 +35,8 @@ public class AgentCertificateForwardingTests
     public async Task HubRoute_WithAgentCertificate_ForwardsBase64Der()
     {
         using var agentCertificate = CreateCertificate(AgentCertificateProfile.CaCommonName);
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
 
         var response = await SendAsync(app, HttpMethod.Post, "/hubs/agent/negotiate", agentCertificate);
 
@@ -47,7 +48,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task AgentsRoute_WithoutCertificate_Returns401_AndDoesNotProxy()
     {
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
 
         var response = await SendAsync(app, HttpMethod.Post, "/api/v1/agents/3f2a/heartbeat", certificate: null);
 
@@ -59,7 +61,8 @@ public class AgentCertificateForwardingTests
     public async Task AgentsRoute_WithForeignIssuer_IsRejected()
     {
         using var foreignCertificate = CreateCertificate(ForeignIssuerCommonName);
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
 
         var response = await SendAsync(app, HttpMethod.Post, "/api/v1/agents/3f2a/heartbeat", foreignCertificate);
 
@@ -72,7 +75,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task EnrollRoute_SpoofedHeader_IsStripped()
     {
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agents/enroll");
         request.Headers.TryAddWithoutValidation(AgentCertificateProfile.ForwardedCertificateHeader, "abc");
 
@@ -88,7 +92,8 @@ public class AgentCertificateForwardingTests
     {
         // Stand-in for the tenant (JWT) routes: a spoofed header must not survive on an anonymous route either.
         // The tenant routes need a bearer token, which the test host does not issue.
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity/.well-known/openid-configuration");
         request.Headers.TryAddWithoutValidation(AgentCertificateProfile.ForwardedCertificateHeader, "abc");
 
@@ -102,7 +107,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task PerAgent_ForgedIssuerCertificatePerRequest_IsRateLimitedByIp()
     {
-        using var app = CreateApp(out var capture, new[]
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture, new[]
         {
             new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "3"),
             new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:WindowSeconds", "60"),
@@ -113,9 +119,7 @@ public class AgentCertificateForwardingTests
         for (var i = 0; i < 4; i++)
         {
             // A fresh self-signed "agent CA" and leaf per request is the forgery.
-            using var forged = CreateCertificate(AgentCertificateProfile.CaCommonName);
-            using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
-            using var response = await SendAsync(app, request, forged, remoteIp);
+            using var response = await PostForgedNegotiateAsync(app, remoteIp);
             statuses.Add(response.StatusCode);
         }
 
@@ -128,7 +132,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task AgentRoute_WithoutCertificate_FloodIsRateLimited()
     {
-        using var app = CreateApp(out var capture, new[]
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture, new[]
         {
             new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "2"),
             new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:WindowSeconds", "60"),
@@ -141,8 +146,7 @@ public class AgentCertificateForwardingTests
         {
             for (var i = 0; i < 3; i++)
             {
-                using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
-                var response = await SendAsync(app, request, certificate: null, remoteIp);
+                var response = await PostNegotiateAsync(app, certificate: null, remoteIp);
                 lastResponse?.Dispose();
                 lastResponse = response;
                 statuses.Add(response.StatusCode);
@@ -163,7 +167,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task AgentRoute_WrongIssuerCertificate_FloodIsRateLimited()
     {
-        using var app = CreateApp(out var capture, new[]
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture, new[]
         {
             new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "2"),
             new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:WindowSeconds", "60"),
@@ -174,8 +179,7 @@ public class AgentCertificateForwardingTests
         using var foreignCertificate = CreateCertificate(ForeignIssuerCommonName);
         for (var i = 0; i < 3; i++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
-            using var response = await SendAsync(app, request, foreignCertificate, remoteIp);
+            using var response = await PostNegotiateAsync(app, foreignCertificate, remoteIp);
             statuses.Add(response.StatusCode);
         }
 
@@ -188,7 +192,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task NonAgentRoute_LimitedByRoutePolicy_NotByGlobal()
     {
-        using var app = CreateApp(out var capture, new[]
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture, new[]
         {
             new KeyValuePair<string, string?>("RateLimiting:Policies:Auth:PermitLimit", "2"),
             new KeyValuePair<string, string?>("RateLimiting:Policies:Auth:WindowSeconds", "60"),
@@ -199,8 +204,7 @@ public class AgentCertificateForwardingTests
 
         for (var i = 0; i < 3; i++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity/.well-known/openid-configuration");
-            using var response = await SendAsync(app, request, certificate: null, remoteIp);
+            using var response = await GetOpenIdConfigurationAsync(app, remoteIp);
             statuses.Add(response.StatusCode);
         }
 
@@ -213,7 +217,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task NonAgentRoute_GlobalExhausted_RoutePolicyStillAllows()
     {
-        using var app = CreateApp(out var capture, new[]
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture, new[]
         {
             new KeyValuePair<string, string?>("RateLimiting:Policies:Global:PermitLimit", "1"),
             new KeyValuePair<string, string?>("RateLimiting:Policies:Global:WindowSeconds", "60"),
@@ -224,8 +229,7 @@ public class AgentCertificateForwardingTests
 
         for (var i = 0; i < 3; i++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity/.well-known/openid-configuration");
-            using var response = await SendAsync(app, request, certificate: null, remoteIp);
+            using var response = await GetOpenIdConfigurationAsync(app, remoteIp);
             statuses.Add(response.StatusCode);
         }
 
@@ -238,7 +242,8 @@ public class AgentCertificateForwardingTests
     [Fact]
     public async Task AgentRoute_NotLimitedByGlobal()
     {
-        using var app = CreateApp(out var capture, new[]
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture, new[]
         {
             new KeyValuePair<string, string?>("RateLimiting:Policies:Global:PermitLimit", "2"),
             new KeyValuePair<string, string?>("RateLimiting:Policies:PerAgent:PermitLimit", "100"),
@@ -247,9 +252,7 @@ public class AgentCertificateForwardingTests
 
         for (var i = 0; i < 3; i++)
         {
-            using var cert = CreateCertificate(AgentCertificateProfile.CaCommonName);
-            using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
-            using var response = await SendAsync(app, request, cert, remoteIp);
+            using var response = await PostForgedNegotiateAsync(app, remoteIp);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
 
@@ -260,7 +263,8 @@ public class AgentCertificateForwardingTests
     public async Task HubRoute_SpoofedHeaderWithRealCertificate_ForwardsRealCertificate()
     {
         using var cert = CreateCertificate(AgentCertificateProfile.CaCommonName);
-        using var app = CreateApp(out var capture);
+        using var capture = new CaptureHandler();
+        using var app = CreateApp(capture);
         using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
         request.Headers.TryAddWithoutValidation(AgentCertificateProfile.ForwardedCertificateHeader, "abc");
 
@@ -272,11 +276,8 @@ public class AgentCertificateForwardingTests
         Assert.Equal(Convert.ToBase64String(cert.RawData), proxied.Header(AgentCertificateProfile.ForwardedCertificateHeader));
     }
 
-    private WebApplicationFactory<Program> CreateApp(out CaptureHandler capture, IEnumerable<KeyValuePair<string, string?>>? extraSettings = null)
+    private WebApplicationFactory<Program> CreateApp(CaptureHandler capture, IEnumerable<KeyValuePair<string, string?>>? extraSettings = null)
     {
-        var handler = new CaptureHandler();
-        capture = handler;
-
         return _factory.WithWebHostBuilder(builder =>
         {
             foreach (var setting in extraSettings ?? Array.Empty<KeyValuePair<string, string?>>())
@@ -303,9 +304,44 @@ public class AgentCertificateForwardingTests
 
             builder.ConfigureTestServices(services =>
             {
-                services.AddSingleton<IForwarderHttpClientFactory>(new CaptureForwarderHttpClientFactory(handler));
+                services.AddSingleton<IForwarderHttpClientFactory>(new CaptureForwarderHttpClientFactory(capture));
             });
         });
+    }
+
+    /// <summary>
+    /// Sends one POST to the agent hub route. The request is created and disposed inside this method,
+    /// so callers in loops do not own a disposable per iteration.
+    /// </summary>
+    private static async Task<HttpResponseMessage> PostNegotiateAsync(
+        WebApplicationFactory<Program> app,
+        X509Certificate2? certificate,
+        IPAddress? remoteIp = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/hubs/agent/negotiate");
+        return await SendAsync(app, request, certificate, remoteIp);
+    }
+
+    /// <summary>
+    /// Sends one POST to the agent hub route with a freshly issued forged certificate.
+    /// </summary>
+    /// <summary>
+    /// Sends one GET for the OpenID configuration document, unauthenticated. The request is disposed here.
+    /// </summary>
+    private static async Task<HttpResponseMessage> GetOpenIdConfigurationAsync(
+        WebApplicationFactory<Program> app,
+        IPAddress remoteIp)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity/.well-known/openid-configuration");
+        return await SendAsync(app, request, certificate: null, remoteIp);
+    }
+
+    private static async Task<HttpResponseMessage> PostForgedNegotiateAsync(
+        WebApplicationFactory<Program> app,
+        IPAddress remoteIp)
+    {
+        using var forged = CreateCertificate(AgentCertificateProfile.CaCommonName);
+        return await PostNegotiateAsync(app, forged, remoteIp);
     }
 
     private static async Task<HttpResponseMessage> SendAsync(
@@ -372,7 +408,7 @@ public class AgentCertificateForwardingTests
     {
         private readonly List<CapturedRequest> _requests = [];
 
-        public IReadOnlyList<CapturedRequest> Requests => _requests;
+        public List<CapturedRequest> Requests => _requests;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -391,10 +427,12 @@ public class AgentCertificateForwardingTests
         }
     }
 
-    private sealed class CaptureForwarderHttpClientFactory(CaptureHandler handler) : IForwarderHttpClientFactory
+    private sealed class CaptureForwarderHttpClientFactory(CaptureHandler handler) : IForwarderHttpClientFactory, IDisposable
     {
         private readonly HttpMessageInvoker _invoker = new(handler);
 
         public HttpMessageInvoker CreateClient(ForwarderHttpClientContext context) => _invoker;
+
+        public void Dispose() => _invoker.Dispose();
     }
 }

@@ -20,6 +20,7 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
     private static readonly Guid NodeId = Guid.Parse("0b7e4c1d-2a3f-4b5c-9d6e-7f8091a2b3c4");
     private static readonly Guid OtherNodeId = Guid.Parse("66666666-7777-8888-9999-000000000000");
     private static readonly Guid OrganizationId = Guid.Parse("c4d3b2a1-0f9e-4d8c-8b7a-6f5e4d3c2b1a");
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly TestAgentCa _ca = new();
 
@@ -28,7 +29,7 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
     [Fact]
     public async Task Enrollment_StoresPkcs8Key_ThatLoadsAndMatchesTheCertificate()
     {
-        var handler = new ScriptedHttpHandler((_, body) => Enrolled(body));
+        using var handler = new ScriptedHttpHandler((_, body) => Enrolled(body));
         var store = new RecordingCertificateStore();
         var provider = new RecordingClientCertificateProvider();
         var sut = new EnrollmentService(
@@ -59,7 +60,7 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
     [Fact]
     public async Task Enrollment_StoredKey_IsNotSec1()
     {
-        var handler = new ScriptedHttpHandler((_, body) => Enrolled(body));
+        using var handler = new ScriptedHttpHandler((_, body) => Enrolled(body));
         var store = new RecordingCertificateStore();
         var sut = new EnrollmentService(
             store,
@@ -88,7 +89,7 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
     [Fact]
     public async Task Enrollment_CertificateForAnotherNode_FailsBeforeStoring()
     {
-        var handler = new ScriptedHttpHandler((_, body) => Enrolled(body, AgentCertificateProfile.SpiffeId(OtherNodeId)));
+        using var handler = new ScriptedHttpHandler((_, body) => Enrolled(body, AgentCertificateProfile.SpiffeId(OtherNodeId)));
         var store = new RecordingCertificateStore();
         var sut = new EnrollmentService(
             store,
@@ -109,7 +110,7 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
     [Fact]
     public async Task Enrollment_ExpiredCertificate_FailsBeforeStoring()
     {
-        var handler = new ScriptedHttpHandler((_, body) => Enrolled(
+        using var handler = new ScriptedHttpHandler((_, body) => Enrolled(
             body,
             AgentCertificateProfile.SpiffeId(NodeId),
             DateTimeOffset.UtcNow.AddDays(-2),
@@ -154,6 +155,6 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
 
         return AgentCertificateTestJson.Json(
             HttpStatusCode.OK,
-            JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            JsonSerializer.Serialize(response, WebJsonOptions));
     }
 }

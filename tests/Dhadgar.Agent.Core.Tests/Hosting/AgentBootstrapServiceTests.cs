@@ -30,7 +30,7 @@ public sealed class AgentBootstrapServiceTests
         h.StoredState(StoredIdentity);
         h.UseCertificate(NodeId);
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -58,7 +58,7 @@ public sealed class AgentBootstrapServiceTests
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
             })));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -95,7 +95,7 @@ public sealed class AgentBootstrapServiceTests
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
             })));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -121,7 +121,7 @@ public sealed class AgentBootstrapServiceTests
             .Returns(_ => Task.FromResult(Result<StoredAgentState>.Failure("[AgentState.Corrupt] State file is not valid JSON")));
         h.Tokens.GetToken().Returns(Result<string>.Success(Token));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
         await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
@@ -148,7 +148,7 @@ public sealed class AgentBootstrapServiceTests
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
             })));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -172,7 +172,7 @@ public sealed class AgentBootstrapServiceTests
             _ => Task.FromResult(Result.Failure("[ControlPlane.Test] unreachable")),
             _ => Task.FromResult(Result.Success()));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -207,7 +207,7 @@ public sealed class AgentBootstrapServiceTests
                 return Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult()));
             });
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -246,7 +246,7 @@ public sealed class AgentBootstrapServiceTests
             return Task.FromResult(Result.Success());
         });
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -273,7 +273,7 @@ public sealed class AgentBootstrapServiceTests
             _ => Task.FromResult(Result<CertificateRenewalResult>.Failure("[Renewal.Test] response lost")),
             _ => Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult())));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -312,7 +312,7 @@ public sealed class AgentBootstrapServiceTests
                 return Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult()));
             });
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -358,7 +358,7 @@ public sealed class AgentBootstrapServiceTests
         h.Store.SaveAsync(Arg.Any<AgentIdentity>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(Result.Failure("[AgentState.Io] disk full")));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -392,7 +392,7 @@ public sealed class AgentBootstrapServiceTests
             .Returns(_ => Task.FromResult(Result<StoredAgentState>.Failure(error)));
         h.Tokens.GetToken().Returns(Result<string>.Success(Token));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
         await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
@@ -411,7 +411,7 @@ public sealed class AgentBootstrapServiceTests
             .Returns(_ => Task.FromException<Result<StoredAgentState>>(new IOException("disk gone")));
         h.Tokens.GetToken().Returns(Result<string>.Success(Token));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -435,7 +435,7 @@ public sealed class AgentBootstrapServiceTests
         h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException<Result<EnrollmentResult>>(new TaskCanceledException()));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -469,7 +469,7 @@ public sealed class AgentBootstrapServiceTests
             _ => Task.FromException<Result<CertificateRenewalResult>>(new TaskCanceledException()),
             _ => Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult())));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -507,7 +507,7 @@ public sealed class AgentBootstrapServiceTests
         h.Client.DisconnectAsync(Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException(new InvalidOperationException("hub busy")));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -529,7 +529,7 @@ public sealed class AgentBootstrapServiceTests
         h.UseCertificate(OtherNodeId);
         h.Tokens.GetToken().Returns(Result<string>.Success(Token));
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
         await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
@@ -550,7 +550,7 @@ public sealed class AgentBootstrapServiceTests
         h.Settings.OrganizationId = OrganizationId;
         h.UseCertificate(OtherNodeId);
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         // The fixed service returns from ExecuteAsync here; a reverted one loops forever and this wait throws.
         await sut.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
@@ -568,7 +568,7 @@ public sealed class AgentBootstrapServiceTests
         h.Settings.OrganizationId = OrganizationId;
         h.UseCertificate(NodeId);
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -591,7 +591,7 @@ public sealed class AgentBootstrapServiceTests
         h.UseCertificate(NodeId);
         h.Settings.Security.CertificateRenewalThresholdDays = 90;
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
@@ -615,7 +615,7 @@ public sealed class AgentBootstrapServiceTests
         h.Settings.Security.EnableCertificateAutoRenewal = false;
         h.Certificates.NeedsRenewal(Arg.Any<int>()).Returns(true);
 
-        var sut = h.Create();
+        using var sut = h.Create();
         await sut.StartAsync(CancellationToken.None);
         try
         {
