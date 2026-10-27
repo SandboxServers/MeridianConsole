@@ -88,8 +88,8 @@ public class ChildProcessTests
 
     private static ChildSpec Spec(string dir) => new(
         "agent",
-        Path.Combine(Environment.SystemDirectory, "cmd.exe"),
-        ["/c", "ping -n 30 127.0.0.1"],
+        Path.Combine(Environment.SystemDirectory, "ping.exe"),
+        ["-n", "30", "127.0.0.1"],
         dir,
         new Dictionary<string, string>(StringComparer.Ordinal));
 
