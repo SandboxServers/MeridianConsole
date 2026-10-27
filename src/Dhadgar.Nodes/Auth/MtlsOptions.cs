@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Dhadgar.Contracts.Nodes;
 
 namespace Dhadgar.Nodes.Auth;
 
@@ -50,7 +51,7 @@ public sealed class MtlsOptions
     /// </summary>
     [Required(ErrorMessage = "SpiffeTrustDomain is required")]
     [StringLength(253, MinimumLength = 1, ErrorMessage = "SpiffeTrustDomain must be between 1 and 253 characters")]
-    public string SpiffeTrustDomain { get; set; } = "meridianconsole.com";
+    public string SpiffeTrustDomain { get; set; } = AgentCertificateProfile.SpiffeTrustDomain;
 
     /// <summary>
     /// The path prefix for agent endpoints that require mTLS authentication.

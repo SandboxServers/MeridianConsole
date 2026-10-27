@@ -1,7 +1,6 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
+using Dhadgar.Contracts.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -18,14 +17,6 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CertificateAuthorityService> _logger;
     private readonly Data.NodesDbContext _dbContext;
-
-    // SPIFFE ID format for agent certificates - cached for performance (CA1863)
-    private static readonly CompositeFormat SpiffeIdFormat = CompositeFormat.Parse("spiffe://meridianconsole.com/nodes/{0}");
-    private const string OrganizationName = "MeridianConsole";
-    private const string CaCommonName = "Meridian Console Agent CA";
-
-    // Agent/client certificates must be valid for exactly 90 days (security policy)
-    private const int AgentCertificateValidityDays = 90;
 
     // Cached CA certificate for performance
     private X509Certificate2? _caCertificate;
@@ -188,7 +179,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
             }
 
             var now = _timeProvider.GetUtcNow().UtcDateTime;
-            var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
+            var subject = new X500DistinguishedName($"CN={nodeId}, O={AgentCertificateProfile.Organization}");
             var request = new CertificateRequest(subject, publicKey, HashAlgorithmName.SHA256);
             AddClientCertificateExtensions(request, nodeId, keyUsage);
 
@@ -203,7 +194,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
                 _caCertificate.SubjectName,
                 signer,
                 now,
-                now.AddDays(AgentCertificateValidityDays),
+                now.AddDays(AgentCertificateProfile.ValidityDays),
                 serialBytes);
 
             var thumbprint = CalculateSha256Thumbprint(certificate);
@@ -316,8 +307,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
         // Subject Alternative Name with SPIFFE ID
         var sanBuilder = new SubjectAlternativeNameBuilder();
-        var spiffeId = string.Format(CultureInfo.InvariantCulture, SpiffeIdFormat, nodeId);
-        sanBuilder.AddUri(new Uri(spiffeId));
+        sanBuilder.AddUri(new Uri(AgentCertificateProfile.SpiffeId(nodeId)));
         request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
     }
 
@@ -417,7 +407,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         using var rsa = RSA.Create(_options.CaKeySize);
 
         // Build the CA certificate request
-        var subject = new X500DistinguishedName($"CN={CaCommonName}, O={OrganizationName}");
+        var subject = new X500DistinguishedName($"CN={AgentCertificateProfile.CaCommonName}, O={AgentCertificateProfile.Organization}");
         var request = new CertificateRequest(subject, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
         // CA certificate extensions
@@ -457,7 +447,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         try
         {
             // Build the client certificate request
-            var subject = new X500DistinguishedName($"CN={nodeId}, O={OrganizationName}");
+            var subject = new X500DistinguishedName($"CN={nodeId}, O={AgentCertificateProfile.Organization}");
             var request = new CertificateRequest(subject, clientKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
             AddClientCertificateExtensions(
@@ -472,7 +462,7 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
             // Sign with CA certificate - use fixed 90-day validity (security policy)
             var notBefore = now;
-            var notAfter = now.AddDays(AgentCertificateValidityDays);
+            var notAfter = now.AddDays(AgentCertificateProfile.ValidityDays);
 
             if (_caCertificate is null)
             {
