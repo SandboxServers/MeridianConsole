@@ -90,7 +90,20 @@ public sealed class HeartbeatService : BackgroundService
         }
 
         var payload = payloadResult.Value;
-        await _controlPlaneClient.SendHeartbeatAsync(payload, cancellationToken);
+        var sendResult = await _controlPlaneClient.SendHeartbeatAsync(
+            HeartbeatPayloadMapper.ToContract(payload), cancellationToken);
+        if (sendResult.IsFailure)
+        {
+            _logger.LogWarning("Heartbeat not sent: {Error}", sendResult.Error);
+            return;
+        }
+
+        if (!sendResult.Value.Acknowledged)
+        {
+            _logger.LogWarning(
+                "Heartbeat not acknowledged by control plane. Error code: {ErrorCode}",
+                sendResult.Value.ErrorCode);
+        }
 
         _logger.LogDebug(
             "Heartbeat sent. Status: {Status}, Active processes: {ProcessCount}",

@@ -72,8 +72,8 @@ public sealed class AgentHubSeamTests : IDisposable
             {
                 CpuUsagePercent = 42.5,
                 TotalMemoryBytes = 1000,
-                AvailableMemoryBytes = 600,
-                Disks = [new DiskMetrics { Name = "root", TotalBytes = 100, AvailableBytes = 30 }]
+                AvailableMemoryBytes = 1000,
+                Disks = [new DiskMetrics { Name = "root", TotalBytes = 100, AvailableBytes = 100 }]
             }
         });
 
@@ -187,15 +187,24 @@ public sealed class AgentHubSeamTests : IDisposable
     }
 
     /// <summary>
-    /// Connect step. P05 changes <see cref="IControlPlaneClient.ConnectAsync"/> to return <c>Result</c>; only this helper changes.
+    /// Connect step. <see cref="IControlPlaneClient.ConnectAsync"/> returns a <c>Result</c>; a refused connection fails here.
     /// </summary>
-    private static Task ConnectAgentAsync(IControlPlaneClient client) => client.ConnectAsync();
+    private static async Task ConnectAgentAsync(IControlPlaneClient client)
+    {
+        var result = await client.ConnectAsync();
+        Assert.True(result.IsSuccess, result.Error);
+    }
 
     /// <summary>
-    /// Heartbeat step. P05 changes <see cref="IControlPlaneClient.SendHeartbeatAsync"/> to return <c>Result&lt;AgentHeartbeatAck&gt;</c>; only this helper changes.
+    /// Heartbeat step. <see cref="IControlPlaneClient.SendHeartbeatAsync"/> takes the typed contract heartbeat
+    /// and returns a <c>Result&lt;AgentHeartbeatAck&gt;</c>; the payload is mapped here.
     /// </summary>
-    private static Task SendAgentHeartbeatAsync(IControlPlaneClient client, HeartbeatPayload payload) =>
-        client.SendHeartbeatAsync(payload);
+    private static async Task SendAgentHeartbeatAsync(IControlPlaneClient client, HeartbeatPayload payload)
+    {
+        var result = await client.SendHeartbeatAsync(HeartbeatPayloadMapper.ToContract(payload));
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.True(result.Value.Acknowledged, result.Value.ErrorCode);
+    }
 
     private static ControlPlaneClient CreateAgentClient(
         Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory,
