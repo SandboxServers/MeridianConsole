@@ -780,7 +780,7 @@ The one-time enrollment token is read from `HKLM\SOFTWARE\Meridian Console\Agent
 
 ### State File
 
-The agent identity (node ID, organization, enrollment time) is stored in `agent-state.json` under `StateDirectory`, which defaults to `%ProgramData%\Meridian Console\Agent`. A Windows-specific protected ACL for this file is not in place yet (D-S233, planned); until then the file inherits the directory's ACL.
+The agent identity (node ID, organization, enrollment time) is stored in `agent-state.json` under `StateDirectory`, which defaults to `%ProgramData%\Meridian Console\Agent`. The file has a protected DACL (D-S233): it is created with no inherited ACEs, and only SYSTEM, Administrators and the agent's account have access. A load trusts the file only when its owner is one of those accounts and no other account holds a write ACE. If the check fails, the load returns `[AgentState.Untrusted]`, and the agent does not adopt the file. To recover, stop the service, remove `agent-state.json`, and supply a new enrollment token.
 
 ### Windows Performance Counters (Planned)
 

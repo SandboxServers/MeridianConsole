@@ -53,6 +53,9 @@ public static class Program
             // Register the enrollment token source before AddAgentCore, so Core's TryAdd keeps this one (D-S232)
             builder.Services.AddSingleton<IEnrollmentTokenSource, RegistryEnrollmentTokenSource>();
 
+            // Register the Windows state-file protection before AddAgentCore, so Core's TryAdd keeps this one (D-S233)
+            builder.Services.AddSingleton<IStateFileSecurity, WindowsStateFileSecurity>();
+
             // Add Agent.Core services (requires ICertificateStore and IProcessManager)
             builder.Services.AddAgentCore();
 
