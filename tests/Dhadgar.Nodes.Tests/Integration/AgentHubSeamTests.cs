@@ -24,7 +24,7 @@ namespace Dhadgar.Nodes.Tests.Integration;
 
 /// <summary>
 /// Seam test (S1): the real agent <see cref="ControlPlaneClient"/> talks to the real Nodes hub over a TestServer,
-/// with mTLS enabled and a certificate issued by the real CA. Red until the hub endpoint exists (Nodes P03/P04).
+/// with mTLS enabled and a certificate issued by the real CA.
 /// </summary>
 [Collection("Nodes Integration")]
 public sealed class AgentHubSeamTests : IDisposable
