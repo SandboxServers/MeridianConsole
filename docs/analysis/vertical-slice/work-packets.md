@@ -4,9 +4,11 @@ Ledger: [README.md](README.md). Resume card: [RESUME.md](RESUME.md).
 
 ## Dispatch rules
 
-- One packet, one worktree, one `packet-coder`. Worktree `/home/claude/meridianconsole/.claude/worktrees/vertical-slice-vsNN`, branch `vs/NN-<slug>`, created by ops from `origin/main` **after the previous wave has merged** (the wave 1 base is `2c4c19c`). A packet marked "stacks on VS-MM" is created from VS-MM's branch instead, and its PR uses `--base vs/MM-<slug>` until VS-MM merges.
+- One packet, one worktree, one `packet-coder`. Worktree `/home/claude/meridianconsole/.claude/worktrees/vertical-slice-vsNN`, branch `vs/NN-<slug>`, created by ops from `origin/main` **after the previous wave has merged** (the wave 1 base was `2c4c19c`; wave 2 bases on `main` after #234, #229, #232 and VS-34 have merged on top of `5eead35`, which already holds Sprint 2 `6df3338`, #233, #230, #231 and #236). A packet marked "stacks on VS-MM" is created from VS-MM's branch instead, and its PR uses `--base vs/MM-<slug>` until VS-MM merges.
+- **Merging main (D-38).** `main` is brought into PR branches by merge, never rebase or force-push: ops runs `git fetch origin && git merge origin/main` on the branch, a `packet-coder` resolves conflicts in that merge commit as the packet or ruling says, and the packet's checks run again before review. Reviewed SHAs stay in the branch history.
 - Report path: `<worktree>/.claude/reports/vertical-slice/VS-NN-coder.md`. Return line: `VS-NN <done|blocked|failed> <sha|-> <report-path> <reason>`.
-- Shipping: **one PR per packet**, squash-merged in the merge order given per wave, CI green, `security-review` label plus the owner's yes where the packet says "Security review: yes".
+- Shipping: **one PR per packet**, squash-merged in the merge order given per wave, CI green, `security-review` label where the packet says "Security review: yes".
+- **Merge authority (D-41).** Only the owner's main session merges, and only after the owner says yes to that PR. This applies to every PR, not only security-review ones. A green CI run, a `ship` verdict, or a yes given for another PR or an earlier head does not count. Every other session, the orchestrator included, stops at "ready to merge" and reports.
 - Within a wave, dispatch every packet whose dependencies have merged, in one message. Packets whose dependencies are still open stay BlockedDependency until those merge.
 - Environment (Linux container, bash; `pwsh` is not assumed). Start every shell call with:
 
@@ -15,16 +17,16 @@ cd /home/claude/meridianconsole/.claude/worktrees/vertical-slice-vsNN && export 
 ```
 
 - `CI=true` matches CI: warnings are errors and the full analyzer set runs. There is no Docker daemon: never use Testcontainers. Tests use `WebApplicationFactory` with EF InMemory.
-- **Lock files.** After any `PackageReference` or `ProjectReference` change, run `dotnet restore <changed csproj or Dhadgar.sln> --force-evaluate`. For every `packages.lock.json` that `git status` shows as changed, run `sed -i 's/\r\?$/\r/' <file>` (lock files are CRLF), then `dotnet restore <same target> --locked-mode` must pass.
+- **Lock files (D-39).** After any `PackageReference` or `ProjectReference` change, run `dotnet restore Dhadgar.sln --force-evaluate`: always the whole solution, because every project that references the changed one gets a new lock file too. For every `packages.lock.json` that `git status` shows as changed, run `sed -i 's/\r\?$/\r/' <file>` (lock files are CRLF), then `dotnet restore Dhadgar.sln --locked-mode` must pass, and every changed lock file is committed with the packet. When merging `main` into a branch, resolve each conflicted lock file by taking `main`'s copy (`git checkout origin/main -- <file>`), finish the merge, then run the two restores above. Never hand-edit lock-file JSON. Never run a bare `dotnet publish -r <rid>` or `dotnet restore -r <rid>` (D-S241: it rewrites lock files with RID sections); publish with a RID-less `--locked-mode` restore followed by `--no-restore`.
 - **Line endings.** Keep each existing file's line endings. New `.cs`, `.csproj` and `.json` files under `src/` and `tests/` are CRLF (finish with `sed -i 's/\r\?$/\r/' <file>`). New `.md`, `.yml` and `.ts`/`.tsx` files match their neighbours (check with `grep -c $'\r' <neighbour>`).
 - Windows-only code builds on Linux; Windows-only tests use `[SkippableFact]` with `Skip.IfNot(OperatingSystem.IsWindows())` and are skipped here and in CI. A packet with Windows-only behaviour says how it is verified.
 - Seam tests that cannot pass yet use `[Fact(Skip = "Pending VS-NN: <reason>")]` (D-13). The writing packet runs them once with the skip removed and quotes the failure line in its report; packet VS-NN removes the skip. The quoted failure must be the seam reason (no route, wrong status from the server, missing event), never an exception thrown inside the test's own client.
 - **A seam test that asserts a rejection must prove the server side rejected it** (VS-05 review-1 and security-1 N1). Passing because a client-side guard threw proves nothing: `ControlPlaneClient` refused to send without a certificate, and the test stayed green while the Gateway and Nodes accepted anyone. Every rejection assertion therefore:
-  1. reads the status from the server's response: `response.StatusCode`, `HttpRequestException.StatusCode`, a ProblemDetails `errorCode` or a `HubException` code. Never `Assert.ThrowsAnyAsync<Exception>`, and never an exception type the client can throw on its own;
-  2. proves which server answered. If the backend rejected it, assert the backend received the call: `SeamForwarderFactory` recorded a request for that cluster and path, or a recording handler or middleware on the backend factory saw it. If the Gateway rejected it, assert the forwarder recorded **no** request for that path;
+  1. reads the status from the server's response: `response.StatusCode`, `HttpRequestException.StatusCode`, a ProblemDetails `errorCode`, a hub ack `ErrorCode` (D-28) or the connection's close reason. Never `Assert.ThrowsAnyAsync<Exception>`, and never an exception type the client can throw on its own;
+  2. proves which server answered. If the backend rejected it, assert the backend received the call: the recording forwarder in `tests/Dhadgar.AgentSeam.Tests` `GatewayTestFactory` (VS-07R) recorded a request for that cluster and path, or a recording handler or middleware on the backend factory saw it. If the Gateway rejected it, assert the forwarder recorded **no** request for that path;
   3. has a positive twin in the same class that differs only in the variable under test (certificate present, right org, valid payload) and passes, so a 401 or 404 is about that variable and not a missing route or JWT.
 - **Client-certificate test shims stay in the test project that owns them.** A startup filter or middleware that turns a test header (`X-Seam-Client-Cert`, `X-Test-Client-Cert`) into `Connection.ClientCertificate` lives in that test project, is registered only in `ConfigureTestServices`, and is never placed in `src/`, in the shared `tests/Dhadgar.Testing` library (VS-32), or behind `InternalsVisibleTo`. A test that needs one copies or reuses the shim inside its own project.
-- **Test JWTs come from one helper (D-22).** Mint and accept test user tokens only with `SeamJwt` (`CreateUserToken(userId, organizationId)`, `Apply(services)`). It lives in `tests/Dhadgar.Seams.Tests/Infrastructure/SeamJwt.cs` until VS-32 moves it to `tests/Dhadgar.Testing/Auth/SeamJwt.cs` (namespace `Dhadgar.Testing.Auth`, global `<Using>` in the consuming test projects). Never add another token minter or another `PostConfigure<JwtBearerOptions>` test-key block. Service test factories that use a test authentication scheme (the `NodesWebApplicationFactory` pattern) are not JWT helpers and stay as they are.
+- **Test JWTs come from one helper (D-22).** Mint and accept test user tokens only with `SeamJwt` (`CreateUserToken(userId, organizationId)`, `Apply(services)`). VS-32R creates it at `tests/Dhadgar.Testing/Auth/SeamJwt.cs` from #231's copy on `main` (`git show 6895cd1:tests/Dhadgar.Seams.Tests/Infrastructure/SeamJwt.cs`; VS-34 deletes the working copy, the commit keeps it) (namespace `Dhadgar.Testing.Auth`, global `<Using>` in the consuming test projects). Never add another token minter or another `PostConfigure<JwtBearerOptions>` test-key block. Service test factories that use a test authentication scheme (the `NodesWebApplicationFactory` pattern) are not JWT helpers and stay as they are.
 - **Agent-originated data is bounded by C-2 "Limit enforcement" (D-23).** A packet that receives agent data (hub methods, events carrying agent text, agent HTTP bodies) enforces its rows with one test per bound. A packet that sends agent data truncates free text to the same constants.
 
 ## The contract
@@ -36,38 +38,111 @@ Everything below is the single source of truth for both sides of each seam. Type
 | Public path (through the Gateway) | Gateway route id, policy, transform | Service and service path | Service auth | Success | Errors (`errorCode`) |
 | --- | --- | --- | --- | --- | --- |
 | `POST /api/v1/agents/enroll` | `agents-enroll-route`, Anonymous, strip `/api/v1` | Nodes `POST /agents/enroll` | token in body | 201 `EnrollNodeResponse` | 400 `invalid_platform`/`invalid_public_key`, 401 `invalid_token` |
-| `GET /api/v1/agents/ca-certificate` | `agents-ca-route` (VS-07), Anonymous, strip `/api/v1` | Nodes `GET /agents/ca-certificate` | none | 200 `application/x-pem-file` | 400 `ca_not_initialized` |
-| `POST /api/v1/agents/{nodeId}/certificates/renew` | `agents-route`, `AgentCertificate` (VS-07), strip `/api/v1` | Nodes `POST /agents/{nodeId}/certificates/renew` | mTLS, `AgentPolicy` | 200 `RenewCertificateResponse` | 400 `invalid_public_key` (also for a `PublicKey` over 4096 chars, checked before decoding), 401 `certificate_not_current`, 403, 404 `node_not_found` |
+| `GET /api/v1/agents/ca-certificate` | `agents-ca-route` (VS-07R), Anonymous, strip `/api/v1`, `Order: 22` (before `agents-enroll-route` 25 and `agents-route` 30) | Nodes `GET /agents/ca-certificate` | none | 200 `application/x-pem-file` | 400 `ca_not_initialized` |
+| `POST /api/v1/agents/{nodeId}/certificates/renew` | `agents-route`, `AgentCertificate` (Sprint 2), strip `/api/v1` | Nodes `POST /agents/{nodeId}/certificates/renew` | mTLS, `AgentPolicy` | 200 `RenewCertificateResponse` | 400 `invalid_public_key` (also for a `PublicKey` over 4096 chars, checked before decoding), 401 `certificate_not_current`, 403, 404 `node_not_found` |
 | `POST /api/v1/agents/{nodeId}/heartbeat` (legacy HTTP, kept per ADR-0008) | `agents-route` | Nodes `POST /agents/{nodeId}/heartbeat` | mTLS, `AgentPolicy` | 200 | 400, 403, 404 |
-| `/hubs/agent` (negotiate and connection) | `agents-hub-route` (VS-07), `AgentCertificate`, no transform | Nodes `/hubs/agent` | mTLS, `AgentPolicy`, header `X-Agent-Protocol: 1` | connected | 401 missing/invalid certificate; connection aborted on wrong protocol or unknown/decommissioned node |
+| `/hubs/agent` (negotiate and connection) | `agent-hub-route` (Sprint 2), `AgentCertificate`, no transform | Nodes `AgentHubProtocol.Path` | mTLS, `AgentPolicy`, header `X-Agent-Protocol` = `AgentHubProtocol.CurrentVersion`, missing counts as "1" (D-32) | connected | 401/403 missing/invalid certificate; connection aborted on wrong protocol (Sprint 2) or unknown/decommissioned node (VS-08R) |
 | `/api/v1/organizations/{organizationId}/nodes/{**}` | `nodes-org-route`, TenantScoped, strip `/api/v1` | Nodes `/organizations/{organizationId}/nodes/...` | JWT, `TenantScoped` | existing | existing |
 | `/api/v1/organizations/{organizationId}/enrollment/{**}` | `enrollment-route`, TenantScoped, strip `/api/v1` | Nodes `/organizations/{organizationId}/enrollment/...` | JWT, `TenantScoped` | 201/200 | existing |
 | `/api/v1/organizations/{organizationId}/servers/{**}` | `servers-org-route` (VS-07, replaces `servers-route`), TenantScoped, strip `/api/v1` | Servers `/organizations/{organizationId}/servers/...` | JWT, `TenantScoped` | 200/201/204 | 400 validation, 404 `server_not_found`, 409 `insufficient_capacity`/`invalid_node` |
 | `POST /api/v1/organizations/{organizationId}/servers/{serverId}/start` and `/stop` | `servers-org-route` | Servers same path minus `/api/v1` | JWT | **202** (VS-23) | 404 `server_not_found`, 409 `node_offline`, 409 `invalid_state` |
 | `/api/v1/organizations/{organizationId}/servers/{serverId}/console/{**}` | `console-org-route` (VS-07, replaces `console-api-route`), TenantScoped, strip `/api/v1`, `Order: -1` | Console `/organizations/{organizationId}/servers/{serverId}/console/...` | JWT | 200 | 404 |
 | `/hubs/console` | `console-hub-route`, TenantScoped (Gateway reads the JWT from the `access_token` query on `/hubs/console`, VS-04) | Console `/hubs/console` | JWT (also from `access_token` query) | connected | 401 |
-| not routed (Gateway must 404) | none | Nodes `POST /internal/organizations/{organizationId}/nodes/{nodeId}/commands` | JWT `TenantScoped`; Servers forwards the caller's token | **202** `DispatchAgentCommandResponse` | 400 `invalid_command_type`/`invalid_payload` (payload fails the typed strict parse or a C-2 limit, or `ServerId` disagrees with the payload), 404 `node_not_found`, 409 `node_offline`, 409 `server_not_on_node` (server command without a Claimed reservation for that server on that node) |
+| not routed (Gateway must 404) | none | Nodes `POST /internal/organizations/{organizationId}/nodes/{nodeId}/commands` | JWT `TenantScoped`; Servers forwards the caller's token | **202** `DispatchAgentCommandResponse` | 400 `invalid_command_type`/`invalid_payload` (payload fails the typed `AgentJson` parse or a C-2 limit, or `ServerId` disagrees with the payload), 404 `node_not_found`, 409 `node_offline`, 409 `server_not_on_node` (server command without a Claimed reservation for that server on that node) |
 | not routed | none | Nodes `POST /organizations/{org}/nodes/{node}/reservations`, `POST /reservations/{token}/claim`, `DELETE /reservations/{token}` (existing) | JWT | 201/200/204 | existing |
 
-Error shape everywhere: RFC 7807 from `Dhadgar.ServiceDefaults.Problems.ProblemDetailsHelper`, `{ "type", "title", "status", "detail", "errorCode", "traceId" }`. Clients branch on `errorCode`. Hubs raise `HubException("<error_code>")`.
+Error shape everywhere: RFC 7807 from `Dhadgar.ServiceDefaults.Problems.ProblemDetailsHelper`, `{ "type", "title", "status", "detail", "errorCode", "traceId" }`. Clients branch on `errorCode`. Hubs never throw `HubException` for business results: agent → Nodes methods return `AgentHeartbeatAck` or `AgentHubAck` with an `AgentHubErrorCodes` value (D-28); protocol and identity failures abort the connection.
 
-### C-2 Agent wire types (`src/Shared/Dhadgar.Contracts/Agents/`, VS-03)
+### C-2 Agent wire types
 
-Synced on 2026-10-26 to branch `vs/03-agent-contracts` at `eabdbe5` (review-3 and security-2 `ship`). The code there is the reference for anything this block abbreviates (XML docs, remarks).
+Two files, one home each (D-26), after VS-03R:
+
+- **Hub surface:** `src/Shared/Dhadgar.Contracts/Nodes/AgentHubContracts.cs`, shipped by Sprint 2 (D-S21) and extended by VS-03R. Block C-2a.
+- **Messages, payloads, events, limits:** `src/Shared/Dhadgar.Contracts/Agents/`, from VS-03 (`eabdbe5`) as changed by VS-03R. Block C-2b.
+
+Synced on 2026-10-27 to `main` `6df3338` and the Sprint 2 reconcile ruling. The code is the reference for anything these blocks abbreviate (XML docs, remarks). Until VS-03R merges, `vs/03-agent-contracts` still has the old shapes.
+
+#### C-2a Hub surface (`Dhadgar.Contracts.Nodes`)
+
+```csharp
+namespace Dhadgar.Contracts.Nodes;
+
+using Dhadgar.Contracts.Agents;
+
+public static class AgentHubProtocol                    // Sprint 2
+{
+    public const string Path = "/hubs/agent";           // same public and service path
+    public const string VersionHeader = "X-Agent-Protocol";
+    public const string CurrentVersion = "1";           // a missing header counts as "1" (D-32)
+    public const string NodeIdClaim = "node_id";
+    public static string NodeGroup(Guid nodeId) => $"node:{nodeId:D}";
+
+    // VS-03R. Nodes HubOptions.MaximumReceiveMessageSize (VS-08R, D-30). Size of one SignalR JSON frame AFTER
+    // escaping: the limits count unescaped chars or UTF-8 bytes, and a control or non-ASCII char escapes to
+    // 6 bytes (\uXXXX), so 64 KiB of content can be 384 KiB on the wire.
+    public const int MaxReceiveMessageBytes = 512 * 1024;
+}
+
+public static class AgentHubErrorCodes
+{
+    public const string NodeNotFound = "node_not_found";             // Sprint 2
+    public const string NodeDecommissioned = "node_decommissioned";  // Sprint 2
+    public const string InvalidHeartbeat = "invalid_heartbeat";      // Sprint 2
+    public const string HeartbeatFailed = "heartbeat_failed";        // Sprint 2
+    public const string InvalidTelemetry = "invalid_telemetry";      // VS-03R
+    public const string InvalidResult = "invalid_result";            // VS-03R
+    public const string InvalidStatus = "invalid_status";            // VS-03R
+    public const string InvalidConsoleBatch = "invalid_console_batch"; // VS-03R
+    public const string UnknownCommand = "unknown_command";          // VS-03R
+    public const string ServerNotOnNode = "server_not_on_node";      // VS-03R
+    public const string NotSupported = "not_supported";              // VS-03R; stub answer until the method is built
+}
+
+public static class AgentHeartbeatLimits                // Sprint 2
+{
+    public const int MaxAgentVersionLength = 50;        // also bounds PingResult.AgentVersion (VS-03R)
+    public const int MaxHealthIssues = 20;
+    public const int MaxHealthIssueLength = 256;
+    public const int MaxActiveGameServers = 10_000;
+}
+
+/// <summary>Implemented by Nodes' AgentHub. Called by the agent.</summary>
+public interface IAgentHub
+{
+    Task<AgentHeartbeatAck> Heartbeat(AgentHeartbeat heartbeat);        // Sprint 2, unchanged
+    Task<AgentHubAck> Telemetry(AgentTelemetry telemetry);              // VS-03R stub; VS-08R implements
+    Task<AgentHubAck> CommandResult(AgentCommandResult result);         // VS-03R stub; VS-33 implements
+    Task<AgentHubAck> ServerStatusChanged(AgentServerStatus status);    // VS-03R stub; VS-33 implements
+    Task<AgentHubAck> ConsoleOutput(AgentConsoleBatch batch);           // VS-03R stub; VS-33 implements
+}
+
+/// <summary>Implemented by the agent. Called by Nodes through IHubContext&lt;AgentHub, IAgentHubClient&gt;.</summary>
+public interface IAgentHubClient
+{
+    Task ReceiveCommand(AgentCommandEnvelope command);  // VS-03R: was string (D-29)
+    Task ReceivePing(string message);                   // Sprint 2, unchanged; bounded by MaxNonceLength
+}
+
+public sealed record AgentHeartbeat(                    // Sprint 2, unchanged; no NodeId (D-S23)
+    double CpuUsagePercent,
+    double MemoryUsagePercent,
+    double DiskUsagePercent,
+    int ActiveGameServers,
+    string? AgentVersion,
+    IReadOnlyList<string>? HealthIssues);
+
+public sealed record AgentHeartbeatAck(bool Acknowledged, DateTimeOffset ServerTime, string? ErrorCode = null); // Sprint 2
+
+/// <summary>Business result of every other agent → Nodes hub call (D-28). Never thrown.</summary>
+public sealed record AgentHubAck(bool Accepted, string? ErrorCode = null);   // VS-03R
+```
+
+#### C-2b Messages, payloads, events (`Dhadgar.Contracts.Agents`)
 
 ```csharp
 namespace Dhadgar.Contracts.Agents;
 
-public static class AgentProtocol
-{
-    public const int Version = 1;
-    public const string VersionHeader = "X-Agent-Protocol";
-    public const string HubPath = "/hubs/agent";            // same public and service path
-    // Nodes HubOptions.MaximumReceiveMessageSize. Size of one SignalR JSON frame AFTER escaping: the limits
-    // below count unescaped chars or UTF-8 bytes, and a control or non-ASCII char escapes to 6 bytes (\uXXXX),
-    // so 64 KiB of content can be 384 KiB on the wire. 512 KiB covers the largest allowed message.
-    public const int MaxHubMessageBytes = 512 * 1024;
-}
+// VS-03R deletes class AgentProtocol (duplicated AgentHubProtocol) and Agents/AgentHubContracts.cs.
 
 /// Strings are UTF-16 chars, bytes are UTF-8 bytes of the unescaped string, unless stated otherwise.
 public static class AgentMessageLimits
@@ -80,10 +155,8 @@ public static class AgentMessageLimits
     public const int MaxConsoleLinesPerBatch = 200;
     public const int MaxConsoleLineLength = 4096;           // chars; longer lines are truncated by the sender
     public const int MaxConsoleBatchChars = 64 * 1024;      // sum of Text lengths in one batch
-    public const int MaxHeartbeatWarnings = 20;
-    public const int MaxWarningLength = 256;
-    public const int MaxAgentVersionLength = 64;            // AgentHeartbeat.AgentVersion, PingResult.AgentVersion
-    public const int MaxServersPerHeartbeat = 64;
+    // VS-03R deletes MaxHeartbeatWarnings, MaxWarningLength, MaxAgentVersionLength and MaxServersPerHeartbeat:
+    // the heartbeat is Sprint 2's and is bounded by AgentHeartbeatLimits (C-2a).
     public const int MaxTelemetryMetrics = 500;
     public const int MaxMetricNameLength = 128;
     public const int MaxNonceLength = 64;                   // PingPayload.Nonce, PingResult.Nonce, ReceivePing(nonce)
@@ -117,7 +190,9 @@ public static class AgentCommandTypes
 }
 
 /// <summary>JSON options for PayloadJson and ResultJson on both sides (camelCase, enums as numbers).
-/// Strict and read-only: a missing required property or an unknown property throws JsonException.</summary>
+/// Lenient about unknown members (D-40), strict about everything else, and read-only: unknown properties
+/// are skipped; a missing required property, a null in a non-nullable member, a duplicate property
+/// or nesting deeper than 8 throws JsonException.</summary>
 public static class AgentJson
 {
     public static JsonSerializerOptions Options { get; } = Create();
@@ -128,7 +203,8 @@ public static class AgentJson
         {
             RespectNullableAnnotations = true,
             RespectRequiredConstructorParameters = true,
-            UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+            UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip, // D-40 (supersedes D-21's Disallow)
+            AllowDuplicateProperties = false,                          // D-40: one meaning per member
             MaxDepth = 8,
         };
         options.MakeReadOnly(populateMissingResolver: true);
@@ -136,24 +212,9 @@ public static class AgentJson
     }
 }
 
-/// <summary>Implemented by Nodes' AgentHub. Called by the agent.</summary>
-public interface IAgentHub
-{
-    Task Heartbeat(AgentHeartbeat heartbeat);
-    Task CommandResult(AgentCommandResult result);
-    Task Telemetry(AgentTelemetry telemetry);
-    Task ServerStatusChanged(AgentServerStatus status);
-    Task ConsoleOutput(AgentConsoleBatch batch);
-}
+// IAgentHub and IAgentHubClient live in Dhadgar.Contracts.Nodes (C-2a, D-26).
 
-/// <summary>Implemented by the agent. Called by Nodes through IHubContext&lt;AgentHub, IAgentHubClient&gt;.</summary>
-public interface IAgentHubClient
-{
-    Task ReceiveCommand(AgentCommandEnvelope command);
-    Task ReceivePing(string nonce);
-}
-
-public sealed record AgentCommandEnvelope(
+public sealed record AgentCommandEnvelope(          // Nodes → agent: keeps NodeId and OrganizationId
     Guid CommandId,
     string CommandType,
     Guid NodeId,
@@ -168,9 +229,9 @@ public sealed record AgentCommandEnvelope(
 
 public enum AgentCommandStatus { Succeeded = 0, Failed = 1, Rejected = 2, TimedOut = 3, Cancelled = 4 }
 
+// Agent → Nodes records carry no NodeId: Nodes takes it from the certificate (D-S23, D-27).
 public sealed record AgentCommandResult(
     Guid CommandId,
-    Guid NodeId,
     AgentCommandStatus Status,
     DateTimeOffset StartedAt,
     DateTimeOffset CompletedAt,
@@ -181,31 +242,21 @@ public sealed record AgentCommandResult(
 
 public enum AgentServerState { Stopped = 0, Installing = 1, Starting = 2, Running = 3, Stopping = 4, Crashed = 5 }
 
-public sealed record AgentServerProcess(
-    Guid ServerId, AgentServerState State, int? OsPid, double CpuPercent, long MemoryBytes, long UptimeSeconds);
-
-public sealed record AgentHeartbeat(
-    Guid NodeId,
-    string AgentVersion,
-    DateTimeOffset Timestamp,
-    double CpuUsagePercent,      // 0..100
-    double MemoryUsagePercent,   // 0..100
-    double DiskUsagePercent,     // 0..100, highest-used disk
-    IReadOnlyList<AgentServerProcess> Servers,
-    IReadOnlyList<string> Warnings);
+// VS-03R deletes AgentServerProcess and the Agents AgentHeartbeat: the heartbeat is Sprint 2's (C-2a);
+// per-server state travels in AgentServerStatus.
 
 public sealed record AgentServerStatus(
-    Guid NodeId, Guid ServerId, AgentServerState State, int? ExitCode, string? Message, DateTimeOffset Timestamp);
+    Guid ServerId, AgentServerState State, int? ExitCode, string? Message, DateTimeOffset Timestamp);
 
 public sealed record AgentConsoleLine(DateTimeOffset Timestamp, bool IsError, string Text);
 
-public sealed record AgentConsoleBatch(Guid NodeId, Guid ServerId, IReadOnlyList<AgentConsoleLine> Lines);
+public sealed record AgentConsoleBatch(Guid ServerId, IReadOnlyList<AgentConsoleLine> Lines);
 
-public sealed record AgentTelemetry(Guid NodeId, DateTimeOffset Timestamp, IReadOnlyDictionary<string, double> Metrics);
+public sealed record AgentTelemetry(DateTimeOffset Timestamp, IReadOnlyDictionary<string, double> Metrics);
 
 // Command payloads (PayloadJson / ResultJson, serialized with AgentJson.Options)
 public sealed record PingPayload(string? Nonce = null);   // default: "{}" is a valid Ping payload (review-2 N1)
-public sealed record PingResult(string AgentVersion, DateTimeOffset AgentTime, string? Nonce);
+public sealed record PingResult(string AgentVersion, DateTimeOffset AgentTime, string? Nonce); // AgentVersion ≤ AgentHeartbeatLimits.MaxAgentVersionLength
 public sealed record StartServerPayload(
     Guid ServerId, string MinecraftVersion, string ServerJarUrl, string ServerJarSha1,
     int MemoryMb, int Port, bool EulaAccepted);
@@ -213,7 +264,7 @@ public sealed record StopServerPayload(Guid ServerId, int GracefulTimeoutSeconds
 public sealed record ServerStatusPayload(Guid ServerId);
 public sealed record ServerStatusResult(Guid ServerId, AgentServerState State, int? OsPid, long UptimeSeconds);
 
-// MassTransit events published by Nodes
+// MassTransit events published by Nodes: keep NodeId, set by Nodes from the certificate
 public sealed record AgentCommandCompleted(
     Guid CommandId, Guid NodeId, Guid OrganizationId, string CommandType, Guid? ServerId,
     AgentCommandStatus Status, string? ResultJson, string? ErrorCode, string? ErrorMessage,
@@ -229,7 +280,8 @@ public sealed record ServerConsoleOutput(
 
 JSON rules (both sides):
 
-- Every positional record parameter is **required** in `AgentJson` unless it has a default value. So `PingPayload(string? Nonce = null)` accepts `{}`, VS-29's `JavaRuntimes = null` is optional, and any future optional field must get a default. Unknown properties throw (D-21 covers the upgrade order this implies).
+- Every positional record parameter is **required** in `AgentJson` unless it has a default value. So `PingPayload(string? Nonce = null)` accepts `{}`, VS-29's `JavaRuntimes = null` is optional, and any future optional field must get a default. Unknown properties are **ignored** (D-40, superseding D-21); duplicate properties throw. Lenient means tolerating unknown members only: every C-2 limit, required field, `Enum.IsDefined` check and null check still applies. A field whose meaning an older receiver must not ignore (a new restriction or safety setting) still bumps `AgentHubProtocol.CurrentVersion`, and Nodes sends it only to connections that announced the new version (D-40).
+- A payload Nodes signs carries only members Nodes understood: Nodes parses the caller's `PayloadJson` with `AgentJson.Options`, validates the typed record, and signs `JsonSerializer.Serialize(typed, AgentJson.Options)`, never the caller's string (D-40; VS-15).
 - PayloadJson is untrusted on the agent: verify the signature over the **raw** `PayloadJson` string before parsing it. After parsing, check every enum with `Enum.IsDefined` (numbers are not range-checked by the serializer).
 - SignalR binds hub-method arguments with its own JSON hub protocol options, **not** `AgentJson`. A non-nullable string or list can arrive null, unknown properties are ignored and enums are not range-checked. Hub receivers therefore null-check and `Enum.IsDefined`-check every field (table below). Do not swap the hub protocol options.
 
@@ -242,12 +294,13 @@ Command acceptance on the agent (the `AgentCommandEnvelope` remarks in the code;
 5. `Signature` decodes (`Convert.TryFromBase64String`) to exactly `AgentCommandSigning.SignatureBytes` (64) bytes and verifies with `DSASignatureFormat.IeeeP1363FixedFieldConcatenation` over `AgentCommandSigning.TryBuildSigningInput(envelope, out input)`. `TryBuildSigningInput` returning false is a rejection, not an exception.
 6. The replay cache has not seen `CommandId`. The cache key is `CommandId`, never the signature (ECDSA signatures are malleable), and an entry is kept until `ExpiresAt + MaxClockSkewSeconds`. A command is registered only after every other check passed.
 
-Hub rules (Nodes side, VS-08 and VS-33):
+Hub rules (Nodes side; Sprint 2, VS-08R and VS-33):
 
-- The connection's node is the `node_id` claim from the certificate (set by `MtlsMiddleware`). Every method whose argument carries a `NodeId` that differs throws `HubException("node_mismatch")`.
-- On connect: missing or wrong `X-Agent-Protocol` aborts the connection; an unknown or decommissioned node aborts it; otherwise the connection joins group `node:{nodeId:D}` and is recorded in `IAgentConnectionRegistry`.
-- `ServerStatusChanged` and `ConsoleOutput` require a **Claimed** capacity reservation on that node whose `ServerId` equals `serverId.ToString("D")`; otherwise `HubException("server_not_on_node")`.
-- `CommandResult` for an unknown command id, or one belonging to another node, throws `HubException("unknown_command")`; a second result for a finished command is ignored.
+- The connection's node is the `AgentHubProtocol.NodeIdClaim` claim from the certificate (set by `MtlsMiddleware`). Agent → Nodes payloads carry no node id (D-27), so there is no `node_mismatch` case.
+- On connect (Sprint 2): a `X-Agent-Protocol` other than `CurrentVersion` (missing counts as "1") aborts; a missing `node_id` claim or a certificate that is not current aborts; otherwise the connection joins `AgentHubProtocol.NodeGroup(nodeId)`. VS-08R adds: an unknown or decommissioned node aborts, and the connection is recorded in `IAgentConnectionRegistry`.
+- Every method returns an ack (D-28). Business failures are `Accepted = false` with an `AgentHubErrorCodes` code; a method never throws `HubException` for them.
+- `ServerStatusChanged` and `ConsoleOutput` require a **Claimed** capacity reservation on that node whose `ServerId` equals `serverId.ToString("D")`; otherwise ack `server_not_on_node`.
+- `CommandResult` for an unknown command id, or one belonging to another node, answers ack `unknown_command`; a second result for a finished command is ignored and answers `Accepted = true`.
 - `AgentCommandCompleted` takes `OrganizationId`, `CommandType`, `ServerId` and `CorrelationId` from Nodes' own `AgentCommand` row, never from the agent's result. `AgentServerStatusChanged` and `ServerConsoleOutput` take `OrganizationId` from the node record (`Context.Items["OrganizationId"]`, set on connect).
 
 #### Limit enforcement (D-23)
@@ -256,18 +309,18 @@ Every receiver of agent-originated data enforces these limits; a conforming send
 
 | Message (direction) | Field rules | Receiver (packet) | Violation |
 | --- | --- | --- | --- |
-| Any hub frame (agent → Nodes) | escaped frame ≤ `AgentProtocol.MaxHubMessageBytes` | SignalR `MaximumReceiveMessageSize` (VS-08) | connection closed by SignalR |
-| `AgentHeartbeat` | `AgentVersion` non-null, 1..`MaxAgentVersionLength`; three percentages finite and 0..100; `Servers` non-null, ≤ `MaxServersPerHeartbeat`, each `State` defined, `CpuPercent` finite ≥ 0, `MemoryBytes` ≥ 0, `UptimeSeconds` ≥ 0; `Warnings` non-null, ≤ `MaxHeartbeatWarnings`, each non-null and ≤ `MaxWarningLength` | `AgentHubMessageValidator` (VS-08) | `HubException("invalid_heartbeat")` |
-| `AgentTelemetry` | `Metrics` non-null, ≤ `MaxTelemetryMetrics`; each name 1..`MaxMetricNameLength` with no control chars; each value finite | VS-08 | `invalid_telemetry` |
-| `AgentCommandResult` | `Status` defined; `ResultJson` null or ≤ `MaxResultJsonBytes` UTF-8 bytes; `ErrorMessage` null or ≤ `MaxErrorMessageLength`; `ErrorCode` null or matches `ErrorCodePattern`; `CorrelationId` null or ≤ `MaxCorrelationIdLength` (bounded, then ignored: the event uses the row's value) | VS-33 | `invalid_result` (row unchanged) |
-| `AgentServerStatus` | `State` defined; `Message` null or ≤ `MaxErrorMessageLength` | VS-33 | `invalid_status` |
-| `AgentConsoleBatch` | `Lines` non-null, 1..`MaxConsoleLinesPerBatch`; each line non-null, `Text` non-null and ≤ `MaxConsoleLineLength`; sum of `Text` lengths ≤ `MaxConsoleBatchChars` | VS-33 | `invalid_console_batch` |
+| Any hub frame (agent → Nodes) | escaped frame ≤ `AgentHubProtocol.MaxReceiveMessageBytes` | SignalR `MaximumReceiveMessageSize` (VS-08R; `main` has 64 KiB) | connection closed by SignalR |
+| `AgentHeartbeat` (Sprint 2) | as `AgentHeartbeatValidator` on `main` enforces with `AgentHeartbeatLimits` | `AgentHeartbeatValidator` (Sprint 2, done) | ack `invalid_heartbeat` |
+| `AgentTelemetry` | `Metrics` non-null, ≤ `MaxTelemetryMetrics`; each name 1..`MaxMetricNameLength` with no control chars; each value finite; `Timestamp` not `default` | `AgentTelemetryValidator` (VS-08R) | ack `invalid_telemetry` |
+| `AgentCommandResult` | `Status` defined; `ResultJson` null or ≤ `MaxResultJsonBytes` UTF-8 bytes; `ErrorMessage` null or ≤ `MaxErrorMessageLength`; `ErrorCode` null or matches `ErrorCodePattern`; `CorrelationId` null or ≤ `MaxCorrelationIdLength` (bounded, then ignored: the event uses the row's value) | VS-33 | ack `invalid_result` (row unchanged) |
+| `AgentServerStatus` | `State` defined; `Message` null or ≤ `MaxErrorMessageLength` | VS-33 | ack `invalid_status` |
+| `AgentConsoleBatch` | `Lines` non-null, 1..`MaxConsoleLinesPerBatch`; each line non-null, `Text` non-null and ≤ `MaxConsoleLineLength`; sum of `Text` lengths ≤ `MaxConsoleBatchChars` | VS-33 | ack `invalid_console_batch` |
 | `ServerConsoleOutput` event (Nodes → Console, agent-originated text) | `Lines.Count` ≤ `MaxConsoleLinesPerBatch`, each `Text` ≤ `MaxConsoleLineLength`; text never logged; rendered only as text | Console consumer (VS-17), Panel (VS-26) | event dropped with a warning that carries no text |
 | `AgentCommandCompleted` event (agent-originated `ResultJson`, `ErrorCode`, `ErrorMessage`) | `Status` defined before use; `ResultJson` parsed only with `AgentJson.Options` inside a `try`, failure = ignore the result body | Servers consumers (VS-23) | event skipped with a warning |
 | `AgentCommandEnvelope` (Nodes → agent) | `CommandType` non-null, ≤ `MaxCommandTypeLength`; `PayloadJson` non-null, ≤ `MaxPayloadJsonBytes`; `CorrelationId` null or ≤ `MaxCorrelationIdLength`; `Signature` null/empty or exactly `AgentCommandSigning.SignatureBase64Length` (88) chars; `SigningKeyId` null/empty or exactly `AgentCommandSigning.KeyIdLength` (64) chars; then the acceptance rules above | agent `InboundCommandFilter` (VS-13: sizes, identity, time) and `CommandValidator` (VS-14: type, signature, key id, replay) | dropped with a log (filter) or `Rejected` result (validator) |
 | `ReceivePing(nonce)` (Nodes → agent) | non-null, ≤ `MaxNonceLength` | agent `ControlPlaneClient` (VS-13) | dropped with a log; the nonce is not logged |
 | Typed payloads (Servers → Nodes dispatch, then agent) | parse with `AgentJson.Options` by `CommandType`; `PingPayload.Nonce` ≤ `MaxNonceLength`; `StartServerPayload`: `MinecraftVersion` matches `MinecraftVersionPattern`, `ServerJarUrl` absolute `https` and ≤ `MaxServerJarUrlLength`, `ServerJarSha1` exactly `ServerJarSha1HexLength` hex chars, `MemoryMb` and `Port` in range; `StopServerPayload.GracefulTimeoutSeconds` in `MinGracefulTimeoutSeconds..MaxGracefulTimeoutSeconds` (rejected, never clamped) | Nodes dispatcher (VS-15) before signing; agent handlers again (VS-16, VS-19, VS-20) | `invalid_payload` (Nodes); `Failed` result with a `[Category.Code]` error (agent) |
-| `RenewCertificateRequest.PublicKey` (agent → Nodes, HTTP) | ≤ 4096 chars before base64 decoding | Nodes renew endpoint (VS-10) | 400 `invalid_public_key` |
+| `RenewCertificateRequest.PublicKey` (agent → Nodes, HTTP) | as Sprint 2's renew endpoint enforces it (D-36) | Nodes renew endpoint (Sprint 2, done) | 400 `invalid_public_key` |
 
 ### C-3 Command signing (`AgentCommandSigning`, VS-03; used by VS-09 and VS-14)
 
@@ -336,10 +389,11 @@ public record EnrollNodeResponse(
     string CommandSigningPublicKey,   // base64 DER SubjectPublicKeyInfo, ECDSA P-256
     string CommandSigningKeyId);      // AgentCommandSigning.ComputeKeyId(...)
 
-// VS-10: replaces the existing renewal records
+// Sprint 2 (on main, D-36; VS-10 superseded): the renewal records, unchanged
 public record RenewCertificateRequest(string PublicKey);   // base64 DER SPKI of the agent's NEW key pair, at most 4096 chars
 public record RenewCertificateResponse(
-    string CertificateThumbprint, string Certificate /* PEM */, DateTimeOffset NotBefore, DateTimeOffset NotAfter);
+    string CertificateThumbprint, string Certificate /* PEM */, string CaCertificate /* PEM */,
+    DateTimeOffset NotBefore, DateTimeOffset NotAfter);
 
 // VS-22: moved unchanged from src/Dhadgar.Nodes/Models/ReservationModels.cs and Data/Entities
 // CreateReservationRequest, ClaimReservationRequest, ReservationResponse, ReservationStatus
@@ -356,18 +410,15 @@ public record RenewCertificateResponse(
 
 | Key or header | Where | Meaning |
 | --- | --- | --- |
-| `X-Agent-Protocol: 1` | agent → hub | Protocol version (D-10) |
-| `X-Client-Cert` | Gateway → Nodes | base64 DER of the TLS client certificate; stripped from client requests |
-| `X-Dhadgar-Gateway-Secret` | Gateway → Nodes | shared secret proving the header came from the Gateway; stripped from client requests |
-| `AgentIngress:ForwardedCertificateSecret` | Gateway | the secret (≥ 32 chars); empty disables forwarding |
-| `Kestrel:Endpoints:Agents:Url`, `...:ClientCertificateMode=AllowCertificate` | Gateway | agent listener `https://+:8443` (compose, VS-27) |
-| `Mtls:ForwardedCertificate:Enabled`, `Mtls:ForwardedCertificate:SharedSecret` | Nodes | accept forwarded certificates (same secret) |
-| `Mtls:AdditionalProtectedPrefixes` | Nodes | default `["/hubs/agent"]` |
+| `X-Agent-Protocol` = `AgentHubProtocol.CurrentVersion` | agent → hub | Protocol version; missing counts as "1" (D-32) |
+| `X-Client-Cert` (`AgentCertificateProfile.ForwardedCertificateHeader`) | Gateway → Nodes | the TLS client certificate, set by `AgentCertificateForwarding.Apply`; any incoming copy is stripped (Sprint 2) |
+| `AgentIngress:ClientCertificateMode` | Gateway | Kestrel client-certificate mode (default `NoCertificate`; compose sets `AllowCertificate`; Sprint 2) |
+| `Mtls:ForwardedCertificate:Enabled`, `Mtls:ForwardedCertificate:TrustedProxies` | Nodes | accept `X-Client-Cert` only from these CIDRs (D-31, D-S25, D-S210 A); no shared secret |
 | `CommandSigning:KeyPath`, `CommandSigning:CommandTtlSeconds` (60, range 10..`AgentMessageLimits.MaxCommandLifetimeSeconds` = 60) | Nodes | signing key file (optional), command lifetime; a TTL above 60 would make every conforming agent reject every command |
 | `Auth:Issuer`, `Auth:Audience`, `Auth:MetadataAddress`, `Auth:InternalBaseUrl`, `Auth:ClockSkewSeconds` | Gateway, Nodes, Servers, Console, Secrets | JWT validation (VS-04 helper) |
 | `Services:Nodes:BaseUrl` | Servers | e.g. `http://nodes:8080` |
 | `Services:Servers:BaseUrl` | Console | e.g. `http://servers:8080` (exists in #88) |
-| `Agent:StatePath` | agent | directory for `agent-identity.json` |
+| `Agent:StateDirectory` (`AgentOptions.StateDirectory`) | agent | directory for `agent-state.json` (Sprint 2, D-37) |
 | `Agent:EnrollmentToken` | agent | optional; Windows also reads `HKLM\SOFTWARE\Meridian Console\Agent\EnrollmentToken` |
 | `Agent:Security:RequireSignedCommands` (true), `Agent:Security:CommandSigningPublicKey` | agent | D-09 |
 | `Agent:Minecraft:AllowedDownloadHosts` (`["piston-data.mojang.com"]`), `Agent:Minecraft:MaxJarBytes` | agent (`MinecraftOptions`, VS-19) | D-19: server jar download |
@@ -375,7 +426,7 @@ public record RenewCertificateResponse(
 
 ### C-7 Java runtime (D-19; VS-29 adds it on top of VS-03's files)
 
-VS-03 built C-2. VS-29 then adds one record and one trailing optional parameter. Old JSON without `javaRuntimes` still deserializes (the parameter has a default, so `AgentJson` does not require it), and every `new StartServerPayload(...)` call with seven arguments still compiles. The reverse does not hold: an agent built before VS-29 rejects a payload that carries `javaRuntimes` (`UnmappedMemberHandling.Disallow`). That is acceptable only under D-21's upgrade order.
+VS-03 built C-2. VS-29 then adds one record and one trailing optional parameter. Old JSON without `javaRuntimes` still deserializes (the parameter has a default, so `AgentJson` does not require it), and every `new StartServerPayload(...)` call with seven arguments still compiles. An agent built before VS-29 ignores `javaRuntimes` (`UnmappedMemberHandling.Skip`, D-40) and starts the server with its configured Java, or fails with its existing no-runtime error. No agent ships before the VS-27 UAT, and every UAT agent includes VS-29, so no protocol bump is needed.
 
 ```csharp
 namespace Dhadgar.Contracts.Agents;
@@ -436,7 +487,270 @@ Agent rules, in order (`JavaRuntimeResolver`, VS-29; installer VS-30; hardening 
 
 ## Wave 1: foundation
 
-Five independent packets, dispatched together from `origin/main` `2c4c19c`. Merge order: VS-03, VS-04, VS-05, VS-01, VS-02 (VS-01 and VS-02 last because they touch the most files; neither conflicts with the others). Wave review after all five reach `ship`.
+Five independent packets, dispatched together from `origin/main` `2c4c19c` on 2026-10-26. The packet texts VS-01 to VS-05 below are the specs the five PRs were built from. **The merge order changed after Sprint 2 (#235, squash `6df3338`) merged first.** Then, on 2026-10-27, another session merged #233 VS-02, #230 VS-04 and #231 VS-05 without the owner's go-ahead. #236 fixed #231's lock file, and `main` is now `5eead35` (ruling § 9). The remaining order is #234 ledger, #229 VS-03R, #232 VS-01, then VS-34 (D-42). Each needs the owner's yes, and the owner's main session merges it (D-41). The next section says what each PR needs now.
+
+### Wave 1 reconcile after Sprint 2 (2026-10-27)
+
+Ruling: [worknotes/sprint2-reconcile-ruling.md](worknotes/sprint2-reconcile-ruling.md). For every PR below, ops first merges `origin/main` into the branch (D-38: merge, never rebase or force-push). Then a `packet-coder` resolves conflicts in that merge commit, as listed here, and runs the checks again. After a review pass the PR ships in this order. Each later PR gets the new `main` merged in the same way before it ships.
+
+| Order | PR | Packet | Branch / worktree | What it needs | Security re-review |
+| --- | --- | --- | --- | --- | --- |
+| 1 | #234 | ledger | `campaign/vertical-slice-ledger` / `vertical-slice-ledger` | ops merges main `5eead35`, commits the 2026-10-27 ledger edits | No |
+| 2 | #229 | VS-03R | `vs/03-agent-contracts` / `vertical-slice-vs03` | merge main (clean on `5eead35`), then the VS-03R packet | Yes |
+| 3 | #232 | VS-01 | `vs/01-park-projects` / `vertical-slice-01-park-projects` | merge-main resolution (below, revised for `5eead35`) | No (keeps the owner's label) |
+| 4 | new | VS-34 | `vs/34-fold-seams` / `vertical-slice-vs34` | the VS-34 packet (below); merge main after #232 | Yes |
+| - | #230 | VS-04 | - | merged as `2440ada` (no owner yes); post-merge security pass FU-41a | owed (FU-41a) |
+| - | #233 | VS-02 | - | merged as `32779b5` (no owner yes); matches its verdict | - |
+| - | #231 | VS-05 | - | merged as `6895cd1`, lock fix #236 `5eead35`; VS-34 folds and removes it | VS-34's pass |
+
+Ops recreates a worktree from its existing branch if it was removed. Never `git worktree prune`.
+
+### VS-03R Agent contracts on Sprint 2's hub surface
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/03-agent-contracts` (PR #229) / `vertical-slice-vs03` |
+| Commit subject | `fix(contracts): move the agent hub surface onto Sprint 2's AgentHubContracts; drop NodeId from agent payloads [VS-03R]` |
+| Security review | Yes (agent contracts, `AgentCommandEnvelope`, a Nodes hub edit) |
+| Depends on | ops has merged `origin/main` (`5eead35` or later) into the branch. `git merge-tree` against `5eead35` is clean. VS-03R touches no Gateway auth, agent or Seams.Tests file, so VS-04's helper and #231's hook do not interact with it (ruling § 9.4). |
+| Size | about 25k tokens |
+
+**Goal.** The hub surface has one home: `src/Shared/Dhadgar.Contracts/Nodes/AgentHubContracts.cs`, which Sprint 2 shipped (D-26). VS-03R extends that file and deletes #229's parallel copy. Payloads the agent sends carry no node id (D-27). Hub methods answer with acks (D-28), `ReceiveCommand` is typed (D-29), and the frame limit is one contract constant (D-30). `AgentJson` ignores unknown members but keeps every other check (D-40).
+
+**Rules.**
+- Contract first: every type the agent and Nodes share stays in `src/Shared/Dhadgar.Contracts`. Never copy one into a service or the agent.
+- Do not change any member Sprint 2 shipped in `Contracts/Nodes/AgentHubContracts.cs`. That covers `AgentHubProtocol.Path`, `VersionHeader`, `CurrentVersion`, `NodeIdClaim` and `NodeGroup`, the four existing error codes, `AgentHeartbeatLimits`, `AgentHeartbeat`, `AgentHeartbeatAck`, `IAgentHub.Heartbeat` and `IAgentHubClient.ReceivePing`. Agents built from Sprint 2 call these.
+- Business failures are acks (`AgentHubAck(false, code)`), never a `HubException`. The four new hub methods are stubs in this packet.
+- Edit no agent project. `ControlPlaneClient` still subscribes by name (`On<string>(nameof(IAgentHubClient.ReceiveCommand), ...)`) and keeps compiling. VS-13 moves it to the typed handler.
+- `Dhadgar.Contracts.csproj` gets no package references. No `Version=` in any `.csproj` (Central Package Management, `Directory.Packages.props`).
+- Keep CRLF in the `.cs` files you edit (dispatch rules, line endings). Nullable is enabled and warnings are errors under `CI=true`.
+
+**Contract excerpt.** C-2a in this file, the exact text: `AgentHubProtocol.MaxReceiveMessageBytes`, the 7 new `AgentHubErrorCodes`, the 5-method `IAgentHub`, typed `IAgentHubClient.ReceiveCommand(AgentCommandEnvelope)` and `AgentHubAck`. Also C-2b's comments on the members it removes, and C-2's `AgentJson` block and "JSON rules" (D-40).
+
+**Changes.**
+1. Start by listing what you will touch:
+
+```bash
+git grep -nE "AgentProtocol\.|AgentServerProcess|MaxHeartbeatWarnings|MaxWarningLength|MaxServersPerHeartbeat|MaxAgentVersionLength|Contracts\.Agents\.(IAgentHub|AgentHeartbeat)" -- src tests
+```
+
+   Expected hits outside the files below: `Agents/AgentCommandPayloads.cs` line 12 (a `PingResult` doc reference), `Contracts/README.md` line 742, `tests/Dhadgar.Contracts.Tests/Agents/AgentMessageLimitsTests.cs` and `AgentMessagesSerializationTests.cs`. Report any other hit; fix it if it is in a file this packet already edits, otherwise return `blocked` with reason `spec`.
+2. Delete `src/Shared/Dhadgar.Contracts/Agents/AgentHubContracts.cs`. In `src/Shared/Dhadgar.Contracts/Nodes/AgentHubContracts.cs`, add exactly the C-2a members: `MaxReceiveMessageBytes`, the seven error codes, the four new `IAgentHub` methods, typed `ReceiveCommand`, and `public sealed record AgentHubAck(bool Accepted, string? ErrorCode = null);`. Give each the XML doc C-2a's comments describe, and add `using Dhadgar.Contracts.Agents;`.
+3. `Contracts/Agents/AgentMessages.cs`: delete `AgentHeartbeat` and `AgentServerProcess`. Remove the `NodeId` parameter, and its `<param>` doc, from `AgentCommandResult`, `AgentServerStatus`, `AgentConsoleBatch` and `AgentTelemetry`. `AgentCommandEnvelope` and the three events keep `NodeId`.
+4. `Contracts/Agents/AgentProtocol.cs`: delete class `AgentProtocol` (lines 9-33 on #229) and keep the rest of the file. In `AgentMessageLimits`, delete `MaxHeartbeatWarnings`, `MaxWarningLength`, `MaxServersPerHeartbeat` and `MaxAgentVersionLength`. In `Agents/AgentCommandPayloads.cs`, point the `PingResult.AgentVersion` doc at `AgentHeartbeatLimits.MaxAgentVersionLength` (add `using Dhadgar.Contracts.Nodes;` or use the full `cref`).
+4a. Lenient agent JSON (D-40, owner decision 2026-10-27, superseding D-21). In `AgentJson.Create()` (`Contracts/Agents/AgentProtocol.cs`), set `UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip` in place of `Disallow`, and add `AllowDuplicateProperties = false`. Keep `RespectNullableAnnotations`, `RespectRequiredConstructorParameters`, `MaxDepth = 8` and `MakeReadOnly`. Rewrite the class `<summary>`/`<remarks>` to C-2's text: unknown properties are skipped; missing required properties, nulls in non-nullable members, duplicate properties and depth over 8 throw `JsonException`. If the compiler reports that `AllowDuplicateProperties` does not exist, return `blocked` with reason `spec`; do not drop it silently.
+5. `src/Dhadgar.Nodes/Hubs/AgentHub.cs`: add the four methods, each with a one-line XML doc naming the packet that implements it (VS-08R for `Telemetry`, VS-33 for the rest):
+
+```csharp
+public Task<AgentHubAck> Telemetry(AgentTelemetry telemetry) =>
+    Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NotSupported));
+// CommandResult, ServerStatusChanged, ConsoleOutput: the same body
+```
+
+   Change nothing else in Nodes.
+6. Tests in `tests/Dhadgar.Contracts.Tests/Agents/`:
+   - `AgentMessageLimitsTests.cs`: drop the pins for the four deleted limits and for `AgentProtocol.MaxHubMessageBytes`. Pin `AgentHubProtocol.MaxReceiveMessageBytes == 512 * 1024`. Delete the `AgentHeartbeat` worst-case case. Every escaped-frame worst case left (telemetry, console batch, command result, server status) asserts against `AgentHubProtocol.MaxReceiveMessageBytes`.
+   - `AgentMessagesSerializationTests.cs`: delete the `AgentServerProcess` and `AgentHeartbeat` cases, and remove `NodeId` from the four records' constructions. For D-40:
+     - Replace `StartServerPayload_UnknownProperty_Throws` with `StartServerPayload_UnknownProperty_IsIgnored`. The same JSON with `"extra":1` deserializes, and it equals the payload built without `extra`.
+     - Add `StartServerPayload_UnknownNestedObject_IsIgnored` (`"extra":{"a":[1,2]}`) and `AgentCommandEnvelope_UnknownProperty_IsIgnored`.
+     - Add `StartServerPayload_DuplicateProperty_Throws` (`"port"` twice).
+     - Add `StartServerPayload_NullForNonNullable_Throws` (`"serverJarUrl":null`).
+     - Add `StartServerPayload_DepthOverLimit_Throws`: an unknown member nested 9 levels deep. Skipping must not bypass `MaxDepth`.
+     - Keep `StartServerPayload_MissingRequiredProperty_Throws` and `PingPayload_EmptyObject_DeserializesWithNullNonce` unchanged.
+     - `AgentJson_Options_AreReadOnly`: `AgentJson.Options.IsReadOnly`, `UnmappedMemberHandling == Skip` and `AllowDuplicateProperties == false`.
+   - New `AgentHubContractTests.cs`:
+     - `IAgentHub_HasExactlyTheFiveMethods`: by reflection, the method names, parameter types and return types are exactly C-2a's.
+     - `IAgentHubClient_ReceiveCommand_IsTyped`: its single parameter is `AgentCommandEnvelope`.
+     - `AgentSentPayloads_CarryNoNodeId` (D-27 guard): `AgentCommandResult`, `AgentServerStatus`, `AgentConsoleBatch` and `AgentTelemetry` have no `NodeId` property.
+     - `AgentHubTypes_HaveOneHome`: no public type named `IAgentHub`, `IAgentHubClient` or `AgentHeartbeat` exists in namespace `Dhadgar.Contracts.Agents`.
+     - Every one of these fails on #229's head before this packet.
+7. `src/Shared/Dhadgar.Contracts/README.md`: fix the line-742 table row, and add one paragraph saying the hub surface (protocol, error codes, interfaces, heartbeat, acks) is in `Contracts.Nodes` and the messages, payloads, limits and signing are in `Contracts.Agents`.
+
+**Why the tests fail when reverted.** Without the move, `IAgentHub` has one method and `ReceiveCommand` takes a string. The `NodeId` properties are back on the payloads. The duplicate types in `Contracts.Agents` exist again. With #229's `Disallow`, the unknown-property cases throw. With duplicates allowed, the duplicate case passes when it should throw.
+
+**Checks (in order).**
+
+```bash
+dotnet build src/Shared/Dhadgar.Contracts/Dhadgar.Contracts.csproj -c Release
+dotnet test tests/Dhadgar.Contracts.Tests/Dhadgar.Contracts.Tests.csproj -c Release
+dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
+dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+# only while the project still exists (VS-34 deletes it):
+test -d tests/Dhadgar.Seams.Tests && dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
+dotnet build Dhadgar.sln -c Release
+```
+
+Sprint 2's hub, bootstrap and renewal seams in `Dhadgar.AgentSeam.Tests`, and `Nodes.Tests/Integration/AgentHubSeamTests`, must stay green. They are the seam test for this contract change. The solution build catches any agent or UAT project that used a deleted member.
+
+**Docs owed.** Change 7. No PROJECT-STATE change.
+
+**Done when.** Checks pass, the report lists every grep hit and how it was handled, and the PR description says the hub contract's home is `Contracts.Nodes` (D-26).
+
+### Merge-main resolutions for #230, #232 and #233
+
+Each is a `packet-coder` dispatch on the existing worktree after ops has run `git fetch origin && git merge origin/main`. The coder resolves the conflicts, finishes the merge commit with subject `merge: origin/main (5eead35) into <branch> [VS-NN]`, runs the checks and reports. The lock-file rule applies to every conflicted `packages.lock.json`: take `main`'s copy, finish the merge, then run both restores. Never hand-merge lock-file JSON.
+
+Only #232 still needs its resolution. #230 and #233 were merged on 2026-10-27 without these steps (ruling § 9). Their texts below are kept for the record. Both PRs as merged match them, and #230's security questions move to FU-41a.
+
+**#230 VS-04** (merged as `2440ada`; record only; the security questions are FU-41a):
+- `src/Dhadgar.Gateway/Program.cs`: keep everything Sprint 2 added, which is the Kestrel `AgentIngress:ClientCertificateMode` block, the `AgentCertificate` policy, `.AddTransforms(AgentCertificateForwarding.Apply)` and the `PerAgent` limiter. Replace only the old `AddAuthentication(JwtBearerDefaults...).AddJwtBearer(...)` block (lines 96-113 on `6df3338`) with VS-04's `AddDhadgarJwtBearer(..., "/hubs/console")` call. Leave policy `Agent` alone; VS-07R deletes it.
+- `src/Dhadgar.Gateway/appsettings.json`: keep both sides, meaning Sprint 2's `AgentIngress` section and `agents-route` with `AgentCertificate`, plus VS-04's `Auth` keys.
+- Checks: `dotnet restore Dhadgar.sln --locked-mode`, `dotnet build Dhadgar.sln -c Release`, then `dotnet test` for `tests/Dhadgar.Gateway.Tests`, `tests/Dhadgar.ServiceDefaults.Tests`, `tests/Dhadgar.Secrets.Tests` and `tests/Dhadgar.AgentSeam.Tests`. `GatewayAgentHubSeamTests` now runs through VS-04's helper and must stay green.
+- Security re-review questions: does the JWT default scheme leave `AgentCertificate` evaluation unchanged (it asserts on `Connection.ClientCertificate`, not on a principal)? Is the `access_token` query fallback still limited to `/hubs/console`, never `/hubs/agent`?
+
+**#232 VS-01** (`vertical-slice-01-park-projects`; revised 2026-10-27 for `main` `5eead35`). `git merge-tree` of `1ea65d6` with `5eead35` is clean: git auto-merges `Dhadgar.sln` and `_dotnet-build-test.yml`.
+- `Dhadgar.sln`: keep VS-01's 12 removals and all four projects added since `2c4c19c`: Sprint 2's `Dhadgar.AgentSeam.Tests`, `Dhadgar.Agent.Windows.Uat` and `Dhadgar.Agent.Windows.Uat.Tests`, and **#231's `Dhadgar.Seams.Tests`**. Keep each one's project block, configuration lines and nesting line. VS-34 removes Seams.Tests later. The file stays LF.
+- `.github/workflows/_dotnet-build-test.yml`: keep Sprint 2's PSScriptAnalyzer step and VS-01's removal of `src/Dhadgar.ShoppingCart` from the npm list.
+- **Parked lock files.** #230 rewrote the `packages.lock.json` of 8 projects that VS-01 moves: Billing, Files, Mods and Tasks, and their `.Tests`. Rename detection carries `main`'s content to the `parked/` path. Check that each matches `main`, for example with `git diff origin/main:src/Dhadgar.Billing/packages.lock.json HEAD:parked/src/Dhadgar.Billing/packages.lock.json`, which must print nothing. If one conflicts, take `main`'s content at the `parked/` path (`git show origin/main:<old path> > parked/<old path>`). Do not run `--locked-mode` for those files, because they are outside the solution.
+- Any other conflict: keep both sides' intent and report it.
+- Checks: VS-01's checks. **The final `git grep` now prints exactly two hits**, `src/Dhadgar.Scope/src/sections/Agents.astro` and `src/Dhadgar.Scope/src/sections/Repos.astro`. Both appear on `1ea65d6` before the merge, and D-20 gives them to VS-28. Any other hit is a leftover: fix it if it is in a file VS-01 edits, otherwise report it. Then run `dotnet test` on `tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj`, `tests/Dhadgar.Agent.Windows.Uat.Tests/Dhadgar.Agent.Windows.Uat.Tests.csproj` and `tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj`, each with `-c Release`. To list the PR's files, use `gh api repos/{owner}/{repo}/pulls/232/files --paginate` (`gh pr view --json files` stops at 100).
+- Optional, if it is still in the merge (FU-41c): `src/Agents/Dhadgar.Agent.Windows/README.md:1682` links to `/src/Agents/Dhadgar.Agent.Linux/README.md`. Point it at `/parked/src/Agents/Dhadgar.Agent.Linux/README.md`. If it is not fixed here, VS-34 fixes it.
+
+**#233 VS-02** (merged as `32779b5`; record only):
+- `src/Dhadgar.Gateway/appsettings.json`: keep Sprint 2's `agent-hub-route`, `agents-route` with `AgentCertificate`, and the `AgentIngress` section. Delete `billing-route`, `tasks-route`, `files-route`, `mods-route` and their clusters. The result is **14 routes and 8 clusters**.
+- `tests/Dhadgar.Gateway.Tests/RouteConfigurationTests.cs`: 14 routes (test `ReverseProxyShouldHave14Routes`) and 8 clusters; keep Sprint 2's rows. In `RateLimiterConfigurationTests.cs`, keep the `agent-hub-route` row and delete the four parked rows.
+- `deploy/compose/docker-compose.services.yml`: keep Sprint 2's gateway env (`AgentIngress__ClientCertificateMode`) and nodes env (`Mtls__ForwardedCertificate__*`, port `127.0.0.1:5040:8080`). Delete only the parked services and their gateway cluster env lines.
+- Checks: VS-02's checks, unchanged.
+
+### VS-34 Fold Seams.Tests into AgentSeam.Tests; remove `IHubConnectionConfigurator`
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/34-fold-seams` / `vertical-slice-vs34`, created by ops from `origin/main` (`5eead35` or later) |
+| Commit subject | `refactor(seams,agent): fold Seams.Tests into AgentSeam.Tests and remove IHubConnectionConfigurator [VS-34]` |
+| Security review | Yes. It touches `ControlPlaneClient`, the `IControlPlaneClient` implementation in Agent.Core. |
+| Depends on | Nothing to start. It merges after #232, because both edit `Dhadgar.sln`. Ops merges `main` in before the review if #232 merged first (D-38). |
+| Size | about 25k tokens |
+| PR | its own PR, `security-review` label, merged by the owner's main session on the owner's yes (D-41) |
+
+**Goal (D-42).** There is one seam project and one agent transport hook. Delete `tests/Dhadgar.Seams.Tests` and the `IHubConnectionConfigurator` hook that only it used. Keep its one live test's coverage as `GatewayAgentEnrollmentSeamTests` on Sprint 2's `GatewayNodesHarness`. `ControlPlaneHubTransport` stays the only way tests change the agent's hub transport.
+
+**Rules.**
+- No contract change. This packet changes no type in `src/Shared/Dhadgar.Contracts`.
+- `IControlPlaneClient.ConnectAsync` returns `Result`, never throws, for every validation failure (D-S227). The HTTPS refusal (`ControlPlane.InsecureEndpoint`) and the missing-certificate refusal (`ControlPlane.NoCertificate`) must stay exactly as they are on `6df3338`.
+- Do not change `ControlPlaneHubTransport`, `AgentServiceCollectionExtensions` or any other agent file apart from the two below.
+- No `Version=` in any `.csproj` (Central Package Management). This packet should need no `.csproj` change. If it does, apply the lock-file rule (D-39) and say why in the report.
+- New `.cs` files are CRLF. Nullable is enabled and warnings are errors under `CI=true`.
+- `using` on every `IDisposable` in the test (`ECDsa`, the public key, `X509Chain`, the harness).
+- Leave `tests/Dhadgar.Testing` alone. `SeamJwt` goes there in VS-32R, from `git show 6895cd1:tests/Dhadgar.Seams.Tests/Infrastructure/SeamJwt.cs`.
+- Follow the xUnit conventions of `tests/Dhadgar.AgentSeam.Tests`: a sealed class, a temporary CA directory created in the constructor and deleted in `Dispose`, as `GatewayAgentHubSeamTests` does.
+
+**Changes.**
+1. List what you will touch:
+
+```bash
+git grep -nE "IHubConnectionConfigurator|SeamHubConfigurator|Seams\.Tests" -- . ':!docs/analysis' ':!.claude/reports'
+git log --oneline 6df3338..HEAD -- src/Agents/Dhadgar.Agent.Core/Communication/ControlPlaneClient.cs
+```
+
+   Expected grep hits:
+   - `ControlPlaneClient.cs`, `IHubConnectionConfigurator.cs` and `tests/Dhadgar.Agent.Core.Tests/Communication/HubConnectionConfiguratorTests.cs`;
+   - files under `tests/Dhadgar.Seams.Tests/`;
+   - `Dhadgar.sln`.
+
+   Report any other hit. Fix a doc hit; return `blocked` with reason `spec` for a code hit. The `git log` must list only `6895cd1`. If it lists another commit, return `blocked` with reason `spec`.
+2. Restore `ControlPlaneClient.cs` to the shape it had before the hook: `git checkout 6df3338 -- src/Agents/Dhadgar.Agent.Core/Communication/ControlPlaneClient.cs`. This removes:
+   - the `_configurators` field;
+   - the `configurators` constructor parameter;
+   - the `LogWarning`;
+   - the configurator loop and the two `InvalidOperationException` checks inside `WithUrl`.
+
+   `git diff 6df3338 -- <that file>` must print nothing.
+3. `git rm src/Agents/Dhadgar.Agent.Core/Communication/IHubConnectionConfigurator.cs tests/Dhadgar.Agent.Core.Tests/Communication/HubConnectionConfiguratorTests.cs`.
+4. `dotnet sln Dhadgar.sln remove tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj`, then `git rm -r tests/Dhadgar.Seams.Tests`. `git diff Dhadgar.sln` must show only deleted lines: the project block, its configuration lines and its nesting line. If the tool rewrote anything else (line endings, ordering), run `git checkout -- Dhadgar.sln` and delete those lines by hand. The file stays LF.
+5. New `tests/Dhadgar.AgentSeam.Tests/GatewayAgentEnrollmentSeamTests.cs`, ported from `git show 6895cd1:tests/Dhadgar.Seams.Tests/Enrollment/AgentEnrollmentThroughGatewaySeamTests.cs`:
+
+```csharp
+namespace Dhadgar.AgentSeam.Tests;
+
+/// <summary>
+/// Seam: the real agent enrollment runs through the real Gateway into the real Nodes. Beyond success, the enrollment
+/// leaves the node, inventory and certificate rows, a certificate for the agent's own key, and a chain to the CA the
+/// agent stored. Moved from tests/Dhadgar.Seams.Tests (D-42).
+/// </summary>
+public sealed class GatewayAgentEnrollmentSeamTests : IDisposable
+{
+    private readonly string _caDirectory = Path.Combine(Path.GetTempPath(), $"gateway-agent-enroll-seam-ca-{Guid.NewGuid()}");
+
+    // constructor creates the directory; Dispose deletes it best-effort (copy GatewayAgentHubSeamTests)
+
+    [Fact]
+    public async Task RealAgent_EnrollsThroughGateway_PersistsNodeAndIssuesChainedCertificateForAgentKey()
+    {
+        using var harness = new GatewayNodesHarness(_caDirectory);
+        var orgId = Guid.NewGuid();
+        var (enrolled, store) = await harness.EnrollThroughGatewayAsync(orgId);
+
+        Assert.NotEqual(Guid.Empty, enrolled.NodeId);
+        Assert.Equal(orgId, enrolled.OrganizationId);
+
+        using (var scope = harness.Nodes.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            var node = await db.Nodes.SingleAsync(n => n.Id == enrolled.NodeId);
+            Assert.Equal(orgId, node.OrganizationId);
+            Assert.True(await db.HardwareInventories.AnyAsync(h => h.NodeId == node.Id));
+            Assert.True(await db.AgentCertificates.AnyAsync(c => c.NodeId == node.Id));
+        }
+
+        var certificate = Assert.IsType<X509Certificate2>(store.StoredClientCertificate);
+        var privateKey = Assert.IsType<byte[]>(store.GetPrivateKey());
+        using var agentKey = ECDsa.Create();
+        agentKey.ImportPkcs8PrivateKey(privateKey, out _);
+        using var certKey = certificate.GetECDsaPublicKey();
+        Assert.NotNull(certKey);
+        Assert.Equal(agentKey.ExportSubjectPublicKeyInfo(), certKey.ExportSubjectPublicKeyInfo());
+
+        var ca = Assert.IsType<X509Certificate2>(store.StoredCaCertificate);
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(ca);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        chain.ChainPolicy.VerificationTime = certificate.NotBefore.AddMinutes(1);
+        Assert.True(chain.Build(certificate), string.Join("; ", chain.ChainStatus.Select(s => s.StatusInformation)));
+    }
+}
+```
+
+   Use the store members as `tests/Dhadgar.Nodes.Tests/Integration/AgentSeam/InMemoryCertificateStore.cs` names them (`StoredClientCertificate`, `GetPrivateKey()`, `StoredCaCertificate`). If a name differs, use the real one; do not add members to the store. Drop the old `host.Forwarder.ForwardedClusters` assertion: `GatewayNodesHarness` reaches Nodes only through the Gateway's forwarder, so success already proves forwarding. VS-07R adds the recording forwarder.
+6. New `tests/Dhadgar.Agent.Core.Tests/Communication/ControlPlaneClientTransportHookTests.cs`, with one test, `ControlPlaneClient_HasOnlyTheTransportHook`. By reflection it asserts:
+   - `ControlPlaneClient` has exactly one public constructor;
+   - that constructor's parameter types are, in order: `IOptions<AgentOptions>`, `ICertificateStore`, `AgentMeter`, `AgentActivitySource`, `ILogger<ControlPlaneClient>`, `IAgentIdentityProvider` and `ControlPlaneHubTransport`;
+   - `typeof(ControlPlaneClient).Assembly.GetTypes()` contains no type named `IHubConnectionConfigurator`.
+
+**Why the tests fail when reverted.**
+- Restore the hook and `ControlPlaneClient_HasOnlyTheTransportHook` fails: the constructor has an eighth parameter and the type exists.
+- Break enrollment through the Gateway and `GatewayAgentEnrollmentSeamTests` fails. That covers removing or mis-stripping the enrollment route, Nodes storing no inventory or certificate row, a certificate issued for a server-side key, or a CA that does not sign the certificate.
+- Before committing, run two scratch mutations of the new test, one at a time. Quote each failing assertion in the report, then revert it.
+  - Import a fresh `ECDsa.Create()` key in place of the stored private key. The SPKI assertion must fail.
+  - Build the chain for `ForeignCa.CreateClientCertificate(enrolled.NodeId)` (from `tests/Dhadgar.Nodes.Tests/Integration/AgentSeam/ForeignCa.cs`) in place of `certificate`. The chain assertion must fail.
+
+**Checks (in order).**
+
+```bash
+dotnet build src/Agents/Dhadgar.Agent.Core/Dhadgar.Agent.Core.csproj -c Release
+dotnet test tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
+dotnet restore Dhadgar.sln --locked-mode
+dotnet build Dhadgar.sln -c Release
+git status --porcelain -- '*packages.lock.json'   # must print nothing
+```
+
+`GatewayAgentHubSeamTests`, `AgentBootstrapSeamTests` and `GatewayAgentRenewalSeamTests` must stay green. They prove that `ControlPlaneHubTransport` alone still carries the agent through the Gateway.
+
+**Docs owed.**
+- `docs/testing/seam-tests.md`: drop any `tests/Dhadgar.Seams.Tests` entry and list `GatewayAgentEnrollmentSeamTests` under AgentSeam.Tests.
+- `docs/reference/seams/enrollment.md`: if it lists seam-test evidence, add the new test.
+- FU-41c, if #232's merge did not fix it: `src/Agents/Dhadgar.Agent.Windows/README.md` line 1682 points at `/parked/src/Agents/Dhadgar.Agent.Linux/README.md`.
+- No PROJECT-STATE change.
+
+**Done when.**
+- The checks pass.
+- `git grep -nE "IHubConnectionConfigurator|Seams\.Tests" -- src tests Dhadgar.sln` prints nothing.
+- The report quotes both mutation failures.
+- The PR description names D-42 and says that production behaviour does not change: no configurator was ever registered.
 
 ### VS-01 Park projects: move, solution, AppHost, CI
 
@@ -491,6 +805,8 @@ The last command must print nothing (the excluded paths belong to VS-02). If the
 **Done when.** Solution builds without the twelve projects, AppHost tests pass, CI files no longer mention parked projects, and the commit holds only moves and the listed edits.
 
 ### VS-02 Park routes: Gateway, compose, Discord map, docs
+
+**Status:** merged as `32779b5` (#233) on 2026-10-27 without the owner's yes. As merged, it matches the reconcile verdict (ruling § 9.4). This text is the spec it was built from.
 
 | Field | Value |
 | --- | --- |
@@ -613,6 +929,8 @@ dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
 
 ### VS-04 Shared service JWT auth helper; Gateway and Secrets adopt it
 
+**Status:** merged as `2440ada` (#230) on 2026-10-27 without the owner's yes. As merged, it matches the reconcile verdict. The post-merge security pass is FU-41a. This text is the spec it was built from.
+
 | Field | Value |
 | --- | --- |
 | Branch / worktree | `vs/04-service-jwt` / `vertical-slice-vs04` |
@@ -698,6 +1016,8 @@ dotnet test tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release
 
 ### VS-05 Seams test project and hub-connection hook
 
+**Status:** merged as `6895cd1` (#231) on 2026-10-27 without the owner's yes; #236 (`5eead35`) fixed its lock file. VS-34 folds the project into AgentSeam.Tests and removes the hook (D-42). This text is the spec it was built from.
+
 | Field | Value |
 | --- | --- |
 | Branch / worktree | `vs/05-seams-harness` / `vertical-slice-vs05` |
@@ -774,342 +1094,23 @@ The seams run must show 1 passed and 3 skipped.
 
 ## Wave 2: control-plane side of the agent seam, Servers import
 
-Base: `origin/main` after all of wave 1. Stage 1, dispatched together: VS-06, VS-07, VS-09, VS-11, VS-32. Stage 2, dispatched as their dependencies merge: VS-08 (after VS-06 and VS-07), VS-10 (after VS-06, VS-07, VS-09). Merge order: VS-11, VS-32, VS-06, VS-07, VS-09, VS-08, VS-10. VS-06 and VS-07 touch disjoint files (Nodes vs Gateway), except for the seams harness: VS-06 owns `NodesSeamFactory.cs`, VS-07 owns `GatewaySeamFactory.cs`, VS-32 owns `SeamJwt.cs` and the seams `.csproj` (it moves `SeamJwt` behind a global `<Using>`, so callers in the two factories need no edit). Whoever merges after VS-32 reruns the lock-file rule for `tests/Dhadgar.Seams.Tests` on rebase (ops).
+Re-sliced on 2026-10-27 after Sprint 2 (ruling [worknotes/sprint2-reconcile-ruling.md](worknotes/sprint2-reconcile-ruling.md) § 3). The base is `main` after #234, #229, #232 and VS-34 have merged on top of `5eead35`, which already holds Sprint 2 `6df3338`, #233, #230, #231 and #236 (ruling § 9). Stage 1 is dispatched together once those have merged and FU-41a (the post-merge Gateway auth security pass) is closed: VS-11, VS-32R, VS-07R, VS-09 and VS-08R. Stage 2 is VS-06R, after VS-32R and VS-07R merge. VS-10 is superseded (D-36). Merge order: VS-11, VS-32R, VS-07R, VS-09, VS-08R, VS-06R. Each packet ships as its own PR, and all six need a security review. Between merges, ops merges the new `main` into the next branch (D-38) and that packet's checks run again.
 
-Contract sync (2026-10-26, report `contract-sync-1.md`): C-2 and C-3 now match VS-03 at `eabdbe5`. Every wave-2+ packet reads C-2 "Limit enforcement" and the new dispatch rules on rejection seams, certificate shims and test JWTs.
+Stage 1 file ownership. Parallel packets stay disjoint; where two share a file, the second to merge resolves it when `main` is merged in:
 
-### VS-06 Nodes auth: JWT, strict AgentPolicy, hub mTLS, forwarded certificates
-
-| Field | Value |
+| File | Stage-1 owner |
 | --- | --- |
-| Branch / worktree | `vs/06-nodes-auth` / `vertical-slice-vs06` |
-| Commit subject | `fix(nodes): register JWT auth, restrict AgentPolicy to mTLS identities, accept Gateway-forwarded certificates [VS-06]` |
-| Security review | Yes |
-| Size | about 40k tokens |
-
-**Goal.** Nodes starts outside tests (F-01), user tokens cannot pass `AgentPolicy` (F-02), `/hubs/agent` is covered by mTLS (F-03), and a certificate forwarded by the Gateway with the shared secret counts as the client certificate (D-06, F-05).
-
-**Rules.**
-- Errors at HTTP boundaries are ProblemDetails (`ProblemDetailsHelper`) or the existing `WriteUnauthorizedResponse`; no new exception types.
-- Secrets are compared with `CryptographicOperations.FixedTimeEquals` on UTF-8 bytes. Never log the secret or the certificate body; log the thumbprint at most.
-- Forwarded certificate bytes are capped at 16 KiB before decoding; parse with `X509CertificateLoader.LoadCertificate`; register the certificate with `context.Response.RegisterForDispose`.
-- mTLS may only be disabled in Development (existing rule in `AddMtlsAuthentication`); do not weaken it.
-- Contract excerpt (C-6): headers `X-Client-Cert` (base64 DER), `X-Dhadgar-Gateway-Secret`; keys `Mtls:ForwardedCertificate:Enabled`, `Mtls:ForwardedCertificate:SharedSecret`, `Mtls:AdditionalProtectedPrefixes` (default `["/hubs/agent"]`).
-
-**Changes.**
-1. `src/Dhadgar.Nodes/Program.cs`: before the authorization builder, `builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment);` (from VS-04, namespace `Dhadgar.ServiceDefaults.Security`). Replace the `AgentPolicy` definition with `policy.AddRequirements(new AgentIdentityRequirement());` and register `builder.Services.AddSingleton<IAuthorizationHandler, AgentIdentityHandler>();`. In the pipeline: `app.UseAuthentication(); app.UseForwardedClientCertificate(); app.UseMtlsAuthentication(); app.UseAuthorization();`.
-2. `src/Dhadgar.Nodes/appsettings.json`: add `"Auth": { "Issuer": "https://meridianconsole.com/api/v1/identity", "Audience": "meridian-api", "ClockSkewSeconds": 30 }` (same values as the Gateway's file) so the helper's required keys exist.
-3. New `src/Dhadgar.Nodes/Auth/AgentIdentityRequirement.cs` (requirement and handler in one file):
-
-```csharp
-public sealed class AgentIdentityRequirement : IAuthorizationRequirement { }
-
-public sealed class AgentIdentityHandler(IOptionsMonitor<MtlsOptions> mtls) : AuthorizationHandler<AgentIdentityRequirement>
-{
-    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, AgentIdentityRequirement requirement)
-    {
-        var hasNodeId = Guid.TryParse(context.User.FindFirst("node_id")?.Value, out _);
-        var viaMtls = context.User.Identities.Any(i => i.IsAuthenticated && i.AuthenticationType == MtlsMiddleware.AuthenticationType);
-        // mTLS can only be disabled in Development (AddMtlsAuthentication enforces it); tests rely on this.
-        if (hasNodeId && (viaMtls || !mtls.CurrentValue.Enabled)) context.Succeed(requirement);
-        return Task.CompletedTask;
-    }
-}
-```
-
-4. `src/Dhadgar.Nodes/Auth/MtlsMiddleware.cs`: add `public const string AuthenticationType = "mTLS";` and use it in `new ClaimsIdentity(claims, AuthenticationType)`. `IsAgentEndpoint` returns true for `AgentEndpointPrefix` **or** any `AdditionalProtectedPrefixes` entry (segment-aware: `PathString.StartsWithSegments`). Exempt paths apply only under `AgentEndpointPrefix`; nothing under an additional prefix is exempt.
-5. `src/Dhadgar.Nodes/Auth/MtlsOptions.cs`: add `public string[] AdditionalProtectedPrefixes { get; set; } = ["/hubs/agent"];` and `public ForwardedCertificateOptions ForwardedCertificate { get; set; } = new();` with class `ForwardedCertificateOptions { bool Enabled; string HeaderName = "X-Client-Cert"; string SecretHeaderName = "X-Dhadgar-Gateway-Secret"; string SharedSecret = ""; }`. Validation (make `MtlsOptions` `IValidatableObject`, or add an `IValidateOptions<MtlsOptions>`): when `ForwardedCertificate.Enabled`, `SharedSecret.Length >= 32`.
-6. New `src/Dhadgar.Nodes/Auth/ForwardedClientCertificateMiddleware.cs` plus `UseForwardedClientCertificate()` in `MtlsMiddlewareExtensions`:
-   - Read both headers, then **always** remove them from `context.Request.Headers`.
-   - If `ForwardedCertificate.Enabled`, `context.Connection.ClientCertificate` is null, the cert header is present, the secret matches (fixed time; different length means no match), and the decoded bytes are at most 16 KiB and parse, then set `context.Connection.ClientCertificate`. Otherwise log a warning (`"Ignoring forwarded client certificate: {Reason}"`, reason one of `disabled`, `secret_mismatch`, `too_large`, `malformed`) and continue without one; `MtlsMiddleware` then answers 401 on protected paths.
-7. Seams harness `tests/Dhadgar.Seams.Tests/Infrastructure/NodesSeamFactory.cs`: delete the `AddAuthentication(...).AddJwtBearer()` line (keep `SeamJwt.Apply`), and add config `Mtls:ForwardedCertificate:Enabled=true`, `Mtls:ForwardedCertificate:SharedSecret=SeamSecrets.ForwardedCertificate`. The seams suite now starts Nodes with its real auth registration, which proves F-01 is fixed. Do not edit `SeamJwt.cs` or the seams `.csproj`: VS-32 moves `SeamJwt` in parallel, and `SeamJwt.Apply(services)` keeps compiling either way (D-22).
-8. Agent identity is bound to the certificate, never to a header (VS-05 security-2 carry-forward). Today `MtlsMiddleware` sets `node_id` only from the certificate's SPIFFE SAN (`spiffe://<trust domain>/nodes/{nodeId}`, `CertificateValidationService`), and the agent's `X-Node-Id` header is advisory. Keep it that way: no Nodes code may read `X-Node-Id` (or any request header or body field) to decide which node a caller is. `ForwardedClientCertificateMiddleware` must not add claims; only `MtlsMiddleware` does, from the validated certificate. New seam `tests/Dhadgar.Seams.Tests/AgentHub/NodesAgentMtlsSeamTests.cs`, against the Nodes factory directly with the forwarded headers (`X-Client-Cert` plus the secret; the Gateway half is VS-07's). Enroll one agent through the Gateway (as the enrollment seam does) to get a real certificate for node A, and a second for node B.
-   - `EnrolledCertificate_Heartbeat_Succeeds` (positive twin): `POST /agents/{A}/heartbeat` with A's certificate → 200.
-   - `CertificateFromAnotherCa_IsRejected`: a self-signed P-256 certificate with the Client Authentication EKU and the SPIFFE SAN of node A (built with `CertificateRequest` and `SubjectAlternativeNameBuilder.AddUri`), forwarded with the right secret, to `POST /agents/{A}/heartbeat` and to `/hubs/agent/negotiate?negotiateVersion=1` → both `401` from Nodes, and the node's `LastHeartbeat` unchanged.
-   - `NodeIdHeader_DoesNotOverrideCertificate`: A's certificate plus `X-Node-Id: {B}` to `POST /agents/{B}/heartbeat` → 403 (or the status the endpoint already returns for a route/claim mismatch; read `AgentEndpoints.cs` around line 102 and assert that exact status), and B's `LastHeartbeat` unchanged.
-   - Also add `Connect_WithCertificateFromAnotherCa_IsRejected` to `AgentClientHubSeamTests` (through the Gateway, with the same `[Fact(Skip = "Pending VS-13: ...")]` text as its neighbours): a `SeamAgent` whose store holds the other-CA certificate and key, `CreateControlPlaneClient(nodeId: A, ...)`, `ConnectAsync` → `HttpRequestException` with `StatusCode == Unauthorized` **and** `Assert.Contains("nodes", host.Forwarder.ForwardedClusters)` (Nodes rejected it, not the Gateway). Run it once without the skip and quote the failure (D-13): today the Gateway rejects without forwarding, so the `ForwardedClusters` assertion fails. VS-13 removes the skip.
-
-**Tests** (`tests/Dhadgar.Nodes.Tests`):
-- `Auth/AgentIdentityHandlerTests.cs`: mTLS identity with `node_id` → succeeds; a JWT-style identity (`AuthenticationType = "Bearer"`) with `node_id` and mTLS enabled → fails; same with mTLS disabled → succeeds; no `node_id` → fails.
-- `Auth/ForwardedClientCertificateMiddlewareTests.cs` (`DefaultHttpContext`): valid secret and cert → `Connection.ClientCertificate` set and both headers removed; wrong secret, disabled, oversize and garbage → not set and headers removed.
-- `MtlsMiddlewareTests.cs`: add `HubPath_WithoutCertificate_Returns401_WhenMtlsEnabled` (`/hubs/agent/negotiate`) and `HubPath_IsNotExempt`.
-- `ForwardedClientCertificateMiddlewareTests.cs`: also `XNodeIdHeader_AddsNoClaim` (after the middleware runs, `context.User` has no `node_id` claim, whatever headers came in).
-- The seam in change 8 (`NodesAgentMtlsSeamTests`): fails when reverted because without `AdditionalProtectedPrefixes` the negotiate path is not checked, and without the forwarded-certificate middleware no certificate is seen at all.
-- Existing Nodes tests stay green: `NodesWebApplicationFactory` keeps its default test scheme (`AddAuthentication(options => { DefaultAuthenticateScheme = ...; DefaultChallengeScheme = ...; })` overrides the JwtBearer defaults), and mTLS disabled there makes `AgentIdentityHandler` accept `node_id` claims.
-
-Why they fail when reverted: without the handler a bearer identity passes `AgentPolicy`; without the middleware the forwarded certificate is never seen; and the seams suite cannot start Nodes without the JWT registration (the enrollment seam goes red).
-
-**Checks (in order).**
-
-```bash
-dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
-dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
-```
-
-**Docs owed.** `src/Dhadgar.Nodes/README.md` (auth section: JWT for users, mTLS for agents, forwarded certificates and the secret); `docs/runbooks/nodes-service-operations.md` (the new config keys).
-
-**Done when.** Checks pass; the seams enrollment test still passes with the factory's auth line gone.
-
-### VS-07 Gateway agent ingress and route alignment
-
-| Field | Value |
-| --- | --- |
-| Branch / worktree | `vs/07-gateway-agent-ingress` / `vertical-slice-vs07` |
-| Commit subject | `feat(gateway): certificate-based agent ingress, client-cert forwarding, hub and org routes [VS-07]` |
-| Security review | Yes |
-| Size | about 40k tokens |
-
-**Goal.** Agents authenticate at the Gateway by TLS client certificate instead of a JWT (F-04); the Gateway forwards the certificate to Nodes (D-06, F-05); routes for the hub, the CA certificate, Servers and Console match the services (F-15).
-
-**Rules.**
-- Strip `X-Client-Cert` and `X-Dhadgar-Gateway-Secret` from **every** incoming request before setting them; never take them from the client.
-- Never log the secret or certificate bodies.
-- The Gateway accepts any client certificate at the TLS layer (the handshake still proves key possession); Nodes validates chain and revocation. Say this in a code comment.
-- Contract excerpt: route table C-1 (rows `agents-*`, `servers-org-route`, `console-org-route`, `console-hub-route`), headers and keys C-6.
-
-**Changes.**
-1. `src/Dhadgar.Gateway/Program.cs`:
-   - In the existing `ConfigureKestrel` lambda add `options.ConfigureHttpsDefaults(https => https.ClientCertificateValidation = static (_, _, _) => true);`. Which endpoints ask for a certificate is set in configuration (`Kestrel:Endpoints:Agents:ClientCertificateMode=AllowCertificate`, VS-27).
-   - Replace policy `Agent` with:
-
-```csharp
-options.AddPolicy("AgentCertificate", policy =>
-    policy.RequireAssertion(ctx => ctx.Resource is HttpContext http && http.Connection.ClientCertificate is not null));
-```
-
-   - Bind `AgentIngressOptions` (section `AgentIngress`: `ForwardedCertificateSecret`, `HeaderName = "X-Client-Cert"`, `SecretHeaderName = "X-Dhadgar-Gateway-Secret"`) and add `app.UseMiddleware<ClientCertificateForwardingMiddleware>();` right after `RequestEnrichmentMiddleware`. When the secret is empty, log one warning at startup: "AgentIngress:ForwardedCertificateSecret is empty; agent certificates will not be forwarded".
-2. New `src/Dhadgar.Gateway/Options/AgentIngressOptions.cs` and `src/Dhadgar.Gateway/Middleware/ClientCertificateForwardingMiddleware.cs`: remove both headers; if `Connection.ClientCertificate` is not null and the secret is configured, set `HeaderName = Convert.ToBase64String(cert.RawData)` and `SecretHeaderName = secret`.
-3. `src/Dhadgar.Gateway/appsettings.json` (`ReverseProxy:Routes`):
-   - `agents-route`: `"AuthorizationPolicy": "AgentCertificate"`.
-   - New `agents-ca-route`: `Match.Path` `/api/v1/agents/ca-certificate`, cluster `nodes`, `Anonymous`, transform `PathRemovePrefix /api/v1`, same `RateLimiterPolicy` as `agents-enroll-route`.
-   - New `agents-hub-route`: `Match.Path` `/hubs/agent/{**catch-all}`, cluster `nodes`, `AgentCertificate`, no transform, `RateLimiterPolicy` `PerAgent`.
-   - Replace `servers-route` with `servers-org-route`: `/api/v1/organizations/{organizationId}/servers/{**catch-all}`, cluster `servers`, `TenantScoped`, `PathRemovePrefix /api/v1`, `PerTenant`.
-   - Replace `console-api-route` with `console-org-route`: `/api/v1/organizations/{organizationId}/servers/{serverId}/console/{**catch-all}`, cluster `console`, `TenantScoped`, `PathRemovePrefix /api/v1`, `"Order": -1`, `PerTenant`.
-   - Result: 14 routes, 8 clusters.
-4. `tests/Dhadgar.Gateway.Tests/RouteConfigurationTests.cs` and `RateLimiterConfigurationTests.cs`: counts (14 routes) and rows for the new and renamed routes; new assertions: `agents-route` and `agents-hub-route` use `AgentCertificate`; `servers-org-route` and `console-org-route` strip `/api/v1`; `console-org-route` has `Order` -1.
-5. Seams `tests/Dhadgar.Seams.Tests/Infrastructure/GatewaySeamFactory.cs`: config `AgentIngress:ForwardedCertificateSecret = SeamSecrets.ForwardedCertificate`. Remove the `Skip` from `AgentIngressThroughGatewaySeamTests.CaCertificate_IsFetchableAnonymously`, and add to that class `RenewEndpoint_WithoutCertificate_IsRejected` (`POST /api/v1/agents/{guid}/certificates/renew` without a cert → 401 or 403, never forwarded: assert the forwarder recorded no `nodes` request for that path) and `SpoofedClientCertHeader_IsStripped` (a request to `/api/v1/agents/enroll` carrying `X-Client-Cert: AAAA` and a wrong secret reaches Nodes without those headers; check with a test middleware on the Nodes factory that records the headers it receives, or with the forwarder's captured request). If `SeamForwarderFactory` records only cluster ids, extend it to record `(clusterId, method, path)` per forwarded request (`ForwardedRequests`), keeping `ForwardedClusters`; VS-08, VS-15 and VS-33 assert on paths (dispatch rule on rejection seams). Do not edit `SeamJwt.cs`, the seams `.csproj` or `tests/Dhadgar.Gateway.Tests/HubTokenTests.cs`: VS-32 owns them in this stage (D-22).
-
-**Tests** (`tests/Dhadgar.Gateway.Tests/AgentIngressTests.cs`): a Gateway factory with a test `IStartupFilter` that sets `Connection.ClientCertificate` from header `X-Test-Client-Cert`, and an `IForwarderHttpClientFactory` whose handler captures the forwarded request and returns 200:
-- with a certificate and the secret configured: the request to `/api/v1/agents/{id}/heartbeat` is forwarded, carries `X-Client-Cert` equal to the cert's base64 DER, and carries the secret;
-- without a certificate: not forwarded, 401 (read from the Gateway's response; the capturing handler recorded nothing);
-- a client-supplied `X-Client-Cert` without a TLS certificate is not forwarded on any route (check on `/api/v1/agents/enroll`);
-- `/hubs/agent/negotiate` with a certificate is forwarded to cluster `nodes`.
-
-Why they fail when reverted: the `Agent` policy demands a JWT claim, so certificate-only requests never forward, and nothing sets the forwarding headers.
-
-**Checks (in order).**
-
-```bash
-dotnet build src/Dhadgar.Gateway/Dhadgar.Gateway.csproj -c Release
-dotnet test tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
-```
-
-**Docs owed.** `src/Dhadgar.Gateway/README.md`: "Agent ingress" (port 8443, `AllowCertificate`, forwarding headers, secret, why Cloudflare-proxied hostnames break mTLS) and the Kestrel environment example:
-
-```bash
-Kestrel__Endpoints__Https__Url=https://+:443
-Kestrel__Endpoints__Http__Url=http://+:8080
-Kestrel__Endpoints__Agents__Url=https://+:8443
-Kestrel__Endpoints__Agents__ClientCertificateMode=AllowCertificate
-```
-
-Also `docs/gateway-routing-reference.md`: the route table rows from C-1.
-
-**Done when.** Checks pass; the CA-certificate seam is green.
-
-### VS-08 Nodes `/hubs/agent` hub, connection registry, heartbeat bridge
-
-| Field | Value |
-| --- | --- |
-| Branch / worktree | `vs/08-agent-hub` / `vertical-slice-vs08` (from `origin/main` after VS-06 and VS-07 merge) |
-| Commit subject | `feat(nodes): /hubs/agent SignalR hub with mTLS identity, protocol check and heartbeat bridge [VS-08]` |
-| Security review | Yes (new agent-facing surface) |
-| Size | about 40k tokens (the contract sync added the validator and the frame-size tests) |
-
-**Goal.** ADR-0008's hub exists on the Nodes side with the C-2 interfaces; heartbeats feed the existing `HeartbeatService`; Nodes can tell whether a node is connected.
-
-**Rules.**
-- Seams harness and test JWTs (D-22): mint and accept test user tokens only with `SeamJwt` (`tests/Dhadgar.Testing/Auth/SeamJwt.cs` after VS-32, which removes VS-04's duplicate minter in `tests/Dhadgar.Gateway.Tests/HubTokenTests.cs`); never add another minter or `PostConfigure<JwtBearerOptions>` test-key block. Client-certificate shims stay inside the test project that owns them. A seam that asserts a rejection proves the server answered: the status or code comes from the server's response, the forwarder or a backend recorder shows which server it reached, and a positive twin passes (dispatch rules).
-- The node identity comes only from the `node_id` claim, never from message fields or headers (C-2 hub rules).
-- Validate every inbound message with `AgentHubMessageValidator` against C-2 "Limit enforcement" (D-23): reject with `HubException("<code>")`, never truncate on receipt, never echo input in error text or logs. SignalR binds hub arguments with its own JSON options, so null-check every reference field and `Enum.IsDefined` every enum.
-- `EnableDetailedErrors = false`. `MaximumReceiveMessageSize = AgentProtocol.MaxHubMessageBytes` (512 KiB, sized for escaped JSON; C-2).
-- Hubs are transient; scoped services (DbContext, `IHeartbeatService`) are injected per invocation.
-- Single-instance registry for the MVP; note in a comment that scale-out needs a Redis backplane (ADR-0008).
-
-**Contract excerpt.** `IAgentHub`, `IAgentHubClient`, `AgentHeartbeat`, `AgentTelemetry`, `AgentServerState`, `AgentProtocol`, `AgentMessageLimits` (C-2); the hub rules and the `AgentHeartbeat`, `AgentTelemetry` and frame rows of "Limit enforcement" under C-2.
-
-**Changes.**
-0. New `src/Dhadgar.Nodes/Hubs/AgentHubMessageValidator.cs` (`internal static`; Nodes.Tests already sees internals, else add `InternalsVisibleTo`): `string? Validate(AgentHeartbeat h)` and `string? Validate(AgentTelemetry t)`, returning null when valid or the error code (`invalid_heartbeat`, `invalid_telemetry`). Implement exactly the two C-2 rows, using the `AgentMessageLimits` constants. VS-33 adds the overloads for `AgentCommandResult`, `AgentServerStatus` and `AgentConsoleBatch` to this file.
-1. New `src/Dhadgar.Nodes/Hubs/AgentHubGroups.cs`: `public static string Node(Guid nodeId) => $"node:{nodeId:D}";`.
-2. New `src/Dhadgar.Nodes/Hubs/IAgentConnectionRegistry.cs` and `AgentConnectionRegistry.cs` (singleton): `void Add(Guid nodeId, string connectionId)`, `void Remove(Guid nodeId, string connectionId)`, `bool IsConnected(Guid nodeId)`, `int ConnectedNodeCount`. A `ConcurrentDictionary<Guid, ImmutableHashSet<string>>` updated with `AddOrUpdate`.
-3. New `src/Dhadgar.Nodes/Hubs/AgentHub.cs`:
-
-```csharp
-[Authorize(Policy = "AgentPolicy")]
-public sealed class AgentHub(
-    NodesDbContext db, IHeartbeatService heartbeats, IAgentConnectionRegistry registry, ILogger<AgentHub> logger)
-    : Hub<IAgentHubClient>, IAgentHub
-{
-    public override async Task OnConnectedAsync()
-    {
-        // 1. X-Agent-Protocol header on Context.GetHttpContext() must equal AgentProtocol.Version; else log + Context.Abort(); return.
-        // 2. nodeId = node_id claim; load (OrganizationId, Status) AsNoTracking; missing or Decommissioned -> Abort.
-        // 3. Context.Items["OrganizationId"] = orgId; Groups.AddToGroupAsync(ConnectionId, AgentHubGroups.Node(nodeId)); registry.Add(...).
-    }
-    public override Task OnDisconnectedAsync(Exception? exception) { /* registry.Remove */ }
-
-    public async Task Heartbeat(AgentHeartbeat heartbeat) { /* see 4 */ }
-    public Task Telemetry(AgentTelemetry telemetry) { /* null check, node match, validator, log the metric COUNT at Debug, drop */ }
-    public Task CommandResult(AgentCommandResult result) => throw new HubException("not_supported_yet");        // VS-33
-    public Task ServerStatusChanged(AgentServerStatus status) => throw new HubException("not_supported_yet");   // VS-33
-    public Task ConsoleOutput(AgentConsoleBatch batch) => throw new HubException("not_supported_yet");          // VS-33
-}
-```
-
-4. `Heartbeat`: null argument → `invalid_heartbeat`; node mismatch → `node_mismatch`; `AgentHubMessageValidator.Validate(heartbeat)` non-null → `HubException(code)`; then map to `new HeartbeatRequest(cpu, mem, disk, heartbeat.Servers.Count(s => s.State == AgentServerState.Running), Truncate(heartbeat.AgentVersion, 50), heartbeat.Warnings.ToList())` (the 50-char truncation is the existing `HeartbeatRequest` storage limit, applied after the contract check passed, not instead of it); call `ProcessHeartbeatAsync(nodeId, request, Context.ConnectionAborted)`; failure codes `node_not_found`/`node_decommissioned` → `HubException(code)`.
-5. `src/Dhadgar.Nodes/Program.cs`: `builder.Services.AddSignalR(o => { o.MaximumReceiveMessageSize = AgentProtocol.MaxHubMessageBytes; o.EnableDetailedErrors = false; });`, `builder.Services.AddSingleton<IAgentConnectionRegistry, AgentConnectionRegistry>();`, and after the endpoint maps `app.MapHub<AgentHub>(AgentProtocol.HubPath).RequireAuthorization("AgentPolicy");`.
-
-**Tests.**
-- `tests/Dhadgar.Nodes.Tests/Hubs/AgentHubTests.cs`, using `NodesWebApplicationFactory` (mTLS disabled; `TestNodesAuthHandler` turns `X-Test-User-Id` and `X-Test-Node-Id` into claims): a raw `HubConnection` to `factory.Server.BaseAddress + "hubs/agent"` with `Transports = LongPolling`, `HttpMessageHandlerFactory = _ => factory.Server.CreateHandler()`, headers `X-Test-User-Id`, `X-Test-Node-Id` = a seeded node, `X-Agent-Protocol: 1`. Cases: heartbeat with CPU 42 updates `LastHeartbeat` and health; heartbeat for another node id → `HubException` with `node_mismatch`; missing protocol header → connection closes (Closed event within 5 s or `StartAsync` throws); unknown node → closes; registry `IsConnected` true while connected and false after `DisposeAsync`.
-- `tests/Dhadgar.Nodes.Tests/Hubs/AgentConnectionRegistryTests.cs`: two connections for one node, remove one, still connected; remove both, not connected.
-- `tests/Dhadgar.Nodes.Tests/Hubs/AgentHubMessageValidatorTests.cs`, one `[Theory]` row per bound in the two C-2 rows, each at the limit (valid) and one past it (code): `AgentVersion` 64 and 65 chars and null; each percentage 100, 100.1, -0.1, `NaN`, `PositiveInfinity`; 64 and 65 servers; a server with `State = (AgentServerState)99`, negative `MemoryBytes`; 20 and 21 warnings; a 256- and 257-char warning; a null warning; null `Servers` and `Warnings`; 500 and 501 metrics; a 128- and 129-char metric name; a metric name with `\n`; a `NaN` metric value.
-- Frame size, in `AgentHubTests` (raw `HubConnection`): `Telemetry_AtEscapedWorstCase_IsAccepted`, 500 metric names of 128 `'é'` each (escaped as `é`, about 400 KiB on the wire), completes without an error and the connection stays open. It fails with the default 32 KiB limit, so it proves `MaximumReceiveMessageSize` was raised. `Frame_OverLimit_ClosesConnection`: one `AgentHeartbeat` whose single warning is 100,000 `'é'` (about 600 KiB escaped); the connection's `Closed` event fires within 5 s. It must be the close, not `HubException("invalid_heartbeat")`, which proves the frame limit is not unlimited.
-- `AgentHubTests` also: a heartbeat with 21 warnings → `HubException` whose message contains `invalid_heartbeat`, and `LastHeartbeat` unchanged.
-- Seam `tests/Dhadgar.Seams.Tests/AgentHub/AgentHubThroughGatewaySeamTests.cs`: enroll through the Gateway with `SeamAgent`, then a raw Contracts-typed `HubConnection` to the **Gateway** `/hubs/agent` (long polling, `ClientCertHeaderHandler`, `X-Agent-Protocol: 1`), invoke `nameof(IAgentHub.Heartbeat)` with an `AgentHeartbeat` for the enrolled node, assert the Nodes DB updated. Rejection cases, under the dispatch rule on rejection seams:
-  - `Connect_WithoutCertificate_IsRejectedByGateway`: no certificate → `StartAsync` throws `HttpRequestException` with `StatusCode == Unauthorized`, and the forwarder recorded **no** `nodes` request for `/hubs/agent`.
-  - `Connect_WithCertificateFromAnotherCa_IsRejectedByNodes`: the other-CA certificate from VS-06's `NodesAgentMtlsSeamTests` → `Unauthorized`, and the forwarder **did** record a `nodes` request for `/hubs/agent/negotiate`.
-  - `Connect_WithoutProtocolHeader_IsClosed`: a valid certificate without `X-Agent-Protocol` → the connection closes (`Closed` fires, or `StartAsync` throws), and the forwarder recorded the request.
-  This proves Gateway forwarding plus the Nodes hub together. The agent's own client joins in VS-13.
-
-Why they fail when reverted: there is no hub at `/hubs/agent` (404 at negotiate); without the raised receive size the worst-case telemetry closes the connection; without the validator the 21-warning heartbeat is stored.
-
-**Checks (in order).**
-
-```bash
-dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
-dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
-```
-
-**Docs owed.** `src/Dhadgar.Nodes/README.md` "Agent hub" (path, auth, protocol header, methods, error codes, single-instance note).
-
-**Done when.** Checks pass; `AgentHubThroughGatewaySeamTests` is green.
-
-### VS-09 Command signing on the control plane; key in the enrollment response
-
-| Field | Value |
-| --- | --- |
-| Branch / worktree | `vs/09-command-signing` / `vertical-slice-vs09` |
-| Commit subject | `feat(nodes): ECDSA command signing key, signer, and signing key in the enrollment response (#94) [VS-09]` |
-| Security review | Yes (key material; touches the agent's `EnrollmentService`) |
-| Size | about 40k tokens |
-
-**Goal.** Nodes owns a P-256 signing key, signs `AgentCommandEnvelope`s per C-3, and hands the public key to agents at enrollment (D-09).
-
-**Rules.**
-- Seams harness and test JWTs (D-22): mint and accept test user tokens only with `SeamJwt` (`tests/Dhadgar.Testing/Auth/SeamJwt.cs` after VS-32, which removes VS-04's duplicate minter in `tests/Dhadgar.Gateway.Tests/HubTokenTests.cs`); never add another minter or `PostConfigure<JwtBearerOptions>` test-key block. Client-certificate shims stay inside the test project that owns them. A seam that asserts a rejection proves the server answered: the status or code comes from the server's response, the forwarder or a backend recorder shows which server it reached, and a positive twin passes (dispatch rules).
-- Private key bytes and PEM buffers are zeroed after use (`CryptographicOperations.ZeroMemory`); `ECDsa` instances are disposed or held by a singleton that disposes them.
-- The key file is written with owner-only permissions on Unix (`File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite)` when not Windows).
-- File paths come from configuration only: normalise with `Path.GetFullPath`, reject relative `CommandSigning:KeyPath` and any path containing `..` segments.
-- The agent rejects a malformed signing key at enrollment with a `Result` failure; no exceptions escape.
-- `Dhadgar.Contracts.csproj` gets no package references; new `.cs` content is CRLF.
-- Contract excerpt: C-3 (`AgentCommandSigning`, including the three constants this packet adds), C-4 (`EnrollNodeResponse` with `CommandSigningPublicKey`, `CommandSigningKeyId`), C-6 `CommandSigning:*`, and `AgentMessageLimits.MaxCommandLifetimeSeconds` (C-2).
-
-**Changes.**
-1. `src/Shared/Dhadgar.Contracts/Nodes/EnrollmentContracts.cs`: append `string CommandSigningPublicKey, string CommandSigningKeyId` to `EnrollNodeResponse` with XML docs (C-4). Fix every constructor call the compiler then reports (Nodes and tests).
-1a. Contract constants (C-2, C-3; security-2 found these fields unbounded). Append, with XML docs in the style of the neighbours, keeping CRLF:
-   - `src/Shared/Dhadgar.Contracts/Agents/AgentProtocol.cs`, class `AgentMessageLimits`: `public const int MaxErrorCodeLength = 64;` and `public const string ErrorCodePattern = "^[A-Za-z0-9._-]{1,64}$";` (bounds `AgentCommandResult.ErrorCode` and `AgentCommandCompleted.ErrorCode`; the agent's `[Category.Code]` codes such as `Java.NoRuntimeForPlatform` match it).
-   - `src/Shared/Dhadgar.Contracts/Agents/AgentCommandSigning.cs`: `public const int SignatureBytes = 64;`, `public const int SignatureBase64Length = 88;`, `public const int KeyIdLength = 64;`.
-   - Do not change any existing member.
-2. New `src/Dhadgar.Nodes/Services/CommandSigning/CommandSigningOptions.cs` (section `CommandSigning`: `string? KeyPath`, `int CommandTtlSeconds = 60` with `[Range(10, AgentMessageLimits.MaxCommandLifetimeSeconds)]`, i.e. 10..60; a TTL above 60 would make every conforming agent reject every command, C-2 acceptance rule 3).
-3. New `src/Dhadgar.Nodes/Services/CommandSigning/ICommandSigner.cs` and `CommandSigner.cs` (singleton):
-
-```csharp
-public interface ICommandSigner
-{
-    string PublicKeySpkiBase64 { get; }
-    string KeyId { get; }
-    Task InitializeAsync(CancellationToken ct = default);   // load or create the key
-    AgentCommandEnvelope Sign(AgentCommandEnvelope unsigned); // returns a copy with Signature and SigningKeyId set
-}
-```
-
-   Key source: `CommandSigning:KeyPath` if set (PEM, `-----BEGIN PRIVATE KEY-----` or `EC PRIVATE KEY`, must be a P-256 key); otherwise `command-signing-key.pem` in the same directory `LocalFileCaStorageProvider` uses (read it to reuse its directory resolution), created with `ECDsa.Create(ECCurve.NamedCurves.nistP256)` and `ExportPkcs8PrivateKeyPem()` on first start. `Sign` uses `AgentCommandSigning.BuildSigningInput(unsigned)` and `SignData(..., HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)`.
-4. `src/Dhadgar.Nodes/Program.cs`: bind `CommandSigningOptions` with validation; register `ICommandSigner`; call `InitializeAsync` at startup right after the CA initialization, with the same try/log pattern.
-5. `src/Dhadgar.Nodes/Endpoints/AgentEndpoints.cs` `Enroll`: inject `ICommandSigner` and fill the two new fields.
-6. Agent: `src/Agents/Dhadgar.Agent.Core/Authentication/EnrollmentService.cs`: after deserializing the response, check `CommandSigningPublicKey` (base64, imports with `ECDsa.ImportSubjectPublicKeyInfo`, `KeySize == 256`) and that `AgentCommandSigning.ComputeKeyId(spki) == CommandSigningKeyId`; otherwise return `Result.Failure("[Enrollment.InvalidSigningKey] Control plane returned an invalid command signing key")` **before** storing the certificate. Add `CommandSigningPublicKey` and `CommandSigningKeyId` to `EnrollmentResult`. Persisting them is VS-12.
-7. `tests/Dhadgar.Nodes.Tests/TestCertificateAuthorityService.cs` and `NodesWebApplicationFactory.cs`: the factory needs a signer. Register the real `CommandSigner` with `CommandSigning:KeyPath` pointing at a key generated into a per-factory temp file, or a `TestCommandSigner` that wraps a fresh in-memory key. Choose the smaller change and say which in the report.
-
-**Tests.**
-- `tests/Dhadgar.Nodes.Tests/CommandSigning/CommandSignerTests.cs`: a signature verifies with the public key over `AgentCommandSigning.BuildSigningInput`; the signature string is exactly `SignatureBase64Length` chars and decodes to `SignatureBytes`; `KeyId == ComputeKeyId(spki)` and has `KeyIdLength` chars; a second signer over the same directory loads the same key (same `KeyId`); `KeyPath` with a P-384 key fails initialization; a relative `KeyPath` fails validation; `CommandTtlSeconds` 61 and 9 fail options validation, 60 and 10 pass.
-- `tests/Dhadgar.Contracts.Tests/Agents/AgentMessageLimitsTests.cs`: pin `MaxErrorCodeLength`, `ErrorCodePattern` (`Java.NoRuntimeForPlatform` and `AgentBusy` match; `a b`, `x\ny`, 65 chars and the empty string do not). `AgentCommandSigningTests.cs`: `Convert.ToBase64String(new byte[SignatureBytes]).Length == SignatureBase64Length` and `ComputeKeyId(...)` of the golden SPKI has `KeyIdLength` chars.
-- `tests/Dhadgar.Nodes.Tests/Integration/AgentEnrollmentContractTests.cs`: extend `RealAgent_EnrollsAgainstRealNodes...` to assert `result.Value.CommandSigningKeyId` equals the factory signer's `KeyId`.
-- `tests/Dhadgar.Agent.Core.Tests/Authentication/EnrollmentServiceSigningKeyTests.cs`: a stub `HttpMessageHandler` returns an enrollment response; a malformed key → failure with `InvalidSigningKey` and the cert store untouched; a key-id mismatch → failure; a valid key → success, with the fields on `EnrollmentResult`.
-- Seams `AgentEnrollmentThroughGatewaySeamTests`: assert the agent received the Nodes signer's `KeyId`.
-
-Why they fail when reverted: the response lacks the key fields (compile failure) and the agent has no key to verify commands with.
-
-**Checks (in order).**
-
-```bash
-dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
-dotnet build src/Agents/Dhadgar.Agent.Core/Dhadgar.Agent.Core.csproj -c Release
-dotnet test tests/Dhadgar.Contracts.Tests/Dhadgar.Contracts.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
-```
-
-**Docs owed.** `docs/runbooks/nodes-service-operations.md`: the key file, backup with the CA, `CommandSigning:*` keys, "rotation not supported in MVP". ADR-0007: a dated note under its divergence note that signing is implemented per D-09.
-
-**Done when.** Checks pass.
-
-### VS-10 Certificate renewal on the agent-held-key path
-
-| Field | Value |
-| --- | --- |
-| Branch / worktree | `vs/10-cert-renewal` / `vertical-slice-vs10` (from `origin/main` after VS-06, VS-07, VS-09) |
-| Commit subject | `fix(agents): align certificate renewal on agent-generated keys; drop server-generated PKCS#12 [VS-10]` |
-| Security review | Yes |
-| Size | about 35k tokens |
-
-**Goal.** F-07: renewal uses one contract (C-4); Nodes signs the agent's new public key and returns PEM; server-side private-key generation goes away.
-
-**Rules.**
-- Seams harness and test JWTs (D-22): mint and accept test user tokens only with `SeamJwt` (`tests/Dhadgar.Testing/Auth/SeamJwt.cs` after VS-32, which removes VS-04's duplicate minter in `tests/Dhadgar.Gateway.Tests/HubTokenTests.cs`); never add another minter or `PostConfigure<JwtBearerOptions>` test-key block. Client-certificate shims stay inside the test project that owns them. A seam that asserts a rejection proves the server answered: the status or code comes from the server's response, the forwarder or a backend recorder shows which server it reached, and a positive twin passes (dispatch rules).
-- The current certificate comes from the mTLS identity (claim `certificate_thumbprint`), never from the request body.
-- Private key bytes zeroed after storing (the existing pattern in `EnrollmentService` stays).
-- `Result<T>` on the agent side; ProblemDetails on the Nodes side.
-- Contract excerpt: `RenewCertificateRequest(string PublicKey)`, `RenewCertificateResponse(string CertificateThumbprint, string Certificate, DateTimeOffset NotBefore, DateTimeOffset NotAfter)`; route row `POST /api/v1/agents/{nodeId}/certificates/renew` (C-1).
-
-**Changes.**
-1. `src/Shared/Dhadgar.Contracts/Nodes/EnrollmentContracts.cs`: replace the two renewal records with the C-4 versions.
-2. `src/Dhadgar.Nodes/Endpoints/AgentEndpoints.cs` `RenewCertificate`: bind `Dhadgar.Contracts.Nodes.RenewCertificateRequest`; a null `PublicKey` or one longer than 4096 chars → 400 `invalid_public_key` **before** base64 decoding (C-2 "Limit enforcement", last row); take the thumbprint from `context.User.FindFirst("certificate_thumbprint")` (missing → 400 `certificate_thumbprint_unavailable`); load the current non-revoked `AgentCertificate` for that node **with that thumbprint** (none → 401 `certificate_not_current`); call `caService.IssueCertificateForPublicKeyAsync(nodeId, request.PublicKey, ct)` (failure `invalid_public_key` → 400); keep the record insert, revocation and the three events; return the C-4 response with `Certificate = certResult.CertificatePem`. Delete the `Local*` renewal aliases and the local renewal records in `src/Dhadgar.Nodes/Models/EnrollmentModels.cs` if nothing else uses them.
-3. `src/Dhadgar.Nodes/Services/ICertificateAuthorityService.cs`, `CertificateAuthorityService.cs`, `tests/Dhadgar.Nodes.Tests/TestCertificateAuthorityService.cs`: delete `RenewCertificateAsync`. If `git grep -n "IssueCertificateAsync(" src` shows no caller outside the CA service, delete `IssueCertificateAsync` and its private-key/PKCS#12 helpers too (no server-generated agent keys remain). Remove or adapt tests that covered them.
-4. Agent `src/Agents/Dhadgar.Agent.Core/Authentication/EnrollmentService.cs` `RenewCertificateAsync`: send `new RenewCertificateRequest(Convert.ToBase64String(publicKeyBytes))`; deserialize `Dhadgar.Contracts.Nodes.RenewCertificateResponse`; decode with the existing `DecodeCertificate` (PEM); keep the key-match check and zeroing. Delete the agent-local `CertificateRenewalRequest` and `CertificateRenewalResponse` classes.
-
-**Tests.**
-- `tests/Dhadgar.Nodes.Tests/Integration/AgentApiIntegrationTests.cs` (or a new `CertificateRenewalEndpointTests.cs`): with the factory's test auth adding `certificate_thumbprint` (extend `TestNodesAuthHandler` with header `X-Test-Cert-Thumbprint`): a matching thumbprint and a valid key → 200 with PEM bound to that key, old cert revoked; a thumbprint that is not current → 401; a malformed key → 400; a 4097-char `PublicKey` → 400 `invalid_public_key` with no CA call (add a call counter to `TestCertificateAuthorityService` if it has none), and a 4096-char one reaches the CA (then fails as malformed).
-- `tests/Dhadgar.Agent.Core.Tests/Authentication/EnrollmentServiceRenewalTests.cs`: the request body JSON has exactly `publicKey`; a PEM response is accepted and stored; a response for a different key is rejected with `[Renewal.KeyMismatch]`.
-- Seam `tests/Dhadgar.Seams.Tests/Enrollment/CertificateRenewalSeamTests.cs`: enroll through the Gateway, call the real `EnrollmentService.RenewCertificateAsync` (agent `NodeId` set from the enrollment result through `Options.Create`; client `ControlPlaneMtls` carries the cert header), then assert the store's new cert key matches the stored private key, and in the Nodes DB the old certificate is revoked and a new one is active.
-
-Why they fail when reverted: the agent and Nodes disagree on both request and response shapes, so renewal fails with 400 or deserializes nothing.
-
-**Checks (in order).**
-
-```bash
-dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
-dotnet build src/Agents/Dhadgar.Agent.Core/Dhadgar.Agent.Core.csproj -c Release
-dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
-```
-
-**Docs owed.** `src/Dhadgar.Nodes/README.md` renewal section; `docs/runbooks/nodes-service-operations.md` if it describes PKCS#12 renewal.
-
-**Done when.** Checks pass; `CertificateRenewalSeamTests` is green.
+| `tests/Dhadgar.AgentSeam.Tests/GatewayNodesHarness.cs` | VS-07R (recording forwarder) |
+| `tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj` and lock file | VS-32R (reference to `Dhadgar.Testing`) |
+| `tests/Dhadgar.AgentSeam.Tests/GatewayAgentHubSeamTests.cs`, `src/Dhadgar.Nodes/Hubs/*` | VS-08R |
+| `tests/Dhadgar.AgentSeam.Tests/AgentBootstrapSeamTests.cs`, `src/Agents/**`, `tests/Dhadgar.Nodes.Tests/NodesWebApplicationFactory.cs` | VS-09 |
+| `src/Dhadgar.Nodes/Program.cs` | VS-08R (SignalR, registry) and VS-09 (signer): different lines; VS-08R merges second and resolves |
+| `src/Dhadgar.Gateway/**`, `tests/Dhadgar.Gateway.Tests/Route*`, `RateLimiter*` | VS-07R |
+| `tests/Dhadgar.Gateway.Tests/HubTokenTests.cs`, `tests/Dhadgar.Gateway.Tests/*.csproj` | VS-32R |
+
+Contract: C-2a and C-2b (rewritten 2026-10-27; #229 carries them after VS-03R), the C-1 rows `agents-ca-route`, `servers-org-route` and `console-org-route`, and C-6. Every wave-2 packet reads C-2 "Limit enforcement" and the dispatch rules on rejection seams, certificate shims, test JWTs, merging main and lock files. Seams go in `tests/Dhadgar.AgentSeam.Tests` (D-33). `tests/Dhadgar.Seams.Tests` is gone after VS-34 (D-42), and `IHubConnectionConfigurator` with it.
+
+The common rule for every wave-2 packet (cited as "the wave-2 seam rule"): test user tokens are minted and accepted only with `SeamJwt` (`tests/Dhadgar.Testing/Auth/SeamJwt.cs`, from VS-32R). Never add another minter or another `PostConfigure<JwtBearerOptions>` block. Client-certificate shims stay inside the test project that owns them. A rejection seam proves which server answered and has a positive twin (dispatch rules).
 
 ### VS-11 Import Servers from PR #88
 
@@ -1120,13 +1121,16 @@ dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
 | Security review | Yes (service-level auth on a promoted service, DV-13) |
 | Size | about 35k tokens |
 
-**Goal.** D-02: Servers' implementation from #88 lands on current `main`, builds under CI rules, authenticates users itself (VS-04 helper), and its tests pass. No new behaviour; placement and lifecycle come in VS-22 and VS-23.
+Unchanged from the wave-2 plan of 2026-10-26, except the guard checks. Sprint 2 touched only the two Servers lock files among the files this packet imports (`git diff --stat 2c4c19c 6df3338` on the import paths), so the import loop is still right.
+
+**Goal.** D-02: Servers' implementation from #88 lands on current `main`, builds under CI rules, authenticates users itself with VS-04's helper, and its tests pass. It adds no new behaviour; placement and lifecycle come in VS-22 and VS-23.
 
 **Rules.**
-- Import file contents with `git show 0761b97:<path> > <path>`; never `git checkout`, `git cherry-pick` or `git restore`. Ops has fetched `refs/pull/88/head` as `origin/pr-88`; check `git rev-parse origin/pr-88` prints `0761b97fba08f62b75925b0772c3b3364b699c77`, else return `blocked` with reason `tool`.
+- Import file contents with `git show 0761b97:<path> > <path>`. Never use `git checkout`, `git cherry-pick` or `git restore`. Ops has fetched `refs/pull/88/head` as `origin/pr-88`. Check that `git rev-parse origin/pr-88` prints `0761b97fba08f62b75925b0772c3b3364b699c77`; otherwise return `blocked` with reason `tool`.
 - Do **not** import `src/Shared/Dhadgar.ServiceDefaults/MultiTenancy/TenantScopedAuthorization.cs` (VS-04 rebuilt it) or `src/Shared/Dhadgar.ServiceDefaults/RabbitMqOptions.cs` (F-17).
 - Do not import anything for Mods, Console or the agents.
-- No `Version=` in `.csproj`; every package #88's csproj references must already be pinned in `Directory.Packages.props` (FluentValidation 12.1.1 is); if one is not, return `blocked` with reason `spec`.
+- No `Version=` in any `.csproj`. Every package #88's csproj references must already be pinned in `Directory.Packages.props` (FluentValidation 12.1.1 is); if one is not, return `blocked` with reason `spec`.
+- `Result<T>`, not exceptions, for validation and IO in any code you have to fix. Nullable is enabled and warnings are errors (`CI=true`).
 
 **Changes.**
 1. Import with this loop (bash), then `git add` the paths:
@@ -1143,14 +1147,14 @@ for f in src/Shared/Dhadgar.Contracts/Servers/ServerEvents.cs src/Shared/Dhadgar
 done
 ```
 
-   Files under `src/Dhadgar.Servers` that exist on `main` but not in #88 stay as they are (check with `git status`; there should be none besides `packages.lock.json`, which you regenerate).
-2. New `src/Shared/Dhadgar.ServiceDefaults/Messaging/RabbitMqOptions.cs`, namespace `Dhadgar.ServiceDefaults.Messaging`: a copy of `src/Dhadgar.Nodes/RabbitMqOptions.cs` (empty `Username`/`Password` defaults, `[Required]`). In `src/Dhadgar.Servers/Program.cs` add `using Dhadgar.ServiceDefaults.Messaging;`. Do not touch Nodes' copy (a follow-up can dedupe).
-3. `src/Dhadgar.Servers/Program.cs`: it already calls `AddTenantScopedAuthorization(builder.Configuration, builder.Environment)`, which now resolves to VS-04's helper. Add `Auth:Issuer`, `Auth:Audience` and `Auth:ClockSkewSeconds` to `src/Dhadgar.Servers/appsettings.json` with the Gateway's values.
-4. Lock files for `src/Dhadgar.Servers` and `tests/Dhadgar.Servers.Tests`, plus any project that references `Dhadgar.Shared` or `Dhadgar.Contracts` whose lock file changes (dispatch rules).
-5. Make it build under `CI=true`: #88's last commits fixed CI analyzer errors, but `main` has moved since. Fix only what the compiler and analyzers report, in the imported Servers files. If a fix would need a change outside `src/Dhadgar.Servers`, `tests/Dhadgar.Servers.Tests` or the files listed above, stop and report it.
-6. `tests/Dhadgar.Servers.Tests/ServersWebApplicationFactory.cs`: if its tests relied on #88's own JwtBearer registration, switch to a test scheme as `NodesWebApplicationFactory` does (default authenticate and challenge schemes overridden). If #88 brought its own test-token minter (a signing key plus `PostConfigure<JwtBearerOptions>`), delete it and use the test scheme; do not keep a third JWT helper (D-22). `DhadgarDbContext` changes are additive; other services' tests must stay green.
+   Files under `src/Dhadgar.Servers` that exist on `main` but not in #88 stay as they are. Check with `git status`; there should be none besides `packages.lock.json`, which you regenerate with the lock-file rule.
+2. New `src/Shared/Dhadgar.ServiceDefaults/Messaging/RabbitMqOptions.cs`, namespace `Dhadgar.ServiceDefaults.Messaging`: a copy of `src/Dhadgar.Nodes/RabbitMqOptions.cs` (empty `Username`/`Password` defaults, `[Required]`). In `src/Dhadgar.Servers/Program.cs`, add `using Dhadgar.ServiceDefaults.Messaging;`. Do not touch Nodes' copy; a follow-up can dedupe.
+3. `src/Dhadgar.Servers/Program.cs` already calls `AddTenantScopedAuthorization(builder.Configuration, builder.Environment)`, which now resolves to VS-04's helper. Add `Auth:Issuer`, `Auth:Audience` and `Auth:ClockSkewSeconds` to `src/Dhadgar.Servers/appsettings.json`, with the Gateway's values.
+4. Lock files: apply the lock-file rule (D-39, whole solution).
+5. Make it build under `CI=true`. #88's last commits fixed CI analyzer errors, but `main` has moved since. Fix only what the compiler and analyzers report in the imported Servers files. If a fix needs a change outside `src/Dhadgar.Servers`, `tests/Dhadgar.Servers.Tests` or the files listed above, stop and report it.
+6. `tests/Dhadgar.Servers.Tests/ServersWebApplicationFactory.cs`: if its tests relied on #88's own JwtBearer registration, switch to a test scheme as `NodesWebApplicationFactory` does (default authenticate and challenge schemes overridden). If #88 brought its own test-token minter (a signing key plus `PostConfigure<JwtBearerOptions>`), delete it and use the test scheme; do not keep another JWT helper (D-22). `DhadgarDbContext` changes are additive, and other services' tests must stay green.
 
-**Tests.** #88's Servers tests (endpoints, lifecycle, templates, validators) come with the import and must pass. Add `tests/Dhadgar.Servers.Tests/Auth/ServersAuthTests.cs`: `GET /organizations/{org}/servers` without credentials → 401; with a test identity for another org → 403. This fails when reverted because #88's endpoints would no longer be protected by the shared helper.
+**Tests.** #88's Servers tests (endpoints, lifecycle, templates, validators) come with the import and must pass. Add `tests/Dhadgar.Servers.Tests/Auth/ServersAuthTests.cs`: `GET /organizations/{org}/servers` without credentials → 401, and with a test identity for another org → 403. These fail when reverted, because #88's endpoints would no longer be protected by the shared helper.
 
 **Checks (in order).**
 
@@ -1161,49 +1165,49 @@ dotnet build src/Dhadgar.Servers/Dhadgar.Servers.csproj -c Release
 dotnet test tests/Dhadgar.Servers.Tests/Dhadgar.Servers.Tests.csproj -c Release
 dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
 dotnet test tests/Dhadgar.Identity.Tests/Dhadgar.Identity.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+dotnet build Dhadgar.sln -c Release
 ```
 
-(Identity and Nodes guard the shared `DhadgarDbContext` change.)
+Identity, Nodes and AgentSeam guard the shared `DhadgarDbContext`, `Pagination` and Contracts changes.
 
-**Docs owed.** `src/Dhadgar.Servers/README.md`: keep #88's text, add a status line "Imported from PR #88 (D-02); placement and agent dispatch arrive in VS-22/VS-23".
+**Docs owed.** `src/Dhadgar.Servers/README.md`: keep #88's text and add the status line "Imported from PR #88 (D-02); placement and agent dispatch arrive in VS-22/VS-23".
 
-**Done when.** Checks pass.
+**Done when.** The checks pass.
 
-### VS-32 One test JWT helper; access tokens never reach traces
+### VS-32R One test JWT helper; access tokens never reach traces
 
 | Field | Value |
 | --- | --- |
 | Branch / worktree | `vs/32-test-jwt` / `vertical-slice-vs32` |
-| Commit subject | `test(shared): single test JWT helper in Dhadgar.Testing; prove access_token never reaches traces [VS-32]` |
+| Commit subject | `test(shared): single test JWT helper in Dhadgar.Testing; prove access_token never reaches traces [VS-32R]` |
 | Security review | Yes (token hygiene in shared telemetry) |
-| Depends on | wave 1 (VS-04, VS-05); wave 2 stage 1 |
-| Size | about 30k tokens |
+| Depends on | wave 1 merged, VS-34 included (VS-04's `HubTokenTests` is on `main` as `2440ada`). `SeamJwt` is read from commit `6895cd1`, which is in `main`'s history, so no branch has to be kept. |
+| Size | about 25k tokens |
 
-**Goal.** D-22: VS-04's private test-token minter (`HubTokenWebApplicationFactory`, a fixed key plus its own `PostConfigure<JwtBearerOptions>`) and VS-05's `SeamJwt` converge on one helper, `SeamJwt`, in a shared test-support library. This packet removes the duplicate. It also closes VS-04 review-1's open item: hub requests carry the user JWT in `?access_token=`, and nothing proves that the OpenTelemetry ASP.NET Core and HttpClient instrumentation keep it out of exported traces. It also adds the first seam that sends a `SeamJwt` user token through the Gateway into Nodes.
+**Goal.** D-22: one test JWT helper. VS-04's private minter (`HubTokenWebApplicationFactory`, a fixed key plus its own `PostConfigure<JwtBearerOptions>`) is replaced by `SeamJwt`, which #231 wrote and which now lives in a shared test-support library. The packet also closes VS-04 review-1's open item: hub requests carry the user JWT in `?access_token=`, and nothing yet proves that the OpenTelemetry instrumentation keeps it out of traces. VS-32 had a user-JWT seam; it moved to VS-06R, which is the packet that gives Nodes real JWT auth.
 
 **Rules.**
-- No `Version=` in any `.csproj` (Central Package Management, `Directory.Packages.props`); every package referenced must already be pinned, else return `blocked` with reason `spec`.
-- `tests/Dhadgar.Testing` is a library, not a test project: `IsPackable` false, `IsTestProject` false, no xUnit reference, and **no client-certificate shims** (dispatch rule). It holds `SeamJwt` only.
-- Never log or assert-print a token; tests compare with `Assert.DoesNotContain(token, ...)` and never write the token to output.
+- No `Version=` in any `.csproj` (Central Package Management). `Microsoft.AspNetCore.Authentication.JwtBearer` and `System.IdentityModel.Tokens.Jwt` are already pinned in `Directory.Packages.props`. Any other package means returning `blocked` with reason `spec`.
+- `tests/Dhadgar.Testing` is a library, not a test project: `IsPackable` false, `IsTestProject` false, no xUnit reference, and **no client-certificate shims** (dispatch rule). For now it holds `SeamJwt` only.
+- Never log or print a token. Tests use `Assert.DoesNotContain(token, ...)` and never write the token to output.
 - Change `src/Shared/Dhadgar.ServiceDefaults` only if the redaction test (change 5) fails without the change. If it passes as is, the packet ships the test as a guard and changes no production code.
-- Lock files and line endings per the dispatch rules (new `.cs`, `.csproj`, `.json` CRLF; `Dhadgar.sln` stays LF).
-- Nullable enabled, warnings as errors (`CI=true`).
+- Lock files follow the lock-file rule (D-39). Line endings: new `.cs`, `.csproj` and `.json` files are CRLF; `Dhadgar.sln` stays LF.
+- Nullable is enabled and warnings are errors (`CI=true`).
 
 **Changes.**
-1. New `tests/Dhadgar.Testing/Dhadgar.Testing.csproj` (target framework and common properties copied from `tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj`): `<FrameworkReference Include="Microsoft.AspNetCore.App" />`, `<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />`, `<PackageReference Include="System.IdentityModel.Tokens.Jwt" />`. `dotnet sln Dhadgar.sln add` it in the test projects' solution folder. Create its lock file.
-2. `git mv tests/Dhadgar.Seams.Tests/Infrastructure/SeamJwt.cs tests/Dhadgar.Testing/Auth/SeamJwt.cs`, then change only the namespace to `Dhadgar.Testing.Auth`. The class keeps its name, members, per-process random key, issuer `https://seams.test/identity` and audience `meridian-api`.
-3. `tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj`: `<ProjectReference Include="..\Dhadgar.Testing\Dhadgar.Testing.csproj" />` and `<Using Include="Dhadgar.Testing.Auth" />`. No `.cs` caller changes: `NodesSeamFactory` and `GatewaySeamFactory` (edited in parallel by VS-06 and VS-07) keep calling `SeamJwt.Apply(services)`.
-4. `tests/Dhadgar.Gateway.Tests`: the same `ProjectReference` and `<Using>`. In `HubTokenTests.cs`, `HubTokenWebApplicationFactory` replaces its `PostConfigure<JwtBearerOptions>` block with `SeamJwt.Apply(services);` and deletes `KeyBytes`, `CreateUserToken()` and the `Issuer`/`Audience` constants once nothing uses them. Callers use `SeamJwt.CreateUserToken(Guid.NewGuid(), Guid.NewGuid())`. Keep `CapturingLoggerProvider` and the log assertions (VS-04 security N1).
-5. Trace redaction test, `tests/Dhadgar.Gateway.Tests/AccessTokenTraceRedactionTests.cs` (uses `HubTokenWebApplicationFactory`): register an `ActivityListener` before the request (`ShouldListenTo = _ => true`, `Sample = AllDataAndRecorded`, `ActivityStopped` adds each activity to a `ConcurrentBag`; dispose it after). Send `GET /hubs/console/negotiate?negotiateVersion=1&access_token={token}` with a fresh `SeamJwt` token.
-   - Positive twin `HubRequest_IsTraced`: at least one stopped activity from source `Microsoft.AspNetCore` has a `url.path` (or `http.target`) tag containing `/hubs/console/negotiate`. This proves the instrumentation ran in the test host. If no such activity exists because tracing is not registered under the `Testing` environment, return `blocked` with reason `spec` and quote what you found in `ServiceDefaultsExtensions.cs` around lines 104 and 435.
-   - `AccessToken_NeverAppearsInTraceTags`: no tag value and no `DisplayName` of any captured activity (ASP.NET Core and the forwarded `System.Net.Http` request) contains the token string.
-   - Prove it red once (D-13 style, quote the failing line in the report): set the instrumentation's documented switch that disables URL query redaction for the run (find the exact environment variable name in the README or CHANGELOG of `opentelemetry.instrumentation.aspnetcore` 1.14.0 and `opentelemetry.instrumentation.http` 1.14.0 under `~/.nuget/packages`). If the test fails **without** that switch, fix it: in `src/Shared/Dhadgar.ServiceDefaults/ServiceDefaultsExtensions.cs`, at both `AddAspNetCoreInstrumentation()` calls, set `EnrichWithHttpRequest` so that when the query contains `access_token`, the `url.query` tag is rewritten with that value replaced by `Redacted`. Do the same for `url.full` in the HttpClient instrumentation options if the forwarded request leaks. Put the helper in one internal static method with its own unit test in `tests/Dhadgar.ServiceDefaults.Tests`.
-6. New seam `tests/Dhadgar.Seams.Tests/Auth/UserJwtThroughGatewaySeamTests.cs` (first real use of `SeamJwt` through the Gateway into Nodes; VS-05 review-1):
-   - `UserToken_ThroughGateway_ReachesNodes`: `GET /api/v1/organizations/{O}/nodes` through the Gateway with `SeamJwt.CreateUserToken(user, O)` → 200, the body deserializes as `PagedNodesResponse`, and `host.Forwarder.ForwardedClusters` contains `nodes`.
-   - `TokenForOtherOrganization_IsRejectedByNodes` (rejection twin): the same request with a token for org P → 403. The Gateway's `TenantScoped` policy only requires an authenticated user (`src/Dhadgar.Gateway/Program.cs`), so the Gateway forwards, and the 403 must come from Nodes' tenant check: assert the status **and** that `ForwardedClusters` contains `nodes` (a fresh `SeamHost` per test). If Nodes answers something other than 403, assert that exact status and say so in the report.
-7. Docs: `tests/Dhadgar.Seams.Tests/README.md` gets one line saying where `SeamJwt` lives now. New `tests/Dhadgar.Testing/README.md` (5-10 lines): what belongs here (shared test helpers with no service references), what never does (certificate shims, service factories). If change 5 touched ServiceDefaults: `src/Shared/Dhadgar.ServiceDefaults/README.md` gets a "Telemetry: query redaction" note.
+1. New `tests/Dhadgar.Testing/Dhadgar.Testing.csproj`. Copy `TargetFramework`, `Nullable` and `IsPackable` from `tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj` and add `<IsTestProject>false</IsTestProject>`. References: `<FrameworkReference Include="Microsoft.AspNetCore.App" />`, `<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />` and `<PackageReference Include="System.IdentityModel.Tokens.Jwt" />`. Run `dotnet sln Dhadgar.sln add` to put it in the same solution folder as `Dhadgar.AgentSeam.Tests`.
+2. `git show 6895cd1:tests/Dhadgar.Seams.Tests/Infrastructure/SeamJwt.cs > tests/Dhadgar.Testing/Auth/SeamJwt.cs` (identical to `760af6a`; VS-34 has deleted the working copy), then change only the namespace to `Dhadgar.Testing.Auth` and convert to CRLF. The class keeps its name and members (`Issuer`, `Audience`, `CreateUserToken(Guid userId, Guid organizationId)`, `Apply(IServiceCollection)`), its per-process random key, issuer `https://seams.test/identity` and audience `meridian-api`.
+3. `tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj` and `tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj`: add `<ProjectReference Include="..\Dhadgar.Testing\Dhadgar.Testing.csproj" />` and `<Using Include="Dhadgar.Testing.Auth" />`. AgentSeam.Tests has no caller yet (VS-06R is the first), but the reference lands here so that stage 2 needs no `.csproj` or lock-file change.
+4. `tests/Dhadgar.Gateway.Tests/HubTokenTests.cs`: in `HubTokenWebApplicationFactory`, replace the `PostConfigure<JwtBearerOptions>` block with `SeamJwt.Apply(services);`. Delete `KeyBytes`, `CreateUserToken()` and the `Issuer`/`Audience` constants once nothing uses them. Callers use `SeamJwt.CreateUserToken(Guid.NewGuid(), Guid.NewGuid())`. Keep `CapturingLoggerProvider` and the log assertions (VS-04 security N1).
+5. Trace redaction test, `tests/Dhadgar.Gateway.Tests/AccessTokenTraceRedactionTests.cs` (it uses `HubTokenWebApplicationFactory`). Register an `ActivityListener` before the request (`ShouldListenTo = _ => true`, `Sample = AllDataAndRecorded`, `ActivityStopped` adds each activity to a `ConcurrentBag`), and dispose it afterwards. Send `GET /hubs/console/negotiate?negotiateVersion=1&access_token={token}` with a fresh `SeamJwt` token.
+   - Positive twin `HubRequest_IsTraced`: at least one stopped activity from source `Microsoft.AspNetCore` has a `url.path` (or `http.target`) tag containing `/hubs/console/negotiate`. This proves the instrumentation ran in the test host. If no such activity exists, because tracing is not registered under the `Testing` environment, return `blocked` with reason `spec` and quote what you found at the `AddAspNetCoreInstrumentation` calls in `src/Shared/Dhadgar.ServiceDefaults/ServiceDefaultsExtensions.cs` (find them with `git grep -n AddAspNetCoreInstrumentation src/Shared`).
+   - `AccessToken_NeverAppearsInTraceTags`: no tag value and no `DisplayName` of any captured activity contains the token string. That covers ASP.NET Core and the forwarded `System.Net.Http` request.
+   - Prove it red once (D-13 style; quote the failing line in the report). Set the instrumentation's documented switch that disables URL query redaction for the run. Find the exact environment variable name in the README or CHANGELOG of `opentelemetry.instrumentation.aspnetcore` and `opentelemetry.instrumentation.http` **1.20.1** (the versions pinned on `main`) under `~/.nuget/packages`.
+   - If the test fails **without** that switch, fix it. In `ServiceDefaultsExtensions.cs`, at each `AddAspNetCoreInstrumentation()` call, set `EnrichWithHttpRequest` so that when the query contains `access_token`, the `url.query` tag is rewritten with that value replaced by `Redacted`. Do the same for `url.full` in the HttpClient instrumentation options if the forwarded request leaks. Put the helper in one internal static method with its own unit test in `tests/Dhadgar.ServiceDefaults.Tests`.
+6. Docs: new `tests/Dhadgar.Testing/README.md`, 5-10 lines. It says what belongs here (shared test helpers with no service references) and what never does (certificate shims, service factories). If change 5 touched ServiceDefaults, add a "Telemetry: query redaction" note to `src/Shared/Dhadgar.ServiceDefaults/README.md`.
 
-**Tests.** Changes 5 and 6. The Gateway hub-token tests and the seams enrollment test must stay green after the move. They fail when reverted: without the `<Using>` and the reference, nothing compiles; without redaction (if it was needed), `AccessToken_NeverAppearsInTraceTags` fails.
+**Tests.** Change 5. The Gateway hub-token tests must stay green after the swap. They fail when reverted: without the reference and the `<Using>`, nothing compiles, and without redaction (if it was needed), `AccessToken_NeverAppearsInTraceTags` fails.
 
 **Checks (in order).**
 
@@ -1211,17 +1215,398 @@ dotnet test tests/Dhadgar.Identity.Tests/Dhadgar.Identity.Tests.csproj -c Releas
 dotnet restore Dhadgar.sln --locked-mode
 dotnet build tests/Dhadgar.Testing/Dhadgar.Testing.csproj -c Release
 dotnet test tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release
-dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
 dotnet test tests/Dhadgar.ServiceDefaults.Tests/Dhadgar.ServiceDefaults.Tests.csproj -c Release   # only if ServiceDefaults changed
+dotnet build Dhadgar.sln -c Release
 ```
 
-**Docs owed.** Change 7.
+**Docs owed.** Change 6.
 
-**Done when.** Checks pass; the report states whether redaction was already on (test green without a code change) or needed the `EnrichWithHttpRequest` change, and quotes the red run.
+**Done when.** The checks pass. The report says whether redaction was already on (the test is green without a code change) or needed the `EnrichWithHttpRequest` change, and it quotes the red run.
+
+### VS-07R Gateway: anonymous CA route, org-scoped Servers and Console routes, recording forwarder
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/07-gateway-routes` / `vertical-slice-vs07` |
+| Commit subject | `fix(gateway): anonymous agent CA route, org-scoped Servers and Console routes, drop the JWT Agent policy [VS-07R]` |
+| Security review | Yes (Gateway authorization policies and a new anonymous route) |
+| Depends on | wave 1 merged, VS-34 included (#233 left 14 routes, on `main` as `32779b5`); FU-41a closed |
+| Size | about 30k tokens |
+
+**Goal.** Sprint 2 already shipped certificate ingress: the `AgentCertificate` policy, `AgentCertificateForwarding` and `agent-hub-route`. VS-07R does what is left of F-15:
+- The agent CA certificate becomes fetchable without a client certificate. Today `/api/v1/agents/ca-certificate` falls into `agents-route`, which requires `AgentCertificate`, even though Nodes serves it anonymously (`AgentEndpoints.cs` line 57, and `/ca-certificate` is in `MtlsOptions.ExemptPaths`).
+- The Servers and Console routes match the services' organization-scoped paths.
+- The unused JWT `Agent` policy goes.
+- The seam harness records every forwarded request, so rejection seams can prove which server answered.
+
+The forwarding middleware and shared secret from VS-07 are dropped (D-31).
+
+**Rules.**
+- The Gateway sets `X-Client-Cert` only through Sprint 2's `AgentCertificateForwarding`. Add no second forwarding path, no shared secret and no header that Nodes would trust.
+- The new anonymous route matches exactly `/api/v1/agents/ca-certificate`, with no catch-all and no parameter.
+- Never log certificate bodies or tokens.
+- No `Version=` in any `.csproj`. Nullable is enabled and warnings are errors (`CI=true`).
+- Apply the wave-2 seam rule.
+
+**Contract excerpt (C-1).**
+
+| Route | Match | Cluster | Policy | Transform | Order | Rate limiter |
+| --- | --- | --- | --- | --- | --- | --- |
+| `agents-ca-route` (new) | `/api/v1/agents/ca-certificate` | `nodes` | `Anonymous` | `PathRemovePrefix /api/v1` | 22 | `Auth` (as `agents-enroll-route`) |
+| `servers-org-route` (replaces `servers-route`) | `/api/v1/organizations/{organizationId}/servers/{**catch-all}` | `servers` | `TenantScoped` | `PathRemovePrefix /api/v1` | 20 | `PerTenant` |
+| `console-org-route` (replaces `console-api-route`) | `/api/v1/organizations/{organizationId}/servers/{serverId}/console/{**catch-all}` | `console` | `TenantScoped` | `PathRemovePrefix /api/v1` | -1 | `PerTenant` |
+
+In YARP the lower `Order` wins. `agents-ca-route` (22) beats `agents-enroll-route` (25) and `agents-route` (30). `console-org-route` (-1) beats `servers-org-route`, whose catch-all also matches console paths.
+
+**Changes.**
+1. `src/Dhadgar.Gateway/appsettings.json` (`ReverseProxy:Routes`): add `agents-ca-route`, and replace `servers-route` and `console-api-route` with the two org routes, exactly as in the table. Copy any other keys from the replaced routes, but not their `PathRemovePrefix` values. The result is **15 routes and 8 clusters**.
+2. `src/Dhadgar.Gateway/Program.cs`: delete `options.AddPolicy("Agent", ...)` (line 106 on `5eead35`). First run `git grep -n '"Agent"' -- src tests deploy`. If a route or test still uses the policy, fix it when it is a test row; otherwise return `blocked` with reason `spec`.
+3. `tests/Dhadgar.Gateway.Tests/RouteConfigurationTests.cs`: rename `ReverseProxyShouldHave14Routes` to `ReverseProxyShouldHave15Routes`, and update the rows for the three routes. Assert that `agents-ca-route` is `Anonymous` with an `Order` lower than both `agents-enroll-route` and `agents-route`, that both org routes strip `/api/v1`, and that `console-org-route` has `Order` -1. In `RateLimiterConfigurationTests.cs`, update the rows. Delete any test of the removed `Agent` policy.
+4. `tests/Dhadgar.AgentSeam.Tests/GatewayNodesHarness.cs`: the forwarder records what it forwards. Add `public sealed record ForwardedRequest(string ClusterId, string Method, string Path);` to the file. `GatewayTestFactory` owns a `ConcurrentQueue<ForwardedRequest>` and exposes it as `public IReadOnlyCollection<ForwardedRequest> ForwardedRequests`. `NodesForwarderHttpClientFactory.CreateClient` wraps the TestServer handler in a small `DelegatingHandler` that enqueues `(context.ClusterId, request.Method.Method, request.RequestUri!.AbsolutePath)` before calling the inner handler. Keep the remote-address callback and the `CA2000` comment. `GatewayNodesHarness` exposes the same collection as `ForwardedRequests`.
+5. New seam `tests/Dhadgar.AgentSeam.Tests/GatewayAgentIngressSeamTests.cs`, which uses `GatewayNodesHarness` (a fresh one per test, as the neighbouring classes do):
+   - `CaCertificate_IsFetchableAnonymously`: `GET /api/v1/agents/ca-certificate` through the Gateway, with no certificate and no token, returns 200. The body is the CA PEM (read `GetCaCertificate`, `AgentEndpoints.cs` line 317, for the exact shape and assert it). `ForwardedRequests` contains `("nodes", "GET", "/agents/ca-certificate")`. Run it once before change 1 and quote the failure (expected: 401 or 403 from `AgentCertificate`, nothing forwarded).
+   - `RenewEndpoint_WithoutCertificate_IsRejectedByGateway`: the rejection twin, which proves the anonymous route did not open the agent paths. `POST /api/v1/agents/{guid}/certificates/renew` with no certificate gets the Gateway's status (assert the exact value the run shows: 401 or 403), and no `ForwardedRequests` entry ends with `/certificates/renew`.
+   - `CaCertificatePathVariant_IsNotAnonymous`: `GET /api/v1/agents/ca-certificate/x` with no certificate is not forwarded. This proves the route is an exact match.
+   - Add no spoofed-header case. Sprint 2's `AgentCertificateForwardingTests.EnrollRoute_SpoofedHeader_IsStripped` and `GatewayAgentHubSeamTests.Hub_SpoofedForwardedHeaderWithoutTlsCert_IsRejected` cover it.
+
+**Tests.** Changes 3 and 5. They fail when reverted: the CA request hits `agents-route` and is refused without forwarding, and the route count and route names no longer match.
+
+**Checks (in order).**
+
+```bash
+dotnet build src/Dhadgar.Gateway/Dhadgar.Gateway.csproj -c Release
+dotnet test tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+dotnet build Dhadgar.sln -c Release
+```
+
+**Docs owed.** `src/Dhadgar.Gateway/README.md`: the route table rows, and a sentence saying the CA certificate is public, while the rest of `/api/v1/agents/*` requires the client certificate. `docs/gateway-routing-reference.md`: the three rows.
+
+**Done when.** The checks pass, the CA seam is green, and its red run is quoted.
+
+### VS-09 Command signing on the control plane; key in the enrollment response
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/09-command-signing` / `vertical-slice-vs09` |
+| Commit subject | `feat(nodes,agent): ECDSA command signing key, signer, and the signing key in the enrollment response and agent state (#94) [VS-09]` |
+| Security review | Yes (key material; agent `EnrollmentService` and state store) |
+| Depends on | wave 1 merged (#229 with VS-03R) |
+| Size | about 40k tokens |
+
+Amended 2026-10-27 for Sprint 2. The agent now persists the key in Sprint 2's `agent-state.json` (D-37), the seam is in `Dhadgar.AgentSeam.Tests`, and the construction sites are on `main`.
+
+**Goal.** Nodes owns a P-256 signing key, signs `AgentCommandEnvelope`s per C-3, and hands the public key to agents at enrollment (D-09). The agent checks the key and keeps it in its state file, so VS-14 can verify commands after a restart.
+
+**Rules.**
+- Apply the wave-2 seam rule.
+- Private key bytes and PEM buffers are zeroed after use (`CryptographicOperations.ZeroMemory`). `ECDsa` instances are disposed, or held by a singleton that disposes them.
+- The key file is written with owner-only permissions on Unix (`File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite)` when not on Windows).
+- File paths come from configuration only. Normalise them with `Path.GetFullPath`, and reject a relative `CommandSigning:KeyPath` and any path with `..` segments.
+- The agent rejects a malformed signing key at enrollment with a `Result` failure; no exception escapes. `Result<T>` everywhere on the agent side. The shared `Result<T>` throws on a null success value, so never return `Success(null)`.
+- `Dhadgar.Contracts.csproj` gets no package references. No `Version=` in any `.csproj`. Keep the line endings of edited files; new `.cs` files are CRLF.
+- Nullable is enabled and warnings are errors (`CI=true`).
+- Contract excerpt: C-3 (`AgentCommandSigning`, including the three constants this packet adds), C-4 (`EnrollNodeResponse` with `CommandSigningPublicKey` and `CommandSigningKeyId` appended after `NotAfter`), C-6 `CommandSigning:*`, and `AgentMessageLimits.MaxCommandLifetimeSeconds` (C-2).
+
+**Changes.**
+1. `src/Shared/Dhadgar.Contracts/Nodes/EnrollmentContracts.cs`: append `string CommandSigningPublicKey, string CommandSigningKeyId` to `EnrollNodeResponse` (7 parameters on `main`, 9 after), with XML docs (C-4). Fix every construction of **`Dhadgar.Contracts.Nodes.EnrollNodeResponse`** that the compiler reports. On `main` these are `src/Dhadgar.Nodes/Endpoints/AgentEndpoints.cs` line 81 and `tests/Dhadgar.Agent.Core.Tests/Authentication/EnrollmentServicePkcs8Tests.cs` line 147, plus any others the build finds. Leave the Nodes-local `Dhadgar.Nodes.Models.EnrollNodeResponse` (`LocalEnrollNodeResponse`) unchanged; `AgentEndpoints` maps it to the contract and adds the two fields there.
+1a. Contract constants (C-2, C-3; security-2 found these fields unbounded). Append them with XML docs in the style of the neighbours, keeping CRLF:
+   - `src/Shared/Dhadgar.Contracts/Agents/AgentProtocol.cs`, class `AgentMessageLimits`: `public const int MaxErrorCodeLength = 64;` and `public const string ErrorCodePattern = "^[A-Za-z0-9._-]{1,64}$";`. These bound `AgentCommandResult.ErrorCode` and `AgentCommandCompleted.ErrorCode`. The agent's `[Category.Code]` codes, such as `Java.NoRuntimeForPlatform`, match the pattern.
+   - `src/Shared/Dhadgar.Contracts/Agents/AgentCommandSigning.cs`: `public const int SignatureBytes = 64;`, `public const int SignatureBase64Length = 88;` and `public const int KeyIdLength = 64;`.
+   - Do not change any existing member.
+2. New `src/Dhadgar.Nodes/Services/CommandSigning/CommandSigningOptions.cs`: section `CommandSigning`, with `string? KeyPath` and `int CommandTtlSeconds = 60` carrying `[Range(10, AgentMessageLimits.MaxCommandLifetimeSeconds)]`, so 10..60. A TTL above 60 would make every conforming agent reject every command (C-2 acceptance rule 3).
+3. New `src/Dhadgar.Nodes/Services/CommandSigning/ICommandSigner.cs` and `CommandSigner.cs` (singleton):
+
+```csharp
+public interface ICommandSigner
+{
+    string PublicKeySpkiBase64 { get; }
+    string KeyId { get; }
+    Task InitializeAsync(CancellationToken ct = default);   // load or create the key
+    AgentCommandEnvelope Sign(AgentCommandEnvelope unsigned); // returns a copy with Signature and SigningKeyId set
+}
+```
+
+   - Key source: `CommandSigning:KeyPath` if it is set. That is a PEM file (`-----BEGIN PRIVATE KEY-----` or `EC PRIVATE KEY`) holding a P-256 key.
+   - Otherwise, `command-signing-key.pem` in the same directory `LocalFileCaStorageProvider` uses (read that class and reuse its directory resolution). On first start, create the key with `ECDsa.Create(ECCurve.NamedCurves.nistP256)` and write it with `ExportPkcs8PrivateKeyPem()`.
+   - `Sign` uses `AgentCommandSigning.BuildSigningInput(unsigned)` and `SignData(..., HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)`.
+4. `src/Dhadgar.Nodes/Program.cs`: bind `CommandSigningOptions` with validation, register `ICommandSigner`, and call `InitializeAsync` at startup right after the CA initialization, with the same try/log pattern.
+5. `src/Dhadgar.Nodes/Endpoints/AgentEndpoints.cs` `Enroll`: inject `ICommandSigner` and fill the two new fields.
+6. Agent enrollment (`src/Agents/Dhadgar.Agent.Core/Authentication/EnrollmentService.cs`):
+   - After deserializing the response, check `CommandSigningPublicKey`: it is base64, it imports with `ECDsa.ImportSubjectPublicKeyInfo`, and `KeySize == 256`. Also check that `AgentCommandSigning.ComputeKeyId(spki) == CommandSigningKeyId`.
+   - Otherwise return `Result.Failure("[Enrollment.InvalidSigningKey] Control plane returned an invalid command signing key")`, **before** storing the certificate.
+   - Add `CommandSigningPublicKey` and `CommandSigningKeyId` to `EnrollmentResult` (line 665).
+6a. Agent persistence (D-37; this was VS-12's job before Sprint 2):
+   - `src/Agents/Dhadgar.Agent.Core/Identity/AgentIdentity.cs`: append `string? CommandSigningPublicKey = null, string? CommandSigningKeyId = null` to the record. Existing callers keep compiling.
+   - `FileAgentStateStore.cs`: add the two nullable fields to `AgentStateFile` (line 228). Map them both ways (the load at line 86, the save at line 149).
+   - On load, a file with exactly one of the two fields set is invalid. It returns the same failure the store already returns for an invalid state file (read lines 70-100 for it). A file with neither field set loads as an identity without a key: files written by Sprint 2 agents. VS-14 decides what an agent without a key does with commands.
+   - `src/Agents/Dhadgar.Agent.Core/Hosting/AgentBootstrapService.cs` line 263: build the identity with the two values from `enrolled.Value`. The seeded identity at line 210 keeps nulls.
+7. `tests/Dhadgar.Nodes.Tests/NodesWebApplicationFactory.cs` and `TestCertificateAuthorityService.cs`: the factory needs a signer. Either register the real `CommandSigner` with `CommandSigning:KeyPath` pointing at a key generated into a per-factory temp file, or register a `TestCommandSigner` that wraps a fresh in-memory key. Choose the smaller change and say which in the report. `AgentSeamHarness.CreateFactoryWithRealCa` derives from this factory, so the seams get the signer too.
+
+**Tests.**
+- `tests/Dhadgar.Nodes.Tests/CommandSigning/CommandSignerTests.cs`:
+  - a signature verifies with the public key over `AgentCommandSigning.BuildSigningInput`;
+  - the signature string is exactly `SignatureBase64Length` chars and decodes to `SignatureBytes`;
+  - `KeyId == ComputeKeyId(spki)`, and it has `KeyIdLength` chars;
+  - a second signer over the same directory loads the same key (same `KeyId`);
+  - a `KeyPath` with a P-384 key fails initialization, and a relative `KeyPath` fails validation;
+  - `CommandTtlSeconds` 61 and 9 fail options validation, while 60 and 10 pass.
+- `tests/Dhadgar.Contracts.Tests/Agents/AgentMessageLimitsTests.cs`: pin `MaxErrorCodeLength` and `ErrorCodePattern`. `Java.NoRuntimeForPlatform` and `AgentBusy` match; `a b`, `x\ny`, a 65-char code and the empty string do not.
+- `AgentCommandSigningTests.cs`: `Convert.ToBase64String(new byte[SignatureBytes]).Length == SignatureBase64Length`, and `ComputeKeyId(...)` of the golden SPKI has `KeyIdLength` chars.
+- `tests/Dhadgar.Agent.Core.Tests/Authentication/EnrollmentServiceSigningKeyTests.cs`: a stub `HttpMessageHandler` returns an enrollment response.
+  - A malformed key gives a failure with `InvalidSigningKey`, and the cert store is untouched.
+  - A key-id mismatch gives a failure.
+  - A valid key gives success, with the fields on `EnrollmentResult`.
+- `tests/Dhadgar.Agent.Core.Tests/Identity/FileAgentStateStoreTests.cs` (extend it):
+  - the two fields round-trip;
+  - a Sprint 2 file without them loads with nulls;
+  - a file with only one of them fails.
+- `tests/Dhadgar.Agent.Core.Tests/Hosting/AgentBootstrapServiceTests.cs`: a successful enrollment saves an identity carrying the result's key fields.
+- Seam, in `tests/Dhadgar.AgentSeam.Tests/AgentBootstrapSeamTests.cs`. Extend the test that enrolls through the Gateway and reads the saved state (name it in the report). The persisted `AgentIdentity.CommandSigningKeyId` equals `harness.Nodes.Services.GetRequiredService<ICommandSigner>().KeyId`, and `ComputeKeyId(Convert.FromBase64String(CommandSigningPublicKey))` equals it too. This runs the real agent, the Gateway and Nodes together.
+
+Why they fail when reverted: the response lacks the key fields (a compile failure in the seam), and the saved state has no key for VS-14 to verify commands with.
+
+**Checks (in order).**
+
+```bash
+dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
+dotnet build src/Agents/Dhadgar.Agent.Core/Dhadgar.Agent.Core.csproj -c Release
+dotnet test tests/Dhadgar.Contracts.Tests/Dhadgar.Contracts.Tests.csproj -c Release
+dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
+dotnet test tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+dotnet build Dhadgar.sln -c Release
+```
+
+**Docs owed.**
+- `docs/runbooks/nodes-service-operations.md`: the key file, backing it up with the CA, the `CommandSigning:*` keys, and "rotation not supported in MVP".
+- `src/Agents/Dhadgar.Agent.Core/README.md`: the two state-file fields.
+- ADR-0007: a dated note under its divergence note saying signing is implemented per D-09.
+
+**Done when.** The checks pass.
+
+### VS-08R Nodes agent hub: connection registry, connect-time node check, frame limit, Telemetry
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/08-agent-hub-registry` / `vertical-slice-vs08` |
+| Commit subject | `feat(nodes): agent connection registry, connect-time node check, 512 KiB frame limit and Telemetry ack on /hubs/agent [VS-08R]` |
+| Security review | Yes (agent-facing hub) |
+| Depends on | wave 1 merged (#229 with VS-03R: `AgentHubAck`, `Telemetry`, `MaxReceiveMessageBytes`) |
+| Size | about 35k tokens |
+
+**Goal.** Sprint 2's hub accepts heartbeats. Wave 3 also needs:
+- Nodes knows which nodes are connected (VS-15 uses `IsConnected`).
+- A connection for an unknown or decommissioned node is refused when it connects, not at its first heartbeat.
+- Frames up to C-2's escaped worst case pass and bigger ones close (D-30).
+- `Telemetry` is validated and acknowledged (D-28).
+
+**Rules.**
+- The node comes only from the `node_id` claim (D-S23). Payloads carry no node id (D-27).
+- Business errors are acks (`new AgentHubAck(false, code)`), never a `HubException`. Never echo agent input into logs or error text; log the node id and counts only.
+- Validate every field. SignalR binds hub arguments with its own JSON options, so null-check every reference field, require `double.IsFinite` for numbers and use `Enum.IsDefined` for enums. Never truncate on receipt. Unknown members are ignored (D-40; SignalR's binding already skips them), so do not add a check that rejects them. Missing or null required fields are still `invalid_telemetry`.
+- Keep Sprint 2's existing connect checks and their order: protocol header (a missing header counts as `"1"`, D-32), `node_id`, then the current certificate. Keep `Heartbeat` as it is. The new checks come after them.
+- `EnableDetailedErrors = false` stays.
+- Hubs are transient and `NodesDbContext` is scoped. The registry is a singleton that holds no scoped service.
+- The registry is single-instance for the MVP. Say in a comment that scale-out needs a Redis backplane (ADR-0008).
+- Nullable is enabled and warnings are errors (`CI=true`).
+- Apply the wave-2 seam rule.
+
+**Contract excerpt.** C-2a: `AgentHubProtocol.MaxReceiveMessageBytes` (512 KiB), `AgentHubProtocol.NodeGroup`, `AgentHubErrorCodes.InvalidTelemetry`, `IAgentHub.Telemetry(AgentTelemetry) → AgentHubAck`. C-2: `AgentTelemetry(DateTimeOffset Timestamp, IReadOnlyDictionary<string, double> Metrics)`, `AgentMessageLimits.MaxTelemetryMetrics` (500) and `MaxMetricNameLength` (128). The "Limit enforcement" rows for the hub frame and for `AgentTelemetry`: `Metrics` non-null and ≤ 500 entries; each name 1..128 characters with no control characters; each value finite; `Timestamp` not `default`.
+
+**Changes.**
+1. New `src/Dhadgar.Nodes/Hubs/IAgentConnectionRegistry.cs` and `AgentConnectionRegistry.cs`, with `void Add(Guid nodeId, string connectionId)`, `void Remove(Guid nodeId, string connectionId)` (a no-op when absent), `bool IsConnected(Guid nodeId)` and `int ConnectedNodeCount`. Back it with a `ConcurrentDictionary<Guid, ImmutableHashSet<string>>` updated by `AddOrUpdate`; remove the key when its set becomes empty.
+2. New `src/Dhadgar.Nodes/Hubs/AgentTelemetryValidator.cs`. Give it the same shape as Sprint 2's `AgentHeartbeatValidator` in the same folder (read it, and match its signature and code style). It returns either valid or `AgentHubErrorCodes.InvalidTelemetry`, and implements exactly the C-2 row.
+3. `src/Dhadgar.Nodes/Hubs/AgentHub.cs`:
+   - Inject `IAgentConnectionRegistry registry`.
+   - `OnConnectedAsync`, after the certificate check and before the group join: load the node with `AsNoTracking`, selecting only `OrganizationId` and `Status` (check the entity's property names). If it is missing or `Decommissioned`, log a warning with the node id, call `Context.Abort()` and return. Then set `Context.Items["OrganizationId"] = organizationId`. Keep Sprint 2's `Groups.AddToGroupAsync(..., AgentHubProtocol.NodeGroup(nodeId))`, and call `registry.Add(nodeId, Context.ConnectionId)` last.
+   - New `OnDisconnectedAsync`: if the connection has a node id, call `registry.Remove(nodeId, Context.ConnectionId)`, then call the base method.
+   - `Telemetry`: replace VS-03R's stub. A failed validation returns `new AgentHubAck(false, code)`. A valid message is logged at Debug as `"Telemetry from node {NodeId}: {MetricCount} metrics"`, never the names or values, and returns `new AgentHubAck(true)`. It writes nothing to the database. The certificate re-check stays on `Heartbeat` (Sprint 2), which closes a connection whose certificate went bad.
+4. `src/Dhadgar.Nodes/Program.cs`: set `o.MaximumReceiveMessageSize = AgentHubProtocol.MaxReceiveMessageBytes;` (it is `64 * 1024` on `main`, line 54) and register `builder.Services.AddSingleton<IAgentConnectionRegistry, AgentConnectionRegistry>();`.
+
+**Tests.**
+- `tests/Dhadgar.Nodes.Tests/Hubs/AgentConnectionRegistryTests.cs`: two connections for one node; removing one leaves the node connected, removing both leaves it disconnected; removing an unknown id is a no-op; `ConnectedNodeCount` is right.
+- `tests/Dhadgar.Nodes.Tests/Hubs/AgentTelemetryValidatorTests.cs`: one `[Theory]` row per bound, each at the limit (valid) and one past it (`invalid_telemetry`):
+  - 500 and 501 metrics;
+  - a 128- and a 129-char name, an empty name, a name containing `\n`;
+  - `NaN` and `PositiveInfinity` values;
+  - null `Metrics`, and a `default` `Timestamp`.
+- `tests/Dhadgar.Nodes.Tests/Hubs/AgentHubTests.cs` (extend it, using its existing connection helper):
+  - Connect for an unknown node, and for a decommissioned node: the connection closes (the `Closed` event fires within 5 s, or `StartAsync` throws).
+  - While a connection is open, the registry from `factory.Services` reports `IsConnected` true; after `DisposeAsync` it reports false (poll for up to 5 s).
+  - Valid telemetry answers `Accepted == true`; 501 metrics answers `Accepted == false` with `ErrorCode == "invalid_telemetry"`.
+  - `Telemetry_WithUnknownMember_IsAccepted` (D-40): `connection.InvokeAsync<AgentHubAck>("Telemetry", new { timestamp = now, metrics = new Dictionary<string, double> { ["cpu"] = 1 }, extra = "x" })` answers `Accepted == true`. `Telemetry_WithoutMetrics_IsRejected`: `new { timestamp = now, extra = "x" }` answers `invalid_telemetry`.
+  - `Telemetry_AtEscapedWorstCase_IsAccepted`: 500 metric names of 128 `'é'` each. That is about 375 KiB on the wire, because each `é` is escaped to `é`. It is acknowledged and the connection stays open. It fails with `main`'s 64 KiB limit, which proves the limit was raised.
+  - `Frame_OverLimit_ClosesConnection`: 700 metric names of 128 `'é'` each, about 525 KiB escaped, which is over 512 KiB. The `Closed` event fires within 5 s and no ack arrives. It must be the close and not an `invalid_telemetry` ack, which proves the frame limit is still enforced.
+- Scope validation, in `AgentHubTests` or a new `HostScopeValidationTests.cs`: build `AgentSeamHarness.CreateFactoryWithRealCa(..., validateScopes: true)`, send one request, and resolve `IAgentConnectionRegistry`. The `Testing` environment hides singleton-to-scoped captures unless this runs.
+- Seam, in `tests/Dhadgar.AgentSeam.Tests/GatewayAgentHubSeamTests.cs` (reuse the class's helpers for enrolling and for connecting through the Gateway with the client certificate):
+  - `Telemetry_ThroughGateway_IsAccepted` (positive twin): enroll, connect through the Gateway and invoke `Telemetry`. The ack is `Accepted == true`, and Nodes' registry (`harness.Nodes.Services`) reports the node as connected.
+  - `Connect_ForDecommissionedNode_IsClosedByNodes`: enroll, then decommission the node through `INodeService` in a scope from `harness.Nodes.Services` (read `NodeService.cs` around line 272 for the method). Connect through the Gateway with the same certificate. `StartAsync` either completes and `Closed` fires within 5 s, or throws. Either way, assert the negotiate reached Nodes: the Gateway hosts no `/hubs/agent` hub, so a completed negotiate came from Nodes. If `StartAsync` throws, assert on `HttpRequestException.StatusCode`, as the dispatch rules require. Do not depend on VS-07R's `ForwardedRequests`; that packet runs in parallel.
+
+Why they fail when reverted: no registry exists (the code does not compile, or `IsConnected` stays false); a decommissioned node stays connected until its first heartbeat; the worst-case telemetry frame closes the connection; 501 metrics are accepted.
+
+**Checks (in order).**
+
+```bash
+dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
+dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+dotnet build Dhadgar.sln -c Release
+```
+
+**Docs owed.** `src/Dhadgar.Nodes/README.md` "Agent hub": the connect checks in order, the registry, the 512 KiB frame limit, the `Telemetry` ack codes, and the single-instance note.
+
+**Done when.** The checks pass and both new `GatewayAgentHubSeamTests` cases are green.
+
+### VS-06R Nodes user JWT beside agent mTLS; strict AgentPolicy
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/06-nodes-user-jwt` / `vertical-slice-vs06` |
+| Commit subject | `fix(nodes): user JWT beside agent mTLS via a path-selected default scheme; AgentPolicy accepts only mTLS identities [VS-06R]` |
+| Security review | Yes (Nodes authentication and authorization) |
+| Depends on | VS-32R (`SeamJwt`, AgentSeam's reference to `Dhadgar.Testing`) and VS-07R (`ForwardedRequests`) merged; #230 (`AddDhadgarJwtBearer`) |
+| Size | about 40k tokens |
+
+**Goal.**
+- F-01: Nodes registers user JWT auth itself, instead of relying on a test scheme.
+- F-02: `AgentPolicy` stops accepting any authenticated user.
+- D-35: a path-selected default scheme keeps the two schemes apart, so a bearer token is never evaluated on agent paths and a certificate never on user paths.
+- A `SeamJwt` user token reaches Nodes' tenant endpoints through the Gateway.
+
+Dropped from VS-06, because Sprint 2 already shipped or covers them:
+- the forwarded-certificate middleware and its secret (D-S25, D-S210 A, D-31);
+- `AdditionalProtectedPrefixes`;
+- the other-CA and `X-Node-Id` seams, which `Nodes.Tests/Integration/AgentHubSeamTests` covers.
+
+**Rules.**
+- Errors at HTTP boundaries are ProblemDetails or the existing `MtlsProblemWriter`. Add no new exception types.
+- mTLS may only be disabled in Development, which `AddMtlsAuthentication` already enforces. Do not weaken it.
+- Agent identity comes only from the certificate: `MtlsMiddleware` sets `node_id` from the SPIFFE SAN. No code may read a header or body field to decide which node a caller is.
+- Do not change Sprint 2's `ForwardedClientCertificateMiddleware`, `TrustedProxies`, `AgentMtlsAuthenticationHandler` or the hub's connect checks.
+- Change nothing in `src/Shared/Dhadgar.ServiceDefaults`. VS-04's `AddDhadgarJwtBearer` is used as it is; Nodes sets its own defaults after both registrations.
+- No `Version=` in any `.csproj`. Nullable is enabled and warnings are errors (`CI=true`).
+- Apply the wave-2 seam rule.
+
+**Contract excerpt.**
+- C-1: `nodes-org-route` (`TenantScoped`, strips `/api/v1`), `agents-route` and `agent-hub-route` (`AgentCertificate`).
+- C-6: `Auth:Issuer`, `Auth:Audience` and `Auth:ClockSkewSeconds`.
+- Policies: `TenantScoped` (unchanged) and `AgentPolicy` (an mTLS identity with `node_id`).
+
+**Changes.**
+1. New `src/Dhadgar.Nodes/Auth/NodesAuthenticationSchemes.cs`:
+
+```csharp
+public static class NodesAuthenticationSchemes
+{
+    /// <summary>Policy scheme that picks agent mTLS or user JWT by path (D-35).</summary>
+    public const string Default = "NodesAuth";
+
+    public static string SelectScheme(HttpContext context)
+    {
+        var mtls = context.RequestServices.GetRequiredService<IOptions<MtlsOptions>>().Value;
+        var path = context.Request.Path;
+        return path.StartsWithSegments(Prefix(mtls.AgentEndpointPrefix), StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments(Prefix(mtls.HubPathPrefix), StringComparison.OrdinalIgnoreCase)
+            ? AgentMtlsAuthenticationHandler.SchemeName
+            : JwtBearerDefaults.AuthenticationScheme;
+    }
+    // Prefix(): the same normalisation MtlsMiddleware uses (NormalizePrefix, around line 167); make that helper internal and reuse it.
+}
+```
+
+2. `src/Dhadgar.Nodes/Program.cs`:
+   - After `builder.Services.AddMtlsAuthentication(builder.Configuration);` (line 71), add `builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment);`. Read the helper's signature; Nodes hosts no user hub, so pass no hub path.
+   - Then add the selector. It must come after both registrations, because each of them sets `DefaultScheme` and the last `Configure` wins:
+
+```csharp
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = NodesAuthenticationSchemes.Default;
+    options.DefaultChallengeScheme = NodesAuthenticationSchemes.Default;
+    options.DefaultForbidScheme = NodesAuthenticationSchemes.Default;
+})
+.AddPolicyScheme(NodesAuthenticationSchemes.Default, "Agent mTLS or user JWT",
+    o => o.ForwardDefaultSelector = NodesAuthenticationSchemes.SelectScheme);
+```
+
+   - In `AgentPolicy`, keep `RequireAuthenticatedUser()` and add `policy.AddRequirements(new AgentIdentityRequirement());`. Register `builder.Services.AddSingleton<IAuthorizationHandler, AgentIdentityHandler>();`. `TenantScoped` stays as it is.
+3. New `src/Dhadgar.Nodes/Auth/AgentIdentityRequirement.cs`, holding both the requirement and the handler:
+
+```csharp
+public sealed class AgentIdentityRequirement : IAuthorizationRequirement { }
+
+public sealed class AgentIdentityHandler(IOptions<MtlsOptions> mtls) : AuthorizationHandler<AgentIdentityRequirement>
+{
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, AgentIdentityRequirement requirement)
+    {
+        var hasNodeId = Guid.TryParse(context.User.FindFirst("node_id")?.Value, out _);
+        var viaMtls = context.User.Identities.Any(i => i.IsAuthenticated && i.AuthenticationType == MtlsMiddleware.AuthenticationType);
+        // mTLS can only be disabled in Development (AddMtlsAuthentication enforces it); tests rely on this.
+        if (hasNodeId && (viaMtls || !mtls.Value.Enabled)) context.Succeed(requirement);
+        return Task.CompletedTask;
+    }
+}
+```
+
+4. `src/Dhadgar.Nodes/Auth/MtlsMiddleware.cs`: add `public const string AuthenticationType = "mTLS";` and use it at line 152 (`new ClaimsIdentity(claims, AuthenticationType)`). Check `AgentMtlsAuthenticationHandler` for a second literal `"mTLS"` and use the constant there too.
+5. `src/Dhadgar.Nodes/appsettings.json`: add the `Auth` section with the same keys and values as the Gateway's file after #230 (the helper's required keys).
+6. Seam harness opt-in, in `tests/Dhadgar.AgentSeam.Tests/GatewayNodesHarness.cs`. Real user auth must run in Nodes and in the Gateway:
+   - `GatewayNodesHarness` gets a constructor parameter `bool realUserAuth = false`. When it is true, the Nodes factory from `CreateFactoryWithRealCa(..., validateScopes: true)` is wrapped with `.WithWebHostBuilder(b => b.ConfigureTestServices(s => { s.PostConfigure<AuthenticationOptions>(o => { o.DefaultAuthenticateScheme = null; o.DefaultChallengeScheme = null; }); SeamJwt.Apply(s); }))`. This undoes `NodesWebApplicationFactory`'s test-scheme override (lines 128-129), so `Program.cs`'s defaults apply.
+   - `GatewayTestFactory` gets an optional `Action<IServiceCollection>? configureTestServices` constructor parameter, invoked inside its `ConfigureTestServices`. The harness passes `SeamJwt.Apply` when `realUserAuth` is set.
+   - Existing harness users are unchanged.
+
+**Tests.**
+- `tests/Dhadgar.Nodes.Tests/Auth/AgentIdentityHandlerTests.cs`:
+  - an mTLS identity with `node_id` succeeds;
+  - a `"Bearer"` identity with `node_id` and mTLS enabled fails;
+  - the same identity with mTLS disabled succeeds;
+  - an identity with no `node_id` fails.
+- `tests/Dhadgar.Nodes.Tests/Auth/NodesAuthenticationSchemesTests.cs` (`DefaultHttpContext` whose `RequestServices` hold default `MtlsOptions`):
+  - `/agents/x/heartbeat` and `/hubs/agent/negotiate` select `AgentMtls`, and so does `/AGENTS/x` (the match ignores case);
+  - `/agentsx` and `/organizations/o/nodes` select `JwtBearer`, which proves the match is segment-aware.
+- Seam `tests/Dhadgar.AgentSeam.Tests/GatewayUserJwtSeamTests.cs`, with `new GatewayNodesHarness(dir, realUserAuth: true)` per test:
+  - `DefaultSchemes_AreTheNodesSelector`: from `harness.Nodes.Services`, `IAuthenticationSchemeProvider.GetDefaultAuthenticateSchemeAsync()` and `GetDefaultChallengeSchemeAsync()` are both `NodesAuth`. Reverted, the last registration wins and this fails.
+  - `UserToken_ThroughGateway_ReachesNodes`: `GET /api/v1/organizations/{O}/nodes` through the Gateway with `SeamJwt.CreateUserToken(user, O)` returns 200, the body deserializes as `PagedNodesResponse`, and `ForwardedRequests` contains `("nodes", "GET", "/organizations/{O}/nodes")`.
+  - `TokenForOtherOrganization_IsRejectedByNodes`: the same request with a token for org P returns 403, and the request **was** forwarded. The Gateway's `TenantScoped` policy only requires an authenticated user, so the 403 comes from Nodes' tenant check. If Nodes answers something else, assert that exact status and say so in the report.
+  - `NoToken_IsRejectedByGateway`: returns 401, and nothing is forwarded for that path.
+  - `UserToken_OnAgentEndpoint_IsRejectedByNodes`: directly against Nodes, `POST /agents/{nodeId}/heartbeat` with the user token and no certificate returns 401. Its twin sends the same request with the enrolled certificate in Sprint 2's forwarded header (`AgentCertificateProfile.ForwardedCertificateHeader`; read it for the encoding) from `GatewayTestFactory.GatewayAddress`, and gets 200. To make that client, use `harness.Nodes.Server.CreateHandler(ctx => ctx.Connection.RemoteIpAddress = GatewayTestFactory.GatewayAddress)`, and read `AgentEndpoints.cs` for the heartbeat body.
+  - `AgentCertificate_OnUserRoute_IsRejectedByNodes`: directly against Nodes, `GET /organizations/{O}/nodes` with the enrolled certificate forwarded and no token returns 401.
+  - Run `DefaultSchemes_AreTheNodesSelector` and `UserToken_ThroughGateway_ReachesNodes` once before change 2 and quote both failures.
+- Existing `Nodes.Tests` and `AgentSeam.Tests` stay green. `NodesWebApplicationFactory` keeps its test-scheme override, and with mTLS disabled `AgentIdentityHandler` accepts `node_id` claims.
+
+**Checks (in order).**
+
+```bash
+dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release
+dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+dotnet test tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release
+dotnet build Dhadgar.sln -c Release
+```
+
+**Docs owed.**
+- `src/Dhadgar.Nodes/README.md`, auth section: user JWT on `/organizations/...`, agent mTLS on `/agents` and `/hubs/agent`, the `NodesAuth` selector, and `AgentPolicy`.
+- `docs/runbooks/nodes-service-operations.md`: the `Auth:*` keys.
+
+**Done when.** The checks pass, and the report quotes the two red runs.
+
+### VS-10 Certificate renewal on the agent-held-key path (superseded)
+
+Superseded by Sprint 2 (D-36). `main` at `6df3338` already renews on the agent-held key:
+- the C-4 records with `CaCertificate`;
+- the thumbprint taken from the mTLS identity;
+- no server-generated private key;
+- `GatewayAgentRenewalSeamTests` through the Gateway.
+
+Do not dispatch it. Any renewal gap found later becomes a new packet against Sprint 2's code.
 
 ---
 
 ## Wave 3: agent runtime, command pipeline, Console import
+
+> Do not dispatch wave 3 from this text. Contract sync 2 (ruling [worknotes/sprint2-reconcile-ruling.md](worknotes/sprint2-reconcile-ruling.md) § 4) first rewrites VS-12, VS-13, VS-14, VS-15, VS-16 and VS-33, and every `tests/Dhadgar.Seams.Tests` path, against D-25..D-39 and Sprint 2's code.
 
 Base: `origin/main` after all of wave 2. Stage 1, dispatched together: VS-12, VS-15, VS-17. Stage 2: VS-33 (after VS-15 merges), VS-13 (stacks on VS-12; needs VS-33 merged before it can unskip the round-trip seam) and VS-14 (stacks on VS-12). Stage 3: VS-16 after VS-13, VS-14, VS-15 and VS-33 merge. Merge order: VS-15, VS-17, VS-12, VS-33, VS-14, VS-13, VS-16. VS-13 and VS-14 both stack on VS-12 but touch disjoint files (`Communication/*` vs `Commands/CommandValidator.cs`, `Commands/CommandReplayCache.cs`, `Configuration/SecurityOptions.cs`).
 
@@ -1250,7 +1635,7 @@ Re-slice (contract sync, 2026-10-26): enforcing C-2 "Limit enforcement" pushed V
 0. `src/Agents/Dhadgar.Agent.Core/Commands/CommandEnvelope.cs`: add `[MaxLength(64)] public string? SigningKeyId { get; init; }` with an XML doc ("Key id of the control-plane signing key; see AgentCommandSigning.ComputeKeyId"). VS-13 and VS-14 both use it, so it lands here.
 1. `src/Agents/Dhadgar.Agent.Core/Configuration/AgentOptions.cs`: add `public string StatePath { get; set; } = DefaultStatePath();` (Windows: `Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Meridian Console", "Agent", "state")`; otherwise `/var/lib/dhadgar-agent`) and `public string? EnrollmentToken { get; set; }`. `SecurityOptions.cs`: add `public string? CommandSigningPublicKey { get; set; }` and `public string? CommandSigningKeyId { get; set; }`.
 2. New `src/Agents/Dhadgar.Agent.Core/Authentication/AgentIdentity.cs`: `public sealed record AgentIdentity(Guid NodeId, Guid OrganizationId, string CommandSigningPublicKey, string CommandSigningKeyId, DateTimeOffset EnrolledAt);`.
-3. New `Authentication/IAgentIdentityStore.cs` and `FileAgentIdentityStore.cs`: `Result<AgentIdentity?> Load()` (missing file → `Success(null)`; unreadable or invalid JSON → `Failure("[Identity.Corrupt] ...")`), `Task<Result> SaveAsync(AgentIdentity identity, CancellationToken ct)` (creates the directory), `Task<Result> ClearAsync(CancellationToken ct)`. File `Path.Combine(options.StatePath, "agent-identity.json")`, `System.Text.Json` with `AgentJson.Options`. Those options are strict (C-2 JSON rules: every positional parameter without a default is required, unknown properties throw), so a field added to `AgentIdentity` later must have a default value, or every agent with an older file would report `[Identity.Corrupt]`. Say so in the record's XML doc.
+3. New `Authentication/IAgentIdentityStore.cs` and `FileAgentIdentityStore.cs`: `Result<AgentIdentity?> Load()` (missing file → `Success(null)`; unreadable or invalid JSON → `Failure("[Identity.Corrupt] ...")`), `Task<Result> SaveAsync(AgentIdentity identity, CancellationToken ct)` (creates the directory), `Task<Result> ClearAsync(CancellationToken ct)`. File `Path.Combine(options.StatePath, "agent-identity.json")`, `System.Text.Json` with `AgentJson.Options`. Those options require every positional parameter without a default (C-2 JSON rules; unknown properties are ignored, D-40), so a field added to `AgentIdentity` later must have a default value, or every agent with an older file would report `[Identity.Corrupt]`. Say so in the record's XML doc.
 4. New `Authentication/AgentIdentityPostConfigure.cs` (`IPostConfigureOptions<AgentOptions>`): when `NodeId` is null, load the identity and set `NodeId`, `OrganizationId`, and `Security.CommandSigningPublicKey`/`CommandSigningKeyId` unless configuration already set them (configuration wins). A load failure logs a warning and leaves options unchanged.
 5. New `Authentication/AgentIdentityService.cs` (singleton): `Task<Result> PersistEnrollmentAsync(EnrollmentResult result, CancellationToken ct)` saves the identity, then calls `IOptionsMonitorCache<AgentOptions>.TryRemove(Options.DefaultName)` so the next `CurrentValue` re-runs the post-configure.
 6. `Authentication/EnrollmentService.cs`: after the certificate is stored, call `AgentIdentityService.PersistEnrollmentAsync`; a failure returns `Failure("[Enrollment.IdentityNotPersisted] ...")`. Read `NodeId` in `RenewCertificateAsync` from `IOptionsMonitor<AgentOptions>.CurrentValue`.
@@ -1422,7 +1807,7 @@ dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
 
 **Rules.**
 - Seams harness and test JWTs (D-22): mint and accept test user tokens only with `SeamJwt` (`tests/Dhadgar.Testing/Auth/SeamJwt.cs` after VS-32, which removes VS-04's duplicate minter in `tests/Dhadgar.Gateway.Tests/HubTokenTests.cs`); never add another minter or `PostConfigure<JwtBearerOptions>` test-key block. Client-certificate shims stay inside the test project that owns them. A seam that asserts a rejection proves the server answered: the status or code comes from the server's response, the forwarder or a backend recorder shows which server it reached, and a positive twin passes (dispatch rules).
-- Only `AgentCommandTypes.IsKnown` types. The payload is validated as the typed record for its command type with `AgentJson.Options` (strict) and against the C-2 limits **before** it is signed (C-2 "Limit enforcement", typed-payloads row). Nodes signs exactly the `PayloadJson` string it validated.
+- Only `AgentCommandTypes.IsKnown` types. The payload is validated as the typed record for its command type with `AgentJson.Options` and against the C-2 limits **before** it is signed (C-2 "Limit enforcement", typed-payloads row). Nodes signs and sends `JsonSerializer.Serialize(typed, AgentJson.Options)` of the record it validated, never the caller's string, so unknown members never reach a signature (D-40).
 - The org check is the `TenantScoped` policy plus a DB check that the node belongs to the route org (a node in another org is 404, not 403).
 - Server commands (`StartServer`, `StopServer`, `ServerStatus`) need `request.ServerId` equal to the payload's `ServerId` and a **Claimed** capacity reservation on that node whose `ServerId` is `serverId.ToString("D")`. This also proves the server belongs to the caller's organization, because the node does. `Ping` needs `request.ServerId == null`.
 - `ServiceResult<T>` pattern as in Nodes' other services; ProblemDetails at the endpoint (C-1 status codes).
@@ -1447,7 +1832,7 @@ dotnet test tests/Dhadgar.Seams.Tests/Dhadgar.Seams.Tests.csproj -c Release
 6. New `src/Dhadgar.Nodes/BackgroundServices/AgentCommandTimeoutService.cs`: every 60 s (`TimeProvider`, `PeriodicTimer` pattern of `StaleNodeDetectionService`) marks `Sent` commands with `ExpiresAt + 5 min < now` as `TimedOut`, error code `agent_timeout`, and publishes `AgentCommandCompleted` for each (all fields from the row). Register it as a hosted service.
 
 **Tests** (`tests/Dhadgar.Nodes.Tests`):
-- `AgentCommands/AgentCommandPayloadValidatorTests.cs`, one row per bound, at the limit and one past it: payload of exactly 64 KiB (padded inside a valid `Nonce`-free JSON, e.g. whitespace) accepted and 64 KiB + 1 rejected; `{}` is a valid Ping; `{"nonce":"<64 chars>"}` accepted, 65 rejected; `StartServer` with an unknown property, a missing property, `"port":1023`, `"port":65536`, `"memoryMb":511`, `"memoryMb":32769`, a 39-char SHA-1, `http://` jar URL, a URL with user info, version `1.21.11/../x`; `StopServer` with `gracefulTimeoutSeconds` 0 and 301 rejected, 1 and 300 accepted; `ServerId` mismatch with the request; `Ping` with a request `ServerId`.
+- `AgentCommands/AgentCommandPayloadValidatorTests.cs`, one row per bound, at the limit and one past it: payload of exactly 64 KiB (padded inside a valid `Nonce`-free JSON, e.g. whitespace) accepted and 64 KiB + 1 rejected; `{}` is a valid Ping; `{"nonce":"<64 chars>"}` accepted, 65 rejected; `StartServer` with an unknown property is **accepted** and the signed `PayloadJson` does not contain it (D-40); `StartServer` with a duplicate property, a missing property, `"port":1023`, `"port":65536`, `"memoryMb":511`, `"memoryMb":32769`, a 39-char SHA-1, `http://` jar URL, a URL with user info, version `1.21.11/../x`; `StopServer` with `gracefulTimeoutSeconds` 0 and 301 rejected, 1 and 300 accepted; `ServerId` mismatch with the request; `Ping` with a request `ServerId`.
 - `AgentCommands/AgentCommandDispatcherTests.cs` (InMemory DB, fake registry, NSubstitute `IHubContext<AgentHub, IAgentHubClient>`): unknown type → `invalid_command_type`; payload not JSON → `invalid_payload`; `CorrelationId` with `\n` → `invalid_payload` and the signer is never called; other org's node → `node_not_found`; `StartServer` for a server with no Claimed reservation on the node → `server_not_on_node`; disconnected → `node_offline`; connected → `ReceiveCommand` called once with an envelope whose signature verifies (use the factory signer's public key and `AgentCommandSigning`) and whose `ExpiresAt - IssuedAt` is `CommandTtlSeconds`, and a `Sent` row saved.
 - `AgentCommands/AgentCommandEndpointTests.cs` (factory with the test scheme): 202 with body; 409 offline; 409 `server_not_on_node`; 400; 404 for another org.
 - `BackgroundServices/AgentCommandTimeoutServiceTests.cs` with `FakeTimeProvider`.
@@ -1757,7 +2142,7 @@ dotnet test tests/Dhadgar.Agent.Core.Tests/Dhadgar.Agent.Core.Tests.csproj -c Re
 - `Result<T>` (or `Result`) for every validation, IO and configuration failure, with the `[Category.Code] message` style. No exceptions for bad input.
 - Trusted hosts: the agent checks an artifact URL (C-7 rule 4) **before** any request. Hosts compare exactly (ordinal, ignore case); no subdomain or wildcard matching.
 - File paths: the override goes through `IPathValidator.IsSafePath` plus `Path.IsPathFullyQualified`, because it is operator configuration outside any agent root. Everything under `JavaRuntimePath` goes through `ValidatePath(path, [JavaRuntimePath])` (VS-30).
-- Contracts: `Dhadgar.Contracts.csproj` gets no package references. Change no C-2 record except appending the one optional parameter to `StartServerPayload`. It **must** have the `= null` default: `AgentJson` requires every parameter without one (C-2 JSON rules). Agents built before this packet reject a payload carrying `javaRuntimes`, which is acceptable only under D-21's upgrade order. Nodes' strict pre-sign parse (VS-15) accepts the new parameter with no Nodes change, and the count limit `MaxPerPayload` is the agent's check (C-7 rule 3). Before appending, `grep -rn "StartServerPayload" src tests` and check that nobody deconstructs it (`var (` on it); report any hit.
+- Contracts: `Dhadgar.Contracts.csproj` gets no package references. Change no C-2 record except appending the one optional parameter to `StartServerPayload`. It **must** have the `= null` default: `AgentJson` requires every parameter without one (C-2 JSON rules). Agents built before this packet ignore `javaRuntimes` (D-40), which is acceptable because no agent ships before VS-27. Nodes must be built with this packet to keep the field: its pre-sign parse (VS-15) re-serializes the typed record, so a Nodes built before VS-29 would drop `javaRuntimes` from what it signs, and the count limit `MaxPerPayload` is the agent's check (C-7 rule 3). Before appending, `grep -rn "StartServerPayload" src tests` and check that nobody deconstructs it (`var (` on it); report any hit.
 - No `Version=` in any `.csproj` (Central Package Management, `Directory.Packages.props`).
 - Nullable enabled and warnings as errors (`CI=true`). XML docs on public types, as `Nodes/EnrollmentContracts.cs` does.
 - xUnit in the style of each target test project; temp directories cleaned in `Dispose`.
