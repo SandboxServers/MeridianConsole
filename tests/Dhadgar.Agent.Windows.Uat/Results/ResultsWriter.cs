@@ -102,7 +102,9 @@ internal static class ResultsWriter
         sb.AppendLine($"- Verb: {r.Verb}{(r.Mode is null ? string.Empty : $" (mode {r.Mode})")}");
         sb.AppendLine($"- Overall: **{r.Overall}** (exit {r.ExitCode}); cleanup: {r.Cleanup.Status}");
         sb.AppendLine($"- Git: {r.GitSha}{(r.GitDirty ? " (dirty)" : string.Empty)}; Windows build {r.WindowsBuild}; .NET {r.DotnetVersion}");
-        sb.AppendLine($"- Launched by: {r.LaunchedBy}; elevated: {r.Elevated}");
+        sb.AppendLine(r.AgentRun is null
+            ? $"- Launched by: {r.LaunchedBy}; elevated: {r.Elevated}"
+            : $"- Launched by: agent (D-S239), tree clean: {r.AgentRun.TreeClean}; elevated: {r.Elevated}");
         sb.AppendLine();
         sb.AppendLine("| Step | Name | Status | Evidence | Duration |");
         sb.AppendLine("| --- | --- | --- | --- | --- |");

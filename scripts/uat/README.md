@@ -7,23 +7,30 @@ point is `scripts/uat/Invoke-AgentWindowsUat.ps1`.
 This README covers `-Preflight`, `-StackOnly` (P19), `-CleanupOnly`, the guards of `-Mode Process`,
 and the process-mode agent legs (P20: U0-U4 and U9). The `Service` and `Msi` modes are added by later packets.
 
-## Who runs what (D-S225)
+## Who runs what (D-S225, D-S239)
 
-- Agents and automated coders may run **only** `-Preflight` and `-StackOnly`.
-- Nobody but a person runs a machine-changing mode. `-Mode Process`, `-Mode Service` and
-  `-Mode Msi` change this machine: services, HKLM, machine certificate stores and the
-  installed MSI. Run them yourself from an elevated PowerShell 7.4+ shell, passing
-  `-AcceptMachineChanges`.
-- The driver refuses `run` (exit 2) when `CLAUDECODE` is set in the environment. It also
-  refuses `cleanup` (`-CleanupOnly`) then, so `-CleanupOnly` is a person-only call. Do not
-  clear it to get around that.
+| Call | Who | Allowed when |
+| --- | --- | --- |
+| `-Preflight` | anyone | always; it also reports `agentRunTree` |
+| `-StackOnly` | anyone | as today (Docker up, port 5672 free, dev cert trusted, no `meridian-uat-*` container, no run folder); also writes `launch.json` |
+| `-Mode Process\|Service\|Msi -AcceptMachineChanges` | user | as today |
+| `-Mode Process\|Service\|Msi -AcceptMachineChanges` | agent (D-S239) | elevated, switch given, the tree clean, no `-NoBuild`, no `launch.json` or manifest in the run folder, no footprint, preflight passes |
+| `-CleanupOnly <runDir>` | user | as today (any run folder under `.uat\agent-windows`) |
+| `-CleanupOnly <runDir>` | agent (D-S239) | the folder's `launch.json` loads, its `runId` equals the folder name, and its `launchedBy` is `agent`; the non-elevated machine-items refusal still applies |
+
+- `CLAUDECODE` set in the environment makes a run an agent run. It is a label, not authentication.
+- The machine-changing modes change this machine: services, HKLM, machine certificate stores and the installed
+  MSI. They need an elevated PowerShell 7.4+ shell and `-AcceptMachineChanges`.
 - The UAT needs RabbitMQ on 127.0.0.1:5672 and a Docker engine for the local stack. Preflight
   reports both.
 
-## Threat model (D-S237, D-S238)
+## Threat model (D-S237, D-S238, D-S239)
 
 The driver trusts the account that runs it. Anything running as that user can change the repo, the build
 or the driver that the elevated script builds and runs, so the driver does not try to defend against it.
+An agent run is trusted as much as the account that runs it: `CLAUDECODE` is a label that selects the agent
+rules and the record, not an authentication. The tree check ties an agent run to a commit: it builds only from a
+clean tree (`docs` and `.claude` excluded), so the run's `gitSha` names what was built.
 
 Its guards stop driver bugs, a stale or foreign manifest, and PID reuse from touching anything the run
 did not create. Cleanup replays only these items: the named service, the agent registry key and its
@@ -37,7 +44,7 @@ A process cleanup cannot read is left running and reported, never killed.
 ## The local stack and `-StackOnly` (P19)
 
 `-StackOnly` proves the control plane end to end without touching the machine outside Docker and the run
-folder. It needs no elevation and runs under `CLAUDECODE`. It refuses (exit 2) when Docker is down, port
+folder. It needs no elevation and runs under `CLAUDECODE` and writes `launch.json`. It refuses (exit 2) when Docker is down, port
 5672 is busy, the dev HTTPS certificate is not trusted (`dotnet dev-certs https --trust`), a
 `meridian-uat-*` container already exists, or its run folder already exists (the driver creates the folder
 itself, so a planted or stale manifest never reaches cleanup).
@@ -125,7 +132,7 @@ folder is ignored by git (`.uat/`).
 | --- | --- |
 | 0 | Every step `pass` and cleanup `clean` |
 | 1 | A step `fail` or `inconclusive` (cleanup `clean`) |
-| 2 | Refused before any machine change: not elevated, switch missing, `CLAUDECODE` set, footprint found, port 5672 busy, Docker down |
+| 2 | Refused before any machine change: not elevated, switch missing, agent run on a dirty tree or with `-NoBuild`, run folder already used, agent cleanup of a non-agent run folder, footprint found, port 5672 busy, Docker down |
 | 3 | Footprint left after cleanup (overrides 1) |
 | 4 | Internal driver error (cleanup still ran) |
 

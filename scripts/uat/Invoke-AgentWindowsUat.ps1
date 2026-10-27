@@ -4,9 +4,11 @@
     Runs the Windows agent UAT driver (Preflight, StackOnly, Run or Cleanup).
 
 .DESCRIPTION
-    Agents may only run -Preflight and -StackOnly (D-S225). -Run changes this machine
-    (services, HKLM, machine certificate stores) and must be run by a person from an
-    elevated shell with -AcceptMachineChanges. See scripts/uat/README.md.
+    Anyone may run -Preflight and -StackOnly. -Mode changes this machine (services, HKLM,
+    machine certificate stores) and needs an elevated shell and -AcceptMachineChanges. Under
+    CLAUDECODE (an agent run, D-S239) it also needs a clean git tree and no -NoBuild, and an
+    agent's -CleanupOnly works only on a run folder whose launch.json says agent. See
+    scripts/uat/README.md.
 
     Every run gets a folder under <repo>\.uat\agent-windows\<runId>. The driver writes
     results.json and results.md there. The folder path is printed first.
@@ -69,9 +71,28 @@ try {
 
     # Cheap guards run before the build and the run folder, so a refused call changes nothing.
     # The driver repeats them and stays authoritative.
-    if (($verb -eq 'run' -or $verb -eq 'cleanup') -and (Test-Path env:CLAUDECODE)) {
-        [Console]::Error.WriteLine("$verb refused: CLAUDECODE is set; only the user runs $verb (D-S225)")
-        exit 2
+    if ($verb -eq 'run' -and (Test-Path env:CLAUDECODE)) {
+        if ($NoBuild) {
+            [Console]::Error.WriteLine('run refused: an agent run always builds (D-S239); drop -NoBuild')
+            exit 2
+        }
+        $treeArgs = @('-C', $repo, 'status', '--porcelain=v1', '--untracked-files=all', '--', '.', ':(exclude)docs', ':(exclude).claude')
+        try {
+            $tree = & git @treeArgs
+            $treeExit = $LASTEXITCODE
+        }
+        catch {
+            $tree = $null
+            $treeExit = 1
+        }
+        if ($treeExit -ne 0) {
+            [Console]::Error.WriteLine('run refused: tree check failed (D-S239)')
+            exit 2
+        }
+        if ($tree) {
+            [Console]::Error.WriteLine('run refused: agent run needs a clean tree (D-S239)')
+            exit 2
+        }
     }
     if ($verb -eq 'run') {
         $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())

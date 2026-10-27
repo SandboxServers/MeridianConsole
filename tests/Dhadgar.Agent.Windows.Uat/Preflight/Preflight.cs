@@ -47,7 +47,7 @@ internal sealed record PreflightReport(IReadOnlyList<PreflightCheck> Checks)
 /// <summary>
 /// The preflight checks (D-S225). Changes nothing; named <c>PreflightChecks</c> so it does not share a name with its namespace. Checks required from stack-only on use Docker,
 /// dev certificates, port 5672 and the Root snapshot; checks required for run add elevation,
-/// the CLAUDECODE refusal and an empty footprint.
+/// an agent run needs a clean tree (D-S239), and an empty footprint.
 /// </summary>
 internal sealed class PreflightChecks
 {
@@ -57,16 +57,40 @@ internal sealed class PreflightChecks
     private readonly IMachineActions _actions;
     private readonly string _runDir;
     private readonly string? _runMode;
-    private readonly bool _claudeCodeSet;
+    private readonly bool _launchedByAgent;
+    private readonly bool? _agentTreeClean;
 
-    /// <summary>Creates the checks for one run folder.</summary>
-    public PreflightChecks(IMachineProbe probe, IMachineActions actions, string runDir, string? runMode, bool claudeCodeSet)
+    /// <summary>Creates the checks for one run folder. <paramref name="agentTreeClean"/> is null when the tree check failed or was not made.</summary>
+    public PreflightChecks(
+        IMachineProbe probe, IMachineActions actions, string runDir, string? runMode, bool launchedByAgent, bool? agentTreeClean)
     {
         _probe = probe;
         _actions = actions;
         _runDir = runDir;
         _runMode = runMode;
-        _claudeCodeSet = claudeCodeSet;
+        _launchedByAgent = launchedByAgent;
+        _agentTreeClean = agentTreeClean;
+    }
+
+    /// <summary>
+    /// The agent-run tree rule (D-S239). Passes for user runs and for agent runs on a clean tree; fails for an agent run
+    /// on a dirty tree or when the tree check failed (null).
+    /// </summary>
+    internal static PreflightCheck AgentRunTree(bool launchedByAgent, bool? treeClean)
+    {
+        if (!launchedByAgent)
+        {
+            return new PreflightCheck("agentRunTree", true, "not an agent run", false, true);
+        }
+
+        if (treeClean is null)
+        {
+            return new PreflightCheck("agentRunTree", false, "tree check failed: agent run refused", false, true);
+        }
+
+        return treeClean == true
+            ? new PreflightCheck("agentRunTree", true, "agent run on a clean tree (D-S239)", false, true)
+            : new PreflightCheck("agentRunTree", false, "agent run needs a clean tree (D-S239)", false, true);
     }
 
     /// <summary>Runs every check. <paramref name="mode"/> is informational here; the report carries each check's requirement.</summary>
@@ -78,7 +102,7 @@ internal sealed class PreflightChecks
             new("buildNumber", Environment.OSVersion.Version.Build >= MinimumWindowsBuild,
                 $"build {Environment.OSVersion.Version.Build} (minimum {MinimumWindowsBuild})", true, true),
             new("elevated", _actions.IsElevated(), "elevated PowerShell (required for run)", false, true),
-            new("claudeCodeUnset", !_claudeCodeSet, "CLAUDECODE is set: run is refused for agents", false, true),
+            AgentRunTree(_launchedByAgent, _agentTreeClean),
             await DockerAsync(ct),
             await DevCertsAsync(ct),
             Port5672(),
