@@ -50,6 +50,12 @@ namespace Dhadgar.Nodes.Data.Migrations
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("SerialNumber")
                         .IsRequired()
                         .HasMaxLength(100)

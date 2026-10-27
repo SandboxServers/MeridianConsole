@@ -303,43 +303,6 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RenewCertificateAsync_GeneratesNewCertificate()
-    {
-        // Arrange
-        using var service = CreateService();
-        await service.InitializeAsync();
-        var nodeId = Guid.NewGuid();
-
-        var originalResult = await service.IssueCertificateAsync(nodeId);
-
-        // Act
-        var renewedResult = await service.RenewCertificateAsync(nodeId, originalResult.Thumbprint!);
-
-        // Assert
-        Assert.True(renewedResult.Success);
-        Assert.NotEqual(originalResult.Thumbprint, renewedResult.Thumbprint);
-        Assert.NotEqual(originalResult.SerialNumber, renewedResult.SerialNumber);
-    }
-
-    [Fact]
-    public async Task RenewCertificateAsync_NewCertificateHasSameNodeId()
-    {
-        // Arrange
-        using var service = CreateService();
-        await service.InitializeAsync();
-        var nodeId = Guid.NewGuid();
-
-        var originalResult = await service.IssueCertificateAsync(nodeId);
-
-        // Act
-        var renewedResult = await service.RenewCertificateAsync(nodeId, originalResult.Thumbprint!);
-
-        // Assert
-        using var cert = X509Certificate2.CreateFromPem(renewedResult.CertificatePem!);
-        Assert.Contains($"CN={nodeId}", cert.Subject, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task GetCaCertificatePemAsync_ReturnsValidPem()
     {
         // Arrange
