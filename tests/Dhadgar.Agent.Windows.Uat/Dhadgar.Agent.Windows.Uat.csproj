@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Dhadgar.Agent.Windows.Uat</RootNamespace>
+    <!-- CA1416: Windows-only tool; every Windows API use is intentional. CA1303: console text is not localized. -->
+    <NoWarn>$(NoWarn);CA1416;CA1303</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dhadgar.Nodes\Dhadgar.Nodes.csproj" />
+    <ProjectReference Include="..\..\src\Agents\Dhadgar.Agent.Core\Dhadgar.Agent.Core.csproj" />
+    <ProjectReference Include="..\..\src\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dhadgar.Agent.Windows.Uat.Tests" />
+  </ItemGroup>
+</Project>
