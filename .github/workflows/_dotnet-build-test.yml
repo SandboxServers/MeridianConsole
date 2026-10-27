@@ -52,6 +52,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # Parse errors and Error-severity findings fail the job; Warnings are
+      # listed but not enforced. Rules and severities live in the settings file.
+      - name: Lint PowerShell (PSScriptAnalyzer)
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          $findings | Where-Object Severity -eq 'Warning' | Group-Object RuleName |
+            ForEach-Object { Write-Host "warning: $($_.Count) x $($_.Name)" }
+          $blocking = @($findings | Where-Object { $_.Severity -in 'Error', 'ParseError' })
+          $blocking | ForEach-Object { Write-Host "::error file=$($_.ScriptPath),line=$($_.Line)::$($_.RuleName): $($_.Message)" }
+          if ($blocking.Count -gt 0) { exit 1 }
+
       # The npm-backed projects run npm ci from MSBuild one at a time; doing it
       # up front in parallel is faster and fails loudly per project.
       - name: npm ci (parallel)
