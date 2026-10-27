@@ -131,10 +131,7 @@ public sealed class AgentCertificateMatcherTests : IDisposable
         return certificate;
     }
 
-    /// <summary>
-    /// Issues certificates shaped like Nodes' agent CA output: the CA is named by
-    /// <see cref="AgentCertificateProfile.CaCommonName"/>, leaves are CN={nodeId}, O=MeridianConsole with a SPIFFE URI SAN.
-    /// </summary>
+    /// <summary>A truncated SAN element after a valid SPIFFE URI must fail the identity check.</summary>
     [Fact]
     public void MalformedSanAfterSpiffeUri_IsNotAnAgentIdentity()
     {
@@ -155,6 +152,11 @@ public sealed class AgentCertificateMatcherTests : IDisposable
         Assert.False(AgentCertificateMatcher.IsAgentClientIdentity(certificate));
         Assert.False(AgentCertificateMatcher.IsAgentClientCertificate(certificate, _now));
     }
+
+    /// <summary>
+    /// Issues certificates shaped like Nodes' agent CA output: the CA is named by
+    /// <see cref="AgentCertificateProfile.CaCommonName"/>, leaves are CN={nodeId}, O=MeridianConsole with a SPIFFE URI SAN.
+    /// </summary>
     private sealed class NodesStyleIssuer : IDisposable
     {
         private readonly ECDsa _caKey = ECDsa.Create(ECCurve.NamedCurves.nistP384);
