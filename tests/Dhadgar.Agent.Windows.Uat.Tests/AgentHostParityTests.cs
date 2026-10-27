@@ -36,9 +36,11 @@ public sealed class AgentHostParityTests : IDisposable
         return paths;
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ProcessAndServiceHosts_MakeTheSameCallsAndReachTheSameSteps()
     {
+        // The service host records the first-start entries through EventLog.SourceExists, which only Windows has.
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test: the service host reads the real event log, which does not exist on non-Windows runners");
         var processPaths = Paths("process");
         var processManifest = new CleanupManifest(processPaths.Manifest);
         var processWorld = new LegWorld(processPaths, processManifest);
