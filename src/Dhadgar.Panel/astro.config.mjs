@@ -1,9 +1,14 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import node from '@astrojs/node';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   integrations: [react()],
+  // Tailwind CSS 4 via its Vite plugin; theme lives in src/styles/global.css
+  vite: {
+    plugins: [tailwindcss()]
+  },
   output: 'server',
   adapter: node({
     mode: 'standalone'

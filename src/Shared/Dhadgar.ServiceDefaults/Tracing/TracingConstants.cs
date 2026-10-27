@@ -50,7 +50,7 @@ public static class TracingConstants
     /// <summary>
     /// Semantic attribute names following OpenTelemetry conventions.
     /// </summary>
-    public static class Attributes
+    public static class SpanAttributes
     {
         /// <summary>
         /// The database management system identifier (e.g., "postgresql", "redis").

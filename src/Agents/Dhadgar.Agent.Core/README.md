@@ -294,6 +294,14 @@ Responsible for all communication with the Meridian Console control plane.
 - Manage authentication tokens and certificate rotation
 - Send telemetry and receive commands
 
+**Current implementation (agent hub):**
+
+- `ConnectAsync(CancellationToken)` returns `Result`. It connects to `AgentHubProtocol.Path` (`/hubs/agent`) over HTTPS with the client certificate and sends the `X-Agent-Protocol` header (`AgentHubProtocol.CurrentVersion`). The agent never sends `X-Node-Id`: Nodes takes the node ID from the certificate.
+- `ConnectAsync` never throws except for the caller's own cancellation. Failures return `Result.Failure` with a `[ControlPlane.*]` code: `InvalidEndpoint`, `InsecureEndpoint`, `NoCertificate`, or `ConnectFailed` (transport errors, timeouts, and any unexpected fault such as a certificate store error, reported by exception type only).
+- `SendHeartbeatAsync(AgentHeartbeat, CancellationToken)` returns `Result<AgentHeartbeatAck>`. It invokes `IAgentHub.Heartbeat` with the typed contract. A rejected heartbeat is a success with `Acknowledged == false` and an `ErrorCode`. Failures use `[ControlPlane.NotConnected]`, `[ControlPlane.Timeout]` or `[ControlPlane.HubError]`.
+- `HeartbeatPayloadMapper.ToContract` clamps the metrics and bounds the version, the health issues and the active game server count to `AgentHeartbeatLimits`.
+- `SendCommandResultAsync` and `SendTelemetryAsync` are not served by Nodes yet (D-S29).
+
 #### ICommandHandler
 
 Interface for handling specific command types from the control plane.
@@ -418,6 +426,21 @@ The agent must handle disconnection gracefully:
 
 ---
 
+## Identity and state
+
+The agent's identity (`NodeId`, `OrganizationId`, `EnrolledAt`) lives in `IAgentIdentityProvider`, not in `AgentOptions`. Runtime code reads `Current` or waits on `WaitForIdentityAsync`, and the heartbeat loop starts once an identity is set (#101).
+
+- **File:** `agent-state.json` in `AgentOptions.StateDirectory`. The default is `%ProgramData%\Meridian Console\Agent`. `StateDirectory` must be a fully qualified local path: not relative, drive-relative (`C:foo`), rooted without a drive (`\foo`), UNC or device (`\\…`), and with no `..` segments. A bad value is `[AgentState.Config]`. The file path is also checked with `IPathValidator` against that directory.
+- **Format:** `{ "nodeId", "organizationId", "enrolledAt" }` in System.Text.Json web defaults. The file holds no secrets. The client certificate and its private key stay in the platform certificate store.
+- **Writes:** any stale `agent-state.json.tmp` is deleted, the temp file is created new (never reused) through `IStateFileSecurity` with write-through and flushed to disk, then moved over the final file. On Unix the file is 0600 and a directory the agent creates is 0700. On Windows the host's `WindowsStateFileSecurity` gives the file a protected ACL (SYSTEM, Administrators and the agent's account only).
+- **Reads:** capped at 64 KB. A file that someone else could have written is `[AgentState.Untrusted]` (Unix: group or world writable; Windows: untrusted owner or write access).
+- **Corrupt file:** bad JSON, a `Guid.Empty` ID or an oversize file gives `Failure("[AgentState.Corrupt] …")`. The agent never re-enrolls silently.
+- **Missing file:** `Success(StoredAgentState.None)`, which is a first run. This is the only outcome on which the agent enrolls (D-S232). Corrupt, unreadable, untrusted or misconfigured state is a `Failure` and is never re-enrolled over.
+- **Changing identity:** setting the same `NodeId` and `OrganizationId` again succeeds. A different `NodeId` or `OrganizationId` gives `Failure("[AgentIdentity.Changed] restart required")`.
+- **Recovery:** after a `Failure`, an operator removes `agent-state.json` and supplies a new enrollment token.
+
+---
+
 ## Authentication
 
 ### Current State
@@ -466,6 +489,33 @@ Authentication is planned but not yet implemented. The target architecture uses 
    - Agents check certificate revocation list (CRL) or OCSP
    - Revoked agents cannot connect
 
+### Certificate Renewal Flow (Implemented)
+
+`EnrollmentService.RenewCertificateAsync` renews the client certificate over the existing mTLS channel:
+
+1. The node id comes from `AgentOptions`. Without an enrolled node or a stored certificate the call fails with `[Renewal.NotEnrolled]` or `[Renewal.NoCertificate]`.
+2. The agent generates a fresh ECDSA P-384 key pair in memory. The private key never leaves the agent.
+3. The agent posts only the public key, as `RenewCertificateRequest` from `Dhadgar.Contracts`, to `POST api/v1/agents/{nodeId}/certificates/renew`. The body is the camelCase `{"publicKey":"<base64 SPKI>"}`.
+4. The response is `RenewCertificateResponse`, read through a size-limited stream. A non-success status becomes `[Renewal.Rejected] {status} {errorCode}`, where `errorCode` is the bounded token from the problem+json body.
+5. The new certificate, PEM or bare base64 DER, must bind the agent's own public key (`[Renewal.KeyMismatch]` otherwise). Its only URI SAN must equal `AgentCertificateProfile.SpiffeId(nodeId)` (`[Renewal.WrongIdentity]` otherwise). A failed check stores nothing.
+6. The key is exported as PKCS#8, handed to `ICertificateStore.StoreCertificateAsync`, and zeroed in a `finally` block. The CA certificate, when present, is stored afterwards.
+7. `IClientCertificateProvider.Invalidate()` runs after the store, so the next mTLS handshake presents the new certificate.
+
+Enrollment follows the same handoff: it exports PKCS#8 and invalidates the provider.
+
+HTTP calls (`ControlPlaneMtls`) pick the current certificate on each handshake; the hub keeps one certificate per connection and picks up a renewed one when it reconnects (D-S231).
+
+#### PKCS#8 Handoff for `ICertificateStore` Implementers
+
+`ICertificateStore.StoreCertificateAsync` receives the private key as **PKCS#8 DER (PrivateKeyInfo) on every platform**, not SEC1 `ECPrivateKey`. Implementations must:
+
+- Import the bytes with `ImportPkcs8PrivateKey`. Fall back to SEC1 only for legacy material already on disk.
+- Zero their own copies after use. The caller zeroes its buffer once the call returns, so do not keep a reference to it.
+
+#### Client Certificate Caching
+
+`ClientCertificateProvider` (registered as a singleton by `AddAgentCore`) loads the certificate from `ICertificateStore` on first use and caches it. `ControlPlaneMtls` builds a `SocketsHttpHandler` whose `LocalCertificateSelectionCallback` reads `provider.Current` on each handshake, and `PooledConnectionLifetime` is one minute, so a renewed certificate is picked up without a restart. When `Current` is null the handshake presents no certificate and the server answers 401.
+
 ### JWT Tokens (Planned)
 
 In addition to mTLS, agents may use JWT tokens for:
@@ -475,6 +525,20 @@ In addition to mTLS, agents may use JWT tokens for:
 - **Audit Trail**: Token-based request attribution
 
 ---
+
+### Startup sequence (AgentBootstrapService)
+
+`AgentBootstrapService` runs before `HeartbeatService` and owns the connection lifecycle (#101):
+
+1. **Resolve identity.** Load the state file. A load failure, including an untrusted file, logs Critical and stops without enrolling (D-S232). Stored identity connects only when the client certificate's only URI SAN is `AgentCertificateProfile.SpiffeId(nodeId)`; a mismatch logs `[AgentState.CertificateMismatch]` and stops (D-S233). With no stored state, a configured `NodeId`/`OrganizationId` seeds the identity only when the certificate names that node. Otherwise the agent enrolls. Recovery for a Critical load failure or `[AgentState.CertificateMismatch]`: stop the agent, remove `agent-state.json` from the state directory (and, for a mismatch, the stale client certificate), set `Agent:EnrollmentToken` to a new token and start the agent.
+2. **Enrollment token.** `IEnrollmentTokenSource` reads `Agent:EnrollmentToken` on every attempt, and the token is never logged. A blank token waits `EnrollmentRetrySeconds` (warning at most hourly). A failed enrollment backs off, doubling from `EnrollmentRetrySeconds` up to 15 minutes.
+3. **Persist.** The identity is saved three times, two seconds apart. If every save fails, the agent runs in memory and logs Critical.
+4. **Connect and renew.** Every `ConnectionCheckIntervalSeconds` (60) the loop calls `ConnectAsync` whenever the state is not `Connected`, including `Reconnecting`. Connect failures back off from `ReconnectDelaySeconds` up to `MaxReconnectDelaySeconds`.
+   - Renewal is checked every `RenewalCheckIntervalMinutes` (720). It runs only when `Agent:Security:EnableCertificateAutoRenewal` is true and the certificate is within `Agent:Security:CertificateRenewalThresholdDays` (default 30, range 1 to 90).
+   - After a successful renewal the service disconnects, and the next pass reconnects so the hub presents the new certificate (D-S231).
+   - A failed renewal retries after `RenewalRetryMinutes` (5), not after the full interval. The old certificate renews only inside the 60-minute grace window (D-S212), and a lost response may have been committed by Nodes.
+
+All waits go through `TimeProvider`, so tests drive the clock.
 
 ## Command Handling
 

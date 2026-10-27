@@ -114,25 +114,22 @@ public record EnrollNodeResponse(
     DateTimeOffset NotAfter);
 
 /// <summary>
-/// Request to renew an agent's certificate.
+/// Request from an agent to renew its client certificate (<c>POST /agents/{nodeId}/certificates/renew</c>,
+/// public path <c>/api/v1/agents/{nodeId}/certificates/renew</c>). Sent over mTLS with the current
+/// certificate; the current thumbprint is taken from that certificate, not from the body.
 /// </summary>
-/// <param name="CurrentThumbprint">Thumbprint of the certificate being renewed.</param>
-public record RenewCertificateRequest(
-    string CurrentThumbprint);
+/// <param name="PublicKey">Base64 DER SubjectPublicKeyInfo of a NEW key pair generated on the agent.</param>
+public record RenewCertificateRequest(string PublicKey);
 
-/// <summary>
-/// Response to a successful certificate renewal.
-/// </summary>
-/// <param name="CertificateThumbprint">Thumbprint of the new certificate.</param>
-/// <param name="Certificate">PEM-encoded new certificate.</param>
-/// <param name="Pkcs12Base64">Base64-encoded PKCS#12 bundle.</param>
-/// <param name="Pkcs12Password">Password for the PKCS#12 bundle.</param>
-/// <param name="NotBefore">Certificate validity start.</param>
-/// <param name="NotAfter">Certificate validity end.</param>
+/// <summary>Response to a successful renewal. No private key or PKCS#12 is ever returned.</summary>
+/// <param name="CertificateThumbprint">SHA-256 thumbprint of the new certificate.</param>
+/// <param name="Certificate">PEM-encoded new certificate, bound to the request's public key.</param>
+/// <param name="CaCertificate">PEM-encoded agent CA certificate.</param>
+/// <param name="NotBefore">Validity start.</param>
+/// <param name="NotAfter">Validity end.</param>
 public record RenewCertificateResponse(
     string CertificateThumbprint,
     string Certificate,
-    string Pkcs12Base64,
-    string Pkcs12Password,
+    string CaCertificate,
     DateTimeOffset NotBefore,
     DateTimeOffset NotAfter);

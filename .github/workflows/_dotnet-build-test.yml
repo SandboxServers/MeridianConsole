@@ -52,6 +52,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # Parse errors and Error-severity findings fail the job; Warnings are
+      # listed but not enforced. Rules and severities live in the settings file.
+      - name: Lint PowerShell (PSScriptAnalyzer)
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+          $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          $findings | Where-Object Severity -eq 'Warning' | Group-Object RuleName |
+            ForEach-Object { Write-Host "warning: $($_.Count) x $($_.Name)" }
+          $blocking = @($findings | Where-Object { $_.Severity -in 'Error', 'ParseError' })
+          $blocking | ForEach-Object { Write-Host "::error file=$($_.ScriptPath),line=$($_.Line)::$($_.RuleName): $($_.Message)" }
+          if ($blocking.Count -gt 0) { exit 1 }
+
       # The npm-backed projects run npm ci from MSBuild one at a time; doing it
       # up front in parallel is faster and fails loudly per project.
       - name: npm ci (parallel)
@@ -98,7 +111,7 @@ jobs:
         if: ${{ !cancelled() && inputs.run-tests }}
         # A fork PR's token cannot create check runs; the test step already gates the job.
         continue-on-error: true
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
         with:
           name: Test results
           path: ${{ runner.temp }}/testresults/**/*.trx

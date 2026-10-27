@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Dhadgar.Agent.Core.Commands;
-using Dhadgar.Agent.Core.Health;
+using Dhadgar.Contracts.Nodes;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Core.Communication;
 
@@ -45,7 +46,12 @@ public interface IControlPlaneClient
     /// Connect to the control plane.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task ConnectAsync(CancellationToken cancellationToken = default);
+    /// <returns>
+    /// Success when connected. Failure with a <c>[ControlPlane.*]</c> error code when the endpoint is not HTTPS,
+    /// no client certificate is available, or the connection attempt fails or times out.
+    /// Caller cancellation still throws <see cref="OperationCanceledException"/>.
+    /// </returns>
+    Task<Result> ConnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Disconnect from the control plane.
@@ -54,11 +60,16 @@ public interface IControlPlaneClient
     Task DisconnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Send a heartbeat with current status to the control plane.
+    /// Send a typed heartbeat to the control plane over the agent hub.
     /// </summary>
-    /// <param name="payload">Heartbeat payload with system metrics.</param>
+    /// <param name="heartbeat">Heartbeat, already clamped to the <see cref="AgentHeartbeatLimits"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendHeartbeatAsync(HeartbeatPayload payload, CancellationToken cancellationToken = default);
+    /// <returns>
+    /// Success with the hub's acknowledgement, even when <see cref="AgentHeartbeatAck.Acknowledged"/> is false
+    /// (the caller logs <see cref="AgentHeartbeatAck.ErrorCode"/>). Failure with <c>[ControlPlane.NotConnected]</c>,
+    /// <c>[ControlPlane.Timeout]</c> or <c>[ControlPlane.HubError]</c>.
+    /// </returns>
+    Task<Result<AgentHeartbeatAck>> SendHeartbeatAsync(AgentHeartbeat heartbeat, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Send command execution result back to the control plane.
@@ -66,6 +77,7 @@ public interface IControlPlaneClient
     /// <param name="result">Command execution result.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if the result was sent successfully, false if not connected or send failed.</returns>
+    /// <remarks>Not served by Nodes yet (D-S29).</remarks>
     Task<bool> SendCommandResultAsync(CommandResult result, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -73,6 +85,7 @@ public interface IControlPlaneClient
     /// </summary>
     /// <param name="payload">Telemetry payload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <remarks>Not served by Nodes yet (D-S29).</remarks>
     Task SendTelemetryAsync(TelemetryPayload payload, CancellationToken cancellationToken = default);
 }
 

@@ -68,7 +68,7 @@ public sealed class UpdateVaultCommand
 
         AnsiConsole.Write(panel);
 
-        var confirm = AnsiConsole.Confirm("\n[yellow]Apply these changes?[/]");
+        var confirm = await AnsiConsole.ConfirmAsync("\n[yellow]Apply these changes?[/]", cancellationToken: ct);
         if (!confirm)
         {
             AnsiConsole.MarkupLine("[dim]Update cancelled.[/]");

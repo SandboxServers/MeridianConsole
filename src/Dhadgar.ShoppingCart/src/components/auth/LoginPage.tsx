@@ -52,7 +52,7 @@ export default function LoginPage({ callbackURL = '/callback' }: LoginPageProps)
 
           {/* Decorative scan line */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-cyber-cyan/20 to-transparent animate-scan-line" />
+            <div className="absolute inset-x-0 h-px bg-linear-to-r from-transparent via-cyber-cyan/20 to-transparent animate-scan-line" />
           </div>
         </Panel>
 

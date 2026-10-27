@@ -52,7 +52,7 @@ export function TextField({
           aria-label={!label ? placeholder : undefined}
           className={clsx(
             "w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-sm text-white placeholder-white/50",
-            "focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50",
+            "focus:outline-hidden focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50",
             "transition-colors",
             icon && "pl-10",
             clearable && value && "pr-10"

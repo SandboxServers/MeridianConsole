@@ -33,7 +33,7 @@
   </Target>
 
   <!-- Run npm build -->
-  <Target Name="NpmBuild" AfterTargets="NpmInstall" Inputs="$(ScopeProjectDir)\src\**\*;$(ScopeProjectDir)\public\**\*;$(ScopeProjectDir)\package.json;$(ScopeProjectDir)\astro.config.mjs;$(ScopeProjectDir)\tailwind.config.mjs" Outputs="$(BuildOutputDir)\index.html">
+  <Target Name="NpmBuild" AfterTargets="NpmInstall" Inputs="$(ScopeProjectDir)\src\**\*;$(ScopeProjectDir)\public\**\*;$(ScopeProjectDir)\package.json;$(ScopeProjectDir)\astro.config.mjs" Outputs="$(BuildOutputDir)\index.html">
     <Message Importance="high" Text="Building Astro site for Dhadgar.Scope..." />
     <Exec Command="$(NpmCommand) run build" WorkingDirectory="$(ScopeProjectDir)" />
   </Target>

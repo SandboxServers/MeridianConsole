@@ -41,13 +41,9 @@ services:
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       ReverseProxy__Clusters__betterauth__Destinations__d1__Address: http://betterauth:8080/
       ReverseProxy__Clusters__identity__Destinations__d1__Address: http://identity:8080/
-      ReverseProxy__Clusters__billing__Destinations__d1__Address: http://billing:8080/
       ReverseProxy__Clusters__servers__Destinations__d1__Address: http://servers:8080/
       ReverseProxy__Clusters__nodes__Destinations__d1__Address: http://nodes:8080/
-      ReverseProxy__Clusters__tasks__Destinations__d1__Address: http://tasks:8080/
-      ReverseProxy__Clusters__files__Destinations__d1__Address: http://files:8080/
       ReverseProxy__Clusters__console__Destinations__d1__Address: http://console:8080/
-      ReverseProxy__Clusters__mods__Destinations__d1__Address: http://mods:8080/
       ReverseProxy__Clusters__notifications__Destinations__d1__Address: http://notifications:8080/
       ReverseProxy__Clusters__firewall__Destinations__d1__Address: http://firewall:8080/
       ReverseProxy__Clusters__secrets__Destinations__d1__Address: http://secrets:8080/
@@ -88,14 +84,6 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  billing:
-    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/billing:${IMAGE_TAG:-latest}
-    environment: *service-env
-    ports:
-      - "5020:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
   servers:
     image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/servers:${IMAGE_TAG:-latest}
     environment: *service-env
@@ -112,35 +100,11 @@ services:
     depends_on: *service-depends
     restart: unless-stopped
 
-  tasks:
-    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/tasks:${IMAGE_TAG:-latest}
-    environment: *service-env
-    ports:
-      - "5050:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
-  files:
-    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/files:${IMAGE_TAG:-latest}
-    environment: *service-env
-    ports:
-      - "5060:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
   console:
     image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/console:${IMAGE_TAG:-latest}
     environment: *service-env
     ports:
       - "5070:8080"
-    depends_on: *service-depends
-    restart: unless-stopped
-
-  mods:
-    image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/mods:${IMAGE_TAG:-latest}
-    environment: *service-env
-    ports:
-      - "5080:8080"
     depends_on: *service-depends
     restart: unless-stopped
 

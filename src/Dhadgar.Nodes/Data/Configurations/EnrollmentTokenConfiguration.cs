@@ -23,6 +23,11 @@ public sealed class EnrollmentTokenConfiguration : IEntityTypeConfiguration<Enro
             .IsRequired()
             .HasMaxLength(100);
 
+        // D-S246: the one-time claim. Enrollment's UPDATE carries WHERE "UsedAt" IS NULL (the value it read),
+        // so of two requests that validated the same token, only the first to save consumes it.
+        builder.Property(t => t.UsedAt)
+            .IsConcurrencyToken();
+
         // Unique index on token hash for fast lookup
         builder.HasIndex(t => t.TokenHash)
             .IsUnique()

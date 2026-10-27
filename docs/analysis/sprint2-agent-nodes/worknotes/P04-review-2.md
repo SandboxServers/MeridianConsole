@@ -1,0 +1,39 @@
+# P04 review, pass 2 (3fad62f)
+
+## Verdict
+
+fix
+
+## Previous notes
+
+- R-N1 (README "Agent hub" section): applied. Section at README.md:654 has path, auth, header, `Heartbeat`, limits table, all four error codes; code blocks and tables are formatted correctly.
+- R-N2 (protocol-header test): applied. The positive control with version "1" is present, and the catch is `when (!cts.IsCancellationRequested)`. With the version check deleted the second invoke would be acknowledged, `rejected` stays false, and the test fails. I did not run the revert, because I may not edit source.
+- R-N3 (validator tests): applied. `AgentHeartbeatValidatorTests.cs` covers null, 10 invalid cases, the boundary values, and control characters. Every validator branch is hit by a case.
+- R-N4 (using order): applied. `Program.cs` now has `Dhadgar.Contracts.Nodes` first.
+- S-N1 (revocation and expiry re-check): applied with deviations. The thumbprint format (lowercase SHA-256 hex) matches `CertificateValidationService.CalculateSha256Thumbprint` and the `AgentCertificates` column. The `certificate_not_after` claim is added from `certificate.NotAfter`, which is set on the success path (CertificateValidationService.cs:271), so the claim is never absent for a valid certificate. `new DateTimeOffset(notAfter)` is correct for a `Local` kind DateTime. The revocation tests are real. Without the expiry test see N1 below. Deviation 2 (no close on `node_decommissioned` / `node_not_found`) is accepted, see Not fixed.
+- S-N2 (control characters): applied. `char.IsControl` on `AgentVersion` and on each health issue, with unit tests and a hub-level NUL test.
+- S-N3 (auth-boundary tests): applied. Tests cover no certificate (401), foreign CA (401), revoked at connect (refused, not 401: accepted), revoked after connect, and two-node isolation.
+- Build: `dotnet build src\Dhadgar.Nodes -c Release -p:TreatWarningsAsErrors=true` is clean. `AgentHubTests|AgentHeartbeatValidatorTests`: 30 passed, run 3 times with no flake.
+
+## Fix notes
+
+N1. tests/Dhadgar.Nodes.Tests/Hubs/AgentHubTests.cs (new test file `tests/Dhadgar.Nodes.Tests/Hubs/AgentHubCertificateExpiryTests.cs`) — the certificate-expiry branch of `AgentHub.IsCertificateCurrentAsync` (AgentHub.cs:112-120) has no test. If the whole `if (!mtlsOptions.Value.AllowExpiredCertificates) { ... }` block is deleted, or the comparison `>` is flipped, every test stays green: the hub tests use certificates with a 90-day life and the clock never passes `NotAfter`. The coder skipped it because a shared `FakeTimeProvider` cannot be moved back. The expiry branch returns before any DB access and does not need the shared clock, so unit-test the hub directly with its own `FakeTimeProvider`. — Add the file `AgentHubCertificateExpiryTests.cs`, namespace `Dhadgar.Nodes.Tests.Hubs`, class `AgentHubCertificateExpiryTests`. Usings: `System.Security.Claims`, `Dhadgar.Contracts.Nodes`, `Dhadgar.Nodes.Auth`, `Dhadgar.Nodes.Data`, `Dhadgar.Nodes.Hubs`, `Dhadgar.Nodes.Services`, `Microsoft.AspNetCore.SignalR`, `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Diagnostics`, `Microsoft.Extensions.Logging.Abstractions`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Time.Testing`, `NSubstitute`. Build the hub with a helper `CreateHub(DateTimeOffset notAfter, bool allowExpired, out HubCallerContext context, out IHeartbeatService heartbeats, FakeTimeProvider time)`:
+  - `var options = new DbContextOptionsBuilder<NodesDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)).Options; var db = new NodesDbContext(options);` (same as `HeartbeatServiceTests.CreateContext`).
+  - `heartbeats = Substitute.For<IHeartbeatService>();` configure `ProcessHeartbeatAsync(Arg.Any<Guid>(), Arg.Any<HeartbeatRequest>(), Arg.Any<CancellationToken>())` to return a successful result. Use whatever type `IHeartbeatService.ProcessHeartbeatAsync` returns (read the interface; the success value has `.Success == true`).
+  - `context = Substitute.For<HubCallerContext>();` with `context.User.Returns(new ClaimsPrincipal(new ClaimsIdentity([new Claim("node_id", nodeId.ToString()), new Claim("certificate_thumbprint", "abc"), new Claim("certificate_not_after", notAfter.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture))], "mTLS")))` and `context.ConnectionAborted.Returns(CancellationToken.None)`.
+  - `new AgentHub(heartbeats, db, Options.Create(new MtlsOptions { AllowExpiredCertificates = allowExpired }), time, NullLogger<AgentHub>.Instance) { Context = context }` (`Hub.Context` has a public setter). Use `using var hub` (Hub is IDisposable) and dispose `db`.
+  - Facts, each with `var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-10-27T12:00:00Z"));` and a valid `new AgentHeartbeat(10, 10, 10, 0, "2.0.0-hub", null)`:
+    1. `Heartbeat_CertificatePastNotAfter_IsRefusedAndAborted`: `notAfter = time.GetUtcNow().AddSeconds(-1)`, `allowExpired = false`. Assert `ack.Acknowledged` is false, `ack.ErrorCode == AgentHubErrorCodes.HeartbeatFailed`, `context.Received(1).Abort()`, and `await heartbeats.DidNotReceive().ProcessHeartbeatAsync(default, default!, default)` (use `Arg.Any<>()` matchers in the call).
+    2. `Heartbeat_CertificateBeforeNotAfter_IsAcknowledged` (control): `notAfter = time.GetUtcNow().AddDays(1)`. Assert `ack.Acknowledged` is true and `context.DidNotReceive().Abort()`.
+    3. `Heartbeat_ExpiredCertificate_WithAllowExpired_IsAcknowledged`: `notAfter` one second ago, `allowExpired = true`. Assert `ack.Acknowledged`.
+    4. `Heartbeat_MissingNotAfterClaim_IsRefused`: leave out the `certificate_not_after` claim (add a bool parameter `includeNotAfter`), `allowExpired = false`. Assert not acknowledged and `context.Received(1).Abort()`.
+  — verify: `dotnet test tests\Dhadgar.Nodes.Tests\Dhadgar.Nodes.Tests.csproj --filter "FullyQualifiedName~AgentHubCertificateExpiryTests"` passes 4 tests. Then, as a throwaway experiment, flip `>` to `<` at AgentHub.cs:116: facts 1 and 2 must fail. Restore the line afterwards.
+
+## Not fixed
+
+- Security review: `AgentHub` auth path, `MtlsMiddleware` claims, certificate revocation and expiry handling (mTLS / agent-adjacent area). security-review label needed.
+- Accepted: S-N1 case (c). A decommissioned or unknown node gets its ack and the connection stays open. No heartbeat is written, because `HeartbeatService` refuses it. The coder's reason (an `Abort()` before returning cancels the pending invocation, so the agent would never see `node_decommissioned`) holds. Whether to close the connection after sending the ack (for example a server-to-client message and then abort) is an owner call for P05, where the agent's reaction to `node_decommissioned` is defined.
+- Accepted: the revoked-at-connect test asserts refusal and not HTTP 401. `MtlsMiddleware` does not check revocation. Adding that check would turn this into a 401 at negotiate time, but it is outside P04's brief.
+- Pre-existing, not P04: `CertificateValidationService.cs:149-150` compares `certificate.NotAfter` / `NotBefore` (Kind `Local`) with `now` (Kind `Utc`) using DateTime operators, which ignore Kind. On a host whose local offset is not UTC, expiry is off by that offset. The hub's own check uses `DateTimeOffset` and is correct. Worth a separate fix.
+- Carried from pass 1: the packet's revert experiment (negotiate 404 without the hub; no validator, so out-of-range writes to the DB) was not run by the coder. S1 `AgentHubSeamTests` 1 and 4 stay red until P05. `HeartbeatService.ProcessHeartbeatAsync` can still throw on database errors and the hub then surfaces a `HubException` (informational; the spec has the same shape).
+- Carried from pass 1 (security): the CA validation does not bind the SPIFFE node ID to a stored thumbprint, and there is no per-connection heartbeat rate limit. Both are decisions for the orchestrator and are not P04 changes.
