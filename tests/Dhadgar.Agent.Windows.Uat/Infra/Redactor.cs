@@ -67,7 +67,8 @@ internal sealed class Redactor
 
     /// <summary>
     /// Scans a text file for registered secrets. Reports line numbers and kinds only.
-    /// A missing file has no hits; callers check existence first.
+    /// A missing file has no hits; callers check existence first. A byte order mark selects the encoding
+    /// (<c>msiexec</c> writes UTF-16 LE with a BOM, P23); without one the file is read as UTF-8.
     /// </summary>
     public IReadOnlyList<SecretHit> Scan(string filePath)
     {
@@ -79,7 +80,8 @@ internal sealed class Redactor
 
         var lineNumber = 0;
         var secrets = Volatile.Read(ref _secrets);
-        foreach (var line in File.ReadLines(filePath))
+        using var reader = new StreamReader(filePath, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        while (reader.ReadLine() is { } line)
         {
             lineNumber++;
             foreach (var (value, kind) in secrets)
