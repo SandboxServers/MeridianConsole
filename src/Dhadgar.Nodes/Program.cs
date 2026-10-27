@@ -1,3 +1,4 @@
+using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes;
 using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Auth;
@@ -5,6 +6,7 @@ using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Consumers;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Endpoints;
+using Dhadgar.Nodes.Hubs;
 using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
 using Dhadgar.ServiceDefaults;
@@ -45,6 +47,13 @@ builder.Services.AddDbContext<NodesDbContext>(options =>
 
 // Note: PostgreSQL health check is already registered by AddDhadgarServiceDefaults
 // with HealthCheckDependencies.Postgres - no need to add it again here.
+
+// Register SignalR for the agent hub (shared framework; no package needed)
+builder.Services.AddSignalR(o =>
+{
+    o.MaximumReceiveMessageSize = 64 * 1024;
+    o.EnableDetailedErrors = false;
+});
 
 // Register services
 builder.Services.AddScoped<INodeService, NodeService>();
@@ -181,6 +190,7 @@ app.MapDhadgarDefaultEndpoints();
 NodesEndpoints.Map(app);
 EnrollmentEndpoints.Map(app);
 AgentEndpoints.Map(app);
+app.MapHub<AgentHub>(AgentHubProtocol.Path).RequireAuthorization("AgentPolicy");
 AuditEndpoints.Map(app);
 ReservationEndpoints.Map(app);
 

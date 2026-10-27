@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
@@ -131,6 +132,14 @@ public sealed class MtlsMiddleware
             new("spiffe_id", validationResult.SpiffeId!),
             new("certificate_thumbprint", validationResult.Thumbprint!)
         };
+
+        // Expiry travels with the principal so long-lived connections (the agent hub) can re-check it
+        if (validationResult.NotAfter is { } notAfter)
+        {
+            claims.Add(new Claim(
+                "certificate_not_after",
+                new DateTimeOffset(notAfter).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
+        }
 
         var identity = new ClaimsIdentity(claims, "mTLS");
         var principal = new ClaimsPrincipal(identity);
