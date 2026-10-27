@@ -487,6 +487,55 @@ public class CertificateValidationServiceTests
         Assert.Equal("certificate_not_yet_valid", result.ErrorCode);
     }
 
+    // D-S247 (campaign-security-1 N2): X509Certificate2 validity times are local. Compared with a UTC DateTime,
+    // the window shifts by the host's UTC offset. On a UTC host these pass with or without the fix; on a host
+    // at least 30 minutes off UTC, reverting the comparison fails at least one of them.
+    [Fact]
+    public async Task ValidateClientCertificateAsync_ExpiredThirtyMinutesAgo_IsExpiredInAnyTimeZone()
+    {
+        // Arrange
+        var now = _timeProvider.GetUtcNow();
+        using var certificate = CreateCertificateWithValidity(now.AddDays(-1), now.AddMinutes(-30));
+        var service = CreateService(allowExpired: false);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.Equal("certificate_expired", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ValidateClientCertificateAsync_ValidForThirtyMoreMinutes_IsNotExpiredInAnyTimeZone()
+    {
+        // Arrange
+        var now = _timeProvider.GetUtcNow();
+        using var certificate = CreateCertificateWithValidity(now.AddMinutes(-30), now.AddMinutes(30));
+        var service = CreateService(allowExpired: false);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.NotEqual("certificate_expired", result.ErrorCode);
+        Assert.NotEqual("certificate_not_yet_valid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ValidateClientCertificateAsync_ValidInThirtyMinutes_IsNotYetValidInAnyTimeZone()
+    {
+        // Arrange
+        var now = _timeProvider.GetUtcNow();
+        using var certificate = CreateCertificateWithValidity(now.AddMinutes(30), now.AddDays(1));
+        var service = CreateService(allowExpired: false);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.Equal("certificate_not_yet_valid", result.ErrorCode);
+    }
+
     [Fact]
     public async Task ValidateClientCertificateAsync_InvalidIssuer_ReturnsFailure()
     {
@@ -668,6 +717,18 @@ public class CertificateValidationServiceTests
             RSASignaturePadding.Pkcs1);
 
         return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(1), DateTimeOffset.UtcNow.AddDays(2));
+    }
+
+    private static X509Certificate2 CreateCertificateWithValidity(DateTimeOffset notBefore, DateTimeOffset notAfter)
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=ValidityWindow",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+
+        return request.CreateSelfSigned(notBefore, notAfter);
     }
 
     private static X509Certificate2 CreateCertificateWithoutClientAuthEku()

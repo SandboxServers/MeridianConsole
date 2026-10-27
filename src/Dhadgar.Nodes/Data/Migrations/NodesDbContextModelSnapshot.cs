@@ -186,6 +186,7 @@ namespace Dhadgar.Nodes.Data.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<DateTime?>("UsedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("UsedByNodeId")

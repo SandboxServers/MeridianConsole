@@ -218,7 +218,35 @@ public sealed class EnrollmentService : IEnrollmentService
             new AgentCertificateIssued(node.Id, certResult.Thumbprint!, certResult.NotAfter!.Value),
             ct);
 
-        await _dbContext.SaveChangesAsync(ct);
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // D-S246: another request consumed this one-time token after ValidateTokenAsync read it. The token
+            // UPDATE carries "UsedAt" IS NULL, so this whole save rolled back: no Node, no AgentCertificate row,
+            // and the certificate issued above is never returned. The audit service saves through this same
+            // DbContext, so drop the rejected entities first or the audit would re-send them.
+            _dbContext.ChangeTracker.Clear();
+
+            _logger.LogWarning(
+                "Enrollment failed: token {TokenId} was consumed by a concurrent enrollment",
+                token.Id);
+            NodesMetrics.RecordEnrollmentFailure(platform, "invalid_token");
+
+            await _auditService.LogAsync(
+                AuditActions.EnrollmentFailed,
+                ResourceTypes.Node,
+                null,
+                AuditOutcome.Failure,
+                new { Platform = platform, Hostname = request.Hardware.Hostname, TokenId = token.Id },
+                organizationId: token.OrganizationId,
+                failureReason: "invalid_token",
+                ct: ct);
+
+            return ServiceResult.Fail<LocalEnrollNodeResponse>("invalid_token");
+        }
 
         _logger.LogInformation(
             "Node {NodeId} enrolled for organization {OrganizationId}, platform: {Platform}, cert thumbprint: {Thumbprint}",

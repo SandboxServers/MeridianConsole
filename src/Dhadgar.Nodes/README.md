@@ -524,7 +524,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 Agents authenticate using mutual TLS (mTLS):
 
 1. **Enrollment Token** - Admin creates one-time token (default: 1 hour validity)
-2. **Agent Enrollment** - Agent presents token, receives mTLS certificate
+2. **Agent Enrollment** - Agent presents token, receives mTLS certificate. The token is consumed by a conditional write at the enrollment's save: of two requests with the same token, only the first to save enrolls; the other gets `invalid_token`, and no node or certificate row is kept for it (D-S246).
 3. **Heartbeat Auth** - Agent uses certificate for all subsequent requests
 4. **Certificate Renewal** - Auto-renewal before expiration (90 days default). The agent generates a new key pair and sends only its public key (base64 SubjectPublicKeyInfo) in `RenewCertificateRequest.PublicKey`. Nodes issues a certificate bound to that key. The current thumbprint comes only from the mTLS client certificate (`certificate_thumbprint` claim), never from the body. No private key or PKCS#12 bundle is created or returned. The response carries the new certificate PEM, the CA PEM, and the validity window. Errors: 401 `certificate_required` or `thumbprint_mismatch`, 400 `invalid_public_key` or `certificate_renewal_failed`, 403 `forbidden` when the certificate's node does not match the URL.
 5. **Revocation** - Certificates can be revoked via API
