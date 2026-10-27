@@ -86,6 +86,26 @@ public class UatRunnerGuardTests : IDisposable
         Assert.Empty(actions.Calls);
     }
 
+    [Fact]
+    public async Task StackOnly_RunFolderExists_RefusesAndTouchesNothing()
+    {
+        var actions = new RecordingActions();
+        WriteServiceManifest();
+        var args = new UatArgs("stack-only", _repo, RunId, null, AcceptMachineChanges: false, RunDir: null);
+
+        var (exit, err) = await CaptureAsync(() => UatRunner.RunWithAsync(
+            args,
+            actions,
+            new FakeProbe(),
+            launchedByAgent: true,
+            new Dictionary<string, IUatScenario>(StringComparer.Ordinal),
+            CancellationToken.None));
+
+        Assert.Equal(UatExitCodes.Refused, exit);
+        Assert.Contains("run folder already exists", err, StringComparison.Ordinal);
+        Assert.Empty(actions.Calls);
+    }
+
     private void WriteServiceManifest()
     {
         var runDir = new RunPaths(_repo, RunId).RunDir;

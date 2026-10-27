@@ -17,6 +17,9 @@
     <ProjectReference Include="..\..\src\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="Dhadgar.Agent.Windows.Uat.Tests" />
   </ItemGroup>
 </Project>

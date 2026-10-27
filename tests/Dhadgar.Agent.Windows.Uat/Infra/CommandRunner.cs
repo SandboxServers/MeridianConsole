@@ -20,7 +20,8 @@ internal static class CommandRunner
         TimeSpan timeout,
         Redactor? redactor = null,
         string? workingDirectory = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var psi = new ProcessStartInfo(fileName)
         {
@@ -33,6 +34,15 @@ internal static class CommandRunner
         foreach (var argument in arguments)
         {
             psi.ArgumentList.Add(argument);
+        }
+
+        // Added after the inherited environment: `docker run -e NAME` (no value) reads NAME from this process.
+        if (environment is not null)
+        {
+            foreach (var (key, value) in environment)
+            {
+                psi.Environment[key] = value;
+            }
         }
 
         try
