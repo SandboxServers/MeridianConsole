@@ -57,11 +57,22 @@ public interface ICertificateAuthorityService
     Task<string> GetCaCertificatePemAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Validates a certificate against the CA.
+    /// Validates a certificate against the CA and the revocation records.
     /// </summary>
     /// <param name="certificatePem">The certificate in PEM format.</param>
-    /// <returns>True if the certificate is valid and signed by this CA.</returns>
-    Task<bool> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default);
+    /// <returns><see cref="CertificateTrustStatus.Unavailable"/> for infrastructure faults, never <see cref="CertificateTrustStatus.Untrusted"/>.</returns>
+    Task<CertificateTrustStatus> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default);
+}
+
+/// <summary>Outcome of <see cref="ICertificateAuthorityService.ValidateCertificateAsync"/>.</summary>
+public enum CertificateTrustStatus
+{
+    /// <summary>Issued by this CA and not revoked.</summary>
+    Trusted,
+    /// <summary>Unreadable, not issued by this CA, or revoked.</summary>
+    Untrusted,
+    /// <summary>Trust could not be determined (CA not loaded, or the revocation lookup failed). Fail closed.</summary>
+    Unavailable
 }
 
 /// <summary>

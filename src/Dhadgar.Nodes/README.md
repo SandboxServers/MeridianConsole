@@ -531,7 +531,7 @@ Agents authenticate using mutual TLS (mTLS):
 - `/agents/*` (the `Mtls:AgentEndpointPrefix`), except the exempt paths `/enroll` and `/ca-certificate`.
 - `/hubs/agent` and its sub-paths (`Mtls:HubPathPrefix`). Matching is by whole path segment, so `/hubs/agentx` is not protected.
 
-Errors on these paths are `application/problem+json` (401 with an `errorCode`, such as `certificate_required`).
+Errors on these paths are `application/problem+json`: 401 with an `errorCode` such as `certificate_required` or `invalid_issuer`, or 503 `certificate_validation_unavailable` when certificate trust cannot be determined (CA not loaded or revocation lookup failed). The CA service is a singleton and opens a new DI scope for each revocation lookup.
 
 #### Forwarded Client Certificate (`Mtls:ForwardedCertificate`)
 

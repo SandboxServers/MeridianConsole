@@ -16,7 +16,8 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
     private readonly NodesOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CertificateAuthorityService> _logger;
-    private readonly Data.NodesDbContext _dbContext;
+    // Singleton: never hold a NodesDbContext. Each lookup gets its own scope (P17f).
+    private readonly IServiceScopeFactory _scopeFactory;
 
     // Cached CA certificate for performance
     private X509Certificate2? _caCertificate;
@@ -27,13 +28,13 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         IOptions<NodesOptions> options,
         TimeProvider timeProvider,
         ILogger<CertificateAuthorityService> logger,
-        Data.NodesDbContext dbContext)
+        IServiceScopeFactory scopeFactory)
     {
         _storageProvider = storageProvider;
         _options = options.Value;
         _timeProvider = timeProvider;
         _logger = logger;
-        _dbContext = dbContext;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task InitializeAsync(CancellationToken ct = default)
@@ -317,21 +318,43 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
         return await _storageProvider.GetCertificatePemAsync(ct);
     }
 
-    public async Task<bool> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
+    public async Task<CertificateTrustStatus> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
     {
         try
         {
             await EnsureInitializedAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Certificate validation unavailable: the CA certificate could not be loaded");
+            return CertificateTrustStatus.Unavailable;
+        }
 
-            using var certificate = X509Certificate2.CreateFromPem(certificatePem);
+        X509Certificate2 certificate;
+        try
+        {
+            certificate = X509Certificate2.CreateFromPem(certificatePem);
+        }
+        catch (Exception ex) when (ex is CryptographicException or ArgumentException)
+        {
+            _logger.LogWarning(ex, "Certificate validation failed: the certificate could not be parsed");
+            return CertificateTrustStatus.Untrusted;
+        }
 
-            // Calculate SHA-256 thumbprint to look up the certificate in the database
+        using (certificate)
+        {
+            // Chain first: pure CPU, so certificates from a foreign CA never reach the database.
+            if (!IsIssuedByOurCa(certificate))
+            {
+                return CertificateTrustStatus.Untrusted;
+            }
+
             var thumbprint = CalculateSha256Thumbprint(certificate);
-
-            // Check if the certificate is revoked in our database before performing chain validation
-            var agentCert = await _dbContext.AgentCertificates
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint, ct);
+            var (lookupSucceeded, agentCert) = await FindAgentCertificateAsync(thumbprint, ct);
+            if (!lookupSucceeded)
+            {
+                return CertificateTrustStatus.Unavailable;
+            }
 
             if (agentCert is not null && agentCert.IsRevoked)
             {
@@ -340,10 +363,17 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
                     thumbprint,
                     agentCert.RevokedAt,
                     agentCert.RevocationReason);
-                return false;
+                return CertificateTrustStatus.Untrusted;
             }
 
-            // Build certificate chain and validate against CA
+            return CertificateTrustStatus.Trusted;
+        }
+    }
+
+    private bool IsIssuedByOurCa(X509Certificate2 certificate)
+    {
+        try
+        {
             using var chain = new X509Chain();
             chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
             // Allow unknown CA (since our CA is self-signed and not in system trust store)
@@ -355,37 +385,43 @@ public sealed class CertificateAuthorityService : ICertificateAuthorityService, 
 
             var isValid = chain.Build(certificate);
 
-            // Verify the certificate was actually signed by our CA
-            // A valid client certificate issued by our CA should have 2 chain elements:
-            // - The client certificate (index 0)
-            // - Our CA certificate (index 1)
+            // A valid client certificate issued by our CA has 2 chain elements:
+            // the client certificate (index 0) and our CA certificate (index 1).
             if (!isValid || chain.ChainElements.Count < 2)
             {
-                // Self-signed certificates or certificates not chaining to any CA
-                // are not valid (they should be issued by our CA)
                 return false;
             }
 
-            // Verify the issuing CA is our CA
             var issuer = chain.ChainElements[^1].Certificate;
             return issuer.Thumbprint == _caCertificate!.Thumbprint;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (CryptographicException ex)
         {
             _logger.LogWarning(ex, "Certificate validation failed due to cryptographic error");
             return false;
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Certificate validation failed");
-            return false;
-        }
     }
 
+    private async Task<(bool Succeeded, Data.Entities.AgentCertificate? Row)> FindAgentCertificateAsync(
+        string thumbprint,
+        CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<Data.NodesDbContext>();
+            var row = await dbContext.AgentCertificates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint, ct);
+            return (true, row);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Infrastructure fault: report Unavailable (503), never Untrusted (401 invalid_issuer).
+            _logger.LogError(ex, "Certificate revocation lookup failed for {Thumbprint}", thumbprint);
+            return (false, null);
+        }
+    }
     private async Task EnsureInitializedAsync(CancellationToken ct)
     {
         if (_caCertificate is null)

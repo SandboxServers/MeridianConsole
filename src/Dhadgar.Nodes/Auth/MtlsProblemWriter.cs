@@ -7,6 +7,7 @@ namespace Dhadgar.Nodes.Auth;
 internal static class MtlsProblemWriter
 {
     private const string UnauthorizedType = "https://tools.ietf.org/html/rfc7235#section-3.1";
+    private const string ServiceUnavailableType = "https://tools.ietf.org/html/rfc7231#section-6.6.4";
     private const string ForbiddenType = "https://tools.ietf.org/html/rfc7231#section-6.5.3";
 
     /// <summary>
@@ -24,6 +25,13 @@ internal static class MtlsProblemWriter
     public static Task WriteForbiddenAsync(HttpContext context, string errorCode, string errorMessage)
     {
         return WriteAsync(context, StatusCodes.Status403Forbidden, ForbiddenType, "Forbidden",
+            errorCode, errorMessage);
+    }
+
+    /// <summary>Writes a 503 problem+json response with the given machine-readable error code.</summary>
+    public static Task WriteServiceUnavailableAsync(HttpContext context, string errorCode, string errorMessage)
+    {
+        return WriteAsync(context, StatusCodes.Status503ServiceUnavailable, ServiceUnavailableType, "Service Unavailable",
             errorCode, errorMessage);
     }
 

@@ -5,6 +5,7 @@ using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -18,7 +19,7 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     private readonly FakeTimeProvider _timeProvider;
     private readonly NodesOptions _options;
     private readonly IOptions<NodesOptions> _optionsWrapper;
-    private readonly List<NodesDbContext> _contexts = [];
+    private readonly List<ServiceProvider> _providers = [];
 
     public CertificateAuthorityServiceTests()
     {
@@ -39,9 +40,9 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var context in _contexts)
+        foreach (var provider in _providers)
         {
-            context.Dispose();
+            provider.Dispose();
         }
 
         try
@@ -57,33 +58,32 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         }
     }
 
-    private NodesDbContext CreateDbContext()
+    private ServiceProvider CreateDbServices(Action<IServiceCollection>? configure = null)
     {
-        var dbOptions = new DbContextOptionsBuilder<NodesDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-            .Options;
-        var context = new NodesDbContext(dbOptions);
-        _contexts.Add(context);
-        return context;
+        var databaseName = Guid.NewGuid().ToString();
+        var services = new ServiceCollection();
+        services.AddDbContext<NodesDbContext>(o => o
+            .UseInMemoryDatabase(databaseName)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+        configure?.Invoke(services);
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
+        return provider;
     }
 
-    private CertificateAuthorityService CreateService(ICaStorageProvider? storageProvider = null, NodesDbContext? dbContext = null)
+    private CertificateAuthorityService CreateService(ICaStorageProvider? storageProvider = null, ServiceProvider? dbServices = null)
     {
         storageProvider ??= new LocalFileCaStorageProvider(
             _optionsWrapper,
             NullLogger<LocalFileCaStorageProvider>.Instance);
-
-        dbContext ??= CreateDbContext();
 
         return new CertificateAuthorityService(
             storageProvider,
             _optionsWrapper,
             _timeProvider,
             NullLogger<CertificateAuthorityService>.Instance,
-            dbContext);
+            (dbServices ?? CreateDbServices()).GetRequiredService<IServiceScopeFactory>());
     }
-
     [Fact]
     public async Task InitializeAsync_CreatesNewCa_WhenNoExistingCa()
     {
@@ -398,10 +398,10 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         var result = await service.IssueCertificateAsync(nodeId);
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
 
         // Assert
-        Assert.True(isValid);
+        Assert.Equal(CertificateTrustStatus.Trusted, trust);
     }
 
     [Fact]
@@ -418,10 +418,10 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
         var foreignPem = foreignCert.ExportCertificatePem();
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(foreignPem);
+        var trust = await service.ValidateCertificateAsync(foreignPem);
 
         // Assert
-        Assert.False(isValid);
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
     }
 
     [Fact]
@@ -457,8 +457,8 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
     public async Task ValidateCertificateAsync_ReturnsFalseForRevokedCertificate()
     {
         // Arrange
-        var dbContext = CreateDbContext();
-        using var service = CreateService(dbContext: dbContext);
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -480,22 +480,26 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
             RevokedAt = DateTime.UtcNow,
             RevocationReason = "Test revocation"
         };
-        dbContext.AgentCertificates.Add(agentCert);
-        await dbContext.SaveChangesAsync();
+        using (var scope = dbServices.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            dbContext.AgentCertificates.Add(agentCert);
+            await dbContext.SaveChangesAsync();
+        }
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
 
         // Assert
-        Assert.False(isValid);
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
     }
 
     [Fact]
     public async Task ValidateCertificateAsync_ReturnsTrueForNonRevokedCertificateInDatabase()
     {
         // Arrange
-        var dbContext = CreateDbContext();
-        using var service = CreateService(dbContext: dbContext);
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
         await service.InitializeAsync();
         var nodeId = Guid.NewGuid();
 
@@ -515,13 +519,87 @@ public sealed class CertificateAuthorityServiceTests : IDisposable
             IssuedAt = DateTime.UtcNow,
             IsRevoked = false
         };
-        dbContext.AgentCertificates.Add(agentCert);
-        await dbContext.SaveChangesAsync();
+        using (var scope = dbServices.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            dbContext.AgentCertificates.Add(agentCert);
+            await dbContext.SaveChangesAsync();
+        }
 
         // Act
-        var isValid = await service.ValidateCertificateAsync(result.CertificatePem!);
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
 
         // Assert
-        Assert.True(isValid);
+        Assert.Equal(CertificateTrustStatus.Trusted, trust);
+    }
+
+    private string CreateForeignPem()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest("CN=Foreign", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var foreignCert = request.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddYears(1));
+        return foreignCert.ExportCertificatePem();
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ConcurrentCallsOnOneInstance_AllTrusted()
+    {
+        var dbServices = CreateDbServices();
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+        var nodeId = Guid.NewGuid();
+        var result = await service.IssueCertificateAsync(nodeId);
+        Assert.True(result.Success);
+
+        using (var scope = dbServices.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            dbContext.AgentCertificates.Add(new AgentCertificate
+            {
+                Id = Guid.NewGuid(),
+                NodeId = nodeId,
+                Thumbprint = result.Thumbprint!,
+                SerialNumber = result.SerialNumber!,
+                NotBefore = result.NotBefore!.Value,
+                NotAfter = result.NotAfter!.Value,
+                IssuedAt = DateTime.UtcNow,
+                IsRevoked = false
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        var pem = result.CertificatePem!;
+        var results = await Task.WhenAll(Enumerable.Range(0, 64)
+            .Select(_ => Task.Run(() => service.ValidateCertificateAsync(pem))));
+
+        Assert.All(results, r => Assert.Equal(CertificateTrustStatus.Trusted, r));
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_WhenRevocationLookupFails_ReturnsUnavailable()
+    {
+        var dbServices = CreateDbServices(s =>
+            s.AddScoped<NodesDbContext>(_ => throw new InvalidOperationException("database unavailable")));
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+        var result = await service.IssueCertificateAsync(Guid.NewGuid());
+        Assert.True(result.Success);
+
+        var trust = await service.ValidateCertificateAsync(result.CertificatePem!);
+
+        Assert.Equal(CertificateTrustStatus.Unavailable, trust);
+    }
+
+    [Fact]
+    public async Task ValidateCertificateAsync_ForeignCertificate_DoesNotQueryDatabase()
+    {
+        var dbServices = CreateDbServices(s =>
+            s.AddScoped<NodesDbContext>(_ => throw new InvalidOperationException("database unavailable")));
+        using var service = CreateService(dbServices: dbServices);
+        await service.InitializeAsync();
+
+        var trust = await service.ValidateCertificateAsync(CreateForeignPem());
+
+        Assert.Equal(CertificateTrustStatus.Untrusted, trust);
     }
 }

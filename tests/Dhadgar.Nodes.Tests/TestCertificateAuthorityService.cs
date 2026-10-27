@@ -117,9 +117,11 @@ public sealed class TestCertificateAuthorityService : ICertificateAuthorityServi
             "-----END CERTIFICATE-----");
     }
 
-    public Task<bool> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
+    public Task<CertificateTrustStatus> ValidateCertificateAsync(string certificatePem, CancellationToken ct = default)
     {
         // In tests, we consider a certificate valid if it contains our fake header
-        return Task.FromResult(certificatePem.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal));
+        return Task.FromResult(certificatePem.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal)
+            ? CertificateTrustStatus.Trusted
+            : CertificateTrustStatus.Untrusted);
     }
 }
