@@ -1,5 +1,7 @@
+using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
 namespace Dhadgar.Nodes.Auth;
@@ -54,15 +56,16 @@ public sealed class MtlsMiddleware
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
-        // Check if this is an agent endpoint
-        if (!IsAgentEndpoint(path))
+        // Check if this is an agent endpoint or the agent hub
+        var isAgentEndpoint = IsAgentEndpoint(path);
+        if (!isAgentEndpoint && !IsHubEndpoint(context.Request.Path))
         {
             await _next(context);
             return;
         }
 
-        // Check if this path is exempt from mTLS
-        if (IsExemptPath(path))
+        // Check if this path is exempt from mTLS (exempt paths are relative to AgentEndpointPrefix only)
+        if (isAgentEndpoint && IsExemptPath(path))
         {
             _logger.LogDebug("Path {Path} is exempt from mTLS validation", path);
             await _next(context);
@@ -88,7 +91,7 @@ public sealed class MtlsMiddleware
                     "No client certificate provided for protected endpoint {Path}",
                     path);
 
-                await WriteUnauthorizedResponse(context, "missing_client_certificate",
+                await MtlsProblemWriter.WriteUnauthorizedAsync(context, "certificate_required",
                     "A client certificate is required for this endpoint");
                 return;
             }
@@ -110,7 +113,7 @@ public sealed class MtlsMiddleware
                 "Certificate validation failed for {Path}. Error: {ErrorCode} - {ErrorMessage}",
                 path, validationResult.ErrorCode, validationResult.ErrorMessage);
 
-            await WriteUnauthorizedResponse(context, validationResult.ErrorCode!,
+            await MtlsProblemWriter.WriteUnauthorizedAsync(context, validationResult.ErrorCode!,
                 validationResult.ErrorMessage!);
             return;
         }
@@ -146,6 +149,16 @@ public sealed class MtlsMiddleware
     {
         var normalizedPrefix = NormalizePrefix(_options.AgentEndpointPrefix);
         return path.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// True when the path is the agent hub or one of its sub-paths. Matches whole segments only,
+    /// so "/hubs/agentx" is not protected and "/hubs/agent/negotiate" is.
+    /// </summary>
+    private bool IsHubEndpoint(PathString path)
+    {
+        var hubPrefix = new PathString(NormalizePrefix(_options.HubPathPrefix));
+        return path.StartsWithSegments(hubPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsExemptPath(string path)
@@ -204,26 +217,6 @@ public sealed class MtlsMiddleware
         return normalized;
     }
 
-    private static async Task WriteUnauthorizedResponse(
-        HttpContext context,
-        string errorCode,
-        string errorMessage)
-    {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        context.Response.ContentType = "application/problem+json";
-
-        var problemDetails = new
-        {
-            type = "https://tools.ietf.org/html/rfc7235#section-3.1",
-            title = "Unauthorized",
-            status = 401,
-            detail = errorMessage,
-            instance = context.Request.Path.Value,
-            errorCode
-        };
-
-        await context.Response.WriteAsJsonAsync(problemDetails);
-    }
 }
 
 /// <summary>
@@ -263,7 +256,41 @@ public static class MtlsMiddlewareExtensions
             }
         }
 
+        // Refuse to start when forwarded certificates are enabled without a usable trust list (D-S25, C6).
+        var forwardedOptions = configuration
+            .GetSection($"{MtlsOptions.SectionName}:ForwardedCertificate")
+            .Get<ForwardedCertificateOptions>() ?? new ForwardedCertificateOptions();
+
+        if (forwardedOptions.Enabled)
+        {
+            if (forwardedOptions.TrustedProxies.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"'{MtlsOptions.SectionName}:ForwardedCertificate:TrustedProxies' must contain at least one CIDR " +
+                    "when 'ForwardedCertificate:Enabled' is true. See D-S210.");
+            }
+
+            foreach (var proxy in forwardedOptions.TrustedProxies)
+            {
+                // A /0 prefix matches every peer, so any client could present a forwarded certificate.
+                if (!IPNetwork.TryParse(proxy, out var network) || network.PrefixLength == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"'{MtlsOptions.SectionName}:ForwardedCertificate:TrustedProxies' contains an invalid CIDR. " +
+                        "Each entry must be an IP address with a prefix length, for example 10.42.0.0/16, " +
+                        "and a prefix length of 0 is not allowed. See D-S210.");
+                }
+            }
+        }
+
         services.AddScoped<ICertificateValidationService, CertificateValidationService>();
+
+        // Named scheme for agent policies. Policies without a scheme evaluate HttpContext.User,
+        // which MtlsMiddleware sets; the scheme writes the C5 challenge and forbid responses.
+        services.AddAuthentication(AgentMtlsAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, AgentMtlsAuthenticationHandler>(
+                AgentMtlsAuthenticationHandler.SchemeName,
+                null);
 
         return services;
     }
@@ -272,8 +299,14 @@ public static class MtlsMiddlewareExtensions
     /// Adds the mTLS middleware to the application pipeline.
     /// This should be called after UseRouting() but before UseAuthorization().
     /// </summary>
+    /// <remarks>
+    /// <see cref="ForwardedClientCertificateMiddleware"/> runs first, so a certificate forwarded by a
+    /// trusted proxy is on the connection before <see cref="MtlsMiddleware"/> validates it.
+    /// </remarks>
     public static IApplicationBuilder UseMtlsAuthentication(this IApplicationBuilder app)
     {
-        return app.UseMiddleware<MtlsMiddleware>();
+        return app
+            .UseMiddleware<ForwardedClientCertificateMiddleware>()
+            .UseMiddleware<MtlsMiddleware>();
     }
 }

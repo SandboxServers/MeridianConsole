@@ -524,6 +524,31 @@ Agents authenticate using mutual TLS (mTLS):
 4. **Certificate Renewal** - Auto-renewal before expiration (90 days default)
 5. **Revocation** - Certificates can be revoked via API
 
+#### mTLS Protected Paths
+
+`MtlsMiddleware` validates the client certificate on these paths:
+
+- `/agents/*` (the `Mtls:AgentEndpointPrefix`), except the exempt paths `/enroll` and `/ca-certificate`.
+- `/hubs/agent` and its sub-paths (`Mtls:HubPathPrefix`). Matching is by whole path segment, so `/hubs/agentx` is not protected.
+
+Errors on these paths are `application/problem+json` (401 with an `errorCode`, such as `certificate_required`).
+
+#### Forwarded Client Certificate (`Mtls:ForwardedCertificate`)
+
+The Gateway terminates TLS for agents on a DNS-only hostname and forwards the client certificate in the `X-Client-Cert` header (base64 DER). Nodes accepts that header only when all of these hold:
+
+- `Mtls:ForwardedCertificate:Enabled` is `true`;
+- the remote address is inside one of `Mtls:ForwardedCertificate:TrustedProxies` (CIDR ranges, for example the Gateway pod CIDR);
+- the header is present exactly once and is at most `MaxHeaderLength` characters (default 16384);
+- the connection has no TLS client certificate of its own;
+- the value parses as base64 DER.
+
+The header is removed from every request. Nodes refuses to start when `Enabled` is `true` and `TrustedProxies` is empty or holds an invalid CIDR. The production ingress and trust model is D-S210 (docs/analysis/sprint2-agent-nodes). Nodes still validates the chain, SPIFFE ID and revocation.
+
+#### `AgentMtls` Authentication Scheme
+
+Policies on agent endpoints use the `AgentMtls` scheme (`AgentMtlsAuthenticationHandler.SchemeName`). It does not authenticate by itself. `MtlsMiddleware` sets `HttpContext.User` after `UseAuthentication`. A challenge writes 401 `certificate_required`, and a forbid writes 403 `forbidden`, both as problem+json.
+
 ### Certificate Details
 
 - **SPIFFE ID:** `spiffe://meridianconsole.com/nodes/{nodeId}`
