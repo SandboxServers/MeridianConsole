@@ -27,6 +27,12 @@ updates:
     directory: /src/Dhadgar.Scope
     schedule:
       interval: weekly
+    ignore:
+      # typescript-eslint 8.x supports TypeScript < 6.1, so the TypeScript 7
+      # update cannot resolve. Lift this when typescript-eslint supports 7.
+      - dependency-name: 'typescript'
+        versions:
+          - '>= 7.0.0'
     groups:
       scope-minor-patch:
         applies-to: version-updates
