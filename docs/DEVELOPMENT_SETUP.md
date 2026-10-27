@@ -445,7 +445,7 @@ dotnet restore
   # Run as Administrator
   New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
   ```
-- **PowerShell scripts**: CI lints every `.ps1` with PSScriptAnalyzer (`PSScriptAnalyzerSettings.psd1`; parse errors and Error severity fail the build). Locally: `Install-Module PSScriptAnalyzer -Scope CurrentUser`, then `Invoke-ScriptAnalyzer -Path scripts -Recurse -Settings ./PSScriptAnalyzerSettings.psd1`.
+- **PowerShell scripts**: CI lints every `.ps1` with PSScriptAnalyzer (`PSScriptAnalyzerSettings.psd1`; parse errors and Error severity fail the build). Locally: `Install-Module PSScriptAnalyzer -Scope CurrentUser`, then `Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1`.
 
 ### Linux (Ubuntu/Debian)
 

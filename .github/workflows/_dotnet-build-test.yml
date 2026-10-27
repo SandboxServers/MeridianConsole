@@ -57,7 +57,7 @@ jobs:
       - name: Lint PowerShell (PSScriptAnalyzer)
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
           $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
           $findings | Where-Object Severity -eq 'Warning' | Group-Object RuleName |
             ForEach-Object { Write-Host "warning: $($_.Count) x $($_.Name)" }
