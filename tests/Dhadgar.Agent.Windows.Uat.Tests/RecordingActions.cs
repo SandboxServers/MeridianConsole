@@ -53,6 +53,8 @@ internal sealed class RecordingActions : IMachineActions
 
     public Result DeleteRegistryKey(string hive, string path) => Record($"DeleteRegistryKey:{hive}\\{path}");
 
+    public Result DeleteEmptyRegistryKey(string hive, string path) => Record($"DeleteEmptyRegistryKey:{hive}\\{path}");
+
     public Result DeleteRegistryValue(string path, string name) => Record($"DeleteRegistryValue:{path}\\{name}");
 
     public Result RemoveCertificate(string storeLocation, string storeName, string thumbprintSha1) =>

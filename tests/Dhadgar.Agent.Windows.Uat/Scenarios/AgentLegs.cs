@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Agent.Windows.Uat.Agent;
 using Dhadgar.Agent.Windows.Uat.Cleanup;
@@ -40,8 +41,8 @@ internal interface IAgentLegsDb
     /// <summary>Every agent certificate row of one node, revoked or not.</summary>
     Task<Result<IReadOnlyList<CertRow>>> CertificatesForNodeAsync(Guid nodeId, CancellationToken ct);
 
-    /// <summary>One enrollment token row, or null when it does not exist.</summary>
-    Task<Result<TokenRow?>> TokenAsync(Guid tokenId, CancellationToken ct);
+    /// <summary>One enrollment token row; a failure when it does not exist.</summary>
+    Task<Result<TokenRow>> TokenAsync(Guid tokenId, CancellationToken ct);
 }
 
 /// <summary>Reads the agent legs' rows from the Nodes database.</summary>
@@ -92,7 +93,7 @@ internal sealed class NodesAgentLegsDb : IAgentLegsDb
     }
 
     /// <inheritdoc />
-    public async Task<Result<TokenRow?>> TokenAsync(Guid tokenId, CancellationToken ct)
+    public async Task<Result<TokenRow>> TokenAsync(Guid tokenId, CancellationToken ct)
     {
         try
         {
@@ -101,11 +102,13 @@ internal sealed class NodesAgentLegsDb : IAgentLegsDb
                 .Where(t => t.Id == tokenId)
                 .Select(t => new TokenRow(t.Id, t.UsedAt, t.UsedByNodeId))
                 .FirstOrDefaultAsync(ct);
-            return Result<TokenRow?>.Success(row);
+            return row is null
+                ? Result<TokenRow>.Failure("[Db.EnrollmentTokens] token not found")
+                : Result<TokenRow>.Success(row);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return Result<TokenRow?>.Failure($"[Db.EnrollmentTokens] read failed: {ex.GetType().Name}");
+            return Result<TokenRow>.Failure($"[Db.EnrollmentTokens] read failed: {ex.GetType().Name}");
         }
     }
 }
@@ -157,7 +160,6 @@ internal sealed class AgentLegs
     private readonly AgentLegsDeps _deps;
     private readonly AgentLegsOptions _options;
     private readonly HashSet<string> _recordedThumbprints = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _recordedKeys = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Creates the legs for one run.</summary>
     public AgentLegs(RunPaths paths, CleanupManifest manifest, AgentLegsDeps deps, AgentLegsOptions options)
@@ -192,16 +194,34 @@ internal sealed class AgentLegs
         }
         finally
         {
-            var warning = _deps.Agent.SawRecoveryWarning();
-            if (warning.IsSuccess && warning.Value)
-            {
-                warnings.Add("agent.log: service recovery could not be configured (expected in process mode)");
-            }
-
             var stopped = await _deps.Agent.StopAsync();
             if (stopped.IsFailure)
             {
                 warnings.Add($"agent stop: {stopped.Error}");
+            }
+
+            var warning = _deps.Agent.SawRecoveryWarning();
+            if (warning.IsFailure)
+            {
+                warnings.Add($"agent.log: {warning.Error}");
+            }
+            else if (warning.Value)
+            {
+                warnings.Add("agent.log: service recovery could not be configured (expected in process mode)");
+            }
+
+            // A certificate the agent created after the last poll is recorded now, so cleanup removes it and its key.
+            try
+            {
+                var recorded = RecordMachineCertificates(_deps.Store.AgentCertificatesInMy());
+                if (recorded.IsFailure)
+                {
+                    warnings.Add($"certificate record: {recorded.Error}");
+                }
+            }
+            catch (Exception ex) when (ex is CryptographicException or UnauthorizedAccessException or IOException)
+            {
+                warnings.Add($"certificate record: {ex.GetType().Name}");
             }
         }
     }
@@ -269,6 +289,13 @@ internal sealed class AgentLegs
 
     private async Task<Result<Check>> EvaluateFirstStartAsync(LegState state, CancellationToken ct)
     {
+        var mine = _deps.Store.AgentCertificatesInMy();
+        var recorded = RecordMachineCertificates(mine);
+        if (recorded.IsFailure)
+        {
+            return Result<Check>.Failure(recorded.Error!);
+        }
+
         var statePath = _paths.Validate(Path.Combine(_paths.AgentState, StateFileName));
         if (statePath.IsFailure)
         {
@@ -309,7 +336,7 @@ internal sealed class AgentLegs
             return Result<Check>.Failure(token.Error!);
         }
 
-        if (token.Value?.UsedAt is null || token.Value.UsedByNodeId != nodeId)
+        if (token.Value.UsedAt is null || token.Value.UsedByNodeId != nodeId)
         {
             return Unmet("token T1 has UsedAt set and UsedByNodeId equal to the node");
         }
@@ -317,13 +344,6 @@ internal sealed class AgentLegs
         if (_deps.Registry.ValueExists())
         {
             return Unmet("the registry token value is removed after the agent reads it");
-        }
-
-        var mine = _deps.Store.AgentCertificatesInMy();
-        var recorded = RecordMachineCertificates(mine);
-        if (recorded.IsFailure)
-        {
-            return Result<Check>.Failure(recorded.Error!);
         }
 
         if (mine.Count != 1)
@@ -458,6 +478,13 @@ internal sealed class AgentLegs
 
     private async Task<Result<Check>> EvaluateRestartAsync(LegState state, DateTime baseline, CancellationToken ct)
     {
+        var mine = _deps.Store.AgentCertificatesInMy();
+        var recorded = RecordMachineCertificates(mine);
+        if (recorded.IsFailure)
+        {
+            return Result<Check>.Failure(recorded.Error!);
+        }
+
         var nodeId = state.NodeId!.Value;
         var nodes = await _deps.Db.NodesForOrganizationAsync(_options.OrganizationId, ct);
         if (nodes.IsFailure)
@@ -483,7 +510,7 @@ internal sealed class AgentLegs
             return Result<Check>.Failure(token.Error!);
         }
 
-        if (token.Value?.UsedAt is not null)
+        if (token.Value.UsedAt is not null)
         {
             return Unmet("token T2 is not used (UsedAt is null)");
         }
@@ -508,13 +535,6 @@ internal sealed class AgentLegs
         if (ReadStateNodeId(statePath.Value) != nodeId)
         {
             return Unmet("agent-state.json holds the same node ID");
-        }
-
-        var mine = _deps.Store.AgentCertificatesInMy();
-        var recorded = RecordMachineCertificates(mine);
-        if (recorded.IsFailure)
-        {
-            return Result<Check>.Failure(recorded.Error!);
         }
 
         if (!mine.Any(c => string.Equals(c.Sha256Thumbprint, state.Certificate!.Sha256Thumbprint, StringComparison.OrdinalIgnoreCase)))
@@ -559,23 +579,23 @@ internal sealed class AgentLegs
         }
     }
 
-    /// <summary>Appends the <c>certificate</c> and <c>cngKey</c> entries for every agent certificate seen, before any check uses them.</summary>
+    /// <summary>The entries recorded for one agent certificate. Its key is deleted with it, through the certificate (D-S238).</summary>
+    internal static IReadOnlyList<CleanupEntry> CertificateEntries(StoreCert certificate) =>
+        [new CertificateEntry(MachineStoreLocation, MachineStoreName, certificate.Sha1Thumbprint)];
+
+    /// <summary>Appends the <c>certificate</c> entry for every agent certificate seen, before any check uses it; the key goes with the certificate (D-S238).</summary>
     private Result RecordMachineCertificates(IReadOnlyList<StoreCert> certificates)
     {
         foreach (var certificate in certificates)
         {
-            if (_recordedThumbprints.Add(certificate.Sha1Thumbprint))
+            if (!_recordedThumbprints.Add(certificate.Sha1Thumbprint))
             {
-                var appended = _manifest.Append(new CertificateEntry(MachineStoreLocation, MachineStoreName, certificate.Sha1Thumbprint));
-                if (appended.IsFailure)
-                {
-                    return appended;
-                }
+                continue;
             }
 
-            if (certificate.Key is { } key && _recordedKeys.Add(key.KeyName))
+            foreach (var entry in CertificateEntries(certificate))
             {
-                var appended = _manifest.Append(new CngKeyEntry(key.KeyName, key.Provider, key.IsMachineKey));
+                var appended = _manifest.Append(entry);
                 if (appended.IsFailure)
                 {
                     return appended;

@@ -87,7 +87,7 @@ internal sealed partial class ChildProcess : IDisposable
         try
         {
             Directory.CreateDirectory(logsDir);
-            log = new StreamWriter(Path.Combine(logsDir, spec.Name + ".log"), append: false, Encoding.UTF8)
+            log = new StreamWriter(Path.Combine(logsDir, spec.Name + ".log"), append: true, Encoding.UTF8)
             {
                 AutoFlush = true,
             };

@@ -67,9 +67,14 @@ internal sealed class AgentPublishConfig
     /// </summary>
     public Result Apply(string appsettingsPath, AgentConfig config)
     {
-        if (config.Endpoint is null || !config.Endpoint.IsAbsoluteUri)
+        if (config.Endpoint is not { IsAbsoluteUri: true } endpoint
+            || !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+            || !string.Equals(endpoint.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || endpoint.IsDefaultPort
+            || endpoint.Port <= 0
+            || endpoint.UserInfo.Length > 0)
         {
-            return Result.Failure("[AgentConfig.Endpoint] endpoint must be an absolute URI");
+            return Result.Failure("[AgentConfig.Endpoint] endpoint must be https://localhost:<port> (R-LOCALURL)");
         }
 
         if (config.HeartbeatIntervalSeconds is < MinHeartbeatSeconds or > MaxHeartbeatSeconds)

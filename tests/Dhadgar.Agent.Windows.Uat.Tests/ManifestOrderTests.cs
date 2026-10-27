@@ -50,7 +50,7 @@ public class ManifestOrderTests : IDisposable
         Assert.Equal(0, world.Snapshots[firstRead].MachineEntries);
         var later = world.Snapshots.Skip(firstRead + 1).ToList();
         Assert.NotEmpty(later);
-        Assert.All(later, s => Assert.Equal(2, s.MachineEntries));
+        Assert.All(later, s => Assert.Equal(1, s.MachineEntries));
     }
 
     [Fact]
@@ -73,6 +73,6 @@ public class ManifestOrderTests : IDisposable
         Assert.Equal(world.Mine[0].Sha1Thumbprint, certificate.ThumbprintSha1);
         Assert.Equal("LocalMachine", certificate.StoreLocation);
         Assert.Equal("My", certificate.StoreName);
-        Assert.Single(loaded.Value.OfType<CngKeyEntry>());
+        Assert.Empty(loaded.Value.OfType<CngKeyEntry>());
     }
 }

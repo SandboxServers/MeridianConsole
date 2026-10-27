@@ -98,7 +98,7 @@ internal sealed class CleanupEngine
     /// <summary>
     /// The allowlist of machine items undo may touch, one case per kind. Anything else is refused before any
     /// call. Directories and files are checked by <see cref="DeleteGuarded"/>; processes by their PID and start time.
-    /// Add a new kind here when a packet adds one.
+    /// Add a new kind here when a packet adds one. The agent's own CNG key is deleted through its certificate, never by name (D-S238).
     /// </summary>
     private Result? Reject(CleanupEntry entry)
     {
@@ -106,7 +106,8 @@ internal sealed class CleanupEngine
         {
             ServiceEntry s => string.Equals(s.Name, AgentWindowsFacts.ServiceName, StringComparison.Ordinal),
             ProcessEntry p => ProcessImageAllowed(p),
-            RegistryKeyEntry k => string.Equals(k.Hive, HklmHive, StringComparison.Ordinal) && IsAgentKey(k.Path),
+            RegistryKeyEntry k => string.Equals(k.Hive, HklmHive, StringComparison.Ordinal)
+                && (IsAgentKey(k.Path) || IsParentKey(k.Path)),
             RegistryValueEntry v => IsAgentKey(v.Path)
                 && string.Equals(v.Name, AgentWindowsFacts.EnrollmentTokenValueName, StringComparison.Ordinal),
             CertificateEntry c => string.Equals(c.StoreLocation, LocalMachine, StringComparison.Ordinal)
@@ -157,6 +158,10 @@ internal sealed class CleanupEngine
         path.Equals(AgentWindowsFacts.RegistryKeyPath, StringComparison.OrdinalIgnoreCase)
         || path.StartsWith(AgentWindowsFacts.RegistryKeyPath + "\\", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Exactly the parent key; no prefix match, so siblings and children of the parent are refused (D-S238).</summary>
+    private static bool IsParentKey(string path) =>
+        path.Equals(AgentWindowsFacts.RegistryParentKeyPath, StringComparison.OrdinalIgnoreCase);
+
     private (string Kind, string Identity, Result? Result) Undo(CleanupEntry entry)
     {
         var refusal = Reject(entry);
@@ -169,6 +174,8 @@ internal sealed class CleanupEngine
         {
             ContainerEntry c => ("container", c.Name, _actions.RemoveContainer(c.Name)),
             ProcessEntry p => ("process", p.Pid.ToString(), _actions.KillProcess(p.Pid, p.StartTimeUtc)),
+            RegistryKeyEntry k when !k.ExistedBefore && IsParentKey(k.Path) =>
+                ("registryKey", $"{k.Hive}\\{k.Path}", _actions.DeleteEmptyRegistryKey(k.Hive, k.Path)),
             RegistryKeyEntry k when !k.ExistedBefore => ("registryKey", $"{k.Hive}\\{k.Path}", _actions.DeleteRegistryKey(k.Hive, k.Path)),
             RegistryValueEntry v when !v.ExistedBefore => ("registryValue", $"{v.Path}\\{v.Name}", _actions.DeleteRegistryValue(v.Path, v.Name)),
             CertificateEntry c => ("certificate", c.ThumbprintSha1, _actions.RemoveCertificate(c.StoreLocation, c.StoreName, c.ThumbprintSha1)),

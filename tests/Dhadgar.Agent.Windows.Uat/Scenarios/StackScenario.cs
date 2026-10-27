@@ -263,10 +263,11 @@ internal sealed class StackScenario : IUatScenario
             context.Paths.AgentState,
             Path.Combine(context.Paths.AgentData, "Servers"),
             Path.Combine(context.Paths.AgentData, "Temp"));
+        using var agentProcess = new AgentProcess(context.Paths, job, context.Redactor, context.Manifest);
         var deps = new AgentLegsDeps(
             new RegistryToken(context.Manifest),
             new StoreInspector(),
-            new AgentProcess(context.Paths, job, context.Redactor, context.Manifest),
+            agentProcess,
             new NodesAgentLegsDb(() => nodesDb.Create()),
             (label, c) => minter.MintAsync(organizationId, label, c));
         var options = new AgentLegsOptions(

@@ -185,6 +185,57 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     }
 
     /// <inheritdoc />
+    public Result DeleteEmptyRegistryKey(string hive, string path)
+    {
+        if (!string.Equals(hive, "HKLM", StringComparison.Ordinal))
+        {
+            return Result.Failure($"unsupported hive {hive}");
+        }
+
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        return DeleteEmptySubKey(hklm, path);
+    }
+
+    /// <summary>Deletes <paramref name="path"/> under <paramref name="baseKey"/> only when it is empty. Tests pass HKCU.</summary>
+    internal static Result DeleteEmptySubKey(RegistryKey baseKey, string path)
+    {
+        try
+        {
+            using (var key = baseKey.OpenSubKey(path, writable: false))
+            {
+                if (key is null)
+                {
+                    return Result.Success(); // Already gone.
+                }
+
+                if (key.SubKeyCount > 0 || key.ValueCount > 0)
+                {
+                    return Result.Failure($"registry key {path} is not empty; left in place");
+                }
+            }
+
+            baseKey.DeleteSubKey(path, throwOnMissingSubKey: false);
+            return Result.Success();
+        }
+        catch (InvalidOperationException)
+        {
+            return Result.Failure($"registry key {path} is not empty; left in place"); // A subkey appeared after the check.
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Result.Failure($"registry delete denied: {ex.Message}");
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            return Result.Failure($"registry delete denied: {ex.Message}");
+        }
+        catch (IOException ex)
+        {
+            return Result.Failure($"registry delete failed: {ex.Message}");
+        }
+    }
+
+    /// <inheritdoc />
     public Result DeleteRegistryValue(string path, string name)
     {
         try
@@ -216,13 +267,11 @@ internal sealed partial class WindowsMachineActions : IMachineActions
             {
                 foreach (var cert in matches)
                 {
-                    // A forged thumbprint in the manifest must not remove an unrelated certificate.
-                    if (!IsDriverCertificate(cert))
+                    var removed = RemoveMatchedCertificate(cert, storeName, location == StoreLocation.LocalMachine, store.Remove);
+                    if (removed.IsFailure)
                     {
-                        return Result.Failure($"certificate {thumbprintSha1} is not an agent or UAT certificate; not removed");
+                        return removed;
                     }
-
-                    store.Remove(cert);
                 }
 
                 return Result.Success();
@@ -252,6 +301,83 @@ internal sealed partial class WindowsMachineActions : IMachineActions
         AgentCertificateMatcher.IsAgentCa(cert)
         || AgentCertificateMatcher.IsAgentClientCertificate(cert, new DateTimeOffset(cert.NotBefore))
         || cert.Subject.Contains("O=Meridian Console UAT", StringComparison.OrdinalIgnoreCase);
+
+    private const string MyStoreName = "My";
+    private const string KeyStorageProviderName = "Microsoft Software Key Storage Provider";
+    private const string PlatformCryptoProviderName = "Microsoft Platform Crypto Provider";
+
+    /// <summary>
+    /// Removes one matched certificate. An agent client certificate in <c>My</c> has its own private key deleted first
+    /// (the agent's key has a Windows-assigned name, so it is reached through its certificate, never by name; D-S238).
+    /// If the key delete fails, the certificate stays so a rerun can find the key again.
+    /// </summary>
+    internal static Result RemoveMatchedCertificate(
+        X509Certificate2 cert, string storeName, bool requireMachineKey, Action<X509Certificate2> remove)
+    {
+        // A forged thumbprint in the manifest must not remove an unrelated certificate.
+        if (!IsDriverCertificate(cert))
+        {
+            return Result.Failure($"certificate {cert.Thumbprint} is not an agent or UAT certificate; not removed");
+        }
+
+        if (string.Equals(storeName, MyStoreName, StringComparison.Ordinal)
+            && AgentCertificateMatcher.IsAgentClientIdentity(cert))
+        {
+            var keyDeleted = DeleteCertificateKey(cert, requireMachineKey);
+            if (keyDeleted.IsFailure)
+            {
+                return Result.Failure($"certificate {cert.Thumbprint} kept: {keyDeleted.Error}");
+            }
+        }
+
+        remove(cert);
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Deletes the persisted CNG key of <paramref name="cert"/>. Only an ECDSA CNG key under one of the two Microsoft
+    /// providers is deleted, and only a machine key when <paramref name="requireMachineKey"/> is true. A key that is
+    /// already gone counts as success.
+    /// </summary>
+    internal static Result DeleteCertificateKey(X509Certificate2 cert, bool requireMachineKey)
+    {
+        if (!cert.HasPrivateKey)
+        {
+            return Result.Success();
+        }
+
+        try
+        {
+            using var ecdsa = cert.GetECDsaPrivateKey();
+            if (ecdsa is not ECDsaCng cng)
+            {
+                return Result.Failure("private key is not an ECDSA CNG key; not deleted");
+            }
+
+            using var key = cng.Key;
+            var provider = key.Provider?.Provider;
+            if (provider is not (KeyStorageProviderName or PlatformCryptoProviderName))
+            {
+                return Result.Failure($"private key provider {provider ?? "(none)"} is not allowed; not deleted");
+            }
+
+            if (requireMachineKey && !key.IsMachineKey)
+            {
+                return Result.Failure("private key is not a machine key; not deleted");
+            }
+
+            key.Delete();
+            return Result.Success();
+        }
+        catch (CryptographicException ex) when (ex.HResult is HResultBadKeyset or HResultNotFound)
+        {
+            return Result.Success(); // Key does not exist: already gone.
+        }
+        catch (CryptographicException ex)
+        {
+            return Result.Failure($"certificate key delete failed: 0x{ex.HResult:X8} {ex.Message}");
+        }
+    }
 
     /// <inheritdoc />
     public Result DeleteCngKey(string keyName, string provider, bool machineKey)

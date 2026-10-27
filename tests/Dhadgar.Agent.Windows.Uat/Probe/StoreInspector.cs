@@ -136,6 +136,7 @@ internal sealed class StoreInspector : IStoreInspector
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         chain.ChainPolicy.CustomTrustStore.Add(authority);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        chain.ChainPolicy.DisableCertificateDownloads = true;
         return chain.Build(client);
     }
 
@@ -233,7 +234,8 @@ internal sealed class StoreInspector : IStoreInspector
             canSign = false;
         }
 
-        return new CngKeyInfo(cng.Key.KeyName ?? string.Empty, cng.Key.Provider?.Provider ?? string.Empty, cng.Key.IsMachineKey, canSign);
+        using var key = cng.Key;
+        return new CngKeyInfo(key.KeyName ?? string.Empty, key.Provider?.Provider ?? string.Empty, key.IsMachineKey, canSign);
     }
 
     /// <summary>Reads the URI entries of the subject alternative name with a DER reader.</summary>

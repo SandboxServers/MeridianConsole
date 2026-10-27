@@ -21,16 +21,23 @@ internal static class SecretScan
     public static SecretScanOutcome Run(RunPaths paths, Redactor redactor)
     {
         var files = new List<string>();
+        var failures = new List<string>();
         if (Directory.Exists(paths.Logs))
         {
-            files.AddRange(Directory.EnumerateFiles(paths.Logs, "*", SearchOption.AllDirectories));
+            try
+            {
+                files.AddRange(Directory.EnumerateFiles(paths.Logs, "*", SearchOption.AllDirectories));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failures.Add($"logs: could not be listed ({ex.GetType().Name})");
+            }
         }
 
         files.Add(Path.Combine(paths.RunDir, "results.md"));
         files.Add(Path.Combine(paths.RunDir, "results.json"));
         files.Add(paths.Manifest);
 
-        var failures = new List<string>();
         var warnings = new List<string>();
         var scanned = 0;
         foreach (var file in files.Where(File.Exists))

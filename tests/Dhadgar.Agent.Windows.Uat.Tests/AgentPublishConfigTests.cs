@@ -104,6 +104,20 @@ public class AgentPublishConfigTests : IDisposable
         Assert.True(result.IsFailure);
     }
 
+    [Theory]
+    [InlineData("https://example.test:5443/")]
+    [InlineData("http://localhost:5443/")]
+    [InlineData("https://localhost/")]
+    [InlineData("https://user@localhost:5443/")]
+    [InlineData("https://127.0.0.1:5443/")]
+    public void Apply_EndpointNotLocalhostHttps_Fails(string endpoint)
+    {
+        var result = new AgentPublishConfig(_paths).Apply(_appsettings, Config() with { Endpoint = new Uri(endpoint) });
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[AgentConfig.Endpoint]", result.Error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Apply_HeartbeatBelowMinimum_Fails()
     {

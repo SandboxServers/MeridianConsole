@@ -49,7 +49,7 @@ internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentProcess,
     /// <summary>Every machine, store and database call in order.</summary>
     public List<string> Calls { get; } = [];
 
-    /// <summary>The number of machine-entry lines (certificate and cngKey) in the manifest at each call.</summary>
+    /// <summary>The number of machine-entry lines (certificate lines; cngKey lines must stay zero) in the manifest at each call.</summary>
     public List<(string Call, int MachineEntries)> Snapshots { get; } = [];
 
     public List<NodeRow> Nodes { get; } = [];
@@ -177,8 +177,18 @@ internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentProcess,
         return Task.FromResult(Result.Success());
     }
 
+    /// <summary>What <see cref="SawRecoveryWarning"/> returns.</summary>
+    public Result<bool> RecoveryWarning { get; set; } = Result<bool>.Success(false);
+
+    /// <summary>Forgets every token row, so the next <see cref="TokenAsync"/> misses.</summary>
+    public void ClearTokens() => _tokens.Clear();
+
     /// <inheritdoc />
-    public Result<bool> SawRecoveryWarning() => Result<bool>.Success(false);
+    public Result<bool> SawRecoveryWarning()
+    {
+        Log("agent.log.read");
+        return RecoveryWarning;
+    }
 
     /// <inheritdoc />
     public Task<Result<IReadOnlyList<NodeRow>>> NodesForOrganizationAsync(Guid organizationId, CancellationToken ct)
@@ -195,10 +205,12 @@ internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentProcess,
     }
 
     /// <inheritdoc />
-    public Task<Result<TokenRow?>> TokenAsync(Guid tokenId, CancellationToken ct)
+    public Task<Result<TokenRow>> TokenAsync(Guid tokenId, CancellationToken ct)
     {
         Log("db.token");
-        return Task.FromResult(Result<TokenRow?>.Success(_tokens.TryGetValue(tokenId, out var row) ? row : null));
+        return Task.FromResult(_tokens.TryGetValue(tokenId, out var row)
+            ? Result<TokenRow>.Success(row)
+            : Result<TokenRow>.Failure("[Db.EnrollmentTokens] token not found"));
     }
 
     /// <summary>The mint function the legs receive.</summary>
@@ -295,7 +307,73 @@ public class AgentLegsTests : IDisposable
         Assert.Equal("pass", evidence["U3"]);
         Assert.Equal("pass", evidence["U4"]);
         Assert.Equal(true, evidence["U4.token2StillInRegistry"]);
-        Assert.Equal("agent.stop", world.Calls[^1]);
+        Assert.Equal(["agent.stop", "agent.log.read", "store.my"], world.Calls.TakeLast(3).ToArray());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReadsRecoveryWarningAfterStop()
+    {
+        var manifest = Manifest();
+        var world = new LegWorld(_paths, manifest) { RecoveryWarning = Result<bool>.Success(true) };
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        var result = await Legs(world, manifest).RunAsync(evidence, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.True(world.Calls.IndexOf("agent.log.read") > world.Calls.LastIndexOf("agent.stop"));
+        var warnings = Assert.IsType<List<string>>(evidence["warnings"]);
+        Assert.Contains(warnings, w => w.Contains("expected in process mode", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_RecoveryWarningReadFails_AddsWarning()
+    {
+        var manifest = Manifest();
+        var world = new LegWorld(_paths, manifest)
+        {
+            RecoveryWarning = Result<bool>.Failure("[AgentProcess.Log] agent.log could not be read"),
+        };
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        var result = await Legs(world, manifest).RunAsync(evidence, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var warnings = Assert.IsType<List<string>>(evidence["warnings"]);
+        Assert.Contains(warnings, w => w.StartsWith("agent.log: [AgentProcess.Log]", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task U3_RecordsCertificateBeforeOtherConditionsHold()
+    {
+        var manifest = Manifest();
+        var world = new LegWorld(_paths, manifest) { ClearRegistryOnStart = false };
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        var result = await Legs(world, manifest).RunAsync(evidence, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("U3: the registry token value is removed", result.Error, StringComparison.Ordinal);
+        var loaded = CleanupManifest.Load(_paths.Manifest);
+        Assert.True(loaded.IsSuccess, loaded.Error);
+        Assert.Single(loaded.Value.OfType<CertificateEntry>());
+        Assert.Empty(loaded.Value.OfType<CngKeyEntry>());
+
+        // The entry exists before the first database read of the poll, not only after the run (the finally also records).
+        var firstDbRead = world.Snapshots.First(s => s.Call == "db.nodes");
+        Assert.Equal(1, firstDbRead.MachineEntries);
+    }
+
+    [Fact]
+    public async Task U3_FailsWhenTokenRowIsMissing()
+    {
+        var manifest = Manifest();
+        var world = new LegWorld(_paths, manifest) { OnStart = w => w.ClearTokens() };
+        var evidence = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        var result = await Legs(world, manifest).RunAsync(evidence, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Db.EnrollmentTokens] token not found", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]

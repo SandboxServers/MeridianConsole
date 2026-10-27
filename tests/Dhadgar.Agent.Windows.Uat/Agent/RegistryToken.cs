@@ -23,13 +23,13 @@ internal interface IRegistryToken
 internal sealed class RegistryToken : IRegistryToken
 {
     /// <summary>Parent key the driver creates when it is missing.</summary>
-    public const string ParentKeyPath = @"SOFTWARE\Meridian Console";
+    public const string ParentKeyPath = AgentWindowsFacts.RegistryParentKeyPath;
 
     /// <summary>The agent's key.</summary>
-    public const string AgentKeyPath = @"SOFTWARE\Meridian Console\Agent";
+    public const string AgentKeyPath = AgentWindowsFacts.RegistryKeyPath;
 
     /// <summary>The value the agent reads and deletes after a successful enrollment.</summary>
-    public const string TokenValueName = "EnrollmentToken";
+    public const string TokenValueName = AgentWindowsFacts.EnrollmentTokenValueName;
 
     private const string HklmHive = "HKLM";
 
@@ -40,6 +40,14 @@ internal sealed class RegistryToken : IRegistryToken
     {
         _manifest = manifest;
     }
+
+    /// <summary>The entries <see cref="Write"/> appends, in order, before it changes the registry (R-CLEANUP, D-S238).</summary>
+    internal static IReadOnlyList<CleanupEntry> ManifestEntries(bool parentExisted, bool agentExisted, bool valueExisted) =>
+    [
+        new RegistryKeyEntry(HklmHive, ParentKeyPath, parentExisted),
+        new RegistryKeyEntry(HklmHive, AgentKeyPath, agentExisted),
+        new RegistryValueEntry(AgentKeyPath, TokenValueName, valueExisted),
+    ];
 
     /// <inheritdoc />
     public Result Write(string token)
@@ -58,22 +66,13 @@ internal sealed class RegistryToken : IRegistryToken
             var valueExisted = ValueExistsIn(hklm);
 
             // Manifest first: a failure after this point still leaves the entries to undo.
-            var appended = _manifest.Append(new RegistryKeyEntry(HklmHive, ParentKeyPath, parentExisted));
-            if (appended.IsFailure)
+            foreach (var entry in ManifestEntries(parentExisted, agentExisted, valueExisted))
             {
-                return appended;
-            }
-
-            appended = _manifest.Append(new RegistryKeyEntry(HklmHive, AgentKeyPath, agentExisted));
-            if (appended.IsFailure)
-            {
-                return appended;
-            }
-
-            appended = _manifest.Append(new RegistryValueEntry(AgentKeyPath, TokenValueName, valueExisted));
-            if (appended.IsFailure)
-            {
-                return appended;
+                var appended = _manifest.Append(entry);
+                if (appended.IsFailure)
+                {
+                    return appended;
+                }
             }
 
             using var agentKey = hklm.CreateSubKey(AgentKeyPath, writable: true);
