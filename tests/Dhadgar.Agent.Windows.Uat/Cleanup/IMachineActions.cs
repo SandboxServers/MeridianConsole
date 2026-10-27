@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Uat.Cleanup;
@@ -57,6 +58,12 @@ internal interface IMachineActions
 
     /// <summary>Removes a certificate, by SHA-1 thumbprint, from a store.</summary>
     Result RemoveCertificate(string storeLocation, string storeName, string thumbprintSha1);
+
+    /// <summary>
+    /// Adds a public certificate to a store (P22: the TLS leaf and the decoy CA go to <c>LocalMachine\Root</c>).
+    /// The caller passes a certificate without a private key; the implementation refuses one that has a key.
+    /// </summary>
+    Result AddCertificate(string storeLocation, string storeName, X509Certificate2 certificate);
 
     /// <summary>Deletes a CNG key.</summary>
     Result DeleteCngKey(string keyName, string provider, bool machineKey);
