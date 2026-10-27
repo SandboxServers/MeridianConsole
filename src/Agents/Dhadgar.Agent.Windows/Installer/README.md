@@ -8,6 +8,10 @@ WiX v5 MSI installer for the Meridian Console Agent Windows Service.
 - WiX Toolset v5 (installed via NuGet package references)
 - Windows 10/11 or Windows Server 2019+ for building
 
+## Requirements
+
+The MSI installs on 64-bit Windows 10 (build 10240) or later. The installer reads the build number from `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\CurrentBuildNumber`. It cannot use the `WindowsBuild` or `VersionNT` properties, because msiexec reports Windows 8.1 values (9600 and 603) for them on Windows 10 and 11 (D-S242).
+
 ## Building the Installer
 
 ### From the Installer directory:
@@ -25,11 +29,9 @@ The project sets `InstallerPlatform` to `x64` (the agent reads the 64-bit regist
 ### From the solution root:
 
 ```powershell
-# First, publish the agent (writes appsettings.json beside the exe)
-dotnet publish src/Agents/Dhadgar.Agent.Windows -c Release -r win-x64
-
-# Then build the installer
-dotnet build src/Agents/Dhadgar.Agent.Windows/Installer -c Release
+# Build the agent and the MSI with the UAT build script (it also builds the UAT driver, Nodes and Gateway);
+# it restores locked and RID-less, so it does not rewrite lock files (D-S241)
+pwsh -NoProfile -File scripts\uat\Build-AgentWindowsUat.ps1 -Verb run -Mode Msi
 ```
 
 ## Output Location
