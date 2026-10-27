@@ -83,6 +83,9 @@ public sealed record CertificateValidationResult
     /// </summary>
     public DateTime? NotAfter { get; init; }
 
+    /// <summary>Error code used when certificate trust cannot be determined (infrastructure fault).</summary>
+    public const string UnavailableErrorCode = "certificate_validation_unavailable";
+
     public static CertificateValidationResult Success(
         Guid nodeId,
         string spiffeId,
@@ -183,9 +186,22 @@ public sealed partial class CertificateValidationService : ICertificateValidatio
 
         // Validate certificate was signed by our CA
         var certPem = certificate.ExportCertificatePem();
-        var isSignedByOurCa = await _caService.ValidateCertificateAsync(certPem, ct);
+        var trust = await _caService.ValidateCertificateAsync(certPem, ct);
 
-        if (!isSignedByOurCa)
+        if (trust == CertificateTrustStatus.Unavailable)
+        {
+            _logger.LogError(
+                "Certificate trust could not be determined. Thumbprint: {Thumbprint}",
+                certificate.GetCertHashString());
+
+            return CertificateValidationResult.Fail(
+                CertificateValidationResult.UnavailableErrorCode,
+                "Certificate validation is temporarily unavailable",
+                notAfter: certificate.NotAfter);
+        }
+
+        // Only an explicit Trusted proceeds; Untrusted and any unknown value fail closed here.
+        if (trust != CertificateTrustStatus.Trusted)
         {
             _logger.LogWarning(
                 "Certificate not signed by our CA. Subject: {Subject}, Thumbprint: {Thumbprint}",

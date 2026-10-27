@@ -212,6 +212,37 @@ public class MtlsMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_ValidationUnavailable_Returns503ProblemJson()
+    {
+        // Arrange
+        using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
+        var context = CreateHttpContext("/agents/some-node-id/heartbeat", certificate);
+        var nextCalled = false;
+        var next = new RequestDelegate(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var validationService = Substitute.For<ICertificateValidationService>();
+        validationService.ValidateClientCertificateAsync(Arg.Any<X509Certificate2>(), Arg.Any<CancellationToken>())
+            .Returns(CertificateValidationResult.Fail(CertificateValidationResult.UnavailableErrorCode, "x"));
+
+        var sut = new MtlsMiddleware(
+            next,
+            Options.Create(new MtlsOptions { Enabled = true }),
+            NullLogger<MtlsMiddleware>.Instance);
+
+        // Act
+        await sut.InvokeAsync(context, validationService);
+
+        // Assert
+        Assert.False(nextCalled);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        Assert.StartsWith("application/problem+json", context.Response.ContentType, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task InvokeAsync_ValidCertificate_StoresNodeIdInContext()
     {
         // Arrange
@@ -405,6 +436,24 @@ public class CertificateValidationServiceTests
     }
 
     [Fact]
+    public async Task ValidateClientCertificateAsync_CaUnavailable_ReturnsUnavailableNotInvalidIssuer()
+    {
+        // Arrange
+        using var certificate = CreateCertificateWithSpiffeId(Guid.NewGuid());
+        var caService = Substitute.For<ICertificateAuthorityService>();
+        caService.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(CertificateTrustStatus.Unavailable);
+        var service = CreateService(caService: caService);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.False(result.IsValid);
+        Assert.Equal(CertificateValidationResult.UnavailableErrorCode, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task ValidateClientCertificateAsync_ExpiredCertificateButAllowed_ContinuesValidation()
     {
         // Arrange
@@ -444,6 +493,24 @@ public class CertificateValidationServiceTests
         // Arrange
         using var certificate = TestCertificateFactory.CreateSelfSignedCertificate();
         var caService = CreateMockCaService(validatesTo: false);
+        var service = CreateService(caService: caService);
+
+        // Act
+        var result = await service.ValidateClientCertificateAsync(certificate);
+
+        // Assert
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_issuer", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ValidateClientCertificateAsync_DefaultTrustStatus_FailsClosedAsInvalidIssuer()
+    {
+        // Arrange: an un-configured or zeroed trust status must never be treated as Trusted.
+        using var certificate = CreateCertificateWithClientAuthEkuButNoSpiffe();
+        var caService = Substitute.For<ICertificateAuthorityService>();
+        caService.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(default(CertificateTrustStatus));
         var service = CreateService(caService: caService);
 
         // Act
@@ -575,7 +642,7 @@ public class CertificateValidationServiceTests
     {
         var mock = Substitute.For<ICertificateAuthorityService>();
         mock.ValidateCertificateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(validatesTo);
+            .Returns(validatesTo ? CertificateTrustStatus.Trusted : CertificateTrustStatus.Untrusted);
         return mock;
     }
 

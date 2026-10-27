@@ -5,6 +5,7 @@ using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -20,7 +21,7 @@ public sealed class CertificateAuthorityPublicKeyIssuanceTests : IDisposable
     private readonly string _tempDirectory;
     private readonly IOptions<NodesOptions> _options;
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
-    private readonly NodesDbContext _dbContext;
+    private readonly ServiceProvider _dbServices;
 
     public CertificateAuthorityPublicKeyIssuanceTests()
     {
@@ -34,15 +35,17 @@ public sealed class CertificateAuthorityPublicKeyIssuanceTests : IDisposable
             CaValidityYears = 10,
             CertificateValidityDays = 90
         });
-        _dbContext = new NodesDbContext(new DbContextOptionsBuilder<NodesDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-            .Options);
+        var databaseName = Guid.NewGuid().ToString();
+        _dbServices = new ServiceCollection()
+            .AddDbContext<NodesDbContext>(o => o
+                .UseInMemoryDatabase(databaseName)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)))
+            .BuildServiceProvider();
     }
 
     public void Dispose()
     {
-        _dbContext.Dispose();
+        _dbServices.Dispose();
         try
         {
             Directory.Delete(_tempDirectory, recursive: true);
@@ -58,7 +61,7 @@ public sealed class CertificateAuthorityPublicKeyIssuanceTests : IDisposable
         _options,
         _timeProvider,
         NullLogger<CertificateAuthorityService>.Instance,
-        _dbContext);
+        _dbServices.GetRequiredService<IServiceScopeFactory>());
 
     [Fact]
     public async Task EcdsaP384Key_IsSignedWithoutReturningAnyPrivateKey()

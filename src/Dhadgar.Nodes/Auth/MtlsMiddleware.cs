@@ -114,6 +114,13 @@ public sealed class MtlsMiddleware
                 "Certificate validation failed for {Path}. Error: {ErrorCode} - {ErrorMessage}",
                 path, validationResult.ErrorCode, validationResult.ErrorMessage);
 
+            if (string.Equals(validationResult.ErrorCode, CertificateValidationResult.UnavailableErrorCode, StringComparison.Ordinal))
+            {
+                await MtlsProblemWriter.WriteServiceUnavailableAsync(context, validationResult.ErrorCode!,
+                    validationResult.ErrorMessage!);
+                return;
+            }
+
             await MtlsProblemWriter.WriteUnauthorizedAsync(context, validationResult.ErrorCode!,
                 validationResult.ErrorMessage!);
             return;
