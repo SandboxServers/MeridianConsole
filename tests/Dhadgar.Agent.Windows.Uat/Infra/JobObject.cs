@@ -73,16 +73,24 @@ internal sealed partial class JobObject : IDisposable
         _handle.Dispose();
     }
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
     [LibraryImport("kernel32.dll", EntryPoint = "CreateJobObjectW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr CreateJobObjectW(IntPtr attributes, string? name);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetInformationJobObject(IntPtr job, int infoClass, IntPtr info, uint length);
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

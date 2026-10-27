@@ -115,14 +115,14 @@ internal sealed class PreflightChecks
         return new PreflightReport(checks);
     }
 
-    private async Task<PreflightCheck> DockerAsync(CancellationToken ct)
+    private static async Task<PreflightCheck> DockerAsync(CancellationToken ct)
     {
         var result = await CommandRunner.RunAsync("docker", ["info", "--format", "{{.ServerVersion}}"], ToolTimeout, null, null, ct);
         var ok = result.IsSuccess && result.Value.ExitCode == 0;
         return new PreflightCheck("docker", ok, ok ? "Docker server reachable" : "Docker is not running", true, true);
     }
 
-    private async Task<PreflightCheck> DevCertsAsync(CancellationToken ct)
+    private static async Task<PreflightCheck> DevCertsAsync(CancellationToken ct)
     {
         var result = await CommandRunner.RunAsync("dotnet", ["dev-certs", "https", "--check", "--trust"], ToolTimeout, null, null, ct);
         var ok = result.IsSuccess && result.Value.ExitCode == 0;

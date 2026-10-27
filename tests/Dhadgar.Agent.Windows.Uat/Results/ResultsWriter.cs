@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -97,11 +98,11 @@ internal static class ResultsWriter
     private static string ToMarkdown(UatResults r)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"# Windows agent UAT {r.RunId}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"# Windows agent UAT {r.RunId}");
         sb.AppendLine();
-        sb.AppendLine($"- Verb: {r.Verb}{(r.Mode is null ? string.Empty : $" (mode {r.Mode})")}");
-        sb.AppendLine($"- Overall: **{r.Overall}** (exit {r.ExitCode}); cleanup: {r.Cleanup.Status}");
-        sb.AppendLine($"- Git: {r.GitSha}{(r.GitDirty ? " (dirty)" : string.Empty)}; Windows build {r.WindowsBuild}; .NET {r.DotnetVersion}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- Verb: {r.Verb}{(r.Mode is null ? string.Empty : $" (mode {r.Mode})")}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- Overall: **{r.Overall}** (exit {r.ExitCode}); cleanup: {r.Cleanup.Status}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- Git: {r.GitSha}{(r.GitDirty ? " (dirty)" : string.Empty)}; Windows build {r.WindowsBuild}; .NET {r.DotnetVersion}");
         sb.AppendLine(r.AgentRun is null
             ? $"- Launched by: {r.LaunchedBy}; elevated: {r.Elevated}"
             : $"- Launched by: agent (D-S239), tree clean: {r.AgentRun.TreeClean}; elevated: {r.Elevated}");
@@ -113,7 +114,7 @@ internal static class ResultsWriter
             // The msi evidence object is listed under the table instead (P23).
             var evidence = string.Join("; ", step.Evidence.Where(kv => kv.Key != "msi").Select(kv => $"{kv.Key}={kv.Value}"));
             var detail = string.IsNullOrEmpty(step.Message) ? evidence : $"{step.Message}; {evidence}".TrimEnd(' ', ';');
-            sb.AppendLine($"| {step.Id} | {step.Name} | {step.Status} | {Cell(detail)} | {step.DurationMs} ms |");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"| {step.Id} | {step.Name} | {step.Status} | {Cell(detail)} | {step.DurationMs} ms |");
         }
 
         if (r.Msi is not null)
@@ -121,8 +122,8 @@ internal static class ResultsWriter
             sb.AppendLine();
             sb.AppendLine("MSI:");
             sb.AppendLine();
-            sb.AppendLine($"- Product code: {r.Msi.ProductCode ?? "none"}; version: {r.Msi.ProductVersion ?? "none"}");
-            sb.AppendLine($"- Install exit code: {r.Msi.InstallExitCode}; uninstall exit code: {r.Msi.UninstallExitCode}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- Product code: {r.Msi.ProductCode ?? "none"}; version: {r.Msi.ProductVersion ?? "none"}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- Install exit code: {r.Msi.InstallExitCode}; uninstall exit code: {r.Msi.UninstallExitCode}");
             sb.AppendLine(r.Msi.Residue.Count == 0
                 ? "- Residue: none"
                 : "- Residue: " + string.Join("; ", r.Msi.Residue));

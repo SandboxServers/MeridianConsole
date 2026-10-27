@@ -581,6 +581,8 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     private static Result<CommandOutput> RunSc(IReadOnlyList<string> args) =>
         CommandRunner.RunAsync("sc.exe", args, ToolTimeout).GetAwaiter().GetResult();
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
     [LibraryImport("crypt32.dll", EntryPoint = "CertUnregisterSystemStore", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CertUnregisterSystemStore(string storeName, uint flags);

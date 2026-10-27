@@ -27,13 +27,21 @@ internal static class GatewayClients
             UseCookies = false,
         };
 
-        if (clientCertificate is not null)
+        try
         {
-            handler.SslOptions.ClientCertificates = new X509CertificateCollection { clientCertificate };
-            handler.SslOptions.LocalCertificateSelectionCallback =
-                (_, _, _, _, _) => clientCertificate;
-        }
+            if (clientCertificate is not null)
+            {
+                handler.SslOptions.ClientCertificates = new X509CertificateCollection { clientCertificate };
+                handler.SslOptions.LocalCertificateSelectionCallback =
+                    (_, _, _, _, _) => clientCertificate;
+            }
 
-        return new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? ProbeTimeout };
+            return new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? ProbeTimeout };
+        }
+        catch
+        {
+            handler.Dispose();
+            throw;
+        }
     }
 }

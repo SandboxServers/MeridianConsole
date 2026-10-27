@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Dhadgar.Agent.Windows.Uat.Infra;
 using Dhadgar.Shared.Results;
@@ -175,7 +176,7 @@ internal sealed class CleanupEngine
         return entry switch
         {
             ContainerEntry c => ("container", c.Name, _actions.RemoveContainer(c.Name)),
-            ProcessEntry p => ("process", p.Pid.ToString(), _actions.KillProcess(p.Pid, p.StartTimeUtc)),
+            ProcessEntry p => ("process", p.Pid.ToString(CultureInfo.InvariantCulture), _actions.KillProcess(p.Pid, p.StartTimeUtc)),
             RegistryKeyEntry k when !k.ExistedBefore && IsParentKey(k.Path) =>
                 ("registryKey", $"{k.Hive}\\{k.Path}", _actions.DeleteEmptyRegistryKey(k.Hive, k.Path)),
             RegistryKeyEntry k when !k.ExistedBefore => ("registryKey", $"{k.Hive}\\{k.Path}", _actions.DeleteRegistryKey(k.Hive, k.Path)),
@@ -212,7 +213,7 @@ internal sealed class CleanupEngine
     private static string Identity(CleanupEntry entry) => entry switch
     {
         ContainerEntry c => c.Name,
-        ProcessEntry p => p.Pid.ToString(),
+        ProcessEntry p => p.Pid.ToString(CultureInfo.InvariantCulture),
         RegistryKeyEntry k => $"{k.Hive}\\{k.Path}",
         RegistryValueEntry v => $"{v.Path}\\{v.Name}",
         CertificateEntry c => c.ThumbprintSha1,
