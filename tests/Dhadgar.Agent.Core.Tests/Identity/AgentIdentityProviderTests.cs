@@ -73,6 +73,21 @@ public sealed class AgentIdentityProviderTests
     }
 
     [Fact]
+    public void Set_SameNodeDifferentOrganization_Fails()
+    {
+        var sut = new AgentIdentityProvider();
+        var node = Guid.NewGuid();
+        var orgA = Guid.NewGuid();
+        sut.Set(new AgentIdentity(node, orgA, EnrolledAt));
+
+        var result = sut.Set(new AgentIdentity(node, Guid.NewGuid(), EnrolledAt));
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[AgentIdentity.Changed]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(orgA, sut.Current!.OrganizationId);
+    }
+
+    [Fact]
     public void Set_EmptyNodeId_Fails()
     {
         var sut = new AgentIdentityProvider();

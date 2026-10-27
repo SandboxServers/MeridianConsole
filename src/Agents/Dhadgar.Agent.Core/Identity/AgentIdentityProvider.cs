@@ -39,7 +39,7 @@ public sealed class AgentIdentityProvider : IAgentIdentityProvider
         {
             if (_current is not null)
             {
-                return _current.NodeId == identity.NodeId
+                return _current.NodeId == identity.NodeId && _current.OrganizationId == identity.OrganizationId
                     ? Result.Success()
                     : Result.Failure("[AgentIdentity.Changed] restart required");
             }

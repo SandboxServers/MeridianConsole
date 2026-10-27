@@ -27,44 +27,49 @@ public sealed class FileAgentStateStore : IAgentStateStore
 
     private readonly IOptions<AgentOptions> _options;
     private readonly IPathValidator _pathValidator;
+    private readonly IStateFileSecurity _fileSecurity;
     private readonly ILogger<FileAgentStateStore> _logger;
 
     public FileAgentStateStore(
         IOptions<AgentOptions> options,
         IPathValidator pathValidator,
+        IStateFileSecurity fileSecurity,
         ILogger<FileAgentStateStore> logger)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _pathValidator = pathValidator ?? throw new ArgumentNullException(nameof(pathValidator));
+        _fileSecurity = fileSecurity ?? throw new ArgumentNullException(nameof(fileSecurity));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
-    public async Task<Result<AgentIdentity?>> LoadAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<StoredAgentState>> LoadAsync(CancellationToken cancellationToken = default)
     {
         var pathResult = ResolveStatePath();
         if (pathResult.IsFailure)
         {
-            return Result<AgentIdentity?>.Failure(pathResult.Error!);
+            return Result<StoredAgentState>.Failure(pathResult.Error!);
         }
 
         var path = pathResult.Value!;
 
         try
         {
-            if (!File.Exists(path))
-            {
-                // The shared Result<T> cannot carry a successful null, so "no state yet" is a distinct failure code.
-                return Result<AgentIdentity?>.Failure("[AgentState.Missing] No agent state file exists yet");
-            }
-
+            // Open directly. File.Exists reports false on access denied, which would turn an unreadable file into "first run".
             await using var stream = new FileStream(
                 path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, System.IO.FileOptions.Asynchronous);
+
+            var trusted = _fileSecurity.VerifyTrusted(path);
+            if (trusted.IsFailure)
+            {
+                _logger.LogCritical("Agent state file is not trusted: {Error}", trusted.Error);
+                return Result<StoredAgentState>.Failure(trusted.Error!);
+            }
 
             if (stream.Length > MaxFileBytes)
             {
                 _logger.LogWarning("Agent state file is larger than the {Max} byte limit", MaxFileBytes);
-                return Result<AgentIdentity?>.Failure("[AgentState.Corrupt] State file exceeds the size limit");
+                return Result<StoredAgentState>.Failure("[AgentState.Corrupt] State file exceeds the size limit");
             }
 
             var bytes = new byte[stream.Length];
@@ -74,26 +79,34 @@ public sealed class FileAgentStateStore : IAgentStateStore
             if (state is null || state.NodeId == Guid.Empty || state.OrganizationId == Guid.Empty)
             {
                 _logger.LogWarning("Agent state file is missing a node or organization ID");
-                return Result<AgentIdentity?>.Failure("[AgentState.Corrupt] State file does not hold a valid identity");
+                return Result<StoredAgentState>.Failure("[AgentState.Corrupt] State file does not hold a valid identity");
             }
 
-            return Result<AgentIdentity?>.Success(
-                new AgentIdentity(state.NodeId, state.OrganizationId, state.EnrolledAt));
+            return Result<StoredAgentState>.Success(
+                new StoredAgentState(new AgentIdentity(state.NodeId, state.OrganizationId, state.EnrolledAt)));
+        }
+        catch (FileNotFoundException)
+        {
+            return Result<StoredAgentState>.Success(StoredAgentState.None);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return Result<StoredAgentState>.Success(StoredAgentState.None);
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Agent state file is not valid JSON");
-            return Result<AgentIdentity?>.Failure("[AgentState.Corrupt] State file is not valid JSON");
+            return Result<StoredAgentState>.Failure("[AgentState.Corrupt] State file is not valid JSON");
         }
         catch (IOException ex)
         {
             _logger.LogError(ex, "Failed to read agent state file");
-            return Result<AgentIdentity?>.Failure("[AgentState.Io] Failed to read agent state file");
+            return Result<StoredAgentState>.Failure("[AgentState.Io] Failed to read agent state file");
         }
         catch (UnauthorizedAccessException ex)
         {
             _logger.LogError(ex, "Access denied reading agent state file");
-            return Result<AgentIdentity?>.Failure("[AgentState.Io] Access denied reading agent state file");
+            return Result<StoredAgentState>.Failure("[AgentState.Io] Access denied reading agent state file");
         }
     }
 
@@ -118,20 +131,36 @@ public sealed class FileAgentStateStore : IAgentStateStore
 
         try
         {
-            var directory = Path.GetDirectoryName(finalPath);
-            if (!string.IsNullOrEmpty(directory))
+            var directory = Path.GetDirectoryName(finalPath)!;
+            if (OperatingSystem.IsWindows())
             {
                 Directory.CreateDirectory(directory);
             }
+            else
+            {
+                // 0700 when the agent creates it; an existing directory keeps its mode
+                Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            // A stale or planted temp file is removed, never adopted (CreateNew below fails if one reappears).
+            TryDeleteTemp(tempPath);
 
             var json = JsonSerializer.SerializeToUtf8Bytes(
                 new AgentStateFile(identity.NodeId, identity.OrganizationId, identity.EnrolledAt), JsonOptions);
 
-            await using (var stream = new FileStream(
-                tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, System.IO.FileOptions.Asynchronous))
+            var created = _fileSecurity.CreateNew(tempPath);
+            if (created.IsFailure)
+            {
+                _logger.LogError("Failed to create agent state temp file: {Error}", created.Error);
+                return Result.Failure(created.Error!);
+            }
+
+            await using (var stream = created.Value!)
             {
                 await stream.WriteAsync(json, cancellationToken);
-                await stream.FlushAsync(cancellationToken);
+#pragma warning disable CA1849 // Flush(bool) has no async overload; FlushAsync does not reach the disk
+                stream.Flush(flushToDisk: true); // durable before the rename
+#pragma warning restore CA1849
             }
 
             File.Move(tempPath, finalPath, overwrite: true);
@@ -162,18 +191,12 @@ public sealed class FileAgentStateStore : IAgentStateStore
         var directory = _options.Value.StateDirectory;
         if (string.IsNullOrWhiteSpace(directory))
         {
-            return Result<string>.Failure("[AgentState.Io] StateDirectory is not configured");
+            return Result<string>.Failure("[AgentState.Config] StateDirectory is not configured");
         }
 
-        if (!Path.IsPathRooted(directory))
+        if (AgentOptions.CheckStateDirectory(directory) is { } error)
         {
-            return Result<string>.Failure("[AgentState.Io] StateDirectory must be an absolute path");
-        }
-
-        var segments = directory.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Contains(".."))
-        {
-            return Result<string>.Failure("[AgentState.Io] StateDirectory must not contain '..' segments");
+            return Result<string>.Failure("[AgentState.Config] " + error);
         }
 
         var candidate = Path.Combine(directory, FileName);

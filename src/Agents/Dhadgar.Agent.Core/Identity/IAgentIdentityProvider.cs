@@ -18,8 +18,8 @@ public interface IAgentIdentityProvider
     Task<AgentIdentity> WaitForIdentityAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Sets the identity. Setting the same NodeId again succeeds; a different NodeId fails
-    /// (an identity change needs a restart).
+    /// Sets the identity. Setting the same NodeId and OrganizationId again succeeds (EnrolledAt is ignored);
+    /// a different NodeId or OrganizationId fails with [AgentIdentity.Changed] (an identity change needs a restart).
     /// </summary>
     Result Set(AgentIdentity identity);
 }

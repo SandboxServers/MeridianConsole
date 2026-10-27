@@ -48,6 +48,7 @@ public static class AgentServiceCollectionExtensions
             }
         });
         services.TryAddSingleton<IAgentIdentityProvider, AgentIdentityProvider>();
+        services.TryAddSingleton<IStateFileSecurity, PortableStateFileSecurity>();
         services.TryAddSingleton<IAgentStateStore, FileAgentStateStore>();
         services.TryAddSingleton<IPathValidator, PathValidator>();
 

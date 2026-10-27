@@ -70,11 +70,34 @@ public sealed class AgentOptions : IValidatableObject
                 [nameof(NodeId), nameof(OrganizationId)]);
         }
 
-        if (!string.IsNullOrWhiteSpace(StateDirectory) && !Path.IsPathRooted(StateDirectory))
+        if (!string.IsNullOrWhiteSpace(StateDirectory) && CheckStateDirectory(StateDirectory) is { } stateDirectoryError)
         {
-            yield return new ValidationResult(
-                $"{nameof(StateDirectory)} must be an absolute path when set",
-                [nameof(StateDirectory)]);
+            yield return new ValidationResult(stateDirectoryError, [nameof(StateDirectory)]);
         }
+    }
+
+    /// <summary>
+    /// Null when <paramref name="directory"/> is an acceptable state directory; otherwise the reason it is not.
+    /// Used by Validate and by FileAgentStateStore so both apply the same rule (D-S233).
+    /// </summary>
+    internal static string? CheckStateDirectory(string directory)
+    {
+        if (!Path.IsPathFullyQualified(directory))
+        {
+            return "StateDirectory must be a fully qualified local path";
+        }
+
+        // UNC (\\server\share, //server/share) and device (\\?\, \\.\) paths: the agent's machine account would authenticate to them.
+        if (directory.StartsWith(@"\\", StringComparison.Ordinal) || directory.StartsWith("//", StringComparison.Ordinal))
+        {
+            return "StateDirectory must not be a UNC or device path";
+        }
+
+        if (directory.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains(".."))
+        {
+            return "StateDirectory must not contain '..' segments";
+        }
+
+        return null;
     }
 }

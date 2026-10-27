@@ -430,13 +430,14 @@ The agent must handle disconnection gracefully:
 
 The agent's identity (`NodeId`, `OrganizationId`, `EnrolledAt`) lives in `IAgentIdentityProvider`, not in `AgentOptions`. Runtime code reads `Current` or waits on `WaitForIdentityAsync`, and the heartbeat loop starts once an identity is set (#101).
 
-- **File:** `agent-state.json` in `AgentOptions.StateDirectory`. The default is `%ProgramData%\Meridian Console\Agent`. `StateDirectory` must be an absolute path with no `..` segments. The file path is checked with `IPathValidator` against that directory before any read or write.
+- **File:** `agent-state.json` in `AgentOptions.StateDirectory`. The default is `%ProgramData%\Meridian Console\Agent`. `StateDirectory` must be a fully qualified local path: not relative, drive-relative (`C:foo`), rooted without a drive (`\foo`), UNC or device (`\\…`), and with no `..` segments. A bad value is `[AgentState.Config]`. The file path is also checked with `IPathValidator` against that directory.
 - **Format:** `{ "nodeId", "organizationId", "enrolledAt" }` in System.Text.Json web defaults. The file holds no secrets. The client certificate and its private key stay in the platform certificate store.
-- **Writes:** saved to `agent-state.json.tmp`, then moved over the final file. The directory is created if missing.
-- **Reads:** capped at 64 KB.
+- **Writes:** any stale `agent-state.json.tmp` is deleted, the temp file is created new (never reused) through `IStateFileSecurity` with write-through and flushed to disk, then moved over the final file. On Unix the file is 0600 and a directory the agent creates is 0700. On Windows the host's `WindowsStateFileSecurity` gives the file a protected ACL (SYSTEM, Administrators and the agent's account only).
+- **Reads:** capped at 64 KB. A file that someone else could have written is `[AgentState.Untrusted]` (Unix: group or world writable; Windows: untrusted owner or write access).
 - **Corrupt file:** bad JSON, a `Guid.Empty` ID or an oversize file gives `Failure("[AgentState.Corrupt] …")`. The agent never re-enrolls silently.
-- **Missing file:** gives `Failure("[AgentState.Missing] …")`. The shared `Result<T>` cannot carry a successful null, so callers treat this code as "not enrolled yet".
-- **Changing identity:** setting the same `NodeId` again succeeds. A different `NodeId` gives `Failure("[AgentIdentity.Changed] restart required")`.
+- **Missing file:** `Success(StoredAgentState.None)`, which is a first run. This is the only outcome on which the agent enrolls (D-S232). Corrupt, unreadable, untrusted or misconfigured state is a `Failure` and is never re-enrolled over.
+- **Changing identity:** setting the same `NodeId` and `OrganizationId` again succeeds. A different `NodeId` or `OrganizationId` gives `Failure("[AgentIdentity.Changed] restart required")`.
+- **Recovery:** after a `Failure`, an operator removes `agent-state.json` and supplies a new enrollment token.
 
 ---
 

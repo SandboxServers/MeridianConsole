@@ -8,10 +8,15 @@ namespace Dhadgar.Agent.Core.Identity;
 public interface IAgentStateStore
 {
     /// <summary>
-    /// Loads the persisted identity.
+    /// Loads the persisted state.
     /// </summary>
-    /// <returns>Success with the identity; Failure with [AgentState.Missing] when no state file exists (the shared Result&lt;T&gt; cannot carry a null success); Failure when the file exists but is unreadable or invalid.</returns>
-    Task<Result<AgentIdentity?>> LoadAsync(CancellationToken cancellationToken = default);
+    /// <returns>
+    /// Success(<see cref="StoredAgentState.None"/>) only when the state file does not exist;
+    /// Success with an identity when the file is valid and trusted;
+    /// Failure ([AgentState.Corrupt], [AgentState.Io], [AgentState.Config] or [AgentState.Untrusted]) otherwise.
+    /// Callers enroll only on None and never on a Failure (D-S232).
+    /// </returns>
+    Task<Result<StoredAgentState>> LoadAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Persists the identity, replacing any previous state.
