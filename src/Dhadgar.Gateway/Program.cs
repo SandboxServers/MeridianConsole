@@ -1,7 +1,7 @@
-using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
 using Dhadgar.Gateway;
+using Dhadgar.Gateway.Agents;
 using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
 using Dhadgar.Gateway.Options;
@@ -15,6 +15,7 @@ using Dhadgar.ServiceDefaults.Resilience;
 using Dhadgar.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -32,6 +33,19 @@ builder.WebHost.ConfigureKestrel(options =>
     options.AddServerHeader = false;
     // Default 10 MB request body limit; Files service has its own 5-minute timeout for large uploads
     options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
+
+    // Agent client certificates. Kestrel accepts any client certificate at TLS level because Nodes is the
+    // validator (D-S25): chain, SPIFFE and revocation are checked by Nodes, the Gateway only forwards.
+    var agentCertMode = builder.Configuration.GetValue("AgentIngress:ClientCertificateMode", ClientCertificateMode.NoCertificate);
+    options.ConfigureHttpsDefaults(https =>
+    {
+        https.ClientCertificateMode = agentCertMode;
+        if (agentCertMode != ClientCertificateMode.NoCertificate)
+        {
+            // Chain, SPIFFE and revocation are validated by Nodes (D-S25); the Gateway only forwards.
+            https.AllowAnyClientCertificate();
+        }
+    });
 });
 
 if (!builder.Environment.IsEnvironment("Testing"))
@@ -111,6 +125,14 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("client_type", "agent");
     });
 
+    // The TLS client certificate must be issued by the agent CA. Nodes validates the rest of the chain and the SPIFFE ID.
+    options.AddPolicy("AgentCertificate", policy =>
+    {
+        policy.RequireAssertion(ctx => ctx.Resource is HttpContext h
+            && h.Connection.ClientCertificate is { } c
+            && AgentCertificateForwarding.IsAgentIssued(c));
+    });
+
     // SECURITY: DenyAll policy for blocking internal endpoints from external access
     options.AddPolicy("DenyAll", policy =>
     {
@@ -119,7 +141,9 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    // Applies to every route: the forwarded certificate header is stripped on all of them (C6).
+    .AddTransforms(AgentCertificateForwarding.Apply);
 
 // HttpClient for diagnostics endpoints
 builder.Services.AddHttpClient();
@@ -170,7 +194,7 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken: cancellationToken);
     };
 
-    options.AddPolicy("Global", _ =>
+    options.AddPolicy(RouteRateLimiting.GlobalPolicy, _ =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: "global",
             factory: _ => new FixedWindowRateLimiterOptions
@@ -185,32 +209,7 @@ builder.Services.AddRateLimiter(options =>
     // range would bypass IP-based rate limiting if we used full addresses
     options.AddPolicy("Auth", httpContext =>
     {
-        var ip = httpContext.Connection.RemoteIpAddress;
-        string partitionKey;
-
-        if (ip == null)
-        {
-            partitionKey = "unknown";
-        }
-        else if (ip.IsIPv6LinkLocal)
-        {
-            // SECURITY: Link-local addresses (fe80::) are not globally unique and can be
-            // reused across different networks/interfaces. Treat them as a special bucket
-            // to prevent multiple clients from unfairly sharing the same rate limit.
-            partitionKey = "unknown-linklocal";
-        }
-        else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
-                 !ip.IsIPv4MappedToIPv6)
-        {
-            // Use /64 prefix for IPv6 to prevent rotation attacks
-            var bytes = ip.GetAddressBytes();
-            Array.Clear(bytes, 8, 8); // Zero out host portion (last 64 bits)
-            partitionKey = new IPAddress(bytes).ToString();
-        }
-        else
-        {
-            partitionKey = ip.ToString();
-        }
+        var partitionKey = RateLimitPartitionKeys.ClientIp(httpContext.Connection.RemoteIpAddress);
 
         return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: partitionKey,
@@ -242,12 +241,13 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("PerAgent", httpContext =>
     {
-        var agentId = httpContext.User.FindFirst("sub")?.Value
-                      ?? httpContext.Connection.RemoteIpAddress?.ToString()
-                      ?? "unknown";
+        // Keyed by client IP (IPv6 /64), never by the client certificate: the Gateway does not validate the
+        // certificate (Nodes does, D-S25), so a certificate-derived key would let a caller pick a fresh bucket per
+        // request with a forged certificate. Agents behind one NAT address share the bucket (D-S26 as amended).
+        var partitionKey = $"agent-ip:{RateLimitPartitionKeys.ClientIp(httpContext.Connection.RemoteIpAddress)}";
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"agent:{agentId}",
+            partitionKey: partitionKey,
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerAgent:PermitLimit") ?? 500,
@@ -382,8 +382,17 @@ app.MapGet("/hello", () => Results.Text(GatewayHello.Message))
 app.MapDhadgarDefaultEndpoints();
 
 // YARP reverse proxy
+// YARP has already added each route's RateLimiterPolicy when this convention runs, and the last
+// EnableRateLimiting wins. Global is attached after the route policy (so it overrides it) except where
+// RouteRateLimiting says the route policy replaces Global (PerAgent; D-S26, D-S220).
 app.MapReverseProxy()
-    .RequireRateLimiting("Global");
+    .ConfigureEndpoints((endpoint, route) =>
+    {
+        if (RouteRateLimiting.UsesGlobal(route.RateLimiterPolicy))
+        {
+            endpoint.RequireRateLimiting(RouteRateLimiting.GlobalPolicy);
+        }
+    });
 
 app.Run();
 
