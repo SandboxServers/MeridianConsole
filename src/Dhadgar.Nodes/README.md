@@ -499,7 +499,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 | `CaKeyPassword` | auto-generated | Password for CA private key |
 | `CaKeySize` | 4096 | RSA key size for CA |
 | `CaValidityYears` | 10 | CA certificate validity |
-| `ClientKeySize` | 2048 | RSA key size for client certs |
+| `ClientKeySize` | 2048 | RSA key size for the legacy server-key issuance path (IssueCertificateAsync); not used by enrollment or renewal |
 | `CertificateValidityDays` | 90 | Agent certificate validity |
 | `AzureKeyVaultUrl` | - | Azure Key Vault URL (production) |
 | `AzureKeyVaultCaCertName` | "meridian-agent-ca" | CA certificate name in KV |
@@ -558,7 +558,7 @@ Policies on agent endpoints use the `AgentMtls` scheme (`AgentMtlsAuthentication
 
 - **SPIFFE ID:** `spiffe://meridianconsole.com/nodes/{nodeId}`
 - **Extended Key Usage:** Client Authentication (OID 1.3.6.1.5.5.7.3.2)
-- **Key Size:** 2048-bit RSA (client), 4096-bit RSA (CA)
+- **Key:** generated and held by the agent (ECDSA P-384; Nodes also accepts ECDSA P-256 and RSA of 2048 bits or more). Nodes never sees the private key. The CA key is 4096-bit RSA.
 
 ### Certificate Renewal and Grace Window
 
@@ -575,8 +575,8 @@ Applied at Gateway level:
 
 | Policy | Limit | Scope |
 |:-------|:------|:------|
-| `PerTenant` | 100 req/sec | Organization |
-| `PerAgent` | 500 req/60sec | Per agent |
+| `PerTenant` | Token bucket: 100 burst, 50 per second refill | `org_id` claim when authenticated, else client IP (IPv6 /64) |
+| `PerAgent` | 500 requests per 60 seconds (fixed window) | Client IP (IPv6 /64) |
 
 ### Audit Logging
 
