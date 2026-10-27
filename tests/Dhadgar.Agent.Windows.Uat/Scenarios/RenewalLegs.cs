@@ -245,20 +245,20 @@ internal sealed class RenewalLegs
         var mine = _deps.Store.AgentCertificatesInMy();
         if (mine.Count != 1 || mine[0].Key is not { IsMachineKey: true, CanSign: true })
         {
-            return Fail(state.Evidence, "U5", "exactly one agent certificate with a machine CNG key is in LocalMachine\\My (C1)");
+            return StepFailure.Fail(state.Evidence, "U5", "exactly one agent certificate with a machine CNG key is in LocalMachine\\My (C1)");
         }
 
         var c1Store = mine[0];
         var opened = _deps.OpenMachineCertificate(c1Store.Sha1Thumbprint);
         if (opened.IsFailure)
         {
-            return Fail(state.Evidence, "U5", opened.Error!);
+            return StepFailure.Fail(state.Evidence, "U5", opened.Error!);
         }
 
         var c1 = Track(opened.Value);
         if (!c1.HasPrivateKey)
         {
-            return Fail(state.Evidence, "U5", "C1 was opened without its private key");
+            return StepFailure.Fail(state.Evidence, "U5", "C1 was opened without its private key");
         }
 
         state.C1 = c1;
@@ -276,14 +276,14 @@ internal sealed class RenewalLegs
         var c2 = TestKeyCertificate.FromPem(k2, renewed.Value.Certificate);
         if (c2.IsFailure)
         {
-            return Fail(state.Evidence, "U5", c2.Error!);
+            return StepFailure.Fail(state.Evidence, "U5", c2.Error!);
         }
 
         var c2Certificate = Track(c2.Value);
         var c2Sha256 = Convert.ToHexString(SHA256.HashData(c2Certificate.RawData));
         if (!string.Equals(c2Sha256, renewed.Value.CertificateThumbprint, StringComparison.OrdinalIgnoreCase))
         {
-            return Fail(state.Evidence, "U5", "the renew response thumbprint does not match the certificate it carries");
+            return StepFailure.Fail(state.Evidence, "U5", "the renew response thumbprint does not match the certificate it carries");
         }
 
         state.C2 = c2Certificate;
@@ -293,24 +293,24 @@ internal sealed class RenewalLegs
         var rows = await _deps.Db.CertificatesForNodeAsync(nodeId, ct);
         if (rows.IsFailure)
         {
-            return Fail(state.Evidence, "U5", rows.Error!);
+            return StepFailure.Fail(state.Evidence, "U5", rows.Error!);
         }
 
         var c1Row = FindRow(rows.Value, state.C1Sha256);
         if (c1Row is not { IsRevoked: true, GraceUntil: { } grace })
         {
-            return Fail(state.Evidence, "U5", "C1's row is revoked with a GraceUntil");
+            return StepFailure.Fail(state.Evidence, "U5", "C1's row is revoked with a GraceUntil");
         }
 
         if ((grace - (_deps.UtcNow() + ExpectedGrace)).Duration() > GraceTolerance)
         {
-            return Fail(state.Evidence, "U5", "C1's GraceUntil is about 5 minutes after the renewal (within 60 s)");
+            return StepFailure.Fail(state.Evidence, "U5", "C1's GraceUntil is about 5 minutes after the renewal (within 60 s)");
         }
 
         var c2Row = FindRow(rows.Value, c2Sha256);
         if (c2Row is not { IsRevoked: false })
         {
-            return Fail(state.Evidence, "U5", "C2's row is active");
+            return StepFailure.Fail(state.Evidence, "U5", "C2's row is active");
         }
 
         state.C1GraceUntil = grace;
@@ -332,7 +332,7 @@ internal sealed class RenewalLegs
         state.Evidence["U5.negotiateC2"] = probeC2.Value;
         if (probeC1.Value != HttpOk || probeC2.Value != HttpOk)
         {
-            return Fail(state.Evidence, "U5", $"negotiate with C1 and C2 through the Gateway must return 200 (got {probeC1.Value} and {probeC2.Value})");
+            return StepFailure.Fail(state.Evidence, "U5", $"negotiate with C1 and C2 through the Gateway must return 200 (got {probeC1.Value} and {probeC2.Value})");
         }
 
         state.Evidence["U5"] = "pass";
@@ -348,7 +348,7 @@ internal sealed class RenewalLegs
             var set = appSettings.SetRenewalThreshold(_options.AppSettingsPath, RenewalThresholdDays);
             if (set.IsFailure)
             {
-                body = Fail(state.Evidence, "U6", set.Error!);
+                body = StepFailure.Fail(state.Evidence, "U6", set.Error!);
             }
             else
             {
@@ -373,7 +373,7 @@ internal sealed class RenewalLegs
                 var reset = appSettings.SetRenewalThreshold(_options.AppSettingsPath, null);
                 if (reset.IsFailure && body.IsSuccess)
                 {
-                    body = Fail(state.Evidence, "U6", $"the renewal threshold key could not be removed: {reset.Error}");
+                    body = StepFailure.Fail(state.Evidence, "U6", $"the renewal threshold key could not be removed: {reset.Error}");
                 }
             }
         }
@@ -386,18 +386,18 @@ internal sealed class RenewalLegs
         var node = await NodeAsync(ct);
         if (node.IsFailure)
         {
-            return Fail(state.Evidence, "U6", node.Error!);
+            return StepFailure.Fail(state.Evidence, "U6", node.Error!);
         }
 
         if (node.Value.LastHeartbeat is not { } baseline)
         {
-            return Fail(state.Evidence, "U6", "no LastHeartbeat baseline for the node");
+            return StepFailure.Fail(state.Evidence, "U6", "no LastHeartbeat baseline for the node");
         }
 
         var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
-            return Fail(state.Evidence, "U6", started.Error!);
+            return StepFailure.Fail(state.Evidence, "U6", started.Error!);
         }
 
         var polled = await PollAsync(
@@ -493,18 +493,18 @@ internal sealed class RenewalLegs
         state.Evidence["U7.c2Gateway"] = c2.Value;
         if (c2.Value != HttpUnauthorized)
         {
-            return Fail(state.Evidence, "U7", $"C2 through the Gateway must return 401 (hard revoked), got {c2.Value}");
+            return StepFailure.Fail(state.Evidence, "U7", $"C2 through the Gateway must return 401 (hard revoked), got {c2.Value}");
         }
 
         if (state.C3 is null)
         {
-            return Fail(state.Evidence, "U7", "C3 is not known");
+            return StepFailure.Fail(state.Evidence, "U7", "C3 is not known");
         }
 
         var opened = _deps.OpenMachineCertificate(state.C3.Sha1Thumbprint);
         if (opened.IsFailure)
         {
-            return Fail(state.Evidence, "U7", opened.Error!);
+            return StepFailure.Fail(state.Evidence, "U7", opened.Error!);
         }
 
         var c3 = Track(opened.Value);
@@ -517,7 +517,7 @@ internal sealed class RenewalLegs
         state.Evidence["U7.c3Gateway"] = c3Probe.Value;
         if (c3Probe.Value != HttpOk)
         {
-            return Fail(state.Evidence, "U7", $"C3 through the Gateway must return 200, got {c3Probe.Value}");
+            return StepFailure.Fail(state.Evidence, "U7", $"C3 through the Gateway must return 200, got {c3Probe.Value}");
         }
 
         // A control: inside its grace Nodes must accept C1 through the forwarded header. Without it, a 401 after the
@@ -531,7 +531,7 @@ internal sealed class RenewalLegs
         state.Evidence["U7.c1NodesInGrace"] = c1InGrace.Value;
         if (c1InGrace.Value != HttpOk)
         {
-            return Fail(state.Evidence, "U7", $"C1 inside its grace must return 200 from Nodes (the forwarded-certificate path), got {c1InGrace.Value}");
+            return StepFailure.Fail(state.Evidence, "U7", $"C1 inside its grace must return 200 from Nodes (the forwarded-certificate path), got {c1InGrace.Value}");
         }
 
         var deadline = state.C1GraceUntil!.Value + GraceExpiryMargin;
@@ -551,7 +551,7 @@ internal sealed class RenewalLegs
         state.Evidence["U7.c1Path"] = "Nodes direct, loopback, X-Client-Cert (C1's key is gone; the Gateway path proved C1 in U5)";
         if (c1.Value != HttpUnauthorized)
         {
-            return Fail(state.Evidence, "U7", $"C1 after its grace must return 401 from Nodes, got {c1.Value}");
+            return StepFailure.Fail(state.Evidence, "U7", $"C1 after its grace must return 401 from Nodes, got {c1.Value}");
         }
 
         state.Evidence["U7"] = "pass";
@@ -563,18 +563,18 @@ internal sealed class RenewalLegs
         var node = await NodeAsync(ct);
         if (node.IsFailure)
         {
-            return Fail(state.Evidence, "U8", node.Error!);
+            return StepFailure.Fail(state.Evidence, "U8", node.Error!);
         }
 
         if (node.Value.LastHeartbeat is not { } baseline)
         {
-            return Fail(state.Evidence, "U8", "no LastHeartbeat baseline for the node");
+            return StepFailure.Fail(state.Evidence, "U8", "no LastHeartbeat baseline for the node");
         }
 
         var rows = await _deps.Db.CertificatesForNodeAsync(_options.NodeId, ct);
         if (rows.IsFailure)
         {
-            return Fail(state.Evidence, "U8", rows.Error!);
+            return StepFailure.Fail(state.Evidence, "U8", rows.Error!);
         }
 
         var rowsBefore = rows.Value.Count;
@@ -583,7 +583,7 @@ internal sealed class RenewalLegs
         var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
-            return Fail(state.Evidence, "U8", started.Error!);
+            return StepFailure.Fail(state.Evidence, "U8", started.Error!);
         }
 
         Result polled;
@@ -691,7 +691,7 @@ internal sealed class RenewalLegs
             var check = await evaluate(ct);
             if (check.IsFailure)
             {
-                return Fail(evidence, step, check.Error!);
+                return StepFailure.Fail(evidence, step, check.Error!);
             }
 
             if (check.Value.Unmet is null)
@@ -701,7 +701,7 @@ internal sealed class RenewalLegs
 
             if (clock.Elapsed >= timeout)
             {
-                return Fail(evidence, step, $"{check.Value.Unmet} did not hold within {timeout.TotalSeconds:0} s");
+                return StepFailure.Fail(evidence, step, $"{check.Value.Unmet} did not hold within {timeout.TotalSeconds:0} s");
             }
 
             await Task.Delay(_options.PollInterval, ct);
@@ -760,11 +760,6 @@ internal sealed class RenewalLegs
         return disposable;
     }
 
-    private static Result Fail(Dictionary<string, object?> evidence, string step, string message)
-    {
-        evidence[step] = "fail";
-        return Result.Failure($"{step}: {message}");
-    }
 
     /// <summary>A probe that never got an HTTP answer is inconclusive, not a failure of the rule under test (P21).</summary>
     private static Result FailProbe(Dictionary<string, object?> evidence, string step, string error)

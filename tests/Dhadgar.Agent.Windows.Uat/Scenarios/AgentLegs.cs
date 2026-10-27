@@ -275,7 +275,7 @@ internal sealed class AgentLegs
         var minted = await _deps.MintToken("uat-agent-first", ct);
         if (minted.IsFailure)
         {
-            return Fail(state.Evidence, "U2", minted.Error!);
+            return StepFailure.Fail(state.Evidence, "U2", minted.Error!);
         }
 
         state.Token1 = minted.Value;
@@ -285,12 +285,12 @@ internal sealed class AgentLegs
         var written = _deps.Registry.Write(minted.Value.PlainText);
         if (written.IsFailure)
         {
-            return Fail(state.Evidence, "U2", written.Error!);
+            return StepFailure.Fail(state.Evidence, "U2", written.Error!);
         }
 
         if (!_deps.Registry.ValueExists())
         {
-            return Fail(state.Evidence, "U2", "the registry token value does not exist after the write");
+            return StepFailure.Fail(state.Evidence, "U2", "the registry token value does not exist after the write");
         }
 
         state.Evidence["U2"] = "pass";
@@ -305,20 +305,20 @@ internal sealed class AgentLegs
                 Path.Combine(_paths.AgentPublish, AppSettingsFileName), _options.Config);
             if (applied.IsFailure)
             {
-                return Fail(state.Evidence, "U3", applied.Error!);
+                return StepFailure.Fail(state.Evidence, "U3", applied.Error!);
             }
         }
 
         var prepared = await _deps.Agent.PrepareAsync(ct);
         if (prepared.IsFailure)
         {
-            return Fail(state.Evidence, "U3", prepared.Error!);
+            return StepFailure.Fail(state.Evidence, "U3", prepared.Error!);
         }
 
         var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
-            return Fail(state.Evidence, "U3", started.Error!);
+            return StepFailure.Fail(state.Evidence, "U3", started.Error!);
         }
 
         var polled = await PollAsync(
@@ -477,7 +477,7 @@ internal sealed class AgentLegs
         var minted = await _deps.MintToken("uat-agent-restart", ct);
         if (minted.IsFailure)
         {
-            return Fail(state.Evidence, "U4", minted.Error!);
+            return StepFailure.Fail(state.Evidence, "U4", minted.Error!);
         }
 
         state.Token2 = minted.Value;
@@ -486,26 +486,26 @@ internal sealed class AgentLegs
         var written = _deps.Registry.Write(minted.Value.PlainText);
         if (written.IsFailure)
         {
-            return Fail(state.Evidence, "U4", written.Error!);
+            return StepFailure.Fail(state.Evidence, "U4", written.Error!);
         }
 
         var nodeId = state.NodeId!.Value;
         var nodes = await _deps.Db.NodesForOrganizationAsync(_options.OrganizationId, ct);
         if (nodes.IsFailure)
         {
-            return Fail(state.Evidence, "U4", nodes.Error!);
+            return StepFailure.Fail(state.Evidence, "U4", nodes.Error!);
         }
 
         var before = nodes.Value.FirstOrDefault(n => n.Id == nodeId)?.LastHeartbeat;
         if (before is null)
         {
-            return Fail(state.Evidence, "U4", "no LastHeartbeat baseline for the node");
+            return StepFailure.Fail(state.Evidence, "U4", "no LastHeartbeat baseline for the node");
         }
 
         var rows = await _deps.Db.CertificatesForNodeAsync(nodeId, ct);
         if (rows.IsFailure)
         {
-            return Fail(state.Evidence, "U4", rows.Error!);
+            return StepFailure.Fail(state.Evidence, "U4", rows.Error!);
         }
 
         state.Evidence["U4.heartbeatBefore"] = before.Value.ToString("O");
@@ -515,13 +515,13 @@ internal sealed class AgentLegs
         var stopped = await _deps.Agent.StopAsync(ct);
         if (stopped.IsFailure)
         {
-            return Fail(state.Evidence, "U4", stopped.Error!);
+            return StepFailure.Fail(state.Evidence, "U4", stopped.Error!);
         }
 
         var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
-            return Fail(state.Evidence, "U4", started.Error!);
+            return StepFailure.Fail(state.Evidence, "U4", started.Error!);
         }
 
         var baseline = before.Value;
@@ -623,7 +623,7 @@ internal sealed class AgentLegs
             var check = await evaluate(ct);
             if (check.IsFailure)
             {
-                return Fail(evidence, step, check.Error!);
+                return StepFailure.Fail(evidence, step, check.Error!);
             }
 
             if (check.Value.Unmet is null)
@@ -633,7 +633,7 @@ internal sealed class AgentLegs
 
             if (clock.Elapsed >= timeout)
             {
-                return Fail(evidence, step, $"{check.Value.Unmet} did not hold within {timeout.TotalSeconds:0} s");
+                return StepFailure.Fail(evidence, step, $"{check.Value.Unmet} did not hold within {timeout.TotalSeconds:0} s");
             }
 
             await Task.Delay(_options.PollInterval, ct);
@@ -707,11 +707,6 @@ internal sealed class AgentLegs
             : Result<string>.Failure("the MSI state folder is not the machine agent folder");
     }
 
-    private static Result Fail(Dictionary<string, object?> evidence, string step, string message)
-    {
-        evidence[step] = "fail";
-        return Result.Failure($"{step}: {message}");
-    }
 
     /// <summary>Mutable state shared by the steps of one run.</summary>
     private sealed class LegState(Dictionary<string, object?> evidence)
