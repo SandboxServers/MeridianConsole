@@ -38,6 +38,9 @@ internal sealed partial class ChildProcess : IDisposable
     /// <summary>The child's process id.</summary>
     public int ProcessId => _process.Id;
 
+    /// <summary>The child's exit code once it has exited; null while it runs.</summary>
+    public int? ExitCode => _process.HasExited ? _process.ExitCode : null;
+
     /// <summary>
     /// Starts the child with <c>ArgumentList</c>, removes agent enrollment variables from its environment,
     /// records it in the manifest, and assigns it to <paramref name="job"/>.
