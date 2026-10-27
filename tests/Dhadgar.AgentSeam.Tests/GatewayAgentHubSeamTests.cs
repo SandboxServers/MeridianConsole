@@ -89,6 +89,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
         using var response = await PostNegotiateAsync(http);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        AssertRejectedByGatewayChallenge(response);
     }
 
     [Fact]
@@ -109,6 +110,7 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
         using var response = await PostNegotiateAsync(http);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        AssertRejectedByGatewayChallenge(response);
     }
 
     [Fact]
@@ -203,6 +205,16 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
                     : inner => outerLayer(certificateHandler(inner)),
                 Transports = HttpTransportType.LongPolling
             });
+    }
+
+    /// <summary>
+    /// The Gateway's JwtBearer challenge answers with a Bearer <c>WWW-Authenticate</c> and no problem+json body.
+    /// Nodes answers with problem+json, so this tells the two rejections apart.
+    /// </summary>
+    private static void AssertRejectedByGatewayChallenge(HttpResponseMessage response)
+    {
+        Assert.Contains(response.Headers.WwwAuthenticate, h => h.Scheme == "Bearer");
+        Assert.NotEqual("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
     private static async Task<HttpResponseMessage> PostNegotiateAsync(HttpClient http)
