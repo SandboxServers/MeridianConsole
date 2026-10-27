@@ -29,7 +29,7 @@ public class ChildProcessTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            DeleteWithRetry(dir);
         }
     }
 
@@ -66,7 +66,23 @@ public class ChildProcessTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            DeleteWithRetry(dir);
+        }
+    }
+
+    private static void DeleteWithRetry(string dir)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+                return;
+            }
+            catch (IOException) when (attempt < 50)
+            {
+                Thread.Sleep(100);
+            }
         }
     }
 

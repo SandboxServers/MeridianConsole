@@ -82,7 +82,7 @@ internal sealed class StackScenario : IUatScenario
             var port = FreePorts.AllocateLoopbackPort();
             if (port.IsFailure)
             {
-                return Fail(evidence, "U1", port.Error!);
+                return StepFailure.Fail(evidence, "U1", port.Error!);
             }
 
             ports.Add(port.Value);
@@ -131,13 +131,13 @@ internal sealed class StackScenario : IUatScenario
         var pg = await docker.StartPostgresAsync(postgresPort, settings.PostgresPassword, ct);
         if (pg.IsFailure)
         {
-            return Fail(evidence, "U1", pg.Error!);
+            return StepFailure.Fail(evidence, "U1", pg.Error!);
         }
 
         var mq = await docker.StartRabbitMqAsync(settings.RabbitMqPassword, ct);
         if (mq.IsFailure)
         {
-            return Fail(evidence, "U1", mq.Error!);
+            return StepFailure.Fail(evidence, "U1", mq.Error!);
         }
 
         evidence["postgresImage"] = await ImageIdAsync(docker.PostgresName, ct);
@@ -149,7 +149,7 @@ internal sealed class StackScenario : IUatScenario
         var started = await host.StartAsync(settings, ct);
         if (started.IsFailure)
         {
-            return Fail(evidence, "U1", started.Error!);
+            return StepFailure.Fail(evidence, "U1", started.Error!);
         }
 
         evidence["nodesPid"] = host.NodesProcessId;
@@ -163,7 +163,7 @@ internal sealed class StackScenario : IUatScenario
         var minted = await minter.MintAsync(organizationId, "uat-smoke", ct);
         if (minted.IsFailure)
         {
-            return Fail(evidence, "S-mint", minted.Error!);
+            return StepFailure.Fail(evidence, "S-mint", minted.Error!);
         }
 
         evidence["tokenId"] = minted.Value.ToString();
@@ -189,7 +189,7 @@ internal sealed class StackScenario : IUatScenario
             evidence["enrollStatus"] = (int)response.StatusCode;
             if (response.StatusCode != HttpStatusCode.Created)
             {
-                return Fail(evidence, "S-enroll", $"enroll returned {(int)response.StatusCode}, expected 201 (Created)");
+                return StepFailure.Fail(evidence, "S-enroll", $"enroll returned {(int)response.StatusCode}, expected 201 (Created)");
             }
 
             enrolled = await response.Content.ReadFromJsonAsync<EnrollNodeResponse>(ct);
@@ -197,13 +197,13 @@ internal sealed class StackScenario : IUatScenario
 
         if (enrolled is null)
         {
-            return Fail(evidence, "S-enroll", "enroll response body was empty");
+            return StepFailure.Fail(evidence, "S-enroll", "enroll response body was empty");
         }
 
         var certificate = TestKeyCertificate.FromPem(key, enrolled.Certificate);
         if (certificate.IsFailure)
         {
-            return Fail(evidence, "S-enroll", certificate.Error!);
+            return StepFailure.Fail(evidence, "S-enroll", certificate.Error!);
         }
 
         using var clientCertificate = certificate.Value;
@@ -211,13 +211,13 @@ internal sealed class StackScenario : IUatScenario
         var san = clientCertificate.Extensions.OfType<X509SubjectAlternativeNameExtension>().FirstOrDefault();
         if (san is null || !san.Format(false).Contains(spiffe, StringComparison.Ordinal))
         {
-            return Fail(evidence, "S-enroll", "certificate SAN does not equal the node's SPIFFE ID");
+            return StepFailure.Fail(evidence, "S-enroll", "certificate SAN does not equal the node's SPIFFE ID");
         }
 
         using var certKey = clientCertificate.GetECDsaPublicKey();
         if (certKey is null || !certKey.ExportSubjectPublicKeyInfo().AsSpan().SequenceEqual(key.ExportSubjectPublicKeyInfo()))
         {
-            return Fail(evidence, "S-enroll", "certificate public key does not equal the enrolled key");
+            return StepFailure.Fail(evidence, "S-enroll", "certificate public key does not equal the enrolled key");
         }
 
         evidence["nodeId"] = enrolled.NodeId.ToString();
@@ -232,7 +232,7 @@ internal sealed class StackScenario : IUatScenario
         evidence["negotiateWithoutCertificate"] = withoutCert;
         if (withCert != 200 || withoutCert != 401)
         {
-            return Fail(evidence, "S-negotiate", $"expected 200 with and 401 without a certificate, got {withCert} and {withoutCert}");
+            return StepFailure.Fail(evidence, "S-negotiate", $"expected 200 with and 401 without a certificate, got {withCert} and {withoutCert}");
         }
 
         evidence["S-negotiate"] = "pass";
@@ -241,7 +241,7 @@ internal sealed class StackScenario : IUatScenario
         var hub = await HubHeartbeatAsync(gatewayPort, clientCertificate, evidence, ct);
         if (hub.IsFailure)
         {
-            return Fail(evidence, "S-hub-ws", hub.Error!);
+            return StepFailure.Fail(evidence, "S-hub-ws", hub.Error!);
         }
 
         evidence["S-hub-ws"] = "pass";
@@ -253,17 +253,17 @@ internal sealed class StackScenario : IUatScenario
             var token = await db.EnrollmentTokens.AsNoTracking().FirstOrDefaultAsync(t => t.Id == minted.Value.Id, ct);
             if (node is null || node.OrganizationId != organizationId)
             {
-                return Fail(evidence, "S-db", "node row missing or in another organization");
+                return StepFailure.Fail(evidence, "S-db", "node row missing or in another organization");
             }
 
             if (node.LastHeartbeat is null)
             {
-                return Fail(evidence, "S-db", "node LastHeartbeat is not set after the hub heartbeat");
+                return StepFailure.Fail(evidence, "S-db", "node LastHeartbeat is not set after the hub heartbeat");
             }
 
             if (token?.UsedAt is null || token.UsedByNodeId != enrolled.NodeId)
             {
-                return Fail(evidence, "S-db", "token is not marked used by the node");
+                return StepFailure.Fail(evidence, "S-db", "token is not marked used by the node");
             }
 
             evidence["lastHeartbeat"] = node.LastHeartbeat.Value.ToString("O");
@@ -311,7 +311,7 @@ internal sealed class StackScenario : IUatScenario
         var msiPath = FindMsi(context.Paths);
         if (msiPath.IsFailure)
         {
-            return Fail(evidence, MsiLegs.InstallStepName, msiPath.Error!);
+            return StepFailure.Fail(evidence, MsiLegs.InstallStepName, msiPath.Error!);
         }
 
         var organizationId = Guid.NewGuid();
@@ -320,7 +320,7 @@ internal sealed class StackScenario : IUatScenario
         var minted = await minter.MintAsync(organizationId, "uat-msi", ct, MsiTokenLifetime);
         if (minted.IsFailure)
         {
-            return Fail(evidence, MsiLegs.InstallStepName, minted.Error!);
+            return StepFailure.Fail(evidence, MsiLegs.InstallStepName, minted.Error!);
         }
 
         var control = new ServiceControl(context.Paths, context.Manifest, context.Redactor);
@@ -413,7 +413,7 @@ internal sealed class StackScenario : IUatScenario
         var accountSid = service is null ? CurrentUserSid() : new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null).Value;
         if (accountSid is null)
         {
-            return Fail(evidence, "U2", "could not read the SID of the account the agent runs as");
+            return StepFailure.Fail(evidence, "U2", "could not read the SID of the account the agent runs as");
         }
 
         var organizationId = Guid.NewGuid();
@@ -437,7 +437,7 @@ internal sealed class StackScenario : IUatScenario
         var legs = await new AgentLegs(context.Paths, context.Manifest, deps, options).RunAsync(evidence, ct);
         if (legs.IsFailure || !Guid.TryParse(evidence["nodeId"] as string, out var nodeId))
         {
-            return legs.IsFailure ? legs : Fail(evidence, "U5", "the node ID from U3 is missing");
+            return legs.IsFailure ? legs : StepFailure.Fail(evidence, "U5", "the node ID from U3 is missing");
         }
 
         // The renewal legs run after the agent is stopped (U4 leaves it stopped), with the same host object.
@@ -565,9 +565,4 @@ internal sealed class StackScenario : IUatScenario
         }
     }
 
-    private static Result Fail(Dictionary<string, object?> evidence, string step, string message)
-    {
-        evidence[step] = "fail";
-        return Result.Failure($"{step}: {message}");
-    }
 }

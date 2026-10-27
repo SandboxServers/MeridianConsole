@@ -7,7 +7,7 @@ point is `scripts/uat/Invoke-AgentWindowsUat.ps1`.
 This README covers `-Preflight`, `-StackOnly` (P19), `-CleanupOnly`, the guards of `-Mode Process`,
 and the process-mode agent legs (P20: U0-U4 and U9). The `Service` mode (P22) and the `Msi` mode (P23) are described below.
 
-Owed to the user run (never run by a coder): in MSI mode U10, U11a, U3, U4, U11b and U9, about 6 minutes.
+Owed to the UAT run (the user or the UAT runner agent under D-S239; never a coder): in MSI mode U10 (TLS leaf and decoy only), U1, U11a, U3, U4, U11b and U9, about 6 minutes.
 
 ## Who runs what (D-S225, D-S239)
 
@@ -169,7 +169,7 @@ agent under D-S239. Coders never run it.
   UpgradeCode, the `DhadgarAgent` service exists as LocalSystem, and the install-time registry value is set.
   The manifest holds an `msiProduct` entry before msiexec runs, so a crash mid-install is still undone.
 - **U3 and U4** run against the installed service exactly as in service mode (first start, then restart with T2).
-- **U11b "MSI uninstall":** removes the product by product code. Pass: exit 0, the service and the install folder
+- **U11b "MSI uninstall":** runs `msiexec /x` on the MSI in the run folder (the final cleanup removes by product code, enumerated from the UpgradeCode). Pass: exit 0, the service and the install folder
   are gone, the HKLM install values (`InstallPath`, `Version`, `DataPath`, `ServiceInstalled`, `ControlPlaneEndpoint`, `EnrollmentToken`) are gone, and the product is no longer registered.
 - **Residue (warnings, not failures):** the uninstall does not remove what the agent itself created at run time: its
   certificates in `LocalMachine\My`, the `MeridianConsoleAgent` store, `%ProgramData%\Meridian Console\Agent`
