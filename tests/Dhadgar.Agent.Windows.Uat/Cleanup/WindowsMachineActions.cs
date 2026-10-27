@@ -299,6 +299,14 @@ internal sealed partial class WindowsMachineActions : IMachineActions
     /// <inheritdoc />
     public Result AddCertificate(string storeLocation, string storeName, X509Certificate2 certificate)
     {
+        // P22 (D-S240): the TLS leaf and the decoy CA are the only machine certificate additions the UAT makes,
+        // so every other store is refused before anything is parsed or opened.
+        if (!string.Equals(storeLocation, "LocalMachine", StringComparison.Ordinal)
+            || !string.Equals(storeName, "Root", StringComparison.Ordinal))
+        {
+            return Result.Failure($"refusing to add a certificate to {storeLocation}\\{storeName}; only LocalMachine\\Root is allowed");
+        }
+
         if (!Enum.TryParse<StoreLocation>(storeLocation, out var location))
         {
             return Result.Failure($"unknown store location {storeLocation}");

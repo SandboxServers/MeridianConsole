@@ -47,6 +47,34 @@ public class WindowsMachineActionsTests
         Assert.False(result.Value.IsRunning);
     }
 
+    [SkippableFact]
+    public void AddCertificate_NonRootStore_IsRefused()
+    {
+        // D-S240. The certificate keeps its private key on purpose: if the store guard is ever removed, the existing
+        // private-key refusal still returns before any store is opened, so this test can never change the machine.
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test");
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest("CN=meridian-uat-addcert-test", key, HashAlgorithmName.SHA256);
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddMinutes(10));
+        Assert.True(certificate.HasPrivateKey);
+        var actions = new WindowsMachineActions();
+
+        foreach (var (location, store) in new[]
+                 {
+                     ("CurrentUser", "Root"),
+                     ("LocalMachine", "TrustedPeople"),
+                     ("LocalMachine", "AuthRoot"),
+                     ("LocalMachine", "My"),
+                     ("localmachine", "root"),
+                 })
+        {
+            var result = actions.AddCertificate(location, store, certificate);
+
+            Assert.True(result.IsFailure, $"{location}\\{store}");
+            Assert.Contains("only LocalMachine\\Root is allowed", result.Error, StringComparison.Ordinal);
+        }
+    }
+
     private static (CngKey Key, X509Certificate2 Cert) AgentCertificateWithKey(string keyName, bool agentIdentity = true)
     {
         var key = CngKey.Create(CngAlgorithm.ECDsaP256, keyName, new CngKeyCreationParameters
