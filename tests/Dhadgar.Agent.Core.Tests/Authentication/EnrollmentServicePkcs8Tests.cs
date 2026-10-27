@@ -18,6 +18,7 @@ namespace Dhadgar.Agent.Core.Tests.Authentication;
 public sealed class EnrollmentServicePkcs8Tests : IDisposable
 {
     private static readonly Guid NodeId = Guid.Parse("0b7e4c1d-2a3f-4b5c-9d6e-7f8091a2b3c4");
+    private static readonly Guid OtherNodeId = Guid.Parse("66666666-7777-8888-9999-000000000000");
     private static readonly Guid OrganizationId = Guid.Parse("c4d3b2a1-0f9e-4d8c-8b7a-6f5e4d3c2b1a");
 
     private readonly TestAgentCa _ca = new();
@@ -84,10 +85,64 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
         return Convert.FromBase64String(document.RootElement.GetProperty("publicKey").GetString()!);
     }
 
-    /// <summary>Signs the enrollment's public key so the certificate passes the key-binding check.</summary>
-    private HttpResponseMessage Enrolled(string requestBody)
+    [Fact]
+    public async Task Enrollment_CertificateForAnotherNode_FailsBeforeStoring()
     {
-        using var leaf = _ca.Issue(ExpectedPublicKey(requestBody), AgentCertificateProfile.SpiffeId(NodeId));
+        var handler = new ScriptedHttpHandler((_, body) => Enrolled(body, AgentCertificateProfile.SpiffeId(OtherNodeId)));
+        var store = new RecordingCertificateStore();
+        var sut = new EnrollmentService(
+            store,
+            new ScriptedHttpClientFactory(handler),
+            Options.Create(new AgentOptions()),
+            NullLogger<EnrollmentService>.Instance,
+            new FixedHardwareInventoryCollector(),
+            clientCertificateProvider: new RecordingClientCertificateProvider(),
+            identityProvider: new AgentIdentityProvider());
+
+        var result = await sut.EnrollAsync("enrollment-token-for-test");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Enrollment.WrongIdentity]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(0, store.StoreCertificateCount);
+    }
+
+    [Fact]
+    public async Task Enrollment_ExpiredCertificate_FailsBeforeStoring()
+    {
+        var handler = new ScriptedHttpHandler((_, body) => Enrolled(
+            body,
+            AgentCertificateProfile.SpiffeId(NodeId),
+            DateTimeOffset.UtcNow.AddDays(-2),
+            DateTimeOffset.UtcNow.AddDays(-1)));
+        var store = new RecordingCertificateStore();
+        var sut = new EnrollmentService(
+            store,
+            new ScriptedHttpClientFactory(handler),
+            Options.Create(new AgentOptions()),
+            NullLogger<EnrollmentService>.Instance,
+            new FixedHardwareInventoryCollector(),
+            clientCertificateProvider: new RecordingClientCertificateProvider(),
+            identityProvider: new AgentIdentityProvider());
+
+        var result = await sut.EnrollAsync("enrollment-token-for-test");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Enrollment.InvalidValidity]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(0, store.StoreCertificateCount);
+    }
+
+    /// <summary>Signs the enrollment's public key so the certificate passes the key-binding check.</summary>
+    private HttpResponseMessage Enrolled(string requestBody) =>
+        Enrolled(requestBody, AgentCertificateProfile.SpiffeId(NodeId));
+
+    /// <summary>Signs the enrollment's public key with the given SPIFFE SAN and validity window.</summary>
+    private HttpResponseMessage Enrolled(
+        string requestBody,
+        string spiffeId,
+        DateTimeOffset? notBefore = null,
+        DateTimeOffset? notAfter = null)
+    {
+        using var leaf = _ca.Issue(ExpectedPublicKey(requestBody), spiffeId, notBefore, notAfter);
         var response = new EnrollNodeResponse(
             NodeId: NodeId,
             OrganizationId: OrganizationId,

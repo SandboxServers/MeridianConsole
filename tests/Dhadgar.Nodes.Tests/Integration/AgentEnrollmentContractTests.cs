@@ -96,6 +96,20 @@ public sealed class AgentEnrollmentContractTests : IDisposable
         Assert.False(second.IsSuccess);
     }
 
+    [Fact]
+    public async Task RealAgent_EnrollsWhileNodesClockRunsAhead()
+    {
+        // D-S234: the Nodes CA stamps NotBefore from the host's fake clock, and the agent rejects a certificate
+        // whose NotBefore is more than 5 minutes ahead of its own clock. The harness must give the agent the
+        // host's clock; on the system clock this enrollment fails with [Enrollment.InvalidValidity].
+        _baseFactory.TimeProvider.Advance(TimeSpan.FromMinutes(10));
+        using var factory = CreateFactoryWithRealCa();
+
+        var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+
+        Assert.NotEqual(Guid.Empty, enrolled.NodeId);
+        Assert.NotNull(store.ClientCertificate);
+    }
     private Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> CreateFactoryWithRealCa()
     {
         return AgentSeamHarness.CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: false);
@@ -105,6 +119,9 @@ public sealed class AgentEnrollmentContractTests : IDisposable
         Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory,
         ICertificateStore store)
     {
-        return AgentSeamHarness.CreateEnrollmentService(new TestServerClientFactory(factory.Server), store);
+        return AgentSeamHarness.CreateEnrollmentService(
+            new TestServerClientFactory(factory.Server),
+            store,
+            factory.Services.GetRequiredService<TimeProvider>());
     }
 }

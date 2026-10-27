@@ -1,4 +1,3 @@
-using System.Formats.Asn1;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -252,6 +251,22 @@ public sealed class EnrollmentService : IEnrollmentService
                         "[Enrollment.KeyMismatch] Certificate public key does not match locally generated keypair");
                 }
 
+                // The certificate must name the enrolled node and no other identity, and be valid now (as renewal checks).
+                // Checked before the store is written, so a mismatched certificate never becomes the agent's identity.
+                if (!AgentCertificateIdentity.HasOnlySpiffeUri(cert, AgentCertificateProfile.SpiffeId(enrollmentResponse.NodeId)))
+                {
+                    return Result<EnrollmentResult>.Failure(
+                        "[Enrollment.WrongIdentity] Certificate SAN does not match the enrolled node");
+                }
+
+                var enrollNow = _timeProvider.GetUtcNow();
+                if (new DateTimeOffset(cert.NotBefore) > enrollNow.AddMinutes(MaxClockSkewMinutes)
+                    || new DateTimeOffset(cert.NotAfter) <= enrollNow)
+                {
+                    return Result<EnrollmentResult>.Failure(
+                        "[Enrollment.InvalidValidity] Certificate is not currently valid");
+                }
+
                 // Capture expiry before cert is disposed
                 certExpiry = cert.NotAfter;
 
@@ -480,7 +495,7 @@ public sealed class EnrollmentService : IEnrollmentService
                 }
 
                 // The certificate must name this node and no other identity
-                if (!HasOnlySpiffeUri(newCert, AgentCertificateProfile.SpiffeId(nodeId)))
+                if (!AgentCertificateIdentity.HasOnlySpiffeUri(newCert, AgentCertificateProfile.SpiffeId(nodeId)))
                 {
                     _logger.LogError("Renewed certificate does not carry the expected SPIFFE identity for node {NodeId}",
                         nodeId);
@@ -608,54 +623,6 @@ public sealed class EnrollmentService : IEnrollmentService
         {
             return null;
         }
-    }
-
-    /// <summary>
-    /// True when the certificate's only URI SAN is <paramref name="expectedUri"/>.
-    /// </summary>
-    private static bool HasOnlySpiffeUri(X509Certificate2 certificate, string expectedUri)
-    {
-        var uriCount = 0;
-        var matches = false;
-
-        foreach (var extension in certificate.Extensions)
-        {
-            // subjectAltName
-            if (extension.Oid?.Value != "2.5.29.17")
-            {
-                continue;
-            }
-
-            try
-            {
-                var reader = new AsnReader(extension.RawData, AsnEncodingRules.DER);
-                var names = reader.ReadSequence();
-                while (names.HasData)
-                {
-                    // GeneralName uniformResourceIdentifier is [6] IA5String
-                    if (names.PeekTag().HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 6)))
-                    {
-                        var uri = names.ReadCharacterString(
-                            UniversalTagNumber.IA5String,
-                            new Asn1Tag(TagClass.ContextSpecific, 6));
-                        uriCount++;
-                        matches = string.Equals(uri, expectedUri, StringComparison.Ordinal);
-                    }
-                    else
-                    {
-                        names.ReadEncodedValue();
-                    }
-                }
-            }
-            catch (AsnContentException)
-            {
-                // A malformed SAN is a wrong identity, not a crash. AsnContentException derives from
-                // Exception, not CryptographicException, so the caller's catch clauses would not see it.
-                return false;
-            }
-        }
-
-        return uriCount == 1 && matches;
     }
 
     /// <summary>
