@@ -12,13 +12,18 @@ internal sealed class ServiceAgentHost : IAgentHost
 {
     private readonly IServiceControl _service;
     private readonly CleanupManifest _manifest;
+    private readonly bool _writesEntries;
     private bool _entriesWritten;
 
-    /// <summary>Wraps the service control for one run.</summary>
-    public ServiceAgentHost(IServiceControl service, CleanupManifest manifest)
+    /// <summary>
+    /// Wraps the service control for one run. <paramref name="writesEntries"/> is false in MSI mode (P23): the
+    /// service's first-start entries were already written before the install, so <see cref="PrepareAsync"/> writes nothing.
+    /// </summary>
+    public ServiceAgentHost(IServiceControl service, CleanupManifest manifest, bool writesEntries = true)
     {
         _service = service;
         _manifest = manifest;
+        _writesEntries = writesEntries;
     }
 
     /// <inheritdoc />
@@ -30,7 +35,7 @@ internal sealed class ServiceAgentHost : IAgentHost
     /// <inheritdoc />
     public Task<Result> PrepareAsync(CancellationToken ct)
     {
-        if (_entriesWritten)
+        if (!_writesEntries || _entriesWritten)
         {
             return Task.FromResult(Result.Success());
         }

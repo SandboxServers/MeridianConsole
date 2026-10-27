@@ -33,8 +33,11 @@ internal sealed class TokenMinter
         _redactor = redactor;
     }
 
-    /// <summary>Creates a single-use token for <paramref name="organizationId"/> valid for 30 minutes.</summary>
-    public async Task<Result<MintedToken>> MintAsync(Guid organizationId, string label, CancellationToken ct)
+    /// <summary>
+    /// Creates a single-use token for <paramref name="organizationId"/>. <paramref name="lifetime"/> defaults to 30 minutes;
+    /// the MSI leg passes 10 minutes (P23).
+    /// </summary>
+    public async Task<Result<MintedToken>> MintAsync(Guid organizationId, string label, CancellationToken ct, TimeSpan? lifetime = null)
     {
         try
         {
@@ -43,7 +46,7 @@ internal sealed class TokenMinter
                 db, new NoopAuditService(), TimeProvider.System,
                 Options.Create(new NodesOptions()), NullLogger<EnrollmentTokenService>.Instance);
             var (token, plainText) = await service.CreateTokenAsync(
-                organizationId, createdByUserId: $"uat-{_runId}", label, TimeSpan.FromMinutes(30), ct);
+                organizationId, createdByUserId: $"uat-{_runId}", label, lifetime ?? TimeSpan.FromMinutes(30), ct);
             _redactor.AddSecret(plainText, SecretKind.EnrollmentToken);
             return Result<MintedToken>.Success(new MintedToken(token.Id, plainText));
         }
