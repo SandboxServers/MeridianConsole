@@ -694,9 +694,7 @@ public sealed class AgentBootstrapServiceTests
 
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
-            // Counted before the timer is armed so a fire can never observe a count that has not been raised yet.
-            Interlocked.Increment(ref _pendingTimers);
-            return base.CreateTimer(
+            var timer = base.CreateTimer(
                 s =>
                 {
                     Interlocked.Decrement(ref _pendingTimers);
@@ -705,6 +703,11 @@ public sealed class AgentBootstrapServiceTests
                 state,
                 dueTime,
                 period);
+
+            // Counted after arming so HasPendingTimer implies the timer's due time is already fixed against the fake clock.
+            // A fire before the increment only makes the count transiently -1, never wrong at rest.
+            Interlocked.Increment(ref _pendingTimers);
+            return timer;
         }
     }
 
