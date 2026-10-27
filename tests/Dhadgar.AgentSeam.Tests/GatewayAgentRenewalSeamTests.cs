@@ -28,7 +28,7 @@ namespace Dhadgar.AgentSeam.Tests;
 /// Seam tests (S3, through the Gateway): the real agent renews its certificate at
 /// <c>/api/v1/agents/{nodeId}/certificates/renew</c> on the Gateway, which forwards to the real Nodes host. The old
 /// certificate stays usable inside the renewal grace window and the hub accepts it there. The time-advance and
-/// lost-response cases run only in the direct test (Nodes.Tests). Red until Nodes P09 and P16 land.
+/// lost-response cases run only in the direct test (Nodes.Tests).
 /// </summary>
 public sealed class GatewayAgentRenewalSeamTests : IDisposable
 {
@@ -127,7 +127,7 @@ public sealed class GatewayAgentRenewalSeamTests : IDisposable
 
     /// <summary>
     /// Builds the real agent enrollment service with the enrolled node identity, so renewal is not refused as
-    /// "not enrolled". P11 changes this to the identity provider.
+    /// "not enrolled". The identity comes from <see cref="AgentIdentityProvider"/>, as in the real host.
     /// </summary>
     private static AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,

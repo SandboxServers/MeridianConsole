@@ -63,6 +63,39 @@ public sealed class AgentOptionsValidationTests
         Assert.Empty(results);
     }
 
+    [Fact]
+    public void NestedRenewalRetryOutOfRange_FailsTryValidateObject()
+    {
+        var options = new AgentOptions();
+        options.ControlPlane.RenewalRetryMinutes = 31;
+
+        var valid = Validator.TryValidateObject(options, new ValidationContext(options), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.False(valid);
+    }
+
+    [Fact]
+    public void NestedConnectionCheckIntervalZero_FailsTryValidateObject()
+    {
+        var options = new AgentOptions();
+        options.ControlPlane.ConnectionCheckIntervalSeconds = 0;
+
+        var valid = Validator.TryValidateObject(options, new ValidationContext(options), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.False(valid);
+    }
+
+    [Fact]
+    public void NestedRenewalThresholdAboveValidity_FailsTryValidateObject()
+    {
+        var options = new AgentOptions();
+        options.Security.CertificateRenewalThresholdDays = 91;
+
+        var valid = Validator.TryValidateObject(options, new ValidationContext(options), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.False(valid);
+    }
+
     [Theory]
     [InlineData(@"\foo")]
     [InlineData("C:foo")]

@@ -74,6 +74,32 @@ public sealed class AgentOptions : IValidatableObject
         {
             yield return new ValidationResult(stateDirectoryError, [nameof(StateDirectory)]);
         }
+
+        // Validator.TryValidateObject is not recursive, so the nested rules (retry window, check intervals,
+        // renewal threshold) run only when they are called here.
+        foreach (var result in ValidateNested(ControlPlane))
+        {
+            yield return result;
+        }
+
+        foreach (var result in ValidateNested(Security))
+        {
+            yield return result;
+        }
+    }
+
+    /// <summary>
+    /// Runs the data annotations and <see cref="IValidatableObject"/> rules of a nested options object.
+    /// </summary>
+    private static List<ValidationResult> ValidateNested(object? value)
+    {
+        var results = new List<ValidationResult>();
+        if (value is not null)
+        {
+            Validator.TryValidateObject(value, new ValidationContext(value), results, validateAllProperties: true);
+        }
+
+        return results;
     }
 
     /// <summary>

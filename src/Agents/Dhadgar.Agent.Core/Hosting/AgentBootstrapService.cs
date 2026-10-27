@@ -82,6 +82,8 @@ public sealed class AgentBootstrapService : BackgroundService
             return;
         }
 
+        _logger.LogInformation("Agent identity resolved. NodeId: {NodeId}", identity.NodeId);
+
         // Check at once on start: a crash after a renewal commit is recovered inside the grace window.
         var nextRenewalCheck = DateTimeOffset.MinValue;
         var checkInterval = TimeSpan.FromSeconds(_cp.ConnectionCheckIntervalSeconds);

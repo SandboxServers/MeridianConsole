@@ -5,7 +5,6 @@ using Dhadgar.Agent.Core.Hosting;
 using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Process;
 using Dhadgar.Agent.Windows.Installation;
-using Dhadgar.Agent.Windows.IPC;
 using Dhadgar.Agent.Windows.Security;
 using Dhadgar.Agent.Windows.Services;
 using Dhadgar.Agent.Windows.Windows;
@@ -92,19 +91,6 @@ public static class Program
                 return new DirectoryAclManager(logger, allowedRoots);
             });
 
-            // Register AgentPipeServer factory - requires NodeId which may not be known until enrollment
-            builder.Services.AddSingleton<IAgentPipeServer>(sp =>
-            {
-                var logger = sp.GetRequiredService<ILogger<AgentPipeServer>>();
-                var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
-
-                // Use the enrolled NodeId from the identity provider, otherwise a placeholder GUID
-                // (pipe server won't be started until after enrollment anyway)
-                var nodeId = sp.GetRequiredService<IAgentIdentityProvider>().Current?.NodeId ?? Guid.Empty;
-
-                return new AgentPipeServer(nodeId, logger, timeProvider);
-            });
-
             // Add Windows Event Log logging
             builder.Logging.AddEventLog(settings =>
             {
@@ -159,11 +145,7 @@ public static class Program
             return Result.Failure("Control plane endpoint must use HTTPS");
         }
 
-        var identity = scope.ServiceProvider.GetRequiredService<IAgentIdentityProvider>().Current;
-        logger.LogInformation(
-            "Windows Agent starting. NodeId: {NodeId}, ControlPlane: {Endpoint}",
-            identity?.NodeId.ToString() ?? "(not enrolled)",
-            uri.Host);
+        logger.LogInformation("Windows Agent starting. ControlPlane: {Endpoint}", uri.Host);
 
         // Configure service recovery with progressive delays (5s/10s/30s).
         // This overrides WiX's uniform delay to set proper progression via sc.exe.

@@ -26,7 +26,7 @@ namespace Dhadgar.Nodes.Tests.Integration;
 /// <summary>
 /// Seam tests (S3): the real agent <see cref="EnrollmentService"/> renews its certificate against the real Nodes host
 /// over a TestServer, with mTLS enabled and a certificate issued by the real CA. The old certificate stays usable
-/// inside the renewal grace window (D-S212), and the hub accepts it there. Red until Nodes P09 and P16 land.
+/// inside the renewal grace window (D-S212), and the hub accepts it there.
 /// </summary>
 [Collection("Nodes Integration")]
 public sealed class AgentRenewalSeamTests : IDisposable
@@ -176,8 +176,8 @@ public sealed class AgentRenewalSeamTests : IDisposable
         Assert.Single(orphan);
         var orphanThumbprint = orphan[0].Thumbprint;
 
-        // Retry after 5 minutes (AgentCertificateRenewalPolicy.AgentRetryMinutes once P16 exists).
-        _baseFactory.TimeProvider.Advance(TimeSpan.FromMinutes(5));
+        // The agent retries a failed renewal after AgentRetryMinutes, well inside the 60-minute grace window (D-S212).
+        _baseFactory.TimeProvider.Advance(TimeSpan.FromMinutes(AgentCertificateRenewalPolicy.AgentRetryMinutes));
         var second = await renewing.RenewCertificateAsync();
         Assert.True(second.IsSuccess, second.Error);
         Assert.Equal(1, dropper.DroppedCount);
@@ -271,7 +271,7 @@ public sealed class AgentRenewalSeamTests : IDisposable
 
     /// <summary>
     /// Builds the real agent enrollment service with the enrolled node identity, so renewal is not refused as
-    /// "not enrolled". P11 changes this to the identity provider.
+    /// "not enrolled". The identity comes from <see cref="AgentIdentityProvider"/>, as in the real host.
     /// </summary>
     private static AgentEnrollmentService CreateRenewingAgent(
         IHttpClientFactory httpClientFactory,
