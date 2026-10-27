@@ -39,6 +39,12 @@ public sealed class AgentCertificate
     /// <summary>When this certificate was issued.</summary>
     public DateTime IssuedAt { get; set; }
 
+    /// <summary>
+    /// Optimistic concurrency token. Maps to the PostgreSQL xmin system column, so a renewal
+    /// and a concurrent revoke or decommission of the same certificate cannot both commit.
+    /// </summary>
+    public uint RowVersion { get; set; }
+
     // Navigation property
     public Node Node { get; set; } = null!;
 }

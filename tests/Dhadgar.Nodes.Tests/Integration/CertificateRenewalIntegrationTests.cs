@@ -8,10 +8,6 @@ using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Models;
 using Microsoft.Extensions.DependencyInjection;
 
-// Alias contract DTOs explicitly; the Models namespace declares types with the same names.
-using RenewCertificateRequest = Dhadgar.Contracts.Nodes.RenewCertificateRequest;
-using RenewCertificateResponse = Dhadgar.Contracts.Nodes.RenewCertificateResponse;
-
 namespace Dhadgar.Nodes.Tests.Integration;
 
 [Collection("Nodes Integration")]

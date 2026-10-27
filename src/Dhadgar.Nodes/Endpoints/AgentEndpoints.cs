@@ -261,7 +261,20 @@ public static class AgentEndpoints
             new AgentCertificateIssued(nodeId, certResult.Thumbprint!, certResult.NotAfter!.Value),
             ct);
 
-        await dbContext.SaveChangesAsync(ct);
+        try
+        {
+            await dbContext.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another renewal, a revoke or a decommission changed the current certificate after it was read.
+            // Nothing from this request was persisted, so the issued certificate is discarded.
+            logger.LogWarning(
+                "Certificate renewal for node {NodeId} lost a concurrency race on thumbprint {Thumbprint}.",
+                nodeId, currentCert.Thumbprint);
+            return ProblemDetailsHelper.Unauthorized("thumbprint_mismatch",
+                "The certificate was renewed or revoked by a concurrent request.");
+        }
 
         logger.LogInformation(
             "Certificate renewed for node {NodeId}. Old: {OldThumbprint}, New: {NewThumbprint}",
