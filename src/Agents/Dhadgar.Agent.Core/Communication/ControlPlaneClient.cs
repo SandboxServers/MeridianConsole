@@ -64,7 +64,10 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
 
             SetState(ConnectionState.Connecting);
 
-            var baseUri = new Uri(_options.ControlPlane.Endpoint);
+            if (!Uri.TryCreate(_options.ControlPlane.Endpoint, UriKind.Absolute, out var baseUri))
+            {
+                return Refuse("[ControlPlane.InvalidEndpoint] Control plane endpoint is not an absolute URI.");
+            }
 
             // Security: Require HTTPS for control plane communication
             if (baseUri.Scheme != Uri.UriSchemeHttps)
@@ -163,11 +166,18 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             _logger.LogInformation("Connected to control plane");
             return Result.Success();
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller's own cancellation is the one exception ConnectAsync lets through (D-S227).
+            SetState(ConnectionState.Failed, "Connect cancelled");
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to connect to control plane");
-            SetState(ConnectionState.Failed, ex.Message);
-            throw;
+            // Any other fault (certificate store, hub builder) is a failed connect, never a throw (D-S24, F8, D-S227).
+            _logger.LogError(ex, "Unexpected error while connecting to control plane");
+            SetState(ConnectionState.Failed, ex.GetType().Name);
+            return Result.Failure($"[ControlPlane.ConnectFailed] unexpected {ex.GetType().Name}");
         }
         finally
         {
