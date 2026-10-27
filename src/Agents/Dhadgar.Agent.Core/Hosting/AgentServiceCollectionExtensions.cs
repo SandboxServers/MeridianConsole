@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.Security;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Commands;
 using Dhadgar.Agent.Core.Communication;
@@ -35,6 +36,7 @@ public static class AgentServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         // Authentication - IEnrollmentService requires ICertificateStore from platform-specific host
+        services.AddSingleton<IClientCertificateProvider, ClientCertificateProvider>();
         services.AddSingleton<IEnrollmentService, EnrollmentService>();
         services.AddSingleton<IHardwareInventoryCollector, HardwareInventoryCollector>();
 
@@ -104,30 +106,21 @@ public static class AgentServiceCollectionExtensions
         services.AddHttpClient("ControlPlaneMtls")
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {
-                var options = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
-                var certificateStore = sp.GetRequiredService<ICertificateStore>();
+                var provider = sp.GetRequiredService<IClientCertificateProvider>();
 
-                var handler = new HttpClientHandler
+                // The certificate is selected per handshake, so a renewal takes effect on the next
+                // connection without rebuilding the handler. PooledConnectionLifetime bounds how long
+                // a pooled connection keeps the certificate it was opened with.
+                return new SocketsHttpHandler
                 {
-                    AllowAutoRedirect = false
+                    AllowAutoRedirect = false,
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(1),
+                    SslOptions = new SslClientAuthenticationOptions
+                    {
+                        // A null return means no client certificate; the control plane answers 401.
+                        LocalCertificateSelectionCallback = (_, _, _, _, _) => provider.Current
+                    }
                 };
-
-                // Add client certificate for mTLS if available
-                var clientCert = certificateStore.GetClientCertificate();
-
-                // SECURITY: Enrolled agents MUST have a client certificate for mTLS
-                if (options.NodeId.HasValue && clientCert is null)
-                {
-                    throw new InvalidOperationException(
-                        "Client certificate is required for enrolled agents (NodeId is set)");
-                }
-
-                if (clientCert is not null)
-                {
-                    handler.ClientCertificates.Add(clientCert);
-                }
-
-                return handler;
             })
             .ConfigureHttpClient((sp, client) =>
             {

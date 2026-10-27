@@ -1,3 +1,4 @@
+using System.Formats.Asn1;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -34,20 +35,32 @@ public sealed class EnrollmentService : IEnrollmentService
     /// </summary>
     private const int MaxResponseBodySize = 1024 * 1024;
 
+    /// <summary>
+    /// Maximum size read from a non-success body when looking for its errorCode (4 KB).
+    /// </summary>
+    private const int MaxErrorBodySize = 4 * 1024;
+
     private readonly ICertificateStore _certificateStore;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AgentOptions _options;
     private readonly ILogger<EnrollmentService> _logger;
     private readonly IEnrollmentTokenCleanup? _enrollmentTokenCleanup;
     private readonly IHardwareInventoryCollector _hardwareInventory;
+    private readonly IClientCertificateProvider _clientCertificateProvider;
 
+    /// <param name="clientCertificateProvider">
+    /// Invalidated after enrollment and renewal store new key material. When omitted, a provider
+    /// over <paramref name="certificateStore"/> is created, which is only correct when no other
+    /// handshake consumer shares the store.
+    /// </param>
     public EnrollmentService(
         ICertificateStore certificateStore,
         IHttpClientFactory httpClientFactory,
         IOptions<AgentOptions> options,
         ILogger<EnrollmentService> logger,
         IHardwareInventoryCollector hardwareInventory,
-        IEnrollmentTokenCleanup? enrollmentTokenCleanup = null)
+        IEnrollmentTokenCleanup? enrollmentTokenCleanup = null,
+        IClientCertificateProvider? clientCertificateProvider = null)
     {
         _hardwareInventory = hardwareInventory ?? throw new ArgumentNullException(nameof(hardwareInventory));
         _certificateStore = certificateStore ?? throw new ArgumentNullException(nameof(certificateStore));
@@ -55,6 +68,7 @@ public sealed class EnrollmentService : IEnrollmentService
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _enrollmentTokenCleanup = enrollmentTokenCleanup;
+        _clientCertificateProvider = clientCertificateProvider ?? new ClientCertificateProvider(certificateStore);
     }
 
     /// <summary>
@@ -227,7 +241,8 @@ public sealed class EnrollmentService : IEnrollmentService
                 // Capture expiry before cert is disposed
                 certExpiry = cert.NotAfter;
 
-                var privateKeyBytes = ecdsa.ExportECPrivateKey();
+                // PKCS#8 on every platform; the store and the mTLS provider both expect this format
+                var privateKeyBytes = ecdsa.ExportPkcs8PrivateKey();
 
                 try
                 {
@@ -239,6 +254,8 @@ public sealed class EnrollmentService : IEnrollmentService
                     System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
                 }
             }
+
+            _clientCertificateProvider.Invalidate();
 
             // Store CA certificate if provided
             if (!string.IsNullOrEmpty(enrollmentResponse.CaCertificate))
@@ -318,11 +335,14 @@ public sealed class EnrollmentService : IEnrollmentService
     public async Task<Result<CertificateRenewalResult>> RenewCertificateAsync(
         CancellationToken cancellationToken = default)
     {
+        // NodeId comes from options; P11 replaces this with the identity provider
         if (!_options.NodeId.HasValue)
         {
             return Result<CertificateRenewalResult>.Failure(
                 "[Renewal.NotEnrolled] Agent is not enrolled");
         }
+
+        var nodeId = _options.NodeId.Value;
 
         // SECURITY: Use 'using' to ensure certificate is disposed after use
         using var currentCert = _certificateStore.GetClientCertificate();
@@ -332,21 +352,15 @@ public sealed class EnrollmentService : IEnrollmentService
                 "[Renewal.NoCertificate] No current certificate found");
         }
 
-        _logger.LogInformation("Starting certificate renewal for node {NodeId}", _options.NodeId);
+        _logger.LogInformation("Starting certificate renewal for node {NodeId}", nodeId);
 
         try
         {
-            // Generate new key pair
+            // The new key pair is generated here and never leaves the agent; only the public key is sent
             using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-            var publicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
+            var request = new RenewCertificateRequest(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo()));
 
-            var request = new CertificateRenewalRequest
-            {
-                NodeId = _options.NodeId.Value,
-                PublicKey = Convert.ToBase64String(publicKeyBytes)
-            };
-
-            // Use mTLS client for renewal (includes current certificate)
+            // Use mTLS client for renewal (the handshake presents the current certificate)
             using var client = _httpClientFactory.CreateClient("ControlPlaneMtls");
 
             // Enforce HTTPS for renewal - certificate material should never traverse plain HTTP
@@ -365,9 +379,9 @@ public sealed class EnrollmentService : IEnrollmentService
             }
 
             // SECURITY: Use ResponseHeadersRead to check Content-Length before buffering entire body
-            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"api/v1/agents/{_options.NodeId}/certificates/renew")
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"api/v1/agents/{nodeId:D}/certificates/renew")
             {
-                Content = JsonContent.Create(request)
+                Content = JsonContent.Create(request, options: WireJsonOptions)
             };
 
             using var response = await client.SendAsync(
@@ -377,10 +391,12 @@ public sealed class EnrollmentService : IEnrollmentService
 
             if (!response.IsSuccessStatusCode)
             {
-                // SECURITY: Do not log response body - may contain secrets or sensitive error details
-                _logger.LogError("Certificate renewal failed with status {Status}", response.StatusCode);
+                // SECURITY: Do not log the body; only the bounded, plain-token errorCode is surfaced
+                var errorCode = await ReadProblemErrorCodeAsync(response, cancellationToken);
+                _logger.LogError("Certificate renewal failed with status {Status} ({ErrorCode})",
+                    response.StatusCode, errorCode ?? "none");
                 return Result<CertificateRenewalResult>.Failure(
-                    $"[Renewal.Failed] Certificate renewal failed: {response.StatusCode}");
+                    $"[Renewal.Rejected] {(int)response.StatusCode} {errorCode ?? "unknown"}");
             }
 
             // SECURITY: Validate Content-Length before reading body to prevent memory exhaustion
@@ -394,13 +410,14 @@ public sealed class EnrollmentService : IEnrollmentService
             }
 
             // Read with size-limited stream if Content-Length is missing or needs verification
-            CertificateRenewalResponse? renewalResponse;
+            RenewCertificateResponse? renewalResponse;
             await using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken))
             await using (var limitedStream = new SizeLimitedStream(responseStream, MaxResponseBodySize))
             {
-                renewalResponse = await JsonSerializer.DeserializeAsync<CertificateRenewalResponse>(
+                renewalResponse = await JsonSerializer.DeserializeAsync<RenewCertificateResponse>(
                     limitedStream,
-                    cancellationToken: cancellationToken);
+                    WireJsonOptions,
+                    cancellationToken);
             }
 
             if (renewalResponse is null)
@@ -416,7 +433,7 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Renewal.InvalidCertificate] Renewal response contains empty certificate");
             }
 
-            // Validate certificate size to prevent memory exhaustion
+            // Validate certificate size to prevent memory exhaustion (PEM fits within the limit)
             if (renewalResponse.Certificate.Length > MaxCertificateBase64Length)
             {
                 _logger.LogWarning("Renewal certificate data exceeds maximum size ({Length} > {Max})",
@@ -425,34 +442,42 @@ public sealed class EnrollmentService : IEnrollmentService
                     "[Renewal.CertificateTooLarge] Certificate data exceeds maximum allowed size");
             }
 
-            // Store the new certificate (use X509CertificateLoader for security)
-            var certBytes = Convert.FromBase64String(renewalResponse.Certificate);
             DateTime newExpiry;
+            var localPublicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
 
             // Use using to guarantee certificate disposal on all paths
-            using (var newCert = X509CertificateLoader.LoadCertificate(certBytes))
+            using (var newCert = DecodeCertificate(renewalResponse.Certificate))
             {
-                // Validate that the certificate's public key matches our locally generated keypair
-                // This prevents the server from issuing a certificate for a different key
-                using var certEcdsa = newCert.GetECDsaPublicKey();
-                if (certEcdsa is null)
+                // The certificate must bind exactly the key this agent generated for this renewal
+                using (var certEcdsa = newCert.GetECDsaPublicKey())
                 {
-                    return Result<CertificateRenewalResult>.Failure(
-                        "[Renewal.InvalidCertificate] Certificate does not contain an ECDSA public key");
+                    if (certEcdsa is null)
+                    {
+                        return Result<CertificateRenewalResult>.Failure(
+                            "[Renewal.InvalidCertificate] Certificate does not contain an ECDSA public key");
+                    }
+
+                    if (!certEcdsa.ExportSubjectPublicKeyInfo().AsSpan().SequenceEqual(localPublicKeyBytes))
+                    {
+                        return Result<CertificateRenewalResult>.Failure(
+                            "[Renewal.KeyMismatch] Certificate public key does not match locally generated keypair");
+                    }
                 }
 
-                var certPublicKeyBytes = certEcdsa.ExportSubjectPublicKeyInfo();
-                var localPublicKeyBytes = ecdsa.ExportSubjectPublicKeyInfo();
-                if (!certPublicKeyBytes.AsSpan().SequenceEqual(localPublicKeyBytes))
+                // The certificate must name this node and no other identity
+                if (!HasOnlySpiffeUri(newCert, AgentCertificateProfile.SpiffeId(nodeId)))
                 {
+                    _logger.LogError("Renewed certificate does not carry the expected SPIFFE identity for node {NodeId}",
+                        nodeId);
                     return Result<CertificateRenewalResult>.Failure(
-                        "[Renewal.KeyMismatch] Certificate public key does not match locally generated keypair");
+                        "[Renewal.WrongIdentity] Certificate SAN does not match this node");
                 }
 
                 // Capture expiry before cert is disposed
                 newExpiry = newCert.NotAfter;
 
-                var privateKeyBytes = ecdsa.ExportECPrivateKey();
+                // PKCS#8 on every platform, matching the enrollment handoff
+                var privateKeyBytes = ecdsa.ExportPkcs8PrivateKey();
 
                 try
                 {
@@ -463,6 +488,24 @@ public sealed class EnrollmentService : IEnrollmentService
                     // SECURITY: Zero sensitive key material immediately after use
                     System.Security.Cryptography.CryptographicOperations.ZeroMemory(privateKeyBytes);
                 }
+
+                // Handshakes must present the new certificate from now on
+                _clientCertificateProvider.Invalidate();
+            }
+
+            // Store CA certificate if provided
+            if (!string.IsNullOrEmpty(renewalResponse.CaCertificate))
+            {
+                if (renewalResponse.CaCertificate.Length > MaxCertificateBase64Length)
+                {
+                    _logger.LogWarning("CA certificate data exceeds maximum size ({Length} > {Max})",
+                        renewalResponse.CaCertificate.Length, MaxCertificateBase64Length);
+                    return Result<CertificateRenewalResult>.Failure(
+                        "[Renewal.CaCertificateTooLarge] CA certificate data exceeds maximum allowed size");
+                }
+
+                using var caCert = DecodeCertificate(renewalResponse.CaCertificate);
+                await _certificateStore.StoreCaCertificateAsync(caCert, cancellationToken);
             }
 
             _logger.LogInformation("Certificate renewal completed. New expiry: {Expiry:O}", newExpiry);
@@ -503,6 +546,81 @@ public sealed class EnrollmentService : IEnrollmentService
             return Result<CertificateRenewalResult>.Failure(
                 "[Renewal.ResponseTooLarge] Response body exceeded maximum allowed size");
         }
+    }
+
+    /// <summary>
+    /// Reads the <c>errorCode</c> extension of a problem+json error body. Returns null when the body
+    /// is absent, malformed, oversized, or the value is not a short plain token.
+    /// </summary>
+    private static async Task<string?> ReadProblemErrorCodeAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            await using var limitedStream = new SizeLimitedStream(responseStream, MaxErrorBodySize);
+            using var document = await JsonDocument.ParseAsync(limitedStream, cancellationToken: cancellationToken);
+
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("errorCode", out var element)
+                || element.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            var value = element.GetString();
+            if (value is null || value.Length is 0 or > 64)
+            {
+                return null;
+            }
+
+            // Only [a-z0-9_] are kept so a hostile body cannot inject text into the error or the log
+            return value.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') ? value : null;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// True when the certificate's only URI SAN is <paramref name="expectedUri"/>.
+    /// </summary>
+    private static bool HasOnlySpiffeUri(X509Certificate2 certificate, string expectedUri)
+    {
+        var uriCount = 0;
+        var matches = false;
+
+        foreach (var extension in certificate.Extensions)
+        {
+            // subjectAltName
+            if (extension.Oid?.Value != "2.5.29.17")
+            {
+                continue;
+            }
+
+            var reader = new AsnReader(extension.RawData, AsnEncodingRules.DER);
+            var names = reader.ReadSequence();
+            while (names.HasData)
+            {
+                // GeneralName uniformResourceIdentifier is [6] IA5String
+                if (names.PeekTag().HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 6)))
+                {
+                    var uri = names.ReadCharacterString(
+                        UniversalTagNumber.IA5String,
+                        new Asn1Tag(TagClass.ContextSpecific, 6));
+                    uriCount++;
+                    matches = string.Equals(uri, expectedUri, StringComparison.Ordinal);
+                }
+                else
+                {
+                    names.ReadEncodedValue();
+                }
+            }
+        }
+
+        return uriCount == 1 && matches;
     }
 
     /// <summary>
@@ -556,23 +674,6 @@ public sealed class EnrollmentResult
     public required Guid NodeId { get; init; }
     public required Guid OrganizationId { get; init; }
     public required DateTime CertificateExpiry { get; init; }
-}
-
-/// <summary>
-/// Certificate renewal request.
-/// </summary>
-public sealed class CertificateRenewalRequest
-{
-    public required Guid NodeId { get; init; }
-    public required string PublicKey { get; init; }
-}
-
-/// <summary>
-/// Certificate renewal response.
-/// </summary>
-public sealed class CertificateRenewalResponse
-{
-    public required string Certificate { get; init; }
 }
 
 /// <summary>
