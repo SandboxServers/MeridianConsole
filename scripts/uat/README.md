@@ -34,6 +34,7 @@ containers and CNG keys, files and folders under the run folder (plus the machin
 processes whose image is under the run folder or is the Nodes or Gateway build the stack starts.
 
 A process cleanup cannot read is left running and reported, never killed.
+
 ## Parameters
 
 | Call | What it does |

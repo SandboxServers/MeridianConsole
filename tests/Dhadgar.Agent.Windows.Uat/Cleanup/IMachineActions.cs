@@ -15,6 +15,7 @@ internal sealed record ProcessImage(bool IsRunning, string Path)
     /// <summary>A running process and its full image path.</summary>
     public static ProcessImage Running(string path) => new(true, path);
 }
+
 /// <summary>
 /// Every machine change the driver can undo, one method per kind. Each method returns a <see cref="Result"/>
 /// and treats "already gone" as success, so undo is idempotent. Fakes stand in for it in unit tests.

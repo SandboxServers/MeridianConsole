@@ -48,6 +48,7 @@ public class RunPathsTests
 
         Assert.True(paths.Validate(Path.Combine("logs", "process.log")).IsFailure);
     }
+
     [Fact]
     public void StackImages_AreTheNodesAndGatewayReleaseBuilds()
     {

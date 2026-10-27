@@ -287,6 +287,7 @@ public class CleanupEngineTests
         Assert.Contains("KillProcess:4", actions.Calls);
         Assert.Empty(report.Failed);
     }
+
     private static readonly RegistryValueEntry TokenValue = new(@"SOFTWARE\Meridian Console\Agent", "EnrollmentToken", false);
 
     [Fact]
