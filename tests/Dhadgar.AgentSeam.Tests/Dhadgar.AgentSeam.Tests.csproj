@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Dhadgar.AgentSeam.Tests</AssemblyName>
+    <RootNamespace>Dhadgar.AgentSeam.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <!-- Pins the transitive System.Security.Cryptography.Xml (via EF Design's MSBuild deps) past its advisories; see Directory.Packages.props -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- Pins the transitive SQLitePCLRaw native lib past GHSA-2m69-gcr7-jv3q; see Directory.Packages.props -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dhadgar.Nodes.Tests\Dhadgar.Nodes.Tests.csproj" />
+    <!-- Both web apps define a global Program; the Gateway's is reached through the alias (D-S216). -->
+    <ProjectReference Include="..\..\src\Dhadgar.Gateway\Dhadgar.Gateway.csproj" Aliases="gateway" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

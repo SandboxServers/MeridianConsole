@@ -257,16 +257,14 @@ public sealed class NodeService : INodeService
         node.DeletedAt = now;
         node.UpdatedAt = now;
 
-        // Revoke all active certificates
+        // Revoke all active certificates and end any renewal grace (D-S212): a decommissioned node authenticates nowhere.
         var activeCerts = await _dbContext.AgentCertificates
-            .Where(c => c.NodeId == nodeId && !c.IsRevoked)
+            .Where(c => c.NodeId == nodeId && (!c.IsRevoked || c.GraceUntil != null))
             .ToListAsync(ct);
 
         foreach (var cert in activeCerts)
         {
-            cert.IsRevoked = true;
-            cert.RevokedAt = now;
-            cert.RevocationReason = "Node decommissioned";
+            AgentCertificateState.RevokeWithoutGrace(cert, now, "Node decommissioned");
         }
 
         // Publish event BEFORE SaveChangesAsync so it's part of the same transaction

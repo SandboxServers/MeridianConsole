@@ -1,6 +1,6 @@
 using Microsoft.IdentityModel.Protocols;
 
-namespace Dhadgar.Secrets.Infrastructure;
+namespace Dhadgar.ServiceDefaults.Security;
 
 /// <summary>
 /// A document retriever that rewrites external URLs to internal URLs for Docker/K8s environments.
@@ -42,11 +42,7 @@ public sealed class UrlRewritingDocumentRetriever : IDocumentRetriever, IDisposa
 
         if (RequireHttps && !rewrittenAddress.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            // Allow HTTP for internal URLs in development
-            if (!rewrittenAddress.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"The address '{address}' is not valid. HTTPS is required.");
-            }
+            throw new InvalidOperationException($"The address '{address}' is not valid. HTTPS is required.");
         }
 
         var response = await _httpClient.GetAsync(rewrittenAddress, cancel);

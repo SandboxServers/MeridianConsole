@@ -8,6 +8,10 @@ WiX v5 MSI installer for the Meridian Console Agent Windows Service.
 - WiX Toolset v5 (installed via NuGet package references)
 - Windows 10/11 or Windows Server 2019+ for building
 
+## Requirements
+
+The MSI installs on 64-bit Windows 10 (build 10240) or later. The installer reads the build number from `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\CurrentBuildNumber`. It cannot use the `WindowsBuild` or `VersionNT` properties, because msiexec reports Windows 8.1 values (9600 and 603) for them on Windows 10 and 11 (D-S242).
+
 ## Building the Installer
 
 ### From the Installer directory:
@@ -18,28 +22,24 @@ dotnet build
 
 # Build Release MSI
 dotnet build -c Release
-
-# Build for specific platform
-dotnet build -p:InstallerPlatform=x64
-dotnet build -p:InstallerPlatform=arm64
 ```
+
+The project sets `InstallerPlatform` to `x64` (the agent reads the 64-bit registry view), so no platform switch is needed.
 
 ### From the solution root:
 
 ```powershell
-# First, publish the agent
-dotnet publish src/Agents/Dhadgar.Agent.Windows -c Release -r win-x64 --self-contained
-
-# Then build the installer
-dotnet build src/Agents/Dhadgar.Agent.Windows/Installer -c Release
+# Build the agent and the MSI with the UAT build script (it also builds the UAT driver, Nodes and Gateway);
+# it restores locked and RID-less, so it does not rewrite lock files (D-S241)
+pwsh -NoProfile -File scripts\uat\Build-AgentWindowsUat.ps1 -Verb run -Mode Msi
 ```
 
 ## Output Location
 
-MSI files are output to:
+The MSI is output to:
 
 ```text
-bin\{Configuration}\{Platform}\en-US\MeridianConsoleAgent-{Version}-{Platform}.msi
+bin\Release\MeridianConsoleAgent.msi
 ```
 
 ## Installation
@@ -49,23 +49,24 @@ bin\{Configuration}\{Platform}\en-US\MeridianConsoleAgent-{Version}-{Platform}.m
 Double-click the MSI file or run:
 
 ```powershell
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi
+msiexec /i MeridianConsoleAgent.msi
 ```
 
 ### Silent Install
 
 ```powershell
 # Basic silent install
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /norestart
+msiexec /i MeridianConsoleAgent.msi /qn /norestart
 
 # With enrollment token
 # SECURITY NOTE: Command-line arguments are visible in process listings (Get-Process),
 # command history, and audit logs. For production deployments, consider using a transform
 # file (.mst) or clearing command history after installation.
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet ENROLLMENT_TOKEN=your-token-here
+# The MSI log never contains the token, even with /l*v: it is written by a hidden custom action (D-S245).
+msiexec /i MeridianConsoleAgent.msi /qn ENROLLMENT_TOKEN=your-token-here CONTROL_PLANE_ENDPOINT=https://control.example.com
 
 # With logging
-msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /l*v install.log
+msiexec /i MeridianConsoleAgent.msi /qn /l*v install.log
 ```
 
 ### Upgrade
@@ -73,14 +74,14 @@ msiexec /i MeridianConsoleAgent-1.0.0-x64.msi /quiet /l*v install.log
 The installer supports in-place upgrades. Simply run the new MSI:
 
 ```powershell
-msiexec /i MeridianConsoleAgent-2.0.0-x64.msi /quiet
+msiexec /i MeridianConsoleAgent-NewVersion.msi /qn
 ```
 
 ### Uninstall
 
 ```powershell
 # Via Add/Remove Programs, or:
-msiexec /x {ProductCode} /quiet
+msiexec /x {ProductCode} /qn
 
 # Or by UpgradeCode (recommended for automation):
 # Find installed product first
@@ -92,7 +93,8 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 | Property | Description | Default |
 |----------|-------------|---------|
 | `INSTALLFOLDER` | Installation directory | `C:\Program Files\Meridian Console\Agent\` |
-| `ENROLLMENT_TOKEN` | One-time enrollment token from control plane | (empty) |
+| `ENROLLMENT_TOKEN` | One-time enrollment token from the control plane. Written to HKLM\SOFTWARE\Meridian Console\Agent\EnrollmentToken by a hidden custom action, never through the Registry table, so no MSI log holds it (D-S245). Deleted on rollback and uninstall. | (empty) |
+| `CONTROL_PLANE_ENDPOINT` | Control plane URL; must be `https://`. Kept across major upgrades when omitted. Overrides `appsettings.json`; environment variables and the agent's command line still win. | (empty; `appsettings.json` value) |
 
 ## What Gets Installed
 
@@ -103,9 +105,12 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 
 ### Directories
 
+- `C:\ProgramData\Meridian Console\` - Parent of the agent data folders; created and owned by the installer so a standard user cannot pre-create it and keep ownership
 - `C:\ProgramData\Meridian Console\Agent\` - Runtime data
 - `C:\ProgramData\Meridian Console\Agent\Servers\` - Game server files
 - `C:\ProgramData\Meridian Console\Agent\Temp\` - Temporary files
+
+The folders above (the parent folder carries an empty-mask Owner Rights ACE, so an owner has no implicit WRITE_DAC) and the `HKLM\SOFTWARE\Meridian Console\Agent` key (which holds the enrollment token; protected on every install, with or without a token) use protected-DACL SDDL: SYSTEM and Administrators only, with no inherited access.
 
 ### Windows Service
 
@@ -113,6 +118,8 @@ Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*Meridi
 - Display Name: `Meridian Console Agent`
 - Startup Type: Automatic (Delayed Start)
 - Recovery: Restart on first 3 failures
+
+The service is installed by the same component as `Dhadgar.Agent.Windows.exe`: Windows Installer installs a service only from the component whose key path is the service's executable (D-S244).
 
 ### Event Log
 
@@ -139,16 +146,11 @@ The following resources are **not automatically removed** to prevent data loss a
 **Certificates** (run as Administrator in PowerShell):
 
 ```powershell
-# Remove agent certificates (filter by issuer for safety)
-Get-ChildItem Cert:\LocalMachine\My | Where-Object {
-    $_.Subject -like '*CN=dhadgar-agent*' -and
-    $_.Issuer -like '*Meridian Console*'
-} | Remove-Item -Force
+# Remove agent client certificates (issued by the agent CA)
+Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Issuer -like '*CN=Meridian Console Agent CA*' } | Remove-Item -Force
 
-# Remove CA certificate (exact subject match)
-Get-ChildItem Cert:\LocalMachine\Root | Where-Object {
-    $_.Subject -eq 'CN=Meridian Console CA, O=Meridian Console'
-} | Remove-Item -Force
+# Remove the agent CA from its custom store
+Get-ChildItem Cert:\LocalMachine\MeridianConsoleAgent | Where-Object { $_.Subject -like '*CN=Meridian Console Agent CA*' } | Remove-Item -Force
 ```
 
 **Firewall rules** (run as Administrator):
@@ -158,6 +160,8 @@ Get-ChildItem Cert:\LocalMachine\Root | Where-Object {
 # This includes any rules created by the agent for game servers
 netsh advfirewall firewall delete rule name=all program="C:\Program Files\Meridian Console\Agent\Dhadgar.Agent.Windows.exe"
 ```
+
+Agent state `C:\ProgramData\Meridian Console\Agent\agent-state.json` and the event source `Meridian Console Agent` also remain.
 
 **Game server data** (WARNING: This deletes all server files!):
 
@@ -186,7 +190,7 @@ For production deployments, uncomment the `<SignOutput>` property in the `.wixpr
 Ensure you've published the agent first:
 
 ```powershell
-dotnet publish ..\Dhadgar.Agent.Windows.csproj -c Release -r win-x64 --self-contained
+dotnet publish ..\Dhadgar.Agent.Windows.csproj -c Release -r win-x64
 ```
 
 **"WiX toolset not found"**
@@ -209,6 +213,10 @@ Check the Windows Event Log (Application) for startup errors. Common causes:
 Run the installer as Administrator.
 
 ## Development
+
+### Custom actions
+
+The installer's only custom actions are in `src/Agents/Dhadgar.Agent.Windows.InstallerActions` (DTF, net462). They write the enrollment token, and delete it on rollback and uninstall. The wixproj builds them through a project reference; the project is not in `Dhadgar.sln`. MakeSfxCA wraps the AnyCPU assembly in the x64 host (`Platform=x64`) and fails on paths of 260 characters or more. A secret installer property must never be formatted into a Registry, IniFile or Environment row, or into a deferred action without `HideTarget`: `Hidden="yes"` does not mask those in `/l*v` logs (D-S245).
 
 ### Debugging Custom Actions
 
@@ -243,5 +251,5 @@ A least-privilege service account would lack the permissions for these operation
 - The MSI requires administrator privileges to install
 - Certificates are stored in the Windows Certificate Store (LocalMachine)
 - All custom actions run elevated during install/uninstall
-- Enrollment tokens are stored in registry with SDDL ACLs restricting access to SYSTEM and Administrators only
+- Enrollment tokens are stored in the registry under a protected SDDL ACL (SYSTEM and Administrators only). They are written by a hidden custom action, so MSI logs never contain them. An administrator who sets the Windows Installer `Debug` policy to 7 opts in to logging otherwise masked values, the command line included.
 - After uninstall, residual artifacts (certificates, firewall rules, game server data) require manual cleanup -- see Package.wxs comments for details

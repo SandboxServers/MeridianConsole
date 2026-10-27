@@ -1,7 +1,7 @@
-using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
 using Dhadgar.Gateway;
+using Dhadgar.Gateway.Agents;
 using Dhadgar.Gateway.Endpoints;
 using Dhadgar.Gateway.Middleware;
 using Dhadgar.Gateway.Options;
@@ -12,9 +12,10 @@ using Dhadgar.ServiceDefaults.Health;
 using Dhadgar.ServiceDefaults.Middleware;
 using Dhadgar.ServiceDefaults.MultiTenancy;
 using Dhadgar.ServiceDefaults.Resilience;
+using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -32,6 +33,19 @@ builder.WebHost.ConfigureKestrel(options =>
     options.AddServerHeader = false;
     // Default 10 MB request body limit; Files service has its own 5-minute timeout for large uploads
     options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
+
+    // Agent client certificates. Kestrel accepts any client certificate at TLS level because Nodes is the
+    // validator (D-S25): chain, SPIFFE and revocation are checked by Nodes, the Gateway only forwards.
+    var agentCertMode = builder.Configuration.GetValue("AgentIngress:ClientCertificateMode", ClientCertificateMode.NoCertificate);
+    options.ConfigureHttpsDefaults(https =>
+    {
+        https.ClientCertificateMode = agentCertMode;
+        if (agentCertMode != ClientCertificateMode.NoCertificate)
+        {
+            // Chain, SPIFFE and revocation are validated by Nodes (D-S25); the Gateway only forwards.
+            https.AllowAnyClientCertificate();
+        }
+    });
 });
 
 if (!builder.Environment.IsEnvironment("Testing"))
@@ -80,23 +94,7 @@ if (!string.IsNullOrEmpty(redisConnectionString))
 }
 
 // Authentication/authorization
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Authority = builder.Configuration["Auth:Issuer"];
-        options.Audience = builder.Configuration["Auth:Audience"];
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ClockSkew = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue<int?>("Auth:ClockSkewSeconds") ?? 60)
-        };
-        options.RefreshOnIssuerKeyNotFound = true;
-    });
+builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment, "/hubs/console");
 
 builder.Services.AddAuthorization(options =>
 {
@@ -111,6 +109,14 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("client_type", "agent");
     });
 
+    // The TLS client certificate must be issued by the agent CA. Nodes validates the rest of the chain and the SPIFFE ID.
+    options.AddPolicy("AgentCertificate", policy =>
+    {
+        policy.RequireAssertion(ctx => ctx.Resource is HttpContext h
+            && h.Connection.ClientCertificate is { } c
+            && AgentCertificateForwarding.IsAgentIssued(c));
+    });
+
     // SECURITY: DenyAll policy for blocking internal endpoints from external access
     options.AddPolicy("DenyAll", policy =>
     {
@@ -119,7 +125,9 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    // Applies to every route: the forwarded certificate header is stripped on all of them (C6).
+    .AddTransforms(AgentCertificateForwarding.Apply);
 
 // HttpClient for diagnostics endpoints
 builder.Services.AddHttpClient();
@@ -170,7 +178,7 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken: cancellationToken);
     };
 
-    options.AddPolicy("Global", _ =>
+    options.AddPolicy(RouteRateLimiting.GlobalPolicy, _ =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: "global",
             factory: _ => new FixedWindowRateLimiterOptions
@@ -185,32 +193,7 @@ builder.Services.AddRateLimiter(options =>
     // range would bypass IP-based rate limiting if we used full addresses
     options.AddPolicy("Auth", httpContext =>
     {
-        var ip = httpContext.Connection.RemoteIpAddress;
-        string partitionKey;
-
-        if (ip == null)
-        {
-            partitionKey = "unknown";
-        }
-        else if (ip.IsIPv6LinkLocal)
-        {
-            // SECURITY: Link-local addresses (fe80::) are not globally unique and can be
-            // reused across different networks/interfaces. Treat them as a special bucket
-            // to prevent multiple clients from unfairly sharing the same rate limit.
-            partitionKey = "unknown-linklocal";
-        }
-        else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
-                 !ip.IsIPv4MappedToIPv6)
-        {
-            // Use /64 prefix for IPv6 to prevent rotation attacks
-            var bytes = ip.GetAddressBytes();
-            Array.Clear(bytes, 8, 8); // Zero out host portion (last 64 bits)
-            partitionKey = new IPAddress(bytes).ToString();
-        }
-        else
-        {
-            partitionKey = ip.ToString();
-        }
+        var partitionKey = RateLimitPartitionKeys.ClientIp(httpContext.Connection.RemoteIpAddress);
 
         return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: partitionKey,
@@ -222,32 +205,32 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
-    // SECURITY: Only use JWT claim for tenant identification - never trust client headers
-    // Unauthenticated requests fall back to IP-based limiting
+    // SECURITY: Keyed by the validated JWT's org_id (UseAuthentication has run), else by client IP. Never a header.
     options.AddPolicy("PerTenant", httpContext =>
     {
-        var tenantId = httpContext.User.FindFirst("org_id")?.Value
-                       ?? httpContext.Connection.RemoteIpAddress?.ToString()
-                       ?? "unknown";
+        var partitionKey = RateLimitPartitionKeys.Tenant(httpContext.User, httpContext.Connection.RemoteIpAddress);
 
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"tenant:{tenantId}",
-            factory: _ => new FixedWindowRateLimiterOptions
+        return RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey: partitionKey,
+            factory: _ => new TokenBucketRateLimiterOptions
             {
-                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:PermitLimit") ?? 100,
-                Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:WindowSeconds") ?? 60),
-                QueueLimit = 0
+                TokenLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:PermitLimit") ?? 100,
+                TokensPerPeriod = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:ReplenishPerSecond") ?? 50,
+                ReplenishmentPeriod = TimeSpan.FromSeconds(1),
+                QueueLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerTenant:QueueLimit") ?? 0,
+                AutoReplenishment = true
             });
     });
 
     options.AddPolicy("PerAgent", httpContext =>
     {
-        var agentId = httpContext.User.FindFirst("sub")?.Value
-                      ?? httpContext.Connection.RemoteIpAddress?.ToString()
-                      ?? "unknown";
+        // Keyed by client IP (IPv6 /64), never by the client certificate: the Gateway does not validate the
+        // certificate (Nodes does, D-S25), so a certificate-derived key would let a caller pick a fresh bucket per
+        // request with a forged certificate. Agents behind one NAT address share the bucket (D-S26 as amended).
+        var partitionKey = $"agent-ip:{RateLimitPartitionKeys.ClientIp(httpContext.Connection.RemoteIpAddress)}";
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"agent:{agentId}",
+            partitionKey: partitionKey,
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:Policies:PerAgent:PermitLimit") ?? 500,
@@ -315,12 +298,13 @@ app.UseMiddleware<ProblemDetailsMiddleware>();
 // 6. CORS (for non-preflight requests)
 app.UseCors(CorsConfiguration.PolicyName);
 
-// 6. Authentication/authorization
+// 6. Authentication, then rate limiting, then authorization.
+//    Rate limiting runs after authentication so PerTenant can key on the validated org_id, and before
+//    authorization so requests that end in 401/403 (no JWT, no or wrong-issuer agent certificate) are counted
+//    too (D-S220, D-S228).
 app.UseAuthentication();
-app.UseAuthorization();
-
-// 7. Rate limiting (after auth so tenant/agent context is available)
 app.UseRateLimiter();
+app.UseAuthorization();
 
 // 8. Request enrichment WITH HEADER STRIPPING (runs after auth to inject validated claims)
 app.UseMiddleware<RequestEnrichmentMiddleware>();
@@ -382,8 +366,17 @@ app.MapGet("/hello", () => Results.Text(GatewayHello.Message))
 app.MapDhadgarDefaultEndpoints();
 
 // YARP reverse proxy
+// YARP has already added each route's RateLimiterPolicy when this convention runs, and the last
+// EnableRateLimiting wins. Global is attached only to routes that name no policy (or "Default"), so it never
+// replaces a route's own policy (RouteRateLimiting.UsesGlobal; D-S228).
 app.MapReverseProxy()
-    .RequireRateLimiting("Global");
+    .ConfigureEndpoints((endpoint, route) =>
+    {
+        if (RouteRateLimiting.UsesGlobal(route.RateLimiterPolicy))
+        {
+            endpoint.RequireRateLimiting(RouteRateLimiting.GlobalPolicy);
+        }
+    });
 
 app.Run();
 

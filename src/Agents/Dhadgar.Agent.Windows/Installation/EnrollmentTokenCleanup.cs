@@ -17,16 +17,6 @@ namespace Dhadgar.Agent.Windows.Installation;
 /// </remarks>
 public sealed class EnrollmentTokenCleanup : IEnrollmentTokenCleanup
 {
-    /// <summary>
-    /// Registry path where agent configuration is stored.
-    /// </summary>
-    private const string RegistryKeyPath = @"SOFTWARE\Meridian Console\Agent";
-
-    /// <summary>
-    /// Registry value name for the enrollment token.
-    /// </summary>
-    private const string EnrollmentTokenValueName = "EnrollmentToken";
-
     private readonly ILogger<EnrollmentTokenCleanup> _logger;
 
     public EnrollmentTokenCleanup(ILogger<EnrollmentTokenCleanup> logger)
@@ -39,17 +29,17 @@ public sealed class EnrollmentTokenCleanup : IEnrollmentTokenCleanup
     {
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath, writable: true);
+            using var key = Registry.LocalMachine.OpenSubKey(AgentRegistry.KeyPath, writable: true);
             if (key is null)
             {
                 _logger.LogDebug(
                     "Registry key {KeyPath} does not exist, no enrollment token to clean up",
-                    RegistryKeyPath);
+                    AgentRegistry.KeyPath);
                 return;
             }
 
             // Check if the value exists before attempting to delete
-            var existingValue = key.GetValue(EnrollmentTokenValueName);
+            var existingValue = key.GetValue(AgentRegistry.EnrollmentTokenValueName);
             if (existingValue is null)
             {
                 _logger.LogDebug("No enrollment token found in registry, nothing to clean up");
@@ -57,12 +47,12 @@ public sealed class EnrollmentTokenCleanup : IEnrollmentTokenCleanup
             }
 
             // Delete the enrollment token value
-            key.DeleteValue(EnrollmentTokenValueName, throwOnMissingValue: false);
+            key.DeleteValue(AgentRegistry.EnrollmentTokenValueName, throwOnMissingValue: false);
 
             _logger.LogInformation(
                 "Successfully removed enrollment token from registry at {KeyPath}\\{ValueName}",
-                RegistryKeyPath,
-                EnrollmentTokenValueName);
+                AgentRegistry.KeyPath,
+                AgentRegistry.EnrollmentTokenValueName);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -72,8 +62,8 @@ public sealed class EnrollmentTokenCleanup : IEnrollmentTokenCleanup
                 ex,
                 "Insufficient permissions to remove enrollment token from registry. " +
                 "Consider manually deleting HKLM\\{KeyPath}\\{ValueName} to prevent token exposure",
-                RegistryKeyPath,
-                EnrollmentTokenValueName);
+                AgentRegistry.KeyPath,
+                AgentRegistry.EnrollmentTokenValueName);
         }
         catch (Exception ex)
         {
@@ -82,8 +72,8 @@ public sealed class EnrollmentTokenCleanup : IEnrollmentTokenCleanup
                 ex,
                 "Failed to remove enrollment token from registry. " +
                 "Consider manually deleting HKLM\\{KeyPath}\\{ValueName} to prevent token exposure",
-                RegistryKeyPath,
-                EnrollmentTokenValueName);
+                AgentRegistry.KeyPath,
+                AgentRegistry.EnrollmentTokenValueName);
         }
     }
 }

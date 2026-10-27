@@ -35,12 +35,12 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 
 | Service | Port | Description | Database |
 |---------|------|-------------|----------|
-| **Billing** | 5020 | Subscription management, usage metering (planned) | No |
+| **Billing** | 5020 | Subscription management, usage metering (planned); parked (see `parked/README.md`) | No |
 | **Servers** | 5030 | Game server lifecycle management (implementation open in PR #88) | No |
-| **Tasks** | 5050 | Background job orchestration (planned) | No |
-| **Files** | 5060 | File operations (slated for removal — see issue #115) | No |
+| **Tasks** | 5050 | Background job orchestration (planned); parked (see `parked/README.md`) | No |
+| **Files** | 5060 | File operations (slated for removal — see issue #115); parked (see `parked/README.md`) | No |
 | **Console** | 5070 | Real-time server console via SignalR (implementation open in PR #88) | No |
-| **Mods** | 5080 | Mod registry, versioning (implementation open in PR #88) | No |
+| **Mods** | 5080 | Mod registry, versioning (implementation open in PR #88); parked (see `parked/README.md`) | No |
 
 ---
 
@@ -50,7 +50,7 @@ Quick reference guide for all service ports in Meridian Console (Dhadgar).
 |-----|------|-------------|------|
 | **Scope** | 4321 | Documentation site | Astro/React/Tailwind (static) |
 | **Panel** | 4321 | Main control plane UI (scaffolding) | Astro/React/Tailwind (SSR) |
-| **ShoppingCart** | 4322 | Marketing, pricing & profile | Astro/React/Tailwind (static) |
+| **ShoppingCart** | 4322 | Marketing, pricing & profile; parked (see `parked/README.md`) | Astro/React/Tailwind (static) |
 
 ---
 

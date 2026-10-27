@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Dhadgar.Contracts.Nodes;
 
 namespace Dhadgar.Agent.Core.Configuration;
 
@@ -57,6 +58,26 @@ public sealed class ControlPlaneOptions : IValidatableObject
     [Range(5, 120)]
     public int InvocationTimeoutSeconds { get; set; } = 30;
 
+    /// <summary>
+    /// Minutes between certificate renewal checks while the agent runs (default 720, i.e. 12 hours).
+    /// </summary>
+    public int RenewalCheckIntervalMinutes { get; set; } = 720;
+
+    /// <summary>
+    /// Minutes before a failed renewal is retried. It stays well inside Nodes' revocation grace window (D-S212).
+    /// </summary>
+    public int RenewalRetryMinutes { get; set; } = AgentCertificateRenewalPolicy.AgentRetryMinutes;
+
+    /// <summary>
+    /// Seconds between connection and renewal checks in the bootstrap loop.
+    /// </summary>
+    public int ConnectionCheckIntervalSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Seconds before the first enrollment retry. The delay doubles after each failed attempt, up to 15 minutes.
+    /// </summary>
+    public int EnrollmentRetrySeconds { get; set; } = 60;
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -81,6 +102,34 @@ public sealed class ControlPlaneOptions : IValidatableObject
             yield return new ValidationResult(
                 $"{nameof(ServerTimeoutSeconds)} ({ServerTimeoutSeconds}) must be greater than {nameof(KeepAliveIntervalSeconds)} ({KeepAliveIntervalSeconds})",
                 [nameof(ServerTimeoutSeconds), nameof(KeepAliveIntervalSeconds)]);
+        }
+
+        if (RenewalCheckIntervalMinutes is < 1 or > 10080)
+        {
+            yield return new ValidationResult(
+                $"{nameof(RenewalCheckIntervalMinutes)} ({RenewalCheckIntervalMinutes}) must be between 1 and 10080",
+                [nameof(RenewalCheckIntervalMinutes)]);
+        }
+
+        if (RenewalRetryMinutes is < 1 or > 30)
+        {
+            yield return new ValidationResult(
+                $"{nameof(RenewalRetryMinutes)} ({RenewalRetryMinutes}) must be between 1 and 30 so retries stay inside the revocation grace window",
+                [nameof(RenewalRetryMinutes)]);
+        }
+
+        if (ConnectionCheckIntervalSeconds is < 1 or > 3600)
+        {
+            yield return new ValidationResult(
+                $"{nameof(ConnectionCheckIntervalSeconds)} ({ConnectionCheckIntervalSeconds}) must be between 1 and 3600",
+                [nameof(ConnectionCheckIntervalSeconds)]);
+        }
+
+        if (EnrollmentRetrySeconds is < 1 or > 3600)
+        {
+            yield return new ValidationResult(
+                $"{nameof(EnrollmentRetrySeconds)} ({EnrollmentRetrySeconds}) must be between 1 and 3600",
+                [nameof(EnrollmentRetrySeconds)]);
         }
     }
 }

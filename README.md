@@ -138,7 +138,7 @@ The design philosophy: **Agents run on customer hardware** and are high-trust co
 
 - **Scope**: Documentation site with 19 sections and interactive dependency graphs (functional)
 - **Panel**: Control plane UI with OAuth integration (scaffolding, dashboard skeleton)
-- **ShoppingCart**: Marketing site with pricing tiers (wireframe, OAuth flow only)
+- **ShoppingCart**: Marketing site with pricing tiers (wireframe, OAuth flow only) — parked (see parked/README.md)
 
 **Development Experience:**
 
@@ -611,7 +611,7 @@ These services have basic scaffolding (hello world, health checks) but core func
 
 #### 💰 Billing (`src/Dhadgar.Billing`) - Port 5002
 
-**Planned:** Subscription management, usage metering, invoicing
+**Planned:** Subscription management, usage metering, invoicing. **Parked** (see `parked/README.md`).
 
 #### 🖥️ Servers (`src/Dhadgar.Servers`) - Port 5003
 
@@ -619,11 +619,11 @@ These services have basic scaffolding (hello world, health checks) but core func
 
 #### 📋 Tasks (`src/Dhadgar.Tasks`) - Port 5005
 
-**Planned:** Background job orchestration, scheduling, status tracking
+**Planned:** Background job orchestration, scheduling, status tracking. **Parked** (see `parked/README.md`).
 
 #### 📁 Files (`src/Dhadgar.Files`) - Port 5006
 
-**Planned:** File upload/download, transfer orchestration, mod distribution
+**Planned:** File upload/download, transfer orchestration, mod distribution. **Parked** (see `parked/README.md`).
 
 #### 🖥️ Console (`src/Dhadgar.Console`) - Port 5007
 
@@ -631,7 +631,7 @@ These services have basic scaffolding (hello world, health checks) but core func
 
 #### 🧩 Mods (`src/Dhadgar.Mods`) - Port 5080
 
-**Planned:** Mod registry, versioning, compatibility tracking (implementation open in PR #88)
+**Planned:** Mod registry, versioning, compatibility tracking (implementation open in PR #88). **Parked** (see `parked/README.md`).
 
 > **Note:** Notifications (port 5090) and Discord (port 5120) were previously listed here
 > but are implemented services — see [Core Services](#core-services).
@@ -669,7 +669,7 @@ MeridianConsole/
 │   │   └── Dhadgar.Agent.GameServerWrapper/  # Per-server Windows service wrapper
 │   ├── Dhadgar.Scope/                # Documentation site ✅
 │   ├── Dhadgar.Panel/                # Main UI (scaffolding)
-│   └── Dhadgar.ShoppingCart/         # Marketing & profile (auth working)
+│   └── Dhadgar.ShoppingCart/         # Marketing & profile (parked, see parked/README.md)
 ├── tests/                             # 1:1 test projects (25 total, ~1,640 tests)
 ├── deploy/
 │   ├── compose/                       # Docker Compose for local dev
