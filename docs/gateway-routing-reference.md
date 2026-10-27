@@ -2,9 +2,7 @@
 
 > **STATUS (2026-07-26): PARTIALLY STALE.** The route table below has drifted from
 > `src/Dhadgar.Gateway/appsettings.json` (which is authoritative): the documented
-> `nodes-route` does not exist (actual: `nodes-org-route` + `enrollment-route`), the
-> `agents-enroll-route` is missing here, and `agents-route` has no path transform
-> (documented as having one). Trust the appsettings file; a rewrite is tracked in
+> `nodes-route` does not exist (actual: `nodes-org-route` + `enrollment-route`). Trust the appsettings file; a rewrite is tracked in
 > `docs/PROJECT-STATE.md`.
 
 This document provides a complete reference for the Gateway service's YARP routing configuration, rate limiting, health checks, CORS, and security headers.
@@ -56,7 +54,9 @@ Routes are matched by `Order` value (lower = higher priority):
 | `notifications-route` | `/api/v1/notifications/{**catch-all}` | notifications | `TenantScoped` | `PerTenant` | Remove `/api/v1/notifications` |
 | `secrets-route` | `/api/v1/secrets/{**catch-all}` | secrets | `TenantScoped` | `PerTenant` | Remove `/api/v1/secrets` |
 | `discord-route` | `/api/v1/discord/{**catch-all}` | discord | `TenantScoped` | `PerTenant` | Remove `/api/v1/discord` |
-| `agents-route` | `/api/v1/agents/{**catch-all}` | nodes | `Agent` | `PerAgent` | Remove `/api/v1/agents` |
+| `agents-route` | `/api/v1/agents/{**catch-all}` | nodes | `AgentCertificate` | `PerAgent` | Remove `/api/v1` |
+| `agents-enroll-route` | `/api/v1/agents/enroll` | nodes | `Anonymous` | `Auth` | Remove `/api/v1` |
+| `agent-hub-route` | `/hubs/agent/{**catch-all}` | nodes | `AgentCertificate` | `PerAgent` | - |
 
 ### Authorization Policies
 
@@ -159,10 +159,12 @@ Rate limiting is configured in `src/Dhadgar.Gateway/appsettings.json` under `Rat
 
 | Policy | Limit | Window/Replenish | Partitioning | Use Case |
 |--------|-------|------------------|--------------|----------|
-| `Global` | 1000 requests | 60 seconds (fixed) | Per IP | DDoS protection |
+| `Global` | 1000 requests | 60 seconds (fixed) | Single shared bucket (routes without a policy only) | DDoS protection |
 | `Auth` | 30 requests | 60 seconds (fixed) | Per IP (/64 for IPv6) | Brute force prevention |
-| `PerTenant` | 100 burst, 50/sec replenish | Token bucket | Per Tenant ID | Fair usage |
-| `PerAgent` | 500 requests | 60 seconds (fixed) | Per Agent ID | Agent operations |
+| `PerTenant` | 100 burst, 50/sec replenish | Token bucket | org_id when authenticated, else client IP | Fair usage |
+| `PerAgent` | 500 requests | 60 seconds (fixed) | Per client IP (/64 for IPv6) | Agent operations |
+
+Each route is limited by its own policy; Global applies only to a route with no `RateLimiterPolicy`. The limiter runs after authentication and before authorization, so rejected requests are counted.
 
 ### Configuration
 

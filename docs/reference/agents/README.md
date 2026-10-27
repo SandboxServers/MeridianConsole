@@ -18,7 +18,9 @@ Changes to these projects need a security review (see the root [CLAUDE.md](../..
 
 ## Chapters
 
-None yet.
+| Chapter | Project | `implementation` |
+| --- | --- | --- |
+| [windows-installer.md](windows-installer.md) | WiX MSI under `src/Agents/Dhadgar.Agent.Windows/Installer` | mixed |
 
 ## Planned
 
@@ -26,7 +28,6 @@ None yet.
 | --- | --- | --- | --- |
 | `core.md` | Dhadgar.Agent.Core | code-exists | DL-311 |
 | `windows.md` | Dhadgar.Agent.Windows | code-exists | DL-312 |
-| `windows-installer.md` | WiX MSI under `src/Agents/Dhadgar.Agent.Windows/Installer` | code-exists | DL-313 |
 | `game-server-wrapper.md` | Dhadgar.Agent.GameServerWrapper | code-exists | DL-314 |
 
-The Linux agent is a stub with no decided path yet; it's tracked as a plan (`plans/agent-linux.md`, DL-509). Agent hub and heartbeat docs wait for the `sprint2-agent-nodes` campaign to close.
+The Linux agent is a stub with no decided path yet; it's tracked as a plan (`plans/agent-linux.md`, DL-509). The agent hub and heartbeat are recorded in [ADR-0008 as built](../../adr/0008-agent-transport-signalr.md#as-built-sprint-2); a seam chapter (`agent-hub.md`) is planned under [seams/](../seams/README.md).

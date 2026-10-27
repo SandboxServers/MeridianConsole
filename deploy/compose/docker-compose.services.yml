@@ -47,6 +47,8 @@ services:
       ReverseProxy__Clusters__notifications__Destinations__d1__Address: http://notifications:8080/
       ReverseProxy__Clusters__secrets__Destinations__d1__Address: http://secrets:8080/
       ReverseProxy__Clusters__discord__Destinations__d1__Address: http://discord:8080/
+      # dev only; production ingress and trust: D-S210 (docs/analysis/sprint2-agent-nodes)
+      AgentIngress__ClientCertificateMode: "AllowCertificate"
     ports:
       - "443:443"
       - "5000:8080"
@@ -110,9 +112,17 @@ services:
     build:
       context: ../..
       dockerfile: src/Dhadgar.Nodes/Dockerfile
-    environment: *service-env
+    environment:
+      <<: *service-env
+      # dev only; production ingress and trust: D-S210 (docs/analysis/sprint2-agent-nodes).
+      # Nodes trusts X-Client-Cert from the whole Docker bridge pool, so any container on this
+      # network, or any host process (host traffic arrives from the bridge gateway), can present
+      # an agent's certificate. The host port is therefore bound to loopback only; never publish
+      # it beyond 127.0.0.1.
+      Mtls__ForwardedCertificate__Enabled: "true"
+      Mtls__ForwardedCertificate__TrustedProxies__0: "172.16.0.0/12"
     ports:
-      - "5040:8080"
+      - "127.0.0.1:5040:8080"
     depends_on: *service-depends
     restart: unless-stopped
 

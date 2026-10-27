@@ -70,3 +70,6 @@ tmpclaude-*
 
 # Planning docs (local development artifacts)
 .planning/
+
+# UAT local output (Windows agent UAT run folders)
+.uat/

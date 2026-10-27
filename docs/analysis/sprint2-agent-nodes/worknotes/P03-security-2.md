@@ -1,0 +1,24 @@
+# P03 security review, pass 2
+
+Range `ded8627..d9e878d` (fix commit `2b29de0..d9e878d`), worktree `sprint2-agent-nodes-p03`.
+
+## Verdict
+
+fix
+
+## Fix notes
+
+Prior notes:
+
+- Pass 1 N2 (/0 CIDR): fixed. `MtlsMiddleware.cs:275` rejects `PrefixLength == 0` at startup without echoing the value, and `ForwardedClientCertificateMiddleware.cs:154` skips /0 entries. Tests added for `0.0.0.0/0`, `::/0` and the middleware bypass case.
+- Pass 1 N1 (certificate left on the connection): fixed for sequential requests. `finally` clears `Connection.ClientCertificate` when this request set it. It is NOT fixed for concurrent requests on one connection; see N3.
+
+N3. src/Dhadgar.Nodes/Auth/ForwardedClientCertificateMiddleware.cs:96-100, :120, :60-63 — The forwarded certificate is still written to connection-scoped state, which is only safe if one request is in flight per connection. YARP's default outbound version is HTTP/2 (`RequestVersionOrLower`), and Kestrel negotiates h2 by ALPN on any HTTPS Gateway-to-Nodes hop (D-S210 production path). On h2, `ITlsConnectionFeature` belongs to the connection and all concurrent streams share it. Concrete state: stream 1 (agent A's header) passes the checks and sets `Connection.ClientCertificate = certA`. Stream 2 (agent B's header, trusted proxy, valid) arrives while stream 1 is still running. At line 97 `ClientCertificate is not null`, so it takes the "handshake certificate wins" branch and returns false without setting its own. `MtlsMiddleware` line 84 then calls `GetClientCertificateAsync()`, gets certA, and authenticates stream 2 as node A. The reverse also happens: when stream 1 finishes, its `finally` nulls the certificate while stream 2 is mid-flight (spurious 401, or the disposed-certificate case if B had set it first). The sequential unit test `InvokeAsync_SameConnectionNextRequest_SeesOnlyItsOwnForwardedCertificate` cannot show this. Cross-agent impersonation needs a Gateway that multiplexes two agents' requests on one h2 connection, which is the normal case. Plain-HTTP h1.1 hops serialize requests per connection and are not affected. — Change: stop using `Connection.ClientCertificate` for the forwarded certificate. Keep the pass 1 "own certificate" check (read `context.Connection.ClientCertificate` before anything is set; with no writes to the connection it now only ever holds a real handshake certificate). Replace the write at line 120 with a per-request feature: `context.Features.Set<ITlsConnectionFeature>(new ForwardedTlsConnectionFeature(certificate));` where the private nested class implements `ITlsConnectionFeature` (`ClientCertificate { get; set; }` returns the cert; `GetClientCertificateAsync(CancellationToken)` returns it). `HttpContext.Features` is the request/stream collection, so the override does not leak to other streams. Keep `RegisterForDispose`. Delete the `finally` clearing and the `accepted` bookkeeping (the request feature dies with the request); `TryAcceptCertificate` can go back to `void`/`bool` for logging only. Confirm `MtlsMiddleware` still reads via `context.Connection.GetClientCertificateAsync()` (it resolves the request-level feature). — verify: (a) unit test with a shared `IFeatureCollection` holding a connection-level `ITlsConnectionFeature` that has no certificate: two `DefaultHttpContext` instances that share the connection feature but have separate request features, each with a different forwarded header, both invoked concurrently (gate `next` with a `TaskCompletionSource` so both are in flight); each `next` must read its own certificate via `GetClientCertificateAsync`, and the connection feature's `ClientCertificate` must stay null throughout; (b) revert check: the old code makes the second context read cert A or null; (c) if a Kestrel HTTPS h2 integration test is available, run two simultaneous streams with different header values and assert two different `node_id` claims.
+
+## Not fixed
+
+Carried over from pass 1, still advisory (see `P03-security-1.md`): trust-model breadth of `TrustedProxies` (D-S210); P06 must strip client-supplied `X-Client-Cert` and set it only from a handshake-validated certificate; P04 must put `[Authorize(Policy = "AgentPolicy")]` on the hub and take `NodeIdClaim` only from the validated claim (`RequireClientCertificate=false` and `Mtls:Enabled=false` let `/hubs/agent` pass with no principal); `AddAuthentication(AgentMtls)` sets the service `DefaultScheme`; pre-existing CA validation accepts CA-signed certificates with no `AgentCertificates` row and does not check node status.
+
+Checked in pass 2 and fine: the 401 error code rename (`certificate_required`) leaks nothing; startup message does not echo configured values; no new logging of certificate contents; no new paths, processes, outbound requests or secrets in the diff.
+
+security-review label needed

@@ -99,21 +99,3 @@ public sealed record EnrollNodeResponse(
     string CaCertificate,
     DateTime NotBefore,
     DateTime NotAfter);
-
-/// <summary>
-/// Request to renew an agent's certificate.
-/// </summary>
-public sealed record RenewCertificateRequest(
-    [Required(ErrorMessage = "Current certificate thumbprint is required")]
-    string CurrentThumbprint);
-
-/// <summary>
-/// Response to a successful certificate renewal.
-/// </summary>
-public sealed record RenewCertificateResponse(
-    string CertificateThumbprint,
-    string Certificate,
-    string Pkcs12Base64,
-    string Pkcs12Password,
-    DateTime NotBefore,
-    DateTime NotAfter);

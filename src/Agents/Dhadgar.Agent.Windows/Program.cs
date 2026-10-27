@@ -2,9 +2,9 @@ using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Shared.Results;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Hosting;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Process;
 using Dhadgar.Agent.Windows.Installation;
-using Dhadgar.Agent.Windows.IPC;
 using Dhadgar.Agent.Windows.Security;
 using Dhadgar.Agent.Windows.Services;
 using Dhadgar.Agent.Windows.Windows;
@@ -36,6 +36,9 @@ public static class Program
         {
             var builder = Host.CreateApplicationBuilder(args);
 
+            // Installer-written control plane endpoint (HKLM) overrides appsettings*.json; env vars and the command line still win (D-S230)
+            RegistryEndpointConfiguration.Apply(builder.Configuration, RegistryEndpointConfiguration.ReadFromRegistry);
+
             // Configure as Windows Service - MUST be called early
             builder.Services.AddWindowsService(options =>
             {
@@ -48,6 +51,12 @@ public static class Program
                 .Bind(builder.Configuration.GetSection(AgentOptions.SectionName))
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
+
+            // Register the enrollment token source before AddAgentCore, so Core's TryAdd keeps this one (D-S232)
+            builder.Services.AddSingleton<IEnrollmentTokenSource, RegistryEnrollmentTokenSource>();
+
+            // Register the Windows state-file protection before AddAgentCore, so Core's TryAdd keeps this one (D-S233)
+            builder.Services.AddSingleton<IStateFileSecurity, WindowsStateFileSecurity>();
 
             // Add Agent.Core services (requires ICertificateStore and IProcessManager)
             builder.Services.AddAgentCore();
@@ -83,20 +92,6 @@ public static class Program
                 }
 
                 return new DirectoryAclManager(logger, allowedRoots);
-            });
-
-            // Register AgentPipeServer factory - requires NodeId which may not be known until enrollment
-            builder.Services.AddSingleton<IAgentPipeServer>(sp =>
-            {
-                var agentOptions = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
-                var logger = sp.GetRequiredService<ILogger<AgentPipeServer>>();
-                var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
-
-                // Use NodeId if enrolled, otherwise use a placeholder GUID
-                // (pipe server won't be started until after enrollment anyway)
-                var nodeId = agentOptions.NodeId ?? Guid.Empty;
-
-                return new AgentPipeServer(nodeId, logger, timeProvider);
             });
 
             // Add Windows Event Log logging
@@ -153,10 +148,7 @@ public static class Program
             return Result.Failure("Control plane endpoint must use HTTPS");
         }
 
-        logger.LogInformation(
-            "Windows Agent starting. NodeId: {NodeId}, ControlPlane: {Endpoint}",
-            options.NodeId?.ToString() ?? "(not enrolled)",
-            uri.Host);
+        logger.LogInformation("Windows Agent starting. ControlPlane: {Endpoint}", uri.Host);
 
         // Configure service recovery with progressive delays (5s/10s/30s).
         // This overrides WiX's uniform delay to set proper progression via sc.exe.

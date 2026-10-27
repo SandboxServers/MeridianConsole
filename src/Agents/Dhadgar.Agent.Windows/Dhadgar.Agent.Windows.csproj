@@ -47,4 +47,9 @@
     <!-- Security analyzers - critical for customer-hosted code -->
     <PackageReference Include="SecurityCodeScan.VS2019" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Published beside the single-file exe (content root = exe folder under UseWindowsService); the MSI binds it -->
+    <None Update="appsettings.json" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
 </Project>

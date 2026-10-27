@@ -1,4 +1,5 @@
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,13 +13,16 @@ public sealed class CommandValidator : ICommandValidator
 {
     private readonly AgentOptions _options;
     private readonly ILogger<CommandValidator> _logger;
+    private readonly IAgentIdentityProvider _identity;
 
     public CommandValidator(
         IOptions<AgentOptions> options,
-        ILogger<CommandValidator> logger)
+        ILogger<CommandValidator> logger,
+        IAgentIdentityProvider identityProvider)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _identity = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
     }
 
     public Result<CommandEnvelope> Validate(CommandEnvelope? envelope)
@@ -46,23 +50,24 @@ public sealed class CommandValidator : ICommandValidator
         }
 
         // Validate node ID matches
-        if (_options.NodeId.HasValue && envelope.NodeId != _options.NodeId.Value)
+        var identity = _identity.Current;
+        if (identity is not null && envelope.NodeId != identity.NodeId)
         {
             _logger.LogWarning(
                 "Command {CommandId} has mismatched NodeId. Expected: {Expected}, Got: {Got}",
                 envelope.CommandId,
-                _options.NodeId.Value,
+                identity.NodeId,
                 envelope.NodeId);
             return Fail("Command is not intended for this node", "NodeIdMismatch");
         }
 
         // Validate organization ID matches (multi-tenant isolation)
-        if (_options.OrganizationId.HasValue && envelope.OrganizationId != _options.OrganizationId.Value)
+        if (identity is not null && envelope.OrganizationId != identity.OrganizationId)
         {
             _logger.LogWarning(
                 "Command {CommandId} has mismatched OrganizationId. Expected: {Expected}, Got: {Got}",
                 envelope.CommandId,
-                _options.OrganizationId.Value,
+                identity.OrganizationId,
                 envelope.OrganizationId);
             return Fail("Command is not for this organization", "OrganizationIdMismatch");
         }

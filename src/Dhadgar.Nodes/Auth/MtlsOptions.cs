@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
+using Dhadgar.Contracts.Nodes;
 
 namespace Dhadgar.Nodes.Auth;
 
@@ -33,6 +35,14 @@ public sealed class MtlsOptions
     public bool AllowExpiredCertificates { get; set; }
 
     /// <summary>
+    /// Minutes a certificate stays usable after a renewal supersedes it (D-S212), so an agent whose
+    /// renewal response was lost can renew again with the presented certificate. 0 means immediate revoke.
+    /// Must be between 0 and <see cref="AgentCertificateRenewalPolicy.MaxGraceMinutes"/>.
+    /// Default: <see cref="AgentCertificateRenewalPolicy.DefaultGraceMinutes"/>.
+    /// </summary>
+    public int RenewalGraceMinutes { get; set; } = AgentCertificateRenewalPolicy.DefaultGraceMinutes;
+
+    /// <summary>
     /// Whether to strictly require a client certificate on protected endpoints.
     /// When true, requests without a certificate will be rejected with 401.
     /// When false and mTLS is enabled, requests without a certificate are logged but allowed.
@@ -50,7 +60,7 @@ public sealed class MtlsOptions
     /// </summary>
     [Required(ErrorMessage = "SpiffeTrustDomain is required")]
     [StringLength(253, MinimumLength = 1, ErrorMessage = "SpiffeTrustDomain must be between 1 and 253 characters")]
-    public string SpiffeTrustDomain { get; set; } = "meridianconsole.com";
+    public string SpiffeTrustDomain { get; set; } = AgentCertificateProfile.SpiffeTrustDomain;
 
     /// <summary>
     /// The path prefix for agent endpoints that require mTLS authentication.
@@ -73,4 +83,55 @@ public sealed class MtlsOptions
         "/enroll",           // Uses one-time enrollment token
         "/ca-certificate"    // Public endpoint to fetch CA certificate
     ];
+
+    /// <summary>
+    /// The agent hub path that requires mTLS authentication (ADR-0008).
+    /// Default: <see cref="AgentHubProtocol.Path"/> ("/hubs/agent").
+    /// </summary>
+    /// <remarks>
+    /// A request is protected when its path starts with this value as a whole segment, so
+    /// "/hubs/agent/negotiate" is protected and "/hubs/agentx" is not.
+    /// </remarks>
+    public string HubPathPrefix { get; set; } = AgentHubProtocol.Path;
+
+    /// <summary>
+    /// Settings for the client certificate the Gateway forwards in <see cref="AgentCertificateProfile.ForwardedCertificateHeader"/>.
+    /// </summary>
+    /// <remarks>
+    /// The Gateway terminates the TLS connection for agents on a DNS-only hostname and forwards the
+    /// client certificate as a header (D-S25). Nodes trusts that header only from the addresses listed
+    /// in <see cref="ForwardedCertificateOptions.TrustedProxies"/>. Production ingress and trust model:
+    /// D-S210 (docs/analysis/sprint2-agent-nodes).
+    /// </remarks>
+    public ForwardedCertificateOptions ForwardedCertificate { get; set; } = new();
+}
+
+/// <summary>
+/// Options for accepting a client certificate forwarded by a trusted proxy (the Gateway), D-S25.
+/// </summary>
+/// <remarks>
+/// Disabled by default. When enabled, <see cref="TrustedProxies"/> must hold at least one valid
+/// CIDR, otherwise the host refuses to start. The production ingress and trust model is D-S210 (A):
+/// Gateway Kestrel on a DNS-only hostname, with Nodes trusting the Gateway's CIDR.
+/// See docs/analysis/sprint2-agent-nodes.
+/// </remarks>
+public sealed class ForwardedCertificateOptions
+{
+    /// <summary>
+    /// Whether the forwarded client certificate header is read at all. Default: false.
+    /// When false, the header is removed from every request and ignored.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// CIDR ranges (for example "10.42.0.0/16") of the proxies allowed to forward a client certificate.
+    /// Required and non-empty when <see cref="Enabled"/> is true. Pointer: D-S210.
+    /// </summary>
+    public Collection<string> TrustedProxies { get; set; } = [];
+
+    /// <summary>
+    /// Maximum length, in characters, of the forwarded header value. Longer values are ignored.
+    /// Default: 16384.
+    /// </summary>
+    public int MaxHeaderLength { get; set; } = 16384;
 }
