@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Contracts.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -35,7 +36,8 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
             Options.Create(new AgentOptions()),
             NullLogger<EnrollmentService>.Instance,
             new FixedHardwareInventoryCollector(),
-            clientCertificateProvider: provider);
+            clientCertificateProvider: provider,
+            identityProvider: new AgentIdentityProvider());
 
         var result = await sut.EnrollAsync("enrollment-token-for-test");
 
@@ -64,7 +66,8 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
             Options.Create(new AgentOptions()),
             NullLogger<EnrollmentService>.Instance,
             new FixedHardwareInventoryCollector(),
-            clientCertificateProvider: new RecordingClientCertificateProvider());
+            clientCertificateProvider: new RecordingClientCertificateProvider(),
+            identityProvider: new AgentIdentityProvider());
 
         await sut.EnrollAsync("enrollment-token-for-test");
 

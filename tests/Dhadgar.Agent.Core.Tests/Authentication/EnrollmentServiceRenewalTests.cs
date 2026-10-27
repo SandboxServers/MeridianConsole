@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Contracts.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -269,12 +270,17 @@ public sealed class EnrollmentServiceRenewalTests : IDisposable
         store = new RecordingCertificateStore(current);
         provider = new RecordingClientCertificateProvider();
 
+        // Renewal reads the identity from the provider, which the enrolled agent has already set.
+        var identity = new AgentIdentityProvider();
+        identity.Set(new AgentIdentity(NodeId, Guid.NewGuid(), DateTimeOffset.UtcNow));
+
         return new EnrollmentService(
             store,
             new ScriptedHttpClientFactory(handler),
-            Options.Create(new AgentOptions { NodeId = NodeId }),
+            Options.Create(new AgentOptions()),
             NullLogger<EnrollmentService>.Instance,
             new FixedHardwareInventoryCollector(),
-            clientCertificateProvider: provider);
+            clientCertificateProvider: provider,
+            identityProvider: identity);
     }
 }
