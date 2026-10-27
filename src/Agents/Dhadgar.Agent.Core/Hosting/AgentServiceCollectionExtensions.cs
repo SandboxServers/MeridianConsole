@@ -52,6 +52,10 @@ public static class AgentServiceCollectionExtensions
         services.TryAddSingleton<IAgentStateStore, FileAgentStateStore>();
         services.TryAddSingleton<IPathValidator, PathValidator>();
 
+        // Startup - the enrollment token is read from configuration; time comes from TimeProvider so tests can drive it
+        services.TryAddSingleton<IEnrollmentTokenSource, ConfigurationEnrollmentTokenSource>();
+        services.TryAddSingleton(TimeProvider.System);
+
         // Authentication - IEnrollmentService requires ICertificateStore from platform-specific host
         services.AddSingleton<IClientCertificateProvider, ClientCertificateProvider>();
         services.AddSingleton<IEnrollmentService, EnrollmentService>();
@@ -60,6 +64,10 @@ public static class AgentServiceCollectionExtensions
         // Communication
         services.TryAddSingleton(new ControlPlaneHubTransport());
         services.AddSingleton<IControlPlaneClient, ControlPlaneClient>();
+
+        // Startup: enrolls if needed, persists the identity, connects and renews. Registered before HeartbeatService
+        // so the identity is set before the heartbeat loop first waits on it.
+        services.AddHostedService<AgentBootstrapService>();
 
         // Health monitoring
         services.AddSingleton<IHealthReporter, HealthReporter>();

@@ -1,0 +1,664 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using Dhadgar.Agent.Core.Authentication;
+using Dhadgar.Agent.Core.Communication;
+using Dhadgar.Agent.Core.Configuration;
+using Dhadgar.Agent.Core.Hosting;
+using Dhadgar.Agent.Core.Identity;
+using Dhadgar.Contracts.Nodes;
+using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
+using Xunit;
+
+namespace Dhadgar.Agent.Core.Tests.Hosting;
+
+public sealed class AgentBootstrapServiceTests
+{
+    private static readonly Guid NodeId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+    private static readonly Guid OtherNodeId = Guid.Parse("66666666-7777-8888-9999-000000000000");
+    private static readonly Guid OrganizationId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    private static readonly AgentIdentity StoredIdentity = new(NodeId, OrganizationId, DateTimeOffset.UtcNow);
+    private const string Token = "super-secret-token-value";
+
+    [Fact]
+    public async Task StoredIdentityWithCertificate_ConnectsWithoutEnrolling()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        h.Identity.Received().Set(StoredIdentity);
+    }
+
+    [Fact]
+    public async Task NoIdentity_WithToken_EnrollsSavesSetsIdentityAndConnects()
+    {
+        var h = new Harness();
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+        h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<EnrollmentResult>.Success(new EnrollmentResult
+            {
+                NodeId = NodeId,
+                OrganizationId = OrganizationId,
+                CertificateExpiry = DateTime.UtcNow.AddDays(90),
+            })));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        Received.InOrder(() =>
+        {
+            h.Enrollment.EnrollAsync(Token, Arg.Any<CancellationToken>());
+            h.Store.SaveAsync(Arg.Is<AgentIdentity>(i => i.NodeId == NodeId), Arg.Any<CancellationToken>());
+            h.Identity.Set(Arg.Is<AgentIdentity>(i => i.NodeId == NodeId));
+            h.Client.ConnectAsync(Arg.Any<CancellationToken>());
+        });
+
+        // The token must never reach the log.
+        Assert.DoesNotContain(h.Logger.Messages, m => m.Contains(Token, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task NoIdentity_NoToken_DoesNotEnroll_AndRetriesAfterInterval()
+    {
+        var h = new Harness();
+        h.Tokens.GetToken().Returns(Result<string>.Success(string.Empty), Result<string>.Success(Token));
+        h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<EnrollmentResult>.Success(new EnrollmentResult
+            {
+                NodeId = NodeId,
+                OrganizationId = OrganizationId,
+                CertificateExpiry = DateTime.UtcNow.AddDays(90),
+            })));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.Tokens.ReceivedCalls().Any());
+            await Task.Delay(50);
+            await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+            h.Time.Advance(TimeSpan.FromSeconds(60));
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        await h.Enrollment.Received(1).EnrollAsync(Token, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CorruptState_DoesNotEnroll()
+    {
+        var h = new Harness();
+        h.Store.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<StoredAgentState>.Failure("[AgentState.Corrupt] State file is not valid JSON")));
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
+        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        await sut.StopAsync(CancellationToken.None);
+
+        await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
+        Assert.True(h.Store.ReceivedCalls().Any(), "Store.LoadAsync was not called");
+    }
+
+    [Fact]
+    public async Task IdentityWithoutCertificate_EnrollsAgain()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(null);
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+        h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<EnrollmentResult>.Success(new EnrollmentResult
+            {
+                NodeId = NodeId,
+                OrganizationId = OrganizationId,
+                CertificateExpiry = DateTime.UtcNow.AddDays(90),
+            })));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        await h.Enrollment.Received(1).EnrollAsync(Token, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConnectFailure_BacksOffAndRetries()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.Client.ConnectAsync(Arg.Any<CancellationToken>()).Returns(
+            _ => Task.FromResult(Result.Failure("[ControlPlane.Test] unreachable")),
+            _ => Task.FromResult(Result.Success()));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+            await Task.Delay(50);
+
+            // ReconnectDelaySeconds (5) is the first backoff: no second attempt before it elapses.
+            h.Time.Advance(TimeSpan.FromSeconds(4));
+            await Task.Delay(50);
+            Assert.Equal(1, h.ConnectCount);
+
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            await WaitUntilAsync(() => h.ConnectCount >= 2);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task RenewalDue_RenewsThenReconnects()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.Certificates.NeedsRenewal(Arg.Any<int>()).Returns(true);
+        h.Enrollment.RenewCertificateAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                h.Events.Enqueue("renew");
+                return Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult()));
+            });
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await h.WaitForRenewalCallsAsync(1);
+            await WaitUntilAsync(() => h.ConnectCount >= 2 || h.DisconnectCount >= 1);
+            await Task.Delay(50);
+
+            // D-S231: the renewed certificate reaches the hub only through a disconnect and a rebuild.
+            h.Time.Advance(TimeSpan.FromSeconds(60));
+            await WaitUntilAsync(() => h.ConnectCount >= 2);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        // D-S231 order: renew, then disconnect, then a rebuild. Recorded in one queue because NSubstitute's InOrder
+        // does not span separate substitutes here.
+        var events = h.Events.ToArray();
+        var renewed = Array.IndexOf(events, "renew");
+        var disconnected = Array.IndexOf(events, "disconnect", renewed + 1);
+        var rebuilt = Array.IndexOf(events, "connect", disconnected + 1);
+        Assert.True(renewed >= 0 && disconnected > renewed && rebuilt > disconnected, string.Join(",", events));
+    }
+
+    [Fact]
+    public async Task ClientReconnecting_IsRebuiltByConnectAsync()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.ClientState = ConnectionState.Reconnecting;
+
+        // The fake keeps reporting Reconnecting, as SignalR's automatic reconnect does while it retries.
+        h.Client.ConnectAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            return Task.FromResult(Result.Success());
+        });
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(60));
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        await h.Client.Received().ConnectAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RenewalFailure_RetriesAfterRetryInterval_NotBefore()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.ClientState = ConnectionState.Connected;
+        h.Certificates.NeedsRenewal(Arg.Any<int>()).Returns(true);
+        h.Enrollment.RenewCertificateAsync(Arg.Any<CancellationToken>()).Returns(
+            _ => Task.FromResult(Result<CertificateRenewalResult>.Failure("[Renewal.Test] response lost")),
+            _ => Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult())));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await h.WaitForRenewalCallsAsync(1);
+
+            // RenewalRetryMinutes (5) - 1: four one-minute passes, still no second call.
+            for (var i = 0; i < 4; i++)
+            {
+                await h.StepPassAsync();
+            }
+
+            Assert.Equal(1, h.RenewalCalls);
+
+            await h.StepPassAsync();
+            await h.WaitForRenewalCallsAsync(2);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task RenewalSuccess_NextCheckAfterFullInterval()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.ClientState = ConnectionState.Connected;
+        h.Settings.ControlPlane.RenewalCheckIntervalMinutes = 10;
+        h.Certificates.NeedsRenewal(Arg.Any<int>()).Returns(true);
+        h.Enrollment.RenewCertificateAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                h.Events.Enqueue("renew");
+                return Task.FromResult(Result<CertificateRenewalResult>.Success(RenewalResult()));
+            });
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await h.WaitForRenewalCallsAsync(1);
+
+            for (var i = 0; i < 9; i++)
+            {
+                await h.StepPassAsync();
+            }
+
+            Assert.Equal(1, h.RenewalCalls);
+
+            await h.StepPassAsync();
+            await h.WaitForRenewalCallsAsync(2);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public void ControlPlaneOptions_DefaultRenewalRetry_IsInsideGraceWindow()
+    {
+        var options = new ControlPlaneOptions();
+
+        Assert.Equal(AgentCertificateRenewalPolicy.AgentRetryMinutes, options.RenewalRetryMinutes);
+        Assert.True(options.RenewalRetryMinutes * 4 <= AgentCertificateRenewalPolicy.DefaultGraceMinutes);
+    }
+
+    [Fact]
+    public async Task SaveFailure_StillConnects_LogsCritical()
+    {
+        var h = new Harness();
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+        h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<EnrollmentResult>.Success(new EnrollmentResult
+            {
+                NodeId = NodeId,
+                OrganizationId = OrganizationId,
+                CertificateExpiry = DateTime.UtcNow.AddDays(90),
+            })));
+        h.Store.SaveAsync(Arg.Any<AgentIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result.Failure("[AgentState.Io] disk full")));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.SaveCount >= 1);
+            h.Time.Advance(TimeSpan.FromSeconds(2));
+            await WaitUntilAsync(() => h.SaveCount >= 2);
+            h.Time.Advance(TimeSpan.FromSeconds(2));
+            await WaitUntilAsync(() => h.SaveCount >= 3);
+
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        h.Identity.Received().Set(Arg.Is<AgentIdentity>(i => i.NodeId == NodeId));
+        Assert.True(h.Store.ReceivedCalls().Any(), "Store.LoadAsync was not called");
+    }
+
+    [Theory]
+    [InlineData("[AgentState.Io] Failed to read agent state file")]
+    [InlineData("[AgentState.Untrusted] State file is writable by group or others")]
+    public async Task LoadFailure_DoesNotEnroll(string error)
+    {
+        var h = new Harness();
+        h.Store.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<StoredAgentState>.Failure(error)));
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
+        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        await sut.StopAsync(CancellationToken.None);
+
+        await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StoredIdentity_CertificateForOtherNode_DoesNotEnrollOrConnect()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(OtherNodeId);
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
+        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        await sut.StopAsync(CancellationToken.None);
+
+        await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        h.Identity.DidNotReceive().Set(Arg.Any<AgentIdentity>());
+        await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
+        Assert.True(h.Certificates.ReceivedCalls().Any(), "The certificate was not checked");
+    }
+
+    [Fact]
+    public async Task ConfigSeed_CertificateForOtherNode_DoesNotSeed()
+    {
+        var h = new Harness();
+        h.Settings.NodeId = NodeId;
+        h.Settings.OrganizationId = OrganizationId;
+        h.UseCertificate(OtherNodeId);
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        // Stop only once the bootstrap has reached its first dependency, or the cancel can beat ExecuteAsync.
+        await WaitUntilAsync(() => h.Store.ReceivedCalls().Any() || h.Certificates.ReceivedCalls().Any());
+        await sut.StopAsync(CancellationToken.None);
+
+        await h.Store.DidNotReceive().SaveAsync(Arg.Any<AgentIdentity>(), Arg.Any<CancellationToken>());
+        await h.Client.DidNotReceive().ConnectAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConfigSeed_MatchingCertificate_SavesAndConnects()
+    {
+        var h = new Harness();
+        h.Settings.NodeId = NodeId;
+        h.Settings.OrganizationId = OrganizationId;
+        h.UseCertificate(NodeId);
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        await h.Store.Received(1).SaveAsync(Arg.Is<AgentIdentity>(i => i.NodeId == NodeId), Arg.Any<CancellationToken>());
+        await h.Enrollment.DidNotReceive().EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RenewalThreshold_ComesFromSecurityOptions()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.Settings.Security.CertificateRenewalThresholdDays = 90;
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+            h.Certificates.Received().NeedsRenewal(90);
+            h.Certificates.DidNotReceive().NeedsRenewal(AgentCertificateProfile.RenewalThresholdDays);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task AutoRenewalDisabled_NeverRenews()
+    {
+        var h = new Harness();
+        h.StoredState(StoredIdentity);
+        h.UseCertificate(NodeId);
+        h.ClientState = ConnectionState.Connected;
+        h.Settings.Security.EnableCertificateAutoRenewal = false;
+        h.Certificates.NeedsRenewal(Arg.Any<int>()).Returns(true);
+
+        var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await h.StepPassAsync();
+            await h.StepPassAsync();
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        await h.Enrollment.DidNotReceive().RenewCertificateAsync(Arg.Any<CancellationToken>());
+    }
+
+    private static CertificateRenewalResult RenewalResult() =>
+        new() { NewExpiry = DateTime.UtcNow.AddDays(90), OldExpiry = DateTime.UtcNow.AddDays(10) };
+
+    /// <summary>A certificate whose only URI SAN is the SPIFFE ID of <paramref name="nodeId"/>, built through the real profile.</summary>
+    private static X509Certificate2 CertificateFor(Guid nodeId)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        var request = new CertificateRequest(
+            $"CN={nodeId:D}, O={AgentCertificateProfile.Organization}",
+            key,
+            HashAlgorithmName.SHA384);
+        var san = new SubjectAlternativeNameBuilder();
+        san.AddUri(new Uri(AgentCertificateProfile.SpiffeId(nodeId)));
+        request.CertificateExtensions.Add(san.Build());
+        using var self = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(90));
+        return X509CertificateLoader.LoadCertificate(self.RawData);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition not met within 10 seconds.");
+            }
+
+            await Task.Delay(5);
+        }
+    }
+
+    private sealed class CapturingLogger : ILogger<AgentBootstrapService>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IEnumerable<string> Messages => Entries.Select(e => e.Message);
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception)));
+    }
+
+    /// <summary>Substitutes for every bootstrap dependency, plus a clock and counters the tests wait on.</summary>
+    private sealed class Harness
+    {
+        private volatile ConnectionState _clientState = ConnectionState.Disconnected;
+        private int _stateReads;
+
+        public Harness()
+        {
+            Store.LoadAsync(Arg.Any<CancellationToken>())
+                .Returns(_ => Task.FromResult(Result<StoredAgentState>.Success(StoredAgentState.None)));
+            Store.SaveAsync(Arg.Any<AgentIdentity>(), Arg.Any<CancellationToken>()).Returns(_ =>
+            {
+                return Task.FromResult(Result.Success());
+            });
+            Identity.Set(Arg.Any<AgentIdentity>()).Returns(Result.Success());
+            Tokens.GetToken().Returns(Result<string>.Success(string.Empty));
+            Certificates.NeedsRenewal(Arg.Any<int>()).Returns(false);
+            Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(_ => Task.FromResult(Result<EnrollmentResult>.Failure("[Enrollment.Test] not configured")));
+            Enrollment.RenewCertificateAsync(Arg.Any<CancellationToken>())
+                .Returns(_ =>
+                {
+                        return Task.FromResult(Result<CertificateRenewalResult>.Failure("[Renewal.Test] not configured"));
+                });
+
+            Client.State.Returns(_ =>
+            {
+                Interlocked.Increment(ref _stateReads);
+                return _clientState;
+            });
+            Client.ConnectAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+            {
+                _clientState = ConnectionState.Connected;
+                Events.Enqueue("connect");
+                return Task.FromResult(Result.Success());
+            });
+            Client.DisconnectAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+            {
+                _clientState = ConnectionState.Disconnected;
+                Events.Enqueue("disconnect");
+                return Task.CompletedTask;
+            });
+        }
+
+        public ConcurrentQueue<string> Events { get; } = new();
+
+        public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
+
+        public IAgentStateStore Store { get; } = Substitute.For<IAgentStateStore>();
+
+        public IAgentIdentityProvider Identity { get; } = Substitute.For<IAgentIdentityProvider>();
+
+        public IEnrollmentService Enrollment { get; } = Substitute.For<IEnrollmentService>();
+
+        public IEnrollmentTokenSource Tokens { get; } = Substitute.For<IEnrollmentTokenSource>();
+
+        public ICertificateStore Certificates { get; } = Substitute.For<ICertificateStore>();
+
+        public IControlPlaneClient Client { get; } = Substitute.For<IControlPlaneClient>();
+
+        public AgentOptions Settings { get; } = new();
+
+        public CapturingLogger Logger { get; } = new();
+
+        public ConnectionState ClientState
+        {
+            get => _clientState;
+            set => _clientState = value;
+        }
+
+        /// <summary>Calls recorded on the substitutes, so tests that override a mock's return value still count.</summary>
+        public int ConnectCount => Client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IControlPlaneClient.ConnectAsync));
+
+        public int DisconnectCount => Client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IControlPlaneClient.DisconnectAsync));
+
+        public int SaveCount => Store.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IAgentStateStore.SaveAsync));
+
+        public int RenewalCalls => Enrollment.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IEnrollmentService.RenewCertificateAsync));
+
+        public AgentBootstrapService Create() => new(
+            Store,
+            Identity,
+            Enrollment,
+            Tokens,
+            Certificates,
+            Client,
+            Microsoft.Extensions.Options.Options.Create(Settings),
+            Time,
+            Logger);
+
+        public void StoredState(AgentIdentity identity) =>
+            Store.LoadAsync(Arg.Any<CancellationToken>())
+                .Returns(_ => Task.FromResult(Result<StoredAgentState>.Success(new StoredAgentState(identity))));
+
+        public void UseCertificate(Guid? nodeId) =>
+            Certificates.GetClientCertificate().Returns(_ => nodeId is { } id ? CertificateFor(id) : null);
+
+        /// <summary>Advances the clock one check interval and waits for the bootstrap loop to finish that pass.</summary>
+        public async Task StepPassAsync()
+        {
+            var before = Volatile.Read(ref _stateReads);
+            Time.Advance(TimeSpan.FromSeconds(Settings.ControlPlane.ConnectionCheckIntervalSeconds));
+            await WaitUntilAsync(() => Volatile.Read(ref _stateReads) > before);
+            await Task.Delay(50);
+        }
+
+        public Task WaitForRenewalCallsAsync(int count) => WaitUntilAsync(() => RenewalCalls >= count);
+    }
+}
