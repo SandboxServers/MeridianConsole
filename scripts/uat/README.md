@@ -5,7 +5,7 @@ heartbeats and cleans up after itself. The driver is `tests/Dhadgar.Agent.Window
 point is `scripts/uat/Invoke-AgentWindowsUat.ps1`.
 
 This README covers `-Preflight`, `-StackOnly` (P19), `-CleanupOnly`, the guards of `-Mode Process`,
-and the process-mode agent legs (P20: U0-U4 and U9). The `Service` and `Msi` modes are added by later packets.
+and the process-mode agent legs (P20: U0-U4 and U9). The `Service` mode (P22) is described below; `Msi` is added by a later packet.
 
 ## Who runs what (D-S225, D-S239)
 
@@ -123,6 +123,33 @@ there fails U9, with the file and line number and never the text, and the file i
 password found is a warning only, and the file is rewritten too. Last, U9 deletes the run's `ca`,
 `agent-state` and `agent-data` folders. `agent` and `logs` stay in the run folder.
 
+## Service mode: `DhadgarAgent` as LocalSystem (P22, D-S222)
+
+`-Mode Service` runs the same legs as process mode, but the agent is the `DhadgarAgent` Windows service
+(`obj= LocalSystem`, `start= demand`, created by U10 with `sc.exe`). A LocalSystem service trusts only
+`LocalMachine` roots, so the Gateway serves a run-scoped `CN=localhost` leaf instead of the user's dev certificate.
+
+- **Step order:** U0 → **U10** → U1 → U2 → U3 → U4 → U5 → U6 → U7 → U8 → U9. U10 runs before U1 because the Gateway
+  needs its PFX at start.
+- **U10 "Service setup":** writes the agent's `appsettings.json` as in process mode, then creates the TLS leaf
+  (ECDSA P-256, serverAuth only, `CN=localhost`, SAN `localhost` and `127.0.0.1`, valid about 2 hours) with its PFX in
+  `<runDir>\tls` (ACL: SYSTEM and the current user only), and a keyless decoy CA (`CN=Meridian Console Agent CA`,
+  `O=UAT decoy <runId>`). Both public certificates go into `LocalMachine\Root`. Pass: both thumbprints are in `Root`,
+  start type is `DEMAND_START`, the account is `LocalSystem`, and the state is `STOPPED`.
+- **Root changes:** the TLS leaf and the decoy are the only additions this UAT makes to `LocalMachine\Root`. Each has
+  a `certificate` manifest entry, flushed before the add. Nothing with a private key is ever added to `Root`.
+- **U3 in service mode:** the decoy must be gone from `Root` (the agent removes agent CAs, P14). This is a pass
+  condition, not a warning.
+- **Expiry:** the TLS leaf lasts about 2 hours. A run that outlives it fails at the TLS handshake, not later.
+- **Undo (`-CleanupOnly`):** first a quiesce pass stops the `DhadgarAgent` service (it is stopped, not deleted, first)
+  and kills any process entries, newest first. Then the manifest is undone in reverse: the service is deleted, the
+  TLS leaf and the decoy leave `Root`, and the PFX folder is removed. Run it after a crash; it needs the elevated
+  shell as before.
+- **Results:** `results.json` gets a `service` object (`name`, `account`, `decoyRemoved` from U3,
+  `tlsRootRemovedAtCleanup` from a post-cleanup `Root` check by thumbprint). Process and stack-only runs have no
+  `service` key. U9 is unchanged: the event-log export (`eventlog.txt`) is the agent's log in this mode.
+- **Path rule:** the run folder path must have no spaces (P18), because `binPath=` is passed to `sc.exe`.
+
 ## Reading `results.md`
 
 `results.md` has one header block (verb, mode, overall result and exit code, cleanup status, git
@@ -138,7 +165,7 @@ its condition, and steps after it show `skipped`. `results.json` holds the same 
 | `Invoke-AgentWindowsUat.ps1` or `-Preflight` | Checks the machine and writes `U0`. Changes nothing. |
 | `-StackOnly` | Starts the local stack and runs the enrollment smoke (P19). Needs no elevation. |
 | `-Mode Process -AcceptMachineChanges` | Runs the stack, the agent legs U2-U4 and the renewal legs U5-U8 as a child process (elevated, machine-changing). It takes about 12 minutes, because U7 waits out the 5-minute grace. |
-| `-Mode Service -AcceptMachineChanges` | Runs the scenario as a Windows service (P22, not built yet). |
+| `-Mode Service -AcceptMachineChanges` | Runs the scenario as the `DhadgarAgent` LocalSystem service with a run-scoped localhost TLS root (P22, see Service mode). |
 | `-Mode Msi -AcceptMachineChanges` | Installs the MSI (P23, not built yet). The script refuses. |
 | `-CleanupOnly <runFolder>` | Undoes the changes recorded in that run's manifest. Use it after a crash. |
 | `-NoBuild` | Skips `dotnet build` and `dotnet publish`. The driver exe must already exist. |
