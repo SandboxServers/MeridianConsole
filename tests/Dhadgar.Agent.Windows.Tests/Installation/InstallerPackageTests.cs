@@ -185,9 +185,11 @@ public sealed class InstallerPackageTests
     {
         var source = File.ReadAllText(Path.Combine(RepoRoot(), "src", "Agents",
             "Dhadgar.Agent.Windows.InstallerActions", "EnrollmentTokenActions.cs"));
-        var calls = Regex.Matches(source, @"session\.Log\((?<args>[^;]*)\);");
+        var calls = Regex.Matches(source, @"session\.Log\((?<args>(?:""(?:[^""\\]|\\.)*""|[^;""])*)\);");
 
         Assert.NotEmpty(calls);
+        // Every session.Log( must be parsed; a call the pattern cannot read must fail the test, not be skipped.
+        Assert.Equal(Regex.Count(source, @"session\.Log\("), calls.Count);
         foreach (Match call in calls)
         {
             // Strip string literals ("token written." is fine); what is left must not use the token variable.
