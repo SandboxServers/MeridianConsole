@@ -34,7 +34,7 @@
   </Target>
 
   <!-- Run npm build -->
-  <Target Name="NpmBuild" AfterTargets="NpmInstall" Inputs="$(ShoppingCartProjectDir)\src\**\*;$(ShoppingCartProjectDir)\public\**\*;$(ShoppingCartProjectDir)\package.json;$(ShoppingCartProjectDir)\astro.config.mjs;$(ShoppingCartProjectDir)\tailwind.config.mjs" Outputs="$(BuildOutputDir)\index.html">
+  <Target Name="NpmBuild" AfterTargets="NpmInstall" Inputs="$(ShoppingCartProjectDir)\src\**\*;$(ShoppingCartProjectDir)\public\**\*;$(ShoppingCartProjectDir)\package.json;$(ShoppingCartProjectDir)\astro.config.mjs" Outputs="$(BuildOutputDir)\index.html">
     <Message Importance="high" Text="Building Astro site for Dhadgar.ShoppingCart..." />
     <Exec Command="$(NpmCommand) run build" WorkingDirectory="$(ShoppingCartProjectDir)" />
   </Target>

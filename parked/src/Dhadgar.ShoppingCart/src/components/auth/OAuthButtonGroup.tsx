@@ -61,7 +61,7 @@ function CategorySection({
               'font-body text-text-primary text-sm md:text-base',
               'transition-all duration-200',
               'hover:border-text-secondary hover:bg-glow-line/20',
-              'focus:outline-none focus:ring-2 focus:ring-cyber-cyan/50 focus:ring-offset-2 focus:ring-offset-space-dark',
+              'focus:outline-hidden focus:ring-2 focus:ring-cyber-cyan/50 focus:ring-offset-2 focus:ring-offset-space-dark',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               loadingProvider === provider.id && 'animate-pulse'
             )}
@@ -95,7 +95,7 @@ function CategorySection({
                 />
               </svg>
             ) : (
-              <ProviderIcon provider={provider.id} className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0" />
+              <ProviderIcon provider={provider.id} className="w-6 h-6 md:w-8 md:h-8 shrink-0" />
             )}
             {!isCompact && (
               <span className="flex-1 text-left">
@@ -141,7 +141,7 @@ export default function OAuthButtonGroup({
               'rounded-lg border border-glow-line/50 bg-panel-dark',
               'transition-all duration-200',
               'hover:border-text-secondary hover:bg-glow-line/20',
-              'focus:outline-none focus:ring-2 focus:ring-cyber-cyan/50',
+              'focus:outline-hidden focus:ring-2 focus:ring-cyber-cyan/50',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               loadingProvider === provider.id && 'animate-pulse'
             )}
