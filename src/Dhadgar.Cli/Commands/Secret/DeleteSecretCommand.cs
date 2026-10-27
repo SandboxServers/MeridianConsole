@@ -20,9 +20,10 @@ public sealed class DeleteSecretCommand
         // Confirm deletion unless --force is specified
         if (!force)
         {
-            var confirm = AnsiConsole.Confirm(
+            var confirm = await AnsiConsole.ConfirmAsync(
                 $"[yellow]Are you sure you want to delete secret '[cyan]{Markup.Escape(name)}[/]'?[/]",
-                defaultValue: false);
+                defaultValue: false,
+                cancellationToken: ct);
 
             if (!confirm)
             {

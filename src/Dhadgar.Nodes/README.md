@@ -414,6 +414,11 @@ dotnet ef database update \
 
 **Note:** Migrations are auto-applied in Development mode.
 
+Recent migrations:
+
+- `20261027130000_AddMassTransitOutboxEntities` creates the MassTransit outbox and inbox tables (`InboxState`, `OutboxState`, `OutboxMessage`). `NodesDbContext` registered them earlier, but no migration created them (P16-ruling-1).
+- `20261027130100_AddAgentCertificateGraceUntil` adds the nullable `GraceUntil` column to `agent_certificates` (renewal grace window, D-S212).
+
 ---
 
 ## Events and Messaging
@@ -494,7 +499,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 | `CaKeyPassword` | auto-generated | Password for CA private key |
 | `CaKeySize` | 4096 | RSA key size for CA |
 | `CaValidityYears` | 10 | CA certificate validity |
-| `ClientKeySize` | 2048 | RSA key size for client certs |
+| `ClientKeySize` | 2048 | RSA key size for the legacy server-key issuance path (IssueCertificateAsync); not used by enrollment or renewal |
 | `CertificateValidityDays` | 90 | Agent certificate validity |
 | `AzureKeyVaultUrl` | - | Azure Key Vault URL (production) |
 | `AzureKeyVaultCaCertName` | "meridian-agent-ca" | CA certificate name in KV |
@@ -519,16 +524,50 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 Agents authenticate using mutual TLS (mTLS):
 
 1. **Enrollment Token** - Admin creates one-time token (default: 1 hour validity)
-2. **Agent Enrollment** - Agent presents token, receives mTLS certificate
+2. **Agent Enrollment** - Agent presents token, receives mTLS certificate. The token is consumed by a conditional write at the enrollment's save: of two requests with the same token, only the first to save enrolls; the other gets `invalid_token`, and no node or certificate row is kept for it (D-S246).
 3. **Heartbeat Auth** - Agent uses certificate for all subsequent requests
-4. **Certificate Renewal** - Auto-renewal before expiration (90 days default)
+4. **Certificate Renewal** - Auto-renewal before expiration (90 days default). The agent generates a new key pair and sends only its public key (base64 SubjectPublicKeyInfo) in `RenewCertificateRequest.PublicKey`. Nodes issues a certificate bound to that key. The current thumbprint comes only from the mTLS client certificate (`certificate_thumbprint` claim), never from the body. No private key or PKCS#12 bundle is created or returned. The response carries the new certificate PEM, the CA PEM, and the validity window. Errors: 401 `certificate_required` or `thumbprint_mismatch`, 400 `invalid_public_key` or `certificate_renewal_failed`, 403 `forbidden` when the certificate's node does not match the URL.
 5. **Revocation** - Certificates can be revoked via API
+
+#### mTLS Protected Paths
+
+`MtlsMiddleware` validates the client certificate on these paths:
+
+- `/agents/*` (the `Mtls:AgentEndpointPrefix`), except the exempt paths `/enroll` and `/ca-certificate`.
+- `/hubs/agent` and its sub-paths (`Mtls:HubPathPrefix`). Matching is by whole path segment, so `/hubs/agentx` is not protected.
+
+Errors on these paths are `application/problem+json`: 401 with an `errorCode` such as `certificate_required` or `invalid_issuer`, or 503 `certificate_validation_unavailable` when certificate trust cannot be determined (CA not loaded or revocation lookup failed). The CA service is a singleton and opens a new DI scope for each revocation lookup.
+
+#### Forwarded Client Certificate (`Mtls:ForwardedCertificate`)
+
+The Gateway terminates TLS for agents on a DNS-only hostname and forwards the client certificate in the `X-Client-Cert` header (base64 DER). Nodes accepts that header only when all of these hold:
+
+- `Mtls:ForwardedCertificate:Enabled` is `true`;
+- the remote address is inside one of `Mtls:ForwardedCertificate:TrustedProxies` (CIDR ranges, for example the Gateway pod CIDR);
+- the header is present exactly once and is at most `MaxHeaderLength` characters (default 16384);
+- the connection has no TLS client certificate of its own;
+- the value parses as base64 DER.
+
+The header is removed from every request. Nodes refuses to start when `Enabled` is `true` and `TrustedProxies` is empty or holds an invalid CIDR. The production ingress and trust model is D-S210 (docs/analysis/sprint2-agent-nodes). Nodes still validates the chain, SPIFFE ID and revocation.
+
+#### `AgentMtls` Authentication Scheme
+
+Policies on agent endpoints use the `AgentMtls` scheme (`AgentMtlsAuthenticationHandler.SchemeName`). It does not authenticate by itself. `MtlsMiddleware` sets `HttpContext.User` after `UseAuthentication`. A challenge writes 401 `certificate_required`, and a forbid writes 403 `forbidden`, both as problem+json.
 
 ### Certificate Details
 
 - **SPIFFE ID:** `spiffe://meridianconsole.com/nodes/{nodeId}`
 - **Extended Key Usage:** Client Authentication (OID 1.3.6.1.5.5.7.3.2)
-- **Key Size:** 2048-bit RSA (client), 4096-bit RSA (CA)
+- **Key:** generated and held by the agent (ECDSA P-384; Nodes also accepts ECDSA P-256 and RSA of 2048 bits or more). Nodes never sees the private key. The CA key is 4096-bit RSA.
+
+### Certificate Renewal and Grace Window
+
+Renewal (`POST /agents/{nodeId}/certificates/renew`) supersedes the presented certificate, but keeps it usable for a short grace window (D-S212), so an agent whose renewal response was lost can renew again with the certificate it still holds.
+
+- **Setting:** `Mtls:RenewalGraceMinutes` (default `60`, from `AgentCertificateRenewalPolicy.DefaultGraceMinutes`). `0` revokes immediately. The value must be in `0..1440`; startup fails otherwise.
+- **Usable rule:** a certificate row is usable when it is not revoked, or when its `GraceUntil` is in the future. `AgentCertificateState.IsUsable` is the only implementation. Certificate validation, the hub's connect and per-heartbeat check, and the renew endpoint all use it.
+- **Renew from grace:** a certificate in grace may renew. Its `GraceUntil` is not extended. Any other row of the node that is still active or in grace is hard-revoked with no grace.
+- **Decommission:** ends any renewal grace on the node's certificates at once.
 
 ### Rate Limiting
 
@@ -536,8 +575,9 @@ Applied at Gateway level:
 
 | Policy | Limit | Scope |
 |:-------|:------|:------|
-| `PerTenant` | 100 req/sec | Organization |
-| `PerAgent` | 500 req/60sec | Per agent |
+| `Auth` | 30 req/60sec (fixed window) | Client IP, shared by login, Identity and `/api/v1/agents/enroll` |
+| `PerTenant` | 100-token bucket, refills 50/sec | Organization (authenticated) or client IP (unauthenticated) |
+| `PerAgent` | 500 req/60sec (fixed window) | Client IP (IPv6 /64), never the certificate (D-S26) |
 
 ### Audit Logging
 
@@ -623,6 +663,33 @@ docker run -p 5040:8080 \
 | `/healthz` | Full health check |
 | `/livez` | Kubernetes liveness probe |
 | `/readyz` | Kubernetes readiness probe |
+
+---
+
+## Agent hub
+
+Agents hold a persistent SignalR connection to the Nodes service for heartbeats.
+
+- **Path:** `/hubs/agent` (`AgentHubProtocol.Path`). The Gateway routes the same path.
+- **Auth:** the hub is mapped with `RequireAuthorization("AgentPolicy")`, and mTLS must be enabled. The node ID is taken only from the `node_id` claim of the client certificate, never from the payload. A certificate that is revoked and outside its renewal grace, or past its `NotAfter` time (unless `AllowExpiredCertificates` is set), is refused at connect, and a heartbeat on an open connection is refused and the connection is closed. The hub applies the same usable rule on connect and on every heartbeat, so a certificate in grace keeps its hub connection until `GraceUntil`.
+- **Protocol header:** `X-Agent-Protocol`. Only `1` is accepted. A missing header is treated as `1`. Any other value aborts the connection.
+- **`Heartbeat(AgentHeartbeat)`:** returns `AgentHeartbeatAck`. Limits are enforced by `AgentHeartbeatValidator` before any database write:
+
+  | Field | Limit |
+  |-------|-------|
+  | `CpuUsagePercent`, `MemoryUsagePercent`, `DiskUsagePercent` | finite, 0-100 |
+  | `ActiveGameServers` | 0-10000 |
+  | `AgentVersion` | at most 50 characters, no control characters |
+  | `HealthIssues` | at most 20 entries, each non-null, at most 256 characters, no control characters |
+
+- **Error codes:** returned in `AgentHeartbeatAck.ErrorCode`, never as a `HubException`:
+
+  | Code | Meaning |
+  |------|---------|
+  | `node_not_found` | No node matches the certificate's node ID |
+  | `node_decommissioned` | The node is decommissioned; no heartbeat is written |
+  | `invalid_heartbeat` | The payload failed validation; nothing was written |
+  | `heartbeat_failed` | Any other failure, including a revoked or expired certificate |
 
 ---
 

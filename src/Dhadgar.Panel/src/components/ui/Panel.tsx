@@ -29,7 +29,7 @@ export default function Panel({
   return (
     <div
       className={clsx(
-        'rounded-lg border backdrop-blur-sm',
+        'rounded-lg border backdrop-blur-xs',
         'transition-all duration-200',
         variantStyles[variant],
         className

@@ -1,32 +1,78 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Scan only src/ for class names, matching the v3 `content` glob. */
+@import "tailwindcss" source("../");
 
-/* Ensure native form controls prefer dark UI where supported */
-:root {
-  color-scheme: dark;
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-slate-950: #020617;
+
+  --font-sans: Roboto, system-ui, sans-serif;
 }
 
-/* Reduce "flashbang" native <select> dropdown styling on Windows/Chromium */
-select,
-option {
-  background-color: rgb(15 23 42); /* slate-900 */
-  color: rgb(226 232 240); /* slate-200 */
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* v4 preflight dropped `cursor: pointer` on buttons; keep the v3 behaviour. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
-html,
-body {
-  height: 100%;
-}
+/*
+  Element-level globals live in the base layer so utility classes still win,
+  as they did in v3. Unlayered CSS would override every Tailwind utility
+  (e.g. `hover:underline` on links, `bg-*` on selects).
+*/
+@layer base {
+  /* Ensure native form controls prefer dark UI where supported */
+  :root {
+    color-scheme: dark;
+  }
 
-a {
-  text-decoration: none;
-}
+  /* Reduce "flashbang" native <select> dropdown styling on Windows/Chromium */
+  select,
+  option {
+    background-color: rgb(15 23 42); /* slate-900 */
+    color: rgb(226 232 240); /* slate-200 */
+  }
 
-/* Better mobile tap targets for buttons/links */
-button,
-a {
-  -webkit-tap-highlight-color: transparent;
+  html,
+  body {
+    height: 100%;
+  }
+
+  a {
+    text-decoration: none;
+  }
+
+  /* Better mobile tap targets for buttons/links */
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Respect iOS safe areas */
+  @supports (padding: env(safe-area-inset-top)) {
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
 }
 
 /* =========================================================
@@ -123,14 +169,6 @@ a {
   .scope-content th,
   .scope-content td {
     white-space: nowrap;
-  }
-}
-
-/* Respect iOS safe areas */
-@supports (padding: env(safe-area-inset-top)) {
-  body {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 

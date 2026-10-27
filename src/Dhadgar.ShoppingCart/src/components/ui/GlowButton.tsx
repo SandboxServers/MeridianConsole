@@ -62,7 +62,7 @@ export default function GlowButton({
       className={clsx(
         'relative inline-flex items-center justify-center font-body font-medium',
         'rounded-full border transition-all duration-200',
-        'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-space-dark',
+        'focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-offset-space-dark',
         variantStyles[variant],
         sizeStyles[size],
         fullWidth && 'w-full',
@@ -94,7 +94,7 @@ export default function GlowButton({
           />
         </svg>
       )}
-      {!isLoading && icon && <span className="flex-shrink-0">{icon}</span>}
+      {!isLoading && icon && <span className="shrink-0">{icon}</span>}
       {children}
     </button>
   );

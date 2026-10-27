@@ -18,7 +18,7 @@ public interface ICertificateStore
     /// Stores a new client certificate received during enrollment or renewal.
     /// </summary>
     /// <param name="certificate">Certificate to store.</param>
-    /// <param name="privateKey">Private key bytes (PEM or PFX format depending on platform).</param>
+    /// <param name="privateKey">PKCS#8 DER (PrivateKeyInfo) on every platform; the caller zeroes it after the call.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task StoreCertificateAsync(
         X509Certificate2 certificate,

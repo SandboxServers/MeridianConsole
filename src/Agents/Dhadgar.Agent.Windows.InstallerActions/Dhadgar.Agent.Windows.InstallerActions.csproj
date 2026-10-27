@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    DTF managed custom actions for the agent MSI (D-S245). Built only through the installer's ProjectReference
+    (scripts\uat\Build-AgentWindowsUat.ps1); not in Dhadgar.sln. net462 is in-box on every supported Windows 10/Server.
+    Platform x64 makes MakeSfxCA wrap the action in the x64 SfxCA host; the managed assembly itself must stay AnyCPU
+    (MakeSfxCA cannot load an x64-only assembly). MakeSfxCA fails on paths of 260 characters or more.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <Platform>x64</Platform>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AnalysisMode>All</AnalysisMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Dtf.CustomAction" />
+    <!-- Explicit, so the lock file does not depend on whether the machine has the 4.6.2 targeting pack -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="CustomAction.config" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

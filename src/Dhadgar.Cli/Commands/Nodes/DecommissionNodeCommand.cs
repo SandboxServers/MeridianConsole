@@ -37,9 +37,10 @@ public sealed class DecommissionNodeCommand
                     "Cannot prompt for confirmation in non-interactive mode. Use --force to skip confirmation.");
             }
 
-            var confirm = AnsiConsole.Confirm(
+            var confirm = await AnsiConsole.ConfirmAsync(
                 $"[yellow]Are you sure you want to decommission node '{Markup.Escape(nodeId)}'?[/] This action cannot be undone.",
-                defaultValue: false);
+                defaultValue: false,
+                cancellationToken: ct);
 
             if (!confirm)
             {
