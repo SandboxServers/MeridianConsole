@@ -52,6 +52,12 @@ internal interface IStoreInspector
     /// <summary>Every agent CA certificate in <c>LocalMachine\Root</c> (must be empty after a clean run).</summary>
     IReadOnlyList<StoreCert> AgentCasInRoot();
 
+    /// <summary>
+    /// True when at least one agent client certificate in <c>LocalMachine\My</c> builds a chain to a CA in the agent's
+    /// CA store (custom root trust, no revocation check; P20 U3).
+    /// </summary>
+    bool AgentCertificateChainsToAgentCa();
+
     /// <summary>Reads the DACL of a file.</summary>
     Result<StateFileAclInfo> StateFileAcl(string path);
 }
@@ -78,6 +84,59 @@ internal sealed class StoreInspector : IStoreInspector
     public IReadOnlyList<StoreCert> AgentCasInRoot()
     {
         return ReadStore(StoreName.Root, StoreLocation.LocalMachine, IsCa);
+    }
+
+    /// <inheritdoc />
+    public bool AgentCertificateChainsToAgentCa()
+    {
+        using var my = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+        using var caStore = new X509Store(AgentWindowsFacts.CaStoreName, StoreLocation.LocalMachine);
+        my.Open(OpenFlags.ReadOnly);
+        caStore.Open(OpenFlags.ReadOnly);
+        var authorities = new List<X509Certificate2>();
+        try
+        {
+            foreach (var candidate in caStore.Certificates)
+            {
+                if (IsCa(candidate))
+                {
+                    authorities.Add(candidate);
+                }
+                else
+                {
+                    candidate.Dispose();
+                }
+            }
+
+            foreach (var client in my.Certificates)
+            {
+                using (client)
+                {
+                    if (IsAgentClient(client) && authorities.Any(authority => ChainsTo(client, authority)))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+        finally
+        {
+            foreach (var authority in authorities)
+            {
+                authority.Dispose();
+            }
+        }
+    }
+
+    private static bool ChainsTo(X509Certificate2 client, X509Certificate2 authority)
+    {
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(authority);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        return chain.Build(client);
     }
 
     /// <inheritdoc />

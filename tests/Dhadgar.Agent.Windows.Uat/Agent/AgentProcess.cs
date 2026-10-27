@@ -5,11 +5,27 @@ using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Uat.Agent;
 
+/// <summary>The agent process as the legs see it. Abstracted so the legs run with a fake (P20 U3, U4).</summary>
+internal interface IAgentProcess
+{
+    /// <summary>The OS process ID while the agent runs; otherwise null.</summary>
+    int? ProcessId { get; }
+
+    /// <summary>Starts the agent. Manifest entries the agent may cause are written before the first start.</summary>
+    Result Start();
+
+    /// <summary>Kills the agent's process tree (a crash-style stop).</summary>
+    Task<Result> StopAsync();
+
+    /// <summary>True when <c>agent.log</c> holds the service-recovery warning (expected in process mode).</summary>
+    Result<bool> SawRecoveryWarning();
+}
+
 /// <summary>
 /// Runs the published agent as a console child of the driver (process mode, P20 step 3). The first start writes
 /// the manifest entries the agent may cause, before the agent can cause them.
 /// </summary>
-internal sealed class AgentProcess : IDisposable
+internal sealed class AgentProcess : IAgentProcess, IDisposable
 {
     /// <summary>The published agent executable, relative to the agent publish folder.</summary>
     public const string ExecutableName = "Dhadgar.Agent.Windows.exe";
