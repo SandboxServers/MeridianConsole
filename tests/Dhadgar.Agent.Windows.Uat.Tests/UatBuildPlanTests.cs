@@ -142,7 +142,7 @@ public sealed class UatBuildPlanTests
         return PwshScript.RunAsync(pwsh, script, arguments, TimeSpan.FromMinutes(2));
     }
 
-    private static IReadOnlyList<PlanStep> ParsePlan(string stdOut)
+    private static List<PlanStep> ParsePlan(string stdOut)
     {
         using var doc = JsonDocument.Parse(stdOut);
         var steps = new List<PlanStep>();
