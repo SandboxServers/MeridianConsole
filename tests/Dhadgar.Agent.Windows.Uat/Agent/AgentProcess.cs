@@ -5,27 +5,12 @@ using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Agent.Windows.Uat.Agent;
 
-/// <summary>The agent process as the legs see it. Abstracted so the legs run with a fake (P20 U3, U4).</summary>
-internal interface IAgentProcess
-{
-    /// <summary>The OS process ID while the agent runs; otherwise null.</summary>
-    int? ProcessId { get; }
-
-    /// <summary>Starts the agent. Manifest entries the agent may cause are written before the first start.</summary>
-    Result Start();
-
-    /// <summary>Kills the agent's process tree (a crash-style stop).</summary>
-    Task<Result> StopAsync();
-
-    /// <summary>True when <c>agent.log</c> holds the service-recovery warning (expected in process mode).</summary>
-    Result<bool> SawRecoveryWarning();
-}
-
 /// <summary>
 /// Runs the published agent as a console child of the driver (process mode, P20 step 3). The first start writes
-/// the manifest entries the agent may cause, before the agent can cause them.
+/// the manifest entries the agent may cause, before the agent can cause them. The legs reach it through
+/// <see cref="IAgentHost"/> (<see cref="ProcessAgentHost"/>).
 /// </summary>
-internal sealed class AgentProcess : IAgentProcess, IDisposable
+internal sealed class AgentProcess : IDisposable
 {
     /// <summary>The published agent executable, relative to the agent publish folder.</summary>
     public const string ExecutableName = "Dhadgar.Agent.Windows.exe";
@@ -70,6 +55,27 @@ internal sealed class AgentProcess : IAgentProcess, IDisposable
     /// <summary>The agent's process id while it runs; null before the first start.</summary>
     public int? ProcessId => _child?.ProcessId;
 
+    /// <summary>
+    /// Writes the first-start manifest entries (once) before the first start. <see cref="ProcessAgentHost.PrepareAsync"/>
+    /// calls it; <see cref="Start"/> calls it too, so a direct start still records them.
+    /// </summary>
+    public Result PrepareFirstStart()
+    {
+        if (_entriesWritten)
+        {
+            return Result.Success();
+        }
+
+        var entries = AppendFirstStartEntries(_manifest);
+        if (entries.IsFailure)
+        {
+            return entries;
+        }
+
+        _entriesWritten = true;
+        return Result.Success();
+    }
+
     /// <summary>Starts the agent. Writes the first-start manifest entries before the first start.</summary>
     public Result Start()
     {
@@ -78,15 +84,10 @@ internal sealed class AgentProcess : IAgentProcess, IDisposable
             return Result.Failure("[AgentProcess.Running] the agent is already running");
         }
 
-        if (!_entriesWritten)
+        var prepared = PrepareFirstStart();
+        if (prepared.IsFailure)
         {
-            var entries = WriteFirstStartEntries();
-            if (entries.IsFailure)
-            {
-                return entries;
-            }
-
-            _entriesWritten = true;
+            return prepared;
         }
 
         var started = ChildProcess.Start(_spec, _job, _redactor, _manifest);
@@ -173,8 +174,11 @@ internal sealed class AgentProcess : IAgentProcess, IDisposable
         new DirectoryEntry(AgentDirectories.MachineAgentDirectory, agentDirectoryExisted),
     ];
 
-    /// <summary>Appends <see cref="FirstStartEntries"/>. Each entry records whether the item existed before.</summary>
-    private Result WriteFirstStartEntries()
+    /// <summary>
+    /// Appends <see cref="FirstStartEntries"/> to <paramref name="manifest"/>. Each entry records whether the item
+    /// existed before. Shared by the process and the service host so both modes record the same entries.
+    /// </summary>
+    internal static Result AppendFirstStartEntries(CleanupManifest manifest)
     {
         var entries = FirstStartEntries(
             SafeEventSourceExists(AgentWindowsFacts.EventLogSourceName),
@@ -182,7 +186,7 @@ internal sealed class AgentProcess : IAgentProcess, IDisposable
 
         foreach (var entry in entries)
         {
-            var appended = _manifest.Append(entry);
+            var appended = manifest.Append(entry);
             if (appended.IsFailure)
             {
                 return appended;

@@ -264,10 +264,11 @@ internal sealed class StackScenario : IUatScenario
             Path.Combine(context.Paths.AgentData, "Servers"),
             Path.Combine(context.Paths.AgentData, "Temp"));
         using var agentProcess = new AgentProcess(context.Paths, job, context.Redactor, context.Manifest);
+        var agentHost = new ProcessAgentHost(context.Paths, agentProcess);
         var deps = new AgentLegsDeps(
             new RegistryToken(context.Manifest),
             new StoreInspector(),
-            agentProcess,
+            agentHost,
             new NodesAgentLegsDb(() => nodesDb.Create()),
             (label, c) => minter.MintAsync(organizationId, label, c));
         var options = new AgentLegsOptions(
@@ -283,7 +284,7 @@ internal sealed class StackScenario : IUatScenario
         // The renewal legs run after the agent is stopped (U4 leaves it stopped), with the same process object.
         var renewalDeps = new RenewalLegsDeps(
             new StoreInspector(),
-            agentProcess,
+            agentHost,
             new NodesAgentLegsDb(() => nodesDb.Create()),
             new GatewayRenewalTransport(gatewayBase, nodesBase),
             OpenMachineCertificate,

@@ -124,7 +124,7 @@ internal sealed class NodesAgentLegsDb : IAgentLegsDb
 internal sealed record AgentLegsDeps(
     IRegistryToken Registry,
     IStoreInspector Store,
-    IAgentProcess Agent,
+    IAgentHost Agent,
     IAgentLegsDb Db,
     Func<string, CancellationToken, Task<Result<MintedToken>>> MintToken);
 
@@ -196,20 +196,24 @@ internal sealed class AgentLegs
         }
         finally
         {
-            var stopped = await _deps.Agent.StopAsync();
+            var stopped = await _deps.Agent.StopAsync(CancellationToken.None);
             if (stopped.IsFailure)
             {
                 warnings.Add($"agent stop: {stopped.Error}");
             }
 
-            var warning = _deps.Agent.SawRecoveryWarning();
-            if (warning.IsFailure)
+            // The recovery warning is read from agent.log only where the host has a console log (process mode).
+            if (_deps.Agent.ConsoleLogPath is not null)
             {
-                warnings.Add($"agent.log: {warning.Error}");
-            }
-            else if (warning.Value)
-            {
-                warnings.Add("agent.log: service recovery could not be configured (expected in process mode)");
+                var warning = _deps.Agent.SawRecoveryWarning();
+                if (warning.IsFailure)
+                {
+                    warnings.Add($"agent.log: {warning.Error}");
+                }
+                else if (warning.Value)
+                {
+                    warnings.Add("agent.log: service recovery could not be configured (expected in process mode)");
+                }
             }
 
             // A certificate the agent created after the last poll is recorded now, so cleanup removes it and its key.
@@ -264,7 +268,13 @@ internal sealed class AgentLegs
             return Fail(state.Evidence, "U3", applied.Error!);
         }
 
-        var started = _deps.Agent.Start();
+        var prepared = await _deps.Agent.PrepareAsync(ct);
+        if (prepared.IsFailure)
+        {
+            return Fail(state.Evidence, "U3", prepared.Error!);
+        }
+
+        var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
             return Fail(state.Evidence, "U3", started.Error!);
@@ -453,13 +463,13 @@ internal sealed class AgentLegs
         state.Evidence["U4.certificateRowsBefore"] = rows.Value.Count;
         state.CertificateRowsBefore = rows.Value.Count;
 
-        var stopped = await _deps.Agent.StopAsync();
+        var stopped = await _deps.Agent.StopAsync(ct);
         if (stopped.IsFailure)
         {
             return Fail(state.Evidence, "U4", stopped.Error!);
         }
 
-        var started = _deps.Agent.Start();
+        var started = await _deps.Agent.StartAsync(ct);
         if (started.IsFailure)
         {
             return Fail(state.Evidence, "U4", started.Error!);

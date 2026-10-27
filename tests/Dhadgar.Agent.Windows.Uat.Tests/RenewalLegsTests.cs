@@ -261,7 +261,7 @@ public class RenewalLegsTests : IDisposable
 /// The Nodes side of U5 revokes C1 with a grace and creates C2 (active). The agent's first start is its renewal from
 /// grace (C3 replaces C1 in My, C2 is hard-revoked); later starts only refresh the heartbeat.
 /// </summary>
-internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsDb, IRenewalTransport, IDisposable
+internal sealed class RenewalWorld : IStoreInspector, IAgentHost, IAgentLegsDb, IRenewalTransport, IDisposable
 {
     private const string SupersededReason = "Superseded by a later renewal";
     private const string KeyProvider = "Microsoft Software Key Storage Provider";
@@ -415,6 +415,18 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
 
     public int? ProcessId => _running ? AgentPid : null;
 
+    public string Mode => "process";
+
+    /// <inheritdoc />
+    public string? ConsoleLogPath => null;
+
+    /// <inheritdoc />
+    public Task<Result> PrepareAsync(CancellationToken ct) => Task.FromResult(Result.Success());
+
+    /// <inheritdoc />
+    public Task<Result> StartAsync(CancellationToken ct) => Task.FromResult(Start());
+
+    /// <summary>Starts the fake agent; <see cref="StartAsync"/> wraps it.</summary>
     public Result Start()
     {
         Starts++;
@@ -433,7 +445,7 @@ internal sealed class RenewalWorld : IStoreInspector, IAgentProcess, IAgentLegsD
         return Result.Success();
     }
 
-    public Task<Result> StopAsync()
+    public Task<Result> StopAsync(CancellationToken ct)
     {
         _running = false;
         if (StopThrows)

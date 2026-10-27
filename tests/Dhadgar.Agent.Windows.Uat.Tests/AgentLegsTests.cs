@@ -16,7 +16,7 @@ namespace Dhadgar.Agent.Windows.Uat.Tests;
 /// One fake machine, database and agent for the legs. The fake agent enrolls on its first start (node row, used token,
 /// certificate in My and CA in the agent store, state file) and refreshes the heartbeat on every start.
 /// </summary>
-internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentProcess, IAgentLegsDb
+internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentHost, IAgentLegsDb
 {
     public const string TokenPrefix = "tok-";
     public const string SystemSid = "S-1-5-18";
@@ -129,6 +129,18 @@ internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentProcess,
     }
 
     /// <inheritdoc />
+    public string Mode => "process";
+
+    /// <inheritdoc />
+    public string? ConsoleLogPath => Path.Combine(_paths.Logs, "agent.log");
+
+    /// <inheritdoc />
+    public Task<Result> PrepareAsync(CancellationToken ct) => Task.FromResult(Result.Success());
+
+    /// <inheritdoc />
+    public Task<Result> StartAsync(CancellationToken ct) => Task.FromResult(Start());
+
+    /// <summary>Starts the fake agent; <see cref="StartAsync"/> wraps it.</summary>
     public Result Start()
     {
         Log("agent.start");
@@ -171,7 +183,7 @@ internal sealed class LegWorld : IRegistryToken, IStoreInspector, IAgentProcess,
     }
 
     /// <inheritdoc />
-    public Task<Result> StopAsync()
+    public Task<Result> StopAsync(CancellationToken ct)
     {
         Log("agent.stop");
         return Task.FromResult(Result.Success());
