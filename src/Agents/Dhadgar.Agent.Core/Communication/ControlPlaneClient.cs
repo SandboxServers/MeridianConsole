@@ -223,11 +223,31 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
 
             _logger.LogInformation("Disconnecting from control plane");
 
-            await _hubConnection.StopAsync(cancellationToken);
-            await _hubConnection.DisposeAsync();
-            _hubConnection = null;
+            // Teardown is unconditional: a fault while stopping still drops the old hub (and its certificate)
+            // and leaves the state Disconnected, so the next ConnectAsync rebuilds the connection.
+            try
+            {
+                await _hubConnection.StopAsync(cancellationToken);
+            }
+            finally
+            {
+                var hub = _hubConnection;
+                _hubConnection = null;
+                SetState(ConnectionState.Disconnected);
 
-            SetState(ConnectionState.Disconnected);
+                if (hub is not null)
+                {
+                    try
+                    {
+                        await hub.DisposeAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        // A dispose fault must not mask a stop fault or leave the state unset.
+                        _logger.LogWarning(ex, "Failed to dispose control plane hub connection");
+                    }
+                }
+            }
         }
         finally
         {
