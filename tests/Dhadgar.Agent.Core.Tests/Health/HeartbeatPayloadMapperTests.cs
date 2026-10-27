@@ -118,6 +118,70 @@ public class HeartbeatPayloadMapperTests
         Assert.Equal(new[] { "first", "second" }, heartbeat.HealthIssues);
     }
 
+    [Fact]
+    public void ToContract_ControlCharactersInWarning_AreReplaced()
+    {
+        var payload = CreatePayload(metrics: null);
+        payload.Warnings.Add("line1\r\nline2\0");
+
+        var heartbeat = HeartbeatPayloadMapper.ToContract(payload);
+
+        Assert.NotNull(heartbeat.HealthIssues);
+        Assert.Equal("line1  line2 ", heartbeat.HealthIssues!.Single());
+        Assert.DoesNotContain(heartbeat.HealthIssues!.Single(), char.IsControl);
+    }
+
+    [Fact]
+    public void ToContract_ControlCharactersInVersion_AreReplaced()
+    {
+        var payload = CreatePayload(metrics: null, agentVersion: "1.0\n2");
+
+        var heartbeat = HeartbeatPayloadMapper.ToContract(payload);
+
+        Assert.Equal("1.0 2", heartbeat.AgentVersion);
+    }
+
+    [Fact]
+    public void ToContract_SurrogatePairAtCut_IsNotSplit()
+    {
+        var warning = new string('x', AgentHeartbeatLimits.MaxHealthIssueLength - 1) + "😀";
+        var payload = CreatePayload(metrics: null);
+        payload.Warnings.Add(warning);
+
+        var heartbeat = HeartbeatPayloadMapper.ToContract(payload);
+
+        var issue = heartbeat.HealthIssues!.Single();
+        Assert.Equal(AgentHeartbeatLimits.MaxHealthIssueLength - 1, issue.Length);
+        Assert.False(char.IsHighSurrogate(issue[^1]));
+    }
+
+    [Fact]
+    public void ToContract_ManyRunningProcesses_AreCappedAtMax()
+    {
+        var payload = CreatePayload(metrics: null);
+        for (var i = 0; i < AgentHeartbeatLimits.MaxActiveGameServers + 3; i++)
+        {
+            payload.ActiveProcesses.Add(CreateProcess(ProcessState.Running));
+        }
+
+        var heartbeat = HeartbeatPayloadMapper.ToContract(payload);
+
+        Assert.Equal(AgentHeartbeatLimits.MaxActiveGameServers, heartbeat.ActiveGameServers);
+    }
+
+    [Fact]
+    public void ToContract_DiskAboveHundred_ClampsToHundred()
+    {
+        var payload = CreatePayload(new SystemMetrics
+        {
+            Disks = [new DiskMetrics { Name = "C:", TotalBytes = 100, AvailableBytes = -50 }]
+        });
+
+        var heartbeat = HeartbeatPayloadMapper.ToContract(payload);
+
+        Assert.Equal(100, heartbeat.DiskUsagePercent);
+    }
+
     private static HeartbeatPayload CreatePayload(
         SystemMetrics? metrics = null,
         string agentVersion = "1.2.3")

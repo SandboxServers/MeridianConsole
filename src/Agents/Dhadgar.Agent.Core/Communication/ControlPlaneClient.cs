@@ -257,6 +257,12 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
             _logger.LogWarning(ex, "Control plane hub rejected the heartbeat");
             return Result<AgentHeartbeatAck>.Failure("[ControlPlane.HubError] Control plane hub returned an error for the heartbeat");
         }
+        catch (InvalidOperationException ex)
+        {
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
+            _logger.LogWarning(ex, "Heartbeat invocation failed: connection not active");
+            return Result<AgentHeartbeatAck>.Failure("[ControlPlane.NotConnected] Connection dropped during heartbeat");
+        }
     }
 
     public async Task<bool> SendCommandResultAsync(CommandResult result, CancellationToken cancellationToken = default)

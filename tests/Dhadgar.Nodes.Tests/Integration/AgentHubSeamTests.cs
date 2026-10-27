@@ -5,8 +5,10 @@ using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Health;
 using Dhadgar.Agent.Core.Telemetry;
+using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
+using Dhadgar.Nodes.Hubs;
 using Dhadgar.Nodes.Tests.Integration.AgentSeam;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -72,8 +74,8 @@ public sealed class AgentHubSeamTests : IDisposable
             {
                 CpuUsagePercent = 42.5,
                 TotalMemoryBytes = 1000,
-                AvailableMemoryBytes = 1000,
-                Disks = [new DiskMetrics { Name = "root", TotalBytes = 100, AvailableBytes = 100 }]
+                AvailableMemoryBytes = 900,
+                Disks = [new DiskMetrics { Name = "root", TotalBytes = 100, AvailableBytes = 90 }]
             }
         });
 
@@ -100,7 +102,29 @@ public sealed class AgentHubSeamTests : IDisposable
         Assert.Equal(expectedHeartbeat, node.LastHeartbeat);
         Assert.Equal("2.0.0-seam", node.AgentVersion);
         Assert.Equal(42.5, health.CpuUsagePercent);
+        Assert.Equal(10.0, health.MemoryUsagePercent);
+        Assert.Equal(10.0, health.DiskUsagePercent);
         Assert.Equal(Dhadgar.Nodes.Data.Entities.NodeStatus.Online, node.Status);
+    }
+
+    [Fact]
+    public void MappedHeartbeat_WithControlCharactersAndSurrogates_PassesNodesValidator()
+    {
+        var payload = new HeartbeatPayload
+        {
+            NodeId = Guid.NewGuid(),
+            AgentVersion = "1.0\n2",
+            Metrics = new SystemMetrics { CpuUsagePercent = 1 }
+        };
+        payload.Warnings.Add("disk error\r\nat C:\\x\0");
+        payload.Warnings.Add(new string('x', AgentHeartbeatLimits.MaxHealthIssueLength - 1) + "\uD83D\uDE00");
+        payload.Warnings.Add(string.Empty);
+
+        var heartbeat = HeartbeatPayloadMapper.ToContract(payload);
+
+        Assert.True(AgentHeartbeatValidator.IsValid(heartbeat));
+        Assert.Equal("1.0 2", heartbeat.AgentVersion);
+        Assert.Equal(2, heartbeat.HealthIssues!.Count);
     }
 
     [Fact]

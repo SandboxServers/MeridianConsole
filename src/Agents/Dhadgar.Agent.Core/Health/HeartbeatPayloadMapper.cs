@@ -9,8 +9,9 @@ namespace Dhadgar.Agent.Core.Health;
 public static class HeartbeatPayloadMapper
 {
     /// <summary>
-    /// Converts a heartbeat payload to the hub contract, clamping percentages to 0-100 and bounding
-    /// the version, the health issues and the active game server count.
+    /// Converts a heartbeat payload to the hub contract, clamping percentages to 0-100, replacing control
+    /// characters in the version and the health issues, and bounding the version, the health issues and the
+    /// active game server count.
     /// </summary>
     /// <param name="payload">The payload collected by the health reporter.</param>
     /// <returns>The contract heartbeat.</returns>
@@ -29,8 +30,9 @@ public static class HeartbeatPayloadMapper
 
         var healthIssues = payload.Warnings
             .Where(w => w is not null)
+            .Select(w => Sanitize(w, AgentHeartbeatLimits.MaxHealthIssueLength))
+            .Where(w => w.Length > 0)
             .Take(AgentHeartbeatLimits.MaxHealthIssues)
-            .Select(w => Truncate(w, AgentHeartbeatLimits.MaxHealthIssueLength))
             .ToList();
 
         return new AgentHeartbeat(
@@ -38,7 +40,7 @@ public static class HeartbeatPayloadMapper
             MemoryUsagePercent: Clamp(payload.Metrics?.MemoryUsagePercent),
             DiskUsagePercent: Clamp(diskUsage),
             ActiveGameServers: activeGameServers,
-            AgentVersion: Truncate(payload.AgentVersion, AgentHeartbeatLimits.MaxAgentVersionLength),
+            AgentVersion: Sanitize(payload.AgentVersion, AgentHeartbeatLimits.MaxAgentVersionLength),
             HealthIssues: healthIssues);
     }
 
@@ -56,8 +58,30 @@ public static class HeartbeatPayloadMapper
     }
 
     /// <summary>
-    /// Truncates a string to the maximum length.
+    /// Replaces each control character with a space, then truncates to the maximum length.
+    /// A cut never leaves a lone high surrogate at the end of the string.
     /// </summary>
-    private static string Truncate(string value, int maxLength) =>
-        value.Length <= maxLength ? value : value[..maxLength];
+    private static string Sanitize(string value, int maxLength)
+    {
+        var cleaned = string.Create(value.Length, value, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+            {
+                span[i] = char.IsControl(source[i]) ? ' ' : source[i];
+            }
+        });
+
+        if (cleaned.Length <= maxLength)
+        {
+            return cleaned;
+        }
+
+        var length = maxLength;
+        if (length > 0 && char.IsHighSurrogate(cleaned[length - 1]))
+        {
+            length--;
+        }
+
+        return cleaned[..length];
+    }
 }
