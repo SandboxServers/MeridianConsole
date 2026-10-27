@@ -92,9 +92,28 @@ Run it yourself from an elevated PowerShell 7.4+ shell. Automated coders never r
 | U2 | Token: mints token T1 for a new organization and writes it to `HKLM\SOFTWARE\Meridian Console\Agent`. | The registry value exists. |
 | U3 | First start: applies the agent config and starts the agent. Polls every 2 s for up to 90 s. | All of these hold: `agent-state.json` has a node ID; exactly one node for the organization, `Online` or `Degraded`, with a heartbeat; T1 is used by that node; the registry value is gone; exactly one agent certificate in `My`, with a machine CNG key that can sign, SAN equal to the node's SPIFFE ID; exactly one unrevoked certificate row with the store certificate's SHA-256 thumbprint; the CA is in `MeridianConsoleAgent` and the client certificate chains to it; no agent CA in `LocalMachine\Root`; the state file's ACL is protected and every Allow ACE is SYSTEM, Administrators or the agent's account (A1). |
 | U4 | Restart (#101): mints T2, writes it, stops the agent, starts it again. Polls for up to 60 s. | The heartbeat is later than before the restart; still one node; T2 is not used; the certificate row count is unchanged; the node ID in the state file is the same; the same thumbprint is in `My`. A second token is not consumed. |
+| U5 | Lost response (D-S212): the driver renews C1 with its own key, C2 is created, and the response is treated as lost. | C1's row is revoked with a `GraceUntil` about 5 minutes after the renewal (within 60 s); C2's row is active; the Gateway answers 200 for C1 and C2. |
+| U6 | Renew from grace (D-S221): sets `CertificateRenewalThresholdDays` to 90 days, starts the agent, and polls for up to 90 s. The key is removed again after U6, pass or fail. | Exactly one agent certificate is in `My` (C3, a machine CNG key that can sign); C1's CNG key is gone (P14 A2); the node heartbeat is later than the baseline; C3's row is active; C2's row is hard-revoked (no grace, reason "Superseded by a later renewal"); C1's `GraceUntil` is unchanged from U5. |
+| U7 | Grace over the wire: the Gateway answers 401 for C2 and 200 for C3. The driver waits until C1's grace has passed (plus 10 s), then sends C1 to Nodes directly over loopback. | C2 gets 401 through the Gateway; C3 gets 200; C1 gets 401 from Nodes after its grace. A transport error (no HTTP answer) is recorded as `inconclusive` for that probe, not as a pass. |
+| U8 | Restart after renewal: the agent starts again and polls for up to 60 s. | The heartbeat is later than before the restart; the certificate row count is unchanged; only C3 is in `My`. |
 | U9 | Cleanup and scan, always last. | See below. |
 
-The agent is stopped at the end of the legs. P21 restarts it for the renewal legs.
+The agent is stopped at the end of each leg that starts it. U5-U8 run after U4 with the same agent process,
+and only when U1-U4 pass.
+
+**Renewal grace and timing.** The Nodes grace is 5 minutes (`Mtls__RenewalGraceMinutes=5` in the stack's
+ServiceHost). U5 checks that C1's grace is about 5 minutes away, so a different grace setting fails U5 rather
+than silently changing what U7 waits for. U7 checks C1 at Nodes, not through the Gateway, because C1's key
+is gone after U6: the Gateway path already proved C1 in U5. The loopback request carries C1 as
+`X-Client-Cert`.
+
+**Threshold in days.** `CertificateRenewalThresholdDays` is in whole days, so U6 sets 90, which renews at
+start for a certificate issued moments earlier. It is removed after U6 (the published `appsettings.json` is
+left as it was built).
+
+**Inconclusive.** `inconclusive` means no HTTP answer reached the probe (connection refused, reset, or TLS
+failure). The step still fails the run, but the evidence says the rule under test was not checked, so a
+network fault is not read as a renewal bug.
 
 **U9** runs in every `run`, after the manifest undo. It passes when the undo had no failures, the machine
 probe finds nothing, and the `LocalMachine\Root` diff has no additions or removals. Then the secret scan
