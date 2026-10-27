@@ -39,10 +39,15 @@ public sealed class AgentBootstrapSeamTests : IDisposable
 
     public void Dispose()
     {
+        TryDelete(_caDirectory);
+        TryDelete(_stateDirectory);
+    }
+
+    private static void TryDelete(string path)
+    {
         try
         {
-            Directory.Delete(_caDirectory, recursive: true);
-            Directory.Delete(_stateDirectory, recursive: true);
+            Directory.Delete(path, recursive: true);
         }
         catch
         {
