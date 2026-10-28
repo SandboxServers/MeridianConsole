@@ -92,7 +92,7 @@ public sealed class I1UnhandledInvariantTests
     private static FaultHistoryEntry Fault(string target, DateTimeOffset started, DateTimeOffset? healed) =>
         new("f-" + target, "fault_disable", target, started, healed);
 
-    private static async Task<IReadOnlyList<InvariantViolation>> RunAsync(IInvariant check)
+    private static async Task<IReadOnlyList<InvariantViolation>> RunAsync(I1UnhandledInvariant check)
     {
         Result<IReadOnlyList<InvariantViolation>> result = await check.CheckAsync(Window, CancellationToken.None);
         Assert.True(result.IsSuccess);
