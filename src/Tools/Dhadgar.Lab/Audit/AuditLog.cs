@@ -152,7 +152,15 @@ public sealed class AuditLog : ILabEvents, IDisposable
         // Roll-over: the previous day's file is closed before the new one opens.
         CloseStream();
 
-        Directory.CreateDirectory(_paths.Audit);
+        // Owner-only on Unix; the root directory's own mode is set by the daemon start packet.
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(_paths.Audit);
+        }
+        else
+        {
+            Directory.CreateDirectory(_paths.Audit, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
 
         var candidate = Path.Combine(_paths.Audit, $"audit-{day}.jsonl");
         var validated = _validator.ValidatePath(candidate, [_paths.Audit]);
@@ -161,7 +169,20 @@ public sealed class AuditLog : ILabEvents, IDisposable
             return Result.Failure("[Lab.Audit] path refused: " + validated.Error);
         }
 
-        _stream = new FileStream(validated.Value, FileMode.Append, FileAccess.Write, FileShare.Read);
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.Append,
+            Access = FileAccess.Write,
+            Share = FileShare.Read,
+        };
+
+        // The setter throws on Windows, so the Unix mode is only set where it applies.
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        _stream = new FileStream(validated.Value, options);
         _streamDay = day;
         return Result.Success();
     }
@@ -190,13 +211,20 @@ public sealed class AuditLog : ILabEvents, IDisposable
                     continue;
                 }
 
+                // A key is redacted like a value; a key that redacts to the envelope name is skipped too.
+                var fieldName = _redactor.Redact(key);
+                if (fieldName is TimestampField or NameField)
+                {
+                    continue;
+                }
+
                 if (value is null)
                 {
-                    writer.WriteNull(key);
+                    writer.WriteNull(fieldName);
                 }
                 else
                 {
-                    writer.WriteString(key, _redactor.Redact(value));
+                    writer.WriteString(fieldName, _redactor.Redact(value));
                 }
             }
 

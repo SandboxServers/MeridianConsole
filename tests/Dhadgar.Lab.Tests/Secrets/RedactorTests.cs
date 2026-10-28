@@ -107,4 +107,70 @@ public sealed class RedactorTests
 
         Assert.Equal("plain status text", redactor.Redact("plain status text"));
     }
+
+    [Fact]
+    public void Redact_BearerTokenLowerCaseScheme_Masked()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        var result = redactor.Redact("authorization: bearer abcdefghijklmnopqrstuvwxyz0123456789");
+
+        Assert.Equal("authorization: Bearer ***", result);
+    }
+
+    [Fact]
+    public void Redact_PasswordLowerCaseKey_Masked()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Assert.Equal("Server=x;password=***;", redactor.Redact("Server=x;password=abc12345;"));
+    }
+
+    [Fact]
+    public void Redact_PwdUpperCaseKey_Masked()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Assert.Equal("PWD=***;", redactor.Redact("PWD=x;"));
+    }
+
+    [Fact]
+    public void Redact_UnterminatedPemBlock_Masked()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        var result = redactor.Redact("x\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC");
+
+        Assert.DoesNotContain("MIIE", result, StringComparison.Ordinal);
+        Assert.Equal("x\n***pem", result);
+    }
+
+    [Fact]
+    public void Redact_TwoPemBlocks_EachStopsAtItsOwnEnd()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        var input = "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\nmid\n-----BEGIN PRIVATE KEY-----\nBBBB\n-----END PRIVATE KEY-----";
+
+        Assert.Equal("***pem\nmid\n***pem", redactor.Redact(input));
+    }
+
+    [Fact]
+    public void Redact_VaultValueAsJsonPropertyName_Masked()
+    {
+        using var vault = new SecretVault();
+        vault.Add(SecretKind.EnrollmentToken, "s3cret-value-123");
+        var redactor = new Redactor(vault);
+        using var document = JsonDocument.Parse("{\"s3cret-value-123\":1,\"Password=hunter2hunter2\":2}");
+
+        var redacted = redactor.Redact(document.RootElement).GetRawText();
+
+        Assert.DoesNotContain("s3cret-value-123", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("hunter2hunter2", redacted, StringComparison.Ordinal);
+        Assert.Equal("{\"***tok-1\":1,\"Password=***\":2}", redacted);
+    }
 }

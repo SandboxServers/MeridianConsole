@@ -18,16 +18,16 @@ public sealed class Redactor
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);
 
     private static readonly Regex PemBlock = new(
-        @"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",
+        @"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant, MatchTimeout);
 
     private static readonly Regex BearerToken = new(
         @"Bearer\s+[A-Za-z0-9._~+/=-]{20,}",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant, MatchTimeout);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, MatchTimeout);
 
     private static readonly Regex PasswordSegment = new(
         @"(Password|Pwd)=[^;]*",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant, MatchTimeout);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, MatchTimeout);
 
     private readonly SecretVault _vault;
 
@@ -97,7 +97,7 @@ public sealed class Redactor
                 var jsonObject = new JsonObject();
                 foreach (var property in element.EnumerateObject())
                 {
-                    jsonObject[property.Name] = ToNode(property.Value);
+                    jsonObject[Redact(property.Name)] = ToNode(property.Value);
                 }
 
                 return jsonObject;

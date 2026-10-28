@@ -3,6 +3,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -123,6 +124,11 @@ public sealed class AuditLogTests : IDisposable
         audit.RecordCall("c5", "lab_status", LabGate.Open, "mcp", null, "ok", 1);
 
         Assert.Single(ReadLines(Path.Combine(_paths.Audit, "audit-20260102.jsonl")));
+        // The previous day's handle must be released on roll-over: an exclusive open only succeeds once it is closed.
+        using (new FileStream(Path.Combine(_paths.Audit, "audit-20260102.jsonl"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+        }
+
         Assert.Single(ReadLines(Path.Combine(_paths.Audit, "audit-20260103.jsonl")));
     }
 
@@ -138,6 +144,62 @@ public sealed class AuditLogTests : IDisposable
 
         Assert.True(result.IsFailure);
         Assert.StartsWith("[Lab.Audit]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecordCall_ValidatorRefusesPath_ReturnsFailureAndWritesNothing()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 2, 10, 0, 0, TimeSpan.Zero));
+        using var vault = new SecretVault();
+        using var audit = new AuditLog(_paths, new RefusingValidator(), new Redactor(vault), time);
+
+        var result = audit.RecordCall("c7", "lab_status", LabGate.Open, "mcp", null, "ok", 1);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.Audit] path refused", result.Error, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(_paths.Audit, "audit-20260102.jsonl")));
+        Assert.StartsWith("[Lab.Audit]", audit.LastFailure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Emit_FieldKeyHoldingVaultValue_IsRedacted()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 2, 10, 0, 0, TimeSpan.Zero));
+        using var vault = new SecretVault();
+        var reference = vault.Add(SecretKind.Password, "key-secret-value");
+        using var audit = CreateLog(time, vault);
+        var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["key-secret-value"] = "x",
+        };
+
+        audit.Emit(new LabEvent("lab.lease", time.GetUtcNow(), fields));
+
+        var line = ReadLines(Path.Combine(_paths.Audit, "audit-20260102.jsonl")).Single();
+        Assert.DoesNotContain("key-secret-value", line, StringComparison.Ordinal);
+        Assert.Contains("***" + reference, line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecordCall_UnixFiles_AreOwnerOnly()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 2, 10, 0, 0, TimeSpan.Zero));
+        using var vault = new SecretVault();
+        using var audit = CreateLog(time, vault);
+
+        audit.RecordCall("c8", "lab_status", LabGate.Open, "mcp", null, "ok", 1);
+
+        const UnixFileMode groupAndOther = UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute
+            | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute;
+        var directoryMode = File.GetUnixFileMode(_paths.Audit);
+        var fileMode = File.GetUnixFileMode(Path.Combine(_paths.Audit, "audit-20260102.jsonl"));
+        Assert.Equal(UnixFileMode.None, directoryMode & groupAndOther);
+        Assert.Equal(UnixFileMode.None, fileMode & groupAndOther);
     }
 
     /// <summary>
@@ -159,4 +221,14 @@ public sealed class AuditLogTests : IDisposable
 
     private AuditLog CreateLog(TimeProvider time, SecretVault vault) =>
         new(_paths, new PathValidator(NullLogger<PathValidator>.Instance), new Redactor(vault), time);
+
+    private sealed class RefusingValidator : IPathValidator
+    {
+        public Result<string> ValidatePath(string path, IEnumerable<string> allowedBasePaths) =>
+            Result<string>.Failure("refused");
+
+        public bool IsSafePath(string path) => false;
+
+        public Result<string> NormalizePath(string path) => Result<string>.Failure("refused");
+    }
 }
