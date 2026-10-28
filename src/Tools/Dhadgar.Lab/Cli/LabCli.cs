@@ -19,6 +19,8 @@ namespace Dhadgar.Lab.Cli;
 /// </summary>
 public static class LabCli
 {
+    private static readonly JsonSerializerOptions StatusJsonOptions = new(JsonSerializerDefaults.Web);
+
     /// <summary>
     /// Parses and runs the command line. Returns the process exit code.
     /// </summary>
@@ -115,7 +117,7 @@ public static class LabCli
             return 0;
         }
 
-        var status = JsonSerializer.Deserialize<StatusDto>(body.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var status = JsonSerializer.Deserialize<StatusDto>(body.Value, StatusJsonOptions);
         if (status is null)
         {
             await error.WriteLineAsync("[Lab.Status] the daemon returned an unreadable status body").ConfigureAwait(false);

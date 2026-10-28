@@ -59,7 +59,7 @@ public sealed class LabSelfTestE2ETests
                     daemon.BaseAddress,
                     token,
                     "lab_build",
-                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["lease_id"] = leaseId });
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["checkout"] = repoRoot, ["lease_id"] = leaseId });
 
                 using var run = await CallToolAsync(
                     daemon.BaseAddress,

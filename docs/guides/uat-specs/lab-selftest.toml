@@ -223,13 +223,33 @@ depends_on = ["gateway-up"]
 id = "token-single-use"
 title = "A token that enrolled once is refused on reuse"
 expected = "Reusing the enroll-gateway token returns http:401"
-depends_on = ["enroll-gateway"]
+depends_on = ["gateway-up"]
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "selftest-single-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "first"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
 
   [[row.step]]
   id = "reuse"
   tool = "nodes_enroll_probe"
   args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
   expect_error = "http:401"
+
+  [[row.expect]]
+  id = "first-status"
+  text = "the first gateway enroll returns 201"
+  source = "step"
+  step = "first"
+  op = "eq"
+  pointer = "/result/status"
+  value = 201
 
   [[row.expect]]
   id = "reuse-code"
@@ -246,13 +266,18 @@ title = "The Nodes log records the enrollments"
 expected = "At least one enroll line in the Nodes log since run start"
 depends_on = ["enroll-direct"]
 
+  [[row.step]]
+  id = "snapshot"
+  tool = "lab_status"
+  args = {}
+
   [[row.expect]]
   id = "log-enroll"
   text = "the Nodes log has a line containing nroll"
   source = "log"
   process = "nodes"
   contains = "nroll"
-  since = "run_start"
+  since = "row_start"
   op = "min_rows"
   pointer = "/count"
   value = 1
