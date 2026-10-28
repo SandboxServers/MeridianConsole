@@ -5,6 +5,7 @@ using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Tools.Logs;
 using Dhadgar.Lab.Windows;
+using Dhadgar.Lab.Tools.Services;
 using Dhadgar.Lab.Tools.Stack;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +51,12 @@ public static class LabMcpServer
         AddLabTool<StackUpTool>(services);
         AddLabTool<StackDownTool>(services);
         AddLabTool<StackStatusTool>(services);
+
+        AddLabTool<BuildTool>(services);
+        AddLabTool<ServiceStartTool>(services);
+        AddLabTool<ServiceStopTool>(services);
+        AddLabTool<ServiceRestartTool>(services);
+        AddLabTool<ServiceConfigSetTool>(services);
     }
 
     /// <summary>
