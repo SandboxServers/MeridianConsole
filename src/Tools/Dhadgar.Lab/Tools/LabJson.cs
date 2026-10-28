@@ -37,6 +37,7 @@ public static class LabJson
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
             TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
         };
 

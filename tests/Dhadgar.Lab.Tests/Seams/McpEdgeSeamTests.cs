@@ -124,6 +124,69 @@ public sealed class McpEdgeSeamTests
         }
     }
 
+    [Fact]
+    [Trait("Seam", "S-L1")]
+    public async Task Mcp_NoToken_Returns401()
+    {
+        var dataRoot = NewDataRoot();
+        try
+        {
+            await using var daemon = await StartDaemonAsync(NewToken(), dataRoot);
+            using var http = new HttpClient { BaseAddress = daemon.BaseAddress };
+            using var request = new HttpRequestMessage(HttpMethod.Post, LabDefaults.McpPath.TrimStart('/'));
+            using var response = await http.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDataRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    [Trait("Seam", "S-L1")]
+    public async Task Mcp_ValidTokenWithOrigin_Returns403()
+    {
+        var token = NewToken();
+        var dataRoot = NewDataRoot();
+        try
+        {
+            await using var daemon = await StartDaemonAsync(token, dataRoot);
+            using var http = new HttpClient { BaseAddress = daemon.BaseAddress };
+            using var request = new HttpRequestMessage(HttpMethod.Post, LabDefaults.McpPath.TrimStart('/'));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.TryAddWithoutValidation("Origin", "http://evil");
+            using var response = await http.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDataRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    [Trait("Seam", "S-L1")]
+    public async Task Mcp_ForeignHostHeader_Returns403()
+    {
+        var token = NewToken();
+        var dataRoot = NewDataRoot();
+        try
+        {
+            await using var daemon = await StartDaemonAsync(token, dataRoot);
+            using var http = new HttpClient { BaseAddress = daemon.BaseAddress };
+            using var request = new HttpRequestMessage(HttpMethod.Post, LabDefaults.McpPath.TrimStart('/'));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Host = "evil:" + LabDefaults.DaemonPort;
+            using var response = await http.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDataRoot(dataRoot);
+        }
+    }
+
     /// <summary>
     /// Starts the daemon on an ephemeral loopback port and asserts the start succeeded.
     /// </summary>
