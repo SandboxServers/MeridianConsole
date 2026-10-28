@@ -18,6 +18,7 @@ public static partial class LabMcpServer
         AddLabTool<UatRunTool>(services);
         AddLabTool<UatReportTool>(services);
         AddLabTool<BundleReadTool>(services);
+        AddLabTool<UatAttestTool>(services);
 
         services.AddSingleton<IClauseSource, ToolSource>();
         services.AddSingleton<IClauseSource, HttpSource>();

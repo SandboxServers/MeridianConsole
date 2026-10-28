@@ -17,6 +17,11 @@ public sealed record UatReportArgs(string RunId);
 public sealed record BundleReadArgs(string RunId, string Path);
 
 /// <summary>
+/// Arguments of <c>uat_attest</c>: the run, the row (section and row id), the human clause, and <c>pass</c> or <c>fail</c>.
+/// </summary>
+public sealed record UatAttestArgs(string? RunId, string? Section, string? Row, string? ClauseId, string? Verdict, string? Note = null);
+
+/// <summary>
 /// <c>uat_report</c> (Open): returns the <c>run.json</c> of one run with its bundle folder name. Reads only; the grades are
 /// the ones the run wrote.
 /// </summary>
@@ -114,5 +119,53 @@ public sealed class BundleReadTool : LabTool<BundleReadArgs>
         }
 
         return Result<object>.Success(new { run_id = args.RunId, path = args.Path, text = _redactor.Redact(text.Value!) });
+    }
+}
+
+/// <summary>
+/// <c>uat_attest</c> (Leased): records a human verdict on one pending human clause of a row, then regrades the row, rewrites
+/// <c>ledger.md</c> and the run's overall. Refuses every non-human clause with <c>[Lab.InvalidArgument]</c>.
+/// </summary>
+public sealed class UatAttestTool : LabTool<UatAttestArgs>
+{
+    private readonly LabPaths _paths;
+    private readonly IPathValidator _validator;
+    private readonly Redactor _redactor;
+    private readonly TimeProvider _time;
+
+    /// <summary>
+    /// Creates the tool.
+    /// </summary>
+    public UatAttestTool(LabPaths paths, IPathValidator validator, Redactor redactor, TimeProvider time)
+    {
+        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
+        _time = time ?? throw new ArgumentNullException(nameof(time));
+    }
+
+    /// <inheritdoc />
+    public override string Name => "uat_attest";
+
+    /// <inheritdoc />
+    public override string Description => "Records a pass or fail verdict on one pending human clause, then regrades the row and rewrites the ledger and overall. Human clauses only.";
+
+    /// <inheritdoc />
+    protected override Task<Result<object>> ExecuteAsync(UatAttestArgs args, LabCallContext context, CancellationToken ct)
+    {
+        Result<string> folder = BundleFolders.Find(_paths.UatRuns, args.RunId, _validator);
+        if (folder.IsFailure)
+        {
+            return Task.FromResult(Result<object>.Failure(folder.Error));
+        }
+
+        Result<string> grade = BundleAttestor.Attest(folder.Value!, args.RunId!, args.Section!, args.Row!, args.ClauseId!,
+            args.Verdict!, args.Note, _time.GetUtcNow(), _redactor, _validator);
+        if (grade.IsFailure)
+        {
+            return Task.FromResult(Result<object>.Failure(grade.Error));
+        }
+
+        return Task.FromResult(Result<object>.Success(new { run_id = args.RunId, section = args.Section, row = args.Row, clause_id = args.ClauseId, grade = grade.Value }));
     }
 }
