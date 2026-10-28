@@ -42,7 +42,7 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | F10 | Nodes maps `POST /agents/enroll` (anonymous, body `Dhadgar.Contracts.Nodes.EnrollNodeRequest`, 201 `EnrollNodeResponse`, 401 `invalid_token`); the Gateway exposes it as `/api/v1/agents/enroll`. This seam exists on `main`. | `src/Dhadgar.Nodes/Endpoints/AgentEndpoints.cs:24`; `src/Shared/Dhadgar.Contracts/Nodes/EnrollmentContracts.cs:62` | L01 (red), L11 (green) |
 | F11 | Nodes needs Postgres and RabbitMQ (own MassTransit section `RabbitMq:Host/VirtualHost/Username/Password`, EF outbox `UsePostgres`, tables `InboxState`, `OutboxState`, `OutboxMessage`), auto-migrates in Development only (`Program.cs:171`; `DatabaseMigrationExtensions.cs:27` returns outside Development, line 39 logs `Applying migrations for {DbContext}...`), initialises its CA with `LocalFileCaStorageProvider`. Consumers: CapacityReserved, CapacityReleased, CapacityReservationExpired, NodeDegraded, NodeOffline. | `src/Dhadgar.Nodes/Program.cs` | L08, L09, L21 |
 | F12 | The Windows agent writes LocalMachine state: service `DhadgarAgent` (LocalSystem), `HKLM\SOFTWARE\Meridian Console\Agent\EnrollmentToken`, client certificate in `LocalMachine\My`, a CA store, a state file under `%ProgramData%`. Console mode still needs admin. Inside a Windows container all of that is the container's own (own SCM, HKLM, cert stores, ProgramData), so the workstation is never touched. | `src/Agents/Dhadgar.Agent.Windows/Program.cs:40`; Sprint 2 P11, P14 | L31, L32 |
-| F13 | Agent footprint names are private constants in the agent. A lab that keeps its own copies would drift: the seam defect class. | `Program.ServiceName`, `WindowsCertificateStore.CaStoreName` (Sprint 2) | L12 (red S-L3), L39 |
+| F13 | Agent footprint names are private constants in the agent. A lab that keeps its own copies would drift: the seam defect class. | `Program.ServiceName`, `WindowsCertificateStore.CaStoreName` (Sprint 2) | L12 (S-L3 green), L39 |
 | F14 | Agent.Windows targets `net10.0` with RIDs win-x64, win-arm64 and linux-x64, so it builds on ubuntu CI. A RID-specific `dotnet publish -r` rewrites lock files (Sprint 2 D-S241); the lab publishes portable (no `-r`) after a locked restore. | `Dhadgar.Agent.Windows.csproj`; Sprint 2 D-S241 | L09, L31 |
 | F15 | Service test hosts run in the `Testing` environment, so DI scope validation is off; a singleton capturing a scoped `DbContext` hid in Nodes until Sprint 2 P07. The daemon adds many singletons. | architect memory `di-scope-validation-off-in-tests` | L05 (R-DI) |
 | F16 | Sprint 2 is on `main` (squash `6df3338`, PR #235, 2026-10-27). It added the AgentHub (`/hubs/agent`, `IAgentHub.Heartbeat(AgentHeartbeat) → AgentHeartbeatAck`, `IAgentHubClient.ReceiveCommand(string)`, `ReceivePing`, header `X-Agent-Protocol: 1`, mTLS identity), `AgentCertificate.GraceUntil`, `Mtls:RenewalGraceMinutes`, the renewal threshold, the CA store move, the state directory and the MSI. UAT passed in Process, Service and Msi modes. | `git log` `6df3338`; Sprint 2 README and RESUME | wave 8 (D-ML60) |
@@ -81,6 +81,10 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | F49 | Toxiproxy's README does not say whether a toxic added to a proxy applies to connections already open. **Assumption** until L51 checks it; the barrier proxy does not depend on it. | Toxiproxy README v2.13.0 | L49, L51 |
 | F50 | Four defects in the first pass: (1) C8 had no `incomplete` outcome, so an all-skipped run read `pass`; (2) C12 matched known issues by the row's claim, not by its signatures; (3) C11 I1 let any active fault anywhere excuse a 5xx; (4) L19 wrote the fault journal after inject, so a crash could leave an unjournalled fault. | the first-pass C8, C11, C12 and L19 text | D-ML46 (L15, L19, L21, L25) |
 | F51 | Sprint 2's `AgentCertificate.GraceUntil` is on `main`, so L11 shifts it from the start and L40 only confirms it against the W8 ruling. | `6df3338` | L11, L40 |
+| F52 | No service could be given a RabbitMQ port. Nodes' `RabbitMqOptions` has no `Port` and calls `cfg.Host(host, virtualHost, ...)`, which always uses 5672 (`host:port` throws). `AddDhadgarMessaging` reads `RabbitMq:Host` only. `docs/CONFIGURATION-MANAGEMENT.md` already promised `RabbitMq:Port`. | `src/Dhadgar.Nodes/RabbitMqOptions.cs`, `Program.cs:125-135`; `src/Shared/Dhadgar.Messaging/MessagingExtensions.cs:77-96`; [ruling L09-1](worknotes/L09-ruling-1.md) | L09f (D-ML62) |
+| F53 | The Gateway has no anonymous route for the CA certificate: `/api/v1/agents/ca-certificate` falls into `agents-route` (`AgentCertificate`), so it is 401 without a client certificate. Four lab specs (L09 item 8, L17 `gateway-up`, L19 S-L7, L23 `gw-nodes-down`) assumed it was open. | `src/Dhadgar.Gateway/appsettings.json:187-207`; [ruling L09-2](worknotes/L09-ruling-2.md) | D-ML63; L09, L17, L19, L23 |
+| F54 | `/api/v1/agents/enroll` is under the Gateway's `Auth` limiter, 30 per 60 s per client IP; agent routes use `PerAgent`, 500 per 60 s; global 1000 per 60 s. All lab traffic reaches the Gateway from one IP, and the clause default `poll_ms = 500` would trip `Auth` within a 30 s recovery poll. | `src/Dhadgar.Gateway/Program.cs:194-240`; `appsettings.json`; C7; [ruling W2-3](worknotes/W2-ruling-3.md) | L17, L19, L23, L28, L42, L57 |
+| F55 | All tool registrations sat in one list in `AddLabMcp`, and the DI test pinned a literal tool count, so every pair of tool packets conflicted on the same two files in wave 2. `PlannedTools` also kept 9 names that were already registered. | `LabMcpServer.cs:48-88`; `LabDaemonServiceLifetimeTests.cs:47`; `ToolPolicy.cs`; wave 2 review M1 | L12a (D-ML65) |
 
 ## Decisions
 
@@ -147,6 +151,10 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | D-ML59 | Rollback: running an older Nodes on a newer schema. Recommended: **unsupported, documented**; the rollback row stays recorded, not required. | **BlockedDecision** (non-blocking) | Product support policy. |
 | D-ML60 | Sprint 2 is on `main` (`6df3338`); `campaign/meridian-lab` is cut after it; wave 8 needs only the architect's W8 ruling note, not a merge. | Accepted | F16, F51. |
 | D-ML61 | Envelope thresholds: healthy = success ratio ≥ 0.95 over 30 s; recovered within 120 s; metastable when not healthy by max(360 s, 3 × fault duration) after the heal. | Accepted (owner may change) | Starting values; a `metastable` cell is a finding, not a reason to move them. |
+| D-ML62 | Add a generic, default-preserving `RabbitMq:Port` (default 5672) to Nodes and `AddDhadgarMessaging` in fix packet L09f, shipped as its own PR. The lab sets `RabbitMq__Port` per proxy; vhost stays `/`. | Accepted; L09f Done (#237) | F52; names nothing in the lab, so not a D-ML40 seam. |
+| D-ML63 | No product change for the Gateway CA route in this campaign. Lab specs probe the forwarded enroll route (`POST /api/v1/agents/enroll` `{}` → 400 `invalid_platform`) and `/healthz`; the fix is vertical-slice VS-07R. | Accepted | F53; a second copy of the fix would race VS-07R and skip its security review. |
+| D-ML64 | `lab_doctor` returns `{ok, checks:[{name, status, detail}]}` with `status` ∈ `ok`, `warn`, `fail`, `info`; `ok` is false iff a check fails; an unimplemented check is not emitted. L12 implements nine checks; `windows-*` come in L31, `playwright` in L35. | Accepted | Informational checks have no honest boolean; nothing consumed the old shape. |
+| D-ML65 | Tool registration by area: `LabMcpServer` declares one `static partial void Add<Area>Area` hook per area; packets register only in their area file and remove their names from their `// Lnn` group in `PlannedTools`; the DI test derives the tool set from `ToolPolicy` (rule R-REG). Packet L12a does it before wave 3. | Accepted | F55; otherwise every parallel wave conflicts on every merge. |
 
 ## Seam tests
 
@@ -154,7 +162,7 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | --- | --- | --- | --- | --- |
 | S-L1 | Claude Code (MCP client) ↔ daemon HTTP edge | `Seams/McpEdgeSeamTests.cs`: a real MCP client lists tools and calls `lab_status`; raw calls without token, wrong token, with `Origin`, bad `Host` get 401/401/403/403 | L01 | L05 |
 | S-L2 | Lab token mint ↔ Nodes enrollment | `Seams/NodesEnrollSeamTests.cs`: lab-minted token, product `EnrollNodeRequest`, real Nodes app → 201; Docker variant through the lab Gateway | L01 | L11 |
-| S-L3 | Lab ↔ Windows agent footprint | `Seams/AgentFootprintSeamTests.cs`: the agent's names equal `Dhadgar.Contracts.Agents.AgentWindowsFootprint` | L12 | L39 |
+| S-L3 | Lab ↔ Windows agent footprint | `Seams/AgentFootprintSeamTests.cs`: the agent's names equal `Dhadgar.Contracts.Agents.AgentWindowsFootprint` | L12 | L12 (Sprint 2's `CaStoreName` was on `main`; L39 keeps it green) |
 | S-L5 | `uat-driver` ↔ tool registry | `Agents/DriverToolListTests.cs` (D-ML18) | L18 | L18 |
 | S-L6 | Runner ↔ live lab | `Uat/LabSelfTestE2ETests.cs` (`RequiresDocker`): `lab-selftest.toml` all PASS, invariants clean | L17 | L17 (invariants from L21) |
 | S-L7 | Lab `ToxiproxyClient` ↔ real Toxiproxy ↔ a real service | `Seams/ToxiproxySeamTests.cs` (`RequiresDocker`): proxy down on `nodes-postgres` makes Nodes `/readyz` fail; heal restores it within 30 s; latency toxic is visible in a timed probe | L19 | L19 |
@@ -173,20 +181,22 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 
 | Packet | Wave | Title | Depends on | Security review | Status |
 | --- | --- | --- | --- | --- | --- |
-| L00 | 0 | Spike: Windows containers on this host (no code; worknote) | - | no | Ready |
-| L01 | 1 | Scaffold projects, packages, isolation test, seam stubs, red S-L1/S-L2 | - | yes | Ready |
-| L02 | 1 | Daemon edge: loopback Kestrel, token, Host/Origin, mutex, `/status`, CLI | L01 | yes | BlockedDependency |
-| L03 | 1 | `LeaseBook`, sweeper, history, `lab.lease` events | L01 | yes | BlockedDependency |
-| L04 | 1 | Audit log, `SecretVault`, `Redactor` | L01 | yes | BlockedDependency |
-| L05 | 1 | Tool registry, policy gate, MCP projection, lease and status tools; S-L1 green | L02, L03, L04 | yes | BlockedDependency |
-| L06 | 1 | `tools/lab` scripts, scheduled task, `.mcp.json` | L05 | yes | BlockedDependency |
-| L07 | 2 | Supervisor, Job Object, log capture and container log followers, watchdog, `logs_tail` | L05 | yes | BlockedDependency |
-| L08 | 2 | Docker layer with contexts, target registry, lab network, Postgres/RabbitMQ/Redis/Toxiproxy, per-service DBs | L05 | yes | BlockedDependency |
-| L09 | 2 | `lab_build` (portable), lab service image, Gateway and Nodes containers behind proxies, overlays | L07, L08 | yes | BlockedDependency |
-| L10 | 2 | `db_query` (per-service DB, read-only) and `http_request` (lab hosts only) | L08 | yes | BlockedDependency |
-| L11 | 2 | Nodes adapter: token mint, enroll probe, cert time shift, `stack_reset_data`; S-L2 green | L09, L10 | yes | BlockedDependency |
-| L12 | 2 | `Dhadgar.Lab.Probe`, `AgentWindowsFootprint`, host reads, `lab_doctor`; red S-L3 | L05 | yes | BlockedDependency |
-| L13 | 3 | Spec model (faults included), TOML loader, validator, `uat_list_specs`, `uat_plan` | L05 | yes | BlockedDependency |
+| L00 | 0 | Spike: Windows containers on this host (no code; worknote) | - | no | Parked (owner: Windows containers off for now; wave 6 waits) |
+| L01 | 1 | Scaffold projects, packages, isolation test, seam stubs, red S-L1/S-L2 | - | yes | Integrated |
+| L02 | 1 | Daemon edge: loopback Kestrel, token, Host/Origin, mutex, `/status`, CLI | L01 | yes | Integrated |
+| L03 | 1 | `LeaseBook`, sweeper, history, `lab.lease` events | L01 | yes | Integrated |
+| L04 | 1 | Audit log, `SecretVault`, `Redactor` | L01 | yes | Integrated |
+| L05 | 1 | Tool registry, policy gate, MCP projection, lease and status tools; S-L1 green | L02, L03, L04 | yes | Integrated |
+| L06 | 1 | `tools/lab` scripts, scheduled task, `.mcp.json` | L05 | yes | Integrated |
+| L07 | 2 | Supervisor, Job Object, log capture and container log followers, watchdog, `logs_tail` | L05 | yes | Integrated |
+| L08 | 2 | Docker layer with contexts, target registry, lab network, Postgres/RabbitMQ/Redis/Toxiproxy, per-service DBs | L05 | yes | Integrated |
+| L09f | 2 | Configurable `RabbitMq:Port` in Nodes and `AddDhadgarMessaging` (D-ML62) | - | yes | Done (#237) |
+| L09 | 2 | `lab_build` (portable), lab service image, Gateway and Nodes containers behind proxies, overlays | L07, L08, L09f | yes | Integrated |
+| L10 | 2 | `db_query` (per-service DB, read-only) and `http_request` (lab hosts only) | L08 | yes | Integrated |
+| L11 | 2 | Nodes adapter: token mint, enroll probe, cert time shift, `stack_reset_data`; S-L2 green | L09, L10 | yes | Integrated |
+| L12 | 2 | `Dhadgar.Lab.Probe`, `AgentWindowsFootprint`, host reads, `lab_doctor`; S-L3 green | L05 | yes | Integrated |
+| L12a | 3 | Tool registration areas; tool set asserted from `ToolPolicy` (D-ML65) | L12 and the wave 2 fix passes | yes | Ready (after the wave 2 fix passes merge) |
+| L13 | 3 | Spec model (faults included), TOML loader, validator, `uat_list_specs`, `uat_plan` | L05, L12a | yes | BlockedDependency |
 | L14 | 3 | Clause evaluator: sources (incl. `step`), ops, `${var}`, capture | L13, L10, L12 | yes | BlockedDependency |
 | L15 | 3 | Runner and grader, seeds, `uat_run` (OwnLease); fault rows BLOCKED until L22 | L14 | yes | BlockedDependency |
 | L16 | 3 | Evidence bundle, `ledger.md`, secret scan, report, attest, `bundle_read` | L15 | yes | BlockedDependency |
@@ -221,7 +231,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L37 | 7 | CLI in a Linux member | L30, L34 | yes | BlockedDependency |
 | L38 | 7 | Catalogs for Identity, BetterAuth, Panel, Notifications, Discord, CLI; coverage flips | L35, L36, L37 | yes | BlockedDependency |
 | L56 | 7 | Tenant isolation twins; M2, M3, M7; S-L12 green | L35, L53, L54, L11 | yes | BlockedDependency |
-| L39 | 8 | Agent consumes `AgentWindowsFootprint`; S-L3 green | L12, W8 ruling note | yes | BlockedDependency |
+| L39 | 8 | Agent consumes `AgentWindowsFootprint`; S-L3 stays green | W8 ruling note | yes | BlockedDependency |
 | L40 | 8 | `GraceUntil` confirm, hub events, `hub` and `agent_log` sources | W8 ruling note, L32 | yes | BlockedDependency |
 | L41 | 8 | Lab Gateway TLS and mTLS; trust inside members (D-ML14) | L40 | yes | BlockedDependency |
 | L42 | 8 | Fleet simulator on real `Agent.Core`; S-L10 | L41, L27 | yes | BlockedDependency |
@@ -243,8 +253,8 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | --- | --- | --- | --- | --- |
 | 0 | L00 | Facts that decide the pool | no merge (worknote only, committed by L01's branch or ops) | beside wave 1 |
 | 1 | L01-L06 | Claude can reach a leased, audited daemon | L01 → L02 → L03 → L04 → L05 → L06 | L02, L03, L04 after L01 |
-| 2 | L07-L12 | Real Gateway and Nodes on a wipeable stack, probed and read | L07 → L08 → L12 → L09 → L10 → L11 | L07, L08, L12; L09, L10 after L08 |
-| 3 | L13-L18, L48 | Graded, evidenced UAT runs by a driver agent; the observation stream | L13 → L14 → L15 → L16 → L48 → L17 → L18 | L48, L17, L18 after L16 |
+| 2 | L07-L12, L09f | Real Gateway and Nodes on a wipeable stack, probed and read | L07 → L08 → L12 → L09f (own PR to `main`, #237) → L09 → L10 → L11 | L07, L08, L12; L09, L10 after L08 |
+| 3 | L12a, L13-L18, L48 | Graded, evidenced UAT runs by a driver agent; the observation stream | L12a → L13 → L14 → L15 → L16 → L48 → L17 → L18 | L48, L17, L18 after L16 |
 | 4 | L19-L24 | Faults, invariants and the first expected-failure catalogs | L19 → L20 → L21 → L22 → L23 → L24 | L21 beside L20 |
 | 4H | L49-L51 | Enrollment histories checked for linearizability | L49 → L50 → L51 | L49, L50 together (L49 after L48; L51 after wave 4) |
 | 5 | L25-L29, L52 | Results DB, triage, model-based hunting, fuzzing, chaos, soak, behavioural coverage | L25 → L26 → L27 → L52 → L28 → L29 | L26, L27, L52 after L25; L28, L29 after L27 |
@@ -255,7 +265,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | 9 | L57-L62 | Adversarial peer, recovery envelopes, continuity, mixed versions and time, guided mode | L57 → L58 → L59 → L60 → L61 → L62 | L57, L58, L59, L60, L62 together once their dependencies are merged; L61 after L58 and L60 |
 | 10 | L45-L47 | Docs, live evidence, close-out | L45 → L46 (no merge) → L47 | serial |
 
-Waves 4H, 5, 5E, 6 and 7 may run in parallel after wave 4 as their dependencies allow; they share `ToolPolicy.cs`, the C4 table and `LabServices.cs`, so their packets merge one at a time and each rebases on the tip first.
+Waves 4H, 5, 5E, 6 and 7 may run in parallel after wave 4 as their dependencies allow; they share `ToolPolicy.cs`, the C4 table and `LabServices.cs`, so their packets merge one at a time and each rebases on the tip first. From L12a, tool registrations live in per-area files and `PlannedTools` groups (R-REG, D-ML65), so those rebases do not conflict on registrations.
 
 Ship: D-ML16 (one PR after L47) until D-ML39 rules; under D-ML39's recommendation ops pushes and opens a PR at the end of each milestone (M1 after wave 3, M2 after wave 4H, M3 after wave 5E, M4 wave 6, M5 wave 7, M6 wave 8, M7 after L47), each with `security-review`, merged on the user's yes.
 
@@ -263,7 +273,7 @@ Ship: D-ML16 (one PR after L47) until D-ML39 rules; under D-ML39's recommendatio
 
 - Wave 0: the L00 worknote records outcome A, B or C with evidence. The orchestrator raises D-ML37 or D-ML38 if the outcome needs them.
 - Wave 1: S-L1 green; S-L2 red as expected; wave review `ship`.
-- Wave 2: S-L2 green (in-process in CI, Docker variant run once locally); wave review `ship`.
+- Wave 2: S-L2 and S-L3 green (S-L2 in-process in CI, Docker variant run once locally); wave review `ship`.
 - Wave 3: S-L5 and S-L6 green (S-L6 locally, Docker); a S-L6 run writes `events.jsonl` and a fingerprint (L48); wave review `ship`.
 - Wave 4: S-L7 and BR green; S-L6 green with invariants on; both catalogs plan clean; wave review `ship`.
 - Wave 4H: S-L11 green; the L51 report answers F49; wave review `ship`.
@@ -271,7 +281,7 @@ Ship: D-ML16 (one PR after L47) until D-ML39 rules; under D-ML39's recommendatio
 - Wave 5E: S-L12 red as expected; M1, M4 and M5 pass gate MD; gate LS holds; wave review `ship`.
 - Wave 6: L00 outcome known and its decisions ruled; S-L8 green on Windows; wave review `ship`.
 - Wave 7: S-L9 and S-L12 green; M7 passes gate MD, and M2 and M3 pass it as `detected` or as `unreachable` with `KI-NODES-USER-AUTH` open; `LabCoverageTests` show no `real-pending` owned by waves 4 to 7; wave review `ship`.
-- Wave 8: the W8 ruling note exists before L40; S-L3 and S-L10 green; wave review `ship`.
+- Wave 8: the W8 ruling note exists before L40; S-L3 still green and S-L10 green; wave review `ship`.
 - Wave 9: S-L13 and S-L14 green; M6 passes gate MD; one full run of each envelope with no `metastable` cell, or each such cell reported as a finding with a follow-up; the L59 and L62 worknotes and the L61 report exist; wave review `ship`.
 - Wave 10: gates MD and LS hold on the campaign tip; campaign review `ship`.
 - **Gate MD** (product mutants): every product mutant's `mutation_run` verdict is `detected` or `detected_other`, or `unreachable` with its named known issue open. `survived` or `stale` fails the gate; the fix is to the lab or the patch, never a weaker mutant.
@@ -292,6 +302,8 @@ All satisfied: Sprint 2 is on `main` (`6df3338`, D-ML60), and the campaign branc
 | L11, L58 | `GraceUntil`, renewal grace, `RevokeWithoutGrace`, the hub's certificate checks (F43, F42) | the grace shift and the peer's expectations |
 | L60, L61 | the `sprint2` baseline commit | mixed-version and time rows |
 | Waves 0-7 | nothing beyond `main` | L33 enrolls over plain HTTP, which `main` supports |
+
+External dependency: Gateway CA route through the Gateway is vertical-slice VS-07R; the lab does not test or fix it (D-ML63, F53). Until VS-07R lands, `GET /api/v1/agents/ca-certificate` through the Gateway is 401 without a client certificate.
 
 ## Status honesty
 

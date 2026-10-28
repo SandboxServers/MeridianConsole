@@ -2,25 +2,27 @@
 
 Ledger: [README.md](README.md). Packets and contract (C1-C20): [work-packets.md](work-packets.md).
 
-## State (2026-10-27, wave 1 closed)
+## State (2026-10-27, wave 2 in review)
 
-- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab`, tip **`ac6f959`** (local only, not pushed). Base `origin/main` `c0a7ee9`.
-- **Wave 1 (L01-L06) is Integrated.** Wave review pass 3 `ship`; wave security pass 2 `ship`. Lab tests: 169 pass, 1 red by design (S-L2, `NodesEnrollSeamTests`, green in L11). S-L1 is green.
-- **L00 is parked** (blocked on `docker`): the Windows engine never started because the `Containers` and Hyper-V features are off. Worknote `worknotes/L00-windows-containers-spike.md` is on the branch.
-- **Owner decision 2026-10-27: skip Windows containers for now** (D-ML37/D-ML38 unruled). Parked: L31, L32, L33 and the container parts of wave 8 (L43, and the container-dependent pieces of L41, L59, L60). Waves 2-5 and 7 proceed.
-- **Owner decision 2026-10-27: reviews at wave boundaries and campaign end only.** No per-packet review loops. Each wave gets a wave reviewer plus a `security-advisor` (security-review areas); fix notes go to fresh coders per packet.
+- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only, not pushed). Base `origin/main` `c0a7ee9`.
+- **Waves 1 and 2 (L01-L12) are Integrated.** L09f (`RabbitMq:Port`, D-ML62) is Done as its own PR to `main` (#237). S-L1, S-L2 and S-L3 are green.
+- **Wave 2 review pass 1 ended on `decision`; ruled in [worknotes/W2-ruling-3.md](worknotes/W2-ruling-3.md)** (D-ML63 probes, D-ML64 doctor, D-ML65 registration areas, F54 rate limits). No owner decision needed.
+- **L00 is parked** (Windows containers off; owner, 2026-10-27). Parked with it: L31, L32, L33 and the container parts of wave 8 (L43; container pieces of L41, L59, L60).
+- **Owner decision 2026-10-27: reviews at wave boundaries and campaign end only.** Each wave gets a wave reviewer plus a `security-advisor`; fix notes go to fresh coders per packet.
 
 ## Next actions (orchestrator)
 
-1. Wave 2: L07, L08, L12 (all depend only on L05) are dispatched from worktrees `ml-l07`, `ml-l08`, `ml-l12` (branches `ml/l07-supervisor`, `ml/l08-docker`, `ml/l12-probe`). Then L09 (L07+L08), L10 (L08), L11 (L09+L10; turns S-L2 green).
-2. Merge each packet locally into the campaign branch (Sonnet general-purpose, one at a time); build and run the lab tests after each.
-3. Ask the user D-ML39 (one PR vs one per milestone) before wave 3 ends.
-4. Before L40: ask the architect for `worknotes/W8-sprint2-deltas.md`.
+1. Wave 2 fix passes: the review's fix notes, with the L12 pass taking N2, D1 (in place of N3), the N4 check table and N5 from W2-ruling-3. Then wave 2 review pass 2.
+2. L12a (wave 3, first): registration areas and the policy-derived tool set. Every later tool packet carries `R-REG: area <Area>`.
+3. Then L13 → L14 → L15 → L16 → L48 → L17 → L18.
+4. Ask the user D-ML39 (one PR vs one per milestone) before wave 3 ends.
+5. Before L40: ask the architect for `worknotes/W8-sprint2-deltas.md`.
 
-## Carry-overs from wave 1 reviews
+## Carry-overs
 
-- The security pass's "Not fixed" list is binding for later packets: validate every path from a tool or config with `PathValidator` (symlinks and junctions) from L07 onward; `http_request` must use `LabHosts.IsLabEndpoint`, refuse redirects; packets that log values must redact; remove `MERIDIAN_LAB_TOKEN` from child environments in the L07 process-start helper.
-- 28 IL2026 warnings come from `Dhadgar.Agent.Core` (exempt, issue #186); not a lab defect.
+- The wave 1 security pass's "Not fixed" list binds later packets: `PathValidator` on every tool or config path (symlinks and junctions); `http_request` only to `LabHosts.IsLabEndpoint`, no redirects; redact logged values; no `MERIDIAN_LAB_TOKEN` in child environments.
+- Lab tests never probe the Gateway CA route (VS-07R, D-ML63). Enroll-route polling uses `poll_ms = 5000` (F54).
+- 28 IL2026 warnings come from `Dhadgar.Agent.Core` (exempt, issue #186).
 - Owner action **O1**: add the D-ML33 promotion-rule line to CLAUDE.md.
 
 ## Owner decisions open (non-blocking unless noted)

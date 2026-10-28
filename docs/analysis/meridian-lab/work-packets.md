@@ -53,6 +53,7 @@ https://claude.ai/code/session_015Wz3WjKW6AyWbyMqsoRqG8
 | R-SEED | Every random choice in a run, hunt, fuzz, chaos, soak or fleet comes from `LabRandom(runSeed, stream)` (C17). `System.Random.Shared` and `Guid.NewGuid()` for data are refused by review. Secrets (tokens, passwords) still come from `RandomNumberGenerator` and are never part of a replay. |
 | R-OBSERVE | Lab observations (readiness, `db_query`, invariant reads, log follow, RabbitMQ management) use the direct host ports, never a Toxiproxy proxy, so a fault never blinds the grader. |
 | R-DOCKER | Every docker call is `docker --context <Lab:Docker:LinuxContext or WindowsContext> ...` through `IDockerCli` with `ArgumentList`; ports bind to `127.0.0.1`; containers carry `--label meridian-lab=1 --restart no` and the `meridian-lab-` name prefix; no named volumes. |
+| R-REG | (D-ML65, from L12a.) Register tools, and the services they introduce, only in your area file `src/Tools/Dhadgar.Lab/Mcp/Areas/<Area>Area.cs` (one `static partial void Add<Area>Area` body; the hook is already declared in `LabMcpServer.cs`). Remove only your own names from your `// Lnn` group in `ToolPolicy.PlannedTools` and keep the comment line. Never edit the hook list, the tool-set assertion in `LabDaemonServiceLifetimeTests` or `LabDaemon.BuildApplication`, except to replace a placeholder your spec names. A new area needs an architect ruling. |
 
 ## Contract
 
@@ -289,7 +290,7 @@ Every Leased tool takes a required `lease_id` string; it is not repeated below. 
 | Tool | Gate | Arguments | Result | Packet |
 | --- | --- | --- | --- | --- |
 | `lab_status` | Open | - | `StatusDto` | L05 |
-| `lab_doctor` | Open | - | `{checks:[{name, ok, detail}]}` | L12, L31 |
+| `lab_doctor` | Open | - | `{ok, checks:[{name, status, detail}]}`; `status` ∈ `ok`, `warn`, `fail`, `info`; `ok` is false iff any check is `fail`; an unimplemented check is not emitted (D-ML64) | L12, L31, L35 |
 | `lab_lease_acquire` | Open | `owner`, `purpose`, `ttl_s?`, `force?`, `reason?` | `{lease_id, owner, purpose, since, expires_at}` | L05 |
 | `lab_lease_renew` | Open | `lease_id`, `ttl_s?` | `LeaseInfo` | L05 |
 | `lab_lease_release` | Open | `lease_id` | `{released:true}` | L05 |
@@ -373,7 +374,7 @@ Every Leased tool takes a required `lease_id` string; it is not repeated below. 
 
 No tool has gate `Machine` (D-ML43).
 
-`svc_config_set` allowlist: every service: `Logging:LogLevel:Default`, `Logging:LogLevel:Dhadgar`, `Logging:LogLevel:Microsoft.AspNetCore`; `nodes`: `Mtls:RenewalGraceMinutes`; `gateway`: `Readyz:RequiredClusters:0` to `:3`. L41 adds the TLS keys. `agent_config_set` allowlist: `Logging:LogLevel:Default`, `Logging:LogLevel:Dhadgar`, `Agent:Security:CertificateRenewalThresholdDays`.
+`svc_config_set` allowlist: every service: `Logging:LogLevel:Default`, `Logging:LogLevel:Dhadgar`, `Logging:LogLevel:Microsoft.AspNetCore`; `nodes`: `Mtls:RenewalGraceMinutes`; `gateway`: `Readyz:RequiredClusters:0` to `:3`. L41 adds the TLS keys. A packet that raises Gateway rate limits for the lab (F54) adds the `RateLimiting:Policies:<Policy>:PermitLimit` key it sets here in the same commit. `agent_config_set` allowlist: `Logging:LogLevel:Default`, `Logging:LogLevel:Dhadgar`, `Agent:Security:CertificateRenewalThresholdDays`.
 
 `ActiveFault`: `{fault_id, kind, target_id, started_at, deadline, args}`; `fault_id` is `f-` plus 8 hex.
 
@@ -607,7 +608,7 @@ Services (Linux containers built from `tools/lab/images/`; container port 8080):
 | `betterauth` | `meridian-lab-betterauth` | 15130 | `src/Dhadgar.BetterAuth` (npm) | `meridian_lab_betterauth` | `betterauth-postgres` | L34 |
 | `panel` | `meridian-lab-panel` | 14321 | `src/Dhadgar.Panel` (npm) | - | - (the browser calls the Gateway) | L34 |
 | `notifications` | `meridian-lab-notifications` | 15090 | `src/Dhadgar.Notifications` | `meridian_lab_notifications` | `notifications-postgres`, `notifications-rabbitmq`, `notifications-webhook` | L36 |
-| `discord` | `meridian-lab-discord` | 15120 | `src/Dhadgar.Discord` | `meridian_lab_discord` | `discord-postgres`, `discord-webhook` | L36 |
+| `discord` | `meridian-lab-discord` | 15120 | `src/Dhadgar.Discord` | `meridian_lab_discord` | `discord-postgres`, `discord-rabbitmq`, `discord-webhook` | L36 |
 
 Infrastructure:
 
@@ -640,6 +641,7 @@ Toxiproxy proxies (`ProxyCatalog`; listen addresses are inside the Toxiproxy con
 | `notifications-webhook` | 20052 | `meridian-lab-sink:8080` | L36 |
 | `discord-postgres` | 20060 | `meridian-lab-postgres:5432` | L36 |
 | `discord-webhook` | 20061 | `meridian-lab-sink:8080` | L36 |
+| `discord-rabbitmq` | 20062 | `meridian-lab-rabbitmq:5672` | L36 |
 | `agent-ingress` | 25000 (published `127.0.0.1:25000`) | `meridian-lab-gateway:8080` | L08 |
 | `agent-ingress-tls` | 25443 (published `127.0.0.1:25443`) | `meridian-lab-gateway:8443` | L41 |
 
@@ -1552,10 +1554,16 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Docs owed:** README section "Lab stack" (C10 tables, never the dev containers, ports or volumes).
 
+### L09f. Configurable RabbitMQ port (Nodes and `Dhadgar.Messaging`). Done (#237)
+
+- **Branch / worktree / commit:** `ml/l09f-rabbitmq-port` / `ml-l09f` (from `main`) / `fix(messaging): honour RabbitMq:Port in Nodes and AddDhadgarMessaging`
+- **Depends on:** none. **Blocks:** L09 item 3, L34, L36. **Security review:** yes (product messaging config).
+- **Spec:** [worknotes/L09-ruling-1.md](worknotes/L09-ruling-1.md) section "L09f" (D-ML62). A generic, default-preserving `RabbitMq:Port` (default 5672, 1-65535, refused with a URI host) in Nodes' options and in `AddDhadgarMessaging`. No vhost key exists; the lab uses vhost `/`.
+
 ### L09. `lab_build`, lab service image, Gateway and Nodes containers behind proxies
 
 - **Branch / worktree / commit:** `ml/l09-build-services` / `meridian-lab-l09` / `feat(lab): portable builds and gateway and nodes containers behind toxiproxy`
-- **Depends on:** L07, L08. **Security review:** yes.
+- **Depends on:** L07, L08, L09f. **Security review:** yes.
 - **Rules:**
   - R-PATH: `checkout` validates under `Lab:RepoRoot` or `<RepoRoot>\.claude\worktrees\`; outputs only under `LabPaths.Builds`.
   - R-ARGS / R-DOCKER: `dotnet`, `git` and `docker` through `ArgumentList`; `git -C <checkout> rev-parse HEAD`, `git -C <checkout> status --porcelain`.
@@ -1569,12 +1577,12 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 1. `Build/LabBuilder.cs`: projects `gateway`, `nodes`, `probe` in this packet (`agent_windows` in L31, Node apps in L34, the rest in L36 and L37; unknown project → `[Lab.InvalidArgument]`). `build8` = first 8 of the commit; a dirty tree gets `-dirty-<yyyyMMddHHmmss>`. Publishes to `<Builds>\<build_id>\<project>`, then `docker build` with `tools/lab/images/dotnet-service.Dockerfile` (`--build-arg PROJECT_DLL=<name>.dll`, context = the publish folder) to `meridian-lab/<project>:<build_id>` with `--label meridian-lab=1`. Writes `build.json` `{build_id, commit, dirty, checkout, projects, images, at}` and `<Builds>\latest.txt`.
 2. `tools/lab/images/dotnet-service.Dockerfile`: `FROM mcr.microsoft.com/dotnet/aspnet:10.0`, `WORKDIR /app`, `COPY . .`, `ENV ASPNETCORE_URLS=http://+:8080`, `USER app`, `ENTRYPOINT ["dotnet", "/app/${PROJECT_DLL}"]` (use an `ARG` plus a shell-free exec form via a tiny `entrypoint.sh` if `ENTRYPOINT` cannot expand the arg; record which).
-3. `Services/ILabServiceAdapter.cs`: `string Name`, `string Container`, `int HostPort`, `IReadOnlyList<string> Proxies`, `Result<IReadOnlyDictionary<string,string>> Environment(LabServiceContext ctx)`, `string HealthPath`. `Services/GatewayAdapter.cs`, `Services/NodesAdapter.cs`. Read `src/Dhadgar.Nodes/appsettings*.json`, `Program.cs`, `src/Dhadgar.Gateway/appsettings.json` and `Dhadgar.ServiceDefaults` to name the keys exactly. Environment for both: `ASPNETCORE_ENVIRONMENT=Development`, `Logging__Console__FormatterName=json`, `Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics=Information` (I1 reads it). Nodes: `ConnectionStrings__Postgres` = `ServiceDb("nodes")`, `RabbitMq__Host=meridian-lab-toxiproxy`, `RabbitMq__Port=20021` (or the key Nodes reads), `RabbitMq__Username`/`__Password`, the CA storage path → `/lab-state/nodes-ca` with a bind mount from `LabPaths.State\nodes-ca` (so the lab CA is never the dev CA). Gateway: `ReverseProxy__Clusters__nodes__Destinations__d1__Address=http://meridian-lab-toxiproxy:20012/`, `Redis__ConnectionString=meridian-lab-toxiproxy:20010`, `Cloudflare__EnableDynamicFetch=false`, `Readyz__RequiredClusters__0=nodes` (L34 adds `identity`).
+3. `Services/ILabServiceAdapter.cs`: `string Name`, `string Container`, `int HostPort`, `IReadOnlyList<string> Proxies`, `Result<IReadOnlyDictionary<string,string>> Environment(LabServiceContext ctx)`, `string HealthPath`. `Services/GatewayAdapter.cs`, `Services/NodesAdapter.cs`. Read `src/Dhadgar.Nodes/appsettings*.json`, `Program.cs`, `src/Dhadgar.Gateway/appsettings.json` and `Dhadgar.ServiceDefaults` to name the keys exactly. Environment for both: `ASPNETCORE_ENVIRONMENT=Development`, `Logging__Console__FormatterName=json`, `Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics=Information` (I1 reads it). Nodes: `ConnectionStrings__Postgres` = `ServiceDb("nodes")`, `RabbitMq__Host=meridian-lab-toxiproxy`, `RabbitMq__Port=20021` (key added by L09f), `RabbitMq__Username`/`__Password`, the CA storage path → `/lab-state/nodes-ca` with a bind mount from `LabPaths.State\nodes-ca` (so the lab CA is never the dev CA). Gateway: `ReverseProxy__Clusters__nodes__Destinations__d1__Address=http://meridian-lab-toxiproxy:20012/`, `Redis__ConnectionString=meridian-lab-toxiproxy:20010`, `Cloudflare__EnableDynamicFetch=false`, `Readyz__RequiredClusters__0=nodes` (L34 adds `identity`).
 4. `Services/LabServices.cs`: `StartAsync(service, buildId)`: `docker run -d --name meridian-lab-<service> --label meridian-lab=1 --restart no --network meridian-lab-net --tmpfs /tmp:rw,size=64m -p 127.0.0.1:<port>:8080 --env-file <temp> meridian-lab/<project>:<build_id>`; registers `c:<service>`; starts an L07 container log follower; readiness GET `http://127.0.0.1:<port><HealthPath>` until 200, 90 s. `StopAsync`, `RestartAsync`. Services table driven by the registered adapters.
 5. `Services/ConfigOverlay.cs`: `config/<service>.json`, allowlist per C4; an unknown key → `[Lab.InvalidArgument] key not allowed`; applied at the next start.
 6. `Tools/Services/BuildTool.cs`, `ServiceTools.cs` (`svc_start` refuses when the stack is not `up`: `[Lab.NotFound] stack is down`).
 7. `tools/lab/images/probe.Dockerfile` (used by L36): `FROM mcr.microsoft.com/dotnet/runtime:10.0`, copies the `probe` publish folder, `ENTRYPOINT ["dotnet","/app/meridian-lab-probe.dll"]`.
-8. Tests: `LabBuilderTests` (argument lists: `--locked-mode`, `--no-restore`, no `-r`; checkout outside the repo refused; `..` refused), `ServiceAdapterTests` (Nodes reaches Postgres and RabbitMQ only through Toxiproxy ports; Gateway reaches Nodes through `gateway-nodes`; CA path under lab state; `Cloudflare__EnableDynamicFetch=false`; no key outside the allowlist; overlay applied), `ServicesDockerTests` (`RequiresDocker`, slow): build, stack up, start Nodes and Gateway, both ready, `GET http://127.0.0.1:15000/api/v1/agents/ca-certificate` → 200; the same through `127.0.0.1:25000` (agent ingress) → 200.
+8. Tests: `LabBuilderTests` (argument lists: `--locked-mode`, `--no-restore`, no `-r`; checkout outside the repo refused; `..` refused), `ServiceAdapterTests` (Nodes reaches Postgres and RabbitMQ only through Toxiproxy ports; Gateway reaches Nodes through `gateway-nodes`; CA path under lab state; `Cloudflare__EnableDynamicFetch=false`; no key outside the allowlist; overlay applied), `ServicesDockerTests` (`RequiresDocker`, slow): build, stack up, start Nodes and Gateway, both ready; Nodes `GET 15040/agents/ca-certificate` → 200 PEM; `GET 25000/healthz` → 200; `POST /api/v1/agents/enroll` `{}` via 15000 and 25000 → 400 `invalid_platform` (forwarded by the Gateway, ruling L09-2).
 
 **Tests and why they fail when reverted:** `Nodes_ReachesPostgresOnlyThroughProxy` fails if an adapter points straight at the database (faults would stop working); `Build_NeverPassesRuntimeIdentifier` fails on a bare `-r`; `Nodes_CaStorage_IsUnderLabState` fails if the lab points at the dev CA.
 
@@ -1654,7 +1662,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Docs owed:** README section "Nodes adapter" (why the lab mints locally: no user-auth path in Nodes).
 
-### L12. `Dhadgar.Lab.Probe`, `AgentWindowsFootprint`, host reads, `lab_doctor`, red S-L3
+### L12. `Dhadgar.Lab.Probe`, `AgentWindowsFootprint`, host reads, `lab_doctor`, S-L3 green
 
 - **Branch / worktree / commit:** `ml/l12-probe-reads` / `meridian-lab-l12` / `feat(lab): footprint contract, probe and windows reads`
 - **Depends on:** L05. **Security review:** yes (cert stores, registry, Contracts change).
@@ -1676,10 +1684,10 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 4. `src/Shared/Dhadgar.Contracts/Agents/ProbeFootprint.cs` (the probe and the lab both build against it; it crosses a process boundary): `ProbeFootprint(ServiceInfo? Service, RegistryInfo Registry, IReadOnlyList<CertInfo> MachineMy, IReadOnlyList<CertInfo> MachineRoot, IReadOnlyList<CertInfo> AgentCa, StateFileInfo StateFile, bool EventSourceExists)`, with `ServiceInfo(string State, string StartType, string Account, string BinaryPath)`, `RegistryInfo(bool Exists, IReadOnlyList<RegistryValueInfo> Values)`, `RegistryValueInfo(string Name, string Kind, bool Present, int Length)`, `CertInfo(string Thumbprint, string Subject, string Issuer, string Serial, DateTimeOffset NotBefore, DateTimeOffset NotAfter, bool HasPrivateKey)`, `StateFileInfo(bool Exists, string Path, DateTimeOffset? LastWrite)`.
 5. `src/Tools/Dhadgar.Lab.Probe/FootprintReader.cs`: fills `ProbeFootprint` from `AgentWindowsFootprint` (service via `sc.exe qc` and `sc.exe query` with `ArgumentList`, or `System.ServiceProcess` if already in CPM; certs metadata only; registry presence and length only).
 6. Lab side, `Windows/CertStoreReader.cs`, `Windows/AgentRegistryReader.cs`, `Windows/AgentStateReader.cs` for host reads (as in the old plan: stores `machine_my`, `machine_root`, `agent_ca` with `OpenExistingOnly` and missing → empty, `current_user_my`; registry access denied → `[Lab.Unavailable] needs an elevated read; use a member`; state JSON through `Redactor` plus blanking properties named like `token`, `key`, `secret`).
-7. `Tools/Doctor/LabDoctorTool.cs`: OS and build (registry `CurrentBuildNumber`, not the API version), `docker --context <linux> version`, Windows context reachable (if configured), `docker-users` membership, `dotnet --version`, lab ports free or owned by lab containers, dev ports seen in use (informational), token length, `Lab:RepoRoot` exists, Playwright browsers present (after L35).
+7. `Tools/Doctor/LabDoctorTool.cs`, result `{ok, checks:[{name, status, detail}]}` (C4, D-ML64), checks in this order: `os`, `build` (registry `CurrentBuildNumber`, not the API version), `dotnet`, `docker` (`IDockerCli`, Linux engine, `version --format {{.Server.Os}}`), `docker-users`, `ports` (lab ports free or held by lab containers), `dev-ports` (always `info`), `token` (length only, via `DaemonTokenInfo`), `repo-root` (never the path). Exact verdicts: [worknotes/W2-ruling-3.md](worknotes/W2-ruling-3.md) section N4. `windows-*` checks arrive in L31 and `playwright` in L35; neither is emitted before then, and no output says "not checked".
 8. `Tools/Windows/WindowsReadTools.cs`: `certstore_list`, `registry_read`, `state_file_read` (host).
 9. Tests: `FootprintReaderTests` (Windows, `SkippableFact`: runs against the host read-only and never reports a private key export), `ProbeCliTests` (unknown mode → 2; `footprint --json` output deserialises as `ProbeFootprint`), `AgentStateReaderTests`, `WindowsToolsOnLinuxTests` (`Skip.If(OperatingSystem.IsWindows())`) → `Lab.Unavailable`.
-10. `tests/Dhadgar.Lab.Tests/Seams/AgentFootprintSeamTests.cs` (S-L3, red until L39): reference `Dhadgar.Agent.Windows` (alias `agentwin` if `Program` clashes); assert the agent's service name, CA store name (reflection: `GetField("CaStoreName", BindingFlags.NonPublic | BindingFlags.Static)` on `WindowsCertificateStore`), registry key path and state file name equal `AgentWindowsFootprint`. Red on `main` because the CA store constant does not exist yet.
+10. `tests/Dhadgar.Lab.Tests/Seams/AgentFootprintSeamTests.cs` (S-L3, green from L12): reference `Dhadgar.Agent.Windows` (alias `agentwin` if `Program` clashes); assert the agent's service name, CA store name (reflection: `GetField("CaStoreName", BindingFlags.NonPublic | BindingFlags.Static)` on `WindowsCertificateStore`), registry key path, `EnrollmentTokenValueName` and state file name equal `AgentWindowsFootprint` (registry key path and value name compared by reflection too, review N5). Green because Sprint 2 put `CaStoreName` on `main` before wave 2 (D-ML60); every later filter runs it. L39 keeps it green while the agent switches to the Contracts constants.
 
 **Tests and why they fail when reverted:** S-L3 fails while the agent and the lab disagree on any footprint name; `ProbeCliTests` fails if the probe's JSON drifts from the Contracts type.
 
@@ -1690,7 +1698,7 @@ dotnet restore <W>\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj --force-
 dotnet build <W>\src\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet build <W>\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 dotnet test <W>\tests\Dhadgar.Contracts.Tests\Dhadgar.Contracts.Tests.csproj -c Release   # if the project exists
 ```
 
@@ -1700,11 +1708,47 @@ dotnet test <W>\tests\Dhadgar.Contracts.Tests\Dhadgar.Contracts.Tests.csproj -c 
 
 ## Wave 3: UAT engine (no Sprint 2 dependency)
 
+L12a merges first; the rest of the wave branches from the tip that contains it.
+
+### L12a. Tool registration areas; tool set asserted from `ToolPolicy`
+
+- **Branch / worktree / commit:** `ml/l12a-tool-areas` / `meridian-lab-l12a` / `refactor(lab): register tools by area and assert the tool set from the policy table`
+- **Depends on:** L12 and every wave 2 fix pass (branch from the campaign tip after they merge). **Blocks:** L13 and every later packet that registers a service. **Security review:** yes (campaign rule); no behaviour change.
+- **Rules:**
+  - No behaviour change: the same 24 tools and services, with the same lifetimes. Nothing outside the file list.
+  - R-DI: `LabDaemonServiceLifetimeTests` stays green with `ValidateScopes` and `ValidateOnBuild`.
+  - R-CPM (no package or project reference added), R-NULL, R-XUNIT.
+
+**Spec:** [worknotes/W2-ruling-3.md](worknotes/W2-ruling-3.md) section "M1" (D-ML65) holds the exact hook list, the `PlannedTools` groups and the test code. Summary:
+
+**Files**
+
+1. `src/Tools/Dhadgar.Lab/Mcp/LabMcpServer.cs`: `public static partial class`. Declare all 32 `static partial void Add<Area>Area(IServiceCollection services);` hooks (Core, Logs, Windows, Stack, Nodes, Probes, Services, Uat, Events, Faults, Invariants, History, Results, Jobs, Fuzz, Chaos, Coverage, Twins, Mutants, Pool, Agents, AuthStack, Ui, NotifyStack, Cli, Identity, Tls, Fleet, Envelopes, Peer, Versions, Guided). `AddLabMcp` keeps `AddMcpServer()`, `LabToolRegistry` and `LabToolDispatcher`, then calls every hook once in that order.
+2. `src/Tools/Dhadgar.Lab/Mcp/Areas/{Core,Logs,Windows,Stack,Nodes,Probes,Services}Area.cs`: the current `AddLabMcp` lines, moved unchanged.
+3. `src/Tools/Dhadgar.Lab/Policy/ToolPolicy.cs`: `PlannedTools` loses the 9 registered names (60 remain), grouped by owning packet under permanent `// Lnn` comment lines. `GateTable` unchanged.
+4. `tests/Dhadgar.Lab.Tests/Daemon/LabDaemonServiceLifetimeTests.cs`: `Assert.Equal(24, ...)` becomes set equality of registered `ILabTool` names against `ToolPolicy.Gates.Keys` minus `PlannedTools`, plus no duplicates and one `McpServerTool` per tool.
+5. `src/Tools/Dhadgar.Lab/README.md`, "Adding a tool": the R-REG steps.
+
+**Tests and why they fail when reverted:** with today's stale `PlannedTools`, the expected set has 15 names against 24 registered, so the set assertion fails; afterwards, a tool registered while still planned (or the reverse) fails it.
+
+**Acceptance:** the 24 names are unchanged. Conflict proof (not committed): two throwaway branches from the L12a tip add `Mcp/Areas/UatArea.cs` (removing `uat_list_specs`) and `Mcp/Areas/EventsArea.cs` (removing `events_read`); `git -C <W> merge-tree --write-tree a b` exits 0. Paste the output into the report and delete both branches.
+
+**Checks**
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+git -C <W> status --porcelain   # only the files above; no packages.lock.json change
+```
+
+**Docs owed:** item 5.
+
 ### L13. Spec model, TOML loader, validator, `uat_list_specs`, `uat_plan`
 
 - **Branch / worktree / commit:** `ml/l13-spec` / `meridian-lab-l13` / `feat(lab): uat spec model, toml loader and plan-only validation`
-- **Depends on:** L05. **Security review:** yes (spec input drives the machine).
+- **Depends on:** L05, L12a. **Security review:** yes (spec input drives the machine).
 - **Rules:**
+  - R-REG: area `Uat`.
   - R-PATH: `specs_dir` defaults to `<RepoRoot>\docs\guides\uat-specs` (and its `catalog\` subfolder); any other dir must validate under the repo root or its worktrees; spec names are file names or `catalog/<file>` only.
   - R-RESULT: every load and validation problem is a list entry `{file, line, message}`, never an exception.
   - R-NULL, R-XUNIT, R-CONTRACT.
@@ -1725,7 +1769,7 @@ dotnet test <W>\tests\Dhadgar.Contracts.Tests\Dhadgar.Contracts.Tests.csproj -c 
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 ```
 
 **Docs owed:** none beyond code comments (L45 writes the spec guide).
@@ -1735,6 +1779,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l14-clauses` / `meridian-lab-l14` / `feat(lab): uat clause sources, operators and variable capture`
 - **Depends on:** L13, L10, L12. **Security review:** yes.
 - **Rules:**
+  - R-REG: area Uat.
   - R-RESULT: a source failure is a `ClauseState.Unverified` with the error text, never an exception.
   - R-TIME: polling uses `TimeProvider` delays.
   - R-LOG: observed values pass through `Redactor`.
@@ -1759,7 +1804,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -1769,6 +1814,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l15-runner` / `meridian-lab-l15` / `feat(lab): uat runner and grader with own-lease runs`
 - **Depends on:** L14. **Security review:** yes.
 - **Rules:**
+  - R-REG: area Uat.
   - R-RESULT: a step error makes the row BLOCKED and stops it; the run continues with the next row.
   - R-TIME, R-LOG (step args never logged), R-NULL, R-XUNIT.
   - R-CONTRACT: steps run through `LabToolDispatcher` with `LabCallContext(callId, leaseId, "uat:<runId>")`; the runner injects `lease_id` into every LEASED step.
@@ -1790,7 +1836,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -1800,6 +1846,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l16-bundle` / `meridian-lab-l16` / `feat(lab): uat evidence bundle, ledger and attestation`
 - **Depends on:** L15. **Security review:** yes (secrets on disk).
 - **Rules:**
+  - R-REG: area Uat.
   - R-PATH: bundle files only under `LabPaths.UatRuns\<run>`; `bundle_read` validates `path` inside that folder.
   - R-LOG / R-ZERO: everything written passes through `Redactor`; `SecretScanner` runs last.
   - R-RESULT, R-USING, R-TIME, R-NULL, R-XUNIT.
@@ -1821,7 +1868,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -1831,6 +1878,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l17-cli-selftest` / `meridian-lab-l17` / `feat(lab): uat cli and lab self-test spec`
 - **Depends on:** L16, L11. **Security review:** yes.
 - **Rules:**
+  - R-REG: area Uat.
+  - Rate limits (F54): enroll-route probes and enrolls through the Gateway follow L23's rate-limit rule (`poll_ms = 5000` when polling; at most 25 enroll-route calls per 60 s per section; a 429 is a spec defect).
   - R-HOST: the CLI talks only to `http://127.0.0.1:<port>`; token from `MERIDIAN_LAB_TOKEN`, never an argument.
   - R-RESULT: the exit code is C8's for `overall`: 0 `pass`, 1 `fail`, 2 config or plan error, 4 `incomplete`, 5 `pass_with_known` (3 is the daemon's "already running"). `LabCliExitCodeTests` pins the map.
   - R-PATH, R-USING, R-NULL, R-XUNIT.
@@ -1840,7 +1889,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 **Files**
 
 1. `Cli/LabCli.cs`: `meridian-lab status [--json]` (GET `/status`); `meridian-lab uat run --specs <file>... [--section <id>] [--rows a,b] [--plan-only] [--label <text>] [--seed <n>] [--replay <repro.toml>] [--json]` as an MCP client calling `uat_run`; prints the seed, the summary table and the bundle path. `--replay` excludes `--specs`, `--section`, `--rows` and `--seed`.
-2. `docs/guides/uat-specs/lab-selftest.toml`, section `lab-selftest`, `requires = ["docker"]`, rows: `stack-up` (`stack_up wipe=true`; expect `stack_status` `/state` eq `up`), `nodes-up` (`svc_start nodes`; `http` GET health eq 200), `gateway-up` (`svc_start gateway`; `http via=gateway` GET `/api/v1/agents/ca-certificate` status 200), `token-mint` (C7 example), `enroll-direct` (`nodes_enroll_probe via=nodes`; expect status 201, `db database=nodes` node row exists for the captured `node_id`), `enroll-gateway` (fresh token, `via=gateway`, 201), `enroll-ingress` (fresh token, `via=agent_ingress`, 201: proves the Toxiproxy path the agents use), `token-single-use` (reuse the `enroll-gateway` token with `expect_error = "http:401"`; `step` clause `/error_code` eq `http:401`), `nodes-log` (`log process=nodes contains="nroll"`, `min_rows` 1 since `run_start`). Use real table and column names from the Nodes EF model (read the migrations snapshot).
+2. `docs/guides/uat-specs/lab-selftest.toml`, section `lab-selftest`, `requires = ["docker"]`, rows: `stack-up` (`stack_up wipe=true`; expect `stack_status` `/state` eq `up`), `nodes-up` (`svc_start nodes`; `http` GET health eq 200), `gateway-up` (`svc_start gateway`; `http via=gateway` GET `/healthz` status 200; then `http via=gateway` POST `/api/v1/agents/enroll` body `{}` status 400 with the body containing `invalid_platform`, which only Nodes emits, so the Gateway forwarded it; never the CA route through the Gateway, D-ML63), `token-mint` (C7 example), `enroll-direct` (`nodes_enroll_probe via=nodes`; expect status 201, `db database=nodes` node row exists for the captured `node_id`), `enroll-gateway` (fresh token, `via=gateway`, 201), `enroll-ingress` (fresh token, `via=agent_ingress`, 201: proves the Toxiproxy path the agents use), `token-single-use` (reuse the `enroll-gateway` token with `expect_error = "http:401"`; `step` clause `/error_code` eq `http:401`), `nodes-log` (`log process=nodes contains="nroll"`, `min_rows` 1 since `run_start`). Use real table and column names from the Nodes EF model (read the migrations snapshot).
 3. `tests/Dhadgar.Lab.Tests/Uat/LabSelfTestE2ETests.cs` (S-L6, `RequiresDocker`, `[Trait("Seam","S-L6")]`, 15-minute timeout): daemon in process on port 0 with a temp data root and `RepoRoot` = the test's repo root; `lab_build` the repo; `uat_run lab-selftest.toml`; every row PASS; the bundle's `secret_scan` is `passed`; `ledger.md` exists.
 4. `tests/Dhadgar.Lab.Tests/Uat/ShippedSpecsValidateTests.cs`: every `docs/guides/uat-specs/*.toml` passes `uat_plan` (runs in CI).
 
@@ -1850,7 +1899,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L6"   # Docker running
 ```
 
@@ -1878,7 +1927,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 **Checks**
 
 ```powershell
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 ```
 
 **Docs owed:** the agent and skill files are the docs.
@@ -1888,6 +1937,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l48-observe` / `meridian-lab-l48` / `feat(lab): ordered observation stream, reproducibility fingerprint and replay fidelity`
 - **Depends on:** L16 (parallel with L17 and L18). **Security review:** yes (every observation is evidence on disk).
 - **Rules:**
+  - R-REG: area Events.
   - R-LOG / R-ZERO: `Args` and `Result` pass through `Redactor` inside `Append`, before the line is written; `SecretScanner` adds `events.jsonl` and `fingerprint.json` to the files it scans.
   - R-TIME: `At` comes from `TimeProvider`; `Seq` comes from the sink's per-run counter under one lock, never from the clock.
   - R-PATH: `events_read` resolves `run_id` through the run index under `LabPaths.UatRuns` and `LabPaths.Jobs` (match on the folder's `run_id` in `run.json`); it never treats `run_id` as a path; `..`, separators or an unknown id → `[Lab.NotFound]`.
@@ -1917,7 +1967,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -1926,13 +1976,15 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ## Wave 4: faults, invariants and the first catalogs (no Sprint 2 dependency)
 
-Every packet in this wave touches the blast-radius boundary, so every one gets a `security-advisor` pass. The base test filter from here on is `F = "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"`.
+Every packet in this wave touches the blast-radius boundary, so every one gets a `security-advisor` pass. The base test filter from here on is `F = "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"`.
 
 ### L19. Blast-radius guard, `FaultBook`, Toxiproxy faults; S-L7, BR
 
 - **Branch / worktree / commit:** `ml/l19-fault-core` / `meridian-lab-l19` / `feat(lab): blast-radius guard, write-ahead fault book and toxiproxy faults`
 - **Depends on:** L08, L09, L48 (`ILabObservationSink`). **Security review:** yes (blast radius).
 - **Rules:**
+  - R-REG: area Faults.
+  - Rate limits (F54): enroll-route probes and enrolls through the Gateway follow L23's rate-limit rule (`poll_ms = 5000` when polling; at most 25 enroll-route calls per 60 s per section; a 429 is a spec defect).
   - R-BLAST: every mutating tool resolves its target through `FaultTargetGuard`; the three checks are separate injectable classes so each is tested alone.
   - R-DOCKER, R-OBSERVE (S-L7 reads `/readyz` on the direct port, never through a proxy).
   - R-HOST: the Toxiproxy API (`127.0.0.1:18474`) passes only through `LabHosts.IsLabInfraEndpoint`.
@@ -1989,7 +2041,7 @@ Every packet in this wave touches the blast-radius boundary, so every one gets a
    - `FaultBookTests`: deadline heals at `heal_after_s`; lease end heals all; recovery heals a journalled entry and runs every `ReconcileAsync`; second fault same kind and target → `FaultActive`; heal error retried once then reported; `IsFaulted` window; `FaultBook_JournalWrittenBeforeInject` (a fake kind asserts, inside `InjectAsync`, that the journal file already holds the entry as `Prepared`); `FaultBook_CrashAfterInjectBeforeActive_RecoveryHeals` (a fake journal that throws on the `Active` write; a new `FaultBook` on the same state folder heals the target); `FaultBook_PreparedNeverInjected_HealSucceeds`; `FaultBook_InjectFails_PartialHealed`; `FaultJournal_TempThenMove` (no partial `faults.json` after an interrupted write).
    - `ToxicValidatorTests`.
    - `BlastRadiusDockerTests` (`RequiresDocker`): start `meridian-lab-decoy` (labelled, not registered) and `dhadgar-decoy` (unlabelled) from `alpine:3` with `sleep 600`; forge a registry entry `c:decoy` pointing at `dhadgar-decoy`'s id; `ResolveAsync` refuses both; both still running; the test removes them in `finally` by id.
-   - `Seams/ToxiproxySeamTests.cs` (S-L7, `RequiresDocker`): stack up, Nodes up; `fault_proxy_disable nodes-postgres` → Nodes `/readyz` on 15040 not 200 within 30 s; `fault_heal` → 200 within 30 s; a 1000 ms latency toxic on `gateway-nodes` downstream → `GET /api/v1/agents/ca-certificate` via the Gateway's direct port takes at least 1000 ms; `fault_reset` leaves Toxiproxy with no toxics.
+   - `Seams/ToxiproxySeamTests.cs` (S-L7, `RequiresDocker`): stack up, Nodes up; `fault_proxy_disable nodes-postgres` → Nodes `/readyz` on 15040 not 200 within 30 s; `fault_heal` → 200 within 30 s; a 1000 ms latency toxic on `gateway-nodes` downstream → `POST /api/v1/agents/enroll` body `{}` via the Gateway's direct port takes at least 1000 ms and returns 400 (D-ML63: never the CA route through the Gateway); `fault_reset` leaves Toxiproxy with no toxics.
 
 **Tests and why they fail when reverted:** removing any one guard check turns its `FaultTargetGuardTests` case red; a new mutating tool without `IFaultTool` turns `BlastRadiusTests` red; dropping the lease-end hook turns `LeaseEnd_HealsAllFaults` red; moving the journal write after inject turns `FaultBook_JournalWrittenBeforeInject` red; dropping reconcile turns the crash test red.
 
@@ -1997,7 +2049,7 @@ Every packet in this wave touches the blast-radius boundary, so every one gets a
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L7|FullyQualifiedName~BlastRadiusDockerTests"   # Docker running
 ```
 
@@ -2008,6 +2060,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l20-more-faults` / `meridian-lab-l20` / `feat(lab): kill, pause, disk, file and database faults`
 - **Depends on:** L19. **Security review:** yes (CA key files, database DDL).
 - **Rules:**
+  - R-REG: area Faults.
   - R-BLAST, R-DOCKER, R-ARGS (`docker exec <id> <tool> <args...>` as separate `ArgumentList` items; never `sh -c` with built text).
   - R-PATH: logical files resolve only from the C10 table; backups under `LabPaths.FaultBackups\<fault_id>\`.
   - R-ZERO: the CA key backup buffer is zeroed after restore; the backup file is deleted after a successful heal.
@@ -2048,7 +2101,7 @@ Every kind implements L19's four members. Prepare records what heal needs and wr
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~FaultKindsDockerTests|FullyQualifiedName~BlastRadiusDockerTests"   # Docker running
 ```
 
@@ -2059,6 +2112,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l21-invariants` / `meridian-lab-l21` / `feat(lab): always-on invariants i1 to i6`
 - **Depends on:** L16, L19 (parallel with L20). **Security review:** yes (raw log scanning sees secrets before redaction).
 - **Rules:**
+  - R-REG: area Invariants.
   - R-OBSERVE: invariant SQL uses `LabConnectionStrings.Reader(service)`; RabbitMQ management on `127.0.0.1:16672` and Toxiproxy on 18474 through `LabHosts.IsLabInfraEndpoint`.
   - R-LOG / R-ZERO: I4 sees raw lines through L07's `IRawLineObserver` and stores only the redacted line; it never logs the raw line, never keeps it after the check.
   - R-RESULT: one failing invariant is an `InvariantCheckError`; the others still run (C11).
@@ -2087,7 +2141,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L6"   # Docker running
 ```
 
@@ -2098,6 +2152,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l22-fault-runner` / `meridian-lab-l22` / `feat(lab): fault rows, invariant grading and replayable fault timelines`
 - **Depends on:** L20, L21. **Security review:** yes.
 - **Rules:**
+  - R-REG: area Uat.
   - R-CONTRACT: faults are injected by dispatching the C4 fault tool through `LabToolDispatcher` with the run's lease and caller `uat:<runId>`; the runner never calls `FaultBook` directly (one path, one guard).
   - R-SEED: fault args that take randomness get the stream `fault:<section>/<row>/<fault id>`.
   - R-RESULT, R-TIME, R-LOG, R-NULL, R-XUNIT.
@@ -2119,7 +2174,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L6|FullyQualifiedName~FaultSmokeE2ETests"   # Docker running
 ```
 
@@ -2133,13 +2188,15 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
   - C7 format; catalog rule (C7): each row states the designed failure. Take the design from the code and its docs (Gateway YARP config and `appsettings.json`, `src/Dhadgar.Nodes/Endpoints/AgentEndpoints.cs`, `ErrorCodes.cs`, the service READMEs). Where the design says nothing, assert the floor every row shares: no 500 (I1 stays unallowed), no partial write (I3), recovery after heal; list each such row under `ExpectationAssumed` in the report.
   - Real table and column names from the Nodes model snapshot; SQL params bound; each row has at least one required non-human clause and a recovery clause with `since = "fault_heal:<id>"`.
   - A row that fails on the packet's local run stays as written: record grade and reason in the report as a finding (the orchestrator triages; L26 seeds known issues). Never edit an expectation to match.
+  - Rate limits (F54): `/api/v1/agents/enroll` sits under the Gateway's `Auth` limiter, 30 per 60 s per client IP, and all lab traffic comes from one IP. Any clause or step that polls it sets `poll_ms = 5000`. A section's enroll-route calls (probes and real enrolls together) stay at or under 25 per 60 s by the spec's own count; write the count per row in the report. A 429 in these rows is a lab spec defect, never a product finding. The same rule applies to L17 and L19.
 
 **Files**
 
 1. `docs/guides/uat-specs/catalog/gateway.toml`, section `catalog-gateway`, `requires = ["docker"]`, rows (each mints what it needs first and sets `allow_invariants = []`):
-   - `gw-nodes-down`: disable `gateway-nodes`; `GET /api/v1/agents/ca-certificate` via `gateway` → status `any [502, 503]`; Gateway `/readyz` not 200 (`Readyz:RequiredClusters:0 = nodes`); after heal 200 within 30 s.
-   - `gw-nodes-latency`: 3000 ms latency toxic on `gateway-nodes` downstream → 200 and the step's `/duration_ms` `gte 3000`.
-   - `gw-reset-peer`: `reset_peer` toxic on `gateway-nodes` → `any [502, 503]`, then 200 after heal.
+   - The Gateway probe in these rows is `http via=gateway POST /api/v1/agents/enroll` body `{}` ("the enroll probe"): healthy → 400 with `invalid_platform` in the body, which only Nodes emits. Never the CA route through the Gateway (D-ML63, VS-07R).
+   - `gw-nodes-down`: disable `gateway-nodes`; the enroll probe → status `any [502, 503]`; Gateway `/readyz` not 200 within 75 s (`Readyz:RequiredClusters:0 = nodes`; YARP counts unknown-health destinations as available, so the flip can take more than one 30 s active-check interval); after heal the enroll probe → 400 `invalid_platform` within 75 s, `poll_ms = 5000`.
+   - `gw-nodes-latency`: 3000 ms latency toxic on `gateway-nodes` downstream → the enroll probe returns 400 `invalid_platform` and the step's `/duration_ms` `gte 3000`.
+   - `gw-reset-peer`: `reset_peer` toxic on `gateway-nodes` → the enroll probe returns `any [502, 503]`, then 400 `invalid_platform` within 30 s after heal, `poll_ms = 5000`.
    - `gw-redis-down`: disable `gateway-redis` → routed requests still 200 if the Gateway treats Redis as optional (F28), else the documented status; I1 clean; recovery.
 2. `docs/guides/uat-specs/catalog/nodes.toml`, section `catalog-nodes`, `requires = ["docker"]`, rows:
    - `nodes-pg-down-enroll`: mint, then disable `nodes-postgres` (`start = "after_step:mint"`); enroll `via=gateway` with `expect_error` per the designed status (503 from the DB health path; the coder confirms); the token row is still unused after heal; a fresh enroll with the same token after heal → 201 within 60 s.
@@ -2152,7 +2209,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
    - `nodes-token-expired`: mint with `validity_minutes = 1`; two `wait_ms = 60000`/`5000` steps; enroll `expect_error = "http:401"`.
    - `nodes-token-reuse-after-failure`: enroll fails under `nodes-postgres` disabled, heal, enroll 201, enroll again with the same token `expect_error = "http:401"`.
    - `nodes-enroll-malformed`: `http_request via=gateway POST /api/v1/agents/enroll` with an empty body, a wrong-typed field and a 1 MiB string field (three steps, each `expect_error = "http:400"`); `step` clauses show `application/problem+json`.
-3. `docs/guides/uat-specs/invariants/nodes.toml` (C11): `node-without-active-cert`, `used-token-without-node`, `cert-without-node`, `duplicate-active-thumbprint`.
+3. `docs/guides/uat-specs/invariants/nodes.toml` (C11): `node-without-active-cert`, `used-token-without-node`, `cert-without-node`, `duplicate-active-thumbprint`. The Nodes invariant checks tolerate `EnrollmentFailed` audit rows with reason `invalid_platform`: the enroll probe writes one per call.
 4. `ShippedSpecsValidateTests` already covers `catalog/`; extend it to `invariants/*.toml` parsing.
 
 **Tests and why they fail when reverted:** `ShippedSpecsValidateTests` fails on any spec or invariant file error. Local evidence: one `uat_run` of each catalog, bundle paths and grades in the report.
@@ -2189,7 +2246,7 @@ Then, with Docker running, the daemon from this worktree, and the lease: `meridi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 **Docs owed:** none (L45; owner action O1 adds the promotion line to CLAUDE.md).
@@ -2205,6 +2262,7 @@ Jepsen-style histories over enrollment (D-ML47, D-ML48). L49 and L50 run in para
 - **Branch / worktree / commit:** `ml/l49-barrier` / `meridian-lab-l49` / `feat(lab): lab-only barrier proxy and red enrollment history seam`
 - **Depends on:** L48, L09, L10. **Security review:** yes (new listener).
 - **Rules:**
+  - R-REG: area History.
   - R-HOST: the listener binds `IPAddress.Loopback` only, on `LabPorts.Barrier` (or port 0 when a test passes 0); `StartAsync` refuses any other port and any upstream that fails `LabHosts.IsLabEndpoint` (`[Lab.BlastRadius]`).
   - Forwarding: `HttpClient` over `SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, UseCookies = false }`, one per proxy instance, disposed with it (R-USING). Hop-by-hop headers (`Connection`, `Keep-Alive`, `Transfer-Encoding`, `Upgrade`, `Proxy-*`, `TE`, `Trailer`) and `X-Lab-Op-Id` are never forwarded.
   - R-LOG / R-ZERO: bodies are never logged; observations carry the status and the byte counts only.
@@ -2242,7 +2300,7 @@ Jepsen-style histories over enrollment (D-ML47, D-ML48). L49 and L50 run in para
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&Seam!=S-L11&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L11&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L11"   # Docker running; expected red, record the failure line in the report
 ```
 
@@ -2253,6 +2311,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l50-history-checker` / `meridian-lab-l50` / `feat(lab): linearizability checker and enrollment history model`
 - **Depends on:** L48 (parallel with L49). **Security review:** yes (the verdicts gate mutants and findings).
 - **Rules:**
+  - R-REG: area History.
   - Pure code: no Docker, no network, no clock (the budget is a `Stopwatch` deadline passed in, checked every 1024 search steps).
   - Deterministic: the same history gives the same verdict, the same violations in the same order and the same minimal history. Iterate ops in `InvokeSeq` order; no `HashSet` iteration order in outputs.
   - Never a false pass: a budget overrun, more than 12 ops on one key or a history the recorder could not build → `unknown` with a reason. `unknown` is never `linearizable`.
@@ -2284,7 +2343,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~Dhadgar.Lab.Tests.History"
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&Seam!=S-L11&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L11&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -2294,6 +2353,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l51-history-run` / `meridian-lab-l51` / `feat(lab): enrollment history runs through the barrier proxy`
 - **Depends on:** L49, L50, L22, L11. **Security review:** yes (clients send real enrollment tokens).
 - **Rules:**
+  - R-REG: area History.
   - R-CONTRACT: history clients send `Dhadgar.Contracts.Nodes.EnrollNodeRequest` and read `EnrollNodeResponse`; never a local copy.
   - R-ZERO / R-USING: each client key is an `ECDsa.Create(ECCurve.NamedCurves.nistP256)` in a `using`; only `ExportSubjectPublicKeyInfo()` leaves it; the token plaintext is read from the vault into a `char[]`/`byte[]` that is zeroed after the body is serialised (record the unavoidable managed-string copy as a residual, as Sprint 2 did).
   - R-LOG: request bodies go into `Invoke` args through `Redactor` (the token becomes `tok-N`).
@@ -2323,7 +2383,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L11|FullyQualifiedName~ToxiproxyTimeoutToxicDockerTests"   # Docker running
 ```
 
@@ -2340,6 +2400,7 @@ Then, with the daemon from this worktree and the lease, one `history_run` of eac
 - **Branch / worktree / commit:** `ml/l25-results-db` / `meridian-lab-l25` / `feat(lab): results database, signatures and overall grading`
 - **Depends on:** L22. **Security review:** yes (evidence store).
 - **Rules:**
+  - R-REG: area Results.
   - R-PATH: the DB is `LabPaths.Results\lab-results.db`; ingest reads only bundles under `LabPaths.UatRuns` and `LabPaths.Jobs`.
   - SQL: `Microsoft.Data.Sqlite` with parameters only; `PRAGMA journal_mode=WAL`; a schema version table and forward-only migrations.
   - R-LOG: only redacted text from bundles enters the DB.
@@ -2369,7 +2430,7 @@ Then, with the daemon from this worktree and the lease, one `history_run` of eac
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -2379,6 +2440,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l26-triage` / `meridian-lab-l26` / `feat(lab): triage buckets, known issues and issue drafts`
 - **Depends on:** L25. **Security review:** yes (drafts leave the lab as text).
 - **Rules:**
+  - R-REG: area Results.
   - No tool calls GitHub or runs `gh` (D-ML28); R-HOST already refuses non-lab hosts.
   - R-PATH: drafts and the ledger only under `LabPaths.Triage`; `repro_path` must be inside a bundle.
   - R-LOG: drafts carry only redacted excerpts; `SecretScanner` (L16) runs on every draft before it is written; a hit refuses the draft.
@@ -2402,7 +2464,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -2412,6 +2474,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l27-jobs-hunter` / `meridian-lab-l27` / `feat(lab): async jobs and a seeded model-based enrollment hunter`
 - **Depends on:** L25 (parallel with L26). **Security review:** yes.
 - **Rules:**
+  - R-REG: area Jobs.
   - R-SEED: the hunter's CsCheck seed derives from the run seed (below); every op choice comes from CsCheck's generator, nothing from `System.Random`.
   - R-CONTRACT: hunter ops dispatch lab tools through `LabToolDispatcher` with the job's lease; no direct `NodesLabAdapter` calls.
   - R-RESULT: a CsCheck failure is caught where `Sample` is called and becomes a `Result` with the shrunk case; nothing else throws.
@@ -2436,7 +2499,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 ```powershell
 dotnet restore <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj --force-evaluate
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~HunterDockerTests"   # Docker running
 ```
 
@@ -2447,6 +2510,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l28-fuzzer` / `meridian-lab-l28` / `feat(lab): seeded contract fuzzer with problem-details oracle`
 - **Depends on:** L27. **Security review:** yes.
 - **Rules:**
+  - R-REG: area Fuzz.
+  - Rate limits (F54): all lab traffic reaches the Gateway from one IP (`Auth` 30 per 60 s, `PerAgent` 500 per 60 s, global 1000 per 60 s). Size the run under those buckets, or raise them for the lab only with Gateway env `RateLimiting__Policies__<Policy>__PermitLimit` in this packet's adapter change, with a report line. Rows that test the limiter itself keep product values.
   - R-CONTRACT: request bodies are built from the `Dhadgar.Contracts` type named by the target, serialised with the product's JSON options, then mutated.
   - R-SEED: case `n` uses `LabRandom(seed, "fuzz:<target>:<n>")`, so any single case replays alone.
   - R-HOST (`http_request` only), R-LOG (bodies redacted in the bundle), R-RESULT, R-NULL, R-XUNIT.
@@ -2467,7 +2532,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -2477,6 +2542,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l29-chaos-soak` / `meridian-lab-l29` / `feat(lab): seeded chaos plans, soak runs and resource-trend invariant`
 - **Depends on:** L27 (parallel with L28). **Security review:** yes (unattended faults).
 - **Rules:**
+  - R-REG: area Chaos.
   - R-SEED: the schedule (which fault, when, how long) comes from `LabRandom(seed, "chaos")`; the timeline is written as it happens.
   - R-BLAST: chaos injects only through the fault tools; a plan may name only C4 fault tools and C10 targets, validated before the job starts.
   - R-TIME, R-RESULT, R-DOCKER (`docker stats --no-stream --format "{{json .}}"` for registered containers only), R-NULL, R-XUNIT.
@@ -2512,7 +2578,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 **Docs owed:** none (L45).
@@ -2522,6 +2588,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l52-coverage` / `meridian-lab-l52` / `feat(lab): behavioural coverage of routes, faults, error codes, invariants and transitions`
 - **Depends on:** L25, L23 (parallel with L26 to L29). **Security review:** no (read-only accounting over redacted evidence); the reviewer checks that `NodesEndpointUniverseTests` adds no product code and no project reference.
 - **Rules:**
+  - R-REG: area Coverage.
   - Lab isolation: `tests/Dhadgar.Nodes.Tests` reads `src/Tools/Dhadgar.Lab/coverage-universe.json` as a file found from the repo root (walk up to the folder holding `Dhadgar.sln`); it gains no `ProjectReference`. `LabIsolationTests` stays green.
   - R-LOG: coverage keys hold templates, status classes, error codes and ids of checks only; never a path with a real id, a body or a header.
   - R-OBSERVE: transition snapshots use `db_query` (direct 15432, reader role).
@@ -2558,7 +2625,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Nodes.Tests\Dhadgar.Nodes.Tests.csproj -c Release --filter "FullyQualifiedName~NodesEndpointUniverseTests"
 ```
 
@@ -2575,6 +2642,7 @@ Twins (D-ML50), mutants (D-ML51) and the lab's own self-check. L53 and L54 run i
 - **Branch / worktree / commit:** `ml/l53-twins` / `meridian-lab-l53` / `feat(lab): paired twin experiments with equal-outcome and isolation relations`
 - **Depends on:** L25, L22. **Security review:** yes (variant worlds inject faults).
 - **Rules:**
+  - R-REG: area Twins.
   - R-BLAST / R-CONTRACT: variant faults are C4 fault tools dispatched through `LabToolDispatcher` by `RowExecutor`, exactly like spec faults; `TwinSpec` validation refuses any tool that is not a C4 fault tool.
   - R-SEED: both worlds use the experiment's `seed` (or the call's `seed`); the variant's extra choices use the stream `twin:<id>:variant`.
   - R-PATH: experiment files only under `docs/guides/uat-specs/twins/`; the name matches `^[a-z0-9-]{1,64}$`.
@@ -2600,7 +2668,7 @@ Twins (D-ML50), mutants (D-ML51) and the lab's own self-check. L53 and L54 run i
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~TwinLatencyDockerTests"   # Docker running
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L12"   # Docker running; expected red, record the failure line
 ```
@@ -2612,6 +2680,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l54-mutants` / `meridian-lab-l54` / `feat(lab): lab-only product mutants and mutation runs`
 - **Depends on:** L27, L51, L23 (parallel with L53). **Security review:** yes (deliberately broken product images; `git` processes).
 - **Rules:**
+  - R-REG: area Mutants.
   - Isolation (D-ML51): patches live only under `tools/lab/mutants/`; no product project, props file or workflow references that folder; a product mutant is applied only in a `git archive` copy under `LabPaths.Builds`; the coder **never commits a product change**: make each patch by editing the product file in the worktree, `git diff -- <file> > tools/lab/mutants/<id>/change.patch`, then `git checkout -- <file>`, and confirm `git status` shows only `tools/lab/` and `src/Tools/` changes before committing.
   - R-ARGS: `git` runs with `ArgumentList` (`-C`, `<dir>`, `archive`, `--format=tar`, `HEAD`; `apply`, `--check`, `<patch>`); never a shell.
   - R-PATH: extraction only into `LabPaths.Builds\mutant-<id>-<build8>\`; `TarFile.ExtractToDirectory` refuses entries outside it (check each entry's full path before writing, as `TarFile` does not reject `..` on every platform; assumption to verify in the packet).
@@ -2637,7 +2706,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~MutationDockerTests"   # Docker running
 git -C <W> status --porcelain   # only tools/lab/, src/Tools/ and tests/Dhadgar.Lab.Tests/ paths
 ```
@@ -2651,6 +2720,7 @@ Then, with the daemon and the lease, `mutation_run` for M1, M4 and M5; record ea
 - **Branch / worktree / commit:** `ml/l55-selfcheck` / `meridian-lab-l55` / `feat(lab): self-check harness that plants defects in the lab itself`
 - **Depends on:** L54, L19, L21, L25, L03. **Security review:** yes (spawns `dotnet test` and a child daemon).
 - **Rules:**
+  - R-REG: area Mutants.
   - Lab isolation: `src/Tools/Dhadgar.Lab.SelfCheck` is a console project referenced by nothing; add it to the lab project set in `LabIsolationTests` and to the solution in the `Tools` folder.
   - R-ARGS / R-USING: `git` and `dotnet` run with `ArgumentList` in `using var process`; `dotnet test <copy>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~<test>" --logger "trx;LogFileName=<id>.trx" --results-directory <dir>`.
   - R-PATH: copies only under `%TEMP%\meridian-lab-selfcheck\<guid>\`, deleted at the end (kept with `--keep`).
@@ -2674,7 +2744,7 @@ Then, with the daemon and the lease, `mutation_run` for M1, M4 and M5; record ea
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab.SelfCheck\Dhadgar.Lab.SelfCheck.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet run --project <W>\src\Tools\Dhadgar.Lab.SelfCheck -c Release -- selfcheck   # every LM caught; attach selfcheck.md to the report
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~SelfCheckRecoveryTests"   # Docker running
 ```
@@ -2692,6 +2762,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l30-pool` / `meridian-lab-l30` / `feat(lab): machine pool with linux container and host providers`
 - **Depends on:** L19. **Security review:** yes (new mutating target kind).
 - **Rules:**
+  - R-REG: area Pool.
   - R-BLAST: a member is registered as `m:<member id>` before its container starts; `pool_release`, `member_reset` and lease end destroy only containers registered as members; `m:host` is read-only.
   - R-DOCKER: `docker run -d --name meridian-lab-m-<id> --label meridian-lab=1 --label meridian-lab-member=<id> --network meridian-lab-net --restart no --memory 1g <image>`; no `-v`, no `-p`.
   - R-PATH: pool state at `LabPaths.State\pool.json` (atomic write).
@@ -2719,7 +2790,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~LinuxPoolDockerTests"   # Docker running
 ```
 
@@ -2730,6 +2801,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l31-windows-pool` / `meridian-lab-l31` / `feat(lab): windows server core container members`
 - **Depends on:** L30, the wave 6 gate. **Security review:** yes.
 - **Rules:**
+  - R-REG: area Pool.
   - R-DOCKER: every call uses `--context <Lab:Docker:WindowsContext>`; the registry stores the context per target and `IDockerInspector` inspects in that context.
   - R-BLAST: as L30. Windows members never get a bind mount or a published port.
   - R-OS: the provider is `[SupportedOSPlatform("windows")]`; on Linux it is unavailable.
@@ -2753,7 +2825,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 1. `tools/lab/images/windows-member.Dockerfile`: `FROM <base image>`; `COPY probe/ C:/lab/probe/`; `SHELL` not used; `CMD ["powershell", "-NoProfile", "-Command", "while ($true) { Start-Sleep -Seconds 3600 }"]`. `lab_build` builds it as `meridian-lab/windows-member:<build_id>` in the Windows context when that context is configured.
 2. `Pool/WindowsContainerProvider.cs`: `docker run -d --name meridian-lab-m-win-<nn> --label meridian-lab=1 --label meridian-lab-member=win-<nn> --isolation <iso> --memory 2g [--storage-opt size=20G] --restart no <image>`; no network flag (Windows `nat` default); readiness = `docker exec <id> C:\lab\probe\Dhadgar.Lab.Probe.exe footprint --json` exits 0; dimensions `{windows, <image build from docker inspect OsVersion>, servercore, <iso>, container, x64, host, false}`.
-3. `Tools/Doctor/LabDoctorTool.cs`: checks `windows_context` (reachable), `windows_isolation` (a 30 s `cmd /c ver` run), `windows_member_image` (present for the latest build); capability `windows_containers` for `requires`.
+3. `Tools/Doctor/LabDoctorTool.cs` (statuses per C4, D-ML64; appended after `repo-root`): `windows-context` (`Lab:Docker:WindowsContext` unset → `info "not configured"`; `docker --context <win> version` exit 0 → `ok`; else `fail`), `windows-isolation` (a 30 s `cmd /c ver` run: `ok`/`fail`; omitted when the context is unset), `windows-member-image` (present for the latest build → `ok`, else `warn "run lab_build"`; omitted when the context is unset); capability `windows_containers` for `requires`.
 4. `tests/Dhadgar.Lab.Tests/Seams/ContainerAgentEnrollSeamTests.cs` (S-L8, `RequiresWindowsContainers`, `RequiresDocker`, red until L33): acquire a Windows member; `agent_install mode=console`; `nodes_token_mint`; `agent_token_write`; `agent_start`; within 120 s a node with platform `windows` exists in Nodes and `certstore_list store=machine_my member=<id>` shows one certificate issued by the lab Nodes CA with a private key; `pool_release` removes the container. Red now because the agent tools return `[Lab.NotImplemented]`.
 5. Tests: `WindowsProviderArgsTests` (exact `ArgumentList` with and without storage-opt; isolation from settings), `WindowsPoolDockerTests` (`RequiresWindowsContainers`): acquire, probe footprint shows an empty footprint, reset gives a new id, release removes it; the host's `Cert:\LocalMachine\Root` count and the host `HKLM\SOFTWARE\Meridian Console` key are unchanged before and after.
 
@@ -2763,7 +2835,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&Seam!=S-L8&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L8&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~WindowsPoolDockerTests"
 ```
 
@@ -2774,6 +2846,7 @@ $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Te
 - **Branch / worktree / commit:** `ml/l32-agent-in-member` / `meridian-lab-l32` / `feat(lab): install and drive the windows agent inside pool members`
 - **Depends on:** L31, L12. **Security review:** yes (agent install, enrollment token).
 - **Rules:**
+  - R-REG: area Agents.
   - R-ARGS: `docker exec <id> sc.exe create <AgentWindowsFootprint.ServiceName> binPath= <path> start= demand` as separate `ArgumentList` items; never a command line built as one string.
   - R-ZERO: the token goes from `SecretVault` to `docker exec -i <id> C:\lab\probe\Dhadgar.Lab.Probe.exe token-write` on stdin as UTF-8 bytes; the byte buffer is zeroed after the write; the token never appears in an argument, an environment variable or a log.
   - R-CONTRACT: every footprint name from `AgentWindowsFootprint`; member reads return `ProbeFootprint` shapes.
@@ -2801,7 +2874,7 @@ $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Te
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet build <W>\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&Seam!=S-L8&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L8&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~AgentInMemberDockerTests|Seam=S-L8"
 ```
 
@@ -2812,6 +2885,7 @@ $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Te
 - **Branch / worktree / commit:** `ml/l33-member-faults` / `meridian-lab-l33` / `feat(lab): faults inside members and the container enrollment spec`
 - **Depends on:** L32. **Security review:** yes (agent state, client certificate, registry).
 - **Rules:**
+  - R-REG: area Faults.
   - R-BLAST: member faults resolve `member` through the guard; backups stay inside the member under `C:\lab\backup\<fault_id>\` (a member reset discards them, which also heals).
   - R-ZERO: the probe zeroes key and token buffers it reads for backup; the client-certificate backup is exported with an ephemeral password from `RandomNumberGenerator` passed on stdin, never as an argument.
   - R-SEED for `garbage`; R-ARGS; R-RESULT; R-NULL; R-XUNIT.
@@ -2831,7 +2905,7 @@ $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Te
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L8"
 ```
 
@@ -2848,6 +2922,7 @@ Then one `uat run --specs <W>\docs\guides\uat-specs\agent-container-enroll.toml 
 - **Branch / worktree / commit:** `ml/l34-auth-stack` / `meridian-lab-l34` / `feat(lab): identity, betterauth and panel services`
 - **Depends on:** L22. **Security review:** yes (auth services, signing keys).
 - **Rules:**
+  - R-REG: area AuthStack (its `ILabServiceAdapter` registrations too).
   - R-ZERO: the Identity exchange key pair is generated per stack at `stack_up` into `LabPaths.State\identity\exchange-*.pem`; the private key goes to BetterAuth by env from the vault (never a file in an image); buffers zeroed after writing.
   - R-HOST, R-DOCKER, R-OBSERVE.
   - R-XUNIT: the Node image build needs the npm registry: `RequiresNetwork`.
@@ -2859,7 +2934,7 @@ Then one `uat run --specs <W>\docs\guides\uat-specs\agent-container-enroll.toml 
 **Files**
 
 1. `tools/lab/images/node-app.Dockerfile`: `ARG APP_DIR`; `FROM node:<major from package.json engines>-bookworm-slim`; copy `src/Dhadgar.SharedAuth` (when the app depends on it) and the app; `npm ci`; Panel: `npm run build` with `PUBLIC_GATEWAY_URL=http://localhost:15000`; `CMD` per app (`node dist/server/entry.mjs` for the Panel, the BetterAuth start script).
-2. `Services/IdentityLabAdapter.cs`: env `ConnectionStrings__*` through `identity-postgres` (20030), `Redis` through `identity-redis` (20031), `RabbitMq__Host=meridian-lab-toxiproxy`, `RabbitMq__Port=20032`, the vhost and credentials; `Auth__Exchange__PublicKeyPem` from the generated key; issuer and audience equal to BetterAuth's; `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate, F23).
+2. `Services/IdentityLabAdapter.cs`: env `ConnectionStrings__*` through `identity-postgres` (20030), `Redis` through `identity-redis` (20031), `RabbitMq__Host=meridian-lab-toxiproxy`, `RabbitMq__Port=20032` (L09f), vhost `/` (`AddDhadgarMessaging` has no vhost key) and credentials; `Auth__Exchange__PublicKeyPem` from the generated key; issuer and audience equal to BetterAuth's; `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate, F23).
 3. `Services/BetterAuthLabAdapter.cs`: env mode (no Secrets service, F22), database through 20040, trusted origins `http://localhost:14321`, the exchange private key, the Gateway URL; health path from the app.
 4. `Services/PanelLabAdapter.cs`: no dependencies; health `GET /login` 200.
 5. Gateway: clusters `identity` and `betterauth` through proxies 20011 and 20013; `Readyz:RequiredClusters` = `[nodes, identity]`.
@@ -2874,7 +2949,7 @@ Then one `uat run --specs <W>\docs\guides\uat-specs\agent-container-enroll.toml 
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&Seam!=S-L9&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L9&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~AuthStackDockerTests"   # Docker running, network
 ```
 
@@ -2885,6 +2960,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l35-playwright` / `meridian-lab-l35` / `feat(lab): playwright panel flows for login, refresh and logout`
 - **Depends on:** L34. **Security review:** yes (session cookies, tokens).
 - **Rules:**
+  - R-REG: area Ui.
   - R-ZERO / R-LOG: tokens and cookies never leave the browser context except as presence flags and the 8-hex SHA-256 prefix (C14); screenshots are taken only on pages without tokens in the DOM (the coder checks; `/callback` is never screenshotted); Playwright traces are off.
   - R-PATH: browsers in `LabPaths.Playwright` (`PLAYWRIGHT_BROWSERS_PATH`); screenshots in the bundle or job folder.
   - R-USING: `IPlaywright`, `IBrowser`, `IBrowserContext` disposed; the Playwright driver process is assigned to the daemon's Job Object (L07) so it dies with the daemon.
@@ -2895,7 +2971,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Files**
 
-1. `Ui/PlaywrightHost.cs`: lazy start; `lab_doctor` check "playwright browsers"; install path `meridian-lab ui install` runs `Microsoft.Playwright.Program.Main(["install", "chromium"])` with `PLAYWRIGHT_BROWSERS_PATH` set (`RequiresNetwork`).
+1. `Ui/PlaywrightHost.cs`: lazy start; `lab_doctor` check `playwright` (chromium present under `PLAYWRIGHT_BROWSERS_PATH` → `ok`, else `warn "run meridian-lab ui install"`; appended last, D-ML64); install path `meridian-lab ui install` runs `Microsoft.Playwright.Program.Main(["install", "chromium"])` with `PLAYWRIGHT_BROWSERS_PATH` set (`RequiresNetwork`).
 2. `Ui/Flows/*.cs`: the four C14 flows; `login_email` signs up and in through `http_request via=gateway` (vault password), parses `Set-Cookie` for BetterAuth's session cookie name, adds it with `Domain = "localhost"`, `Path = "/"`, `Secure = true`, `HttpOnly = true`, `SameSite = None`, then opens `/callback`. `refresh` records `refresh_path` (`panel` or `direct`).
 3. `Tools/Ui/UiTools.cs`; clause source: `ui_flow_run` is a step tool, and `step` clauses read `UiFlowResult`.
 4. `docs/guides/uat-specs/panel.toml` (section `panel`, `requires = ["docker", "network"]`): rows `login`, `refresh-rotates`, `refresh-replay-refused` (DV-3), `logout-clears`, `dashboard-guard`.
@@ -2908,7 +2984,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 ```powershell
 dotnet restore <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj --force-evaluate
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L9"   # Docker running, network
 ```
 
@@ -2919,6 +2995,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l36-notify-discord` / `meridian-lab-l36` / `feat(lab): notifications, discord and a webhook sink`
 - **Depends on:** L22, L12. **Security review:** yes (admin API keys, webhooks).
 - **Rules:**
+  - R-REG: area NotifyStack (its `ILabServiceAdapter` registrations too).
   - R-HOST: the services' webhook and email targets point only at `meridian-lab-sink` through proxies 20052 and 20061; if a service validates webhook hosts against `discord.com` (read the code), the rows that need delivery become catalog rows asserting the refusal and a known issue, not a product change.
   - R-ZERO / R-LOG: `X-Admin-Api-Key` values come from the vault and are redacted; the sink stores bodies redacted and drops `Authorization` headers.
   - D-ML40 not ruled → no SMTP switch: email rows assert the designed failure with `known_issue = "KI-NOTIF-OUTBOX"` or the Graph provider's refusal; D-ML41 recommended out → the Discord bot stays absent, and Discord's `/readyz` 503 is the asserted state (F26).
@@ -2929,7 +3006,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 **Files**
 
 1. Probe mode `sink` (ASP.NET minimal app in the probe): `POST /{**path}` records `{at, path, headers (minus Authorization), body (redacted, max 64 KiB)}` in memory (last 500); `GET /_sink/requests?since=` returns them; `DELETE /_sink/requests` clears. Image `meridian-lab/probe:<build_id>` runs it as `meridian-lab-sink`.
-2. `Services/NotificationsLabAdapter.cs`, `Services/DiscordLabAdapter.cs`: env through their proxies; `RabbitMq__Host` explicit (F27); Discord `Discord__WebhookUrl=http://meridian-lab-toxiproxy:20061/webhook`, `SecretsService__Url` unset or a lab value so the `:5080` fallback is visible (KI-DISCORD-SECRETS-PORT); admin API keys generated into the vault.
+2. `Services/NotificationsLabAdapter.cs`, `Services/DiscordLabAdapter.cs`: env through their proxies; `RabbitMq__Host=meridian-lab-toxiproxy` explicit (F27) with `RabbitMq__Port=20051` for Notifications and `RabbitMq__Port=20062` for Discord (L09f key; vhost `/`); Discord `Discord__WebhookUrl=http://meridian-lab-toxiproxy:20061/webhook`, `SecretsService__Url` unset or a lab value so the `:5080` fallback is visible (KI-DISCORD-SECRETS-PORT); admin API keys generated into the vault.
 3. Gateway clusters `notifications` and `discord` through 20014 and 20015.
 4. `stack_reset_data`, `db_query`, `ProxyCatalog`, `LabTargetRegistry`, `I2OutboxInvariant` (Notifications' outbox, if the tables exist; else the I2 check reports `InvariantCheckError` "outbox tables missing", which is KI-NOTIF-OUTBOX).
 5. Tests: `SinkTests` (Authorization dropped; redaction), adapter env tests, `NotifyDockerTests` (`RequiresDocker`): both services start; a Discord webhook test call reaches the sink, or the refusal is recorded.
@@ -2941,7 +3018,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet build <W>\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~NotifyDockerTests"   # Docker running
 ```
 
@@ -2952,6 +3029,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l37-cli` / `meridian-lab-l37` / `feat(lab): run the cli inside a linux pool member`
 - **Depends on:** L30, L34. **Security review:** yes (CLI credentials).
 - **Rules:**
+  - R-REG: area Cli.
   - The CLI never runs on the host (F30): `cli_run` refuses `m:host` and any non-Linux member.
   - R-ARGS: `docker exec -e HOME=/home/lab <id> /opt/lab/cli/dhadgar <args...>`, each arg its own item; the first arg must be in the C10 verb allowlist; the packet reads `src/Dhadgar.Cli` and writes the exact safe subcommand list into C10 (no subcommand that prints a secret).
   - R-LOG: stdout and stderr are redacted with the vault before they return.
@@ -2972,7 +3050,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 **Docs owed:** README "Services": CLI.
@@ -3009,6 +3087,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l56-tenant-twin` / `meridian-lab-l56` / `test(lab): tenant isolation twin experiments and tenant mutants`
 - **Depends on:** L35, L53, L54, L11. **Security review:** yes (user tokens, a second tenant, product mutants).
 - **Rules:**
+  - R-REG: area Identity.
   - Both tenants are lab-owned: organization ids `LabIds.OrganizationId` (A) and `LabIds.TenantBOrganizationId` (B), or organizations the lab created in its own Identity database; users are seeded lab users. Nothing reaches a real account.
   - R-ZERO / R-LOG: bearer tokens go to the vault as `brr-N` and are redacted everywhere; `identity_user_token` never returns the token.
   - Stop rule: if the Identity sign-in and exchange cannot produce a token with `org_id` for a lab user in the lab stack, stop after files 1 to 4 and 6, record the step that failed, and leave `tenant-isolation-http` and `identity_user_token` for a follow-up packet; S-L12 does not depend on them.
@@ -3034,7 +3113,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L12|FullyQualifiedName~MutantPatchesApplyTests"   # Docker running
 git -C <W> status --porcelain   # only tools/lab/, src/Tools/, tests/Dhadgar.Lab.Tests/ and docs/guides/uat-specs/ paths
 ```
@@ -3051,17 +3130,17 @@ Sprint 2 is on `main` (squash `6df3338`, PR #235, D-ML60), and `campaign/meridia
 
 **Wave 8 gate (orchestrator):** before dispatching L40 to L44, the architect re-reads the Sprint 2 code on the campaign branch and writes a ruling note `worknotes/W8-sprint2-deltas.md` listing every name in L39 to L44 that differs from this plan (hub method names, config keys, the `GraceUntil` column, the MSI path); packets use the ruling's names. L39 needs only L12 and the ruling and may be dispatched as soon as both exist, in any earlier wave's slot.
 
-### L39. Agent consumes `AgentWindowsFootprint`; S-L3 green
+### L39. Agent consumes `AgentWindowsFootprint`; S-L3 stays green
 
 - **Branch / worktree / commit:** `ml/l39-footprint` / `meridian-lab-l39` / `refactor(agent-windows): take footprint names from Dhadgar.Contracts`
-- **Depends on:** L12 and the W8 ruling note. **Security review:** yes (agent project).
+- **Depends on:** the W8 ruling note (S-L3 is already green from L12; this packet only removes the agent's local literals). **Security review:** yes (agent project).
 - **Rules:** R-CONTRACT (names only from `AgentWindowsFootprint`; delete the local literals), R-NULL, R-XUNIT, R-CPM; no behaviour change.
 
 **Contract excerpt:** C5. If Sprint 2's merged names differ from C5 (for example the state file name), C5 changes to match the agent and the report says so: the agent is the source of truth for values, Contracts for location.
 
 **Files:** `src/Agents/Dhadgar.Agent.Windows/Program.cs` (`ServiceName` and `EventLogSourceName` become aliases of the Contracts constants), `Windows/WindowsCertificateStore.cs` (`CaStoreName`), `Installation/EnrollmentTokenCleanup.cs` (`EnrollmentTokenValueName`, the key path), the state file name in `AgentOptions` or its consumer (find each literal with Grep), the MSI's WiX constants if Sprint 2 shares them through a generated file (otherwise list them in the report as a follow-up). `AgentFootprintSeamTests` switches from reflection to direct comparison where the constant is now public.
 
-**Tests:** S-L3 green; `tests/Dhadgar.Agent.Windows.Tests` stays green.
+**Tests:** S-L3 stays green; `tests/Dhadgar.Agent.Windows.Tests` stays green.
 
 **Checks**
 
@@ -3078,6 +3157,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l40-s2-evidence` / `meridian-lab-l40` / `feat(lab): grace, hub and agent log evidence for uat`
 - **Depends on:** wave 8 gate, L32. **Security review:** yes (Nodes hub logging).
 - **Rules:** R-LOG (hub log events carry `NodeId` and the connection id only, never certificates), R-CONTRACT, R-RESULT, R-TIME, R-NULL, R-XUNIT, R-DI.
+  - R-REG: area Uat.
 
 **Contract excerpt:** C7 `hub` and `agent_log` rows; C6 `CertTimeField.GraceUntil`.
 
@@ -3104,6 +3184,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l41-lab-tls` / `meridian-lab-l41` / `feat(lab): lab gateway tls and member trust`
 - **Depends on:** L40. **Security review:** yes (certificates, trust stores).
 - **Rules:**
+  - R-REG: area Tls.
   - R-ZERO: the lab TLS CA key and server key; `CryptographicOperations.ZeroMemory` on exported key bytes.
   - R-PATH: cert files under `LabPaths.State\tls`.
   - D-ML14: trust is added only inside members, never on the host. Probe modes `trust-add` and `trust-remove` accept a certificate on stdin and refuse it unless its thumbprint equals the lab TLS CA or the lab Nodes CA thumbprint the lab passes as an argument and the probe re-computes; no tool adds trust on the host.
@@ -3133,6 +3214,8 @@ $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Te
 - **Branch / worktree / commit:** `ml/l42-fleet` / `meridian-lab-l42` / `feat(lab): fleet of real agent-core instances against the lab`
 - **Depends on:** L41, L27. **Security review:** yes (agent core, client keys).
 - **Rules:**
+  - R-REG: area Fleet.
+  - Rate limits (F54): all lab traffic reaches the Gateway from one IP (`Auth` 30 per 60 s, `PerAgent` 500 per 60 s, global 1000 per 60 s). Size the run under those buckets, or raise them for the lab only with Gateway env `RateLimiting__Policies__<Policy>__PermitLimit` in this packet's adapter change, with a report line. Rows that test the limiter itself keep product values.
   - R-CONTRACT: the fleet uses `Dhadgar.Agent.Core` through `AddAgentCore()` (F31); it never re-implements an enrollment, heartbeat or hub message. Replace only the F31 list per agent: `ICertificateStore` (an in-memory store in the lab, modelled on Sprint 2's test `InMemoryCertificateStore`), `IAgentStateStore`, `ISystemMetricsCollector`, `IHardwareInventoryCollector`, `IProcessManager` (refuses every start), `IHttpClientFactory` (handler with the agent's client certificate, base address the agent ingress).
   - R-SEED: per-agent `LabRandom(seed, "fleet:agent-<nnnn>")` drives hardware inventory values and jitter; secrets still come from `RandomNumberGenerator`.
   - R-ZERO: per-agent private keys live in the in-memory store and are zeroed at dispose.
@@ -3166,6 +3249,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Branch / worktree / commit:** `ml/l43-agent-specs` / `meridian-lab-l43` / `test(lab): sprint 2 agent flows as specs in windows members`
 - **Depends on:** L41, L33. **Security review:** yes (MSI, agent install).
 - **Rules:**
+  - R-REG: area Agents.
   - C7 format; real table and column names from the merged Nodes model; SQL params bound; every row has a required non-human clause; catalog rule for failure rows.
   - The MSI is built with Sprint 2's build arguments from its packet (locked RID-less restore, then `--no-restore`; never a bare `publish -r`, D-S241); `agent_msi_install` copies it into the member and sends the token on stdin to the probe mode `msi-install`, which runs `msiexec /i <msi> /qn /l*v C:\lab\msi\install.log <TOKEN property>=<token>` with `ArgumentList`. The token is on msiexec's command line only inside the member, because that is how Sprint 2's MSI takes it; it never reaches a host argument or log. It is a `Hidden` property (D-S245), and the lab runs `SecretScanner` over `install.log` before the log enters the bundle; a hit fails the row.
   - Legs of Sprint 2's UAT scripts that need a reboot or the host are listed as not covered (D-ML31), never faked.
@@ -3195,6 +3279,7 @@ Then one run of each spec in Windows members; grades in the report.
 - **Branch / worktree / commit:** `ml/l44-agent-fuzz` / `meridian-lab-l44` / `feat(lab): fuzz the agent hub and command envelopes; fleet chaos`
 - **Depends on:** L42, L28, L29. **Security review:** yes (`CommandEnvelope`, hub).
 - **Rules:**
+  - R-REG: area Fuzz.
   - `CommandEnvelope` fuzzing runs in-process against `CommandValidator` (and `CommandDispatcher` with fake handlers that record and refuse); the oracle: no unhandled exception, every invalid envelope rejected with a `Result` failure, never dispatched; issue #94 (no signature check) is KI-94, so unsigned envelopes that pass are known, not new.
   - Hub fuzzing goes through a fleet agent's authenticated connection with mutated `AgentHeartbeat` payloads; oracle: the hub never crashes the Nodes process (I1, I6), rejects malformed payloads, and other fleet agents stay connected.
   - R-SEED, R-CONTRACT (types from Contracts and `Agent.Core`), R-RESULT, R-NULL, R-XUNIT.
@@ -3226,6 +3311,8 @@ The adversarial peer (D-ML52), recovery envelopes (D-ML61), gameplay continuity 
 - **Branch / worktree / commit:** `ml/l57-envelope` / `meridian-lab-l57` / `feat(lab): recovery envelopes over fault duration and load`
 - **Depends on:** L42, L29, L21. **Security review:** yes (injects faults in a loop).
 - **Rules:**
+  - R-REG: area Envelopes.
+  - Rate limits (F54): all lab traffic reaches the Gateway from one IP (`Auth` 30 per 60 s, `PerAgent` 500 per 60 s, global 1000 per 60 s). Size the run under those buckets, or raise them for the lab only with Gateway env `RateLimiting__Policies__<Policy>__PermitLimit` in this packet's adapter change, with a report line. Rows that test the limiter itself keep product values.
   - R-BLAST: the envelope's `fault` is validated exactly like a chaos plan step (C4 fault tools only, targets through `FaultTargetGuard`); `heal_after_s` is always set; the job heals at the end of each cell and on cancel or failure (in `finally`, through the same `FaultBook` heal path the lease-end hook uses, L19).
   - R-SEED: cell order from `LabRandom(seed, "envelope:<id>")`; the fleet workload uses its own L42 streams.
   - R-OBSERVE: success ratios come from the workload's observations (fleet per-second metrics, or row grades for `spec` workloads), never from the proxy that carries the fault.
@@ -3251,7 +3338,7 @@ The adversarial peer (D-ML52), recovery envelopes (D-ML61), gameplay continuity 
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~EnvelopeDockerTests"   # Docker running
 ```
 
@@ -3264,6 +3351,7 @@ Then, with the daemon and the lease, one full `envelope_run nodes-postgres-outag
 - **Branch / worktree / commit:** `ml/l58-peer` / `meridian-lab-l58` / `feat(lab): adversarial peer against lab-enrolled identities`
 - **Depends on:** L41, L42, L54. **Security review:** yes (attack traffic, client certificates and keys, a Nodes adapter path that decommissions nodes).
 - **Rules:**
+  - R-REG: area Peer (`nodes_decommission` goes in area `Nodes`).
   - D-ML52 scope: a peer uses only identities enrolled by `nodes_enroll_probe` in this run (their `key_ref`/`cert_ref` in the vault) and connects only to `127.0.0.1:25000`, `127.0.0.1:25443` or `127.0.0.1:15040`. `PeerTargetGuard.Check(Uri)` refuses any other host or port with `[Lab.BlastRadius]` before a socket opens; the peer never takes a URL from a tool argument.
   - `nodes_decommission` accepts only a node id that this lease enrolled (the lease's enrolled-node set, filled by `nodes_enroll_probe`); any other id is `[Lab.BlastRadius]`.
   - R-ZERO: private key bytes, PKCS#12 exports and their passwords are zeroed with `CryptographicOperations.ZeroMemory` after the `X509Certificate2` is built; certificates are disposed (`using`).
@@ -3291,7 +3379,7 @@ Then, with the daemon and the lease, one full `envelope_run nodes-postgres-outag
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L13"   # Docker running; green at the end
 git -C <W> status --porcelain   # only tools/lab/, src/Tools/ and tests/Dhadgar.Lab.Tests/ paths
 ```
@@ -3305,6 +3393,7 @@ Then, with the daemon and the lease, `mutation_run {mutants = ["M6-renew-no-supe
 - **Branch / worktree / commit:** `ml/l59-continuity` / `meridian-lab-l59` / `test(lab): synthetic game and gameplay continuity rows`
 - **Depends on:** L43, L33. **Security review:** yes (runs a process under the agent's process manager and wrapper in members).
 - **Rules:**
+  - R-REG: area Agents.
   - Lab isolation: `src/Tools/Dhadgar.Lab.SyntheticGame` is a console project referenced by nothing; add it to the lab project set in `LabIsolationTests` and to the solution's `Tools` folder. It binds `127.0.0.1` only.
   - R-PATH: `--state` must be under `C:\lab\game\` inside the member; the program refuses anything else.
   - R-ARGS / R-USING: the probe starts nothing; the agent starts the game. The probe's `game-tick` only connects and reads.
@@ -3331,7 +3420,7 @@ Then, with the daemon and the lease, `mutation_run {mutants = ["M6-renew-no-supe
 dotnet build <W>\src\Tools\Dhadgar.Lab.SyntheticGame\Dhadgar.Lab.SyntheticGame.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet build <W>\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 Then one `uat_run continuity.toml` in a Windows member; grades and `observed` in the report and the worknote.
@@ -3343,6 +3432,7 @@ Then one `uat_run continuity.toml` in a Windows member; grades and `observed` in
 - **Branch / worktree / commit:** `ml/l60-versions` / `meridian-lab-l60` / `feat(lab): baseline builds and mixed-version runs`
 - **Depends on:** L54, L43. **Security review:** yes (`git` processes, builds from archived trees).
 - **Rules:**
+  - R-REG: area Versions.
   - Reuse L54's `MutantBuilder` archive path with no patch (`ArchiveBuilder` extracted from it if the coder needs to; the mutant path keeps its tests green). `git -C <RepoRoot> archive --format=tar <commit>`; the commit must be a full 40-hex SHA from `tools/lab/baselines.toml` and `git -C <RepoRoot> cat-file -e <commit>^{commit}` must succeed, else `[Lab.InvalidArgument] unknown baseline commit`.
   - R-ARGS, R-PATH (only `LabPaths.Builds\baseline-<name>-<build8>\`; tar entries checked as in L54), R-USING, R-DOCKER (baseline images labelled `meridian-lab-baseline=<name>`; `version_run` always restores head builds in `finally`).
   - A baseline build uses the archived tree's own `Directory.Packages.props` and lock files (locked RID-less restore, then `--no-restore`, D-S241); it never mixes head packages into an old tree.
@@ -3366,7 +3456,7 @@ Then one `uat_run continuity.toml` in a Windows member; grades and `observed` in
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L14"   # Docker running; green at the end
 ```
 
@@ -3377,6 +3467,7 @@ $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Te
 - **Branch / worktree / commit:** `ml/l61-time` / `meridian-lab-l61` / `test(lab): resurrection, interrupted migration and rollback rows`
 - **Depends on:** L60, L58. **Security review:** yes (decommissions lab nodes; kills Nodes during migration).
 - **Rules:**
+  - R-REG: area Versions.
   - Only TOML and catalog changes plus the `seed-node` helper rows; no new tool. If a row needs a tool C4 does not have, stop and report (the orchestrator asks for a ruling).
   - The lab's Nodes runs with `ASPNETCORE_ENVIRONMENT=Development` (L09), so `AutoMigrateDatabaseAsync` applies migrations at start and logs `Applying migrations for NodesDbContext...` (`DatabaseMigrationExtensions.cs:39`); `kill_on_log` matches that line.
   - Assumption to verify in the packet: the `pre-sprint2` Nodes starts with the head `NodesLabAdapter` environment. If it does not, the rows that need it are SKIPPED with reason `baseline config: <key>` and the report names the key.
@@ -3408,6 +3499,7 @@ Then, with the daemon and the lease, `version_run` for `interrupted-migration` a
 - **Branch / worktree / commit:** `ml/l62-guided` / `meridian-lab-l62` / `feat(lab): coverage-guided choices for the hunter and chaos, behind an a/b`
 - **Depends on:** L52, L29, L27. **Security review:** yes (changes which faults the chaos scheduler picks).
 - **Rules:**
+  - R-REG: area Guided.
   - D-ML57: guided ships with `tools/lab/guided.toml` `enabled = false`; `mode = "guided"` is refused with `[Lab.InvalidArgument] guided mode disabled` while it is false, except inside `guided_ab_run`. `random_share` is clamped to 0.3..1.0; the chooser draws "random" first, with `LabRandom`, so the share is honoured exactly per draw.
   - R-BLAST: guided changes only which choice is made from the plan's allowed set; it never adds a fault, target or duration the plan does not allow.
   - R-SEED: guided draws use the stream `guided:<job>`; the A/B uses paired seeds `seed + i` in both arms.
@@ -3432,7 +3524,7 @@ Then, with the daemon and the lease, `version_run` for `interrupted-migration` a
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam!=S-L3&RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
 ```
 
 Then, with the daemon and the lease, one `guided_ab_run {job = "hunt_model_run", args = {model = "enrollment", iterations = 25}, runs = 100}`; record it in the worknote; flip `enabled` in a separate commit only on a strict win.
