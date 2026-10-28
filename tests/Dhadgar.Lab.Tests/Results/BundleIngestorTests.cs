@@ -109,7 +109,7 @@ public sealed class BundleIngestorTests : IDisposable
         string folder = BundleFixtures.Write(_uatRuns, "run-e", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
         using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
         var later = new RecordingObserver();
-        BundleIngestor ingestor = new(db, _validator, KnownIssues.Empty, text => text,
+        BundleIngestor ingestor = new(db, _validator, KnownIssueCheck.Of(KnownIssues.Empty, "test"), text => text,
             [new ThrowingObserver(), later], NullLogger<BundleIngestor>.Instance);
 
         Result<IngestResult> result = await ingestor.IngestAsync(folder, [_uatRuns], CancellationToken.None);
@@ -120,7 +120,7 @@ public sealed class BundleIngestorTests : IDisposable
     }
 
     private static BundleIngestor NewIngestor(ResultsDb db) =>
-        new(db, new PathValidator(NullLogger<PathValidator>.Instance), KnownIssues.Empty, text => text, [],
+        new(db, new PathValidator(NullLogger<PathValidator>.Instance), KnownIssueCheck.Of(KnownIssues.Empty, "test"), text => text, [],
             NullLogger<BundleIngestor>.Instance);
 
     private sealed class ThrowingObserver : IIngestObserver

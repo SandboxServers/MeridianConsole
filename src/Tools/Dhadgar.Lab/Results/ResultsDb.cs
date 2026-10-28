@@ -456,6 +456,9 @@ public sealed class ResultsDb : IDisposable
 
         _disposed = true;
         _connection.Dispose();
+
+        // A disposed SqliteConnection returns to the pool and keeps the WAL file open; clearing its pool releases the file.
+        SqliteConnection.ClearPool(_connection);
     }
 }
 

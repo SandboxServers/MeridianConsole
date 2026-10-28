@@ -40,7 +40,7 @@ public sealed class FlakeOnIngestTests : IDisposable
     public async Task Ingest_SameBuildAndSeedGradedDifferently_RecordsOneFlake()
     {
         using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
-        BundleIngestor ingestor = new(db, _validator, KnownIssues.Empty, text => text, [], NullLogger<BundleIngestor>.Instance);
+        BundleIngestor ingestor = new(db, _validator, KnownIssueCheck.Of(KnownIssues.Empty, "test"), text => text, [], NullLogger<BundleIngestor>.Instance);
         string passed = BundleFixtures.Write(_uatRuns, "run-pass", "b1", 7, new RowSpec("nodes", "enroll", "PASS"));
         string failed = BundleFixtures.Write(_uatRuns, "run-fail", "b1", 7, new RowSpec("nodes", "enroll", "FAIL", ClauseState: "NotHeld"));
 
@@ -55,7 +55,7 @@ public sealed class FlakeOnIngestTests : IDisposable
     public async Task Ingest_SameBuildAndSeedSameGrade_RecordsNoFlake()
     {
         using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
-        BundleIngestor ingestor = new(db, _validator, KnownIssues.Empty, text => text, [], NullLogger<BundleIngestor>.Instance);
+        BundleIngestor ingestor = new(db, _validator, KnownIssueCheck.Of(KnownIssues.Empty, "test"), text => text, [], NullLogger<BundleIngestor>.Instance);
         string first = BundleFixtures.Write(_uatRuns, "run-1", "b1", 7, new RowSpec("nodes", "enroll", "PASS"));
         string second = BundleFixtures.Write(_uatRuns, "run-2", "b1", 7, new RowSpec("nodes", "enroll", "PASS"));
 
@@ -69,7 +69,7 @@ public sealed class FlakeOnIngestTests : IDisposable
     public async Task Ingest_GradeChangeAcrossBuilds_IsNotAFlake()
     {
         using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
-        BundleIngestor ingestor = new(db, _validator, KnownIssues.Empty, text => text, [], NullLogger<BundleIngestor>.Instance);
+        BundleIngestor ingestor = new(db, _validator, KnownIssueCheck.Of(KnownIssues.Empty, "test"), text => text, [], NullLogger<BundleIngestor>.Instance);
         string older = BundleFixtures.Write(_uatRuns, "run-old", "b1", 7, new RowSpec("nodes", "enroll", "PASS"));
         string newer = BundleFixtures.Write(_uatRuns, "run-new", "b2", 7, new RowSpec("nodes", "enroll", "FAIL", ClauseState: "NotHeld"));
 

@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Dhadgar.Lab.Results;
 
 /// <summary>What one ingest wrote: the run id, its overall, and the number of rows and signatures of the run.</summary>
-public sealed record IngestResult(string RunId, string Overall, int Rows, int Signatures);
+public sealed record IngestResult(string RunId, string Overall, int Rows, int Signatures, KnownIssueCheck KnownIssues);
 
 /// <summary>
 /// Reads one evidence bundle (C9) and writes it to the results index (C12). Ingest is an upsert by <c>run_id</c> (A2): a second
@@ -27,7 +27,7 @@ public sealed class BundleIngestor
 
     private readonly ResultsDb _db;
     private readonly IPathValidator _validator;
-    private readonly KnownIssues _known;
+    private readonly KnownIssueCheck _known;
     private readonly Func<string, string> _scrub;
     private readonly IReadOnlyList<IIngestObserver> _observers;
     private readonly ILogger<BundleIngestor> _logger;
@@ -38,12 +38,12 @@ public sealed class BundleIngestor
     /// </summary>
     /// <param name="db">The results database.</param>
     /// <param name="validator">Validates every path the ingest reads.</param>
-    /// <param name="known">The shipped known-issue file, matched against every failing row.</param>
+    /// <param name="known">The known-issue load outcome; its issues are matched against every failing row, and an unchecked outcome matches none.</param>
     /// <param name="scrub">Redacts a bundle text before it is stored (the bundle's <c>Redactor.Redact</c>).</param>
     /// <param name="observers">The observers called after each successful ingest, in order.</param>
     /// <param name="logger">The logger for observer failures; names and type names only.</param>
     /// <param name="time">The clock for flake detection times.</param>
-    public BundleIngestor(ResultsDb db, IPathValidator validator, KnownIssues known, Func<string, string> scrub,
+    public BundleIngestor(ResultsDb db, IPathValidator validator, KnownIssueCheck known, Func<string, string> scrub,
         IEnumerable<IIngestObserver> observers, ILogger<BundleIngestor>? logger = null, TimeProvider? time = null)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
@@ -64,6 +64,21 @@ public sealed class BundleIngestor
     /// <param name="allowedRoots">The roots a bundle may be read from.</param>
     /// <param name="ct">The cancellation token.</param>
     public async Task<Result<IngestResult>> IngestAsync(string bundleFolder, IReadOnlyList<string> allowedRoots, CancellationToken ct)
+    {
+        Result<IngestResult> written = await WriteAsync(bundleFolder, allowedRoots, ct).ConfigureAwait(false);
+        if (written.IsSuccess)
+        {
+            await NotifyAsync(written.Value.RunId, ct).ConfigureAwait(false);
+        }
+
+        return written;
+    }
+
+    /// <summary>
+    /// Writes the bundle folder <paramref name="bundleFolder"/> to the index without notifying observers. Returns a failure,
+    /// never throws. <see cref="ResultsService"/> calls this under its gate and <see cref="NotifyAsync"/> after the gate is released.
+    /// </summary>
+    internal async Task<Result<IngestResult>> WriteAsync(string bundleFolder, IReadOnlyList<string> allowedRoots, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(allowedRoots);
         if (string.IsNullOrWhiteSpace(bundleFolder))
@@ -89,14 +104,11 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure(run.Error);
         }
 
-        Result<IngestResult> ingested = await IngestRunAsync(folder.Value, run.Value, ct).ConfigureAwait(false);
-        if (ingested.IsSuccess)
-        {
-            await NotifyObserversAsync(ingested.Value.RunId, ct).ConfigureAwait(false);
-        }
-
-        return ingested;
+        return await IngestRunAsync(folder.Value, run.Value, ct).ConfigureAwait(false);
     }
+
+    /// <summary>Calls the observers for one written run (A3). Never fails; an observer failure is logged by type name.</summary>
+    internal Task NotifyAsync(string runId, CancellationToken ct) => NotifyObserversAsync(runId, ct);
 
     private async Task<Result<IngestResult>> IngestRunAsync(string folder, JsonObject run, CancellationToken ct)
     {
@@ -146,7 +158,7 @@ public sealed class BundleIngestor
                 FailureSignature? primary = SignatureBuilder.Primary(evidence) is { } first ? Scrubbed(first) : null;
                 primaryId = primary is null ? null : SignatureBuilder.SignatureId(primary.Text);
 
-                KnownMatch match = _known.Match(new RowFailure(row.Section, row.RowId, row.KnownIssue, scrubbed));
+                KnownMatch match = _known.Issues.Match(new RowFailure(row.Section, row.RowId, row.KnownIssue, scrubbed));
                 matches[row.Section + "/" + row.RowId] = match;
                 knownMatch = match.State switch
                 {
@@ -187,7 +199,7 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure(flakes.Error);
         }
 
-        return Result<IngestResult>.Success(new IngestResult(runId, overall, rowRecords.Count, signatureRecords.Count));
+        return Result<IngestResult>.Success(new IngestResult(runId, overall, rowRecords.Count, signatureRecords.Count, _known));
     }
 
     private Result WriteRun(string runId, JsonObject run, string folder, string overall, List<RowRecord> rowRecords,
