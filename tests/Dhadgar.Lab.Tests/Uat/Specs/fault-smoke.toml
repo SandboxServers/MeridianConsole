@@ -1,7 +1,11 @@
 schema = 1
 
-# Fault smoke (L22). One row: Postgres for Nodes is cut, Nodes /readyz is not 200 while it is cut, and Nodes recovers after the heal.
-# No enroll-route calls.
+# Fault smoke (L22, D-ML83). One row: Postgres for Nodes is cut after a token is minted. An enroll on the Nodes direct port
+# fails with a 5xx while it is cut, and the same token enrolls with 201 after the heal; Nodes /readyz is 200 after the heal.
+# No readiness claim during the cut: Nodes /readyz has no Postgres check (F67, D-ML71). When D-ML71 lands, add a readyz-down
+# clause and narrow allow_invariants.
+# I1 is allowed on this row only: the cut enroll is a 500 that GlobalExceptionHandler logs as "Unhandled exception" (F67).
+# Enroll-route calls: 2, both on the Nodes direct port, which has no rate limiter (F54).
 
 [section]
 id = "fault-smoke"
@@ -12,14 +16,15 @@ allow_invariants = []
 
 [[row]]
 id = "pg-down"
-title = "Nodes is not ready while its Postgres is cut and recovers after the heal"
-expected = "readyz is not 200 during the fault and 200 after the heal"
+title = "Cutting Nodes' Postgres fails the Nodes DB path, and the heal restores it"
+expected = "A direct enroll returns a 5xx while Postgres is cut; after the heal the same token returns 201 and /readyz returns 200"
+allow_invariants = ["I1"]
 
   [[row.fault]]
   id = "pg"
   inject = { tool = "fault_proxy_disable", args = { proxy = "nodes-postgres" } }
-  start = "after_step:start"
-  heal = "after_steps"
+  start = "after_step:mint"
+  heal = "after_step:enroll-down"
 
   [[row.step]]
   id = "up"
@@ -32,18 +37,57 @@ expected = "readyz is not 200 during the fault and 200 after the heal"
   args = { service = "nodes" }
 
   [[row.step]]
-  id = "probe"
-  tool = "http_request"
-  args = { via = "nodes", method = "GET", path = "/readyz" }
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "fault-smoke-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "settle-down"
+  wait_ms = 5000
+
+  [[row.step]]
+  id = "enroll-down"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "nodes" }
+
+  [[row.step]]
+  id = "settle-up"
+  wait_ms = 10000
+
+  [[row.step]]
+  id = "enroll-after"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "nodes" }
 
   [[row.expect]]
-  id = "readyz-down"
-  text = "Nodes GET /readyz is not 200 while Postgres is cut"
+  id = "db-path-down-5xx"
+  text = "the direct enroll while Postgres is cut returns a status of at least 500"
   source = "step"
-  step = "probe"
+  step = "enroll-down"
   pointer = "/result/status"
-  op = "ne"
-  value = 200
+  op = "gte"
+  value = 500
+  required = true
+
+  [[row.expect]]
+  id = "db-path-down-below-600"
+  text = "the direct enroll while Postgres is cut returns a status below 600"
+  source = "step"
+  step = "enroll-down"
+  pointer = "/result/status"
+  op = "lt"
+  value = 600
+  required = true
+
+  [[row.expect]]
+  id = "db-path-recovered-201"
+  text = "the same token enrolls with 201 on the direct port after the heal"
+  source = "step"
+  step = "enroll-after"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
   required = true
 
   [[row.expect]]

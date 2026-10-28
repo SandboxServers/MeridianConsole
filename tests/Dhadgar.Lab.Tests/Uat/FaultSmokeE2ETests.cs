@@ -9,9 +9,10 @@ using ModelContextProtocol.Protocol;
 namespace Dhadgar.Lab.Tests.Uat;
 
 /// <summary>
-/// L22 seam: the daemon runs in process; <c>Specs/fault-smoke.toml</c> cuts Nodes' Postgres through <c>fault_proxy_disable</c> and checks
-/// that Nodes <c>/readyz</c> is not 200 during the fault and recovers after the heal. Needs the Linux Docker engine. Containers are
-/// removed by label and name prefix only.
+/// L22 seam (D-ML83): the daemon runs in process; <c>Specs/fault-smoke.toml</c> mints a token, cuts Nodes' Postgres through
+/// <c>fault_proxy_disable</c>, and checks that a direct-port enroll answers 5xx during the cut and 201 after the heal. Nodes
+/// <c>/readyz</c> has no Postgres check (F67), so readiness is checked only after the heal. Needs the Linux Docker engine.
+/// Containers are removed by label and name prefix only.
 /// </summary>
 [Collection("LabHome")]
 public sealed class FaultSmokeE2ETests
@@ -22,7 +23,7 @@ public sealed class FaultSmokeE2ETests
     [Trait("Seam", "S-L6")]
     [Trait("RequiresDocker", "true")]
     [Trait("RequiresNetwork", "true")]
-    public async Task FaultSmoke_PostgresCut_ReadyzFailsThenRecovers()
+    public async Task FaultSmoke_PostgresCut_DbPathFailsThenRecovers()
     {
         string context = Environment.GetEnvironmentVariable("Lab__Docker__LinuxContext") is { Length: > 0 } configured
             ? configured
