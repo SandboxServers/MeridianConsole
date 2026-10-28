@@ -195,7 +195,7 @@ public sealed class AgentHubCertificateExpiryTests
         HubCallerContext context)
     {
         var options = Options.Create(new MtlsOptions { AllowExpiredCertificates = allowExpired });
-        return new AgentHub(heartbeats, db, options, time, NullLogger<AgentHub>.Instance)
+        return new AgentHub(heartbeats, db, options, time, NullLogger<AgentHub>.Instance, new AgentConnectionRegistry())
         {
             Context = context,
         };

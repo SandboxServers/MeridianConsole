@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
@@ -106,6 +107,10 @@ public sealed class AgentHubTests : IDisposable
         var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
         using var cert = store.GetClientCertificate()!;
 
+        // Connected first: a node decommissioned before connecting is refused at connect (VS-08R).
+        await using var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
@@ -113,9 +118,6 @@ public sealed class AgentHubTests : IDisposable
             node.Status = NodeStatus.Decommissioned;
             await db.SaveChangesAsync();
         }
-
-        await using var connection = CreateHubConnection(factory, cert);
-        await connection.StartAsync();
 
         var ack = await connection.InvokeAsync<AgentHeartbeatAck>(
             nameof(IAgentHub.Heartbeat),
@@ -298,6 +300,247 @@ public sealed class AgentHubTests : IDisposable
     public void AgentHub_ImplementsContractInterface()
     {
         Assert.True(typeof(IAgentHub).IsAssignableFrom(typeof(AgentHub)));
+    }
+
+    [Fact]
+    public async Task Connect_ForDecommissionedNode_IsClosedByNodes()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            var node = await db.Nodes.SingleAsync(n => n.Id == enrolled.NodeId);
+            node.Status = NodeStatus.Decommissioned;
+            await db.SaveChangesAsync();
+        }
+
+        await using var connection = CreateHubConnection(factory, cert);
+        var closed = WatchForClose(connection);
+        await TryStartAsync(connection);
+
+        await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(factory.Services.GetRequiredService<IAgentConnectionRegistry>().IsConnected(enrolled.NodeId));
+    }
+
+    [Fact]
+    public async Task Connect_ForUnknownNode_IsClosedByNodes()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            db.AgentCertificates.RemoveRange(await db.AgentCertificates.Where(c => c.NodeId == enrolled.NodeId).ToListAsync());
+            db.NodeHealths.RemoveRange(await db.NodeHealths.Where(h => h.NodeId == enrolled.NodeId).ToListAsync());
+            db.Nodes.RemoveRange(await db.Nodes.IgnoreQueryFilters().Where(n => n.Id == enrolled.NodeId).ToListAsync());
+            await db.SaveChangesAsync();
+        }
+
+        await using var connection = CreateHubConnection(factory, cert);
+        var closed = WatchForClose(connection);
+        await TryStartAsync(connection);
+
+        await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(factory.Services.GetRequiredService<IAgentConnectionRegistry>().IsConnected(enrolled.NodeId));
+    }
+
+    [Fact]
+    public async Task OpenConnection_IsRegistered_UntilDisposed()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+        var registry = factory.Services.GetRequiredService<IAgentConnectionRegistry>();
+
+        var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+        await WaitUntilAsync(() => registry.IsConnected(enrolled.NodeId), TimeSpan.FromSeconds(5));
+        Assert.True(registry.IsConnected(enrolled.NodeId));
+
+        await connection.DisposeAsync();
+        await WaitUntilAsync(() => !registry.IsConnected(enrolled.NodeId), TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Telemetry_Valid_IsAccepted()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (_, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        await using var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+
+        var ack = await connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), new Dictionary<string, double> { ["cpu"] = 1 }));
+
+        Assert.True(ack.Accepted);
+    }
+
+    [Fact]
+    public async Task Telemetry_With501Metrics_IsRejectedAsInvalidTelemetry()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (_, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        await using var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+
+        var ack = await connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), Metrics(501, i => $"m{i}")));
+
+        Assert.False(ack.Accepted);
+        Assert.Equal(AgentHubErrorCodes.InvalidTelemetry, ack.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Telemetry_WithUnknownMember_IsAccepted()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (_, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+        var now = _baseFactory.TimeProvider.GetUtcNow();
+
+        await using var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+
+        // Positive twin of Telemetry_WithoutMetrics_IsRejected: the only difference is the unknown member.
+        var ack = await connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new { timestamp = now, metrics = new Dictionary<string, double> { ["cpu"] = 1 }, extra = "x" });
+
+        Assert.True(ack.Accepted);
+    }
+
+    [Fact]
+    public async Task Telemetry_WithoutMetrics_IsRejected()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (_, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+        var now = _baseFactory.TimeProvider.GetUtcNow();
+
+        await using var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+
+        var ack = await connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new { timestamp = now, extra = "x" });
+
+        Assert.False(ack.Accepted);
+        Assert.Equal(AgentHubErrorCodes.InvalidTelemetry, ack.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Telemetry_AtEscapedWorstCase_IsAccepted_AndConnectionStaysOpen()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (_, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        await using var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+
+        // 80,000 control chars in an unknown member: each escapes to \u0001 (6 bytes), about 469 KiB on the wire.
+        // That is over main's 64 KiB limit and under the 512 KiB limit, so the ack proves the limit was raised.
+        var ack = await connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new { timestamp = _baseFactory.TimeProvider.GetUtcNow(), metrics = new Dictionary<string, double> { ["cpu"] = 1 }, extra = new string('\u0001', 80_000) });
+
+        Assert.True(ack.Accepted);
+        Assert.Equal(HubConnectionState.Connected, connection.State);
+    }
+
+    [Fact]
+    public async Task Frame_OverLimit_ClosesConnection()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true);
+        var (_, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        await using var connection = CreateHubConnection(factory, cert);
+        var closed = WatchForClose(connection);
+        await connection.StartAsync();
+
+        // 100,000 control chars in an unknown member: about 586 KiB on the wire, over the 512 KiB frame limit.
+        // No ack may arrive; an invalid_telemetry ack would mean the frame reached the validator.
+        var invoke = connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new { timestamp = _baseFactory.TimeProvider.GetUtcNow(), metrics = new Dictionary<string, double> { ["cpu"] = 1 }, extra = new string('\u0001', 100_000) });
+
+        // Long polling reports the refused frame as a failed invoke; the server-side close is not surfaced to Closed.
+        await Task.WhenAny(invoke, closed.Task).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(invoke.IsCompletedSuccessfully, "an ack arrived for an over-limit frame");
+    }
+
+    [Fact]
+    public async Task Connect_WithValidatedScopes_RegistersAndAcknowledges()
+    {
+        using var factory = CreateFactoryWithRealCa(_baseFactory, _caDirectory, enableMtls: true, validateScopes: true);
+        var (enrolled, store) = await EnrollAgentAsync(factory, Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        await using var connection = CreateHubConnection(factory, cert);
+        await connection.StartAsync();
+
+        var ack = await connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), new Dictionary<string, double> { ["cpu"] = 1 }));
+
+        Assert.True(ack.Accepted);
+        Assert.True(factory.Services.GetRequiredService<IAgentConnectionRegistry>().IsConnected(enrolled.NodeId));
+    }
+
+    private static Dictionary<string, double> Metrics(int count, Func<int, string> nameFor)
+    {
+        var metrics = new Dictionary<string, double>(count);
+        for (var i = 0; i < count; i++)
+        {
+            metrics[nameFor(i)] = 1;
+        }
+
+        return metrics;
+    }
+
+    private static TaskCompletionSource WatchForClose(HubConnection connection)
+    {
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+        return closed;
+    }
+
+    /// <summary>StartAsync may throw when the server closes during negotiation; the Closed event is the assertion.</summary>
+    private static async Task TryStartAsync(HubConnection connection)
+    {
+        try
+        {
+            await connection.StartAsync();
+        }
+        catch (Exception)
+        {
+            // Refused during connect; the caller asserts on the Closed event.
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
     }
 
     private static HubConnection CreateHubConnection(
