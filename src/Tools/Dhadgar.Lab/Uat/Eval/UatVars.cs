@@ -21,6 +21,9 @@ public sealed class UatVars
 
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
 
+    /// <summary>The run id these variables belong to (the <c>uat:&lt;runId&gt;</c> caller of tool calls).</summary>
+    public string RunId => _values["run_id"];
+
     /// <summary>
     /// Creates the built-in variables for one row. <paramref name="member"/> is defined only for sections with <c>requires_pool</c>.
     /// </summary>
