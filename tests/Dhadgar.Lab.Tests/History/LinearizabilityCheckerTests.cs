@@ -105,6 +105,25 @@ public sealed class LinearizabilityCheckerTests
         Assert.Contains("budget exceeded", result.Reason ?? string.Empty);
     }
 
+    [Fact]
+    public void Minimise_SixOps_ReducesToTwo()
+    {
+        var observations = new List<LabObservation>();
+        for (var i = 1; i <= 6; i++)
+        {
+            observations.Add(Invoke(2L * i - 1, $"op-{i}"));
+            observations.Add(Complete(2L * i, $"op-{i}", OpOutcome.Ok));
+        }
+
+        var history = Build(observations);
+        var model = new TakeOnceModel();
+
+        var minimal = LinearizabilityChecker.Minimise(history, model, TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, minimal.Ops.Count);
+        Assert.Equal(LinearizabilityChecker.Violation, LinearizabilityChecker.Check(minimal, model, TimeSpan.FromSeconds(5)).Verdict);
+    }
+
     private static LabObservation Invoke(long seq, string opId) =>
         new(seq, "run-1", DateTimeOffset.UnixEpoch, "actor-a", opId, ObservationKind.Invoke,
             "enroll", default, null, default, null);

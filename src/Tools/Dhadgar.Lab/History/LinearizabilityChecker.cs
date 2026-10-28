@@ -41,6 +41,19 @@ public static class LinearizabilityChecker
         return CheckWithDeadline(history, model, DeadlineAfter(budget));
     }
 
+    /// <summary>
+    /// Minimises a failing history (delta debugging over the Ok/Fail ops; Unknown ops are kept) within
+    /// <paramref name="budget"/>. Returns the smallest failing history found, or <paramref name="failing"/> when it
+    /// does not check as a violation.
+    /// </summary>
+    public static History Minimise<TState>(History failing, IHistoryModel<TState> model, TimeSpan budget)
+        where TState : IEquatable<TState>
+    {
+        ArgumentNullException.ThrowIfNull(failing);
+        ArgumentNullException.ThrowIfNull(model);
+        return Minimiser.Minimise(failing, model, DeadlineAfter(budget));
+    }
+
     internal static long DeadlineAfter(TimeSpan budget) =>
         Stopwatch.GetTimestamp() + (long)(Math.Max(0, budget.TotalSeconds) * Stopwatch.Frequency);
 
