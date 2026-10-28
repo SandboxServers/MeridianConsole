@@ -106,6 +106,36 @@ public sealed class BlastRadiusTests
     }
 
     [Fact]
+    public async Task CorruptFile_NodesNotRegistered_IsRefusedAndNoFileIsTouched()
+    {
+        string root = NewRoot();
+        try
+        {
+            await using LabDaemon daemon = await StartDaemonAsync(root);
+            LabPaths paths = daemon.Services.GetRequiredService<LabPaths>();
+            string caKey = Path.Combine(paths.State, "nodes-ca", "ca.key");
+            Directory.CreateDirectory(Path.GetDirectoryName(caKey)!);
+            byte[] original = "lab-test-ca-key"u8.ToArray();
+            await File.WriteAllBytesAsync(caKey, original);
+            ILabTool tool = daemon.Services.GetServices<ILabTool>().Single(t => t.Name == "fault_corrupt_file");
+
+            Result<JsonElement> result = await tool.InvokeAsync(
+                JsonSerializer.SerializeToElement(new { file = "nodes-ca-key", mode = "truncate" }),
+                Context,
+                CancellationToken.None);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("[Lab.BlastRadius] target is not registered", result.Error);
+            Assert.Equal(original, await File.ReadAllBytesAsync(caKey));
+            Assert.True(!Directory.Exists(paths.FaultBackups) || Directory.GetFileSystemEntries(paths.FaultBackups).Length == 0);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
     public async Task FaultsActive_OnAFreshDaemon_IsEmpty()
     {
         string root = NewRoot();

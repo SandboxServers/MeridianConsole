@@ -36,7 +36,7 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
             [LabTargetKind.Container] = new HashSet<string>(StringComparer.Ordinal) { "kill", "pause", "disk_fill", "corrupt_file", "corrupt_registry" },
             [LabTargetKind.Proxy] = new HashSet<string>(StringComparer.Ordinal) { "toxic", "proxy_disable", "partition", "reset" },
             [LabTargetKind.Database] = new HashSet<string>(StringComparer.Ordinal) { "db" },
-            [LabTargetKind.File] = new HashSet<string>(StringComparer.Ordinal) { "corrupt_file" },
+            [LabTargetKind.File] = new HashSet<string>(StringComparer.Ordinal), // no fault kind targets a file id; corrupt_file goes through c:nodes (review N8)
             [LabTargetKind.Member] = new HashSet<string>(StringComparer.Ordinal),
         };
 

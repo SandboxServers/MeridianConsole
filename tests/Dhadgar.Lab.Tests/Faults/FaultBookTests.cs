@@ -147,22 +147,58 @@ public sealed class FaultBookTests : IDisposable
     }
 
     [Fact]
-    public async Task FaultBook_CrashAfterInjectBeforeActive_RecoveryHeals()
+    public async Task FaultBook_ActiveWriteFails_HealsNowAndReturnsFailure()
     {
         using var book = Book(new ThrowOnActiveJournal(_journal));
 
         var begun = await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None);
 
         Assert.True(begun.IsFailure);
-        Assert.Single(_kind.Injected);
+        Assert.Equal(1, _kind.HealCalls);
+        Assert.Empty(_kind.Injected);
+        Assert.Empty(book.ListActive());
+        Assert.Empty((await _journal.ReadAsync(CancellationToken.None)).Value);
+    }
 
-        // A new book on the same state folder: recovery heals the entry that the journal still holds as Prepared.
-        using var restarted = Book();
-        await restarted.StartAsync(CancellationToken.None);
+    [Fact]
+    public async Task FaultBook_PreparedEntryWithLiveFault_RecoveryHeals()
+    {
+        // A crash after inject but before the Active write leaves a Prepared entry and a live fault on the target.
+        await _journal.WriteAsync([Entry("f-live", FaultState.Prepared)], CancellationToken.None);
+        _kind.Injected.Add("f-live");
+        using var book = Book();
+
+        await book.StartAsync(CancellationToken.None);
 
         Assert.Empty(_kind.Injected);
-        Assert.Empty(restarted.ListActive());
-        await restarted.StopAsync(CancellationToken.None);
+        Assert.Equal("f-live", Assert.Single(_kind.Healed));
+        Assert.Empty((await _journal.ReadAsync(CancellationToken.None)).Value);
+        await book.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task FaultBook_HealFailed_RetriedOnlyAfterTheRetryInterval()
+    {
+        using var book = Book();
+        await book.StartAsync(CancellationToken.None);
+        Assert.True((await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None)).IsSuccess);
+        _kind.HealError = "[Lab.FaultKind] still paused";
+
+        _time.Advance(TimeSpan.FromSeconds(121));
+        await WaitUntilAsync(() => _kind.HealCalls == 2);
+
+        // The failed heal waits 60 s before the sweeper tries again.
+        for (int i = 0; i < 5; i++)
+        {
+            _time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(50);
+        }
+
+        Assert.Equal(2, _kind.HealCalls);
+
+        _time.Advance(TimeSpan.FromSeconds(60));
+        await WaitUntilAsync(() => _kind.HealCalls >= 4);
+        await book.StopAsync(CancellationToken.None);
     }
 
     [Fact]

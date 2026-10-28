@@ -210,6 +210,29 @@ public sealed class CorruptFileFaultTests : IDisposable
     }
 
     [Fact]
+    public async Task ReconcileAsync_RestoreFails_KeepsTheBackup_ThenRetrySucceeds()
+    {
+        var fault = Fault();
+        var heal = await PrepareAsync(fault, "f9", "truncate");
+        await fault.InjectAsync(Target(), Args("truncate"), heal, "f9", CancellationToken.None);
+        WriteText(BackupOf("f9"), "tampered");
+
+        var failed = await Fault(new FakeJournal()).ReconcileAsync(CancellationToken.None);
+
+        Assert.True(failed.IsFailure);
+        Assert.StartsWith("[Lab.Integrity]", failed.Error, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(Path.Combine(_paths.FaultBackups, "f9")));
+
+        await File.WriteAllBytesAsync(BackupOf("f9"), Original);
+        var retried = await Fault(new FakeJournal()).ReconcileAsync(CancellationToken.None);
+
+        Assert.True(retried.IsSuccess, retried.Error);
+        Assert.Equal(1, retried.Value);
+        Assert.Equal(Original, ReadBytes(CaKey));
+        Assert.False(Directory.Exists(Path.Combine(_paths.FaultBackups, "f9")));
+    }
+
+    [Fact]
     public async Task ReconcileAsync_BackupOwnedByJournal_IsLeftAlone()
     {
         var fault = Fault();

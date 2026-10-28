@@ -48,6 +48,33 @@ public sealed class FaultTargetGuardTests
     }
 
     [Fact]
+    public async Task ResolveAsync_NodesRegisteredButUnlabelled_CorruptFileIsRefused()
+    {
+        var registry = Registry();
+        registry.Register("c:nodes", LabTargetKind.Container, "nodes", ContainerId);
+        var inspection = LabInspection() with { Name = "/meridian-lab-nodes", Labels = new Dictionary<string, string>() };
+        var guard = Guard(registry, Inspector(inspection), new PassingTripwire());
+
+        var result = await guard.ResolveAsync("c:nodes", "corrupt_file", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("not labelled", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_FileTarget_NoKindAllowed()
+    {
+        var registry = Registry();
+        registry.Register("f:nodes-ca-key", LabTargetKind.File, "nodes-ca-key", null);
+        var guard = Guard(registry, Inspector(), new PassingTripwire());
+
+        var result = await guard.ResolveAsync("f:nodes-ca-key", "corrupt_file", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("[Lab.BlastRadius] fault kind is not allowed on this target", result.Error);
+    }
+
+    [Fact]
     public async Task ResolveAsync_LabelledContainerNamedDhadgarGateway_IsRefusedByTripwireAlone()
     {
         var inspection = LabInspection();

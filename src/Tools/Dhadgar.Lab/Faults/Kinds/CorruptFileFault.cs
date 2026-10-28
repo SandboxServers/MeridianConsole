@@ -197,6 +197,7 @@ public sealed class CorruptFileFault(
         }
 
         int restored = 0;
+        string? firstError = null;
         foreach (string folder in Directory.EnumerateDirectories(_paths.FaultBackups))
         {
             string faultId = Path.GetFileName(folder);
@@ -211,12 +212,15 @@ public sealed class CorruptFileFault(
                 continue;
             }
 
+            bool allRestored = true;
             foreach (string hashFile in Directory.GetFiles(checkedFolder.Value, "*" + HashSuffix))
             {
                 string logical = Path.GetFileName(hashFile)[..^HashSuffix.Length];
                 Result<string> live = LivePath(logical);
                 if (live.IsFailure)
                 {
+                    allRestored = false;
+                    firstError ??= live.Error;
                     continue;
                 }
 
@@ -227,16 +231,22 @@ public sealed class CorruptFileFault(
                     restored++;
                     _logger.LogInformation("Reconcile restored an unowned corrupted file {File}", logical);
                 }
+                else
+                {
+                    allRestored = false;
+                    firstError ??= restore.Error;
+                }
             }
 
-            // The backup folder belongs to no journal entry, so it goes once its files are handled.
-            if (Directory.Exists(checkedFolder.Value))
+            // The backup folder belongs to no journal entry. It goes only when every file was restored;
+            // otherwise the backup stays for the next reconcile.
+            if (allRestored && Directory.Exists(checkedFolder.Value))
             {
                 Directory.Delete(checkedFolder.Value, recursive: true);
             }
         }
 
-        return Result<int>.Success(restored);
+        return firstError is null ? Result<int>.Success(restored) : Result<int>.Failure(firstError);
     }
 
     /// <summary>

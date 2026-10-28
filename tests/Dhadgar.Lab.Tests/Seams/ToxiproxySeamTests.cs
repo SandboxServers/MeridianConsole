@@ -90,13 +90,11 @@ public sealed class ToxiproxySeamTests
         using var http = new HttpClient(handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(10) };
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(20));
         CancellationToken ct = cts.Token;
-        bool stackUp = false;
 
         try
         {
             Result<StackStatusDto> up = await stack.UpAsync(wipe: true, ct);
             Assert.True(up.IsSuccess, up.IsFailure ? up.Error : string.Empty);
-            stackUp = true;
 
             Result<LabBuildDto> build = await LabBuilder.BuildAsync(
                 repoRoot,
@@ -230,10 +228,7 @@ public sealed class ToxiproxySeamTests
                 _ = await services.StopAsync(name, CancellationToken.None);
             }
 
-            if (stackUp)
-            {
-                _ = await stack.DownAsync(wipe: true, CancellationToken.None);
-            }
+            _ = await stack.DownAsync(wipe: true, CancellationToken.None);
 
             Directory.Delete(home, recursive: true);
         }

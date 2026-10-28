@@ -98,6 +98,9 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, 
     /// </summary>
     public static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(1);
 
+    /// <summary>A failed heal is retried by the sweeper after this long, not every sweep (review N5).</summary>
+    public static readonly TimeSpan HealFailedRetryInterval = TimeSpan.FromSeconds(60);
+
     private readonly FaultTargetGuard _guard;
     private readonly IFaultJournal _journal;
     private readonly Dictionary<string, IFaultKind> _kinds;
@@ -219,7 +222,8 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, 
             Result activated = await PersistAsync(ct).ConfigureAwait(false);
             if (activated.IsFailure)
             {
-                // The journal on disk still says Prepared, so recovery heals it; the sweeper heals it at the deadline.
+                // The target is faulted but the journal cannot say so: heal now rather than leave a live fault behind a failed result.
+                await HealLockedAsync(faultId, "journal_failed", ct).ConfigureAwait(false);
                 return Result<ActiveFault>.Failure(activated.Error);
             }
 
@@ -513,7 +517,7 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, 
             return Result.Success();
         }
 
-        Replace(current with { State = FaultState.HealFailed, HealError = outcome.Error });
+        Replace(current with { State = FaultState.HealFailed, HealError = outcome.Error, Deadline = now + HealFailedRetryInterval });
         AddHistory(new FaultHealRecord(faultId, current.Kind, current.TargetId, reason, now, false));
         await PersistBestEffortAsync(ct).ConfigureAwait(false);
         Observe(ObservationKind.FaultHeal, current, "heal_failed");
