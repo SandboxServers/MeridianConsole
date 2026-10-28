@@ -213,7 +213,12 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, 
             if (injected.IsFailure)
             {
                 // A partial inject is healed now; if that fails the entry stays journalled as HealFailed.
-                await HealLockedAsync(faultId, "inject_failed", ct).ConfigureAwait(false);
+                Result injectHeal = await HealLockedAsync(faultId, "inject_failed", ct).ConfigureAwait(false);
+                if (injectHeal.IsFailure)
+                {
+                    return Result<ActiveFault>.Failure($"{injected.Error}; heal also failed: {injectHeal.Error}");
+                }
+
                 return Result<ActiveFault>.Failure(injected.Error);
             }
 
@@ -223,7 +228,12 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, 
             if (activated.IsFailure)
             {
                 // The target is faulted but the journal cannot say so: heal now rather than leave a live fault behind a failed result.
-                await HealLockedAsync(faultId, "journal_failed", ct).ConfigureAwait(false);
+                Result journalHeal = await HealLockedAsync(faultId, "journal_failed", ct).ConfigureAwait(false);
+                if (journalHeal.IsFailure)
+                {
+                    return Result<ActiveFault>.Failure($"{activated.Error}; heal also failed: {journalHeal.Error}");
+                }
+
                 return Result<ActiveFault>.Failure(activated.Error);
             }
 

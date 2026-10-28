@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Random;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
@@ -323,11 +324,45 @@ public sealed class CorruptFileFault(
             return Result<string>.Failure("[Lab.InvalidArgument] unknown logical file");
         }
 
-        return _validator.ValidatePath(Path.Combine(_paths.State, "nodes-ca", name), [_paths.State]);
+        return LinkFreePath(Path.Combine(_paths.State, "nodes-ca", name), _paths.State);
     }
 
     private Result<string> BackupFolder(string faultId) =>
-        _validator.ValidatePath(Path.Combine(_paths.FaultBackups, faultId), [_paths.FaultBackups]);
+        LinkFreePath(Path.Combine(_paths.FaultBackups, faultId), _paths.FaultBackups);
+
+    /// <summary>
+    /// The lexical check of <see cref="IPathValidator"/> plus a refusal when the path or any folder between it and
+    /// <paramref name="root"/> is a symbolic link or junction. The validator does not resolve links (N5), so a link planted
+    /// at the CA key would otherwise redirect the truncate, the garbage write and the restore to another file.
+    /// </summary>
+    private Result<string> LinkFreePath(string candidate, string root)
+    {
+        Result<string> validated = _validator.ValidatePath(candidate, [root]);
+        if (validated.IsFailure)
+        {
+            return validated;
+        }
+
+        try
+        {
+            string top = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+            for (string? current = Path.GetFullPath(validated.Value!);
+                 current is not null && Path.TrimEndingDirectorySeparator(current).Length > top.Length;
+                 current = Path.GetDirectoryName(current))
+            {
+                if (LogPathGuard.IsLink(current))
+                {
+                    return Result<string>.Failure("[Lab.Path] the path crosses a symbolic link or junction");
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Result<string>.Failure("[Lab.Unavailable] the path could not be checked");
+        }
+
+        return validated;
+    }
 
     private static string? HashOf(string path)
     {

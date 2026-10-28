@@ -2,12 +2,14 @@ using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.History;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
+using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -304,6 +306,52 @@ public sealed class BundleSecretTests : IDisposable
         {
             Assert.DoesNotContain(planted, File.ReadAllText(file), StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void HistoryRun_WithSecretInAnOp_IsNotKept_AndRunJsonSaysFailed()
+    {
+        // "Password=<value>" is rewritten by the redactor to "Password=***", which the scanner still matches, so the scan removes
+        // history.json. run.json must not claim "passed" for that folder (N1).
+        const string planted = "Password=fixture-only-w3fb-n1";
+        JsonElement output = JsonSerializer.SerializeToElement(new { echo = planted });
+        var op = new HistoryOp("op-1", "actor-1", "key-1", "write", output, 1L, 2L, Dhadgar.Lab.Observe.OpOutcome.Ok, output);
+        var history = new global::Dhadgar.Lab.History.History("history-w3fb-n1", "scenario-w3fb", [op], output);
+        var bundle = new HistoryBundle("history-w3fb-n1", Start, "scenario-w3fb", 11UL, 1, 0, history, new CheckResult("linearizable", [], null), RowGrade.Pass);
+        BundleWriter writer = CreateWriter();
+
+        Result<string> written = writer.WriteHistoryRun(bundle);
+
+        Assert.True(written.IsFailure);
+        Assert.Contains("[Lab.Unavailable]", written.Error, StringComparison.Ordinal);
+        Assert.NotNull(writer.Folder);
+        string folder = writer.Folder!;
+        Assert.False(File.Exists(Path.Combine(folder, "history.json")));
+        foreach (string file in Directory.GetFiles(folder, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(planted, File.ReadAllText(file), StringComparison.Ordinal);
+        }
+
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "run.json")));
+        Assert.Equal("failed", run.RootElement.GetProperty("secret_scan").GetString());
+    }
+
+    [Fact]
+    public void HistoryRun_WriteFailsPartWay_MarksTheFolderFailed()
+    {
+        // A directory where check.json belongs makes the write fail after history.json is written (N1).
+        var history = new global::Dhadgar.Lab.History.History("history-w3fb-n1b", "scenario-w3fb", [], JsonSerializer.SerializeToElement(new { }));
+        var bundle = new HistoryBundle("history-w3fb-n1b", Start, "scenario-w3fb", 12UL, 1, 0, history, new CheckResult("linearizable", [], null), RowGrade.Pass);
+        BundleWriter writer = CreateWriter();
+        _ = Directory.CreateDirectory(Path.Combine(_uatRuns, "20261102-abcd1234-history-w3fb-n1b", "check.json"));
+
+        Result<string> written = writer.WriteHistoryRun(bundle);
+
+        Assert.True(written.IsFailure);
+        Assert.NotNull(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(writer.Folder!, "run.json")));
+        Assert.Equal("failed", run.RootElement.GetProperty("secret_scan").GetString());
     }
 
     public void Dispose()

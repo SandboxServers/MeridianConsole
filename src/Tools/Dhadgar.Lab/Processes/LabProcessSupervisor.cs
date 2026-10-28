@@ -43,7 +43,8 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
     private readonly object _gate = new();
 
     private static readonly Regex PemBegin = new("-----BEGIN [A-Z ]*PRIVATE KEY-----", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-    private const int MaxPemLines = 200;
+    private static readonly Regex NewRecord = new(@"^\s*(\{|(trce|dbug|info|warn|fail|crit):|\d{4}-\d{2}-\d{2}[T ])", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private const int MaxPemLines = 100;
     private readonly LogPathGuard _logPaths;
     private readonly Redactor _redactor;
     private readonly LeaseBook _leases;
@@ -400,6 +401,12 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
             return Result.Failure(created.Error);
         }
 
+        // A new process starts outside any key block: a block cut short by a crash must not mask the first lines after a relaunch (N3).
+        lock (entry.PemGate)
+        {
+            entry.PemLines = 0;
+        }
+
         Process process = created.Value!;
         bool attached = false;
         try
@@ -568,26 +575,28 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
         string stored = rawLine;
         lock (entry.PemGate)
         {
-            if (entry.PemLines > 0)
+            try
             {
-                // Inside a multi-line private key: the body never reaches the ring, the file or a bundle (security N2).
-                stored = "***pem";
-                bool end = rawLine.Contains("-----END", StringComparison.Ordinal);
-                entry.PemLines = end || entry.PemLines >= MaxPemLines ? 0 : entry.PemLines + 1;
-            }
-            else
-            {
-                try
+                // A line that starts a new log record ends an unterminated block (N3): a key body never looks like one.
+                if (entry.PemLines > 0 && !NewRecord.IsMatch(rawLine))
                 {
+                    // Inside a multi-line private key: the body never reaches the ring, the file or a bundle (security N2).
+                    stored = "***pem";
+                    bool end = rawLine.Contains("-----END", StringComparison.Ordinal);
+                    entry.PemLines = end || entry.PemLines >= MaxPemLines ? 0 : entry.PemLines + 1;
+                }
+                else
+                {
+                    entry.PemLines = 0;
                     if (PemBegin.IsMatch(rawLine) && !rawLine.Contains("-----END", StringComparison.Ordinal))
                     {
                         entry.PemLines = 1;
                     }
                 }
-                catch (RegexMatchTimeoutException)
-                {
-                    stored = "***pem";
-                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                stored = "***pem";
             }
         }
 

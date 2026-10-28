@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Processes;
@@ -188,6 +189,28 @@ public sealed class RowEvidenceTests : IDisposable
         using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "run.json")));
         Assert.True(run.RootElement.GetProperty("redactions").GetInt32() > 0);
         Assert.Equal("passed", run.RootElement.GetProperty("secret_scan").GetString());
+    }
+
+    [Fact]
+    public void UnevaluatedSkip_IsCountedInRunJson_AndNamedInWarnings()
+    {
+        // I5 queues skipped at run end (D-ML80): the grade stays, but run.json says how many sources were not evaluated (N2).
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+        _writer.RunStarted("run-n2-skip", 10UL, loaded.Spec!);
+        _writer.RowFinished(new UatRowResult("evidence", RowGrade.Pass, "fine", []));
+        var skip = new InvariantSkip("I5", "queues", "stack not up (no lab credentials)", "(run-end)");
+        var invariants = new InvariantReport([], [], [skip]);
+        _writer.RunFinished(new UatRunResult("run-n2-skip", 10UL, false, RunOverall.Incomplete, [], Invariants: invariants));
+
+        Assert.Null(_writer.WriteError);
+        Assert.NotNull(_writer.Folder);
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_writer.Folder!, "run.json")));
+        Assert.Equal(1, run.RootElement.GetProperty("invariant_skips").GetInt32());
+        string warnings = run.RootElement.GetProperty("warnings").GetRawText();
+        Assert.Contains("I5", warnings, StringComparison.Ordinal);
+        Assert.Contains("queues", warnings, StringComparison.Ordinal);
+        Assert.Contains("(run-end)", warnings, StringComparison.Ordinal);
     }
 
     [Fact]

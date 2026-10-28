@@ -109,6 +109,21 @@ public sealed class KillFaultTests
     }
 
     [Fact]
+    public async Task HealAsync_LabelInspectNoSuchObject_IsSuccessAndInspectsContainersOnly()
+    {
+        var docker = new FakeDocker(args => args[0] == "inspect"
+            ? new DockerOutput(1, "", "Error: No such object: " + ContainerId)
+            : Ok(ContainerId));
+        var fault = Fault(docker, Registry(), Inspector(), new FakeJournal());
+
+        var result = await fault.HealAsync(Entry(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("--type", docker.Calls[0][1]);
+        Assert.Equal("container", docker.Calls[0][2]);
+    }
+
+    [Fact]
     public async Task HealAsync_StartFailsForAnotherReason_IsFailure()
     {
         var docker = HealDocker(_ => new DockerOutput(1, "", "Error response from daemon: driver failed programming external connectivity"));
@@ -256,7 +271,7 @@ public sealed class KillFaultTests
 
     /// <summary>A fake whose label inspect (security N4) answers "1"; every other call goes to <paramref name="respond"/>.</summary>
     internal static FakeDocker HealDocker(Func<IReadOnlyList<string>, DockerOutput> respond) =>
-        new(args => args[0] == "inspect" && args.Count == 4 && args[2].Contains(".Config.Labels", StringComparison.Ordinal) ? Ok("1") : respond(args));
+        new(args => args[0] == "inspect" && args.Count == 6 && args[4].Contains(".Config.Labels", StringComparison.Ordinal) ? Ok("1") : respond(args));
 
     internal sealed class FakeDocker(Func<IReadOnlyList<string>, DockerOutput> respond) : IDockerCli
     {

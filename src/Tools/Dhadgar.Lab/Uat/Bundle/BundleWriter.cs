@@ -282,21 +282,10 @@ public sealed class BundleWriter : IUatRunSink
         }
 
         Folder = checkedFolder.Value;
+        const string secretHeld = "[Lab.Unavailable] the history bundle held a secret and was not kept";
         try
         {
             _passRedactions = 0;
-            Write("run.json", JsonSerializer.Serialize(new
-            {
-                run_id = bundle.RunId,
-                kind = "history",
-                scenario = bundle.Scenario,
-                seed = bundle.Seed,
-                clients = bundle.Clients,
-                reruns = bundle.Reruns,
-                verdict = bundle.Check.Verdict,
-                grade = bundle.Grade.ToString(),
-                secret_scan = "passed",
-            }, JsonOptions) + "\n");
             Write("history.json", JsonSerializer.Serialize(bundle.History, JsonOptions) + "\n");
             Write("check.json", JsonSerializer.Serialize(bundle.Check, JsonOptions) + "\n");
             if (bundle.Check.Minimal is not null)
@@ -315,10 +304,20 @@ public sealed class BundleWriter : IUatRunSink
                 },
             }, JsonOptions) + "\n");
 
+            // Scan the payload before run.json exists in its final form, so run.json never says "passed" for a folder that
+            // was not scanned clean. A failed scan marks the folder failed (the scanner has already removed the flagged file).
             SecretScanResult scan = _scanner.ScanFolder(Folder);
             if (!scan.Passed)
             {
-                return Result<string>.Failure("[Lab.Unavailable] the history bundle held a secret and was not kept");
+                MarkFailedAfterWriteError(Folder);
+                return Result<string>.Failure(secretHeld);
+            }
+
+            Write("run.json", HistoryRunJson(bundle, "passed"));
+            if (!_scanner.ScanFolder(Folder).Passed)
+            {
+                MarkFailedAfterWriteError(Folder);
+                return Result<string>.Failure(secretHeld);
             }
 
             return Result<string>.Success(Folder);
@@ -326,9 +325,23 @@ public sealed class BundleWriter : IUatRunSink
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)
         {
             WriteError = "[Lab.Unavailable] the bundle could not be written";
+            MarkFailedAfterWriteError(Folder);
             return Result<string>.Failure(WriteError);
         }
     }
+
+    private static string HistoryRunJson(HistoryBundle bundle, string secretScan) => JsonSerializer.Serialize(new
+    {
+        run_id = bundle.RunId,
+        kind = "history",
+        scenario = bundle.Scenario,
+        seed = bundle.Seed,
+        clients = bundle.Clients,
+        reruns = bundle.Reruns,
+        verdict = bundle.Check.Verdict,
+        grade = bundle.Grade.ToString(),
+        secret_scan = secretScan,
+    }, JsonOptions) + "\n";
 
     /// <summary>
     /// Runs the scan after a failed write, so a half-written bundle is not left unscanned, then records
@@ -500,6 +513,14 @@ public sealed class BundleWriter : IUatRunSink
                 .Order(StringComparer.Ordinal)
                 .ToArray();
 
+        // A skip outside (run-start) and stack-up is a source that was not evaluated after the stack existed. It never changes
+        // a grade (D-ML80), but run.json and warnings name it so that a ledger reader does not read "clean" for it.
+        IReadOnlyList<InvariantSkip> skips = result.Invariants?.Skipped ?? [];
+        IReadOnlyList<InvariantSkip> unexpectedSkips = skips.Where(skip => skip.Row is not ("(run-start)" or "stack-up")).ToList();
+        string[] warnings = _warnings
+            .Concat(unexpectedSkips.Select(skip => $"invariant {skip.InvariantId} not evaluated for {skip.Source} at {skip.Row ?? "an unlabelled checkpoint"}: {skip.Reason}"))
+            .ToArray();
+
         // Last, so that redactions counts every other file written in this pass.
         var run = new
         {
@@ -534,7 +555,9 @@ public sealed class BundleWriter : IUatRunSink
             pair = (object?)null,
             replay = (object?)null,
             events = result.Events,
-            warnings = _warnings.ToArray(),
+            warnings,
+            invariant_skips = skips.Count,
+            invariant_skips_unevaluated = unexpectedSkips.Select(skip => new { row = skip.Row, source = skip.Source, invariant_id = skip.InvariantId }).ToArray(),
         };
 
         Write("run.json", JsonSerializer.Serialize(run, JsonOptions));

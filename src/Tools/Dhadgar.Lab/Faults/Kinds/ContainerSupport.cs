@@ -51,7 +51,8 @@ internal static class ContainerSupport
             return Result.Failure("[Lab.BlastRadius] journal container reference is not valid");
         }
 
-        Result<DockerOutput> run = await RunAsync(docker, ct, "inspect", "--format", LabelFormat, containerId).ConfigureAwait(false);
+        // --type container: without it docker also resolves images, volumes and networks, so a lab-labelled image could pass.
+        Result<DockerOutput> run = await RunAsync(docker, ct, "inspect", "--type", "container", "--format", LabelFormat, containerId).ConfigureAwait(false);
         if (run.IsFailure)
         {
             return Result.Failure(run.Error);

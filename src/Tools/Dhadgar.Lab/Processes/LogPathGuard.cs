@@ -52,7 +52,11 @@ public sealed class LogPathGuard
         return Result<string>.Success(validated.Value!);
     }
 
-    private static bool IsLink(string path)
+    /// <summary>
+    /// True when <paramref name="path"/> exists and is a symbolic link or junction (a reparse point). A missing path is not a link.
+    /// </summary>
+    /// <param name="path">The path to check.</param>
+    internal static bool IsLink(string path)
     {
         if (!File.Exists(path) && !Directory.Exists(path))
         {

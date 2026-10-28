@@ -247,6 +247,29 @@ public sealed class CorruptFileFaultTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_paths.FaultBackups, "f9")));
     }
 
+    [SkippableFact]
+    public async Task PrepareAsync_CaKeyIsASymbolicLink_IsRefusedAndTheTargetIsUntouched()
+    {
+        // A link at the CA key would send the truncate, the garbage write and the restore to another file (N5).
+        string outside = Path.Combine(_root, "outside.bin");
+        await File.WriteAllBytesAsync(outside, Original);
+        File.Delete(CaKey);
+        try
+        {
+            File.CreateSymbolicLink(CaKey, outside);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            Skip.If(true, "creating a symbolic link needs a privilege this host does not grant");
+        }
+
+        var result = await Fault().PrepareAsync(Target(), Args("truncate"), "f1", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.Path]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(Original, ReadBytes(outside));
+    }
+
     private CorruptFileFault Fault(FakeJournal? journal = null) =>
         new(_paths, new PathValidator(NullLogger<PathValidator>.Instance), journal ?? new FakeJournal(), NullLogger<CorruptFileFault>.Instance);
 

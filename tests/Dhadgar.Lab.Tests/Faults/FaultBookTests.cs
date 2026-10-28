@@ -229,6 +229,23 @@ public sealed class FaultBookTests : IDisposable
     }
 
     [Fact]
+    public async Task FaultBook_InjectFailsAndHealFails_ErrorNamesBoth_AndEntryIsHealFailed()
+    {
+        // The target may still be faulted, so the caller must learn that the heal failed too (N6).
+        _kind.InjectError = "[Lab.FaultKind] inject failed halfway";
+        _kind.HealError = "[Lab.Docker] heal refused";
+        using var book = Book();
+
+        var begun = await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None);
+
+        Assert.True(begun.IsFailure);
+        Assert.Contains("[Lab.FaultKind] inject failed halfway", begun.Error, StringComparison.Ordinal);
+        Assert.Contains("heal also failed: [Lab.Docker] heal refused", begun.Error, StringComparison.Ordinal);
+        var active = Assert.Single(book.ListActive());
+        Assert.Equal(FaultState.HealFailed, active.State);
+    }
+
+    [Fact]
     public async Task FaultBook_HealAfterSOutOfRange_IsInvalidArgument()
     {
         using var book = Book();

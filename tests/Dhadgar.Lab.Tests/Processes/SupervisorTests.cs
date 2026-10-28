@@ -187,6 +187,25 @@ public sealed class SupervisorTests
         }
     }
 
+    [SkippableFact]
+    public async Task Supervisor_UnterminatedPemBlock_EndsAtNextLogRecord()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        using var harness = new SupervisorHarness();
+        LabProcessSpec spec = SupervisorHarness.ChildSpec("tc-pem-open", relaunch: true, "--pem-unterminated", "--sleep-ms", "60000");
+
+        _ = await harness.Supervisor.StartAsync(spec, CancellationToken.None);
+        bool captured = await SupervisorHarness.WaitUntilAsync(() => (harness.Supervisor.ReadLines("tc-pem-open").Value?.Count ?? 0) >= 4, Patience);
+        Assert.True(captured);
+        _ = await harness.Supervisor.StopAsync("tc-pem-open");
+
+        List<LogLine> ring = harness.Supervisor.ReadLines("tc-pem-open").Value!.ToList();
+        Assert.DoesNotContain(ring, line => line.Message.Contains("MIIEvQ", StringComparison.Ordinal));
+        // The block is masked only until the next record starts: the last two lines are not masked (N3).
+        Assert.Equal("info: X[0]", ring[^2].Message);
+        Assert.Contains("Unhandled exception", ring[^1].Message, StringComparison.Ordinal);
+    }
+
     private static int CountMarker(string path, string marker) =>
         ReadSharedLines(path).Count(line => line.Contains(marker, StringComparison.Ordinal));
 
