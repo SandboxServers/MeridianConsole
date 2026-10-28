@@ -424,6 +424,9 @@ public sealed class BarrierProxy : IAsyncDisposable
             }
         }
 
+        // The upstream is a loopback lab port (StaysOnUpstream). The Gateway's AllowedHosts refuse the IP-literal authority that
+        // HttpClient would derive from the destination, so the proxy names the lab probe host, as LabHttp does (R-HOST, F81).
+        request.Headers.Host = Dhadgar.Lab.Services.LabServices.ProbeHostHeader;
         return request;
     }
 

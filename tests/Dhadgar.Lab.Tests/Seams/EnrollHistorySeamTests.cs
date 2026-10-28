@@ -11,8 +11,9 @@ namespace Dhadgar.Lab.Tests.Seams;
 
 /// <summary>
 /// S-L11: <c>history_run</c> drives the enrollment race through the daemon, the barrier proxy and the checker. Needs the Linux Docker
-/// engine and the lab stack. The stack is brought up with <c>stack_up wipe</c> under a lease, so credentials exist for the history
-/// clients. Containers are removed by label and name prefix only.
+/// engine and the lab stack. The stack is brought up with <c>stack_up wipe</c>, and Nodes then the Gateway are started with
+/// <c>svc_start</c>, all under one lease, so the schema exists and the barrier's upstream answers (F80). Containers are removed by
+/// label and name prefix only.
 /// </summary>
 [Collection("LabHome")]
 public sealed class EnrollHistorySeamTests
@@ -71,7 +72,17 @@ public sealed class EnrollHistorySeamTests
                     "stack_up",
                     new Dictionary<string, object?>(StringComparer.Ordinal) { ["wipe"] = true, ["lease_id"] = leaseId });
 
-                using JsonDocument race = await CallToolAsync(daemon.BaseAddress, token, "history_run", new Dictionary<string, object?>(StringComparer.Ordinal)
+                // Nodes creates its schema on start (F80); the barrier's upstream is agent-ingress -> Gateway, whose readiness needs Nodes.
+                foreach (string service in new[] { "nodes", "gateway" })
+                {
+                    using JsonDocument svc = await CallToolAsync(
+                        daemon.BaseAddress,
+                        token,
+                        "svc_start",
+                        new Dictionary<string, object?>(StringComparer.Ordinal) { ["service"] = service, ["lease_id"] = leaseId });
+                }
+
+                using JsonDocument race =await CallToolAsync(daemon.BaseAddress, token, "history_run", new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["scenario"] = "enroll-race",
                     ["clients"] = 4,

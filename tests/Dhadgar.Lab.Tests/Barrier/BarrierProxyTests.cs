@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text.Json;
 using Dhadgar.Lab.Barrier;
 using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Services;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Microsoft.AspNetCore.Builder;
@@ -124,6 +125,21 @@ public sealed class BarrierProxyTests
         IReadOnlyDictionary<string, string> seen = Assert.Single(up.Seen);
         Assert.False(seen.ContainsKey("Keep-Alive"));
         Assert.False(seen.ContainsKey("Proxy-Authorization"));
+    }
+
+    [Fact]
+    public async Task Forwarded_Host_IsTheLabProbeHost()
+    {
+        await using Upstream up = await Upstream.StartAsync(200);
+        var sink = new RecordingSink();
+        await using BarrierProxy proxy = await StartProxyAsync(sink);
+        Assert.True(proxy.Arm(RunId, [Rule(1, BarrierAction.Pass, null)]).IsSuccess);
+
+        using HttpResponseMessage response = await Send(proxy, 1);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        IReadOnlyDictionary<string, string> seen = Assert.Single(up.Seen);
+        Assert.Equal(LabServices.ProbeHostHeader, seen["Host"]);
     }
 
     [Fact]
