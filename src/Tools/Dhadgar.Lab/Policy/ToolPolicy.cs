@@ -103,13 +103,9 @@ public static class ToolPolicy
     /// </summary>
     public static IReadOnlySet<string> PlannedTools { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
-        "lab_doctor",
         "logs_tail",
         "stack_status",
         "db_query",
-        "certstore_list",
-        "registry_read",
-        "state_file_read",
         "uat_list_specs",
         "uat_plan",
         "uat_report",
