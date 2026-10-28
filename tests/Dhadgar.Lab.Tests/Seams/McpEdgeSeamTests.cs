@@ -11,6 +11,7 @@ namespace Dhadgar.Lab.Tests.Seams;
 /// <summary>
 /// S-L1: the daemon's loopback edge and MCP projection. The MCP facts go green in L05; the raw HTTP facts go green in L02.
 /// </summary>
+[Collection("LabHome")]
 public sealed class McpEdgeSeamTests
 {
     [Fact]

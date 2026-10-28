@@ -2,6 +2,7 @@ using Dhadgar.Lab.Daemon;
 
 namespace Dhadgar.Lab.Tests.Daemon;
 
+[Collection("LabHome")]
 public sealed class SingleInstanceGuardTests
 {
     [Fact]
