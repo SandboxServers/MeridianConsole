@@ -20,5 +20,6 @@ public static partial class LabMcpServer
         services.AddSingleton<ILabStatusSource>(sp => sp.GetRequiredService<JobRunner>());
         AddLabTool<JobStatusTool>(services);
         AddLabTool<JobCancelTool>(services);
+        AddLabTool<FlakeCheckTool>(services);
     }
 }
