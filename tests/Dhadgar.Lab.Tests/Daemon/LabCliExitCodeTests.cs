@@ -149,6 +149,38 @@ public sealed class LabCliExitCodeTests
         Assert.Equal(expected, LabCli.ExitCodeForOverall(overall));
     }
 
+    [Fact]
+    public void ToolErrorText_McpErrorEnvelope_BecomesCodeAndMessage()
+    {
+        var text = LabCli.ToolErrorText("uat_run", """{"error":{"code":"Lab.NotFound","message":"no such spec"}}""");
+
+        Assert.Equal("[Lab.NotFound] no such spec", text);
+    }
+
+    [Fact]
+    public void ToolErrorText_NotJson_ReturnsTextUnchanged()
+    {
+        Assert.Equal("plain failure text", LabCli.ToolErrorText("uat_run", "plain failure text"));
+    }
+
+    [Fact]
+    public void ToolErrorText_Blank_NamesTheTool()
+    {
+        Assert.Equal("[Lab.Tool] uat_run failed", LabCli.ToolErrorText("uat_run", "  "));
+    }
+
+    [Theory]
+    [InlineData("[Lab.NotFound] x", 2)]
+    [InlineData("[Lab.InvalidArgument] x", 2)]
+    [InlineData("[Lab.Elevated] x", 2)]
+    [InlineData("[Lab.AlreadyRunning] x", 3)]
+    [InlineData("[Lab.Docker] x", 1)]
+    [InlineData("garbage", 1)]
+    public void ExitCodeFor_MapsRefusalCodes(string error, int expected)
+    {
+        Assert.Equal(expected, LabCli.ExitCodeFor(error));
+    }
+
     private static string ValidToken() => System.Buffers.Text.Base64Url.EncodeToString(
         System.Security.Cryptography.RandomNumberGenerator.GetBytes(LabDefaults.MinTokenBytes));
 
