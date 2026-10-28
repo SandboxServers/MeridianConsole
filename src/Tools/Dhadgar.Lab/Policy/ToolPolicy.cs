@@ -105,7 +105,6 @@ public static class ToolPolicy
     {
         // L13
         // L15
-        "uat_run",
         // L16
         "uat_report",
         "bundle_read",
