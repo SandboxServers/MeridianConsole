@@ -12,7 +12,7 @@ public sealed record SecretScanResult(bool Passed, IReadOnlyList<string> Removed
 
 /// <summary>
 /// The last step before a bundle is final (C9). Every file is checked for every vault value (which includes the daemon
-/// token), PEM private key blocks, <c>Bearer &lt;20+ chars&gt;</c> and <c>Password=</c>/<c>Pwd=</c>. A hit deletes that file.
+/// token) in its raw and JSON-escaped forms, PEM private key blocks, <c>Bearer &lt;20+ chars&gt;</c> and <c>Password=</c>/<c>Pwd=</c>. A hit deletes that file.
 /// </summary>
 public sealed class SecretScanner
 {
@@ -60,7 +60,9 @@ public sealed class SecretScanner
                 continue;
             }
 
-            Dhadgar.Shared.Results.Result<bool> found = _vault.Use(reference, secret => text.Contains(secret, StringComparison.Ordinal));
+            // A hit is any form of the secret: the raw value or one of its JSON-escaped forms.
+            Dhadgar.Shared.Results.Result<bool> found = _vault.Use(reference, secret =>
+                !SecretForms.ForEachForm(secret, form => text.AsSpan().IndexOf(form, StringComparison.Ordinal) < 0));
             if (found.IsSuccess && found.Value)
             {
                 return true;
