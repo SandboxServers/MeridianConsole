@@ -213,14 +213,14 @@ public sealed class AgentBootstrapService : BackgroundService
             }
         }
 
-        return await EnrollUntilSucceededAsync(stoppingToken);
+        return await EnrollUntilSucceededAsync(stoppingToken, stored?.CommandSigningKeyId);
     }
 
     /// <summary>
     /// Enrolls with the token source's token, re-reading it on every attempt, until enrollment succeeds or the host stops.
     /// Never retries in a tight loop: a missing token waits <c>EnrollmentRetrySeconds</c>, and a failed attempt backs off.
     /// </summary>
-    private async Task<AgentIdentity?> EnrollUntilSucceededAsync(CancellationToken stoppingToken)
+    private async Task<AgentIdentity?> EnrollUntilSucceededAsync(CancellationToken stoppingToken, string? previousKeyId = null)
     {
         var retryDelay = TimeSpan.FromSeconds(_cp.EnrollmentRetrySeconds);
         var enrollmentDelay = retryDelay;
@@ -260,6 +260,16 @@ public sealed class AgentBootstrapService : BackgroundService
                 stoppingToken);
             if (enrolled.IsSuccess)
             {
+                // Re-enrollment trusts the key the server returns; log a change of key (ids only, never key material).
+                if (previousKeyId is not null
+                    && !string.Equals(previousKeyId, enrolled.Value.CommandSigningKeyId, StringComparison.Ordinal))
+                {
+                    _logger.LogWarning(
+                        "Re-enrollment replaced the command signing key (previous KeyId {PreviousKeyId}, new KeyId {KeyId})",
+                        previousKeyId,
+                        enrolled.Value.CommandSigningKeyId);
+                }
+
                 var identity = new AgentIdentity(
                     enrolled.Value!.NodeId,
                     enrolled.Value.OrganizationId,

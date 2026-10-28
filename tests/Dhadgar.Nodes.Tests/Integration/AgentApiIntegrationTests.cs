@@ -186,6 +186,40 @@ public sealed class AgentApiIntegrationTests
     }
 
     [Fact]
+    public async Task Enroll_WhenCommandSigningUnavailable_Returns503AndKeepsToken()
+    {
+        var token = await CreateEnrollmentTokenAsync(TestOrgId);
+        using var client = _factory.CreateClient();
+
+        var request = new EnrollNodeRequest(
+            Token: token,
+            Platform: "linux",
+            PublicKey: TestAgentKeys.PublicKeyBase64,
+            Hardware: new HardwareInventoryDto(
+                Hostname: "test-server",
+                OsVersion: "Ubuntu 22.04",
+                CpuCores: 8,
+                MemoryBytes: 16L * 1024 * 1024 * 1024,
+                DiskBytes: 500L * 1024 * 1024 * 1024,
+                NetworkInterfaces: null));
+
+        _factory.Signer.IsReady = false;
+        try
+        {
+            using var unavailable = await client.PostAsJsonAsync("/agents/enroll", request);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
+        }
+        finally
+        {
+            _factory.Signer.IsReady = true;
+        }
+
+        // The token was not consumed, so the same enrollment succeeds once signing is available.
+        using var retry = await client.PostAsJsonAsync("/agents/enroll", request);
+        Assert.Equal(HttpStatusCode.Created, retry.StatusCode);
+    }
+
+    [Fact]
     public async Task Heartbeat_WithValidNode_ReturnsOk()
     {
         var orgId = Guid.NewGuid();

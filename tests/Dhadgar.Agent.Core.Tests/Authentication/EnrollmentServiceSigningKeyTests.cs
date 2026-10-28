@@ -45,6 +45,26 @@ public sealed class EnrollmentServiceSigningKeyTests : IDisposable
     }
 
     [Fact]
+    public async Task Enrollment_P384SigningKey_FailsBeforeStoring()
+    {
+        // Well-formed SubjectPublicKeyInfo on the wrong curve: only the P-256 check rejects it.
+        using var handler = new ScriptedHttpHandler((_, body) =>
+        {
+            using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+            var spki = signingKey.ExportSubjectPublicKeyInfo();
+            return Enrolled(body, Convert.ToBase64String(spki), AgentCommandSigning.ComputeKeyId(spki));
+        });
+        var store = new RecordingCertificateStore();
+        var sut = CreateSut(handler, store);
+
+        var result = await sut.EnrollAsync("enrollment-token-for-test");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Enrollment.InvalidSigningKey]", result.Error, StringComparison.Ordinal);
+        Assert.Equal(0, store.StoreCertificateCount);
+    }
+
+    [Fact]
     public async Task Enrollment_SigningKeyIdMismatch_FailsBeforeStoring()
     {
         using var handler = new ScriptedHttpHandler((_, body) =>

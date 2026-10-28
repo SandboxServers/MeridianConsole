@@ -67,15 +67,29 @@ public sealed class CommandSigner : ICommandSigner, IDisposable
     }
 
     /// <inheritdoc />
-    public AgentCommandEnvelope Sign(AgentCommandEnvelope unsigned)
+    public AgentCommandEnvelope Sign(AgentCommandEnvelope envelope)
     {
-        ArgumentNullException.ThrowIfNull(unsigned);
+        ArgumentNullException.ThrowIfNull(envelope);
+        if (envelope.CommandId == Guid.Empty || envelope.NodeId == Guid.Empty || envelope.OrganizationId == Guid.Empty)
+        {
+            throw new ArgumentException("CommandId, NodeId and OrganizationId must be set.", nameof(envelope));
+        }
+
+        // C-2: the agent rejects a command whose lifetime is not positive or exceeds the limit, so never sign one.
+        var lifetime = envelope.ExpiresAt - envelope.IssuedAt;
+        if (lifetime <= TimeSpan.Zero || lifetime > TimeSpan.FromSeconds(AgentMessageLimits.MaxCommandLifetimeSeconds))
+        {
+            throw new ArgumentException(
+                $"Command lifetime must be greater than zero and at most {AgentMessageLimits.MaxCommandLifetimeSeconds} seconds.",
+                nameof(envelope));
+        }
+
         var key = _key ?? throw new InvalidOperationException("Command signer is not initialized.");
 
-        var input = AgentCommandSigning.BuildSigningInput(unsigned);
+        var input = AgentCommandSigning.BuildSigningInput(envelope);
         var signature = key.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
 
-        return unsigned with
+        return envelope with
         {
             Signature = Convert.ToBase64String(signature),
             SigningKeyId = _keyId!,
@@ -110,7 +124,9 @@ public sealed class CommandSigner : ICommandSigner, IDisposable
     {
         var pemBytes = File.ReadAllBytes(path);
         char[]? pemChars = null;
+#pragma warning disable CA2000 // Disposed in the catch; on success ownership passes to the caller.
         var key = ECDsa.Create();
+#pragma warning restore CA2000
         try
         {
             pemChars = Encoding.UTF8.GetChars(pemBytes);
@@ -140,29 +156,64 @@ public sealed class CommandSigner : ICommandSigner, IDisposable
 
     private ECDsa CreateKey(string path)
     {
+#pragma warning disable CA2000 // Ownership of the key passes to the caller, which holds and disposes it.
         var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+#pragma warning restore CA2000
         byte[]? der = null;
         char[]? pem = null;
         byte[]? pemBytes = null;
+        // Unique temp name: a leftover or concurrent temp file never collides with ours.
+        var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             der = key.ExportPkcs8PrivateKey();
             pem = PemEncoding.Write("PRIVATE KEY", der);
             pemBytes = Encoding.ASCII.GetBytes(pem);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            var directory = Path.GetDirectoryName(path)!;
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                }
+            }
+
+            // The temp file is born owner-only, so the private key is never world-readable. It is moved into
+            // place without overwriting: a concurrent starter that wins the move is loaded instead.
+            var streamOptions = new FileStreamOptions
+            {
+                Mode = FileMode.CreateNew,
+                Access = FileAccess.Write,
+                Share = FileShare.None,
+            };
+            if (!OperatingSystem.IsWindows())
+            {
+                streamOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            }
+
+            using (var stream = new FileStream(tempPath, streamOptions))
             {
                 stream.Write(pemBytes);
+                stream.Flush(flushToDisk: true);
             }
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                File.SetUnixFileMode(tempPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
+
+            File.Move(tempPath, path, overwrite: false);
 
             _logger.LogWarning("Command signing key created at {KeyPath}. Back it up with the CA.", path);
             return key;
+        }
+        catch (IOException) when (File.Exists(path))
+        {
+            // Another instance created the key first: discard ours and load theirs.
+            key.Dispose();
+            return LoadKey(path);
         }
         catch
         {
@@ -171,6 +222,18 @@ public sealed class CommandSigner : ICommandSigner, IDisposable
         }
         finally
         {
+            try
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+            catch (IOException)
+            {
+                // Best effort: the temp file holds the private key, so it is removed whenever it is left behind.
+            }
+
             if (der is not null)
             {
                 CryptographicOperations.ZeroMemory(der);

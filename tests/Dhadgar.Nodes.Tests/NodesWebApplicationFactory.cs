@@ -34,6 +34,9 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = $"nodes-tests-{Guid.NewGuid()}";
     public TestNodesEventPublisher EventPublisher { get; } = new();
     public SaveChangesFaultInjector Faults { get; } = new();
+
+    /// <summary>Command signer used by the factory. Tests can mark it not ready to simulate a failed key load.</summary>
+    public TestCommandSigner Signer { get; } = new();
     public FakeTimeProvider TimeProvider { get; } = new(DateTimeOffset.UtcNow);
     public TestCertificateAuthorityService CaService { get; private set; } = null!;
 
@@ -101,7 +104,7 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 
             // Replace the command signer with an in-memory key so tests never write a key file
             services.RemoveAll<ICommandSigner>();
-            services.AddSingleton<ICommandSigner>(new TestCommandSigner());
+            services.AddSingleton<ICommandSigner>(Signer);
 
             // Disable mTLS for testing (tests use TestNodesAuthHandler instead)
             services.Configure<MtlsOptions>(options =>
@@ -279,9 +282,6 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 }
 
 /// <summary>
-/// Injects failures into SaveChanges for tests that need a database-side conflict the InMemory provider never raises.
-/// </summary>
-/// <summary>
 /// Command signer for tests: holds a fresh in-memory P-256 key, so no key file is written.
 /// </summary>
 public sealed class TestCommandSigner : ICommandSigner, IDisposable
@@ -290,6 +290,9 @@ public sealed class TestCommandSigner : ICommandSigner, IDisposable
     private readonly string _publicKeySpkiBase64;
     private readonly string _keyId;
 
+    /// <summary>When false, the key accessors throw, as they do for a signer whose initialization failed.</summary>
+    public bool IsReady { get; set; } = true;
+
     public TestCommandSigner()
     {
         var spki = _key.ExportSubjectPublicKeyInfo();
@@ -297,23 +300,30 @@ public sealed class TestCommandSigner : ICommandSigner, IDisposable
         _keyId = AgentCommandSigning.ComputeKeyId(spki);
     }
 
-    public string PublicKeySpkiBase64 => _publicKeySpkiBase64;
+    public string PublicKeySpkiBase64 => IsReady
+        ? _publicKeySpkiBase64
+        : throw new InvalidOperationException("Command signer is not initialized.");
 
-    public string KeyId => _keyId;
+    public string KeyId => IsReady
+        ? _keyId
+        : throw new InvalidOperationException("Command signer is not initialized.");
 
     public Task InitializeAsync(CancellationToken ct = default) => Task.CompletedTask;
 
-    public AgentCommandEnvelope Sign(AgentCommandEnvelope unsigned)
+    public AgentCommandEnvelope Sign(AgentCommandEnvelope envelope)
     {
-        ArgumentNullException.ThrowIfNull(unsigned);
-        var input = AgentCommandSigning.BuildSigningInput(unsigned);
+        ArgumentNullException.ThrowIfNull(envelope);
+        var input = AgentCommandSigning.BuildSigningInput(envelope);
         var signature = _key.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
-        return unsigned with { Signature = Convert.ToBase64String(signature), SigningKeyId = _keyId };
+        return envelope with { Signature = Convert.ToBase64String(signature), SigningKeyId = _keyId };
     }
 
     public void Dispose() => _key.Dispose();
 }
 
+/// <summary>
+/// Injects failures into SaveChanges for tests that need a database-side conflict the InMemory provider never raises.
+/// </summary>
 public sealed class SaveChangesFaultInjector : SaveChangesInterceptor
 {
     private volatile bool _throwConcurrency;

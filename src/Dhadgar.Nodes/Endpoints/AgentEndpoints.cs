@@ -64,6 +64,22 @@ public static class AgentEndpoints
         ICommandSigner commandSigner,
         CancellationToken ct = default)
     {
+        // Read the signer before EnrollAsync: that call consumes the one-time token and creates the node.
+        string signingPublicKey;
+        string signingKeyId;
+        try
+        {
+            signingPublicKey = commandSigner.PublicKeySpkiBase64;
+            signingKeyId = commandSigner.KeyId;
+        }
+        catch (InvalidOperationException)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Command signing unavailable",
+                extensions: new Dictionary<string, object?> { ["errorCode"] = "command_signing_unavailable" });
+        }
+
         var result = await enrollmentService.EnrollAsync(request, ct);
 
         if (!result.Success)
@@ -88,8 +104,8 @@ public static class AgentEndpoints
             CaCertificate: localResponse.CaCertificate,
             NotBefore: new DateTimeOffset(localResponse.NotBefore, TimeSpan.Zero),
             NotAfter: new DateTimeOffset(localResponse.NotAfter, TimeSpan.Zero),
-            CommandSigningPublicKey: commandSigner.PublicKeySpkiBase64,
-            CommandSigningKeyId: commandSigner.KeyId);
+            CommandSigningPublicKey: signingPublicKey,
+            CommandSigningKeyId: signingKeyId);
 
         return Results.Created($"/agents/{localResponse.NodeId}", contractsResponse);
     }

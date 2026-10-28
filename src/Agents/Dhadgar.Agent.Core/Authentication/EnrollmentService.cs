@@ -225,7 +225,7 @@ public sealed class EnrollmentService : IEnrollmentService
 
             // Validate the command signing key before anything is stored. It is pinned for the
             // agent's lifetime (D-09), so a malformed key must never be accepted.
-            if (!IsValidCommandSigningKey(enrollmentResponse.CommandSigningPublicKey, enrollmentResponse.CommandSigningKeyId))
+            if (!AgentSigningKeyValidation.IsValid(enrollmentResponse.CommandSigningPublicKey, enrollmentResponse.CommandSigningKeyId))
             {
                 _logger.LogError("Enrollment response carries an invalid command signing key");
                 return Result<EnrollmentResult>.Failure(
@@ -669,46 +669,6 @@ public sealed class EnrollmentService : IEnrollmentService
         var version = assembly.GetName().Version;
         return version?.ToString() ?? "0.0.0";
     }
-
-    /// <summary>
-    /// Checks that the enrolled signing key is a P-256 SubjectPublicKeyInfo whose key id is its SHA-256 hash.
-    /// Never throws: malformed input returns false.
-    /// </summary>
-    private static bool IsValidCommandSigningKey(string? publicKeyBase64, string? keyId)
-    {
-        const string p256Oid = "1.2.840.10045.3.1.7";
-
-        if (string.IsNullOrEmpty(publicKeyBase64) || string.IsNullOrEmpty(keyId))
-        {
-            return false;
-        }
-
-        byte[] spki;
-        try
-        {
-            spki = Convert.FromBase64String(publicKeyBase64);
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-
-        try
-        {
-            using var key = ECDsa.Create();
-            key.ImportSubjectPublicKeyInfo(spki, out var bytesRead);
-            if (bytesRead != spki.Length || key.KeySize != 256 || key.ExportParameters(false).Curve.Oid?.Value != p256Oid)
-            {
-                return false;
-            }
-        }
-        catch (CryptographicException)
-        {
-            return false;
-        }
-
-        return string.Equals(AgentCommandSigning.ComputeKeyId(spki), keyId, StringComparison.Ordinal);
-    }
 }
 
 /// <summary>
@@ -822,5 +782,51 @@ internal sealed class SizeLimitedStream : Stream
     {
         await _innerStream.DisposeAsync();
         await base.DisposeAsync();
+    }
+}
+
+/// <summary>
+/// Command signing key checks shared by enrollment and the agent state file, so a key is accepted by the same rules wherever it enters the agent.
+/// </summary>
+internal static class AgentSigningKeyValidation
+{
+    /// <summary>
+    /// Checks that the enrolled signing key is a P-256 SubjectPublicKeyInfo whose key id is its SHA-256 hash.
+    /// Never throws: malformed input returns false.
+    /// </summary>
+    public static bool IsValid(string? publicKeyBase64, string? keyId)
+    {
+        const string p256Oid = "1.2.840.10045.3.1.7";
+
+        if (string.IsNullOrEmpty(publicKeyBase64) || string.IsNullOrEmpty(keyId))
+        {
+            return false;
+        }
+
+        byte[] spki;
+        try
+        {
+            spki = Convert.FromBase64String(publicKeyBase64);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var key = ECDsa.Create();
+            key.ImportSubjectPublicKeyInfo(spki, out var bytesRead);
+            if (bytesRead != spki.Length || key.KeySize != 256 || key.ExportParameters(false).Curve.Oid?.Value != p256Oid)
+            {
+                return false;
+            }
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+
+        return string.Equals(AgentCommandSigning.ComputeKeyId(spki), keyId, StringComparison.Ordinal);
     }
 }

@@ -174,6 +174,42 @@ public sealed class AgentBootstrapServiceTests
     }
 
     [Fact]
+    public async Task ReEnrollment_WithDifferentSigningKey_LogsWarningWithBothKeyIds()
+    {
+        var h = new Harness();
+        h.StoredState(new AgentIdentity(NodeId, OrganizationId, DateTimeOffset.UtcNow, "key-a-public", "key-a-id"));
+        h.UseCertificate(null);
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+        h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<EnrollmentResult>.Success(new EnrollmentResult
+            {
+                NodeId = NodeId,
+                OrganizationId = OrganizationId,
+                CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "key-b-public",
+                CommandSigningKeyId = "key-b-id",
+            })));
+
+        using var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        var warning = Assert.Single(
+            h.Logger.Entries,
+            e => e.Level == LogLevel.Warning && e.Message.Contains("replaced the command signing key", StringComparison.Ordinal));
+        Assert.Contains("key-a-id", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("key-b-id", warning.Message, StringComparison.Ordinal);
+        // Key ids only: the public key material never reaches the log.
+        Assert.DoesNotContain(h.Logger.Messages, m => m.Contains("key-a-public", StringComparison.Ordinal) || m.Contains("key-b-public", StringComparison.Ordinal));
+    }
+    [Fact]
     public async Task ConnectFailure_BacksOffAndRetries()
     {
         var h = new Harness();

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Shared.Results;
@@ -9,7 +10,8 @@ namespace Dhadgar.Agent.Core.Identity;
 
 /// <summary>
 /// Stores the agent identity as <c>agent-state.json</c> in <see cref="AgentOptions.StateDirectory"/>.
-/// The file holds no secrets. A corrupt file is a failure, never a silent re-enrollment.
+/// The file holds no secret key material, but it holds the command trust anchor (the public signing key), so a
+/// damaged file is a failure, never a silent re-enrollment or a key the agent cannot verify with.
 /// </summary>
 public sealed class FileAgentStateStore : IAgentStateStore
 {
@@ -88,6 +90,15 @@ public sealed class FileAgentStateStore : IAgentStateStore
                 _logger.LogWarning("Agent state file holds only one of the command signing key fields");
                 return Result<StoredAgentState>.Failure(
                     "[AgentState.Corrupt] State file holds a partial command signing key");
+            }
+
+            // A key present in the file must pass the enrollment-time checks. Empty strings are present, so they fail.
+            if (state.CommandSigningPublicKey is not null
+                && !AgentSigningKeyValidation.IsValid(state.CommandSigningPublicKey, state.CommandSigningKeyId))
+            {
+                _logger.LogWarning("Agent state file holds an invalid command signing key");
+                return Result<StoredAgentState>.Failure(
+                    "[AgentState.Corrupt] State file holds an invalid command signing key");
             }
 
             return Result<StoredAgentState>.Success(

@@ -24,8 +24,8 @@ public interface ICommandSigner
     Task InitializeAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Returns a copy of <paramref name="unsigned"/> with <c>Signature</c> and <c>SigningKeyId</c> set.
+    /// Returns a copy of <paramref name="envelope"/> with <c>Signature</c> and <c>SigningKeyId</c> set.
     /// </summary>
-    /// <param name="unsigned">The envelope to sign; its signature fields are ignored.</param>
-    AgentCommandEnvelope Sign(AgentCommandEnvelope unsigned);
+    /// <param name="envelope">The envelope to sign; its signature fields are ignored.</param>
+    AgentCommandEnvelope Sign(AgentCommandEnvelope envelope);
 }

@@ -137,6 +137,62 @@ public sealed class CommandSignerTests : IDisposable
         Assert.Equal(valid, ok);
     }
 
+    [Fact]
+    public async Task Sign_RejectsLifetimeOverAgentLimit()
+    {
+        var signer = await CreateSignerAsync(Path.Combine(_root, "key.pem"));
+        var sample = SampleEnvelope();
+        var tooLong = sample with { ExpiresAt = sample.IssuedAt.AddSeconds(AgentMessageLimits.MaxCommandLifetimeSeconds + 1) };
+
+        Assert.Throws<ArgumentException>(() => signer.Sign(tooLong));
+    }
+
+    [Fact]
+    public async Task Sign_RejectsExpiryNotAfterIssue()
+    {
+        var signer = await CreateSignerAsync(Path.Combine(_root, "key.pem"));
+        var sample = SampleEnvelope();
+        var expired = sample with { ExpiresAt = sample.IssuedAt };
+
+        Assert.Throws<ArgumentException>(() => signer.Sign(expired));
+    }
+
+    [Fact]
+    public async Task Sign_RejectsEmptyNodeId()
+    {
+        var signer = await CreateSignerAsync(Path.Combine(_root, "key.pem"));
+        var unbound = SampleEnvelope() with { NodeId = Guid.Empty };
+
+        Assert.Throws<ArgumentException>(() => signer.Sign(unbound));
+    }
+
+    [Fact]
+    public async Task CreatedKeyDirectory_And_KeyFile_AreOwnerOnlyOnUnix()
+    {
+        // Unix file modes do not apply on Windows, so there is nothing to check there.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var directory = Path.Combine(_root, "fresh-dir");
+        var path = Path.Combine(directory, "key.pem");
+        await CreateSignerAsync(path);
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+        Assert.Equal(
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+            File.GetUnixFileMode(directory));
+    }
+
+    [Fact]
+    public async Task CreateKey_LeavesNoTempFile()
+    {
+        await CreateSignerAsync(Path.Combine(_root, "key.pem"));
+
+        Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
+    }
+
     private async Task<ICommandSigner> CreateSignerAsync(string keyPath)
     {
         var signer = CreateSigner(keyPath);
