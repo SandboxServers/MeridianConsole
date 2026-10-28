@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Observe;
@@ -197,6 +198,7 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             system: RuntimeInformation.OSDescription,
             build: string.Empty,
             label: label);
+        sink.UseBuild(LastBuildReader.Read(_paths, _validator));
 
         using HttpMessageHandler probeHandler = LabHttp.CreateHandler();
         sink.UseLiveParts(await LiveFingerprint.CollectAsync(

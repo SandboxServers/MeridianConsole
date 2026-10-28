@@ -7,6 +7,7 @@ using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Random;
 using Dhadgar.Lab.Tools;
+using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
@@ -131,8 +132,8 @@ public sealed class UatRunner
             sink.RunStarted(runId, seed, request.Spec);
             if (_observations is not null && _uatRuns is not null)
             {
-                // The bundle folder name (BundleWriter) is yyyyMMdd-<build id>-<run id>; UAT runs are not built at start, so the build id is "nobuild".
-                string folder = Path.Combine(_uatRuns, $"{_time.GetUtcNow().UtcDateTime:yyyyMMdd}-nobuild-{runId}");
+                // The sink names the folder once the run has started; the fallback uses the same name rule.
+                string folder = Path.Combine(_uatRuns, sink.FolderName ?? BundleFolders.Name(run.RunStart, "nobuild", runId));
                 observing = _observations.BeginRun(runId, folder).IsSuccess;
             }
 

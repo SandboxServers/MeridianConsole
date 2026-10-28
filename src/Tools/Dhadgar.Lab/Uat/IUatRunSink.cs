@@ -26,4 +26,9 @@ public interface IUatRunSink
     /// </summary>
     /// <param name="result">The run result.</param>
     void RunFinished(UatRunResult result);
+
+    /// <summary>
+    /// The bundle folder name (<c>yyyyMMdd-buildId-runId</c>), known after <c>RunStarted</c>; null before that or for a sink with no bundle.
+    /// </summary>
+    string? FolderName => null;
 }

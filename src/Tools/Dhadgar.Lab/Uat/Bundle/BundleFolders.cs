@@ -16,6 +16,15 @@ public static class BundleFolders
     private static readonly Regex RunIdPattern = new("^[A-Za-z0-9_-]{1,64}$", RegexOptions.CultureInvariant);
 
     /// <summary>
+    /// The bundle folder name of one run: <c>yyyyMMdd-buildId-runId</c>, the date in UTC.
+    /// </summary>
+    /// <param name="started">The run start time.</param>
+    /// <param name="buildId">The build id, or <c>nobuild</c>.</param>
+    /// <param name="runId">The run id.</param>
+    public static string Name(DateTimeOffset started, string buildId, string runId) =>
+        FormattableString.Invariant($"{started.UtcDateTime:yyyyMMdd}-{buildId}-{runId}");
+
+    /// <summary>
     /// Returns the bundle folder whose name ends with <c>-&lt;runId&gt;</c>.
     /// </summary>
     /// <param name="uatRuns">The <c>LabPaths.UatRuns</c> root.</param>

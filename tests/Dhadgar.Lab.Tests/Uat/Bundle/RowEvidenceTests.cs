@@ -3,6 +3,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
@@ -200,6 +201,51 @@ public sealed class RowEvidenceTests : IDisposable
         Assert.DoesNotContain("\"attempts\"", json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Bundle_UseBuild_FolderRunJsonAndLedgerCarryTheBuild()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, redactor, new SecretScanner(_vault), _time, "nobuild", "linux", string.Empty, null);
+        writer.UseBuild(new BuildStamp("0123abcd", "0123abcd4567ef89", true, "."));
+
+        await RunSpecAsync(writer);
+
+        Assert.Contains("-0123abcd-", Path.GetFileName(writer.Folder!), StringComparison.Ordinal);
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json")));
+        JsonElement build = run.RootElement.GetProperty("build");
+        Assert.Equal("0123abcd4567ef89", build.GetProperty("commit").GetString());
+        Assert.True(build.GetProperty("dirty").GetBoolean());
+        string ledger = await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "ledger.md"));
+        Assert.Contains("commit 0123abcd4567, dirty", ledger, StringComparison.Ordinal);
+        Assert.DoesNotContain("commit not collected", run.RootElement.GetProperty("warnings").GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Runner_EventsAndBundle_ShareOneFolder()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        LabPaths paths = LabPaths.FromRoot(_root);
+        var observations = new LabObservationSink(redactor, _time, validator, [paths.UatRuns]);
+        var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
+        var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new EvidenceTool() }), leases, _audit, redactor, _time);
+        var evaluator = new ClauseEvaluator(new IClauseSource[] { new StepSource(), new FakeDbSource() }, redactor, _time);
+        var runner = new UatRunner(dispatcher, leases, evaluator, new FakeProbe(), _time, observations, paths);
+        var writer = new BundleWriter(paths.UatRuns, validator, redactor, new SecretScanner(_vault), _time, "abcd1234", "linux", "build", null);
+        writer.UseBuild(new BuildStamp("abcd1234", string.Empty, false, string.Empty));
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+
+        Result<UatRunResult> run = await runner.RunAsync(
+            new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), writer, CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        Assert.NotNull(writer.Folder);
+        Assert.Contains("-abcd1234-", Path.GetFileName(writer.Folder!), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(writer.Folder!, "events.jsonl")));
+    }
+
     public void Dispose()
     {
         _audit.Dispose();
@@ -212,16 +258,17 @@ public sealed class RowEvidenceTests : IDisposable
 
     private string RowPath(string rowId) => Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
 
-    private async Task<UatRunResult> RunSpecAsync()
+    private async Task<UatRunResult> RunSpecAsync(BundleWriter? sink = null)
     {
+        BundleWriter writer = sink ?? _writer;
         SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
         Assert.NotNull(loaded.Spec);
         Result<UatRunResult> run = await _runner.RunAsync(
-            new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), _writer, CancellationToken.None);
+            new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), writer, CancellationToken.None);
 
         Assert.True(run.IsSuccess);
-        Assert.Null(_writer.WriteError);
-        Assert.NotNull(_writer.Folder);
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
         return run.Value!;
     }
 

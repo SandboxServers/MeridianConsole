@@ -142,7 +142,7 @@ public static class BundleAttestor
 
             List<LedgerRow> rows = ReadRows(folder, redactor);
             string system = runObj["os"]?.GetValue<string>() ?? string.Empty;
-            written = WriteRedacted(folder, "ledger.md", LedgerRenderer.Render(runId, system, string.Empty, rows), redactor, validator);
+            written = WriteRedacted(folder, "ledger.md", LedgerRenderer.Render(runId, system, BuildStamp.FromRunJson(runObj).LedgerLine, rows), redactor, validator);
             if (written.IsFailure)
             {
                 return Result<string>.Failure(written.Error);

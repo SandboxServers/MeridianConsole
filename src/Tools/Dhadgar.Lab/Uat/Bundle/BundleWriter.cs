@@ -34,9 +34,10 @@ public sealed class BundleWriter : IUatRunSink
     private readonly Redactor _redactor;
     private readonly SecretScanner _scanner;
     private readonly TimeProvider _time;
-    private readonly string _buildId;
+    private string _buildId;
     private readonly string _system;
-    private readonly string _build;
+    private string _build;
+    private BuildStamp _stamp;
     private readonly string? _label;
     private readonly List<LedgerRow> _rows = [];
     private readonly List<UatRowResult> _results = [];
@@ -75,12 +76,28 @@ public sealed class BundleWriter : IUatRunSink
         _system = system ?? string.Empty;
         _build = build ?? string.Empty;
         _label = label;
+        _stamp = new BuildStamp(_buildId, string.Empty, false, string.Empty);
     }
 
     /// <summary>
     /// The bundle folder once the run finished, or null for a plan-only run or a write failure.
     /// </summary>
     public string? Folder { get; private set; }
+
+    /// <inheritdoc />
+    public string? FolderName => string.IsNullOrEmpty(_runId) ? null : BundleFolders.Name(_started, _buildId, _runId);
+
+    /// <summary>
+    /// Sets the build the bundle is written against (folder name, <c>run.json</c> build, fingerprint and ledger line). Call before <see cref="RunStarted"/>.
+    /// </summary>
+    /// <param name="stamp">The build stamp.</param>
+    public void UseBuild(BuildStamp stamp)
+    {
+        ArgumentNullException.ThrowIfNull(stamp);
+        _stamp = stamp;
+        _buildId = stamp.Id;
+        _build = stamp.LedgerLine;
+    }
 
     /// <summary>
     /// The first write failure, as a short text without paths or values, or null.
@@ -103,8 +120,8 @@ public sealed class BundleWriter : IUatRunSink
     private void CaptureFingerprint(ulong seed, UatSpec spec)
     {
         var input = new FingerprintInput(
-            Commit: FingerprintBuilder.UnknownPart,
-            Dirty: false,
+            Commit: _stamp.Commit.Length > 0 ? _stamp.Commit : FingerprintBuilder.UnknownPart,
+            Dirty: _stamp.Dirty,
             BuildId: _buildId == "nobuild" ? null : _buildId,
             ImageDigests: _live?.ImageDigests ?? new Dictionary<string, string>(),
             LockFilesSha256: null,
@@ -120,7 +137,11 @@ public sealed class BundleWriter : IUatRunSink
         _fingerprint = FingerprintBuilder.Build(input);
         _fingerprintSha = FingerprintHasher.Sha256(_fingerprint);
         _warnings.Clear();
-        _warnings.Add("commit not collected: unknown");
+        if (_stamp.Commit.Length == 0)
+        {
+            _warnings.Add("commit not collected: unknown");
+        }
+
         _warnings.Add("lock files not collected: unknown");
         _warnings.AddRange(_live?.Warnings ?? ["live fingerprint parts not collected: unknown"]);
     }
@@ -182,8 +203,7 @@ public sealed class BundleWriter : IUatRunSink
             return;
         }
 
-        string name = $"{_started.UtcDateTime:yyyyMMdd}-{_buildId}-{_runId}";
-        string folder = Path.Combine(_uatRuns, name);
+        string folder = Path.Combine(_uatRuns, BundleFolders.Name(_started, _buildId, _runId));
         Result<string> checkedFolder = _validator.ValidatePath(folder, [_uatRuns]);
         if (checkedFolder.IsFailure)
         {
@@ -326,7 +346,7 @@ public sealed class BundleWriter : IUatRunSink
             ended_at = _time.GetUtcNow(),
             daemon_version = typeof(BundleWriter).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             os = RuntimeInformation.OSDescription,
-            build = new { id = _buildId, commit = string.Empty, dirty = false, checkout = string.Empty },
+            build = new { id = _stamp.Id, commit = _stamp.Commit, dirty = _stamp.Dirty, checkout = _stamp.Checkout },
             lease_owner = (string?)null,
             members = Array.Empty<string>(),
             specs = new[] { new { file = spec.File, sha256 = spec.Sha256 } },
