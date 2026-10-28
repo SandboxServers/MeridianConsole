@@ -106,9 +106,6 @@ public static class ToolPolicy
         // L13
         // L15
         // L16
-        "uat_report",
-        "bundle_read",
-        "uat_attest",
         // L19
         "fault_list_targets",
         "faults_active",

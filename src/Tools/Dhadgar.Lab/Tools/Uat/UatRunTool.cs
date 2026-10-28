@@ -1,5 +1,8 @@
+using System.Runtime.InteropServices;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,7 +12,8 @@ namespace Dhadgar.Lab.Tools;
 /// <summary>
 /// Arguments of <c>uat_run</c>. <c>spec</c> is one file name or <c>catalog/&lt;file&gt;</c>. <c>sections</c> and <c>rows</c>
 /// filter the run. <c>lease_id</c> is used when it matches the current lease; without it the run takes its own lease.
-/// <c>replay</c> arrives in a later packet and is refused until then.
+/// <c>replay</c> is a bundle-relative <c>&lt;run_id&gt;\repro\repro.toml</c>: the seed, section, rows and spec come from that file,
+/// and a spec whose sha256 differs from the recorded one is refused.
 /// </summary>
 public sealed record UatRunArgs(
     string Spec,
@@ -49,13 +53,59 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
     /// <inheritdoc />
     public override string Description => "Runs one UAT spec (or plans it with plan_only). Uses the given lease_id, or takes and releases its own. Returns run_id, seed, overall and the rows.";
 
+    /// <summary>
+    /// Reads <c>repro\repro.toml</c> of one run. The first path segment is the run id; the rest must be a <c>repro</c> file
+    /// inside that bundle, which <see cref="BundleFolders.ResolveFile"/> checks against the bundle folder.
+    /// </summary>
+    private async Task<Result<ReproSettings>> LoadReproAsync(string replay, CancellationToken ct)
+    {
+        string[] parts = replay.Split(['\\', '/'], 2);
+        bool inReproFolder = parts.Length == 2 &&
+            (parts[1].StartsWith("repro\\", StringComparison.Ordinal) || parts[1].StartsWith("repro/", StringComparison.Ordinal));
+        if (!inReproFolder || !parts[1].EndsWith(".toml", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<ReproSettings>.Failure("[Lab.InvalidArgument] replay must be <run_id>\\repro\\<file>.toml");
+        }
+
+        Result<string> folder = BundleFolders.Find(_paths.UatRuns, parts[0], _validator);
+        if (folder.IsFailure)
+        {
+            return Result<ReproSettings>.Failure(folder.Error);
+        }
+
+        Result<string> file = BundleFolders.ResolveFile(folder.Value!, parts[1], _validator);
+        if (file.IsFailure)
+        {
+            return Result<ReproSettings>.Failure(file.Error);
+        }
+
+        Result<string> text = await BundleFolders.ReadTextAsync(file.Value!, ct).ConfigureAwait(false);
+        if (text.IsFailure)
+        {
+            return Result<ReproSettings>.Failure(text.Error);
+        }
+
+        return ReproReader.Parse(text.Value!);
+    }
+
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(UatRunArgs args, LabCallContext context, CancellationToken ct)
     {
+        ReproSettings? repro = null;
         if (args.Replay is not null)
         {
-            return Result<object>.Failure("[Lab.InvalidArgument] replay arrives in a later packet");
+            Result<ReproSettings> loadedRepro = await LoadReproAsync(args.Replay, ct).ConfigureAwait(false);
+            if (loadedRepro.IsFailure)
+            {
+                return Result<object>.Failure(loadedRepro.Error);
+            }
+
+            repro = loadedRepro.Value!;
         }
+
+        string specName = repro?.SpecFile ?? args.Spec;
+        IReadOnlyList<string>? sectionFilter = repro is null ? args.Sections : [repro.Section];
+        IReadOnlyList<string>? rowFilter = repro is null ? args.Rows : repro.Rows;
 
         Result<string> dir = UatSpecPaths.ResolveDir(args.SpecsDir, _paths, _validator);
         if (dir.IsFailure)
@@ -63,7 +113,7 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             return Result<object>.Failure(dir.Error);
         }
 
-        Result<string> path = UatSpecPaths.ResolveSpec(dir.Value!, args.Spec, _validator);
+        Result<string> path = UatSpecPaths.ResolveSpec(dir.Value!, specName, _validator);
         if (path.IsFailure)
         {
             return Result<object>.Failure(path.Error);
@@ -101,47 +151,48 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             return Result<object>.Failure("[Lab.InvalidArgument] the spec has validation problems; run uat_plan for the list");
         }
 
-        if (args.Sections is { Count: > 0 } &&!args.Sections.Contains(loaded.Spec.Section.Id, StringComparer.Ordinal))
+        if (repro is not null && loaded.Spec.Sha256 != repro.SpecSha256)
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] spec changed since the run");
+        }
+
+        if (sectionFilter is { Count: > 0 } && !sectionFilter.Contains(loaded.Spec.Section.Id, StringComparer.Ordinal))
         {
             return Result<object>.Failure("[Lab.NotFound] the section is not in the spec");
         }
 
+        string? label = string.IsNullOrEmpty(args.Label) ? repro?.Label : args.Label;
         var request = new UatRunRequest(
             loaded.Spec,
-            args.Rows is { Count: > 0 } ? args.Rows : null,
-            args.Seed,
+            rowFilter is { Count: > 0 } ? rowFilter : null,
+            repro is null ? args.Seed : repro.Seed,
             args.LeaseId,
-            args.Label,
+            label,
             args.PlanOnly);
 
         UatRunner runner = _services.GetRequiredService<UatRunner>();
-        Result<UatRunResult> run = await runner.RunAsync(request, new NullRunSink(), ct).ConfigureAwait(false);
+        var sink = new BundleWriter(
+            _paths.UatRuns,
+            _validator,
+            _services.GetRequiredService<Redactor>(),
+            new SecretScanner(_services.GetRequiredService<SecretVault>()),
+            _services.GetRequiredService<TimeProvider>(),
+            buildId: "nobuild",
+            system: RuntimeInformation.OSDescription,
+            build: string.Empty,
+            label: label);
+
+        Result<UatRunResult> run = await runner.RunAsync(request, sink, ct).ConfigureAwait(false);
         if (run.IsFailure)
         {
             return Result<object>.Failure(run.Error);
         }
 
+        if (sink.WriteError is not null)
+        {
+            return Result<object>.Failure(sink.WriteError);
+        }
+
         return Result<object>.Success(run.Value!);
-    }
-
-    /// <summary>
-    /// The sink for a tool call that returns its whole result in one reply; nothing is written anywhere.
-    /// </summary>
-    private sealed class NullRunSink : IUatRunSink
-    {
-        /// <inheritdoc />
-        public void RunStarted(string runId, ulong seed, UatSpec spec)
-        {
-        }
-
-        /// <inheritdoc />
-        public void RowFinished(UatRowResult row)
-        {
-        }
-
-        /// <inheritdoc />
-        public void RunFinished(UatRunResult result)
-        {
-        }
     }
 }
