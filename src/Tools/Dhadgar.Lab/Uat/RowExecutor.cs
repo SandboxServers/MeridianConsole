@@ -60,8 +60,9 @@ internal sealed class RowExecutor
 
     /// <summary>
     /// Runs one row after its gates. A gate that fails returns the row SKIPPED or BLOCKED without running its steps.
+    /// <paramref name="extraFaults"/> are the twin overlay's faults (L53): they inject before the steps, like the row's own before_steps faults.
     /// </summary>
-    internal async Task<UatRowResult> RunRowAsync(UatSpec spec, UatRow row, string? missing, Dictionary<string, RowGrade> recorded, RunContext run, CancellationToken ct)
+    internal async Task<UatRowResult> RunRowAsync(UatSpec spec, UatRow row, string? missing, Dictionary<string, RowGrade> recorded, RunContext run, IReadOnlyList<UatFault> extraFaults, CancellationToken ct)
     {
         if (run.LeaseLost)
         {
@@ -91,10 +92,10 @@ internal sealed class RowExecutor
             }
         }
 
-        return await ExecuteRowAsync(spec, row, run, ct).ConfigureAwait(false);
+        return await ExecuteRowAsync(spec, row, extraFaults, run, ct).ConfigureAwait(false);
     }
 
-    private async Task<UatRowResult> ExecuteRowAsync(UatSpec spec, UatRow row, RunContext run, CancellationToken ct)
+    private async Task<UatRowResult> ExecuteRowAsync(UatSpec spec, UatRow row, IReadOnlyList<UatFault> extraFaults, RunContext run, CancellationToken ct)
     {
         var vars = new UatVars(run.RunId, row.Id, spec.Section.Id, run.Seed, null);
         var stepStarts = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
@@ -117,7 +118,7 @@ internal sealed class RowExecutor
         try
         {
             // Faults that start before the first step. An inject error stops the row; the faults already in place are healed below.
-            foreach (UatFault fault in row.Faults.Where(f => f.Start == BeforeSteps))
+            foreach (UatFault fault in row.Faults.Where(f => f.Start == BeforeSteps).Concat(extraFaults))
             {
                 faultError = await InjectAsync(fault, vars, run, faults, ct).ConfigureAwait(false);
                 if (faultError is not null)
@@ -223,7 +224,7 @@ internal sealed class RowExecutor
         }
 
         // A row with faults waits for the system to settle before its clauses read the state (Lab:Uat:SettleMs).
-        if (row.Faults.Count > 0 && stepError is null && _settle > TimeSpan.Zero)
+        if ((row.Faults.Count > 0 || extraFaults.Count > 0) && stepError is null && _settle > TimeSpan.Zero)
         {
             await Task.Delay(_settle, _time, ct).ConfigureAwait(false);
         }

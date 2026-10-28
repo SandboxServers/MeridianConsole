@@ -562,7 +562,7 @@ public sealed class BundleWriter : IUatRunSink
             secret_scan_removed = removed,
             fingerprint_sha256 = _fingerprintSha,
             fidelity = FidelityText(CurrentFidelity(result.Truncated)),
-            pair = (object?)null,
+            pair = result.Pair is { } info ? (object)new { experiment_id = info.ExperimentId, role = info.Role, partner_run_id = info.PartnerRunId, relation = info.Relation } : null,
             replay = (object?)null,
             events = result.Events,
             warnings,
