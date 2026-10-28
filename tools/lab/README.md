@@ -18,16 +18,16 @@ Run from the repository root in PowerShell 7:
 .\tools\lab\install.ps1
 ```
 
-`install.ps1` may run elevated, but the task it registers runs as your logged-on user with the Limited run level, so the daemon never runs elevated. The token is written to your user environment; the script never prints it.
+`install.ps1` refuses to run elevated (`[Lab.Elevated]`), so run it from a normal PowerShell 7 window. It publishes repository build code and writes into a directory that other same-user processes can change; an elevated session would give those processes administrator rights. The task it registers runs as your logged-on user with the Limited run level, so the daemon never runs elevated. The token is generated in PowerShell and written to your user environment; the script never prints it.
 
-When it finishes, restart your terminal so Claude Code sees `MERIDIAN_LAB_TOKEN`.
+When it finishes, restart your terminal so Claude Code sees `MERIDIAN_LAB_TOKEN`. The daemon starts at your next logon; run `.\tools\lab\daemon.ps1 -Start` to start it now.
 
 ## Start, stop and status
 
 ```powershell
 .\tools\lab\daemon.ps1 -Start
 .\tools\lab\daemon.ps1 -Stop
-.\tools\lab\daemon.ps1 -Status    # prints "HTTP 200" and the status body, or the refusal
+.\tools\lab\daemon.ps1 -Status    # prints "HTTP 200" and the status body, or the refusal; exits 1 when the status is not 200
 ```
 
 The task restarts the daemon up to 3 times, one minute apart, after a failure. It has no execution time limit and starts at each logon.
