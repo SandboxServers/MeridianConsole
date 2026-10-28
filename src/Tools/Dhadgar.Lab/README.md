@@ -227,6 +227,21 @@ A Leased call's lease is watched for the whole call. If the lease expires, is re
 - **Run and row fields.** `run.json` has `tools` (the distinct step tools) and `lease_owner`. Each row has `started_at` and `ended_at`, and `member`.
 - **Redaction.** Every file passes `Redactor`; `SecretScanner` runs last. A hit rewrites the bundle with every row BLOCKED.
 
+## Invariants
+
+Six monitors run at the start and end of every `uat_run` and on demand through `invariants_check` (Open gate). The windows and violations land in `invariants.json` in the bundle, and `run.json` carries the violation count.
+
+| Id | Watches |
+| --- | --- |
+| I1 | Unhandled exceptions in service log rings |
+| I2 | Outbox rows stuck past their age limit |
+| I3 | Database checks from `docs/guides/uat-specs/invariants` |
+| I4 | Secrets (vault values, the daemon token) in any raw log line |
+| I5 | Orphans: labelled containers, queues, proxies, backups |
+| I6 | Unexplained restarts (kill and pause faults excuse theirs) |
+
+I1 to I6 register in `Mcp/Areas/InvariantsArea.cs`; the wiring adapters live in `Invariants/InvariantWiring.cs`.
+
 ## Attestation
 
 `uat_attest` records a human verdict on a clause that needs someone to look at the screen (D-ML67).

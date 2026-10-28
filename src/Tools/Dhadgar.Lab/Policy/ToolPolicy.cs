@@ -109,7 +109,6 @@ public static class ToolPolicy
         // L19
         // L20 (registered)
         // L21
-        "invariants_check",
         // L25
         "results_query",
         // L26
