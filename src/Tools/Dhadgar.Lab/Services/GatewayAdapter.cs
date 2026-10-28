@@ -51,13 +51,17 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     public Result<IReadOnlyDictionary<string, string>> Environment(LabServiceContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
+        // The vault-built string (with the Redis password) wins; the bare proxy address is the fallback.
+        string redis = ctx.ConnectionStrings.TryGetValue("gateway-redis", out string? vaultRedis) && !string.IsNullOrWhiteSpace(vaultRedis)
+            ? vaultRedis
+            : $"{ToxiproxyHost}:{GatewayRedisProxyPort}";
         var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
             ["Logging__Console__FormatterName"] = "json",
             ["Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics"] = "Information",
             ["ReverseProxy__Clusters__nodes__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayNodesProxyPort}/",
-            ["Redis__ConnectionString"] = $"{ToxiproxyHost}:{GatewayRedisProxyPort}",
+            ["Redis__ConnectionString"] = redis,
             ["Cloudflare__EnableDynamicFetch"] = "false",
             ["Readyz__RequiredClusters__0"] = "nodes",
         };
