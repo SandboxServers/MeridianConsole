@@ -172,6 +172,12 @@ public sealed class LabSelfTestE2ETests
         using var runJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
         Assert.Equal("passed", runJson.RootElement.GetProperty("secret_scan").GetString());
         Assert.True(File.Exists(Path.Combine(bundle, "ledger.md")));
+
+        // L21: the always-on invariants found nothing and no check errored.
+        Assert.Equal(0, runJson.RootElement.GetProperty("violations").GetInt32());
+        using var invariantsJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "invariants.json")));
+        Assert.Equal(0, invariantsJson.RootElement.GetProperty("errors").GetArrayLength());
+        Assert.Equal(0, invariantsJson.RootElement.GetProperty("violations").GetArrayLength());
     }
 
     /// <summary>

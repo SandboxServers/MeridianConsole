@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
@@ -358,6 +359,13 @@ public sealed class BundleWriter : IUatRunSink
             Write(Path.Combine("rows", row.Section, row.Row + ".json"), JsonSerializer.Serialize(rowJson, JsonOptions));
         }
 
+        if (!secretFailed)
+        {
+            // Violations and check errors are already redacted by their invariants.
+            InvariantReport invariants = result.Invariants ?? new InvariantReport([], []);
+            Write("invariants.json", JsonSerializer.Serialize(new { schema = 1, violations = invariants.Violations, errors = invariants.Errors }, JsonOptions));
+        }
+
         Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));
         Write("ledger.md", LedgerRenderer.Render(_runId, _system, _build, rows));
         if (!secretFailed)
@@ -396,7 +404,7 @@ public sealed class BundleWriter : IUatRunSink
             incomplete_reasons = Array.Empty<string>(),
             new_failures = failedRows,
             known_failures = Array.Empty<string>(),
-            violations = 0,
+            violations = secretFailed ? 0 : result.Invariants?.Violations.Count ?? 0,
             redactions = _passRedactions,
             secret_scan = secretScan,
             secret_scan_removed = removed,

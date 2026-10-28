@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Policy;
@@ -40,7 +42,7 @@ public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, I
 /// The result of one run. <see cref="Seed"/> is the seed the rows ran with (the section seed when the section sets one).
 /// <see cref="LeaseOwner"/> is the owner of the lease the run held; it goes only to the bundle, never to the <c>uat_run</c> result.
 /// </summary>
-public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows, long Events = 0, bool Truncated = false, [property: JsonIgnore] string? LeaseOwner = null);
+public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows, long Events = 0, bool Truncated = false, [property: JsonIgnore] string? LeaseOwner = null, [property: JsonIgnore] InvariantReport? Invariants = null);
 
 /// <summary>
 /// Runs a loaded spec through <see cref="LabToolDispatcher"/> (C8, R-CONTRACT). Rows run in file order; a row whose dependency did not
@@ -68,11 +70,14 @@ public sealed class UatRunner
     private readonly TimeProvider _time;
     private readonly ILabObservationSink? _observations;
     private readonly string? _uatRuns;
+    private readonly InvariantMonitor? _invariants;
+    private readonly InvariantLedger? _ledger;
+    private readonly DaemonIdentity? _daemon;
 
     /// <summary>
     /// Creates the runner. With <paramref name="observations"/> and <paramref name="paths"/> every run and step is recorded in the run's <c>events.jsonl</c> (C18).
     /// </summary>
-    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null)
+    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null, InvariantMonitor? invariants = null, InvariantLedger? ledger = null, DaemonIdentity? daemon = null)
     {
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
@@ -81,6 +86,9 @@ public sealed class UatRunner
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _observations = observations;
         _uatRuns = paths?.UatRuns;
+        _invariants = invariants;
+        _ledger = ledger;
+        _daemon = daemon;
     }
 
     /// <summary>
@@ -144,6 +152,9 @@ public sealed class UatRunner
 
             string? missing = await MissingCapabilityAsync(request.Spec.Section, ct).ConfigureAwait(false);
 
+            // Checkpoint at run start: the window runs from the daemon's start, so earlier leaks and orphans are reported.
+            InvariantReport startReport = await CheckpointAsync(_daemon?.StartedAt ?? run.RunStart, ct).ConfigureAwait(false);
+
             var grades = new List<RowGrade>();
             var failures = new List<(string FailureKey, bool IsKnown)>();
             var rows = new List<UatRowResult>();
@@ -170,6 +181,12 @@ public sealed class UatRunner
                 sink.RowFinished(result);
             }
 
+            // Checkpoint at run end: from the run start to now.
+            InvariantReport endReport = await CheckpointAsync(run.RunStart, ct).ConfigureAwait(false);
+            var invariantReport = new InvariantReport(
+                startReport.Violations.Concat(endReport.Violations).ToArray(),
+                startReport.Errors.Concat(endReport.Errors).ToArray());
+
             long events = 0;
             if (observing)
             {
@@ -180,7 +197,7 @@ public sealed class UatRunner
 
             // The sink stops counting at MaxObservationsPerRun and writes one extra "truncated" note, so a larger count means truncation.
             bool truncated = events > LabObservationSink.MaxObservationsPerRun;
-            var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows, events, truncated, leaseOwner);
+            var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows, events, truncated, leaseOwner, invariantReport);
             sink.RunFinished(outcome);
             return Result<UatRunResult>.Success(outcome);
         }
@@ -196,6 +213,22 @@ public sealed class UatRunner
                 _ = _leases.Release(leaseId);
             }
         }
+    }
+
+    /// <summary>
+    /// Runs one invariant checkpoint over [from, now] and records it in the ledger. A run without a monitor reports nothing.
+    /// </summary>
+    private async Task<InvariantReport> CheckpointAsync(DateTimeOffset from, CancellationToken ct)
+    {
+        if (_invariants is null)
+        {
+            return new InvariantReport([], []);
+        }
+
+        var window = new InvariantWindow(from, _time.GetUtcNow(), null, null);
+        InvariantReport report = await _invariants.CheckpointAsync(window, ct).ConfigureAwait(false);
+        _ledger?.Record(window, report);
+        return report;
     }
 
     private async Task<string?> MissingCapabilityAsync(UatSection section, CancellationToken ct)
