@@ -2,17 +2,18 @@
 
 Ledger: [README.md](README.md). Packets and contract (C1-C20): [work-packets.md](work-packets.md).
 
-## State (2026-10-27, wave 2 in review)
+## State (2026-10-27, wave 2 closed)
 
-- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only, not pushed). Base `origin/main` `c0a7ee9`.
-- **Waves 1 and 2 (L01-L12) are Integrated.** L09f (`RabbitMq:Port`, D-ML62) is Done as its own PR to `main` (#237). S-L1, S-L2 and S-L3 are green.
-- **Wave 2 review pass 1 ended on `decision`; ruled in [worknotes/W2-ruling-3.md](worknotes/W2-ruling-3.md)** (D-ML63 probes, D-ML64 doctor, D-ML65 registration areas, F54 rate limits). No owner decision needed.
+- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only, not pushed). Tip **`310887b`**. Base `origin/main` `c0a7ee9`; `main` has moved on (L09f #237 `c5ca3c4` is already merged into the branch).
+- **Waves 1 and 2 (L01-L12) are Integrated.** Wave 2 review pass 3 `ship`, security pass 2 `ship`. Lab tests: 308 pass, 0 fail, 4 skipped; `CI=true` build clean. L09f (`RabbitMq:Port`, D-ML62) is Done as its own PR (#237). S-L1, S-L2 and S-L3 are green.
+- Wave 2 rulings are in [worknotes/W2-ruling-3.md](worknotes/W2-ruling-3.md) (D-ML63 probes, D-ML64 doctor, D-ML65 registration areas, F54 rate limits). No owner decision needed.
+- Open for the architect before L49/L36: the doctor `ports` check flags the lab's own in-daemon listeners (barrier 25080, sink 18090) as foreign (wave2-review-2 D4).
 - **L00 is parked** (Windows containers off; owner, 2026-10-27). Parked with it: L31, L32, L33 and the container parts of wave 8 (L43; container pieces of L41, L59, L60).
 - **Owner decision 2026-10-27: reviews at wave boundaries and campaign end only.** Each wave gets a wave reviewer plus a `security-advisor`; fix notes go to fresh coders per packet.
 
 ## Next actions (orchestrator)
 
-1. Wave 2 fix passes: the review's fix notes, with the L12 pass taking N2, D1 (in place of N3), the N4 check table and N5 from W2-ruling-3. Then wave 2 review pass 2.
+1. Wave 3 begins. Coders context-stop often on big packets: tell them to commit after each step and keep tool output short.
 2. L12a (wave 3, first): registration areas and the policy-derived tool set. Every later tool packet carries `R-REG: area <Area>`.
 3. Then L13 → L14 → L15 → L16 → L48 → L17 → L18.
 4. Ask the user D-ML39 (one PR vs one per milestone) before wave 3 ends.
