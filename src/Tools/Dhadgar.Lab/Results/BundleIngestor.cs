@@ -139,45 +139,22 @@ public sealed class BundleIngestor
         foreach (ParsedRow row in rows.Value)
         {
             graded.Add(new GradedRow(row.Section, row.RowId, row.Grade));
-            string? primaryId = null;
-            var signatureIds = new List<string>();
-            string? knownMatch = null;
-
-            if (row.Grade is RowGrade.Fail or RowGrade.Blocked or RowGrade.Unverified)
+            RowVerdict verdict = RowVerdicts.Of(row, _known.Issues, _scrub);
+            foreach (FailureSignature signature in verdict.Signatures)
             {
-                var evidence = new RowEvidence(row.Section, row.RowId, [], [], row.Clauses,
-                    row.Violations.Select(v => v.Evidence).ToList(), [], []);
-                List<FailureSignature> scrubbed = SignatureBuilder.BuildAll(evidence).Select(Scrubbed).ToList();
-                foreach (FailureSignature signature in scrubbed)
-                {
-                    string id = SignatureBuilder.SignatureId(signature.Text);
-                    if (!signatureIds.Contains(id, StringComparer.Ordinal))
-                    {
-                        signatureIds.Add(id);
-                    }
+                signatureRecords[SignatureBuilder.SignatureId(signature.Text)] = new SignatureRecord(
+                    SignatureBuilder.SignatureId(signature.Text), signature.Kind, signature.Text, row.EndedAt ?? runEnd, "new", null);
+            }
 
-                    signatureRecords[id] = new SignatureRecord(id, signature.Kind, signature.Text, row.EndedAt ?? runEnd,
-                        "new", null);
-                }
-
-                FailureSignature? primary = SignatureBuilder.Primary(evidence) is { } first ? Scrubbed(first) : null;
-                primaryId = primary is null ? null : SignatureBuilder.SignatureId(primary.Text);
-
-                KnownMatch match = _known.Issues.Match(new RowFailure(row.Section, row.RowId, row.KnownIssue, scrubbed));
+            if (verdict.Match is { } match)
+            {
                 matches[row.Section + "/" + row.RowId] = match;
-                knownMatch = match.State switch
-                {
-                    "known" => match.IssueId,
-                    "claimed_mismatch" => "claimed_mismatch",
-                    "regressed" => "regressed:" + match.IssueId,
-                    _ => null,
-                };
-                RecordSignatureState(signatureRecords, signatureIds, match, row.EndedAt ?? runEnd);
+                RecordSignatureState(signatureRecords, verdict.SignatureIds.ToList(), match, row.EndedAt ?? runEnd);
             }
 
             rowRecords.Add(new RowRecord(runId, row.Section, row.RowId, LedgerRenderer.ResultText(row.Grade),
-                row.Reason is null ? null : _scrub(row.Reason), ParsedSeed(run), row.KnownIssue, primaryId,
-                JsonSerializer.Serialize(signatureIds), knownMatch, row.StartedAt, row.EndedAt));
+                row.Reason is null ? null : _scrub(row.Reason), ParsedSeed(run), row.KnownIssue, verdict.PrimaryId,
+                JsonSerializer.Serialize(verdict.SignatureIds), verdict.KnownMatchText, row.StartedAt, row.EndedAt));
 
             foreach (ParsedViolation violation in row.Violations)
             {
@@ -373,7 +350,7 @@ public sealed class BundleIngestor
                 return Result<List<ParsedRow>>.Failure(obj.Error);
             }
 
-            Result<ParsedRow> row = ParseRow(obj.Value);
+            Result<ParsedRow> row = RowVerdicts.Parse(obj.Value);
             if (row.IsFailure)
             {
                 return Result<List<ParsedRow>>.Failure(row.Error);
@@ -405,48 +382,13 @@ public sealed class BundleIngestor
         }
     }
 
-    private static Result<ParsedRow> ParseRow(JsonObject obj)
-    {
-        string? section = Text(obj, "section");
-        string? rowId = Text(obj, "id");
-        if (string.IsNullOrEmpty(section) || string.IsNullOrEmpty(rowId))
-        {
-            return Result<ParsedRow>.Failure("[Lab.InvalidArgument] a row file has no section or id");
-        }
-
-        var clauses = Objects(obj, "clauses")
-            .Where(clause => Bool(clause, "required") ?? true)
-            .Select(clause => new ClauseEvidence(section, rowId, Text(clause, "id") ?? string.Empty,
-                Text(clause, "state") ?? string.Empty))
-            .ToList();
-        var violations = Objects(obj, "violations")
-            .Select(v => new ParsedViolation(
-                new ViolationEvidence(Text(v, "invariant_id") ?? string.Empty, Text(v, "service") ?? string.Empty,
-                    Text(v, "check_id") ?? string.Empty, Bool(v, "allowed") ?? false),
-                Text(v, "detail"), Text(v, "at")))
-            .ToList();
-
-        return Result<ParsedRow>.Success(new ParsedRow(section, rowId, ParseGrade(Text(obj, "grade")), Text(obj, "reason"),
-            Text(obj, "started_at"), Text(obj, "ended_at"), Text(obj, "known_issue"), clauses, violations));
-    }
-
-    private static RowGrade ParseGrade(string? text) => text switch
-    {
-        "PASS" => RowGrade.Pass,
-        "FAIL" => RowGrade.Fail,
-        "BLOCKED" => RowGrade.Blocked,
-        "SKIPPED" => RowGrade.Skipped,
-        "NEEDS_HUMAN" => RowGrade.NeedsHuman,
-        _ => RowGrade.Unverified,
-    };
-
     private static long ParsedSeed(JsonObject run) =>
         run["seed"] is JsonValue value && value.TryGetValue(out long seed) ? seed : 0;
 
-    private static IEnumerable<JsonObject> Objects(JsonObject obj, string key) =>
+    internal static IEnumerable<JsonObject> Objects(JsonObject obj, string key) =>
         (obj[key] as JsonArray ?? new JsonArray()).OfType<JsonObject>();
 
-    private static string? Text(JsonObject obj, params string[] path)
+    internal static string? Text(JsonObject obj, params string[] path)
     {
         JsonNode? node = obj;
         foreach (string key in path)
@@ -457,7 +399,7 @@ public sealed class BundleIngestor
         return node is JsonValue value && value.TryGetValue(out string? text) ? text : null;
     }
 
-    private static bool? Bool(JsonObject obj, params string[] path)
+    internal static bool? Bool(JsonObject obj, params string[] path)
     {
         JsonNode? node = obj;
         foreach (string key in path)
@@ -467,9 +409,4 @@ public sealed class BundleIngestor
 
         return node is JsonValue value && value.TryGetValue(out bool flag) ? flag : null;
     }
-
-    private sealed record ParsedRow(string Section, string RowId, RowGrade Grade, string? Reason, string? StartedAt,
-        string? EndedAt, string? KnownIssue, IReadOnlyList<ClauseEvidence> Clauses, IReadOnlyList<ParsedViolation> Violations);
-
-    private sealed record ParsedViolation(ViolationEvidence Evidence, string? Detail, string? At);
 }
