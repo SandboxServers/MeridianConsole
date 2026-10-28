@@ -4,6 +4,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Secrets;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Dhadgar.Lab.Tests.Daemon;
@@ -11,6 +14,7 @@ namespace Dhadgar.Lab.Tests.Daemon;
 /// <summary>
 /// The edge refusal order (C2): Host, then Origin, then bearer token, for every route.
 /// </summary>
+[Collection("LabHome")]
 public sealed class EdgeGuardTests
 {
     [Fact]
@@ -304,6 +308,42 @@ public sealed class EdgeGuardTests
             Assert.Equal(0, json.RootElement.GetProperty("activeFaults").GetInt32());
             Assert.Equal(0, json.RootElement.GetProperty("leasedMembers").GetArrayLength());
             Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("runningJob").ValueKind);
+        }
+        finally
+        {
+            EdgeTestHost.DeleteDataRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Status_LeasePurposeHoldsVaultSecret_ReturnsRedactedPurpose()
+    {
+        // GET /status runs the same redaction as lab_status: a lease purpose that equals a vault value is masked.
+        var token = EdgeTestHost.NewToken();
+        var dataRoot = EdgeTestHost.NewDataRoot();
+        try
+        {
+            await using var daemon = await EdgeTestHost.StartAsync(token, dataRoot);
+            var secret = "purpose-secret-" + Guid.NewGuid().ToString("N");
+            var secretRef = daemon.Services.GetRequiredService<SecretVault>().Add(SecretKind.Password, secret.AsSpan());
+            var lease = daemon.Services.GetRequiredService<LeaseBook>().Acquire("session-a", secret, null, false, null);
+            Assert.True(lease.IsSuccess, lease.Error);
+
+            using var http = new HttpClient { BaseAddress = daemon.BaseAddress };
+            using var request = new HttpRequestMessage(HttpMethod.Get, "status");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var response = await http.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.DoesNotContain(secret, body, StringComparison.Ordinal);
+            Assert.Contains("***" + secretRef, body, StringComparison.Ordinal);
+            using var json = JsonDocument.Parse(body);
+            var leaseJson = json.RootElement.GetProperty("lease");
+            Assert.True(leaseJson.GetProperty("held").GetBoolean());
+            Assert.Equal("session-a", leaseJson.GetProperty("owner").GetString());
+            Assert.Equal("***" + secretRef, leaseJson.GetProperty("purpose").GetString());
         }
         finally
         {

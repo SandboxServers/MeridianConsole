@@ -121,7 +121,8 @@ public sealed class LabDaemon : IAsyncDisposable
             }
 
             // The daemon's own token is a vault value, so it never reaches the audit log or a tool payload.
-            _ = app.Services.GetRequiredService<SecretVault>().Add(SecretKind.BearerToken, options.Token.AsSpan());
+            // TokenValidator trims before decoding, so the vault gets the same trimmed text the guard accepts.
+            _ = app.Services.GetRequiredService<SecretVault>().Add(SecretKind.BearerToken, options.Token.AsSpan().Trim());
 
             await app.StartAsync(ct).ConfigureAwait(false);
 

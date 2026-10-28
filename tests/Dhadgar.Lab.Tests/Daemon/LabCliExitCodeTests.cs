@@ -14,6 +14,7 @@ namespace Dhadgar.Lab.Tests.Daemon;
 /// <remarks>
 /// These tests set process environment variables, so they run one at a time within this class.
 /// </remarks>
+[Collection("LabHome")]
 public sealed class LabCliExitCodeTests
 {
     [Fact]
@@ -117,6 +118,22 @@ public sealed class LabCliExitCodeTests
         Assert.Equal(0, exit);
         var line = output.TrimEnd('\r', '\n');
         Assert.Equal(LabDefaults.MinTokenBytes, System.Buffers.Text.Base64Url.DecodeFromChars(line).Length);
+    }
+
+    [Fact]
+    public async Task TakeTokenFromEnvironment_ReturnsTokenAndClearsItFromEnvironment()
+    {
+        var token = ValidToken();
+        var (read, after) = await WithEnvironmentAsync(
+            new Dictionary<string, string?> { [LabDefaults.TokenEnvVar] = token },
+            () =>
+            {
+                var taken = LabCli.TakeTokenFromEnvironment();
+                return Task.FromResult((taken, Environment.GetEnvironmentVariable(LabDefaults.TokenEnvVar)));
+            });
+
+        Assert.Equal(token, read);
+        Assert.Null(after);
     }
 
     private static string ValidToken() => System.Buffers.Text.Base64Url.EncodeToString(
