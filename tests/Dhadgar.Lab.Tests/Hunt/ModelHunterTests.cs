@@ -17,7 +17,7 @@ namespace Dhadgar.Lab.Tests.Hunt;
 /// </summary>
 public sealed class ModelHunterTests : IDisposable
 {
-    private static readonly ulong Seed = 20261028;
+    private const ulong Seed = 20261028;
     private readonly string _root = Path.Combine(Path.GetTempPath(), "meridian-lab-hunter", Guid.NewGuid().ToString("N"));
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 28, 10, 0, 0, TimeSpan.Zero));
     private readonly PathValidator _validator = new(NullLogger<PathValidator>.Instance);
@@ -150,10 +150,7 @@ public sealed class ModelHunterTests : IDisposable
         public async Task<LabToolResult> InvokeAsync(string tool, JsonElement args, LabCallContext context, CancellationToken ct)
         {
             Calls.Add((tool, ct.IsCancellationRequested));
-            if (ct.IsCancellationRequested)
-            {
-                throw new OperationCanceledException(ct);
-            }
+            ct.ThrowIfCancellationRequested();
 
             await Task.Yield();
             switch (tool)

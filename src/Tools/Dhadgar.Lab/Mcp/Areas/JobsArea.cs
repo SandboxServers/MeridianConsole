@@ -1,6 +1,7 @@
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Tools.Hunt;
 using Dhadgar.Lab.Tools.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,5 +22,6 @@ public static partial class LabMcpServer
         AddLabTool<JobStatusTool>(services);
         AddLabTool<JobCancelTool>(services);
         AddLabTool<FlakeCheckTool>(services);
+        AddLabTool<HuntModelTool>(services);
     }
 }

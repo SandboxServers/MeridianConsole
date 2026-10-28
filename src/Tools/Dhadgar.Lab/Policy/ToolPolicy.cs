@@ -115,8 +115,6 @@ public static class ToolPolicy
         "results_known_issue_set",
         "triage_draft_issue",
         "triage_mark",
-        // L27
-        "hunt_model_run",
         // L28
         "fuzz_run",
         // L29
