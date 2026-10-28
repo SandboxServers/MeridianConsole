@@ -224,6 +224,13 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
         var payload = System.Text.Json.JsonSerializer.SerializeToNode(run.Value!, LabJson.Options) as System.Text.Json.Nodes.JsonObject
             ?? new System.Text.Json.Nodes.JsonObject();
         payload["bundle"] = sink.Folder is { } folder ? Path.GetFileName(folder) : null;
+
+        // A4: the overall is the one the bundle wrote to run.json (D-ML89), whenever the sink wrote one.
+        if (sink.FinalOverall is { } finalOverall)
+        {
+            payload["overall"] = finalOverall;
+        }
+
         return Result<object>.Success(payload);
     }
 }

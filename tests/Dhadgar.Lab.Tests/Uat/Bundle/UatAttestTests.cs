@@ -99,6 +99,42 @@ public sealed class UatAttestTests : IDisposable
         """;
 
     [Fact]
+    public async Task UatRun_ReturnedOverallEqualsRunJson()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l25-overall-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var vault = new SecretVault();
+            var redactor = new Redactor(vault);
+            var time = new FakeTimeProvider(At);
+            using var audit = new AuditLog(LabPaths.FromRoot(root), _validator, redactor, time);
+            var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+            var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new AcceptingStub() }), leases, audit, redactor, time);
+            var runner = new UatRunner(dispatcher, leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), new ProbeYes(), time);
+            UatSpec spec = SpecLoader.LoadText("overall-equals.toml", HiddenExpectSpec).Spec!;
+            var writer = new BundleWriter(Path.Combine(root, "uat-runs"), _validator, redactor, new SecretScanner(vault), time,
+                "nobuild", "test-system", "test-build", null);
+
+            Result<UatRunResult> run = await runner.RunAsync(
+                new UatRunRequest(spec, null, 1UL, null, null, PlanOnly: false), writer, CancellationToken.None);
+
+            Assert.True(run.IsSuccess);
+            Assert.NotNull(writer.Folder);
+            Assert.Equal(RunOverall.Fail, run.Value!.Overall);
+            JsonNode? runJson = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json"), CancellationToken.None));
+            Assert.Equal(runJson?["overall"]?.GetValue<string>(), writer.FinalOverall);
+            Assert.Equal("fail", writer.FinalOverall);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Attest_FailRowWithHiddenExpectFailure_StaysFail()
     {
         string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l16-fail-" + Guid.NewGuid().ToString("N"));

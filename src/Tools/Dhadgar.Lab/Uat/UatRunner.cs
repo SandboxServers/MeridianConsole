@@ -6,6 +6,7 @@ using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Random;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Eval;
@@ -161,8 +162,6 @@ public sealed class UatRunner
             InvariantReport startReport = await CheckpointAsync(startWindow, ct).ConfigureAwait(false);
             run.CoveredTo = startWindow.To;
 
-            var grades = new List<RowGrade>();
-            var failures = new List<(string FailureKey, bool IsKnown)>();
             var rows = new List<UatRowResult>();
             var recorded = new Dictionary<string, RowGrade>(StringComparer.Ordinal);
 
@@ -176,13 +175,7 @@ public sealed class UatRunner
                 DateTimeOffset rowStarted = _time.GetUtcNow();
                 UatRowResult result = await _rows.RunRowAsync(request.Spec, row, missing, recorded, run, ct).ConfigureAwait(false);
                 result = result with { StartedAt = rowStarted, EndedAt = _time.GetUtcNow() };
-                grades.Add(result.Grade);
                 recorded[row.Id] = result.Grade;
-                if (result.Grade is RowGrade.Fail or RowGrade.Blocked)
-                {
-                    failures.Add((row.Id, false));
-                }
-
                 rows.Add(result);
                 sink.RowFinished(result);
             }
@@ -201,12 +194,6 @@ public sealed class UatRunner
             // Violations and check errors outside every row window (the run start and end checkpoints) become synthetic rows (C8, D-ML24).
             foreach (UatRowResult synthetic in SyntheticRows(startReport.Violations.Concat(endReport.Violations).ToArray(), startReport.Errors.Concat(endReport.Errors).ToArray()))
             {
-                grades.Add(synthetic.Grade);
-                if (synthetic.Grade is RowGrade.Fail)
-                {
-                    failures.Add((synthetic.RowId, false));
-                }
-
                 rows.Add(synthetic);
                 sink.RowFinished(synthetic);
             }
@@ -221,7 +208,10 @@ public sealed class UatRunner
 
             // The sink stops counting at MaxObservationsPerRun and writes one extra "truncated" note, so a larger count means truncation.
             bool truncated = events > LabObservationSink.MaxObservationsPerRun;
-            var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows, events, truncated, leaseOwner, invariantReport);
+            // A1: the one rule for the overall (RunSummary). Known-issue matches come from the ingest, so none here (D-ML89).
+            var graded = rows.Select(row => new GradedRow(request.Spec.Section.Id, row.RowId, row.Grade)).ToList();
+            RunOverall overall = RunSummary.Compute(graded, new Dictionary<string, KnownMatch>(StringComparer.Ordinal)).Overall;
+            var outcome = new UatRunResult(runId, seed, false, overall, rows, events, truncated, leaseOwner, invariantReport);
             sink.RunFinished(outcome);
             return Result<UatRunResult>.Success(outcome);
         }

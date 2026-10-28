@@ -8,6 +8,7 @@ using Dhadgar.Lab.History;
 using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Processes;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
@@ -55,6 +56,7 @@ public sealed class BundleWriter : IUatRunSink
     private int _passRedactions;
     private int _rowRedactions;
     private IRunLogSource? _logs;
+    private string? _finalOverall;
 
     /// <summary>
     /// Creates the writer for one run.
@@ -90,6 +92,9 @@ public sealed class BundleWriter : IUatRunSink
 
     /// <inheritdoc />
     public string? FolderName => string.IsNullOrEmpty(_runId) ? null : BundleFolders.Name(_started, _buildId, _runId);
+
+    /// <inheritdoc />
+    public string? FinalOverall => _finalOverall;
 
     /// <summary>
     /// Sets the build the bundle is written against (folder name, <c>run.json</c> build, fingerprint and ledger line). Call before <see cref="RunStarted"/>.
@@ -367,7 +372,6 @@ public sealed class BundleWriter : IUatRunSink
         IReadOnlyList<LedgerRow> rows = secretFailed
             ? _rows.Select(row => row with { Grade = RowGrade.Blocked, Title = row.Row, Expected = string.Empty, Clauses = Array.Empty<LedgerClause>() }).ToList()
             : _rows;
-        string overall = secretFailed ? "fail" : OverallText(result.Overall);
         string secretScan = secretFailed ? "failed" : "passed";
 
         var summary = new Dictionary<string, int>(StringComparer.Ordinal)
@@ -379,8 +383,12 @@ public sealed class BundleWriter : IUatRunSink
             summary[LedgerRenderer.ResultText(row.Grade)]++;
         }
 
-        string[] failedRows = rows.Where(row => row.Grade is RowGrade.Fail or RowGrade.Blocked or RowGrade.Unverified)
-            .Select(row => row.Section + "/" + row.Row).ToArray();
+        // A1: the one rule (RunSummary). A secret-failed pass is "fail" whatever the rows say, as before.
+        RunSummary runSummary = RunSummary.Compute(
+            rows.Select(row => new GradedRow(spec.Section.Id, row.Row, row.Grade)).ToList(),
+            new Dictionary<string, KnownMatch>(StringComparer.Ordinal));
+        string overall = secretFailed ? "fail" : runSummary.OverallText;
+        _finalOverall = overall;
 
         if (_fingerprint is not null && !secretFailed)
         {
@@ -540,8 +548,8 @@ public sealed class BundleWriter : IUatRunSink
             summary,
             overall,
             incomplete_reasons = Array.Empty<string>(),
-            new_failures = failedRows,
-            known_failures = Array.Empty<string>(),
+            new_failures = runSummary.NewFailures,
+            known_failures = runSummary.KnownFailures,
             violations = secretFailed ? 0 : result.Invariants?.Violations.Count ?? 0,
             row_violations = secretFailed
                 ? []
@@ -800,12 +808,4 @@ public sealed class BundleWriter : IUatRunSink
         return text.Append('"').ToString();
     }
 
-    private static string OverallText(RunOverall overall) => overall switch
-    {
-        RunOverall.Pass => "pass",
-        RunOverall.PassWithKnown => "pass_with_known",
-        RunOverall.Incomplete => "incomplete",
-        RunOverall.Fail => "fail",
-        _ => throw new ArgumentOutOfRangeException(nameof(overall)),
-    };
 }

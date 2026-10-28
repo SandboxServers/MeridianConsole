@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Shared.Results;
 
@@ -258,20 +259,14 @@ public static class BundleAttestor
             summary[key] = rows.Count(row => LedgerRenderer.ResultText(row.Grade) == key);
         }
 
-        string[] failed = rows.Where(row => row.Grade is RowGrade.Fail or RowGrade.Blocked or RowGrade.Unverified)
-            .Select(row => row.Section + "/" + row.Row).ToArray();
-        RunOverall overall = RunOutcome.Compute(rows.Select(row => row.Grade).ToList(),
-            failed.Select(key => (FailureKey: key, IsKnown: false)).ToList());
+        // A1: the one rule (RunSummary). Known-issue matches are not read here, as at run end, so the attested overall agrees with run.json.
+        RunSummary run = RunSummary.Compute(rows.Select(row => new GradedRow(row.Section, row.Row, row.Grade)).ToList(),
+            new Dictionary<string, KnownMatch>(StringComparer.Ordinal));
 
         runObj["summary"] = summary;
-        runObj["new_failures"] = new JsonArray(failed.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray());
-        runObj["overall"] = overall switch
-        {
-            RunOverall.Pass => "pass",
-            RunOverall.PassWithKnown => "pass_with_known",
-            RunOverall.Incomplete => "incomplete",
-            _ => "fail",
-        };
+        runObj["new_failures"] = new JsonArray(run.NewFailures.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray());
+        runObj["known_failures"] = new JsonArray(run.KnownFailures.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray());
+        runObj["overall"] = run.OverallText;
         runObj["fidelity"] = "evidence_only";
     }
 
