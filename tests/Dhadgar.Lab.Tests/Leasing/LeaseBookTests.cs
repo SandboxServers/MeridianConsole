@@ -302,6 +302,35 @@ public sealed class LeaseBookTests
     }
 
     [Fact]
+    public void Renew_AfterExpiryWithoutSweep_ReturnsLeaseRequired()
+    {
+        (LeaseBook book, FakeTimeProvider time, RecordingEvents _) = Create();
+        LeaseGrant grant = Grant(book.Acquire("s1", "uat", 30, false, null));
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        Result<LeaseInfo> renewed = book.Renew(grant.LeaseId, null);
+
+        Assert.True(renewed.IsFailure);
+        Assert.StartsWith("[Lab.LeaseRequired]", renewed.Error, StringComparison.Ordinal);
+        Assert.Null(book.Current);
+        Assert.Equal(LeaseEndReason.Expired, Assert.Single(book.History).Reason);
+    }
+
+    [Fact]
+    public void Release_AfterExpiryWithoutSweep_ReturnsLeaseRequired()
+    {
+        (LeaseBook book, FakeTimeProvider time, RecordingEvents _) = Create();
+        LeaseGrant grant = Grant(book.Acquire("s1", "uat", 30, false, null));
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        Result released = book.Release(grant.LeaseId);
+
+        Assert.True(released.IsFailure);
+        Assert.StartsWith("[Lab.LeaseRequired]", released.Error, StringComparison.Ordinal);
+        Assert.Equal(LeaseEndReason.Expired, Assert.Single(book.History).Reason);
+    }
+
+    [Fact]
     public void Renew_TtlAboveMaximum_ClampsToOneHour()
     {
         (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
@@ -412,6 +441,38 @@ public sealed class LeaseBookTests
 
         Assert.True(result.IsFailure);
         Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Acquire_SupplementaryFormatCharInOwner_IsRefusedAsInvalidArgument()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+
+        Result<LeaseGrant> result = book.Acquire("s1" + char.ConvertFromUtf32(0xE0041), "uat", null, false, null);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Acquire_TagCharacterInOwner_IsRefusedAsInvalidArgument()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+
+        Result<LeaseGrant> result = book.Acquire("s1" + char.ConvertFromUtf32(0xE0049), "uat", null, false, null);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Acquire_EmojiSurrogatePairInOwner_IsAccepted()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+
+        Result<LeaseGrant> result = book.Acquire("s1" + char.ConvertFromUtf32(0x1F600), "uat", null, false, null);
+
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]

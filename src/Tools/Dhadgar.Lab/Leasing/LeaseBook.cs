@@ -504,6 +504,12 @@ public sealed class LeaseBook
 
             if (char.IsHighSurrogate(c) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
             {
+                UnicodeCategory pairCategory = CharUnicodeInfo.GetUnicodeCategory(char.ConvertToUtf32(c, value[i + 1]));
+                if (pairCategory is UnicodeCategory.Format or UnicodeCategory.Control or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
+                {
+                    return false;
+                }
+
                 i++;
                 continue;
             }
