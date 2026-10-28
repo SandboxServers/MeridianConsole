@@ -1,3 +1,5 @@
+using Dhadgar.Lab.Invariants;
+
 namespace Dhadgar.Lab.Uat;
 
 /// <summary>
@@ -49,13 +51,17 @@ public static class RowGrader
 {
     /// <summary>
     /// Grades a row. Precedence once a row ran: BLOCKED &gt; FAIL &gt; UNVERIFIED &gt; NEEDS_HUMAN &gt; PASS. Non-required clauses never change the grade.
+    /// An invariant violation that is not allowed for the row is a FAIL (C8, D-ML24); an allowed one never changes the grade.
+    /// A check error in the row turns a PASS, NEEDS_HUMAN or UNVERIFIED into UNVERIFIED with the reason <c>invariant &lt;id&gt; unchecked: &lt;error&gt;</c>.
     /// </summary>
     /// <param name="ran">Whether the row ran.</param>
     /// <param name="skipReason">The reason a row did not run; used when <paramref name="ran"/> is false.</param>
     /// <param name="stepError">The error of the step that stopped the row, or null.</param>
     /// <param name="clauses">Each clause as (required, state).</param>
+    /// <param name="violations">Each invariant violation in the row's window as (invariant id, allowed for this row).</param>
+    /// <param name="checkErrors">The invariant checks that could not run in the row's window.</param>
     /// <returns>The grade and a short reason.</returns>
-    public static (RowGrade Grade, string Reason) Grade(bool ran, string? skipReason, string? stepError, IReadOnlyList<(bool Required, ClauseState State)> clauses)
+    public static (RowGrade Grade, string Reason) Grade(bool ran, string? skipReason, string? stepError, IReadOnlyList<(bool Required, ClauseState State)> clauses, IReadOnlyList<(string InvariantId, bool Allowed)>? violations = null, IReadOnlyList<InvariantCheckError>? checkErrors = null)
     {
         ArgumentNullException.ThrowIfNull(clauses);
 
@@ -95,9 +101,39 @@ public static class RowGrader
             }
         }
 
+        (string InvariantId, bool Allowed)? unallowed = null;
+        if (violations is not null)
+        {
+            foreach ((string invariantId, bool allowed) in violations)
+            {
+                if (!allowed)
+                {
+                    unallowed = (invariantId, allowed);
+                    break;
+                }
+            }
+        }
+
+        (RowGrade grade, string reason) = GradeClauses(required, anyNotHeld, anyUnverified, anyPending, unallowed);
+        if (checkErrors is { Count: > 0 } && grade is RowGrade.Pass or RowGrade.NeedsHuman or RowGrade.Unverified)
+        {
+            InvariantCheckError first = checkErrors[0];
+            return (RowGrade.Unverified, "invariant " + first.InvariantId + " unchecked: " + first.Error);
+        }
+
+        return (grade, reason);
+    }
+
+    private static (RowGrade Grade, string Reason) GradeClauses(int required, bool anyNotHeld, bool anyUnverified, bool anyPending, (string InvariantId, bool Allowed)? unallowed)
+    {
         if (anyNotHeld)
         {
             return (RowGrade.Fail, "a required clause is not held");
+        }
+
+        if (unallowed is { } violation)
+        {
+            return (RowGrade.Fail, "invariant " + violation.InvariantId + " violated");
         }
 
         if (required == 0)

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Policy;
@@ -36,19 +37,21 @@ internal sealed class RowExecutor
     private readonly ClauseEvaluator _evaluator;
     private readonly TimeProvider _time;
     private readonly ILabObservationSink? _observations;
+    private readonly Func<InvariantWindow, CancellationToken, Task<InvariantReport>> _checkpoint;
     private readonly TimeSpan _settle;
 
     /// <summary>
     /// Creates the executor. With <paramref name="observations"/> every step is recorded in the run's <c>events.jsonl</c> (C18).
-    /// <paramref name="settle"/> is the wait after a row with faults; zero skips it.
+    /// <paramref name="checkpoint"/> runs one invariant checkpoint over a row window. <paramref name="settle"/> is the wait after a row with faults; zero skips it.
     /// </summary>
-    public RowExecutor(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, TimeProvider time, ILabObservationSink? observations, TimeSpan settle)
+    public RowExecutor(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, TimeProvider time, ILabObservationSink? observations, Func<InvariantWindow, CancellationToken, Task<InvariantReport>> checkpoint, TimeSpan settle)
     {
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _observations = observations;
+        _checkpoint = checkpoint ?? throw new ArgumentNullException(nameof(checkpoint));
         _settle = settle;
     }
 
@@ -85,12 +88,12 @@ internal sealed class RowExecutor
             }
         }
 
-        return await ExecuteRowAsync(spec.Section.Id, row, run, ct).ConfigureAwait(false);
+        return await ExecuteRowAsync(spec, row, run, ct).ConfigureAwait(false);
     }
 
-    private async Task<UatRowResult> ExecuteRowAsync(string sectionId, UatRow row, RunContext run, CancellationToken ct)
+    private async Task<UatRowResult> ExecuteRowAsync(UatSpec spec, UatRow row, RunContext run, CancellationToken ct)
     {
-        var vars = new UatVars(run.RunId, row.Id, sectionId, run.Seed, null);
+        var vars = new UatVars(run.RunId, row.Id, spec.Section.Id, run.Seed, null);
         var stepStarts = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
         var steps = new Dictionary<string, StepOutcome>(StringComparer.Ordinal);
         var heals = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
@@ -202,7 +205,8 @@ internal sealed class RowExecutor
         faultError ??= healError;
         if (faultError is not null)
         {
-            return Blocked(row, faultError);
+            InvariantReport blockedReport = await CheckRowAsync(spec, row, run, ct).ConfigureAwait(false);
+            return Blocked(row, faultError, AttributeViolations(blockedReport, spec, row), blockedReport.Errors);
         }
 
         // A row with faults waits for the system to settle before its clauses read the state (Lab:Uat:SettleMs).
@@ -229,13 +233,36 @@ internal sealed class RowExecutor
             inputs.Add((true, ClauseState.NotHeld));
         }
 
-        (RowGrade grade, string reason) = RowGrader.Grade(true, null, stepError, inputs);
+        // The invariant checkpoint for [previous checkpoint, now] runs on every path that reached the steps, so a blocked row keeps its violations.
+        InvariantReport invariants = await CheckRowAsync(spec, row, run, ct).ConfigureAwait(false);
+        UatRowViolation[] violations = AttributeViolations(invariants, spec, row);
+        (RowGrade grade, string reason) = RowGrader.Grade(true, null, stepError, inputs, violations.Select(v => (v.Violation.InvariantId, v.Allowed)).ToArray(), invariants.Errors);
         if (expectFailed && grade == RowGrade.Fail)
         {
             reason = expectFailure!;
         }
 
-        return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults);
+        return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults, Violations: violations, CheckErrors: invariants.Errors);
+    }
+
+    /// <summary>
+    /// Runs the invariant checkpoint over the time since the last checkpoint, up to now, for this row. The next checkpoint starts where this one ends.
+    /// </summary>
+    private async Task<InvariantReport> CheckRowAsync(UatSpec spec, UatRow row, RunContext run, CancellationToken ct)
+    {
+        var window = new InvariantWindow(run.CoveredTo, _time.GetUtcNow(), spec.Section.Id, row.Id);
+        InvariantReport report = await _checkpoint(window, ct).ConfigureAwait(false);
+        run.CoveredTo = window.To;
+        return report;
+    }
+
+    /// <summary>
+    /// Marks each violation allowed when the section's or the row's <c>allow_invariants</c> lists its invariant (D-ML24).
+    /// </summary>
+    private static UatRowViolation[] AttributeViolations(InvariantReport report, UatSpec spec, UatRow row)
+    {
+        var allowed = new HashSet<string>(spec.Section.AllowInvariants.Concat(row.AllowInvariants), StringComparer.Ordinal);
+        return report.Violations.Select(v => new UatRowViolation(v, allowed.Contains(v.InvariantId))).ToArray();
     }
 
     /// <summary>
@@ -491,10 +518,10 @@ internal sealed class RowExecutor
         return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>());
     }
 
-    private static UatRowResult Blocked(UatRow row, string error)
+    private static UatRowResult Blocked(UatRow row, string error, IReadOnlyList<UatRowViolation>? violations = null, IReadOnlyList<InvariantCheckError>? checkErrors = null)
     {
         (RowGrade grade, string text) = RowGrader.Grade(true, null, error, Array.Empty<(bool, ClauseState)>());
-        return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>());
+        return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>(), Violations: violations, CheckErrors: checkErrors);
     }
 
     /// <summary>
@@ -526,6 +553,7 @@ internal sealed class RowExecutor
             LeaseId = leaseId;
             OwnLease = ownLease;
             RunStart = runStart;
+            CoveredTo = runStart;
         }
 
         public string RunId { get; }
@@ -542,5 +570,8 @@ internal sealed class RowExecutor
 
         /// <summary>Set when a heal failed and faults were still in place after reset (R-REG). Every remaining row is BLOCKED.</summary>
         public bool LabNotClean { get; set; }
+
+        /// <summary>The time the last invariant checkpoint covered up to. The next checkpoint starts here, so the windows never overlap.</summary>
+        public DateTimeOffset CoveredTo { get; set; }
     }
 }

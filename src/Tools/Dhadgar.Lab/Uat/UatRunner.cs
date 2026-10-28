@@ -34,7 +34,13 @@ public sealed record UatStepResult(string Id, string? Tool, bool Ok, string? Err
 /// One recorded row: its grade, the reason, and its clauses (empty when the row stopped before its clauses ran). The steps
 /// go only to the bundle.
 /// </summary>
-public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null, [property: JsonIgnore] DateTimeOffset? StartedAt = null, [property: JsonIgnore] DateTimeOffset? EndedAt = null, [property: JsonIgnore] string? Member = null);
+public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null, [property: JsonIgnore] DateTimeOffset? StartedAt = null, [property: JsonIgnore] DateTimeOffset? EndedAt = null, [property: JsonIgnore] string? Member = null, [property: JsonIgnore] IReadOnlyList<UatRowViolation>? Violations = null, [property: JsonIgnore] IReadOnlyList<InvariantCheckError>? CheckErrors = null);
+
+/// <summary>
+/// One invariant violation found in a row's window, or in a synthetic <c>invariants/&lt;id&gt;</c> row. <see cref="Allowed"/> is true when the row's
+/// <c>allow_invariants</c> (section or row) lists the invariant; the violation is still recorded.
+/// </summary>
+public sealed record UatRowViolation(InvariantViolation Violation, bool Allowed);
 
 /// <summary>
 /// The result of one run. <see cref="Seed"/> is the seed the rows ran with (the section seed when the section sets one).
@@ -75,7 +81,7 @@ public sealed class UatRunner
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
         _time = time ?? throw new ArgumentNullException(nameof(time));
-        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations, settle ?? RowExecutor.DefaultSettle);
+        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations, CheckpointAsync, settle ?? RowExecutor.DefaultSettle);
         _observations = observations;
         _uatRuns = paths?.UatRuns;
         _invariants = invariants;
@@ -145,7 +151,9 @@ public sealed class UatRunner
             string? missing = await MissingCapabilityAsync(request.Spec.Section, ct).ConfigureAwait(false);
 
             // Checkpoint at run start: the window runs from the daemon's start, so earlier leaks and orphans are reported.
-            InvariantReport startReport = await CheckpointAsync(_daemon?.StartedAt ?? run.RunStart, ct).ConfigureAwait(false);
+            var startWindow = new InvariantWindow(_daemon?.StartedAt ?? run.RunStart, _time.GetUtcNow(), null, null);
+            InvariantReport startReport = await CheckpointAsync(startWindow, ct).ConfigureAwait(false);
+            run.CoveredTo = startWindow.To;
 
             var grades = new List<RowGrade>();
             var failures = new List<(string FailureKey, bool IsKnown)>();
@@ -173,11 +181,25 @@ public sealed class UatRunner
                 sink.RowFinished(result);
             }
 
-            // Checkpoint at run end: from the run start to now.
-            InvariantReport endReport = await CheckpointAsync(run.RunStart, ct).ConfigureAwait(false);
+            // Checkpoint at run end: from the last covered time (the end of the last row checkpoint) to now. Rows already cover their own windows.
+            InvariantReport endReport = await CheckpointAsync(new InvariantWindow(run.CoveredTo, _time.GetUtcNow(), null, null), ct).ConfigureAwait(false);
+
             var invariantReport = new InvariantReport(
-                startReport.Violations.Concat(endReport.Violations).ToArray(),
-                startReport.Errors.Concat(endReport.Errors).ToArray());
+                startReport.Violations.Concat(rows.SelectMany(r => r.Violations ?? []).Select(v => v.Violation)).Concat(endReport.Violations).ToArray(),
+                startReport.Errors.Concat(rows.SelectMany(r => r.CheckErrors ?? [])).Concat(endReport.Errors).ToArray());
+
+            // Violations and check errors outside every row window (the run start and end checkpoints) become synthetic rows (C8, D-ML24).
+            foreach (UatRowResult synthetic in SyntheticRows(startReport.Violations.Concat(endReport.Violations).ToArray(), startReport.Errors.Concat(endReport.Errors).ToArray()))
+            {
+                grades.Add(synthetic.Grade);
+                if (synthetic.Grade is RowGrade.Fail)
+                {
+                    failures.Add((synthetic.RowId, false));
+                }
+
+                rows.Add(synthetic);
+                sink.RowFinished(synthetic);
+            }
 
             long events = 0;
             if (observing)
@@ -208,19 +230,33 @@ public sealed class UatRunner
     }
 
     /// <summary>
-    /// Runs one invariant checkpoint over [from, now] and records it in the ledger. A run without a monitor reports nothing.
+    /// Runs one invariant checkpoint over the window and records it in the ledger. A run without a monitor reports nothing.
     /// </summary>
-    private async Task<InvariantReport> CheckpointAsync(DateTimeOffset from, CancellationToken ct)
+    private async Task<InvariantReport> CheckpointAsync(InvariantWindow window, CancellationToken ct)
     {
         if (_invariants is null)
         {
             return new InvariantReport([], []);
         }
 
-        var window = new InvariantWindow(from, _time.GetUtcNow(), null, null);
         InvariantReport report = await _invariants.CheckpointAsync(window, ct).ConfigureAwait(false);
         _ledger?.Record(window, report);
         return report;
+    }
+
+    /// <summary>
+    /// Builds one synthetic row per invariant outside every row window: FAIL when it has a violation, otherwise UNVERIFIED for a check error.
+    /// </summary>
+    private static IEnumerable<UatRowResult> SyntheticRows(IReadOnlyList<InvariantViolation> violations, IReadOnlyList<InvariantCheckError> errors)
+    {
+        IEnumerable<string> ids = violations.Select(v => v.InvariantId).Concat(errors.Select(e => e.InvariantId)).Distinct(StringComparer.Ordinal);
+        foreach (string id in ids)
+        {
+            UatRowViolation[] own = violations.Where(v => v.InvariantId == id).Select(v => new UatRowViolation(v, false)).ToArray();
+            InvariantCheckError[] ownErrors = errors.Where(e => e.InvariantId == id).ToArray();
+            (RowGrade grade, string reason) = RowGrader.Grade(true, null, null, Array.Empty<(bool, ClauseState)>(), own.Select(v => (v.Violation.InvariantId, v.Allowed)).ToArray(), ownErrors);
+            yield return new UatRowResult("invariants/" + id, grade, reason, Array.Empty<UatClauseResult>(), Violations: own, CheckErrors: ownErrors);
+        }
     }
 
     private async Task<string?> MissingCapabilityAsync(UatSection section, CancellationToken ct)

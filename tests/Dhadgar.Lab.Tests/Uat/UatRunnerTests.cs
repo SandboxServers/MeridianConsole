@@ -1,6 +1,7 @@
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
@@ -347,6 +348,108 @@ public sealed class UatRunnerTests
           wait_ms = 60000
         """;
 
+    private const string InvariantSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-invariants"
+        title = "Runner invariants"
+
+        [[row]]
+        id = "strict"
+        title = "Strict"
+        expected = "no violation"
+        depends_on = []
+
+          [[row.step]]
+          tool = "faults_active"
+
+        [[row]]
+        id = "lenient"
+        title = "Lenient"
+        expected = "allowed violation"
+        depends_on = []
+        allow_invariants = ["I1"]
+
+          [[row.step]]
+          tool = "faults_active"
+        """;
+
+    [Fact]
+    public async Task Violation_NotAllowed_FailsPassRow()
+    {
+        var invariant = new ScriptedInvariant("I1", window => window.Row == "strict" ? Violated("I1", window) : Clean());
+        using var harness = new Harness(new FakeProbe(true), null, new InvariantMonitor([invariant]), ProbeTool());
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(InvariantSpec), new[] { "strict" }, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        UatRowResult row = Assert.Single(run.Value!.Rows);
+        Assert.Equal(RowGrade.Fail, row.Grade);
+        Assert.Contains("I1", row.Reason, StringComparison.Ordinal);
+        Assert.False(Assert.Single(row.Violations!).Allowed);
+        Assert.Equal(RunOverall.Fail, run.Value.Overall);
+    }
+
+    [Fact]
+    public async Task Violation_Allowed_RecordedNotFailed()
+    {
+        var invariant = new ScriptedInvariant("I1", window => window.Row == "lenient" ? Violated("I1", window) : Clean());
+        using var harness = new Harness(new FakeProbe(true), null, new InvariantMonitor([invariant]), ProbeTool());
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(InvariantSpec), new[] { "lenient" }, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        UatRowResult row = Assert.Single(run.Value!.Rows);
+        Assert.NotEqual(RowGrade.Fail, row.Grade);
+        UatRowViolation violation = Assert.Single(row.Violations!);
+        Assert.Equal("I1", violation.Violation.InvariantId);
+        Assert.True(violation.Allowed);
+    }
+
+    [Fact]
+    public async Task CheckError_InRow_IsUnverified()
+    {
+        var invariant = new ScriptedInvariant("I1", window => window.Row == "strict" ? Result<IReadOnlyList<InvariantViolation>>.Failure("source down") : Clean());
+        using var harness = new Harness(new FakeProbe(true), null, new InvariantMonitor([invariant]), ProbeTool());
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(InvariantSpec), new[] { "strict" }, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        UatRowResult row = Assert.Single(run.Value!.Rows);
+        Assert.Equal(RowGrade.Unverified, row.Grade);
+        Assert.StartsWith("invariant I1 unchecked", row.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Violation_OutsideRows_SyntheticRow()
+    {
+        var invariant = new ScriptedInvariant("I1", window => window.Row is null ? Violated("I1", window) : Clean());
+        using var harness = new Harness(new FakeProbe(true), null, new InvariantMonitor([invariant]), ProbeTool());
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(InvariantSpec), new[] { "strict" }, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        UatRowResult synthetic = Assert.Single(run.Value!.Rows, r => r.RowId == "invariants/I1");
+        Assert.Equal(RowGrade.Fail, synthetic.Grade);
+        Assert.Equal(2, synthetic.Violations!.Count);
+        Assert.Equal(RunOverall.Fail, run.Value.Overall);
+    }
+
+    private static Result<IReadOnlyList<InvariantViolation>> Clean() => Result<IReadOnlyList<InvariantViolation>>.Success([]);
+
+    private static Result<IReadOnlyList<InvariantViolation>> Violated(string id, InvariantWindow window) =>
+        Result<IReadOnlyList<InvariantViolation>>.Success([new InvariantViolation(id, "nodes", "check-" + id, "redacted", window.To, null)]);
+
+    private static ScriptedTool ProbeTool() => new("faults_active", () => Result<object>.Success(new { faults = Array.Empty<object>() }));
+
+    private sealed class ScriptedInvariant(string id, Func<InvariantWindow, Result<IReadOnlyList<InvariantViolation>>> answer) : IInvariant
+    {
+        public string Id { get; } = id;
+
+        public Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct) => Task.FromResult(answer(window));
+    }
+
     private static UatSpec Load(string text)
     {
         SpecLoadOutcome loaded = SpecLoader.LoadText("runner-selftest.toml", text);
@@ -466,6 +569,11 @@ public sealed class UatRunnerTests
         private readonly AuditLog _audit;
 
         public Harness(ICapabilityProbe probe, ILabObservationSink? observations = null, params ILabTool[] tools)
+            : this(probe, observations, null, tools)
+        {
+        }
+
+        public Harness(ICapabilityProbe probe, ILabObservationSink? observations, InvariantMonitor? invariants, params ILabTool[] tools)
         {
             _root = Path.Combine(Path.GetTempPath(), "lab-l15-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
@@ -476,7 +584,7 @@ public sealed class UatRunnerTests
             _audit = new AuditLog(LabPaths.FromRoot(_root), new PathValidator(NullLogger<PathValidator>.Instance), redactor, time);
             Leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
             var dispatcher = new LabToolDispatcher(new LabToolRegistry(tools), Leases, _audit, redactor, time);
-            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), probe, time, observations, settle: TimeSpan.Zero);
+            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), probe, time, observations, invariants: invariants, settle: TimeSpan.Zero);
         }
 
         public LeaseBook Leases { get; }
