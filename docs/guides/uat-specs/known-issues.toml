@@ -27,8 +27,8 @@ patterns = [
 state = "open"
 
 [issue.scope]
-sections = ["catalog-nodes"]
-rows = ["nodes-pg-down-enroll"]
+sections = ["catalog-nodes", "hunt"]
+rows = ["nodes-pg-down-enroll", "enrollment"]
 
 [[issue]]
 id = "KI-F69"
