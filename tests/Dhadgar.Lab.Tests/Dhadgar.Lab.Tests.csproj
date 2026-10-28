@@ -28,5 +28,7 @@
     <ProjectReference Include="..\..\src\Dhadgar.Nodes\Dhadgar.Nodes.csproj" />
     <!-- The scripted child (L07). Its build output lands next to the test assembly. -->
     <ProjectReference Include="..\Dhadgar.Lab.TestChild\Dhadgar.Lab.TestChild.csproj" />
+    <ProjectReference Include="..\..\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj" />
+    <ProjectReference Include="..\..\src\Agents\Dhadgar.Agent.Windows\Dhadgar.Agent.Windows.csproj" />
   </ItemGroup>
 </Project>

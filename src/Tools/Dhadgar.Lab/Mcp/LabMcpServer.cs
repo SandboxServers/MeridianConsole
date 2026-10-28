@@ -4,6 +4,7 @@ using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Tools.Logs;
+using Dhadgar.Lab.Windows;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.AspNetCore;
@@ -39,6 +40,12 @@ public static class LabMcpServer
         AddLabTool<LeaseReleaseTool>(services);
         AddLabTool<LeaseStatusTool>(services);
         AddLabTool<LogsTailTool>(services);
+
+        services.AddSingleton<AgentStateReader>();
+        AddLabTool<LabDoctorTool>(services);
+        AddLabTool<CertStoreListTool>(services);
+        AddLabTool<RegistryReadTool>(services);
+        AddLabTool<StateFileReadTool>(services);
     }
 
     /// <summary>

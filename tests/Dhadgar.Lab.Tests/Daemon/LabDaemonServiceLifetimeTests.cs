@@ -44,7 +44,7 @@ public sealed class LabDaemonServiceLifetimeTests
             Assert.NotNull(services.GetRequiredService<SecretVault>());
             Assert.NotNull(services.GetRequiredService<Redactor>());
             Assert.NotNull(services.GetRequiredService<LabToolRegistry>());
-            Assert.Equal(6, services.GetServices<ILabTool>().Count());
+            Assert.Equal(10, services.GetServices<ILabTool>().Count());
 
             using IServiceScope scope = services.CreateScope();
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<LabToolDispatcher>());
