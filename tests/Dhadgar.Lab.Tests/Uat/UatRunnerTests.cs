@@ -105,6 +105,34 @@ public sealed class UatRunnerTests
           heal = "never"
         """;
 
+    private const string SinceHealSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-faults"
+        title = "Runner faults"
+
+        [[row]]
+        id = "faulted"
+        title = "Faulted row"
+        expected = "pass"
+        depends_on = []
+
+          [[row.fault]]
+          id = "kill-it"
+          inject = { tool = "fault_kill", args = { target = "x" } }
+          start = "before_steps"
+          heal = "after_steps"
+
+          [[row.expect]]
+          id = "recovered"
+          text = "recovered after heal"
+          source = "probe"
+          op = "truthy"
+          since = "fault_heal:kill-it"
+          required = true
+        """;
+
     private const string HealFailsSpec = """
         schema = 1
 
@@ -256,6 +284,29 @@ public sealed class UatRunnerTests
         Assert.Equal(RowGrade.Blocked, run.Value.Rows[1].Grade);
         Assert.Contains("lab not clean", run.Value.Rows[1].Reason, StringComparison.Ordinal);
         Assert.Single(kill.Calls);
+    }
+
+    [Fact]
+    public async Task SinceFaultHeal_UsesHealTime()
+    {
+        var kill = new ScriptedTool("fault_kill", () => Result<object>.Success(new { fault_id = "f-kill-1" }));
+        FakeTimeProvider? clock = null;
+        var heal = new ScriptedTool("fault_heal", () =>
+        {
+            clock!.Advance(TimeSpan.FromSeconds(3));
+            return Result<object>.Success(new { healed = true });
+        });
+        var source = new SinceProbeSource();
+        using var harness = new Harness(new FakeProbe(true), null, null, [source], kill, heal);
+        clock = harness.Time;
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(SinceHealSpec), null, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        Assert.Equal(RowGrade.Pass, Assert.Single(run.Value!.Rows).Grade);
+        Assert.NotNull(source.Since);
+        Assert.True(source.Since!.Value > Start, "since = fault_heal must resolve to the heal moment, not the row start");
     }
 
     [Fact]
@@ -457,6 +508,24 @@ public sealed class UatRunnerTests
         return loaded.Spec!;
     }
 
+    private sealed class SinceProbeSource : IClauseSource
+    {
+        public string Name => "probe";
+
+        public DateTimeOffset? Since { get; private set; }
+
+        public Task<Result<System.Text.Json.JsonElement>> ReadAsync(UatClause clause, UatVars vars, ClauseWindow window, CancellationToken ct)
+        {
+            Result<DateTimeOffset> since = window.SinceFor(clause.Since ?? string.Empty);
+            if (since.IsSuccess)
+            {
+                Since = since.Value;
+            }
+
+            return Task.FromResult(Result<System.Text.Json.JsonElement>.Success(System.Text.Json.JsonDocument.Parse("true").RootElement.Clone()));
+        }
+    }
+
     private sealed class FakeProbe : ICapabilityProbe
     {
         private readonly bool _answer;
@@ -574,6 +643,11 @@ public sealed class UatRunnerTests
         }
 
         public Harness(ICapabilityProbe probe, ILabObservationSink? observations, InvariantMonitor? invariants, params ILabTool[] tools)
+            : this(probe, observations, invariants, Array.Empty<IClauseSource>(), tools)
+        {
+        }
+
+        public Harness(ICapabilityProbe probe, ILabObservationSink? observations, InvariantMonitor? invariants, IClauseSource[] sources, params ILabTool[] tools)
         {
             _root = Path.Combine(Path.GetTempPath(), "lab-l15-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
@@ -584,7 +658,7 @@ public sealed class UatRunnerTests
             _audit = new AuditLog(LabPaths.FromRoot(_root), new PathValidator(NullLogger<PathValidator>.Instance), redactor, time);
             Leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
             var dispatcher = new LabToolDispatcher(new LabToolRegistry(tools), Leases, _audit, redactor, time);
-            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), probe, time, observations, invariants: invariants, settle: TimeSpan.Zero);
+            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(sources, redactor, time), probe, time, observations, invariants: invariants, settle: TimeSpan.Zero);
         }
 
         public LeaseBook Leases { get; }
