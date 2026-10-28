@@ -287,7 +287,7 @@ public class GatewayAuthSeparationTests
             .Where(line => !line.StartsWith("-----", StringComparison.Ordinal))
             .ToArray();
 
-        var logs = new CapturingLoggerProvider();
+        using var logs = new CapturingLoggerProvider();
         using var capture = new CaptureHandler();
         using var app = CreateApp(_factory, capture, logs);
 

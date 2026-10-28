@@ -16,7 +16,6 @@ namespace Dhadgar.Gateway.Tests;
 [Collection("Gateway Integration")]
 public class AgentCertificateForwardingTests
 {
-    private const string NodesDestination = "http://nodes.test/";
     private const string ForeignIssuerCommonName = "Some Other Certificate Authority";
 
     private readonly GatewayWebApplicationFactory _factory;
