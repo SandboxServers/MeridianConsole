@@ -452,7 +452,8 @@ public sealed class LabServices
 
     /// <summary>
     /// Writes <c>KEY=value</c> lines to a fresh file under <see cref="LabPaths.State"/>. The caller deletes it.
-    /// Values never carry control characters (the overlay and adapters reject them), so a line is one variable.
+    /// Overlay values are checked for control characters on read and write (<see cref="ConfigOverlay"/>), so a line is one variable.
+    /// Each pair goes through the same zeroing writer as <see cref="LabStack"/>, so no secret stays in a managed string buffer.
     /// </summary>
     private Result<string> WriteEnvFile(IReadOnlyDictionary<string, string> env)
     {
@@ -479,16 +480,11 @@ public sealed class LabServices
             }
 
             using var stream = new FileStream(path, options);
-            using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             foreach (KeyValuePair<string, string> entry in env)
             {
-                writer.Write(entry.Key);
-                writer.Write('=');
-                writer.Write(entry.Value);
-                writer.Write('\n');
+                LabStack.WriteEntry(stream, entry.Key, entry.Value.AsSpan());
             }
 
-            writer.Flush();
             return Result<string>.Success(path);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

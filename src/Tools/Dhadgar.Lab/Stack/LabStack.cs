@@ -534,7 +534,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         }
     }
 
-    private static void WriteEntry(Stream stream, string key, ReadOnlySpan<char> value)
+    internal static void WriteEntry(Stream stream, string key, ReadOnlySpan<char> value)
     {
         char[] line = new char[key.Length + 1 + value.Length];
         try
