@@ -47,7 +47,6 @@ public sealed class UatRunner
     private const string PoolDeferred = "pool unavailable";
     private const string OwnLeasePrefix = "uat-run/";
     private const string DefaultPurpose = "uat";
-    private const string LeaseIdField = "lease_id";
     private const string RunnerActor = "runner";
 
     private static readonly JsonElement EmptyObject = JsonSerializer.SerializeToElement(new JsonObject());
@@ -356,7 +355,8 @@ public sealed class UatRunner
         }
 
         var context = new LabCallContext(Guid.NewGuid().ToString("N"), run.LeaseId, "uat:" + run.RunId);
-        OpId? op = BeginStepObservation(run.RunId, tool, args);
+        // The observation records the spec's arguments, never the injected lease_id (D-ML66, D-ML4).
+        OpId? op = BeginStepObservation(run.RunId, tool, expanded.Value);
         LabToolResult call = await _dispatcher.InvokeAsync(tool, args, context, ct).ConfigureAwait(false);
         CompleteStepObservation(op, run.RunId, tool, call);
         long elapsed = (long)(_time.GetUtcNow() - started).TotalMilliseconds;
@@ -441,7 +441,7 @@ public sealed class UatRunner
             return args;
         }
 
-        obj[LeaseIdField] = leaseId;
+        obj[LabToolDispatcher.LeaseIdArgument] = leaseId;
         return JsonSerializer.SerializeToElement(obj);
     }
 

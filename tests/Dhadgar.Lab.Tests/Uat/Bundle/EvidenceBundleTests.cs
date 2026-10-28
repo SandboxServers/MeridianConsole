@@ -78,6 +78,7 @@ public sealed class SecretScannerTests : IDisposable
     }
 }
 
+[Collection("LabHome")]
 public sealed class BundleReadTests : IDisposable
 {
     private readonly string _root;
@@ -124,6 +125,7 @@ public sealed class BundleReadTests : IDisposable
     }
 }
 
+[Collection("LabHome")]
 public sealed class ReproTests : IDisposable
 {
     private const string SpecText = """

@@ -1,5 +1,6 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
+using System.Text.Json.Nodes;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
@@ -58,6 +59,70 @@ public sealed class LabDaemonServiceLifetimeTests
             using IServiceScope scope = services.CreateScope();
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<LabToolDispatcher>());
             Assert.Same(services.GetRequiredService<LeaseBook>(), scope.ServiceProvider.GetRequiredService<LeaseBook>());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LeaseIdArgument_FollowsTheGate()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "lab-di-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            byte[] bytes = RandomNumberGenerator.GetBytes(LabDefaults.MinTokenBytes);
+            string token = Base64Url.EncodeToString(bytes);
+            Array.Clear(bytes);
+
+            var started = await LabDaemon.StartAsync(new LabDaemonOptions(
+                Port: 0,
+                Token: token,
+                DataRoot: root,
+                EnforceSingleInstance: false,
+                RefuseElevated: false,
+                Time: new FakeTimeProvider(DateTimeOffset.UnixEpoch)), CancellationToken.None);
+            Assert.True(started.IsSuccess, started.Error);
+
+            await using LabDaemon daemon = started.Value;
+            IServiceProvider services = daemon.Services;
+
+            static string[] RequiredOf(JsonObject schema) =>
+                schema["required"] is JsonArray array ? array.Select(item => item!.GetValue<string>()).ToArray() : [];
+
+            // C3, D-ML66: a Leased tool never declares lease_id in its own schema; an OwnLease tool declares it as optional.
+            foreach (ILabTool tool in services.GetServices<ILabTool>())
+            {
+                LabGate? gate = ToolPolicy.GateFor(tool.Name);
+                JsonObject schema = JsonNode.Parse(tool.InputSchema.GetRawText())!.AsObject();
+                JsonObject? properties = schema["properties"] as JsonObject;
+                if (gate == LabGate.Leased)
+                {
+                    Assert.Null(properties?["lease_id"]);
+                }
+                else if (gate == LabGate.OwnLease)
+                {
+                    Assert.NotNull(properties?["lease_id"]);
+                    Assert.DoesNotContain("lease_id", RequiredOf(schema));
+                }
+            }
+
+            // The MCP projection advertises lease_id as required on every Leased tool.
+            foreach (McpServerTool mcp in services.GetServices<McpServerTool>())
+            {
+                if (ToolPolicy.GateFor(mcp.ProtocolTool.Name) != LabGate.Leased)
+                {
+                    continue;
+                }
+
+                JsonObject advertised = JsonNode.Parse(mcp.ProtocolTool.InputSchema.GetRawText())!.AsObject();
+                Assert.Contains("lease_id", RequiredOf(advertised));
+            }
         }
         finally
         {
