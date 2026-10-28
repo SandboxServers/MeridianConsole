@@ -2,7 +2,12 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Threading;
+using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
+using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Mcp;
+using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -100,9 +105,23 @@ public sealed class LabDaemon : IAsyncDisposable
         {
             var time = options.Time ?? TimeProvider.System;
             var startedAt = time.GetUtcNow();
-            app = BuildApplication(options.Port, settings, edge, time);
+            app = BuildApplication(options.Port, settings, edge, time, paths, startedAt);
             app.UseMiddleware<EdgeGuardMiddleware>();
             app.MapStatus(startedAt);
+            LabMcpServer.MapLabMcp(app);
+
+            // A duplicate tool name is a programming error; it stops the start before anything listens.
+            try
+            {
+                _ = app.Services.GetRequiredService<LabToolRegistry>();
+            }
+            catch (InvalidOperationException)
+            {
+                return Result<LabDaemon>.Failure("[Lab.InvalidArgument] two lab tools share a name");
+            }
+
+            // The daemon's own token is a vault value, so it never reaches the audit log or a tool payload.
+            _ = app.Services.GetRequiredService<SecretVault>().Add(SecretKind.BearerToken, options.Token.AsSpan());
 
             await app.StartAsync(ct).ConfigureAwait(false);
 
@@ -183,7 +202,13 @@ public sealed class LabDaemon : IAsyncDisposable
             .AddEnvironmentVariables()
             .Build();
 
-    private static WebApplication BuildApplication(int port, IConfiguration settings, EdgeState edge, TimeProvider time)
+    private static WebApplication BuildApplication(
+        int port,
+        IConfiguration settings,
+        EdgeState edge,
+        TimeProvider time,
+        LabPaths paths,
+        DateTimeOffset startedAt)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -222,7 +247,27 @@ public sealed class LabDaemon : IAsyncDisposable
 
         builder.Services.AddSingleton(time);
         builder.Services.AddSingleton(edge);
-        builder.Services.AddSingleton<ILabEvents, NullLabEvents>();
+        builder.Services.AddSingleton(paths);
+        builder.Services.AddSingleton(new DaemonIdentity(Environment.ProcessId, startedAt));
+        builder.Services.AddSingleton(new LeaseOptions());
+
+        // Audit, secrets and redaction: one instance each for the daemon's run. The audit log is the event sink.
+        builder.Services.AddSingleton<IPathValidator, PathValidator>();
+        builder.Services.AddSingleton<SecretVault>();
+        builder.Services.AddSingleton<Redactor>();
+        builder.Services.AddSingleton<AuditLog>();
+        builder.Services.AddSingleton<ILabEvents, DaemonEvents>();
+
+        // The single lease, its sweep every 5 s, and the end-of-lease hook relay (no hook is registered in L05).
+        builder.Services.AddSingleton(sp => new LeaseBook(
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILabEvents>(),
+            sp.GetRequiredService<LeaseOptions>()));
+        builder.Services.AddHostedService<LeaseSweeper>();
+        builder.Services.AddHostedService<LeaseEndRelay>();
+        builder.Services.AddSingleton<ILabStatusSource, LeaseStatusSource>();
+
+        LabMcpServer.AddLabMcp(builder.Services);
 
         return builder.Build();
     }
