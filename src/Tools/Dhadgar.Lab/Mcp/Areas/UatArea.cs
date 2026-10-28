@@ -15,6 +15,7 @@ public static partial class LabMcpServer
     {
         AddLabTool<UatListSpecsTool>(services);
         AddLabTool<UatPlanTool>(services);
+        AddLabTool<UatRunTool>(services);
 
         services.AddSingleton<IClauseSource, ToolSource>();
         services.AddSingleton<IClauseSource, HttpSource>();
