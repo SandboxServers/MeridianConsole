@@ -26,5 +26,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj" />
     <ProjectReference Include="..\..\src\Dhadgar.Nodes\Dhadgar.Nodes.csproj" />
+    <ProjectReference Include="..\..\src\Tools\Dhadgar.Lab.Probe\Dhadgar.Lab.Probe.csproj" />
   </ItemGroup>
 </Project>
