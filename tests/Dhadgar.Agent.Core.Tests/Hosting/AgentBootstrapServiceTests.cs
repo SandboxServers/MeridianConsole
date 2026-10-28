@@ -56,6 +56,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
 
         using var sut = h.Create();
@@ -77,6 +79,11 @@ public sealed class AgentBootstrapServiceTests
             h.Client.ConnectAsync(Arg.Any<CancellationToken>());
         });
 
+        // The saved identity carries the signing key pinned at enrollment, so it survives a restart.
+        await h.Store.Received(1).SaveAsync(
+            Arg.Is<AgentIdentity>(i => i.CommandSigningPublicKey == "test-signing-key"
+                && i.CommandSigningKeyId == "test-signing-key-id"),
+            Arg.Any<CancellationToken>());
         // The token must never reach the log. Non-empty first, so the check cannot pass against a logger that records nothing.
         Assert.NotEmpty(h.Logger.Entries);
         Assert.DoesNotContain(h.Logger.Messages, m => m.Contains(Token, StringComparison.Ordinal));
@@ -93,6 +100,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
 
         using var sut = h.Create();
@@ -146,6 +155,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
 
         using var sut = h.Create();
@@ -160,6 +171,43 @@ public sealed class AgentBootstrapServiceTests
         }
 
         await h.Enrollment.Received(1).EnrollAsync(Token, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReEnrollment_WithDifferentSigningKey_LogsWarningWithBothKeyIds()
+    {
+        var h = new Harness();
+        h.StoredState(new AgentIdentity(NodeId, OrganizationId, DateTimeOffset.UtcNow, "key-a-public", "key-a-id"));
+        h.UseCertificate(null);
+        h.Tokens.GetToken().Returns(Result<string>.Success(Token));
+        h.Enrollment.EnrollAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Result<EnrollmentResult>.Success(new EnrollmentResult
+            {
+                NodeId = NodeId,
+                OrganizationId = OrganizationId,
+                CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "key-b-public",
+                CommandSigningKeyId = "key-b-id",
+            })));
+
+        using var sut = h.Create();
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => h.ConnectCount >= 1);
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        var warning = Assert.Single(
+            h.Logger.Entries,
+            e => e.Level == LogLevel.Warning && e.Message.Contains("replaced the command signing key", StringComparison.Ordinal));
+        Assert.Contains("key-a-id", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("key-b-id", warning.Message, StringComparison.Ordinal);
+        // Key ids only: the public key material never reaches the log.
+        Assert.DoesNotContain(h.Logger.Messages, m => m.Contains("key-a-public", StringComparison.Ordinal) || m.Contains("key-b-public", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -354,6 +402,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
         h.Store.SaveAsync(Arg.Any<AgentIdentity>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(Result.Failure("[AgentState.Io] disk full")));

@@ -5,8 +5,10 @@ using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Hosting;
 using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Process;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
+using Dhadgar.Nodes.Services.CommandSigning;
 using Dhadgar.Nodes.Tests.Integration.AgentSeam;
 using Dhadgar.Shared.Results;
 using Microsoft.AspNetCore.Http.Connections;
@@ -80,6 +82,12 @@ public sealed class AgentBootstrapSeamTests : IDisposable
         Assert.True(File.Exists(StateFilePath), "agent-state.json was not written by the first run.");
         Assert.Equal(firstNode.Id, ReadStoredNodeId());
 
+        // The enrollment handed the agent the signing key, and the state file keeps it for VS-14.
+        var (storedPublicKey, storedKeyId) = ReadStoredSigningKey();
+        var signer = harness.Nodes.Services.GetRequiredService<ICommandSigner>();
+        Assert.Equal(signer.KeyId, storedKeyId);
+        Assert.Equal(storedKeyId, AgentCommandSigning.ComputeKeyId(Convert.FromBase64String(storedPublicKey)));
+
         // Between runs the Nodes clock moves 2 minutes. Budget: at most 4 minutes over the whole test (D-S234),
         // so the Nodes CA's NotBefore stays inside the agent's 5-minute skew window.
         harness.NodesBase.TimeProvider.Advance(TimeSpan.FromMinutes(2));
@@ -109,6 +117,14 @@ public sealed class AgentBootstrapSeamTests : IDisposable
     {
         using var document = JsonDocument.Parse(File.ReadAllText(StateFilePath));
         return document.RootElement.GetProperty("nodeId").GetGuid();
+    }
+
+    private (string PublicKey, string KeyId) ReadStoredSigningKey()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(StateFilePath));
+        return (
+            document.RootElement.GetProperty("commandSigningPublicKey").GetString()!,
+            document.RootElement.GetProperty("commandSigningKeyId").GetString()!);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Shared.Results;
@@ -9,7 +10,8 @@ namespace Dhadgar.Agent.Core.Identity;
 
 /// <summary>
 /// Stores the agent identity as <c>agent-state.json</c> in <see cref="AgentOptions.StateDirectory"/>.
-/// The file holds no secrets. A corrupt file is a failure, never a silent re-enrollment.
+/// The file holds no secret key material, but it holds the command trust anchor (the public signing key), so a
+/// damaged file is a failure, never a silent re-enrollment or a key the agent cannot verify with.
 /// </summary>
 public sealed class FileAgentStateStore : IAgentStateStore
 {
@@ -82,8 +84,30 @@ public sealed class FileAgentStateStore : IAgentStateStore
                 return Result<StoredAgentState>.Failure("[AgentState.Corrupt] State file does not hold a valid identity");
             }
 
+            // The signing key is stored as a pair; one field without the other is a damaged file.
+            if ((state.CommandSigningPublicKey is null) != (state.CommandSigningKeyId is null))
+            {
+                _logger.LogWarning("Agent state file holds only one of the command signing key fields");
+                return Result<StoredAgentState>.Failure(
+                    "[AgentState.Corrupt] State file holds a partial command signing key");
+            }
+
+            // A key present in the file must pass the enrollment-time checks. Empty strings are present, so they fail.
+            if (state.CommandSigningPublicKey is not null
+                && !AgentSigningKeyValidation.IsValid(state.CommandSigningPublicKey, state.CommandSigningKeyId))
+            {
+                _logger.LogWarning("Agent state file holds an invalid command signing key");
+                return Result<StoredAgentState>.Failure(
+                    "[AgentState.Corrupt] State file holds an invalid command signing key");
+            }
+
             return Result<StoredAgentState>.Success(
-                new StoredAgentState(new AgentIdentity(state.NodeId, state.OrganizationId, state.EnrolledAt)));
+                new StoredAgentState(new AgentIdentity(
+                    state.NodeId,
+                    state.OrganizationId,
+                    state.EnrolledAt,
+                    state.CommandSigningPublicKey,
+                    state.CommandSigningKeyId)));
         }
         catch (FileNotFoundException)
         {
@@ -146,7 +170,12 @@ public sealed class FileAgentStateStore : IAgentStateStore
             TryDeleteTemp(tempPath);
 
             var json = JsonSerializer.SerializeToUtf8Bytes(
-                new AgentStateFile(identity.NodeId, identity.OrganizationId, identity.EnrolledAt), JsonOptions);
+                new AgentStateFile(
+                    identity.NodeId,
+                    identity.OrganizationId,
+                    identity.EnrolledAt,
+                    identity.CommandSigningPublicKey,
+                    identity.CommandSigningKeyId), JsonOptions);
 
             var created = _fileSecurity.CreateNew(tempPath);
             if (created.IsFailure)
@@ -225,5 +254,10 @@ public sealed class FileAgentStateStore : IAgentStateStore
     /// <summary>
     /// On-disk shape of the state file. Field names follow the web defaults (camelCase).
     /// </summary>
-    private sealed record AgentStateFile(Guid NodeId, Guid OrganizationId, DateTimeOffset EnrolledAt);
+    private sealed record AgentStateFile(
+        Guid NodeId,
+        Guid OrganizationId,
+        DateTimeOffset EnrolledAt,
+        string? CommandSigningPublicKey = null,
+        string? CommandSigningKeyId = null);
 }
