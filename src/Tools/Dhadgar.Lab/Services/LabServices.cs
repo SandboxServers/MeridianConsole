@@ -404,7 +404,7 @@ public sealed class LabServices
             return Result.Failure("[Lab.Untrusted] readiness URL is not a lab endpoint");
         }
 
-        using var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+        using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
         using var http = new HttpClient(handler, disposeHandler: false)
         {
             Timeout = TimeSpan.FromSeconds(5),
