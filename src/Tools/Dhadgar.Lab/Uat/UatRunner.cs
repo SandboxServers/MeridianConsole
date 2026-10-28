@@ -52,8 +52,9 @@ public sealed record UatRowViolation(InvariantViolation Violation, bool Allowed)
 /// <summary>
 /// The result of one run. <see cref="Seed"/> is the seed the rows ran with (the section seed when the section sets one).
 /// <see cref="LeaseOwner"/> is the owner of the lease the run held; it goes only to the bundle, never to the <c>uat_run</c> result.
+/// <see cref="Pair"/> is the experiment pair of a twin run (C18); it goes only to the bundle's <c>run.json</c>.
 /// </summary>
-public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows, long Events = 0, bool Truncated = false, [property: JsonIgnore] string? LeaseOwner = null, [property: JsonIgnore] InvariantReport? Invariants = null);
+public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows, long Events = 0, bool Truncated = false, [property: JsonIgnore] string? LeaseOwner = null, [property: JsonIgnore] InvariantReport? Invariants = null, [property: JsonIgnore] PairInfo? Pair = null);
 
 /// <summary>
 /// Runs a loaded spec through <see cref="LabToolDispatcher"/> (C8, R-CONTRACT). Rows run in file order; a row whose dependency did not
@@ -102,10 +103,32 @@ public sealed class UatRunner
     /// <param name="request">The run arguments.</param>
     /// <param name="sink">Receives the run's progress.</param>
     /// <param name="ct">Cancels the run.</param>
-    public async Task<Result<UatRunResult>> RunAsync(UatRunRequest request, IUatRunSink sink, CancellationToken ct)
+    public Task<Result<UatRunResult>> RunAsync(UatRunRequest request, IUatRunSink sink, CancellationToken ct)
+    {
+        return RunAsync(request, sink, null, ct);
+    }
+
+    /// <summary>
+    /// Runs one spec with a twin overlay (L53, C19). The overlay is internal: no tool argument reaches it. Its pre rows run first and are graded and recorded;
+    /// its extra faults are injected before the steps of every other row of the run. A null overlay is an ordinary run.
+    /// </summary>
+    /// <param name="request">The run arguments.</param>
+    /// <param name="sink">Receives the run's progress.</param>
+    /// <param name="overlay">The twin overlay, or null.</param>
+    /// <param name="ct">Cancels the run.</param>
+    internal async Task<Result<UatRunResult>> RunAsync(UatRunRequest request, IUatRunSink sink, UatRunOverlay? overlay, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(sink);
+
+        if (overlay is not null)
+        {
+            Result overlayCheck = CheckOverlay(request.Spec, overlay);
+            if (overlayCheck.IsFailure)
+            {
+                return Result<UatRunResult>.Failure(overlayCheck.Error);
+            }
+        }
 
         ulong runSeed = request.Seed ?? LabRandom.NewSeed();
         string runId = Convert.ToHexString(RandomNumberGenerator.GetBytes(3)).ToLowerInvariant();
@@ -113,7 +136,7 @@ public sealed class UatRunner
 
         if (request.PlanOnly)
         {
-            var planned = new UatRunResult(runId, seed, true, RunOverall.Incomplete, Array.Empty<UatRowResult>());
+            var planned = new UatRunResult(runId, seed, true, RunOverall.Incomplete, Array.Empty<UatRowResult>(), Pair: overlay?.Pair);
             sink.RunFinished(planned);
             return Result<UatRunResult>.Success(planned);
         }
@@ -165,15 +188,33 @@ public sealed class UatRunner
             var rows = new List<UatRowResult>();
             var recorded = new Dictionary<string, RowGrade>(StringComparer.Ordinal);
 
+            // The pre rows (twin overlay) run first, without the extra faults; the other rows carry them.
+            IReadOnlyList<UatFault> extraFaults = overlay is null ? Array.Empty<UatFault>() : ExtraFaultsOf(overlay);
+            var order = new List<(UatRow Row, bool Pre)>();
+            if (overlay is not null)
+            {
+                order.AddRange(overlay.PreRows.Select(id => (request.Spec.Rows.First(r => r.Id == id), true)));
+            }
+
             foreach (UatRow row in request.Spec.Rows)
             {
+                if (overlay is not null && overlay.PreRows.Contains(row.Id, StringComparer.Ordinal))
+                {
+                    continue;
+                }
+
                 if (request.RowFilter is { } filter && !filter.Contains(row.Id))
                 {
                     continue;
                 }
 
+                order.Add((row, false));
+            }
+
+            foreach ((UatRow row, bool pre) in order)
+            {
                 DateTimeOffset rowStarted = _time.GetUtcNow();
-                UatRowResult result = await _rows.RunRowAsync(request.Spec, row, missing, recorded, run, ct).ConfigureAwait(false);
+                UatRowResult result = await _rows.RunRowAsync(request.Spec, row, missing, recorded, run, pre ? Array.Empty<UatFault>() : extraFaults, ct).ConfigureAwait(false);
                 result = result with { StartedAt = rowStarted, EndedAt = _time.GetUtcNow() };
                 recorded[row.Id] = result.Grade;
                 rows.Add(result);
@@ -211,7 +252,7 @@ public sealed class UatRunner
             // Unmatched overall (D-ML92): used only when no bundle exists (plan_only); the bundle and the ingest carry their own.
             var graded = rows.Select(row => new GradedRow(request.Spec.Section.Id, row.RowId, row.Grade)).ToList();
             RunOverall overall = RunSummary.Compute(graded, new Dictionary<string, KnownMatch>(StringComparer.Ordinal)).Overall;
-            var outcome = new UatRunResult(runId, seed, false, overall, rows, events, truncated, leaseOwner, invariantReport);
+            var outcome = new UatRunResult(runId, seed, false, overall, rows, events, truncated, leaseOwner, invariantReport, overlay?.Pair);
             sink.RunFinished(outcome);
             return Result<UatRunResult>.Success(outcome);
         }
@@ -227,6 +268,45 @@ public sealed class UatRunner
                 _ = _leases.Release(leaseId);
             }
         }
+    }
+
+    /// <summary>
+    /// Refuses an overlay whose pre rows are not rows of the spec, repeated, or from another spec file (L53). Returns success when the overlay fits the spec.
+    /// </summary>
+    private static Result CheckOverlay(UatSpec spec, UatRunOverlay overlay)
+    {
+        if (overlay.PreSpec is not null && !string.Equals(overlay.PreSpec, Path.GetFileName(spec.File), StringComparison.Ordinal))
+        {
+            return Result.Failure("[Lab.InvalidArgument] the twin pre spec is not the run's spec");
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string id in overlay.PreRows)
+        {
+            if (!seen.Add(id))
+            {
+                return Result.Failure("[Lab.InvalidArgument] the twin pre row " + id + " is repeated");
+            }
+
+            if (!spec.Rows.Any(r => r.Id == id))
+            {
+                return Result.Failure("[Lab.NotFound] the twin pre row " + id + " is not in the spec");
+            }
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// The overlay's extra faults as spec faults: injected before the steps and healed at row end (heal <c>never</c>, so the row's final heal takes them).
+    /// Each id names the twin and its role, so the seeded fault stream is per twin (R-SEED).
+    /// </summary>
+    private static UatFault[] ExtraFaultsOf(UatRunOverlay overlay)
+    {
+        string owner = overlay.Pair is { } pair ? "twin:" + pair.ExperimentId + ":" + pair.Role : "twin";
+        return overlay.ExtraFaults
+            .Select((fault, index) => new UatFault(owner + ":" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), fault.Tool, fault.Args, "before_steps", "never"))
+            .ToArray();
     }
 
     /// <summary>

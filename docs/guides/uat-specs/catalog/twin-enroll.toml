@@ -1,0 +1,54 @@
+schema = 1
+
+# Twin catalog for Nodes enrollment (L53, C19). Read by twin_run through docs/guides/uat-specs/twins/<name>.toml, and also a plain uat_run spec.
+# Enroll-route calls per row (F54): one enroll through the Gateway per world, so two per twin run. The row does not poll the enroll route,
+# so it sets no poll_ms; any future poll of the route sets poll_ms = 5000. No Gateway limit is raised (D-ML88).
+
+[section]
+id = "catalog-twin-enroll"
+title = "Twin catalog: enrollment through the Gateway"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+
+[[row]]
+id = "enroll-once"
+title = "One enrollment through the Gateway with a fresh token returns 201 and a node id"
+expected = "The enroll returns 201 and the response carries a node id that is captured for the twin comparison"
+allow_invariants = []
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "twin-enroll-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "enroll"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  capture = { node_id = "/node_id" }
+
+  [[row.expect]]
+  id = "enroll-201"
+  text = "the enroll through the Gateway returns 201"
+  source = "step"
+  step = "enroll"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true

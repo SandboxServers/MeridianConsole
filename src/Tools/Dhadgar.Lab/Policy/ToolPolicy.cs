@@ -145,7 +145,6 @@ public static class ToolPolicy
         // L51 (registered)
         // L52 (registered)
         // L53
-        "twin_run",
         // L54
         "mutation_run",
         // L56
