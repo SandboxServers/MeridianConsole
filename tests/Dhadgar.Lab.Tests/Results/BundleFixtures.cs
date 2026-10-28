@@ -4,7 +4,7 @@ namespace Dhadgar.Lab.Tests.Results;
 
 /// <summary>One row of a test bundle. A <see cref="ClauseState"/> adds one required clause; <see cref="Violation"/> adds one.</summary>
 internal sealed record RowSpec(string Section, string Id, string Grade, string? ClauseState = null, string? Violation = null,
-    bool Allowed = false, string? Reason = null);
+    bool Allowed = false, string? Reason = null, string CheckId = "I1");
 
 /// <summary>
 /// Writes a small evidence bundle in the C9 shape (<c>run.json</c> and <c>rows\&lt;section&gt;\&lt;id&gt;.json</c>) for the ingest
@@ -47,7 +47,7 @@ internal static class BundleFixtures
                 {
                     ["invariant_id"] = invariant,
                     ["service"] = "nodes",
-                    ["check_id"] = "I1",
+                    ["check_id"] = row.CheckId,
                     ["allowed"] = row.Allowed,
                     ["detail"] = "detail text",
                     ["at"] = "2026-10-28T00:00:30+00:00",

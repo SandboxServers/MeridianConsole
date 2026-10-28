@@ -259,13 +259,19 @@ public static class BundleAttestor
             summary[key] = rows.Count(row => LedgerRenderer.ResultText(row.Grade) == key);
         }
 
-        // A1: the one rule (RunSummary). Known-issue matches are not read here, as at run end, so the attested overall agrees with run.json.
+        // A1: the one rule (RunSummary). Unmatched until L26 (D-ML92): known_failures is null and known_issues says so.
+        // The attested overall agrees with run.json.
         RunSummary run = RunSummary.Compute(rows.Select(row => new GradedRow(row.Section, row.Row, row.Grade)).ToList(),
             new Dictionary<string, KnownMatch>(StringComparer.Ordinal));
 
         runObj["summary"] = summary;
         runObj["new_failures"] = new JsonArray(run.NewFailures.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray());
-        runObj["known_failures"] = new JsonArray(run.KnownFailures.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray());
+        runObj["known_failures"] = null;
+        runObj["known_issues"] = new JsonObject
+        {
+            ["checked"] = false,
+            ["reason"] = KnownIssueCheck.BundleUncheckedReason,
+        };
         runObj["overall"] = run.OverallText;
         runObj["fidelity"] = "evidence_only";
     }

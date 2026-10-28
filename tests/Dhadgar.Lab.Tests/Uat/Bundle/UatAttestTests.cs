@@ -4,6 +4,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
@@ -11,6 +12,7 @@ using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -416,7 +418,9 @@ public sealed class UatAttestTests : IDisposable
         LeaseGrant grant = leases.Acquire("owner-b", "uat", null, false, null).Value;
         using var vault = new SecretVault();
         var redactor = new Redactor(vault);
-        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases, vault);
+        using var results = new ResultsService(LabPaths.FromRoot(lab), _validator, redactor, new ServiceCollection().BuildServiceProvider(),
+            NullLoggerFactory.Instance, time);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases, vault, results);
         JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-1", grant.LeaseId, "mcp-test"), CancellationToken.None);
@@ -442,7 +446,10 @@ public sealed class UatAttestTests : IDisposable
         var time = new FakeTimeProvider(At);
         var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
         using var vault = new SecretVault();
-        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, new Redactor(vault), time, leases, vault);
+        var redactor = new Redactor(vault);
+        using var results = new ResultsService(LabPaths.FromRoot(lab), _validator, redactor, new ServiceCollection().BuildServiceProvider(),
+            NullLoggerFactory.Instance, time);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases, vault, results);
         JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-2", "no-such-lease", "mcp-test"), CancellationToken.None);

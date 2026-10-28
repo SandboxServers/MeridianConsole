@@ -1,6 +1,9 @@
+using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Uat;
 using Dhadgar.Shared.Results;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Dhadgar.Lab.Tests.Results;
@@ -117,6 +120,74 @@ public sealed class BundleIngestorTests : IDisposable
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(1, db.CountRuns());
         Assert.Equal(["run-e"], later.Seen);
+    }
+
+    [Fact]
+    public async Task Ingest_SignatureKinds_AreOnlyBuiltKinds()
+    {
+        string folder = BundleFixtures.Write(_uatRuns, "run-kinds", "b1", 42,
+            new RowSpec("nodes", "heartbeat", "FAIL", ClauseState: "NotHeld", Violation: "I1"),
+            new RowSpec("nodes", "enroll", "FAIL", Violation: "I1"));
+        string resultsRoot = Path.Combine(_root, "results");
+        using ResultsDb db = ResultsDb.Open(resultsRoot, _validator).Value;
+
+        Result<IngestResult> result = await NewIngestor(db).IngestAsync(folder, [_uatRuns], CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        List<string> kinds = SignatureKindsOf(Path.Combine(resultsRoot, "lab-results.db"));
+        Assert.NotEmpty(kinds);
+        Assert.All(kinds, kind => Assert.Contains(kind, EvidenceCoverage.BuiltKinds));
+    }
+
+    [Fact]
+    public async Task Ingest_RunEndViolationRow_IsInvSignature()
+    {
+        string folder = BundleFixtures.Write(_uatRuns, "run-end", "b1", 42,
+            new RowSpec("invariants", "I1", "FAIL", Violation: "I1", CheckId: "unhandled"));
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+
+        Result<IngestResult> result = await NewIngestor(db).IngestAsync(folder, [_uatRuns], CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("fail", result.Value.Overall);
+        string text = SignatureBuilder.Invariant("I1", "nodes", "unhandled").Text;
+        Assert.Equal("inv:I1|nodes|unhandled", text);
+        Assert.Equal(1, db.SignatureHits(SignatureBuilder.SignatureId(text)));
+        Assert.Contains("invariants/I1", RunSummary.Compute([new GradedRow("invariants", "I1", RowGrade.Fail)],
+            new Dictionary<string, KnownMatch>(StringComparer.Ordinal)).NewFailures);
+    }
+
+    [Fact]
+    public async Task Ingest_HistoryBundle_IsRefused()
+    {
+        string folder = Path.Combine(_uatRuns, "20261028-hist-run-h");
+        Directory.CreateDirectory(folder);
+        var run = new JsonObject { ["schema"] = 1, ["run_id"] = "run-h", ["kind"] = "history", ["seed"] = 42 };
+        await File.WriteAllTextAsync(Path.Combine(folder, "run.json"), run.ToJsonString(), CancellationToken.None);
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+
+        Result<IngestResult> result = await NewIngestor(db).IngestAsync(folder, [_uatRuns], CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("[Lab.InvalidArgument] history bundles are not ingested until L25f", result.Error);
+        Assert.True(db.RunOf("run-h").IsFailure);
+        Assert.Contains("[Lab.NotFound]", db.RunOf("run-h").Error, StringComparison.Ordinal);
+    }
+
+    private static List<string> SignatureKindsOf(string databasePath)
+    {
+        using SqliteConnection connection = new($"Data Source={databasePath}");
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "select kind from signatures;";
+        using SqliteDataReader reader = command.ExecuteReader();
+        var kinds = new List<string>();
+        while (reader.Read())
+        {
+            kinds.Add(reader.GetString(0));
+        }
+
+        return kinds;
     }
 
     private static BundleIngestor NewIngestor(ResultsDb db) =>

@@ -3,8 +3,8 @@ using Dhadgar.Lab.Uat;
 namespace Dhadgar.Lab.Results;
 
 /// <summary>
-/// One graded row of a run, as the summary sees it. A standalone unallowed violation (outside any row) is passed as a
-/// <see cref="RowGrade.Fail"/> with section <c>violation</c> and the row id <c>&lt;invariant id&gt;/&lt;signature id&gt;</c>.
+/// One graded row of a run. Run-start and run-end violations arrive as the synthetic rows <c>invariants/&lt;id&gt;</c>
+/// (<c>UatRunner.SyntheticRows</c>).
 /// </summary>
 public sealed record GradedRow(string Section, string RowId, RowGrade Grade);
 

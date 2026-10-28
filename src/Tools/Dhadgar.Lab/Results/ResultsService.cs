@@ -151,7 +151,7 @@ public sealed class ResultsService : IDisposable
     }
 
     /// <summary>
-    /// The JSON an MCP tool returns for one ingest: <c>{"ok":true,"run_id","overall","rows","signatures","known_issues"}</c>
+    /// The JSON an MCP tool returns for one ingest: <c>{"ok":true,"run_id","overall","rows","signatures","known_issues","evidence"}</c>
     /// on success, or <c>{"ok":false,"error"}</c> with the error redacted (R-LOG).
     /// </summary>
     public JsonObject ToPayload(Result<IngestResult> ingested)
@@ -174,6 +174,7 @@ public sealed class ResultsService : IDisposable
             ["rows"] = result.Rows,
             ["signatures"] = result.Signatures,
             ["known_issues"] = result.KnownIssues.ToJson(),
+            ["evidence"] = EvidenceCoverage.ToJson(),
         };
     }
 

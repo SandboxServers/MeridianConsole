@@ -383,7 +383,8 @@ public sealed class BundleWriter : IUatRunSink
             summary[LedgerRenderer.ResultText(row.Grade)]++;
         }
 
-        // A1: the one rule (RunSummary). A secret-failed pass is "fail" whatever the rows say, as before.
+        // A1: the one rule (RunSummary). Unmatched until L26 (D-ML92): the overall is conservative, any failure gives "fail".
+        // A secret-failed pass is "fail" whatever the rows say, as before.
         RunSummary runSummary = RunSummary.Compute(
             rows.Select(row => new GradedRow(spec.Section.Id, row.Row, row.Grade)).ToList(),
             new Dictionary<string, KnownMatch>(StringComparer.Ordinal));
@@ -549,7 +550,8 @@ public sealed class BundleWriter : IUatRunSink
             overall,
             incomplete_reasons = Array.Empty<string>(),
             new_failures = runSummary.NewFailures,
-            known_failures = runSummary.KnownFailures,
+            known_failures = (IReadOnlyList<string>?)null,
+            known_issues = new { @checked = false, reason = KnownIssueCheck.BundleUncheckedReason },
             violations = secretFailed ? 0 : result.Invariants?.Violations.Count ?? 0,
             row_violations = secretFailed
                 ? []

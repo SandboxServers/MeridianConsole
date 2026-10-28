@@ -44,6 +44,10 @@ public sealed class ResultsDb : IDisposable
         create table if not exists flakes (section text not null, row_id text not null, seed integer not null,
           run_ids_json text not null, grades_json text not null, detected_at text not null);
         """,
+        """
+        alter table runs add column known_issues_json text;
+        alter table runs add column evidence_json text;
+        """,
     ];
 
     private static readonly object InitLock = new();
@@ -134,20 +138,60 @@ public sealed class ResultsDb : IDisposable
         return Execute(
             """
             insert into runs (run_id, kind, label, seed, build_id, commit_sha, dirty, started_at, ended_at, overall,
-              fingerprint_sha256, fidelity, bundle_path)
+              fingerprint_sha256, fidelity, bundle_path, known_issues_json, evidence_json)
             values ($run_id, $kind, $label, $seed, $build_id, $commit_sha, $dirty, $started_at, $ended_at, $overall,
-              $fingerprint, $fidelity, $bundle_path)
+              $fingerprint, $fidelity, $bundle_path, $known_issues_json, $evidence_json)
             on conflict(run_id) do update set kind = excluded.kind, label = excluded.label, seed = excluded.seed,
               build_id = excluded.build_id, commit_sha = excluded.commit_sha, dirty = excluded.dirty,
               started_at = excluded.started_at, ended_at = excluded.ended_at, overall = excluded.overall,
               fingerprint_sha256 = excluded.fingerprint_sha256, fidelity = excluded.fidelity,
-              bundle_path = excluded.bundle_path;
+              bundle_path = excluded.bundle_path, known_issues_json = excluded.known_issues_json,
+              evidence_json = excluded.evidence_json;
             """,
             ("$run_id", run.RunId), ("$kind", run.Kind), ("$label", run.Label), ("$seed", run.Seed),
             ("$build_id", run.BuildId), ("$commit_sha", run.CommitSha), ("$dirty", Flag(run.Dirty)),
             ("$started_at", run.StartedAt), ("$ended_at", run.EndedAt), ("$overall", run.Overall),
-            ("$fingerprint", run.FingerprintSha256), ("$fidelity", run.Fidelity), ("$bundle_path", run.BundlePath));
+            ("$fingerprint", run.FingerprintSha256), ("$fidelity", run.Fidelity), ("$bundle_path", run.BundlePath),
+            ("$known_issues_json", run.KnownIssuesJson), ("$evidence_json", run.EvidenceJson));
     }
+
+    /// <summary>
+    /// The summary row of one run. Returns <c>[Lab.NotFound]</c> when the run is absent, never a null success (R-RESULT).
+    /// </summary>
+    /// <param name="runId">The run id.</param>
+    public Result<RunRecord> RunOf(string runId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        try
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText =
+                """
+                select run_id, kind, label, seed, build_id, commit_sha, dirty, started_at, ended_at, overall,
+                  fingerprint_sha256, fidelity, bundle_path, known_issues_json, evidence_json
+                from runs where run_id = $run_id;
+                """;
+            command.Parameters.AddWithValue("$run_id", runId);
+            using SqliteDataReader reader = command.ExecuteReader();
+            if (!reader.Read())
+            {
+                return Result<RunRecord>.Failure("[Lab.NotFound] no run with that id is in the results database");
+            }
+
+            return Result<RunRecord>.Success(new RunRecord(
+                reader.GetString(0), reader.GetString(1), TextOrNull(reader, 2), reader.GetInt64(3),
+                TextOrNull(reader, 4), TextOrNull(reader, 5), reader.IsDBNull(6) ? null : reader.GetInt64(6) != 0,
+                TextOrNull(reader, 7), TextOrNull(reader, 8), TextOrNull(reader, 9), TextOrNull(reader, 10),
+                TextOrNull(reader, 11), reader.GetString(12), TextOrNull(reader, 13), TextOrNull(reader, 14)));
+        }
+        catch (SqliteException ex)
+        {
+            return Result<RunRecord>.Failure("[Lab.IoError] results database read failed: SQLite " + ex.SqliteErrorCode);
+        }
+    }
+
+    private static string? TextOrNull(SqliteDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
 
     /// <summary>Removes a run's rows, pairs, faults and violations so a re-ingest can write them again.</summary>
     public Result DeleteRunDetails(string runId)
@@ -465,7 +509,7 @@ public sealed class ResultsDb : IDisposable
 /// <summary>A run row of the index (C12 <c>runs</c>).</summary>
 public sealed record RunRecord(string RunId, string Kind, string? Label, long Seed, string? BuildId, string? CommitSha,
     bool? Dirty, string? StartedAt, string? EndedAt, string? Overall, string? FingerprintSha256, string? Fidelity,
-    string BundlePath);
+    string BundlePath, string? KnownIssuesJson = null, string? EvidenceJson = null);
 
 /// <summary>A graded row of a run (C12 <c>rows</c>). <c>SignaturesJson</c> is a JSON array of signature ids.</summary>
 public sealed record RowRecord(string RunId, string Section, string RowId, string Grade, string? Reason, long Seed,

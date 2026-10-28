@@ -104,6 +104,11 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure(run.Error);
         }
 
+        if (Text(run.Value, "kind") == "history")
+        {
+            return Result<IngestResult>.Failure("[Lab.InvalidArgument] history bundles are not ingested until L25f");
+        }
+
         return await IngestRunAsync(folder.Value, run.Value, ct).ConfigureAwait(false);
     }
 
@@ -218,7 +223,9 @@ public sealed class BundleIngestor
             Overall: overall,
             FingerprintSha256: Text(run, "fingerprint_sha256"),
             Fidelity: Text(run, "fidelity"),
-            BundlePath: folder);
+            BundlePath: folder,
+            KnownIssuesJson: _known.ToJson().ToJsonString(),
+            EvidenceJson: EvidenceCoverage.ToJson().ToJsonString());
 
         Result result = _db.UpsertRun(record);
         if (result.IsFailure)

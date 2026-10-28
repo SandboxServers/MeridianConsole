@@ -208,7 +208,7 @@ public sealed class UatRunner
 
             // The sink stops counting at MaxObservationsPerRun and writes one extra "truncated" note, so a larger count means truncation.
             bool truncated = events > LabObservationSink.MaxObservationsPerRun;
-            // A1: the one rule for the overall (RunSummary). Known-issue matches come from the ingest, so none here (D-ML89).
+            // Unmatched overall (D-ML92): used only when no bundle exists (plan_only); the bundle and the ingest carry their own.
             var graded = rows.Select(row => new GradedRow(request.Spec.Section.Id, row.RowId, row.Grade)).ToList();
             RunOverall overall = RunSummary.Compute(graded, new Dictionary<string, KnownMatch>(StringComparer.Ordinal)).Overall;
             var outcome = new UatRunResult(runId, seed, false, overall, rows, events, truncated, leaseOwner, invariantReport);
