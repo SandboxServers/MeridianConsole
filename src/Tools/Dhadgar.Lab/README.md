@@ -203,7 +203,7 @@ The host reads are read-only and run on Windows only; elsewhere they return `[La
 - `certstore_list` lists metadata for `machine_my`, `machine_root`, `agent_ca` (missing store is empty) and `current_user_my`. No certificate, public key blob or private key leaves the reader.
 - `registry_read` reports presence, kind and length of the agent registry values. It never returns a value. An access-denied read returns `[Lab.Unavailable]`.
 - `state_file_read` returns the agent state file as JSON. The path comes from `%ProgramData%` and `AgentWindowsFootprint`, is validated by `PathValidator`, and is refused above 1 MiB. Properties named like `token`, `key` or `secret` are blanked, then the whole document goes through `Redactor`.
-- `lab_doctor` reports OS, build number, dotnet and the Docker server OS. Ports, docker-users, token length and repo root are listed as `info` (not checked yet).
+- `lab_doctor` returns `{ok, checks:[{name, status, detail}]}`. `status` is `ok` (checked, fine), `warn` (checked; degraded or unknown), `fail` (checked; a lab action will fail) or `info` (a fact, not a verdict); `ok` is false only when a check is `fail`. Nine checks, in order: `os`, `build`, `dotnet`, `docker` (the lab Linux context answers with `linux`), `docker-users` (Windows), `ports` (lab ports free or held by lab containers), `dev-ports` (always `info`; the AppHost binds no fixed port), `token` (length only), `repo-root` (never the path). `windows-*` checks arrive with L31 and `playwright` with L35.
 
 Every read takes no `member` in L12; a `member` argument returns `[Lab.Unavailable] members arrive in L32`.
 

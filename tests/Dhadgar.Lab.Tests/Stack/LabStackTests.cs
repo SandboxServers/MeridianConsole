@@ -96,6 +96,25 @@ public sealed class LabStackTests : IDisposable
     }
 
     [Fact]
+    public async Task UpAsync_SweepsOldEnvFiles_AndKeepsFreshOnes()
+    {
+        // An env file older than ten minutes is a crash leftover and is swept; a fresh one may belong to a svc_start in flight.
+        string state = LabPaths.FromRoot(_root, repoRoot: FindRepoRoot()).State;
+        _ = Directory.CreateDirectory(state);
+        string old = Path.Combine(state, "env-old");
+        string fresh = Path.Combine(state, "env-fresh");
+        await File.WriteAllTextAsync(old, "A=1", CancellationToken.None);
+        await File.WriteAllTextAsync(fresh, "B=2", CancellationToken.None);
+        File.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddHours(-1));
+        using LabStack stack = CreateStack(out _);
+
+        _ = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.False(File.Exists(old));
+        Assert.True(File.Exists(fresh));
+    }
+
+    [Fact]
     public void WriteEnvFile_SecondSecretMissing_DeletesThePartialFile()
     {
         // The first secret is written, the second ref is not in the vault: the failure must leave no env-* file in State (N1).
