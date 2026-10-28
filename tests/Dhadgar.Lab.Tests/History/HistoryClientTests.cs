@@ -113,7 +113,7 @@ public sealed class HistoryClientTests : IDisposable
         Assert.Equal(2, _handler.Bodies.Count);
         Assert.Equal(Deserialize(_handler.Bodies[0]).PublicKey, Deserialize(_handler.Bodies[1]).PublicKey);
         Assert.Equal(2, outcome.Value!.OpIds.Count);
-        IReadOnlyList<LabObservation> invokes = _sink.Lines.Where(l => l.Kind == ObservationKind.Invoke).ToList();
+        List<LabObservation> invokes = _sink.Lines.Where(l => l.Kind == ObservationKind.Invoke).ToList();
         Assert.Equal(outcome.Value.OpIds[0], invokes[1].CausedBy);
     }
 

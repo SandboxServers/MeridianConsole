@@ -1,0 +1,16 @@
+# Known issues (C12). A failing signature that matches an issue here is linked to it instead of reported as new.
+schema = 1
+
+[[issue]]
+id = "KI-ENROLL-RETRY"
+title = "A lost enroll response plus a retry leaves an orphan node and a 401 (D-ML49)"
+link = "docs/PROJECT-STATE.md"
+signatures = [
+  "hist:enrollment|E5|enroll-lost-response",
+  "hist:enrollment|E5|enroll-lost-response-new-key",
+]
+patterns = []
+state = "open"
+
+[issue.scope]
+sections = ["history"]

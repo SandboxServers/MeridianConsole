@@ -151,8 +151,7 @@ public static class ToolPolicy
         "agent_msi_install",
         "agent_msi_uninstall",
         // L48
-        // L51
-        "history_run",
+        // L51 (registered)
         // L52
         "coverage_report",
         // L53
