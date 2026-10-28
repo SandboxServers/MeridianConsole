@@ -692,6 +692,26 @@ Agents hold a persistent SignalR connection to the Nodes service for heartbeats.
   | `invalid_heartbeat` | The payload failed validation; nothing was written |
   | `heartbeat_failed` | Any other failure, including a revoked or expired certificate |
 
+- **Connect checks:** run in this order, and each failure aborts the connection:
+  1. the `X-Agent-Protocol` header (a missing header counts as `1`);
+  2. the `node_id` claim;
+  3. the client certificate is current (the rule above);
+  4. the node exists and is not decommissioned (`AsNoTracking`, selecting `OrganizationId` and `Status` only).
+
+  Only then does the connection join `AgentHubProtocol.NodeGroup(nodeId)` and get recorded in `IAgentConnectionRegistry`. The registry is removed again on disconnect. A decommissioned node is refused at connect, not at its first heartbeat.
+- **Registry:** `IAgentConnectionRegistry` tracks connection IDs per node (`IsConnected`, `ConnectedNodeCount`). It is a singleton with no scoped dependency. It is single-instance for the MVP. Scale-out across several Nodes instances needs a Redis backplane (ADR-0008) before the registry is shared.
+- **Frame limit:** `MaximumReceiveMessageSize` is `AgentHubProtocol.MaxReceiveMessageBytes` (512 KiB) for each escaped frame received from an agent. A larger frame closes the connection.
+- **`Telemetry(AgentTelemetry)`:** returns `AgentHubAck`. `AgentTelemetryValidator` runs before anything is logged, and nothing is written to the database. A valid message is logged at Debug with the node ID and metric count only.
+
+  | Field | Limit |
+  |-------|-------|
+  | `Timestamp` | not `default` |
+  | `Metrics` | non-null, at most 500 entries |
+  | Each metric name | 1 to 128 characters, no control characters |
+  | Each metric value | finite |
+
+  Unknown members are ignored. A rejected message returns `invalid_telemetry` in `AgentHubAck.ErrorCode`. A message with no `node_id` claim returns `heartbeat_failed`.
+
 ---
 
 ## Related Documentation
