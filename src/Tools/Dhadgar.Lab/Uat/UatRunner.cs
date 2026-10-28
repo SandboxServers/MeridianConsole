@@ -167,7 +167,7 @@ public sealed class UatRunner
         return null;
     }
 
-    private async Task<UatRowResult> RunRowAsync(UatSpec spec, UatRow row, string? missing, IReadOnlyDictionary<string, RowGrade> recorded, RunContext run, CancellationToken ct)
+    private async Task<UatRowResult> RunRowAsync(UatSpec spec, UatRow row, string? missing, Dictionary<string, RowGrade> recorded, RunContext run, CancellationToken ct)
     {
         if (run.LeaseLost)
         {

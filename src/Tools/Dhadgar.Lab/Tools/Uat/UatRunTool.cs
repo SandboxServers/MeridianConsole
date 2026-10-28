@@ -14,8 +14,8 @@ namespace Dhadgar.Lab.Tools;
 public sealed record UatRunArgs(
     string Spec,
     string? SpecsDir = null,
-    string[]? Sections = null,
-    string[]? Rows = null,
+    IReadOnlyList<string>? Sections = null,
+    IReadOnlyList<string>? Rows = null,
     bool PlanOnly = false,
     string? Label = null,
     ulong? Seed = null,
@@ -101,14 +101,14 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             return Result<object>.Failure("[Lab.InvalidArgument] the spec has validation problems; run uat_plan for the list");
         }
 
-        if (args.Sections is { Length: > 0 } && !args.Sections.Contains(loaded.Spec.Section.Id, StringComparer.Ordinal))
+        if (args.Sections is { Count: > 0 } &&!args.Sections.Contains(loaded.Spec.Section.Id, StringComparer.Ordinal))
         {
             return Result<object>.Failure("[Lab.NotFound] the section is not in the spec");
         }
 
         var request = new UatRunRequest(
             loaded.Spec,
-            args.Rows is { Length: > 0 } ? args.Rows : null,
+            args.Rows is { Count: > 0 } ? args.Rows : null,
             args.Seed,
             args.LeaseId,
             args.Label,
