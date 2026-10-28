@@ -56,7 +56,7 @@ public static class SpecValidator
     /// <summary>Required source fields per C7 source (the clause's top-level keys are not listed here).</summary>
     private static readonly Dictionary<string, string[]> SourceRequired = new(StringComparer.Ordinal)
     {
-        ["db"] = ["sql"],
+        ["db"] = ["database", "sql"],
         ["log"] = ["process"],
         ["http"] = ["via", "method", "path"],
         ["tool"] = ["tool"],
@@ -78,7 +78,9 @@ public static class SpecValidator
         ["log"] = ["contains", "matches", "category", "level", "event_id"],
         ["http"] = ["headers", "body"],
         ["tool"] = ["args"],
-        ["certstore"] = ["subject_contains", "issuer_contains", "issuer_thumbprint"],
+        ["certstore"] = ["member", "subject_contains", "issuer_contains", "issuer_thumbprint"],
+        ["registry"] = ["member"],
+        ["state_file"] = ["member"],
         ["agent_log"] = ["contains", "matches"],
     };
 

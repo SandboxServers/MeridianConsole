@@ -209,6 +209,16 @@ The host reads are read-only and run on Windows only; elsewhere they return `[La
 
 Every read takes no `member` in L12; a `member` argument returns `[Lab.Unavailable] members arrive in L32`.
 
+## CLI
+
+Both commands talk only to `http://127.0.0.1:<port>` (`--port`, default from `LabDefaults`). The token comes from `MERIDIAN_LAB_TOKEN`, never an argument. Requests follow no redirects and use no proxy.
+
+- `meridian-lab status [--json] [--port <n>]` calls `GET /status` and prints the daemon state.
+- `meridian-lab uat run --specs <file>... [--section <id>] [--rows a,b] [--plan-only] [--label <text>] [--seed <n>] [--replay <repro.toml>] [--json] [--port <n>]` calls the `uat_run` MCP tool on `/mcp`. It prints the seed, the summary table and the bundle path. `--replay` excludes `--specs`, `--section`, `--rows` and `--seed`.
+
+Exit codes for `uat run` follow `overall` (C8): 0 `pass`, 1 `fail`, 2 config or plan error, 4 `incomplete`, 5 `pass_with_known`. Exit 3 is the daemon's "already running" for `daemon run`.
+
+The shipped spec `docs/guides/uat-specs/lab-selftest.toml` (section `lab-selftest`, requires Docker) exercises the stack, Nodes and Gateway enrolment and the Toxiproxy ingress path. Its Gateway checks never call the CA route through the Gateway (D-ML63). Enrol polling uses `poll_ms = 5000` (F54).
 ## Reads and probes
 
 Part of L10. Both tools are lab-only and never touch the dev stack.

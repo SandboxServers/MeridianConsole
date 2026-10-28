@@ -136,6 +136,19 @@ public sealed class LabCliExitCodeTests
         Assert.Null(after);
     }
 
+    [Theory]
+    [InlineData("pass", 0)]
+    [InlineData("fail", 1)]
+    [InlineData("incomplete", 4)]
+    [InlineData("pass_with_known", 5)]
+    [InlineData("error", 2)]
+    [InlineData("", 2)]
+    [InlineData(null, 2)]
+    public void UatRun_OverallMapsToCliExitCode(string? overall, int expected)
+    {
+        Assert.Equal(expected, LabCli.ExitCodeForOverall(overall));
+    }
+
     private static string ValidToken() => System.Buffers.Text.Base64Url.EncodeToString(
         System.Security.Cryptography.RandomNumberGenerator.GetBytes(LabDefaults.MinTokenBytes));
 

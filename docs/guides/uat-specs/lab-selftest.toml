@@ -1,0 +1,284 @@
+schema = 1
+
+# Lab self-test (S-L6). Proves the runner reaches the stack through the daemon, the Gateway and the agent ingress.
+# Enroll-route calls per section: 4 gateway or ingress enrolls, 2 direct probes, 1 probe reuse: under 25 per 60 s.
+# No row calls the CA route through the Gateway (D-ML63).
+
+[section]
+id = "lab-selftest"
+title = "Lab self-test"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+
+[[row]]
+id = "stack-up"
+title = "The stack comes up from a wiped data root"
+expected = "stack_status reports up"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.expect]]
+  id = "stack-state"
+  text = "stack state is up"
+  source = "tool"
+  tool = "stack_status"
+  op = "eq"
+  pointer = "/state"
+  value = "up"
+  timeout_ms = 0
+
+[[row]]
+id = "nodes-up"
+title = "The Nodes service starts and answers its health route"
+expected = "Nodes health returns 200"
+depends_on = ["stack-up"]
+
+  [[row.step]]
+  id = "start"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.expect]]
+  id = "nodes-health"
+  text = "Nodes GET /healthz returns 200"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/healthz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  timeout_ms = 30000
+  poll_ms = 500
+
+[[row]]
+id = "gateway-up"
+title = "The Gateway starts and forwards enrollment to Nodes"
+expected = "Gateway health returns 200; an empty enroll body returns 400 invalid_platform from Nodes"
+depends_on = ["nodes-up"]
+
+  [[row.step]]
+  id = "start"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.expect]]
+  id = "gateway-health"
+  text = "Gateway GET /healthz returns 200"
+  source = "http"
+  via = "gateway"
+  method = "GET"
+  path = "/healthz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  timeout_ms = 30000
+  poll_ms = 5000
+
+  [[row.expect]]
+  id = "gateway-forwards"
+  text = "Gateway forwards the enroll route to Nodes, which rejects the empty body"
+  source = "http"
+  via = "gateway"
+  method = "POST"
+  path = "/api/v1/agents/enroll"
+  body = {}
+  op = "eq"
+  pointer = "/status"
+  value = 400
+  timeout_ms = 0
+
+  [[row.expect]]
+  id = "gateway-invalid-platform"
+  text = "the forwarded reply names invalid_platform, which only Nodes emits"
+  source = "http"
+  via = "gateway"
+  method = "POST"
+  path = "/api/v1/agents/enroll"
+  body = {}
+  op = "eq"
+  pointer = "/body/errorCode"
+  value = "invalid_platform"
+  timeout_ms = 0
+
+[[row]]
+id = "token-mint"
+title = "A minted enrollment token is stored hashed and unused"
+expected = "One enrollment token row with the label, not used"
+depends_on = ["nodes-up"]
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "selftest-${run_id}" }
+  capture = { token_ref = "/token_ref", token_id = "/token_id" }
+
+  [[row.expect]]
+  id = "token-row"
+  text = "token row exists and is unused"
+  source = "db"
+  database = "nodes"
+  sql = 'select "UsedAt" as used_at from enrollment_tokens where "Id" = @id::uuid'
+  params = { id = "${token_id}" }
+  op = "falsy"
+  pointer = "/rows/0/used_at"
+  timeout_ms = 0
+  required = true
+
+[[row]]
+id = "enroll-direct"
+title = "A direct enroll to Nodes creates the node row"
+expected = "Enroll probe returns 201 and the node row exists"
+depends_on = ["nodes-up"]
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "selftest-direct-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "nodes" }
+  capture = { node_id = "/node_id" }
+
+  [[row.expect]]
+  id = "probe-status"
+  text = "the direct enroll returns 201"
+  source = "step"
+  step = "probe"
+  op = "eq"
+  pointer = "/result/status"
+  value = 201
+
+  [[row.expect]]
+  id = "node-row"
+  text = "the node row exists for the captured node_id"
+  source = "db"
+  database = "nodes"
+  sql = 'select "Id" as node_id from nodes where "Id" = @id::uuid'
+  params = { id = "${node_id}" }
+  op = "exists"
+  pointer = "/rows/0/node_id"
+  timeout_ms = 0
+
+[[row]]
+id = "enroll-gateway"
+title = "An enroll through the Gateway succeeds with a fresh token"
+expected = "Enroll probe via the gateway returns 201"
+depends_on = ["gateway-up"]
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "selftest-gw-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.expect]]
+  id = "probe-status"
+  text = "the gateway enroll returns 201"
+  source = "step"
+  step = "probe"
+  op = "eq"
+  pointer = "/result/status"
+  value = 201
+
+[[row]]
+id = "enroll-ingress"
+title = "An enroll through the agent ingress succeeds (the path agents use)"
+expected = "Enroll probe via agent_ingress returns 201"
+depends_on = ["gateway-up"]
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "selftest-ingress-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "agent_ingress" }
+
+  [[row.expect]]
+  id = "probe-status"
+  text = "the agent ingress enroll returns 201"
+  source = "step"
+  step = "probe"
+  op = "eq"
+  pointer = "/result/status"
+  value = 201
+
+[[row]]
+id = "token-single-use"
+title = "A token that enrolled once is refused on reuse"
+expected = "Reusing the enroll-gateway token returns http:401"
+depends_on = ["gateway-up"]
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "selftest-single-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "first"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.step]]
+  id = "reuse"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  expect_error = "http:401"
+
+  [[row.expect]]
+  id = "first-status"
+  text = "the first gateway enroll returns 201"
+  source = "step"
+  step = "first"
+  op = "eq"
+  pointer = "/result/status"
+  value = 201
+
+  [[row.expect]]
+  id = "reuse-code"
+  text = "the reused token is refused with http:401"
+  source = "step"
+  step = "reuse"
+  op = "eq"
+  pointer = "/result/status"
+  value = 401
+
+[[row]]
+id = "nodes-log"
+title = "The Nodes log records the enrollments"
+expected = "At least one enroll line in the Nodes log since run start"
+depends_on = ["enroll-direct"]
+
+  [[row.step]]
+  id = "snapshot"
+  tool = "lab_status"
+  args = {}
+
+  [[row.expect]]
+  id = "log-enroll"
+  text = "the Nodes log has a line containing nroll"
+  source = "log"
+  process = "nodes"
+  contains = "nroll"
+  since = "row_start"
+  op = "min_rows"
+  pointer = "/count"
+  value = 1
+  timeout_ms = 0
