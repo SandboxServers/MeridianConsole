@@ -45,6 +45,7 @@ public sealed class BundleWriter : IUatRunSink
     private LabFingerprint? _fingerprint;
     private string _fingerprintSha = string.Empty;
     private readonly List<string> _warnings = [];
+    private LiveFingerprintParts? _live;
 
     /// <summary>
     /// Creates the writer for one run.
@@ -101,24 +102,32 @@ public sealed class BundleWriter : IUatRunSink
             Commit: FingerprintBuilder.UnknownPart,
             Dirty: false,
             BuildId: _buildId == "nobuild" ? null : _buildId,
-            ImageDigests: new Dictionary<string, string>(),
+            ImageDigests: _live?.ImageDigests ?? new Dictionary<string, string>(),
             LockFilesSha256: null,
             ServiceEnvironments: new Dictionary<string, IReadOnlyDictionary<string, string>>(),
             SecretKeys: new HashSet<string>(),
             Specs: [new SpecHash(spec.File, spec.Sha256)],
             DaemonVersion: FingerprintBuilder.DaemonVersionText(),
-            ToxiproxyVersion: null,
+            ToxiproxyVersion: _live?.ToxiproxyVersion,
             Seed: seed,
             Os: RuntimeInformation.OSDescription,
-            EngineVersions: new Dictionary<string, string>());
+            EngineVersions: _live?.EngineVersions ?? new Dictionary<string, string>());
 
         _fingerprint = FingerprintBuilder.Build(input);
         _fingerprintSha = FingerprintHasher.Sha256(_fingerprint);
         _warnings.Clear();
         _warnings.Add("commit not collected: unknown");
         _warnings.Add("lock files not collected: unknown");
-        _warnings.Add("toxiproxy version not collected: unknown");
-        _warnings.Add("image digests and engine versions not collected: unknown");
+        _warnings.AddRange(_live?.Warnings ?? ["live fingerprint parts not collected: unknown"]);
+    }
+
+    /// <summary>
+    /// Supplies the live fingerprint parts (engine, images, Toxiproxy). Call before the run starts; without it those parts are <c>unknown</c>.
+    /// </summary>
+    /// <param name="parts">The collected parts.</param>
+    public void UseLiveParts(LiveFingerprintParts parts)
+    {
+        _live = parts ?? throw new ArgumentNullException(nameof(parts));
     }
 
     private ReplayFidelity CurrentFidelity(bool truncated) => FidelityRules.For(new FidelityInput(
