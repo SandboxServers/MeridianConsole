@@ -216,7 +216,7 @@ public static class BundleAttestor
                 Scrub(obj["title"]?.GetValue<string>() ?? string.Empty),
                 Scrub(obj["expected"]?.GetValue<string>() ?? string.Empty),
                 ParseGrade(obj["grade"]?.GetValue<string>()),
-                obj["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
+                obj["ended_at"]?.GetValue<DateTimeOffset>() ?? obj["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
                 clauses,
                 attestations));
         }

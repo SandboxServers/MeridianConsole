@@ -191,7 +191,7 @@ public sealed class BundleWriter : IUatRunSink
             string? error = result?.Error is null ? null : Scrub(result.Error);
             return new LedgerClause(clause.Id, Scrub(clause.Pointer ?? clause.Source), result?.State ?? ClauseState.Unverified, error, clause.Source, clause.Required);
         }).ToList();
-        _rows.Add(new LedgerRow(section, row.RowId, Scrub(spec?.Title ?? row.RowId), Scrub(spec?.Expected ?? string.Empty), row.Grade, _time.GetUtcNow(), clauses));
+        _rows.Add(new LedgerRow(section, row.RowId, Scrub(spec?.Title ?? row.RowId), Scrub(spec?.Expected ?? string.Empty), row.Grade, row.EndedAt ?? _time.GetUtcNow(), clauses));
     }
 
     /// <inheritdoc />
@@ -284,11 +284,23 @@ public sealed class BundleWriter : IUatRunSink
             var clauseJson = row.Clauses.Select(clause =>
             {
                 UatClauseResult? evidence = source?.Clauses.FirstOrDefault(candidate => candidate.Id == clause.Id);
+                UatClause? specClause = spec.Rows.FirstOrDefault(candidate => candidate.Id == row.Row)?.Expect
+                    .FirstOrDefault(candidate => candidate.Id == clause.Id);
+                string clauseText = string.Empty;
+                if (specClause is not null)
+                {
+                    clauseText = _redactor.Redact(specClause.Text, out int textRedactions);
+                    _passRedactions += textRedactions;
+                }
+
                 return new
                 {
                     id = clause.Id,
+                    text = clauseText,
                     pointer = clause.Locator,
                     source = clause.Source,
+                    op = specClause?.Op,
+                    value = Evidence(specClause?.Value),
                     required = clause.Required,
                     state = clause.State.ToString(),
                     error = clause.Error,
@@ -324,7 +336,9 @@ public sealed class BundleWriter : IUatRunSink
                 expected = row.Expected,
                 grade = LedgerRenderer.ResultText(row.Grade),
                 reason,
-                at = row.At,
+                started_at = source?.StartedAt ?? row.At,
+                ended_at = row.At,
+                member = source?.Member,
                 clauses = secretFailed ? Array.Empty<object>() : clauseJson.Cast<object>(),
                 steps = stepJson,
                 attestations = Array.Empty<object>(),
@@ -334,6 +348,16 @@ public sealed class BundleWriter : IUatRunSink
 
         Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));
         Write("ledger.md", LedgerRenderer.Render(_runId, _system, _build, rows));
+
+        // The distinct tools of the recorded steps; none in the secret-failed pass, which writes no steps.
+        string[] tools = secretFailed
+            ? []
+            : _results.SelectMany(row => row.Steps ?? Array.Empty<UatStepResult>())
+                .Where(step => step.Tool is not null)
+                .Select(step => step.Tool!)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
 
         // Last, so that redactions counts every other file written in this pass.
         var run = new
@@ -347,10 +371,10 @@ public sealed class BundleWriter : IUatRunSink
             daemon_version = typeof(BundleWriter).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             os = RuntimeInformation.OSDescription,
             build = new { id = _stamp.Id, commit = _stamp.Commit, dirty = _stamp.Dirty, checkout = _stamp.Checkout },
-            lease_owner = (string?)null,
+            lease_owner = result.LeaseOwner,
             members = Array.Empty<string>(),
             specs = new[] { new { file = spec.File, sha256 = spec.Sha256 } },
-            tools = Array.Empty<string>(),
+            tools,
             summary,
             overall,
             incomplete_reasons = Array.Empty<string>(),

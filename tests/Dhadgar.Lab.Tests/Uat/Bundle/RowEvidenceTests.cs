@@ -199,6 +199,8 @@ public sealed class RowEvidenceTests : IDisposable
         Assert.DoesNotContain("\"observed\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"steps\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"attempts\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("leaseOwner", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("startedAt", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -254,6 +256,101 @@ public sealed class RowEvidenceTests : IDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task RowJson_HasStartedEndedAndMember()
+    {
+        await RunSpecAsync();
+
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(RowPath("evidence")));
+        DateTimeOffset started = row.RootElement.GetProperty("started_at").GetDateTimeOffset();
+        DateTimeOffset ended = row.RootElement.GetProperty("ended_at").GetDateTimeOffset();
+        Assert.True(started <= ended);
+        Assert.Equal(JsonValueKind.Null, row.RootElement.GetProperty("member").ValueKind);
+        Assert.False(row.RootElement.TryGetProperty("at", out _));
+    }
+
+    [Fact]
+    public async Task ClauseJson_HasTextOpAndValue()
+    {
+        const string valueSpec = """
+            schema = 1
+
+            [section]
+            id = "row-value"
+            title = "Row value"
+
+            [[row]]
+            id = "valued"
+            title = "Valued row"
+            expected = "pass"
+            depends_on = []
+
+              [[row.step]]
+              id = "read"
+              tool = "stack_up"
+
+              [[row.expect]]
+              id = "state-ready"
+              text = "state is ready"
+              source = "step"
+              step = "read"
+              pointer = "/result/state"
+              op = "eq"
+              value = "ready"
+              required = true
+            """;
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-value.toml", valueSpec);
+        Assert.NotNull(loaded.Spec);
+
+        Result<UatRunResult> run = await _runner.RunAsync(
+            new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), _writer, CancellationToken.None);
+
+        Assert.True(run.IsSuccess, run.Error);
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "rows", "row-value", "valued.json")));
+        JsonElement clause = row.RootElement.GetProperty("clauses")[0];
+        Assert.Equal("state is ready", clause.GetProperty("text").GetString());
+        Assert.Equal("eq", clause.GetProperty("op").GetString());
+        Assert.Equal("ready", clause.GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public async Task RunJson_ToolsAreTheDistinctStepTools()
+    {
+        await RunSpecAsync();
+
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "run.json")));
+        string[] tools = run.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetString()!).ToArray();
+        Assert.Equal(new[] { "stack_up" }, tools);
+    }
+
+    [Fact]
+    public async Task LeaseId_OfTheRun_IsInNoBundleFile_AndLeaseOwnerIsRecorded()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
+        LeaseGrant grant = leases.Acquire("owner-l16f", "uat", null, false, null).Value!;
+        var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new EvidenceTool() }), leases, _audit, redactor, _time);
+        var evaluator = new ClauseEvaluator(new IClauseSource[] { new StepSource(), new FakeDbSource() }, redactor, _time);
+        var runner = new UatRunner(dispatcher, leases, evaluator, new FakeProbe(), _time);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, redactor, new SecretScanner(_vault), _time, "abcd1234", "linux", "build", null);
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+
+        Result<UatRunResult> run = await runner.RunAsync(
+            new UatRunRequest(loaded.Spec!, null, 7UL, grant.LeaseId, null, PlanOnly: false), writer, CancellationToken.None);
+
+        Assert.True(run.IsSuccess, run.Error);
+        Assert.NotNull(writer.Folder);
+        foreach (string file in Directory.EnumerateFiles(writer.Folder!, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(grant.LeaseId, await File.ReadAllTextAsync(file), StringComparison.Ordinal);
+        }
+
+        using JsonDocument runJson = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json")));
+        Assert.Equal("owner-l16f", runJson.RootElement.GetProperty("lease_owner").GetString());
     }
 
     private string RowPath(string rowId) => Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");

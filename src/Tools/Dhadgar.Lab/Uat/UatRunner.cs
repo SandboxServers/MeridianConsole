@@ -34,12 +34,13 @@ public sealed record UatStepResult(string Id, string? Tool, bool Ok, string? Err
 /// One recorded row: its grade, the reason, and its clauses (empty when the row stopped before its clauses ran). The steps
 /// go only to the bundle.
 /// </summary>
-public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null);
+public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null, [property: JsonIgnore] DateTimeOffset? StartedAt = null, [property: JsonIgnore] DateTimeOffset? EndedAt = null, [property: JsonIgnore] string? Member = null);
 
 /// <summary>
 /// The result of one run. <see cref="Seed"/> is the seed the rows ran with (the section seed when the section sets one).
+/// <see cref="LeaseOwner"/> is the owner of the lease the run held; it goes only to the bundle, never to the <c>uat_run</c> result.
 /// </summary>
-public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows, long Events = 0, bool Truncated = false);
+public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows, long Events = 0, bool Truncated = false, [property: JsonIgnore] string? LeaseOwner = null);
 
 /// <summary>
 /// Runs a loaded spec through <see cref="LabToolDispatcher"/> (C8, R-CONTRACT). Rows run in file order; a row whose dependency did not
@@ -106,6 +107,7 @@ public sealed class UatRunner
 
         string? leaseId = request.LeaseId;
         bool ownLease = leaseId is null;
+        string leaseOwner;
         if (leaseId is null)
         {
             Result<LeaseGrant> grant = _leases.Acquire(OwnLeasePrefix + runId, string.IsNullOrWhiteSpace(request.Label) ? DefaultPurpose : request.Label, OwnLeaseTtlSeconds, false, null);
@@ -115,6 +117,7 @@ public sealed class UatRunner
             }
 
             leaseId = grant.Value!.LeaseId;
+            leaseOwner = OwnLeasePrefix + runId;
         }
         else
         {
@@ -123,6 +126,8 @@ public sealed class UatRunner
             {
                 return Result<UatRunResult>.Failure(touched.Error);
             }
+
+            leaseOwner = touched.Value!.Owner;
         }
 
         bool observing = false;
@@ -151,7 +156,9 @@ public sealed class UatRunner
                     continue;
                 }
 
+                DateTimeOffset rowStarted = _time.GetUtcNow();
                 UatRowResult result = await RunRowAsync(request.Spec, row, missing, recorded, run, ct).ConfigureAwait(false);
+                result = result with { StartedAt = rowStarted, EndedAt = _time.GetUtcNow() };
                 grades.Add(result.Grade);
                 recorded[row.Id] = result.Grade;
                 if (result.Grade is RowGrade.Fail or RowGrade.Blocked)
@@ -173,7 +180,7 @@ public sealed class UatRunner
 
             // The sink stops counting at MaxObservationsPerRun and writes one extra "truncated" note, so a larger count means truncation.
             bool truncated = events > LabObservationSink.MaxObservationsPerRun;
-            var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows, events, truncated);
+            var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows, events, truncated, leaseOwner);
             sink.RunFinished(outcome);
             return Result<UatRunResult>.Success(outcome);
         }

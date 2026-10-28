@@ -280,6 +280,21 @@ public sealed class UatAttestTests : IDisposable
     }
 
     [Fact]
+    public void Attest_OldBundleWithAt_StillRenders()
+    {
+        // The fixture row carries only the old "at" field (no started_at or ended_at), as bundles written before L16f do.
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string ledger = File.ReadAllText(Path.Combine(_folder, "ledger.md"));
+        Assert.Contains("PASS", ledger);
+    }
+
+    [Fact]
     public void Attest_RecordsLeaseOwnerAndCaller()
     {
         using var vault = new SecretVault();
