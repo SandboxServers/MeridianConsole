@@ -707,10 +707,10 @@ Agents hold a persistent SignalR connection to the Nodes service for heartbeats.
   |-------|-------|
   | `Timestamp` | not `default` |
   | `Metrics` | non-null, at most 500 entries |
-  | Each metric name | 1 to 128 characters, no control characters |
+  | Each metric name | 1 to 128 characters, no control, format or separator characters (such as U+202E or U+2028), no unpaired surrogates |
   | Each metric value | finite |
 
-  Unknown members are ignored. A rejected message returns `invalid_telemetry` in `AgentHubAck.ErrorCode`. A message with no `node_id` claim returns `heartbeat_failed`.
+  Unknown members are ignored. A rejected message returns `invalid_telemetry` in `AgentHubAck.ErrorCode`. A message with no `node_id` claim returns `node_not_found`.
 
 ---
 
