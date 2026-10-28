@@ -139,6 +139,75 @@ public sealed class UatAttestTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A row with a plain step and one required human clause, so the row grades NEEDS_HUMAN and an attest can hold it.
+    /// </summary>
+    private const string BuildLineSpec = """
+        schema = 1
+
+        [section]
+        id = "attest-build"
+        title = "Attest build fixture"
+
+        [[row]]
+        id = "key-build"
+        title = "Operator confirms the build"
+        expected = "present"
+        depends_on = []
+
+          [[row.step]]
+          id = "probe"
+          tool = "lab_status"
+          args = {}
+
+          [[row.expect]]
+          id = "human-look"
+          text = "Operator confirms the build"
+          source = "human"
+          required = true
+        """;
+
+    [Fact]
+    public async Task Attest_LedgerKeepsTheBuildLine()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l16-build-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var vault = new SecretVault();
+            var redactor = new Redactor(vault);
+            var time = new FakeTimeProvider(At);
+            using var audit = new AuditLog(LabPaths.FromRoot(root), _validator, redactor, time);
+            var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+            var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new AcceptingStub() }), leases, audit, redactor, time);
+            var runner = new UatRunner(dispatcher, leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), new ProbeYes(), time);
+            UatSpec spec = SpecLoader.LoadText("attest-build.toml", BuildLineSpec).Spec!;
+            var writer = new BundleWriter(Path.Combine(root, "uat-runs"), _validator, redactor, new SecretScanner(vault), time,
+                "nobuild", "test-system", string.Empty, null);
+            writer.UseBuild(new BuildStamp("0123abcd", "0123abcd4567ef89", true, "."));
+
+            Result<UatRunResult> run = await runner.RunAsync(
+                new UatRunRequest(spec, null, 1UL, null, null, PlanOnly: false), writer, CancellationToken.None);
+
+            Assert.True(run.IsSuccess, run.Error);
+            Assert.NotNull(writer.Folder);
+            Assert.Contains("-0123abcd-", Path.GetFileName(writer.Folder!), StringComparison.Ordinal);
+
+            Result<string> result = BundleAttestor.Attest(writer.Folder!, run.Value!.RunId, "attest-build", "key-build", "human-look",
+                "held", null, At, Attester, redactor, _validator);
+
+            Assert.True(result.IsSuccess, result.Error);
+            string ledger = await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "ledger.md"), CancellationToken.None);
+            Assert.Contains("0123abcd (commit 0123abcd4567, dirty)", ledger, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "NoArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]
     private sealed record NoArgs(bool? Unused = null);
 
@@ -211,6 +280,40 @@ public sealed class UatAttestTests : IDisposable
     }
 
     [Fact]
+    public void Attest_OldBundleWithAt_StillRenders()
+    {
+        // The fixture row carries only the old "at" field (no started_at or ended_at), as bundles written before L16f do.
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string ledger = File.ReadAllText(Path.Combine(_folder, "ledger.md"));
+        Assert.Contains("PASS", ledger);
+    }
+
+    [Fact]
+    public void Attest_ReadRowsScrub_RedactsTitleBeforeRender()
+    {
+        // The renderer turns a tab into a space, so only a scrub before the render removes the vault value.
+        using var vault = new SecretVault();
+        _ = vault.Add(SecretKind.Password, "tab\tsecret-l16f");
+        var redactor = new Redactor(vault);
+        string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
+        File.WriteAllText(rowPath, File.ReadAllText(rowPath).Replace("\"Operator confirms the key\"", "\"tab\\tsecret-l16f\"", StringComparison.Ordinal));
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string ledger = File.ReadAllText(Path.Combine(_folder, "ledger.md"));
+        Assert.DoesNotContain("tab\tsecret-l16f", ledger, StringComparison.Ordinal);
+        Assert.DoesNotContain("tab secret-l16f", ledger, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Attest_RecordsLeaseOwnerAndCaller()
     {
         using var vault = new SecretVault();
@@ -228,6 +331,43 @@ public sealed class UatAttestTests : IDisposable
     }
 
     [Fact]
+    public void Attest_NoteWithPasswordSegment_WritesNothing()
+    {
+        string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
+        string ledgerPath = Path.Combine(_folder, "ledger.md");
+        File.WriteAllText(ledgerPath, "# ledger before\n");
+        string runPath = Path.Combine(_folder, "run.json");
+        string[] before = [File.ReadAllText(rowPath), File.ReadAllText(ledgerPath), File.ReadAllText(runPath)];
+
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held", "Password=hunter2x",
+            At, Attester, redactor, _validator, new SecretScanner(vault));
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.Unavailable]", result.Error, StringComparison.Ordinal);
+        string[] after = [File.ReadAllText(rowPath), File.ReadAllText(ledgerPath), File.ReadAllText(runPath)];
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void Attest_SetsReproFidelityToEvidenceOnly()
+    {
+        string reproPath = Path.Combine(_folder, "repro", "repro.toml");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(reproPath)!);
+        File.WriteAllText(reproPath, "seed = 1\nfidelity = \"exact\"\n");
+
+        using var vault = new SecretVault();
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held", null,
+            At, Attester, new Redactor(vault), _validator, new SecretScanner(vault));
+
+        Assert.True(result.IsSuccess, result.Error);
+        string repro = File.ReadAllText(reproPath);
+        Assert.Contains("fidelity = \"evidence_only\"", repro, StringComparison.Ordinal);
+        Assert.DoesNotContain("fidelity = \"exact\"", repro, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UatAttestTool_RecordsTheLeaseOwnerAndTheCallContextCaller()
     {
         string lab = Path.Combine(_root, "lab");
@@ -240,7 +380,7 @@ public sealed class UatAttestTests : IDisposable
         LeaseGrant grant = leases.Acquire("owner-b", "uat", null, false, null).Value;
         using var vault = new SecretVault();
         var redactor = new Redactor(vault);
-        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases, vault);
         JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-1", grant.LeaseId, "mcp-test"), CancellationToken.None);
@@ -266,7 +406,7 @@ public sealed class UatAttestTests : IDisposable
         var time = new FakeTimeProvider(At);
         var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
         using var vault = new SecretVault();
-        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, new Redactor(vault), time, leases);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, new Redactor(vault), time, leases, vault);
         JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-2", "no-such-lease", "mcp-test"), CancellationToken.None);

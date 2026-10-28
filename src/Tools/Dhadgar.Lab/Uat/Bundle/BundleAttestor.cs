@@ -41,8 +41,9 @@ public static class BundleAttestor
     /// <param name="by">The lease owner and the caller of the attest call.</param>
     /// <param name="redactor">Redacts every written text.</param>
     /// <param name="validator">Validates every path.</param>
+    /// <param name="scanner">Scans every text before the first write; a hit writes nothing. Null skips the scan.</param>
     public static Result<string> Attest(string folder, string runId, string section, string row, string clauseId, string verdict,
-        string? note, DateTimeOffset at, AttestedBy by, Redactor redactor, IPathValidator validator)
+        string? note, DateTimeOffset at, AttestedBy by, Redactor redactor, IPathValidator validator, SecretScanner? scanner = null)
     {
         if (verdict is not ("held" or "not_held"))
         {
@@ -134,25 +135,36 @@ public static class BundleAttestor
             rowObj["grade"] = LedgerRenderer.ResultText(grade);
             rowObj["reason"] = reason;
 
-            Result written = WriteRedacted(folder, Path.Combine("rows", section!, row! + ".json"), rowObj.ToJsonString(JsonOptions), redactor, validator);
-            if (written.IsFailure)
-            {
-                return Result<string>.Failure(written.Error);
-            }
-
-            List<LedgerRow> rows = ReadRows(folder, redactor);
+            // Every text is built and redacted before the first write, so a scan hit leaves the bundle as it was.
+            string rowRelative = Path.Combine("rows", section!, row! + ".json");
+            List<LedgerRow> rows = ReadRows(folder, redactor, (rowFile.Value!, rowObj));
             string system = runObj["os"]?.GetValue<string>() ?? string.Empty;
-            written = WriteRedacted(folder, "ledger.md", LedgerRenderer.Render(runId, system, string.Empty, rows), redactor, validator);
-            if (written.IsFailure)
+            string ledgerText = LedgerRenderer.Render(runId, system, BuildStamp.FromRunJson(runObj).LedgerLine, rows);
+            RecomputeRun(runObj, rows);
+            var texts = new List<(string Relative, string Text)>
             {
-                return Result<string>.Failure(written.Error);
+                (rowRelative, redactor.Redact(rowObj.ToJsonString(JsonOptions))),
+                ("ledger.md", redactor.Redact(ledgerText)),
+                ("run.json", redactor.Redact(runObj.ToJsonString(JsonOptions))),
+            };
+            string? repro = ReproTextAtEvidenceOnly(folder, validator);
+            if (repro is not null)
+            {
+                texts.Add((Path.Combine("repro", "repro.toml"), redactor.Redact(repro)));
             }
 
-            RecomputeRun(runObj, rows);
-            written = WriteRedacted(folder, "run.json", runObj.ToJsonString(JsonOptions), redactor, validator);
-            if (written.IsFailure)
+            if (scanner is not null && texts.Any(item => scanner.HasSecret(item.Text)))
             {
-                return Result<string>.Failure(written.Error);
+                return Result<string>.Failure("[Lab.Unavailable] the attestation would write a secret; nothing was written");
+            }
+
+            foreach ((string relative, string text) in texts)
+            {
+                Result written = WriteRedacted(folder, relative, text, redactor, validator);
+                if (written.IsFailure)
+                {
+                    return Result<string>.Failure(written.Error);
+                }
             }
 
             return Result<string>.Success(LedgerRenderer.ResultText(grade));
@@ -176,7 +188,10 @@ public static class BundleAttestor
         _ => RowGrade.Unverified,
     };
 
-    private static List<LedgerRow> ReadRows(string folder, Redactor redactor)
+    /// <summary>
+    /// Reads the bundle rows. <paramref name="replacement"/> stands in for the file at its path, so the attested row is used before it is written.
+    /// </summary>
+    private static List<LedgerRow> ReadRows(string folder, Redactor redactor, (string Path, JsonObject Row)? replacement = null)
     {
         var rows = new List<LedgerRow>();
         string rowsRoot = Path.Combine(folder, "rows");
@@ -191,7 +206,11 @@ public static class BundleAttestor
 
         foreach (string file in Directory.EnumerateFiles(rowsRoot, "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
         {
-            if (JsonNode.Parse(File.ReadAllText(file)) is not JsonObject obj)
+            // The replacement is re-parsed so its values read back exactly as the written file would (in-memory strings do not convert to dates).
+            JsonNode? node = replacement is { } pending && Path.GetFullPath(pending.Path) == Path.GetFullPath(file)
+                ? JsonNode.Parse(pending.Row.ToJsonString())
+                : JsonNode.Parse(File.ReadAllText(file));
+            if (node is not JsonObject obj)
             {
                 continue;
             }
@@ -216,7 +235,7 @@ public static class BundleAttestor
                 Scrub(obj["title"]?.GetValue<string>() ?? string.Empty),
                 Scrub(obj["expected"]?.GetValue<string>() ?? string.Empty),
                 ParseGrade(obj["grade"]?.GetValue<string>()),
-                obj["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
+                obj["ended_at"]?.GetValue<DateTimeOffset>() ?? obj["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
                 clauses,
                 attestations));
         }
@@ -250,6 +269,25 @@ public static class BundleAttestor
             _ => "fail",
         };
         runObj["fidelity"] = "evidence_only";
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex FidelityLine = new(
+        @"^fidelity = [^\r\n]*",
+        System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The text of <c>repro\repro.toml</c> with its <c>fidelity</c> line set to <c>evidence_only</c> (an attested run is no
+    /// longer exact), or null when the bundle has no repro file.
+    /// </summary>
+    private static string? ReproTextAtEvidenceOnly(string folder, IPathValidator validator)
+    {
+        Result<string> file = BundleFolders.ResolveFile(folder, Path.Combine("repro", "repro.toml"), validator);
+        if (file.IsFailure)
+        {
+            return null;
+        }
+
+        return FidelityLine.Replace(File.ReadAllText(file.Value!), "fidelity = \"evidence_only\"", 1);
     }
 
     private static Result WriteRedacted(string folder, string relative, string text, Redactor redactor, IPathValidator validator)

@@ -2,8 +2,10 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
@@ -21,7 +23,6 @@ public sealed class BundleWriter : IUatRunSink
 {
     private const string SecretScanFailed = "secret scan failed";
     private const int MaxEvidenceChars = 16384;
-    private static readonly string[] SensitiveEvidenceWords = ["token", "secret", "password", "passwd", "key", "cookie", "authorization", "credential"];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -34,9 +35,10 @@ public sealed class BundleWriter : IUatRunSink
     private readonly Redactor _redactor;
     private readonly SecretScanner _scanner;
     private readonly TimeProvider _time;
-    private readonly string _buildId;
+    private string _buildId;
     private readonly string _system;
-    private readonly string _build;
+    private string _build;
+    private BuildStamp _stamp;
     private readonly string? _label;
     private readonly List<LedgerRow> _rows = [];
     private readonly List<UatRowResult> _results = [];
@@ -50,6 +52,7 @@ public sealed class BundleWriter : IUatRunSink
     private LiveFingerprintParts? _live;
     private int _passRedactions;
     private int _rowRedactions;
+    private IRunLogSource? _logs;
 
     /// <summary>
     /// Creates the writer for one run.
@@ -75,12 +78,37 @@ public sealed class BundleWriter : IUatRunSink
         _system = system ?? string.Empty;
         _build = build ?? string.Empty;
         _label = label;
+        _stamp = new BuildStamp(_buildId, string.Empty, false, string.Empty);
     }
 
     /// <summary>
     /// The bundle folder once the run finished, or null for a plan-only run or a write failure.
     /// </summary>
     public string? Folder { get; private set; }
+
+    /// <inheritdoc />
+    public string? FolderName => string.IsNullOrEmpty(_runId) ? null : BundleFolders.Name(_started, _buildId, _runId);
+
+    /// <summary>
+    /// Sets the build the bundle is written against (folder name, <c>run.json</c> build, fingerprint and ledger line). Call before <see cref="RunStarted"/>.
+    /// </summary>
+    /// <param name="stamp">The build stamp.</param>
+    public void UseBuild(BuildStamp stamp)
+    {
+        ArgumentNullException.ThrowIfNull(stamp);
+        _stamp = stamp;
+        _buildId = stamp.Id;
+        _build = stamp.LedgerLine;
+    }
+
+    /// <summary>
+    /// Supplies the log slices written under <c>logs\</c> for the run window. Without it no log files are written.
+    /// </summary>
+    /// <param name="source">The log source.</param>
+    public void UseLogs(IRunLogSource source)
+    {
+        _logs = source ?? throw new ArgumentNullException(nameof(source));
+    }
 
     /// <summary>
     /// The first write failure, as a short text without paths or values, or null.
@@ -103,8 +131,8 @@ public sealed class BundleWriter : IUatRunSink
     private void CaptureFingerprint(ulong seed, UatSpec spec)
     {
         var input = new FingerprintInput(
-            Commit: FingerprintBuilder.UnknownPart,
-            Dirty: false,
+            Commit: _stamp.Commit.Length > 0 ? _stamp.Commit : FingerprintBuilder.UnknownPart,
+            Dirty: _stamp.Dirty,
             BuildId: _buildId == "nobuild" ? null : _buildId,
             ImageDigests: _live?.ImageDigests ?? new Dictionary<string, string>(),
             LockFilesSha256: null,
@@ -120,7 +148,11 @@ public sealed class BundleWriter : IUatRunSink
         _fingerprint = FingerprintBuilder.Build(input);
         _fingerprintSha = FingerprintHasher.Sha256(_fingerprint);
         _warnings.Clear();
-        _warnings.Add("commit not collected: unknown");
+        if (_stamp.Commit.Length == 0)
+        {
+            _warnings.Add("commit not collected: unknown");
+        }
+
         _warnings.Add("lock files not collected: unknown");
         _warnings.AddRange(_live?.Warnings ?? ["live fingerprint parts not collected: unknown"]);
     }
@@ -170,7 +202,7 @@ public sealed class BundleWriter : IUatRunSink
             string? error = result?.Error is null ? null : Scrub(result.Error);
             return new LedgerClause(clause.Id, Scrub(clause.Pointer ?? clause.Source), result?.State ?? ClauseState.Unverified, error, clause.Source, clause.Required);
         }).ToList();
-        _rows.Add(new LedgerRow(section, row.RowId, Scrub(spec?.Title ?? row.RowId), Scrub(spec?.Expected ?? string.Empty), row.Grade, _time.GetUtcNow(), clauses));
+        _rows.Add(new LedgerRow(section, row.RowId, Scrub(spec?.Title ?? row.RowId), Scrub(spec?.Expected ?? string.Empty), row.Grade, row.EndedAt ?? _time.GetUtcNow(), clauses));
     }
 
     /// <inheritdoc />
@@ -182,8 +214,7 @@ public sealed class BundleWriter : IUatRunSink
             return;
         }
 
-        string name = $"{_started.UtcDateTime:yyyyMMdd}-{_buildId}-{_runId}";
-        string folder = Path.Combine(_uatRuns, name);
+        string folder = Path.Combine(_uatRuns, BundleFolders.Name(_started, _buildId, _runId));
         Result<string> checkedFolder = _validator.ValidatePath(folder, [_uatRuns]);
         if (checkedFolder.IsFailure)
         {
@@ -264,11 +295,24 @@ public sealed class BundleWriter : IUatRunSink
             var clauseJson = row.Clauses.Select(clause =>
             {
                 UatClauseResult? evidence = source?.Clauses.FirstOrDefault(candidate => candidate.Id == clause.Id);
+                UatClause? specClause = spec.Rows.FirstOrDefault(candidate => candidate.Id == row.Row)?.Expect
+                    .FirstOrDefault(candidate => candidate.Id == clause.Id);
+                string clauseText = string.Empty;
+                if (specClause is not null)
+                {
+                    clauseText = _redactor.Redact(specClause.Text, out int textRedactions);
+                    clauseText = SensitiveText.Redact(clauseText, out int pairRedactions);
+                    _passRedactions += textRedactions + pairRedactions;
+                }
+
                 return new
                 {
                     id = clause.Id,
+                    text = clauseText,
                     pointer = clause.Locator,
                     source = clause.Source,
+                    op = specClause?.Op,
+                    value = Evidence(specClause?.Value),
                     required = clause.Required,
                     state = clause.State.ToString(),
                     error = clause.Error,
@@ -304,7 +348,9 @@ public sealed class BundleWriter : IUatRunSink
                 expected = row.Expected,
                 grade = LedgerRenderer.ResultText(row.Grade),
                 reason,
-                at = row.At,
+                started_at = source?.StartedAt ?? row.At,
+                ended_at = row.At,
+                member = source?.Member,
                 clauses = secretFailed ? Array.Empty<object>() : clauseJson.Cast<object>(),
                 steps = stepJson,
                 attestations = Array.Empty<object>(),
@@ -314,6 +360,20 @@ public sealed class BundleWriter : IUatRunSink
 
         Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));
         Write("ledger.md", LedgerRenderer.Render(_runId, _system, _build, rows));
+        if (!secretFailed)
+        {
+            WriteLogs();
+        }
+
+        // The distinct tools of the recorded steps; none in the secret-failed pass, which writes no steps.
+        string[] tools = secretFailed
+            ? []
+            : _results.SelectMany(row => row.Steps ?? Array.Empty<UatStepResult>())
+                .Where(step => step.Tool is not null)
+                .Select(step => step.Tool!)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
 
         // Last, so that redactions counts every other file written in this pass.
         var run = new
@@ -326,11 +386,11 @@ public sealed class BundleWriter : IUatRunSink
             ended_at = _time.GetUtcNow(),
             daemon_version = typeof(BundleWriter).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             os = RuntimeInformation.OSDescription,
-            build = new { id = _buildId, commit = string.Empty, dirty = false, checkout = string.Empty },
-            lease_owner = (string?)null,
+            build = new { id = _stamp.Id, commit = _stamp.Commit, dirty = _stamp.Dirty, checkout = _stamp.Checkout },
+            lease_owner = result.LeaseOwner,
             members = Array.Empty<string>(),
             specs = new[] { new { file = spec.File, sha256 = spec.Sha256 } },
-            tools = Array.Empty<string>(),
+            tools,
             summary,
             overall,
             incomplete_reasons = Array.Empty<string>(),
@@ -364,7 +424,8 @@ public sealed class BundleWriter : IUatRunSink
 
         // Values under a sensitive name (and the value of a sensitive header) are blanked first: the stack can mint
         // tokens and cookies at run time that the vault never held.
-        string blanked = BlankSensitive(value);
+        string blanked = BlankSensitive(value, out int pairs);
+        _passRedactions += pairs;
         _redactor.Redact(blanked, out int count);
         _passRedactions += count;
         JsonElement redacted;
@@ -381,20 +442,23 @@ public sealed class BundleWriter : IUatRunSink
 
     /// <summary>
     /// Writes the element as JSON with every scalar under a sensitive key replaced by <c>"[redacted]"</c>. A header
-    /// object (one with a sensitive <c>name</c>) has its <c>value</c> replaced too.
+    /// object (one with a sensitive <c>name</c>) has its <c>value</c> replaced too. A string outside a sensitive member has
+    /// its <c>name=value</c> credential pairs redacted (<see cref="SensitiveText"/>); <paramref name="pairs"/> counts them.
     /// </summary>
-    private static string BlankSensitive(JsonElement element)
+    private static string BlankSensitive(JsonElement element, out int pairs)
     {
+        int count = 0;
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
-            WriteBlanked(writer, element, inSensitive: false);
+            WriteBlanked(writer, element, inSensitive: false, ref count);
         }
 
+        pairs = count;
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static void WriteBlanked(Utf8JsonWriter writer, JsonElement element, bool inSensitive)
+    private static void WriteBlanked(Utf8JsonWriter writer, JsonElement element, bool inSensitive, ref int pairs)
     {
         switch (element.ValueKind)
         {
@@ -408,7 +472,7 @@ public sealed class BundleWriter : IUatRunSink
                     writer.WritePropertyName(property.Name);
                     bool child = inSensitive || IsSensitiveEvidenceName(property.Name)
                         || (sensitiveHeader && property.Name == "value");
-                    WriteBlanked(writer, property.Value, child);
+                    WriteBlanked(writer, property.Value, child, ref pairs);
                 }
 
                 writer.WriteEndObject();
@@ -418,10 +482,15 @@ public sealed class BundleWriter : IUatRunSink
                 writer.WriteStartArray();
                 foreach (JsonElement item in element.EnumerateArray())
                 {
-                    WriteBlanked(writer, item, inSensitive);
+                    WriteBlanked(writer, item, inSensitive, ref pairs);
                 }
 
                 writer.WriteEndArray();
+                break;
+
+            case JsonValueKind.String when !inSensitive:
+                writer.WriteStringValue(SensitiveText.Redact(element.GetString() ?? string.Empty, out int found));
+                pairs += found;
                 break;
 
             default:
@@ -440,7 +509,7 @@ public sealed class BundleWriter : IUatRunSink
 
     private static bool IsSensitiveEvidenceName(string name)
     {
-        foreach (string word in SensitiveEvidenceWords)
+        foreach (string word in SensitiveText.Words)
         {
             if (name.Contains(word, StringComparison.OrdinalIgnoreCase))
             {
@@ -449,6 +518,46 @@ public sealed class BundleWriter : IUatRunSink
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Writes <c>logs\&lt;process&gt;.jsonl</c> for each slice whose process name is a safe id: one compact JSON object per line
+    /// with the timestamp, level, category, event id and the message (<see cref="SensitiveText"/> redacted).
+    /// </summary>
+    private void WriteLogs()
+    {
+        if (_logs is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<RunLogSlice> slices = _logs.Slices(_started, _time.GetUtcNow());
+        foreach (RunLogSlice slice in slices)
+        {
+            if (!SafeIds.IsSafe(slice.Process))
+            {
+                continue;
+            }
+
+            var text = new StringBuilder();
+            foreach (LogLine line in slice.Lines)
+            {
+                string message = SensitiveText.Redact(line.Message, out int found);
+                _passRedactions += found;
+                JsonNode? eventId = line.EventId is int id ? JsonValue.Create(id) : null;
+                var entry = new JsonObject
+                {
+                    ["ts"] = line.Timestamp.ToString("O", CultureInfo.InvariantCulture),
+                    ["level"] = line.Level,
+                    ["category"] = line.Category,
+                    ["event_id"] = eventId,
+                    ["message"] = message,
+                };
+                text.Append(entry.ToJsonString()).Append('\n');
+            }
+
+            Write(Path.Combine("logs", slice.Process + ".jsonl"), text.ToString());
+        }
     }
 
     private void Write(string relative, string text)
@@ -487,8 +596,38 @@ public sealed class BundleWriter : IUatRunSink
         return text.ToString();
     }
 
-    private static string Quote(string value) =>
-        "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+    /// <summary>
+    /// Writes the value as a TOML basic string. Backslash and quote are escaped; tab, newline and carriage return use their short
+    /// escapes; any other control character (below U+0020 or U+007F) becomes <c>\uXXXX</c>.
+    /// </summary>
+    private static string Quote(string value)
+    {
+        var text = new StringBuilder("\"");
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '\\': text.Append("\\\\"); break;
+                case '"': text.Append("\\\""); break;
+                case '\n': text.Append("\\n"); break;
+                case '\r': text.Append("\\r"); break;
+                case '\t': text.Append("\\t"); break;
+                default:
+                    if (c < 0x20 || c == 0x7F)
+                    {
+                        text.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        text.Append(c);
+                    }
+
+                    break;
+            }
+        }
+
+        return text.Append('"').ToString();
+    }
 
     private static string OverallText(RunOverall overall) => overall switch
     {

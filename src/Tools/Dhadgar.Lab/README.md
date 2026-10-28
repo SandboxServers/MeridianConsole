@@ -85,7 +85,8 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 ## Secrets and audit
 
 - `SecretVault` stores each secret as a `char[]` and returns a reference: `tok-N`, `key-N`, `pwd-N` or `brr-N` (a counter per kind). `Use` hands the caller a `ReadOnlySpan<char>` over the stored array and copies nothing out. `Remove` and `Dispose` zero the storage.
-- `Redactor` replaces every vault value of 8 or more characters (longest first) with `***<ref>`. Each vault value is also matched in its JSON-escaped forms (for example `"` and `\` escaped by `JavaScriptEncoder.Default` or `UnsafeRelaxedJsonEscaping`), and `SecretScanner` checks the same forms. It also masks PEM private key blocks (`***pem`), `Bearer <token>` (`Bearer ***`) and `Password=` / `Pwd=` segments (`$1=***`). Each pattern has a 1 second timeout; on timeout the text becomes `***redaction-timeout***`.
+- `Redactor` replaces every vault value of 8 or more characters (longest first) with `***<ref>`. Each vault value is also matched in its JSON-escaped forms (for example `"` and `\` escaped by `JavaScriptEncoder.Default` or `UnsafeRelaxedJsonEscaping`), and `SecretScanner` checks the same forms. It also masks PEM private key blocks (`***pem`), `Bearer <token>` (`Bearer ***`) and `Password=` / `Pwd=` segments (`$1=***`). Each pattern has a 1 second timeout; on timeout the text becomes `***redaction-timeout***`. Lowercase `\uXXXX` escapes of a vault value are matched too, and `SensitiveText` blanks `name=value` credential pairs in plain-string evidence (counted in `redactions`).
+- `uat_attest` builds every text it writes (the row, `ledger.md`, `run.json` and `repro/repro.toml`), redacts each, and scans it with `SecretScanner` before the first write. A hit writes nothing and returns `[Lab.Unavailable]`.
 - `AuditLog` writes one JSON line per event to `audit/audit-<yyyyMMdd>.jsonl` under the lab root, using the UTC day, and closes the previous day's file on roll-over. A `lab.call` entry records call id, tool, gate, caller, lease owner, outcome and duration. It never records tool arguments. Every value passes through `Redactor`.
 - `ILabEvents.Emit` returns void, so a failed audit write is kept in `AuditLog.LastFailure`. `RecordCall` and `TryEmit` return the failure as a `Result`. The dispatcher refuses a call whose `lab.call.begin` cannot be written, deciding on the `TryEmit` result and never on `LastFailure`.
 - Every refused attempt is audited as one `lab.call` with the refusal code as its outcome, including unknown names (recorded as `<unknown>`), unclassified or machine-gated tools, and a missing `lease_id`. A tool that throws is audited once with outcome `Lab.Internal`; its exception text is never returned or logged.
@@ -195,6 +196,13 @@ Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate be
 `Machine` is reserved. No tool may carry it; the dispatcher refuses any such tool with `[Lab.MachineReserved]`.
 
 A Leased call's lease is watched for the whole call. If the lease expires, is released or is taken over while the tool runs, the tool's token is cancelled and the call returns `[Lab.LeaseLost]`.
+
+## Evidence bundle
+
+- **Folder.** One folder per run under `uat-runs/`, named `yyyyMMdd-<build id>-<run id>` (the date in UTC). The build id comes from `builds\latest.txt`, so the name records the latest build, not necessarily the build a running service was started from.
+- **Files.** `run.json`, `rows\<section>\<row>.json`, `repro\repro.toml`, `ledger.md`, `fingerprint.json` and `logs\<process>.jsonl`. A log file holds the lines inside the run window, the latest 5000 per process, one JSON object per line (`ts`, `level`, `category`, `event_id`, `message`); each message passes `SensitiveText` and `Redactor`.
+- **Run and row fields.** `run.json` has `tools` (the distinct step tools) and `lease_owner`. Each row has `started_at` and `ended_at`, and `member`.
+- **Redaction.** Every file passes `Redactor`; `SecretScanner` runs last. A hit rewrites the bundle with every row BLOCKED.
 
 ## Attestation
 

@@ -308,19 +308,9 @@ public sealed class LabServices
             buildId = File.ReadAllText(latest.Value).Trim();
         }
 
-        return IsSafeBuildId(buildId)
+        return SafeIds.IsSafe(buildId)
             ? Result<string>.Success(buildId)
             : Result<string>.Failure("[Lab.InvalidArgument] build id is not valid");
-    }
-
-    private static bool IsSafeBuildId(string value)
-    {
-        if (value.Length is 0 or > 64 || !char.IsAsciiLetterOrDigit(value[0]))
-        {
-            return false;
-        }
-
-        return value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_');
     }
 
     /// <summary>

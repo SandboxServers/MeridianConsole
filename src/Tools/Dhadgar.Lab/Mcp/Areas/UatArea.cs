@@ -1,6 +1,7 @@
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Eval;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,6 +31,7 @@ public static partial class LabMcpServer
         services.AddSingleton<IClauseSource, RegistrySource>();
         services.AddSingleton<IClauseSource, StateFileSource>();
         services.AddSingleton<IClauseSource>(sp => new LogSource(sp.GetRequiredService<LabProcessSupervisor>().RingFor));
+        services.AddSingleton<IRunLogSource, SupervisorRunLogSource>();
         services.AddSingleton<ClauseEvaluator>();
         services.AddSingleton<ICapabilityProbe, LabCapabilityProbe>();
         services.AddSingleton<UatRunner>();

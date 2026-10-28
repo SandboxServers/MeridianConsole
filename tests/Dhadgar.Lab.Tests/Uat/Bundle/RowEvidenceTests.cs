@@ -3,6 +3,8 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
@@ -198,6 +200,53 @@ public sealed class RowEvidenceTests : IDisposable
         Assert.DoesNotContain("\"observed\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"steps\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"attempts\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("leaseOwner", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("startedAt", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Bundle_UseBuild_FolderRunJsonAndLedgerCarryTheBuild()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, redactor, new SecretScanner(_vault), _time, "nobuild", "linux", string.Empty, null);
+        writer.UseBuild(new BuildStamp("0123abcd", "0123abcd4567ef89", true, "."));
+
+        await RunSpecAsync(writer);
+
+        Assert.Contains("-0123abcd-", Path.GetFileName(writer.Folder!), StringComparison.Ordinal);
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json")));
+        JsonElement build = run.RootElement.GetProperty("build");
+        Assert.Equal("0123abcd4567ef89", build.GetProperty("commit").GetString());
+        Assert.True(build.GetProperty("dirty").GetBoolean());
+        string ledger = await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "ledger.md"));
+        Assert.Contains("commit 0123abcd4567, dirty", ledger, StringComparison.Ordinal);
+        Assert.DoesNotContain("commit not collected", run.RootElement.GetProperty("warnings").GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Runner_EventsAndBundle_ShareOneFolder()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        LabPaths paths = LabPaths.FromRoot(_root);
+        using var observations = new LabObservationSink(redactor, _time, validator, [paths.UatRuns]);
+        var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
+        var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new EvidenceTool() }), leases, _audit, redactor, _time);
+        var evaluator = new ClauseEvaluator(new IClauseSource[] { new StepSource(), new FakeDbSource() }, redactor, _time);
+        var runner = new UatRunner(dispatcher, leases, evaluator, new FakeProbe(), _time, observations, paths);
+        var writer = new BundleWriter(paths.UatRuns, validator, redactor, new SecretScanner(_vault), _time, "abcd1234", "linux", "build", null);
+        writer.UseBuild(new BuildStamp("abcd1234", string.Empty, false, string.Empty));
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+
+        Result<UatRunResult> run = await runner.RunAsync(
+            new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), writer, CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        Assert.NotNull(writer.Folder);
+        Assert.Contains("-abcd1234-", Path.GetFileName(writer.Folder!), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(writer.Folder!, "events.jsonl")));
     }
 
     public void Dispose()
@@ -210,24 +259,165 @@ public sealed class RowEvidenceTests : IDisposable
         }
     }
 
-    private string RowPath(string rowId) => Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
-
-    private async Task<UatRunResult> RunSpecAsync()
+    [Fact]
+    public async Task RowJson_HasStartedEndedAndMember()
     {
-        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        await RunSpecAsync();
+
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(RowPath("evidence")));
+        DateTimeOffset started = row.RootElement.GetProperty("started_at").GetDateTimeOffset();
+        DateTimeOffset ended = row.RootElement.GetProperty("ended_at").GetDateTimeOffset();
+        Assert.True(started <= ended);
+        Assert.Equal(JsonValueKind.Null, row.RootElement.GetProperty("member").ValueKind);
+        Assert.False(row.RootElement.TryGetProperty("at", out _));
+    }
+
+    [Fact]
+    public async Task ClauseJson_HasTextOpAndValue()
+    {
+        const string valueSpec = """
+            schema = 1
+
+            [section]
+            id = "row-value"
+            title = "Row value"
+
+            [[row]]
+            id = "valued"
+            title = "Valued row"
+            expected = "pass"
+            depends_on = []
+
+              [[row.step]]
+              id = "read"
+              tool = "stack_up"
+
+              [[row.expect]]
+              id = "state-ready"
+              text = "state is ready"
+              source = "step"
+              step = "read"
+              pointer = "/result/state"
+              op = "eq"
+              value = "ready"
+              required = true
+            """;
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-value.toml", valueSpec);
         Assert.NotNull(loaded.Spec);
+
         Result<UatRunResult> run = await _runner.RunAsync(
             new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), _writer, CancellationToken.None);
 
+        Assert.True(run.IsSuccess, run.Error);
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "rows", "row-value", "valued.json")));
+        JsonElement clause = row.RootElement.GetProperty("clauses")[0];
+        Assert.Equal("state is ready", clause.GetProperty("text").GetString());
+        Assert.Equal("eq", clause.GetProperty("op").GetString());
+        Assert.Equal("ready", clause.GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public async Task RunJson_ToolsAreTheDistinctStepTools()
+    {
+        await RunSpecAsync();
+
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "run.json")));
+        string[] tools = run.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetString()!).ToArray();
+        Assert.Equal(new[] { "stack_up" }, tools);
+    }
+
+    [Fact]
+    public async Task LeaseId_OfTheRun_IsInNoBundleFile_AndLeaseOwnerIsRecorded()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
+        LeaseGrant grant = leases.Acquire("owner-l16f", "uat", null, false, null).Value!;
+        var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new EvidenceTool() }), leases, _audit, redactor, _time);
+        var evaluator = new ClauseEvaluator(new IClauseSource[] { new StepSource(), new FakeDbSource() }, redactor, _time);
+        var runner = new UatRunner(dispatcher, leases, evaluator, new FakeProbe(), _time);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, redactor, new SecretScanner(_vault), _time, "abcd1234", "linux", "build", null);
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+
+        Result<UatRunResult> run = await runner.RunAsync(
+            new UatRunRequest(loaded.Spec!, null, 7UL, grant.LeaseId, null, PlanOnly: false), writer, CancellationToken.None);
+
+        Assert.True(run.IsSuccess, run.Error);
+        Assert.NotNull(writer.Folder);
+        foreach (string file in Directory.EnumerateFiles(writer.Folder!, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(grant.LeaseId, await File.ReadAllTextAsync(file), StringComparison.Ordinal);
+        }
+
+        using JsonDocument runJson = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json")));
+        Assert.Equal("owner-l16f", runJson.RootElement.GetProperty("lease_owner").GetString());
+    }
+
+    [Fact]
+    public async Task LogSlice_VaultValueInRingLine_IsAbsent()
+    {
+        var line = new LogLine(Start, "Information", "Dhadgar.Test", null, "service said " + Secret);
+        _writer.UseLogs(new FakeLogSource(new RunLogSlice("tc-log", [line])));
+
+        await RunSpecAsync();
+
+        string logFile = Path.Combine(_writer.Folder!, "logs", "tc-log.jsonl");
+        Assert.True(File.Exists(logFile));
+        Assert.DoesNotContain(Secret, await File.ReadAllTextAsync(logFile));
+    }
+
+    [Fact]
+    public void LogSlice_LineOutsideTheRunWindow_IsAbsent()
+    {
+        var before = new LogLine(Start.AddSeconds(-1), "Information", "c", null, "before");
+        var inside = new LogLine(Start.AddSeconds(1), "Information", "c", null, "inside");
+        var after = new LogLine(Start.AddSeconds(60), "Information", "c", null, "after");
+
+        IReadOnlyList<LogLine> kept = SupervisorRunLogSource.LinesInWindow([before, inside, after], Start, Start.AddSeconds(30));
+
+        Assert.Equal(new[] { "inside" }, kept.Select(line => line.Message));
+    }
+
+    [Fact]
+    public async Task Repro_LabelWithNewline_RoundTripsThroughTomlyn()
+    {
+        const string label = "a\nb\t\"c\"";
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, new Redactor(_vault), new SecretScanner(_vault), _time,
+            "abcd1234", "linux", "build", label);
+
+        await RunSpecAsync(writer);
+
+        string text = await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "repro", "repro.toml"));
+        Dictionary<string, object?> model = Tomlyn.TomlSerializer.Deserialize<Dictionary<string, object?>>(text)!;
+        Assert.Equal(label, (string?)model["label"]);
+    }
+
+    private string RowPath(string rowId) => Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
+
+    private async Task<UatRunResult> RunSpecAsync(BundleWriter? sink = null)
+    {
+        BundleWriter writer = sink ?? _writer;
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+        Result<UatRunResult> run = await _runner.RunAsync(
+            new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), writer, CancellationToken.None);
+
         Assert.True(run.IsSuccess);
-        Assert.Null(_writer.WriteError);
-        Assert.NotNull(_writer.Folder);
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
         return run.Value!;
     }
 
     private sealed class FakeProbe : ICapabilityProbe
     {
         public Task<bool> IsAvailableAsync(string capability, CancellationToken ct) => Task.FromResult(true);
+    }
+
+    private sealed class FakeLogSource(params RunLogSlice[] slices) : IRunLogSource
+    {
+        public IReadOnlyList<RunLogSlice> Slices(DateTimeOffset from, DateTimeOffset to) => slices;
     }
 
     /// <summary>
