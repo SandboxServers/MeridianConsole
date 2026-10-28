@@ -116,11 +116,13 @@ public sealed class ReservationOwnershipTests
             $"/reservations/{token}/claim",
             new { ServerId = Guid.NewGuid() });
         var deleteResponse = await otherOrgClient.DeleteAsync($"/reservations/{token}");
+        var crossOrgBody = await getResponse.Content.ReadAsStringAsync();
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, claimResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, deleteResponse.StatusCode);
+        Assert.Contains("reservation_not_found", crossOrgBody);
         Assert.Equal(ReservationStatus.Pending, await ReadStatusThroughServiceAsync(token));
     }
 
@@ -193,8 +195,10 @@ public sealed class ReservationOwnershipTests
 
         // Act
         var response = await client.GetAsync($"/reservations/{Guid.NewGuid()}");
+        var unknownBody = await response.Content.ReadAsStringAsync();
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Contains("reservation_not_found", unknownBody);
     }
 }
