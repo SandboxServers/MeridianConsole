@@ -56,6 +56,13 @@ public sealed class UatReportTool : LabTool<UatReportArgs>
             return Result<object>.Failure(folder.Error);
         }
 
+        // An interrupted attestation is completed or rolled back before the bundle is read (OD-1).
+        Result recovered = BundleStaging.Recover(folder.Value!, _validator);
+        if (recovered.IsFailure)
+        {
+            return Result<object>.Failure(recovered.Error);
+        }
+
         Result<string> file = BundleFolders.ResolveFile(folder.Value!, "run.json", _validator);
         if (file.IsFailure)
         {
@@ -106,6 +113,13 @@ public sealed class BundleReadTool : LabTool<BundleReadArgs>
         if (folder.IsFailure)
         {
             return Result<object>.Failure(folder.Error);
+        }
+
+        // An interrupted attestation is completed or rolled back before the bundle is read (OD-1).
+        Result recovered = BundleStaging.Recover(folder.Value!, _validator);
+        if (recovered.IsFailure)
+        {
+            return Result<object>.Failure(recovered.Error);
         }
 
         Result<string> file = BundleFolders.ResolveFile(folder.Value!, args.Path, _validator);
