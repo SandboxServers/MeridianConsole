@@ -224,7 +224,7 @@ Configuration is loaded from environment variables, with secrets fetched from th
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | HTTP server port | `5130` |
-| `NODE_ENV` | Environment mode | `development` |
+| `NODE_ENV` | Environment mode. No default: any value other than `development` (or unset) fails closed on trusted origins (D-49) | unset |
 | `TRUST_PROXY` | Express `trust proxy` setting, used to derive the client IP for rate limiting. Unset, `false` or `0` trusts nothing (`req.ip` is the socket peer). A positive integer trusts that many proxy hops; set `1` behind the Gateway. This gives per-client limits only when Cloudflare is in front of the Gateway (the Gateway only accepts `X-Forwarded-For` from Cloudflare); without it, every client shares one bucket. Limits are per process, so each replica counts separately. Otherwise a comma-separated list of proxy addresses/subnets or Express presets (`loopback`, `uniquelocal`). `true` is refused at startup because it lets clients spoof `X-Forwarded-For`. | unset (off) |
 
 #### Exchange Endpoint Rate Limiting
@@ -251,7 +251,7 @@ The limit is keyed on `req.ip`, so `TRUST_PROXY` must match the deployment. Behi
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `BETTER_AUTH_URL` | Public URL of this service | `http://localhost:5130/api/v1/betterauth` |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated allowed origins | (empty = all) |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated exact origins (`scheme://host[:port]`, no path or trailing slash). Required outside `NODE_ENV=development`: the service refuses to start if it is empty, contains `*`, or holds a non-origin entry | required outside development |
 | `BETTER_AUTH_SECRET` | Secret key for session encryption | Loaded from Secrets service |
 | `BETTER_AUTH_CLIENT_APPS` | Allowed client app identifiers | `panel,shop` |
 
@@ -519,13 +519,11 @@ session: {
 
 ### Cookie Configuration
 
+Session and OAuth state cookies are host-only (D-48): no `Domain` attribute and no `crossSubDomainCookies`, so a cookie reaches only the host that set it, the Gateway host that serves `/api/v1/betterauth`. That host must equal the Panel's `PUBLIC_GATEWAY_URL` host, or the state cookie set at sign-in is missing at the callback.
+
 ```javascript
+// buildAdvancedOptions() in src/config.js
 advanced: {
-  // Share cookies across subdomains
-  crossSubDomainCookies: {
-    enabled: true,
-    domain: "meridianconsole.com"
-  },
   defaultCookieAttributes: {
     sameSite: "none",    // Required for cross-origin
     secure: true,        // HTTPS only
@@ -1142,7 +1140,7 @@ export BETTER_AUTH_TRUSTED_ORIGINS=https://panel.meridianconsole.com,http://loca
 
 **Possible causes:**
 1. **Cross-origin issues:** Ensure `SameSite=None` and `Secure=true` are set
-2. **Domain mismatch:** Cookie domain must match request domain
+2. **Host mismatch:** Cookies are host-only. `BETTER_AUTH_URL`'s host must equal the Panel's `PUBLIC_GATEWAY_URL` host
 3. **Browser privacy:** Some browsers block third-party cookies
 
 ### Debugging
@@ -1262,4 +1260,4 @@ In the service:
 - Secrets service integration for credential management
 - Microsoft federated credentials support
 - Account linking across providers
-- Cross-subdomain cookie support
+- Host-only session cookies (no cross-subdomain sharing)
