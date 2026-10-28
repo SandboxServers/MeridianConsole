@@ -38,7 +38,13 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     /// <inheritdoc />
     public IReadOnlySet<string> OverlayKeys { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
-        "Logging__LogLevel__Default",
+        "Logging:LogLevel:Default",
+        "Logging:LogLevel:Dhadgar",
+        "Logging:LogLevel:Microsoft.AspNetCore",
+        "Readyz:RequiredClusters:0",
+        "Readyz:RequiredClusters:1",
+        "Readyz:RequiredClusters:2",
+        "Readyz:RequiredClusters:3",
     };
 
     /// <inheritdoc />

@@ -35,7 +35,10 @@ public sealed class NodesAdapter : ILabServiceAdapter
     /// <inheritdoc />
     public IReadOnlySet<string> OverlayKeys { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
-        "Logging__LogLevel__Default",
+        "Logging:LogLevel:Default",
+        "Logging:LogLevel:Dhadgar",
+        "Logging:LogLevel:Microsoft.AspNetCore",
+        "Mtls:RenewalGraceMinutes",
     };
 
     /// <inheritdoc />
