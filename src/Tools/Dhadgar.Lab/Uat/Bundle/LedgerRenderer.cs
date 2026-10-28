@@ -10,7 +10,7 @@ namespace Dhadgar.Lab.Uat.Bundle;
 /// <param name="Pointer">The JSON pointer or the source name when the clause has no pointer.</param>
 /// <param name="State">The clause state after evaluation.</param>
 /// <param name="Error">The error text, or null.</param>
-public sealed record LedgerClause(string Id, string Pointer, ClauseState State, string? Error);
+public sealed record LedgerClause(string Id, string Pointer, ClauseState State, string? Error, string Source = "", bool Required = true);
 
 /// <summary>
 /// One row as the ledger shows it.
