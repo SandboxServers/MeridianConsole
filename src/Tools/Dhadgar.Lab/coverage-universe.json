@@ -24,7 +24,8 @@
         { "method": "GET", "template": "/api/v1/reservations/{token}" },
         { "method": "POST", "template": "/api/v1/reservations/{token}/claim" },
         { "method": "DELETE", "template": "/api/v1/reservations/{token}" },
-        { "method": "*", "template": "/hubs/agent" }
+        { "method": "*", "template": "/hubs/agent" },
+        { "method": "*", "template": "/hubs/agent/negotiate" }
       ],
       "error_codes": [
         "node_not_found",
