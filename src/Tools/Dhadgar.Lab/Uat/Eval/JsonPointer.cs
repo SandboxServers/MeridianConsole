@@ -5,38 +5,38 @@ using Dhadgar.Shared.Results;
 namespace Dhadgar.Lab.Uat.Eval;
 
 /// <summary>
-/// The outcome of a pointer lookup that parsed: <see cref="Found"/> is false when the pointer names nothing.
+/// The outcome of a path lookup that parsed: <see cref="Found"/> is false when the path names nothing.
 /// </summary>
 public readonly record struct PointerLookup(bool Found, JsonElement Value);
 
 /// <summary>
-/// RFC 6901 JSON Pointer over <see cref="JsonElement"/> (C7 <c>pointer</c>, <c>~0</c> and <c>~1</c> escapes).
-/// An empty pointer names the whole document. A malformed pointer is a failure; a well-formed pointer that names
+/// RFC 6901 JSON Pointer over <see cref="JsonElement"/> (C7 <c>path</c>, <c>~0</c> and <c>~1</c> escapes).
+/// An empty path names the whole document. A malformed path is a failure; a well-formed path that names
 /// nothing is a success with <see cref="PointerLookup.Found"/> false, so callers can tell "missing" from "broken".
 /// </summary>
 public static class JsonPointer
 {
-    /// <summary>Resolves <paramref name="pointer"/> against <paramref name="root"/>.</summary>
-    public static Result<PointerLookup> Resolve(JsonElement root, string pointer)
+    /// <summary>Resolves <paramref name="path"/> against <paramref name="root"/>.</summary>
+    public static Result<PointerLookup> Resolve(JsonElement root, string path)
     {
-        ArgumentNullException.ThrowIfNull(pointer);
+        ArgumentNullException.ThrowIfNull(path);
 
-        if (pointer.Length == 0)
+        if (path.Length == 0)
         {
             return Result<PointerLookup>.Success(new PointerLookup(true, root));
         }
 
-        if (pointer[0] != '/')
+        if (path[0] != '/')
         {
-            return Result<PointerLookup>.Failure("[Lab.InvalidArgument] pointer must be empty or start with /");
+            return Result<PointerLookup>.Failure("[Lab.InvalidArgument] path must be empty or start with /");
         }
 
         JsonElement current = root;
-        foreach (string raw in pointer[1..].Split('/'))
+        foreach (string raw in path[1..].Split('/'))
         {
             if (!IsWellEscaped(raw))
             {
-                return Result<PointerLookup>.Failure("[Lab.InvalidArgument] pointer has a bad ~ escape");
+                return Result<PointerLookup>.Failure("[Lab.InvalidArgument] path has a bad ~ escape");
             }
 
             string token = raw.Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);

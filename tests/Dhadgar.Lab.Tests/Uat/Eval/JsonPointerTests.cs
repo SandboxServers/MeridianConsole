@@ -54,9 +54,9 @@ public sealed class JsonPointerTests
     [InlineData("/rows/-")]
     [InlineData("/rows/01")]
     [InlineData("/row_count/deeper")]
-    public void MissingTarget_IsSuccessNotFound(string pointer)
+    public void MissingTarget_IsSuccessNotFound(string path)
     {
-        Result<PointerLookup> found = JsonPointer.Resolve(Root(), pointer);
+        Result<PointerLookup> found = JsonPointer.Resolve(Root(), path);
 
         Assert.True(found.IsSuccess);
         Assert.False(found.Value.Found);
@@ -66,9 +66,9 @@ public sealed class JsonPointerTests
     [InlineData("rows")]
     [InlineData("/bad~2")]
     [InlineData("/trailing~")]
-    public void Malformed_IsFailure(string pointer)
+    public void Malformed_IsFailure(string path)
     {
-        Result<PointerLookup> found = JsonPointer.Resolve(Root(), pointer);
+        Result<PointerLookup> found = JsonPointer.Resolve(Root(), path);
 
         Assert.True(found.IsFailure);
     }

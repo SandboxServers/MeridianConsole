@@ -40,20 +40,20 @@ public sealed class UatVars
     }
 
     /// <summary>
-    /// Captures <paramref name="name"/> from a step result: the value at <paramref name="pointer"/>. A string is stored as its text,
+    /// Captures <paramref name="name"/> from a step result: the value at <paramref name="path"/>. A string is stored as its text,
     /// any other value as its JSON text. A missing pointer or a bad name is a failure.
     /// </summary>
-    public Result Capture(string name, JsonElement stepResult, string pointer)
+    public Result Capture(string name, JsonElement stepResult, string path)
     {
         ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(pointer);
+        ArgumentNullException.ThrowIfNull(path);
 
         if (!VarName.IsMatch(name))
         {
             return Result.Failure("[Lab.InvalidArgument] invalid var name");
         }
 
-        Result<PointerLookup> found = JsonPointer.Resolve(stepResult, pointer);
+        Result<PointerLookup> found = JsonPointer.Resolve(stepResult, path);
         if (found.IsFailure)
         {
             return Result.Failure(found.Error);

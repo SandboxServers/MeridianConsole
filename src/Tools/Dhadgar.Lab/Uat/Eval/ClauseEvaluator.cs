@@ -19,7 +19,7 @@ public sealed record ClauseEvaluation(ClauseState State, JsonElement? Observed, 
 /// </summary>
 public sealed class ClauseEvaluator
 {
-    private readonly IReadOnlyDictionary<string, IClauseSource> _sources;
+    private readonly Dictionary<string, IClauseSource> _sources;
     private readonly Redactor _redactor;
     private readonly TimeProvider _time;
 
