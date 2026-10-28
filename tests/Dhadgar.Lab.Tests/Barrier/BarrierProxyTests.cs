@@ -216,6 +216,80 @@ public sealed class BarrierProxyTests
         Assert.Contains(sink.Lines, line => line.Op == "proxy_upstream_completed");
     }
 
+    [Fact]
+    public async Task RetryOp_ArmedWithPass_IsForwarded_UnarmedOpRefused()
+    {
+        await using Upstream up = await Upstream.StartAsync(200);
+        var sink = new RecordingSink();
+        await using BarrierProxy proxy = await StartProxyAsync(sink);
+        Assert.True(proxy.Arm(RunId, [Rule(1, BarrierAction.DropResponse, null), Rule(2, BarrierAction.Pass, null)]).IsSuccess);
+
+        // The first attempt reaches the upstream and its response is dropped; the armed retry is forwarded; op 3 was never armed.
+        await Assert.ThrowsAsync<HttpRequestException>(() => Send(proxy, 1));
+        using HttpResponseMessage retry = await Send(proxy, 2);
+        using HttpResponseMessage unarmed = await Send(proxy, 3);
+
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, unarmed.StatusCode);
+        Assert.Contains("lab.barrier.no_op", await unarmed.Content.ReadAsStringAsync());
+        Assert.Equal(2, up.Hits);
+    }
+
+    [Fact]
+    public async Task NetworkPathTarget_Refused400_NoUpstreamRequest()
+    {
+        await using Upstream up = await Upstream.StartAsync(200);
+        var sink = new RecordingSink();
+        await using BarrierProxy proxy = await StartProxyAsync(sink);
+        Assert.True(proxy.Arm(RunId, [Rule(1, BarrierAction.Pass, null)]).IsSuccess);
+
+        // "//host/path" is a network-path reference; it must not replace the authority of the upstream.
+        using HttpResponseMessage escape = await SendPathAsync(proxy, 1, "//evil.example/api/v1/agents/enroll");
+
+        Assert.Equal(HttpStatusCode.BadRequest, escape.StatusCode);
+        Assert.Contains("lab.barrier.bad_target", await escape.Content.ReadAsStringAsync());
+        Assert.Equal(0, up.Hits);
+        Assert.DoesNotContain(sink.Lines, line => line.Op == "proxy_upstream_completed");
+
+        using HttpResponseMessage normal = await SendPathAsync(proxy, 1, "/api/v1/agents/enroll");
+
+        Assert.Equal(HttpStatusCode.OK, normal.StatusCode);
+        Assert.Equal("/api/v1/agents/enroll", Assert.Single(up.Paths));
+        Assert.Equal(1, up.Hits);
+    }
+
+    [Fact]
+    public async Task KestrelEndpointEnv_CannotAddNonLoopbackListener()
+    {
+        await using Upstream up = await Upstream.StartAsync(200);
+        int extra = FreeLoopbackPort();
+        const string EndpointVar = "Kestrel__Endpoints__Any__Url";
+        string? previous = Environment.GetEnvironmentVariable(EndpointVar);
+        Environment.SetEnvironmentVariable(EndpointVar, "http://0.0.0.0:" + extra.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        try
+        {
+            var sink = new RecordingSink();
+            Result<BarrierProxy> started = await BarrierProxy.StartAsync(UpstreamUri, 0, sink, TimeProvider.System, CancellationToken.None);
+            Assert.True(started.IsSuccess, started.Error);
+            await using BarrierProxy proxy = started.Value;
+
+            // The configuration source is ignored: the proxy listens on loopback only, so the extra port stays closed.
+            using var tcp = new System.Net.Sockets.TcpClient();
+            await Assert.ThrowsAnyAsync<Exception>(() => tcp.ConnectAsync(IPAddress.Loopback, extra));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(EndpointVar, previous);
+        }
+    }
+
+    private static int FreeLoopbackPort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
     private static async Task<BarrierProxy> StartProxyAsync(RecordingSink sink)
     {
         Result<BarrierProxy> started = await BarrierProxy.StartAsync(UpstreamUri, 0, sink, TimeProvider.System, CancellationToken.None);
@@ -248,6 +322,15 @@ public sealed class BarrierProxyTests
         return await client.SendAsync(request);
     }
 
+    private static async Task<HttpResponseMessage> SendPathAsync(BarrierProxy proxy, int seq, string path)
+    {
+        using SocketsHttpHandler handler = NewHandler();
+        using var client = new HttpClient(handler, disposeHandler: false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, ProxyUri(proxy, path));
+        request.Headers.Add("X-Lab-Op-Id", OpText(seq));
+        return await client.SendAsync(request);
+    }
+
     /// <summary>
     /// The test upstream on the agent-ingress port: counts calls, records the request headers, and answers with a fixed status.
     /// </summary>
@@ -256,6 +339,7 @@ public sealed class BarrierProxyTests
         private readonly WebApplication _app;
         private readonly int _status;
         private readonly ConcurrentQueue<IReadOnlyDictionary<string, string>> _seen = new();
+        private readonly ConcurrentQueue<string> _paths = new();
         private int _hits;
 
         private Upstream(WebApplication app, int status)
@@ -267,6 +351,8 @@ public sealed class BarrierProxyTests
         public int Hits => _hits;
 
         public IEnumerable<IReadOnlyDictionary<string, string>> Seen => _seen;
+
+        public IEnumerable<string> Paths => _paths;
 
         public static async Task<Upstream> StartAsync(int status)
         {
@@ -289,6 +375,7 @@ public sealed class BarrierProxyTests
         private async Task HandleAsync(HttpContext ctx)
         {
             Interlocked.Increment(ref _hits);
+            _paths.Enqueue(ctx.Request.Path.Value ?? string.Empty);
             _seen.Enqueue(ctx.Request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString(), StringComparer.OrdinalIgnoreCase));
             ctx.Response.StatusCode = _status;
             ctx.Response.Headers["X-Upstream-Probe"] = "yes";
