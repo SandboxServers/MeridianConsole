@@ -79,6 +79,52 @@ public sealed class UatRunnerTests
           tool = "unregistered_tool"
         """;
 
+    private const string SeededFaultSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-seeded"
+        title = "Runner seeded"
+
+        [[row]]
+        id = "garbled"
+        title = "Garbled"
+        expected = "pass"
+        depends_on = []
+
+          [[row.fault]]
+          id = "garble"
+          inject = { tool = "fault_corrupt_file", args = { file = "nodes-ca-key", mode = "garbage" } }
+          start = "before_steps"
+          heal = "after_steps"
+
+          [[row.step]]
+          tool = "faults_active"
+        """;
+
+    private const string SeededFaultSpecWithSeed = """
+        schema = 1
+
+        [section]
+        id = "runner-seeded"
+        title = "Runner seeded"
+
+        [[row]]
+        id = "garbled"
+        title = "Garbled"
+        expected = "pass"
+        depends_on = []
+
+          [[row.fault]]
+          id = "garble"
+          inject = { tool = "fault_corrupt_file", args = { file = "nodes-ca-key", mode = "garbage", seed = 5 } }
+          start = "before_steps"
+          heal = "after_steps"
+
+          [[row.step]]
+          tool = "faults_active"
+        """;
+
     private const string CancelledStepSpec = """
         schema = 1
 
@@ -571,6 +617,67 @@ public sealed class UatRunnerTests
         Assert.Equal(RunOverall.Fail, run.Value.Overall);
     }
 
+    [Fact]
+    public async Task Skips_AreLabelledByCheckpoint_AndNeverGrade()
+    {
+        // The strict row has no expect clauses, so it grades Unverified on its own: the grade must equal the clean-invariant baseline.
+        using var clean = new Harness(new FakeProbe(true), null, new InvariantMonitor([new ScriptedInvariant("I2", _ => Clean())]), ProbeTool());
+        Result<UatRunResult> baseline = await clean.Runner.RunAsync(
+            new UatRunRequest(Load(InvariantSpec), new[] { "strict" }, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        var invariant = new SkippingInvariant("I2");
+        using var harness = new Harness(new FakeProbe(true), null, new InvariantMonitor([invariant]), ProbeTool());
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(InvariantSpec), new[] { "strict" }, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        UatRowResult row = Assert.Single(run.Value!.Rows);
+        UatRowResult baselineRow = Assert.Single(baseline.Value!.Rows);
+        Assert.Equal(baselineRow.Grade, row.Grade);
+        Assert.Equal(baselineRow.Reason, row.Reason);
+        Assert.NotEqual(RowGrade.Fail, row.Grade);
+        Assert.Empty(run.Value.Invariants!.Errors);
+        Assert.Equal(["(run-start)", "strict", "(run-end)"], run.Value.Invariants!.Skipped!.Select(s => s.Row));
+        Assert.DoesNotContain(run.Value.Rows, r => r.RowId.StartsWith("invariants/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SeededFault_SeedIsDerivedFromTheRunSeed()
+    {
+        ulong[] seeds = [1UL, 1UL, 2UL];
+        var recorded = new List<ulong?>();
+        foreach (ulong runSeed in seeds)
+        {
+            var corrupt = new ScriptedTool("fault_corrupt_file", () => Result<object>.Success(new { fault_id = "f-garble-1" }));
+            var heal = new ScriptedTool("fault_heal", () => Result<object>.Success(new { healed = true }));
+            using var harness = new Harness(new FakeProbe(true), null, corrupt, heal, ProbeTool());
+
+            Result<UatRunResult> run = await harness.Runner.RunAsync(
+                new UatRunRequest(Load(SeededFaultSpec), new[] { "garbled" }, runSeed, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+            Assert.True(run.IsSuccess);
+            recorded.Add(Assert.Single(corrupt.Calls).Seed);
+        }
+
+        Assert.All(recorded, seed => Assert.NotNull(seed));
+        Assert.Equal(recorded[0], recorded[1]);
+        Assert.NotEqual(recorded[0], recorded[2]);
+    }
+
+    [Fact]
+    public async Task SeededFault_SpecSeed_IsKept()
+    {
+        var corrupt = new ScriptedTool("fault_corrupt_file", () => Result<object>.Success(new { fault_id = "f-garble-1" }));
+        var heal = new ScriptedTool("fault_heal", () => Result<object>.Success(new { healed = true }));
+        using var harness = new Harness(new FakeProbe(true), null, corrupt, heal, ProbeTool());
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(SeededFaultSpecWithSeed), new[] { "garbled" }, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        Assert.Equal(5UL, Assert.Single(corrupt.Calls).Seed);
+    }
+
     private static Result<IReadOnlyList<InvariantViolation>> Clean() => Result<IReadOnlyList<InvariantViolation>>.Success([]);
 
     private static Result<IReadOnlyList<InvariantViolation>> Violated(string id, InvariantWindow window) =>
@@ -583,6 +690,18 @@ public sealed class UatRunnerTests
         public string Id { get; } = id;
 
         public Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct) => Task.FromResult(answer(window));
+    }
+
+    private sealed class SkippingInvariant(string id) : ISkippableInvariant
+    {
+        public string Id { get; } = id;
+
+        public Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct) => Task.FromResult(Clean());
+
+        public Task<Result<InvariantOutcome>> CheckWithSkipsAsync(InvariantWindow window, CancellationToken ct) =>
+            Task.FromResult(Result<InvariantOutcome>.Success(new InvariantOutcome(
+                [],
+                [new InvariantSkip(Id, "db:nodes", "stack not up (no lab credentials)")])));
     }
 
     private static UatSpec Load(string text)
@@ -662,7 +781,7 @@ public sealed class UatRunnerTests
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "ScriptedArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]
-    private sealed record ScriptedArgs(string? Target = null, string? FaultId = null);
+    private sealed record ScriptedArgs(string? Target = null, string? FaultId = null, string? File = null, string? Mode = null, ulong? Seed = null);
 
     /// <summary>
     /// A tool under a given name (a fault or check tool) that answers with the scripted result and keeps every call's arguments.

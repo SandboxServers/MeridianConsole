@@ -98,6 +98,36 @@ public sealed class CorruptFileFaultTests : IDisposable
     }
 
     [Fact]
+    public async Task Garbage_SameSeedDifferentFaultIds_WriteTheSameBytes()
+    {
+        var fault = Fault();
+        var heal1 = await PrepareAsync(fault, "f1", "garbage", seed: 7);
+        Assert.True((await fault.InjectAsync(Target(), Args("garbage"), heal1, "f1", CancellationToken.None)).IsSuccess);
+        byte[] first = ReadBytes(CaKey);
+        Assert.True((await fault.HealAsync(Entry("f1", "garbage", heal1), CancellationToken.None)).IsSuccess);
+
+        var heal2 = await PrepareAsync(fault, "f2", "garbage", seed: 7);
+        Assert.True((await fault.InjectAsync(Target(), Args("garbage"), heal2, "f2", CancellationToken.None)).IsSuccess);
+
+        Assert.Equal(first, ReadBytes(CaKey));
+    }
+
+    [Fact]
+    public async Task Garbage_DifferentSeeds_WriteDifferentBytes()
+    {
+        var fault = Fault();
+        var heal1 = await PrepareAsync(fault, "f1", "garbage", seed: 7);
+        Assert.True((await fault.InjectAsync(Target(), Args("garbage"), heal1, "f1", CancellationToken.None)).IsSuccess);
+        byte[] first = ReadBytes(CaKey);
+        Assert.True((await fault.HealAsync(Entry("f1", "garbage", heal1), CancellationToken.None)).IsSuccess);
+
+        var heal2 = await PrepareAsync(fault, "f2", "garbage", seed: 8);
+        Assert.True((await fault.InjectAsync(Target(), Args("garbage"), heal2, "f2", CancellationToken.None)).IsSuccess);
+
+        Assert.NotEqual(first, ReadBytes(CaKey));
+    }
+
+    [Fact]
     public async Task HealAsync_NeverInjected_IsSuccessAndCleansTheBackup()
     {
         var fault = Fault();

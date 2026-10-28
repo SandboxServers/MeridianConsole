@@ -79,6 +79,18 @@ public sealed class I1UnhandledInvariantTests
         Assert.Single(await RunAsync(check));
     }
 
+    [Fact]
+    public async Task UnhandledException_Detail_IsSensitiveTextRedacted()
+    {
+        var ring = new LogRing();
+        ring.Add(new LogLine(T0, "Error", "Dhadgar.ServiceDefaults.GlobalExceptionHandler", null, "Unhandled exception while validating cookie=abc123xyz"));
+        var check = new I1UnhandledInvariant(["nodes"], name => name == "nodes" ? ring : null, new FixedHistory());
+
+        InvariantViolation violation = Assert.Single(await RunAsync(check));
+        Assert.Contains("cookie=[redacted]", violation.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123xyz", violation.Detail, StringComparison.Ordinal);
+    }
+
     private static I1UnhandledInvariant Build(string service, LogLine line, FaultHistoryEntry fault)
     {
         var ring = new LogRing();

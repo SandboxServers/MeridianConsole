@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Dhadgar.Lab.Processes;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Invariants;
@@ -72,7 +73,7 @@ public sealed partial class I1UnhandledInvariant : IInvariant
                 || line.Category.Contains("GlobalExceptionHandler", StringComparison.Ordinal));
         if (exceptionLog || line.Message.Contains("Unhandled exception", StringComparison.Ordinal))
         {
-            return Violation(service, "unhandled", line.Timestamp, Truncate(service + ": " + line.Message));
+            return Violation(service, "unhandled", line.Timestamp, Truncate(service + ": " + SensitiveText.Redact(line.Message, out _)));
         }
 
         if (!line.Category.StartsWith("Microsoft.AspNetCore.Hosting.Diagnostics", StringComparison.Ordinal))

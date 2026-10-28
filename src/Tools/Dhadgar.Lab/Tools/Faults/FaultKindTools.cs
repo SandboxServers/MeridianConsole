@@ -23,7 +23,7 @@ public sealed record FaultDiskFillArgs(string Target, string Mount, int? LeaveKi
 /// <summary>
 /// Arguments of <c>fault_corrupt_file</c>. <c>file</c> is a logical name from the C10 table.
 /// </summary>
-public sealed record FaultCorruptFileArgs(string File, string Mode, string? Member = null, int? HealAfterS = null);
+public sealed record FaultCorruptFileArgs(string File, string Mode, string? Member = null, int? HealAfterS = null, ulong? Seed = null);
 
 /// <summary>
 /// Arguments of <c>fault_db</c>. <c>database</c> is a database target id (<c>d:nodes</c>) or a service name.
@@ -158,7 +158,7 @@ public sealed class FaultCorruptFileTool(FaultBook book) : LabTool<FaultCorruptF
     /// <inheritdoc />
     protected override Task<Result<object>> ExecuteAsync(FaultCorruptFileArgs args, LabCallContext context, CancellationToken ct) =>
         FaultKindToolSupport.BeginAsync(
-            _book, "corrupt_file", FaultKindToolSupport.NodesTargetId, new CorruptFileArgs(args.File, args.Mode, args.Member), args.HealAfterS, ct);
+            _book, "corrupt_file", FaultKindToolSupport.NodesTargetId, new CorruptFileArgs(args.File, args.Mode, args.Member, args.Seed), args.HealAfterS, ct);
 }
 
 /// <summary>

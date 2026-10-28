@@ -20,6 +20,9 @@ internal sealed class RowExecutor
     /// <summary>The settle time after a row with faults, before its clauses run (Lab:Uat:SettleMs default).</summary>
     internal static readonly TimeSpan DefaultSettle = TimeSpan.FromMilliseconds(5000);
 
+    /// <summary>The fault tools that take a seed (D-ML81).</summary>
+    private static readonly HashSet<string> SeededFaultTools = new(StringComparer.Ordinal) { "fault_corrupt_file" };
+
     private const string LeaseLostCode = "Lab.LeaseLost";
     private const string DefaultErrorCode = "Lab.Unavailable";
     private const string LabNotCleanReason = "[Lab.Unavailable] lab not clean";
@@ -298,7 +301,8 @@ internal sealed class RowExecutor
     /// </summary>
     private async Task<string?> InjectAsync(UatFault fault, UatVars vars, RunContext run, FaultState faults, CancellationToken ct)
     {
-        var step = Synthetic(fault.Tool, fault.Args);
+        JsonElement args = EffectiveArgs(fault, vars, run);
+        var step = Synthetic(fault.Tool, args);
         DateTimeOffset injectedAt = _time.GetUtcNow();
         StepOutcome outcome = await ExecuteStepAsync(step, "inject:" + fault.Id, vars, run, ct).ConfigureAwait(false);
         if (!outcome.Ok)
@@ -312,8 +316,22 @@ internal sealed class RowExecutor
         }
 
         faults.Active.Add(new InjectedFault(fault, faultId));
-        faults.Log.Add(new UatRowFault(fault.Id, fault.Tool, fault.Args, faultId, injectedAt, null, null));
+        faults.Log.Add(new UatRowFault(fault.Id, fault.Tool, args, faultId, injectedAt, null, null));
         return null;
+    }
+
+    /// <summary>R-SEED (D-ML81): a seeded fault tool gets a seed derived from the run seed unless the spec sets one.</summary>
+    private static JsonElement EffectiveArgs(UatFault fault, UatVars vars, RunContext run)
+    {
+        if (!SeededFaultTools.Contains(fault.Tool) || fault.Args.ValueKind != JsonValueKind.Object || fault.Args.TryGetProperty("seed", out _))
+        {
+            return fault.Args;
+        }
+
+        JsonObject args = JsonNode.Parse(fault.Args.GetRawText())!.AsObject();
+        ulong seed = new Dhadgar.Lab.Random.LabRandom(run.Seed, "fault:" + vars.SectionId + "/" + vars.RowId + "/" + fault.Id).NextUInt64() >> 11;
+        args["seed"] = seed;
+        return JsonSerializer.SerializeToElement(args);
     }
 
     /// <summary>

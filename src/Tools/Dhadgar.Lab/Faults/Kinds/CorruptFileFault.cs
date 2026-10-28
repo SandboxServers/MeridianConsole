@@ -33,6 +33,9 @@ public sealed class CorruptFileFault(
     private const string HashSuffix = ".sha256";
     private const long MaxFileBytes = 1024 * 1024;
 
+    /// <summary>The fixed LabRandom stream for garbage bytes: the same seed writes the same bytes whatever the fault id (D-ML81).</summary>
+    private const string GarbageStream = "corrupt_file:garbage";
+
     /// <summary>The logical files (C10) and their names under <c>LabPaths.State\nodes-ca</c>.</summary>
     internal static readonly IReadOnlyDictionary<string, string> LogicalFiles = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -141,7 +144,7 @@ public sealed class CorruptFileFault(
                     File.WriteAllBytes(live.Value, []);
                     break;
                 case "garbage":
-                    WriteGarbage(live.Value, heal.Value, faultId);
+                    WriteGarbage(live.Value, heal.Value);
                     break;
                 default:
                     File.Delete(live.Value);
@@ -289,12 +292,12 @@ public sealed class CorruptFileFault(
         }
     }
 
-    private static void WriteGarbage(string live, CorruptFileHealData heal, string faultId)
+    private static void WriteGarbage(string live, CorruptFileHealData heal)
     {
         byte[] buffer = new byte[heal.Length];
         try
         {
-            new LabRandom(heal.Seed, $"fault:{faultId}").NextBytes(buffer);
+            new LabRandom(heal.Seed, GarbageStream).NextBytes(buffer);
             File.WriteAllBytes(live, buffer);
         }
         finally

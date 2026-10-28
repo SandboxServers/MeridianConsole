@@ -178,6 +178,16 @@ public sealed class LabSelfTestE2ETests
         using var invariantsJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "invariants.json")));
         Assert.Equal(0, invariantsJson.RootElement.GetProperty("errors").GetArrayLength());
         Assert.Equal(0, invariantsJson.RootElement.GetProperty("violations").GetArrayLength());
+
+        // D-ML80: sources that do not exist yet are skipped, only before Nodes has migrated. A skip at run end means a gate that always skips.
+        JsonElement skipped = invariantsJson.RootElement.GetProperty("skipped");
+        foreach (JsonElement skip in skipped.EnumerateArray())
+        {
+            string row = skip.GetProperty("row").GetString() ?? string.Empty;
+            Assert.True(row is "(run-start)" or "stack-up", "unexpected invariant skip: " + skip.GetRawText());
+        }
+
+        Assert.Contains(skipped.EnumerateArray(), s => s.GetProperty("row").GetString() == "(run-start)");
     }
 
     /// <summary>

@@ -24,6 +24,12 @@ public sealed class UatVars
     /// <summary>The run id these variables belong to (the <c>uat:&lt;runId&gt;</c> caller of tool calls).</summary>
     public string RunId => _values["run_id"];
 
+    /// <summary>The row id these variables belong to.</summary>
+    public string RowId => _values["row_id"];
+
+    /// <summary>The section id these variables belong to.</summary>
+    public string SectionId => _values["section_id"];
+
     /// <summary>
     /// Creates the built-in variables for one row. <paramref name="member"/> is defined only for sections with <c>requires_pool</c>.
     /// </summary>
