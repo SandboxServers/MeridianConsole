@@ -40,6 +40,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         [LabCredentialRefs.Postgres, LabCredentialRefs.LabOwner, LabCredentialRefs.LabReader, LabCredentialRefs.RabbitMq, LabCredentialRefs.Redis];
     private static readonly TimeSpan ReadinessWindow = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessPoll = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan StaleEnvFileAge = TimeSpan.FromMinutes(10);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IDockerCli _docker;
@@ -573,7 +574,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     }
 
     /// <summary>
-    /// Deletes every <c>env-*</c> file left in <see cref="LabPaths.State"/>. Each candidate goes through the path validator first.
+    /// Deletes every <c>env-*</c> file older than ten minutes left in <see cref="LabPaths.State"/>. Each candidate goes through the path validator first.
     /// </summary>
     private void SweepStaleEnvFiles()
     {
@@ -586,6 +587,11 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         {
             foreach (string file in Directory.EnumerateFiles(_paths.State, "env-*"))
             {
+                if (File.GetLastWriteTimeUtc(file) > DateTime.UtcNow - StaleEnvFileAge)
+                {
+                    continue;
+                }
+
                 Result<string> validated = _validator.ValidatePath(file, [_paths.State]);
                 if (validated.IsSuccess)
                 {
