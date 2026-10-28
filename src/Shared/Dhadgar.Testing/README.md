@@ -346,3 +346,12 @@ See the test projects for complete examples:
 
 - [xUnit Documentation](https://xunit.net/)
 - [WebApplicationFactory Docs](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests)
+
+## SeamJwt (test JWTs)
+
+`Dhadgar.Testing.Authentication.SeamJwt` is the only test JWT minter (D-22). `CreateUserToken(userId, organizationId)`
+mints a user access token for issuer `https://seams.test/identity` and audience `meridian-api`, signed with a key that is
+generated per process. `Apply(services)` makes the JWT bearer scheme accept those tokens and replaces its validation
+parameters. Do not add another minter or another `PostConfigure<JwtBearerOptions>` test-key block.
+
+This library does not hold client-certificate shims or service test factories. Those stay in the test project that owns them.
