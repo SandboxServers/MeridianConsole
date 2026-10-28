@@ -96,7 +96,7 @@ public sealed class LabCoverageTests
 
     private sealed record Entry(string Project, string Status, string? Adapter, string? Catalog, string? Until, string? Note);
 
-    private static IReadOnlyList<Entry> ReadManifest(string root)
+    private static List<Entry> ReadManifest(string root)
     {
         using JsonDocument document = JsonDocument.Parse(File.ReadAllText(ResolveUnderRoot(root, ManifestPath)));
         Assert.Equal(1, document.RootElement.GetProperty("schema").GetInt32());
