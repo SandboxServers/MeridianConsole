@@ -35,7 +35,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     private const string RabbitRepository = "meridian-lab/rabbitmq";
     private const string LoopbackPrefix = "127.0.0.1:";
     private const string SuperUser = "postgres";
-    private static readonly string[] LabDatabaseServices = ["nodes", "identity", "notifications", "discord", "betterauth"];
+    internal static readonly string[] LabDatabaseServices = ["nodes", "identity", "notifications", "discord", "betterauth"];
     private static readonly string[] CredentialNames =
         [LabCredentialRefs.Postgres, LabCredentialRefs.LabOwner, LabCredentialRefs.LabReader, LabCredentialRefs.RabbitMq, LabCredentialRefs.Redis];
     private static readonly TimeSpan ReadinessWindow = TimeSpan.FromSeconds(60);

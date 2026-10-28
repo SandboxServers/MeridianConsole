@@ -4,15 +4,20 @@ using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Data;
 using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Nodes;
+using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Stack;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Tools.Data;
 using Dhadgar.Lab.Tools.Http;
 using Dhadgar.Lab.Tools.Logs;
+using Dhadgar.Lab.Tools.Nodes;
 using Dhadgar.Lab.Windows;
 using Dhadgar.Lab.Tools.Services;
 using Dhadgar.Lab.Tools.Stack;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -55,6 +60,18 @@ public static class LabMcpServer
         AddLabTool<StackUpTool>(services);
         AddLabTool<StackDownTool>(services);
         AddLabTool<StackStatusTool>(services);
+        services.AddSingleton<LabDataReset>();
+        AddLabTool<StackResetDataTool>(services);
+
+        // Nodes (L11): the adapter opens a context per call as the owner on the direct host port; mint and shift go through it.
+        services.AddSingleton<INodesLabAdapter>(sp => new NodesLabAdapter(
+            NodesLabContexts.ForOwner(sp.GetRequiredService<LabConnectionStrings>()),
+            sp.GetRequiredService<SecretVault>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILoggerFactory>()));
+        AddLabTool<NodesTokenMintTool>(services);
+        AddLabTool<NodesEnrollProbeTool>(services);
+        AddLabTool<NodesCertTimeShiftTool>(services);
 
         // Reads and probes (L10): read-only SQL on the direct host port, and lab-only HTTP with no redirects.
         services.AddSingleton<LabDb>();

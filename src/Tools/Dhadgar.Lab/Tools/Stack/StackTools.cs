@@ -72,6 +72,47 @@ public sealed class StackDownTool : LabTool<StackDownArgs>
 }
 
 /// <summary>
+/// Arguments of <c>stack_reset_data</c>. <c>databases</c> defaults to every lab database.
+/// </summary>
+public sealed record StackResetDataArgs(IReadOnlyList<string>? Databases = null);
+
+/// <summary>
+/// <c>stack_reset_data</c> (Leased): truncates the lab databases (the migrations history is kept) and returns what was emptied.
+/// </summary>
+public sealed class StackResetDataTool : LabTool<StackResetDataArgs>
+{
+    private readonly LabDataReset _reset;
+
+    /// <summary>
+    /// Creates the tool over the data reset.
+    /// </summary>
+    public StackResetDataTool(LabDataReset reset)
+    {
+        _reset = reset ?? throw new ArgumentNullException(nameof(reset));
+    }
+
+    /// <inheritdoc />
+    public override string Name => "stack_reset_data";
+
+    /// <inheritdoc />
+    public override string Description => "Truncate the lab databases (default all) and keep the migrations history; returns the tables emptied per database.";
+
+    /// <inheritdoc />
+    protected override async Task<Result<object>> ExecuteAsync(StackResetDataArgs args, LabCallContext context, CancellationToken ct)
+    {
+        IReadOnlyCollection<string> databases = args.Databases ?? LabStack.LabDatabaseServices;
+        Result<IReadOnlyList<TruncatedDatabase>> result = await _reset.ResetAsync(databases, ct).ConfigureAwait(false);
+        if (result.IsFailure)
+        {
+            return Result<object>.Failure(result.Error);
+        }
+
+        var truncated = result.Value.Select(db => new { database = db.Database, tables = db.Tables }).ToArray();
+        return Result<object>.Success(new { truncated });
+    }
+}
+
+/// <summary>
 /// <c>stack_status</c> (Open): the network and each registered lab container with its live state.
 /// </summary>
 public sealed class StackStatusTool : LabTool<NoArguments>
