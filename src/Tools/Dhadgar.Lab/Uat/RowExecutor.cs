@@ -206,7 +206,7 @@ internal sealed class RowExecutor
         if (faultError is not null)
         {
             InvariantReport blockedReport = await CheckRowAsync(spec, row, run, ct).ConfigureAwait(false);
-            return Blocked(row, faultError, AttributeViolations(blockedReport, spec, row), blockedReport.Errors);
+            return Blocked(row, faultError, AttributeViolations(blockedReport, spec, row), blockedReport.Errors, faults.Log);
         }
 
         // A row with faults waits for the system to settle before its clauses read the state (Lab:Uat:SettleMs).
@@ -242,7 +242,7 @@ internal sealed class RowExecutor
             reason = expectFailure!;
         }
 
-        return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults, Violations: violations, CheckErrors: invariants.Errors);
+        return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults, Violations: violations, CheckErrors: invariants.Errors, Faults: faults.Log);
     }
 
     /// <summary>
@@ -289,6 +289,7 @@ internal sealed class RowExecutor
     private async Task<string?> InjectAsync(UatFault fault, UatVars vars, RunContext run, FaultState faults, CancellationToken ct)
     {
         var step = Synthetic(fault.Tool, fault.Args);
+        DateTimeOffset injectedAt = _time.GetUtcNow();
         StepOutcome outcome = await ExecuteStepAsync(step, "inject:" + fault.Id, vars, run, ct).ConfigureAwait(false);
         if (!outcome.Ok)
         {
@@ -301,6 +302,7 @@ internal sealed class RowExecutor
         }
 
         faults.Active.Add(new InjectedFault(fault, faultId));
+        faults.Log.Add(new UatRowFault(fault.Id, fault.Tool, fault.Args, faultId, injectedAt, null, null));
         return null;
     }
 
@@ -315,12 +317,15 @@ internal sealed class RowExecutor
             StepOutcome outcome = await ExecuteStepAsync(Synthetic("fault_heal", JsonSerializer.SerializeToElement(args)), "heal:" + injected.Fault.Id, vars, run, ct).ConfigureAwait(false);
             if (!outcome.Ok)
             {
+                faults.Record(injected.Fault.Id, log => log with { HealError = outcome.Error });
                 await ResetAsync(faults, vars, run, ct).ConfigureAwait(false);
                 return "heal " + injected.Fault.Id + ": " + outcome.Error;
             }
 
             faults.Active.Remove(injected);
-            faults.Heals[injected.Fault.Id] = _time.GetUtcNow();
+            DateTimeOffset healedAt = _time.GetUtcNow();
+            faults.Heals[injected.Fault.Id] = healedAt;
+            faults.Record(injected.Fault.Id, log => log with { HealedAt = healedAt });
         }
 
         return null;
@@ -518,10 +523,10 @@ internal sealed class RowExecutor
         return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>());
     }
 
-    private static UatRowResult Blocked(UatRow row, string error, IReadOnlyList<UatRowViolation>? violations = null, IReadOnlyList<InvariantCheckError>? checkErrors = null)
+    private static UatRowResult Blocked(UatRow row, string error, IReadOnlyList<UatRowViolation>? violations = null, IReadOnlyList<InvariantCheckError>? checkErrors = null, IReadOnlyList<UatRowFault>? faultLog = null)
     {
         (RowGrade grade, string text) = RowGrader.Grade(true, null, error, Array.Empty<(bool, ClauseState)>());
-        return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>(), Violations: violations, CheckErrors: checkErrors);
+        return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>(), Violations: violations, CheckErrors: checkErrors, Faults: faultLog);
     }
 
     /// <summary>
@@ -539,6 +544,17 @@ internal sealed class RowExecutor
         public List<InjectedFault> Active { get; } = [];
 
         public Dictionary<string, DateTimeOffset> Heals { get; }
+
+        public List<UatRowFault> Log { get; } = [];
+
+        public void Record(string id, Func<UatRowFault, UatRowFault> change)
+        {
+            int index = Log.FindIndex(entry => entry.Id == id && entry.HealedAt is null);
+            if (index >= 0)
+            {
+                Log[index] = change(Log[index]);
+            }
+        }
     }
 
     /// <summary>

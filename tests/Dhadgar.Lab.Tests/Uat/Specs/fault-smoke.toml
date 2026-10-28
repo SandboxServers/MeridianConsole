@@ -1,0 +1,62 @@
+schema = 1
+
+# Fault smoke (L22). One row: Postgres for Nodes is cut, Nodes /readyz is not 200 while it is cut, and Nodes recovers after the heal.
+# No enroll-route calls.
+
+[section]
+id = "fault-smoke"
+title = "Fault smoke"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+
+[[row]]
+id = "pg-down"
+title = "Nodes is not ready while its Postgres is cut and recovers after the heal"
+expected = "readyz is not 200 during the fault and 200 after the heal"
+
+  [[row.fault]]
+  id = "pg"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "nodes-postgres" } }
+  start = "after_step:start"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "http_request"
+  args = { via = "nodes", method = "GET", path = "/readyz" }
+
+  [[row.expect]]
+  id = "readyz-down"
+  text = "Nodes GET /readyz is not 200 while Postgres is cut"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "ne"
+  value = 200
+  required = true
+
+  [[row.expect]]
+  id = "readyz-recovered"
+  text = "Nodes GET /readyz returns 200 after the heal"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/readyz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:pg"
+  timeout_ms = 30000
+  poll_ms = 500
+  required = true

@@ -34,7 +34,13 @@ public sealed record UatStepResult(string Id, string? Tool, bool Ok, string? Err
 /// One recorded row: its grade, the reason, and its clauses (empty when the row stopped before its clauses ran). The steps
 /// go only to the bundle.
 /// </summary>
-public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null, [property: JsonIgnore] DateTimeOffset? StartedAt = null, [property: JsonIgnore] DateTimeOffset? EndedAt = null, [property: JsonIgnore] string? Member = null, [property: JsonIgnore] IReadOnlyList<UatRowViolation>? Violations = null, [property: JsonIgnore] IReadOnlyList<InvariantCheckError>? CheckErrors = null);
+public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null, [property: JsonIgnore] DateTimeOffset? StartedAt = null, [property: JsonIgnore] DateTimeOffset? EndedAt = null, [property: JsonIgnore] string? Member = null, [property: JsonIgnore] IReadOnlyList<UatRowViolation>? Violations = null, [property: JsonIgnore] IReadOnlyList<InvariantCheckError>? CheckErrors = null, [property: JsonIgnore] IReadOnlyList<UatRowFault>? Faults = null);
+
+/// <summary>
+/// One fault a row injected: the spec id and tool, the fault id the tool returned, when it went in and came out, and the heal error if any.
+/// Bundle evidence only (C9 row <c>faults</c>, <c>repro.toml</c> <c>[[fault]]</c>).
+/// </summary>
+public sealed record UatRowFault(string Id, string Tool, JsonElement Args, string FaultId, DateTimeOffset InjectedAt, DateTimeOffset? HealedAt, string? HealError);
 
 /// <summary>
 /// One invariant violation found in a row's window, or in a synthetic <c>invariants/&lt;id&gt;</c> row. <see cref="Allowed"/> is true when the row's

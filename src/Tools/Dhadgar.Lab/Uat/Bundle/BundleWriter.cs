@@ -169,10 +169,27 @@ public sealed class BundleWriter : IUatRunSink
 
     private ReplayFidelity CurrentFidelity(bool truncated) => FidelityRules.For(new FidelityInput(
         ConcurrentActors: false,
-        TimingFaults: false,
+        TimingFaults: _results.Any(row => row.Faults?.Any(IsTimingFault) == true),
         Truncated: truncated,
         Attested: false,
         BuildPresent: _buildId != "nobuild"));
+
+    /// <summary>
+    /// True for a fault that bends time: a <c>fault_toxic_add</c> of <c>latency</c>, <c>bandwidth</c>, <c>slow_close</c> or <c>timeout</c>, or any <c>fault_pause</c>.
+    /// </summary>
+    private static bool IsTimingFault(UatRowFault fault)
+    {
+        if (fault.Tool == "fault_pause")
+        {
+            return true;
+        }
+
+        return fault.Tool == "fault_toxic_add"
+            && fault.Args.ValueKind == JsonValueKind.Object
+            && fault.Args.TryGetProperty("toxic", out JsonElement toxic)
+            && toxic.ValueKind == JsonValueKind.String
+            && toxic.GetString() is "latency" or "bandwidth" or "slow_close" or "timeout";
+    }
 
     private static string FidelityText(ReplayFidelity fidelity) => fidelity switch
     {
@@ -340,6 +357,37 @@ public sealed class BundleWriter : IUatRunSink
                     });
                 }
             }
+            var faultJson = new List<object>();
+            var violationJson = new List<object>();
+            if (!secretFailed)
+            {
+                foreach (UatRowFault fault in source?.Faults ?? Array.Empty<UatRowFault>())
+                {
+                    faultJson.Add(new
+                    {
+                        id = fault.Id,
+                        tool = fault.Tool,
+                        fault_id = fault.FaultId,
+                        injected_at = fault.InjectedAt,
+                        healed_at = fault.HealedAt,
+                        heal_error = fault.HealError is null ? null : _redactor.Redact(fault.HealError, out int healRedactions),
+                    });
+                }
+
+                foreach (UatRowViolation violation in source?.Violations ?? Array.Empty<UatRowViolation>())
+                {
+                    violationJson.Add(new
+                    {
+                        invariant_id = violation.Violation.InvariantId,
+                        service = violation.Violation.Service,
+                        check_id = violation.Violation.CheckId,
+                        detail = violation.Violation.Detail,
+                        at = violation.Violation.At,
+                        allowed = violation.Allowed,
+                    });
+                }
+            }
+
             string reason = secretFailed ? SecretScanFailed : source?.Reason ?? string.Empty;
             var rowJson = new
             {
@@ -354,6 +402,8 @@ public sealed class BundleWriter : IUatRunSink
                 member = source?.Member,
                 clauses = secretFailed ? Array.Empty<object>() : clauseJson.Cast<object>(),
                 steps = stepJson,
+                faults = faultJson,
+                violations = violationJson,
                 attestations = Array.Empty<object>(),
             };
             Write(Path.Combine("rows", row.Section, row.Row + ".json"), JsonSerializer.Serialize(rowJson, JsonOptions));
@@ -405,6 +455,10 @@ public sealed class BundleWriter : IUatRunSink
             new_failures = failedRows,
             known_failures = Array.Empty<string>(),
             violations = secretFailed ? 0 : result.Invariants?.Violations.Count ?? 0,
+            row_violations = secretFailed
+                ? []
+                : _results.SelectMany(row => (row.Violations ?? Array.Empty<UatRowViolation>())
+                    .Select(v => new { row = row.RowId, invariant_id = v.Violation.InvariantId, allowed = v.Allowed })).ToArray(),
             redactions = _passRedactions,
             secret_scan = secretScan,
             secret_scan_removed = removed,
@@ -601,6 +655,25 @@ public sealed class BundleWriter : IUatRunSink
         text.Append("\n[[specs]]\n");
         text.Append("file = ").Append(Quote(spec.File)).Append('\n');
         text.Append("sha256 = ").Append(Quote(spec.Sha256)).Append('\n');
+        foreach (UatRowResult row in _results)
+        {
+            foreach (UatRowFault fault in row.Faults ?? Array.Empty<UatRowFault>())
+            {
+                DateTimeOffset rowStart = row.StartedAt ?? fault.InjectedAt;
+                JsonElement? args = Evidence(fault.Args);
+                text.Append("\n[[fault]]\n");
+                text.Append("row = ").Append(Quote(row.RowId)).Append('\n');
+                text.Append("id = ").Append(Quote(fault.Id)).Append('\n');
+                text.Append("tool = ").Append(Quote(fault.Tool)).Append('\n');
+                text.Append("args = ").Append(Quote(args?.GetRawText() ?? "{}")).Append('\n');
+                text.Append("injected_ms = ").Append(((long)(fault.InjectedAt - rowStart).TotalMilliseconds).ToString(CultureInfo.InvariantCulture)).Append('\n');
+                if (fault.HealedAt is { } healed)
+                {
+                    text.Append("healed_ms = ").Append(((long)(healed - rowStart).TotalMilliseconds).ToString(CultureInfo.InvariantCulture)).Append('\n');
+                }
+            }
+        }
+
         return text.ToString();
     }
 
