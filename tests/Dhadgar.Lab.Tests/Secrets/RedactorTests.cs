@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Uat.Bundle;
 
 namespace Dhadgar.Lab.Tests.Secrets;
 
@@ -172,5 +173,55 @@ public sealed class RedactorTests
         Assert.DoesNotContain("s3cret-value-123", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("hunter2hunter2", redacted, StringComparison.Ordinal);
         Assert.Equal("{\"***tok-1\":1,\"Password=***\":2}", redacted);
+    }
+
+    [Fact]
+    public void Redact_JsonEscapedFormAlone_Masked()
+    {
+        using var vault = new SecretVault();
+        vault.Add(SecretKind.EnrollmentToken, "ab\"cd\\ef");
+        var redactor = new Redactor(vault);
+        var escaped = "ab\\\"cd\\\\ef";
+
+        var redacted = redactor.Redact("{\"v\":\"" + escaped + "\"}");
+
+        Assert.Equal("{\"v\":\"***tok-1\"}", redacted);
+        Assert.DoesNotContain(escaped, redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HasSecret_JsonEscapedFormAlone_Found()
+    {
+        using var vault = new SecretVault();
+        vault.Add(SecretKind.EnrollmentToken, "ab\"cd\\ef");
+        var scanner = new SecretScanner(vault);
+
+        Assert.True(scanner.HasSecret("{\"v\":\"ab\\\"cd\\\\ef\"}"));
+        Assert.False(scanner.HasSecret("{\"v\":\"abcdef\"}"));
+    }
+
+    [Fact]
+    public void Redact_WithCount_CountsEachVaultMatchOnce()
+    {
+        using var vault = new SecretVault();
+        vault.Add(SecretKind.EnrollmentToken, "s3cret-value-123");
+        var redactor = new Redactor(vault);
+
+        var result = redactor.Redact("a s3cret-value-123 b s3cret-value-123", out var count);
+
+        Assert.Equal("a ***tok-1 b ***tok-1", result);
+        Assert.Equal(2, count);
+    }
+
+    [Fact]
+    public void Redact_WithoutSecrets_CountIsZero()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        var result = redactor.Redact("nothing here", out var count);
+
+        Assert.Equal("nothing here", result);
+        Assert.Equal(0, count);
     }
 }
