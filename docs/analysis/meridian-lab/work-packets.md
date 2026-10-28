@@ -2719,18 +2719,20 @@ Waves 5 and 5E run together as one boundary of 10 packets: L16g (new, OD-1), L25
 | --- | --- | --- | --- |
 | A | L16g ‖ L25 | now (716e331b). L25 steps 1-3 run beside L16g; L25 step 4 starts only after L16g merges and L25 rebases | none (L16g registers nothing); Results (L25 creates `ResultsArea.cs`) |
 | B | L26 ‖ L27 ‖ L52 ‖ L53 | L25 merged | Results; Jobs; Coverage; Twins |
-| C | L28 ‖ L29 ‖ L54 | L27 merged (L54 also needs L51 and L23, both Integrated) | Fuzz; Chaos (plus one I7 line in `InvariantsArea.cs`); Mutants (plus `{mutant}` in `Tools/Services/BuildTool.cs`) |
-| D | L55 | L54 merged | Mutants |
+| C | L28 ‖ L29 ‖ L54 ‖ L25e | L27 merged (L54 also needs L51 and L23, both Integrated); L25e needs L26 and L53 merged (L25-ruling-1) | Fuzz; Chaos (plus one I7 line in `InvariantsArea.cs`); Mutants (plus `{mutant}` in `Tools/Services/BuildTool.cs`); none (L25e registers nothing) |
+| D | L55 ‖ L25f | L54 merged; L25f needs L25e merged | Mutants; none (L25f registers nothing) |
 
-**Merge order:** L16g → L25 → L26 → L27 → L52 → L53 → L28 → L29 → L54 → L55. Each packet rebases on the tip before its merge.
+**Merge order:** L16g → L25 → L26 → L27 → L52 → L53 → L25e → L28 → L29 → L54 → L25f → L55. Each packet rebases on the tip before its merge. L25e and L25f were added by L25-ruling-1 (D-ML93).
 
 **Files each parallel packet touches** (under `src/Tools/Dhadgar.Lab/` unless named; overlaps are what make the order above):
 
 | Packet | Files |
 | --- | --- |
 | L16g | new `Uat/Bundle/BundleStaging.cs`, `Uat/Bundle/BundleAttestor.cs`, `Tools/Uat/UatReportTools.cs`; tests under `Uat/Bundle/` |
-| L25 | `Directory.Packages.props` (one line), `Dhadgar.Lab.csproj`, both lab lock files, `Results/*`, `Mcp/Areas/ResultsArea.cs`, the `// L25` group, `docs/guides/uat-specs/known-issues.toml` (KI-F67, KI-F69), `Uat/IUatRunSink.cs`, `Uat/UatRunner.cs`, `Uat/Bundle/BundleWriter.cs`, `Uat/Bundle/BundleAttestor.cs`, `Tools/Uat/UatRunTool.cs`, `Tools/Uat/UatReportTools.cs`, `Observe/ReplayJudge.cs`, `Tools/Results/ResultsQueryTool.cs`; tests under `Results/`, `Uat/` |
-| L26 | `known-issues.toml` (the seeds), `Triage/*`, `Tools/Triage/TriageTools.cs`, `Mcp/Areas/ResultsArea.cs`, the `// L26` group, `.claude/skills/lab-uat/SKILL.md`, `.claude/agents/uat-driver.md`; tests under `Triage/`, `Results/` |
+| L25 | `Directory.Packages.props` (one line), `Dhadgar.Lab.csproj`, both lab lock files, `Results/*` (with `ResultsService.cs`, `KnownIssueCheck.cs`, `EvidenceCoverage.cs`, L25-ruling-1), `Mcp/Areas/ResultsArea.cs`, the `// L25` group, `docs/guides/uat-specs/known-issues.toml` (KI-F67, KI-F69), `Uat/IUatRunSink.cs`, `Uat/UatRunner.cs`, `Uat/Bundle/BundleWriter.cs`, `Uat/Bundle/BundleAttestor.cs`, `Tools/Uat/UatRunTool.cs`, `Tools/Uat/UatReportTools.cs`, `Observe/ReplayJudge.cs`, `Tools/Results/ResultsQueryTool.cs`; tests under `Results/`, `Uat/`, plus `Daemon/LabDaemonServiceLifetimeTests.cs` and `Uat/LabSelfTestE2ETests.cs` |
+| L26 | `known-issues.toml` (the seeds; KI-F67 and KI-F69 clause entries, B5), `Triage/*`, `Tools/Triage/TriageTools.cs`, `Mcp/Areas/ResultsArea.cs`, the `// L26` group, `.claude/skills/lab-uat/SKILL.md`, `.claude/agents/uat-driver.md`; for matching (B1-B4): new `Results/RowVerdicts.cs`, `Results/BundleIngestor.cs`, `Results/KnownIssues.cs`, `Results/SignatureBuilder.cs`, `Uat/Bundle/BundleWriter.cs`, `Uat/Bundle/BundleAttestor.cs`, `Uat/RowExecutor.cs` (one static), `Tools/Uat/UatRunTool.cs`, `Tools/Uat/UatReportTools.cs`; tests under `Triage/`, `Results/`, `Uat/` |
+| L25e | `Results/RowVerdicts.cs`, `Results/EvidenceCoverage.cs`, `Uat/Bundle/BundleWriter.cs` (row log window, step method and route), `Uat/RowExecutor.cs` (step request fields); tests under `Results/`, `Uat/` |
+| L25f | `Results/BundleIngestor.cs`, `Results/RowVerdicts.cs`, `Results/EvidenceCoverage.cs`, `Results/ResultsDb.cs` (typed fault and pair inserts), `Uat/Bundle/BundleWriter.cs` (fault `target_id`, `kind`); tests under `Results/`, `Twins/` (against L53's writer) |
 | L27 | `Dhadgar.Lab.csproj` (CsCheck), both lab lock files, `Jobs/*`, `Hunt/*`, `Results/FlakeCheckJob.cs`, `Tools/Jobs/JobTools.cs`, `Mcp/Areas/JobsArea.cs`, the `// L27` group, `StatusDto.RunningJob`; tests under `Jobs/`, `Hunt/` |
 | L52 | `coverage-universe.json`, `Dhadgar.Lab.csproj` (copy to output), `Coverage/*`, `Tools/Coverage/CoverageReportTool.cs`, `Mcp/Areas/CoverageArea.cs`, the `// L52` group, `tests/Dhadgar.Nodes.Tests/Lab/NodesEndpointUniverseTests.cs`; tests under `tests/Dhadgar.Lab.Tests/Coverage/` (beside L24's `LabCoverageTests`) |
 | L53 | `Twins/*`, `Uat/UatRunOverlay.cs`, `Uat/UatRunner.cs`, `Tools/Twins/TwinRunTool.cs`, `Mcp/Areas/TwinsArea.cs`, the `// L53` group, `catalog/twin-enroll.toml`, `twins/enroll-latency-invariance.toml`, `Seams/TenantTwinSeamTests.cs`; tests under `Twins/` |
@@ -2740,8 +2742,11 @@ Waves 5 and 5E run together as one boundary of 10 packets: L16g (new, OD-1), L25
 | L55 | `tools/lab/mutants/LM*`, `tools/lab/mutants/README.md` (LM rows), new `src/Tools/Dhadgar.Lab.SelfCheck/*` and its lock file, `Dhadgar.sln` (Tools folder), `tests/Dhadgar.Lab.Tests/Dhadgar.Lab.Tests.csproj` and lock file, `LabIsolationTests.cs`, `ObservationPathTests.cs`, lab `README.md` "Self-check"; tests under `SelfCheck/` |
 
 Files with more than one owner, in merge order:
-- `BundleAttestor.cs`, `UatReportTools.cs`: L16g → L25.
-- `known-issues.toml`, `ResultsArea.cs`: L25 → L26.
+- `BundleAttestor.cs`, `UatReportTools.cs`: L16g → L25 → L26.
+- `known-issues.toml`, `ResultsArea.cs`, `UatRunTool.cs`: L25 → L26.
+- `BundleWriter.cs`: L25 → L26 → L25e → L25f.
+- `BundleIngestor.cs`, `EvidenceCoverage.cs`: L25 → L26 → L25e → L25f (`RowVerdicts.cs` from L26 on).
+- `RowExecutor.cs`: L26 (one static) → L25e.
 - `UatRunner.cs`: L25 → L53.
 - `Dhadgar.Lab.csproj`: L25 → L27 → L52, each in its own `ItemGroup` line.
 - The two lab lock files: L25 → L27 → L55. On a lock-file conflict, take the tip's file and rerun the locked restore; never hand-merge a lock file.
@@ -2757,7 +2762,9 @@ Files with more than one owner, in merge order:
 
 **Dependency amendments made with this plan.**
 - L25 depends on L16g before its step 4: both edit `BundleAttestor` (D-ML89).
-- L28 depends on L25 for the KI-F69 entry it matches, and on L27 for jobs and `GatewayPacer`.
+- L28 depends on L25 and L26 for the `KI-F69-HTTP` entry it matches (L25-ruling-1), and on L27 for jobs and `GatewayPacer`.
+- L25e depends on L26 and L53; L25f depends on L25e, L53 and L51 (L25-ruling-1, D-ML93).
+- Whichever packet first feeds `twin`, `peer`, `env` or `ver` signatures into the ingest (L53, L58, L57, L60) moves that kind from `EvidenceCoverage.NotBuiltKinds` to `BuiltKinds` in the same commit (D-ML93).
 - L53 merges after L52, and L54 after L29. L54's own dependencies (L27, L51, L23) are unchanged.
 - L16g is new (OD-1, ruled as its default in D-ML89).
 
@@ -2792,8 +2799,10 @@ Docker, Testcontainers and network tests are written in their packet (red or gre
 | Packet | Runs in its steps (non-Docker) | Written in the packet, run at the boundary |
 | --- | --- | --- |
 | L16g | `FS` over `Dhadgar.Lab.Tests.Uat` | none |
-| L25 | `FS` | wave 4 regression: S-L6 `LabSelfTestE2ETests` (now ingests and computes `overall`) |
+| L25 | `FS` | wave 4 regression: S-L6 `LabSelfTestE2ETests` (now asserts `ingest.ok`, `ingest.known_issues.checked` and the DB file, L25-ruling-1 item 18) |
 | L26 | `FS` | none |
+| L25e | `FS` | none |
+| L25f | `FS` | none |
 | L27 | `FS` | `HunterDockerTests` |
 | L52 | `FS`; `Dhadgar.Nodes.Tests` `~NodesEndpointUniverseTests` (in-memory, no Docker) | none |
 | L53 | `FS` | `TwinLatencyDockerTests`; S-L12 `Seam=S-L12` (expected red: record the failure line) |
@@ -2829,7 +2838,7 @@ The report goes to `worknotes/wave5-docker-run.md`. Failures go to a ruling, not
 | D-ML57 | none until L62 | guided mode off |
 
 **Boundary review.** One pass after the boundary run, in three slices. Each slice gets a `packet-reviewer` and a `security-advisor`, with the boundary-run report as input:
-- R1 = L16g, L25, L26 (evidence and triage).
+- R1 = L16g, L25, L26, L25e, L25f (evidence and triage).
 - R2 = L27, L28, L29, L52 (jobs and hunting). L52 has no security review of its own; the R2 security-advisor reads it only for R-LOG.
 - R3 = L53, L54, L55 (experiments and planted defects).
 
@@ -2890,7 +2899,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ### L25. Results DB, ingest, signatures, known-issue matching, `overall`, `results_query`
 
-- **Branch / worktree / commit:** `ml/l25-results-db` / `ml-l25` / `feat(lab): results database, signatures and overall grading`
+- **Branch / worktree / commit:** `ml/l25-results-db` (cut as `ml/l25-tools`; keep that branch) / `ml-l25` / `feat(lab): results database, signatures and overall grading`
 - **Depends on:** L22 and L51 (both Integrated; both edit `BundleWriter`); L16g merged before step 4 (both edit `BundleAttestor`, D-ML89). **Security review:** yes (evidence store).
 - **Rules:**
   - R-REG: area Results; register in a new `Mcp/Areas/ResultsArea.cs` and remove `results_query` from the `// L25` PlannedTools group.
@@ -2914,8 +2923,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
    public sealed record FailureSignature(string Kind, string Text, string? Service, string? InvariantId);
    public sealed record KnownMatch(string? IssueId, string State, string? Reason); // State: "known" | "new" | "claimed_mismatch" | "regressed"
    ```
-4. `Results/BundleIngestor.cs`: idempotent by `run_id`; inserts runs (with `fingerprint_sha256`, `fidelity`), rows (with `signatures_json`, `known_match`), `pairs` when `run.json` has `pair`, faults, violations, signatures (upsert, hits, first and last seen); detects flakes on ingest (same section, row, seed and build graded differently).
-5. `Uat/Bundle/BundleWriter.cs`: at run end, ingest, then compute `overall`, `new_failures`, `known_failures` (C12) and write them to `run.json` and `ledger.md`; `uat_report` returns them. L48's `ReplayJudge` gains the C18 signature rule: an `exact` replay reproduces only with the same grades and the same primary signature per failed row; a `schedule_approximate` replay reproduces when the original primary signature appears in one of up to 5 attempts.
+4. `Results/BundleIngestor.cs`: idempotent by `run_id`; inserts runs (with `fingerprint_sha256`, `fidelity`), rows (with `signatures_json`, `known_match`), violations, signatures (upsert, hits, first and last seen); detects flakes on ingest (same section, row, seed and build graded differently). **Amended (L25-ruling-1, D-ML93):** `pairs` and faults move to L25f; history bundles are refused.
+5. `Uat/Bundle/BundleWriter.cs`: compute `overall`, `new_failures`, `known_failures` (C12) and write them to `run.json` and `ledger.md`; `uat_report` returns them. **Amended (D-ML91, D-ML92):** the run-end ingest is in `Tools/Uat/UatRunTool.cs` after the bundle is written, not in the writer; the writer does not match known issues until L26 and writes `known_failures: null` with `known_issues: {checked: false, reason}`. L48's `ReplayJudge` gains the C18 signature rule: an `exact` replay reproduces only with the same grades and the same primary signature per failed row; a `schedule_approximate` replay reproduces when the original primary signature appears in one of up to 5 attempts.
 6. `Tools/Results/ResultsQueryTool.cs` (`results_query`; views `runs`, `rows`, `buckets`, `flakes`, `trend` (per row and per signature: date, grade or hits), `known_issues`, `findings` (empty until L26)).
 7. Tests: `SignatureBuilderTests` (golden normalisation: compiler-generated frames, GUIDs and digits in routes, fault kinds sorted; `BuildAll` returns the 500 and the NotHeld clause of one row), `KnownIssuesTests` (`Match_ClaimedIssueSignatureDiffers_IsNew`, `Match_OneOfTwoSignaturesUnmatched_IsNew`, `Match_OutOfScopeService_IsNew`, `Match_FixedIssue_IsRegressed`, `Match_AllSignaturesSameIssue_IsKnown`, `Load_UnanchoredPattern_IsInvalid`, `Load_DotStarPattern_IsInvalid`, `Load_NoSignaturesNoPatterns_IsInvalid`), `BundleIngestorTests` (ingest twice → one run; `signatures_json` filled), `OverallTests` (`pass`, `pass_with_known`, `incomplete`, `fail`; an unallowed violation linked to no issue → `fail`; known failures plus a SKIPPED row → `incomplete`), `FlakeOnIngestTests`.
 
@@ -2929,12 +2938,20 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **A5, KI-F67 and KI-F69 (D-ML87, F83).** Add both to `docs/guides/uat-specs/known-issues.toml` with `scope = { service = "nodes" }` and anchored patterns that pass C12's loader rules. KI-F67: the enroll 500 while `nodes-postgres` is cut (the `http` signature for `POST /api/v1/agents/enroll` and the I1 violation in that window). KI-F69: a Nodes 400 without an `application/problem+json` body (F69), with a pattern that cannot match any 5xx. Both are `open`. Add `KnownIssueClaimsResolveTests`: every `known_issue = "..."` under `docs/guides/uat-specs/` names an id in the shipped file.
 - **A6, shipped specs against the real registry (wave4-R2-ruling-1 D3).** `ShippedSpecsRegistryValidateTests` runs `SpecValidator.Validate` with the daemon's real tool registry over `lab-selftest.toml` and `catalog/*.toml`. It skips `known-issues.toml`, `invariants/`, `chaos/` and `twins/`, and follows the `LabSelfTestSpecValidateTests` pattern. A failure is a finding: report it, and never edit an expected value to make the test pass.
 
-**Steps (commit after each step, with the packet's subject plus ` (step N/5)`; the wave 5 plan's slicing rule applies):**
-1. Packages (R-CPM as amended), the restore, `Results/ResultsDb.cs`, `ResultsDbTests` (migrate twice, WAL on, parameters only). Checks: restore, build, `FS` with `FullyQualifiedName~Dhadgar.Lab.Tests.Results`.
-2. Files 2-3 (`SignatureBuilder`, `KnownIssues`), A5's TOML entries, `SignatureBuilderTests`, `KnownIssuesTests`, `KnownIssueClaimsResolveTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Results`.
-3. File 4 with A2 and A3, A1's `RunSummary`, `BundleIngestorTests`, `OverallTests`, `FlakeOnIngestTests`. Checks: as step 2.
-4. Starts only after L16g has merged and this worktree has rebased. File 5 with A1 (`UatRunner`, `BundleWriter`, `BundleAttestor.RecomputeRun`), A4, the re-ingest in `uat_attest`, and `UatRun_ReturnedOverallEqualsRunJson`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Uat` and `~Dhadgar.Lab.Tests.Results`.
-5. File 5's `ReplayJudge` rule, file 6, `ResultsArea.cs` and the group edit, A6. Checks: the full lines below.
+**Amendments (L25-ruling-1, `worknotes/L25-ruling-1.md`; they win over everything above where they differ, and the ruling's finishing list is the plan of record for steps 4-7):**
+- **A7, `ResultsService` (D-ML91, F87).** One singleton `Results/ResultsService.cs` owns the lazily opened `ResultsDb` behind a `SemaphoreSlim(1, 1)` and builds a `BundleIngestor` per ingest; observers run after the gate is released. `ResultsDb` and `BundleIngestor` are not registered. `Mcp/Areas/ResultsArea.cs` registers it. `uat_run` ingests at run end and `uat_attest` re-ingests after a committed attest; both return an `ingest` field, and an ingest failure never fails the run or the attest.
+- **A8, honest "unchecked" (D-ML92).** Writer, attestor and runner do not match known issues until L26: run.json writes `known_failures: null` and `known_issues: {checked: false, reason}`. The ingest records `{checked, issues, file_sha256}` or `{checked: false, reason}` (`Results/KnownIssueCheck.cs`) in `runs.known_issues_json` (migration 2) and in the payload.
+- **A9, ingest coverage (D-ML93, F89).** L25 ingests `clause` and `inv` (synthetic `invariants/<id>` rows included) and refuses `kind = "history"` bundles. `Results/EvidenceCoverage.cs` lists built kinds, unbuilt kinds and the not-ingested parts; the ingest stores it in `runs.evidence_json` and echoes it. `exc` and `http` go to L25e; faults, pairs and history go to L25f.
+- **A10, KI-F67 scope and the loader rule (D-ML94, F88).** KI-F67 is scoped to `catalog-nodes` / `nodes-pg-down-enroll` with an exact I1 pattern; a `services` scope with a kind that carries no service, or an `invariants` scope with a non-`inv` kind, is a loader problem.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/7)`; the wave 5 plan's slicing rule applies; steps 4-7 are itemised in `worknotes/L25-ruling-1.md`):**
+1. Packages (R-CPM as amended), the restore, `Results/ResultsDb.cs`, `ResultsDbTests` (migrate twice, WAL on, parameters only). Checks: restore, build, `FS` with `FullyQualifiedName~Dhadgar.Lab.Tests.Results`. **Done** (`8f3a2bf1`).
+2. Files 2-3 (`SignatureBuilder`, `KnownIssues`), A5's TOML entries, `SignatureBuilderTests`, `KnownIssuesTests`, `KnownIssueClaimsResolveTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Results`. **Done** (`aa5c3df7`).
+3. File 4 with A2 and A3, A1's `RunSummary`, `BundleIngestorTests`, `OverallTests`, `FlakeOnIngestTests`. Checks: as step 2. **Done** (`7b708435`, `1d382ed6`).
+4. After L16g merged (done): A1 (`UatRunner`, `BundleWriter`, `BundleAttestor.RecomputeRun`), A4 and `UatRun_ReturnedOverallEqualsRunJson` (**done**, `bbb59400`); then A7: `KnownIssueCheck`, `ResultsService`, `ResultsArea.cs`, the `BundleIngestor` split, the run-end ingest, the attest re-ingest and the DI test (ruling items 1-7). Checks: build, `FS` with `~Dhadgar.Lab.Tests.Daemon`, `~Dhadgar.Lab.Tests.Uat` and `~Dhadgar.Lab.Tests.Results`.
+5. A8 and A9: `EvidenceCoverage`, migration 2, the history refusal, the bundle's unchecked fields, the `RunSummary` doc, and their tests (items 8-12). Checks: build, `FS` with `~Dhadgar.Lab.Tests.Results` and `~Dhadgar.Lab.Tests.Uat`.
+6. A10: the KI-F67 entry, the loader rule and their tests (items 13-15). Checks: build, `FS` with `~Dhadgar.Lab.Tests.Results`.
+7. File 5's `ReplayJudge` rule, file 6 through `ResultsService`, the `ResultsArea.cs` tool line and the group edit, A6, and the S-L6 assertions (items 16-18). Checks: the full lines below.
 
 **Checks**
 
@@ -2975,16 +2992,37 @@ S-L6 (`LabSelfTestE2ETests`) is rerun at the wave boundary (D-ML74).
 **Tests and why they fail when reverted:** `NoGitHubCallsTests` fails if anything starts filing; `Draft_PlantedSecret_IsRefused` fails if the scan is skipped.
 
 **Amendments (wave 5 plan):**
-- File 1 adds the seeds below L25's KI-F67 and KI-F69 and never edits those two entries.
-- File 2: `TriageService` implements L25's `IIngestObserver`. It is registered in this packet's part of `ResultsArea.cs`, and `BundleIngestor` is never edited.
+- File 1 adds the seeds below L25's KI-F67 and KI-F69 and edits those two entries only as B5 says. Each seed's scope must pass L25's loader rule (D-ML94): a `services` scope only with `exc`, `http` or `inv` signatures.
+- File 2: `TriageService` implements L25's `IIngestObserver`. It is registered in this packet's part of `ResultsArea.cs`. It reads the DB only through `ResultsService.ReadAsync` (observers run outside the gate, D-ML91). `BundleIngestor` is edited only as B1 says.
 - File 4's tools register in `ResultsArea.cs` and are removed from the `// L26` group (R-REG).
 - File 5: D-ML42 is unruled, so leave the filing sentence out (default).
 - Regex rule as in L25. No `Success(null)`.
 
-**Steps (commit after each step, with the packet's subject plus ` (step N/3)`):**
-1. File 1 and `KnownIssuesShippedFileTests`; file 2 and `TriageServiceTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Triage` and `~Dhadgar.Lab.Tests.Results`.
-2. Files 3-4, the area and group edits, `DraftWriterTests`, `TriageMarkTests`, `NoGitHubCallsTests`. Checks: as step 1.
-3. File 5 (SKILL.md, uat-driver.md), with `DriverToolListTests` green. Checks: the full lines below.
+**Amendments (L25-ruling-1, D-ML92: L26 owns matching outside the ingest):**
+- **B1, one row-verdict path.** New `Results/RowVerdicts.cs` takes the per-row block of `BundleIngestor` (L25 tip `Results/BundleIngestor.cs:129-159`) and its row parsing (`ParseRow`, `ParseGrade`, `:389-422`): `static RowVerdict Of(ParsedRow row, KnownIssues known, Func<string, string> scrub)` returns the signatures, the primary and the `KnownMatch`. `BundleIngestor`, `BundleWriter` and `BundleAttestor` all call it; none keeps its own copy.
+- **B2, matching at run end and on attest.**
+  - `BundleWriter.UseKnownIssues(KnownIssueCheck check)`. `UatRunTool` passes `ResultsService.LoadKnownIssues()` before the run.
+  - `BundleAttestor.Attest` gains a trailing `KnownIssueCheck? known = null`. `UatAttestTool` passes `ResultsService.LoadKnownIssues()`.
+  - With a checked file, run.json writes `known_failures` from the matches and `known_issues: {checked: true, issues, file_sha256}`. Unchecked keeps L25's `null` and reason.
+  - The row JSON gains `known_issue` (the spec row's claim, from `UatRow.KnownIssue`) and `known_match` (`{issue_id, state, reason}`).
+  - Test `Writer_RunJsonAgreesWithIngest`: for one bundle, run.json `overall`, `new_failures` and `known_failures` equal the ingest's.
+- **B3, step pseudo-signatures.**
+  - Extract `internal static bool ExpectedErrorMet(string expected, string? errorCode, JsonElement? result)` from `Uat/RowExecutor.cs:520-522`. The step JSON gains `expect_met` (bool, only when `expect_error` is set).
+  - `RowVerdicts` adds `clause:<section>/<row>/step:<step id>|NotHeld` for each step whose expected error was not met, and for the step that errored and stopped the row.
+  - `SignatureBuilder` documents the `step:` clause id form.
+  - Test `Step_ExpectedErrorNotMet_IsSignature`: an expected `http:400` answered 200 gives the step signature, and KI-F69 does not match it.
+- **B4, `requires` on issues.** A new issue key `requires`: an array of patterns under the same loader rules (anchored, kind prefix, not empty-matching, 1 s timeout). Every pattern must match at least one of the row's signatures, else there is no match. On a claim, the result is `claimed_mismatch` with reason `required evidence <pattern> absent`. Test `Match_RequiresAbsent_IsClaimedMismatch`.
+- **B5, KI-F67 and KI-F69 from row evidence.**
+  - KI-F67 adds `signatures` with the four `clause:catalog-nodes/nodes-pg-down-enroll/<clause>|Unverified` texts (`down-503`, `after-201`, `recovered`, `token-used`) plus `clause:catalog-nodes/nodes-pg-down-enroll/step:enroll-down|NotHeld`. It adds `requires = ['^clause:catalog-nodes/nodes-pg-down-enroll/step:enroll-down\|NotHeld$', '^inv:I1\|(nodes|gateway)\|(unhandled|unexplained-500)$']`. A blocked row without the I1 violation (a mint or fault error) is therefore not KI-F67.
+  - KI-F69 becomes row evidence only: `signatures` `clause:catalog-nodes/nodes-enroll-malformed/problem-json|NotHeld` and `clause:catalog-nodes/nodes-enroll-malformed/problem-json-empty|NotHeld`, `patterns = []`, `[issue.scope] sections = ["catalog-nodes"]`, `rows = ["nodes-enroll-malformed"]`. A clause signature carries no service, so it cannot share an issue with a `services` scope (D-ML94). Its `http` 4xx pattern moves unchanged, with `services = ["nodes"]`, to a new entry `KI-F69-HTTP` ("Nodes 400 without problem+json, as an HTTP case (F69)"), which L28's oracle matches (L28 amendment).
+  - Test `CatalogClaims_ResolveFromRowEvidence`: fixture rows shaped like the two catalog rows under F67 and F69 give `known`, and the same rows with the `requires` evidence removed give `claimed_mismatch`.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/5)`):**
+1. B1 (`RowVerdicts`, with `BundleIngestor` calling it and the Results tests unchanged and green). Checks: build, `FS` with `~Dhadgar.Lab.Tests.Results`.
+2. B3 and B4, B5's TOML, and their tests. Checks: as step 1.
+3. B2 (writer, attestor, both tools), `Writer_RunJsonAgreesWithIngest`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Results` and `~Dhadgar.Lab.Tests.Uat`.
+4. File 1 and `KnownIssuesShippedFileTests`; file 2 and `TriageServiceTests`; files 3-4, the area and group edits, `DraftWriterTests`, `TriageMarkTests`, `NoGitHubCallsTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Triage` and `~Dhadgar.Lab.Tests.Results`.
+5. File 5 (SKILL.md, uat-driver.md), with `DriverToolListTests` green. The skill's "Triage" section reads `known_issues.checked` and `ingest.evidence` and tells the user when matching was unchecked or partial. Checks: the full lines below.
 
 **Checks**
 
@@ -2992,6 +3030,52 @@ S-L6 (`LabSelfTestE2ETests`) is rerun at the wave boundary (D-ML74).
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
 dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
 ```
+
+**Docs owed:** none (L45).
+
+### L25e. Row `exc` and `http` evidence
+
+- **Branch / worktree / commit:** `ml/l25e-evidence` / `ml-l25e` / `feat(lab): exception and http evidence in row signatures`
+- **Depends on:** L26 (`RowVerdicts`), L53 (it edits `BundleWriter` before this packet). **Security review:** yes (log text enters the evidence store and payloads).
+- **Origin:** L25-ruling-1, D-ML93. The C12 `exc` and `http` signatures exist in `SignatureBuilder`, but no row file carries their inputs, so L25 builds none.
+- **Spec status:** outline. The architect writes the numbered step list (file:line, code shapes, tests) against the L53 tip before dispatch.
+- **Rules:**
+  - R-LOG: exception messages and request lines are redacted with `Redactor.Redact` before they are written; nothing unredacted reaches the row JSON, the DB or a payload.
+  - R-PATH for every file read. Regex with a timeout and `RegexOptions.CultureInvariant`. No `Success(null)`.
+  - R-RESULT, R-NULL, R-XUNIT.
+
+**Contract excerpt:** C12 signature table (`exc`, `http`), C11 row file, D-ML93.
+
+**Scope**
+
+1. `Uat/RowExecutor.cs`: each step records its request method and route template (not the full URL, never the query string) beside its status and error code.
+2. `Uat/Bundle/BundleWriter.cs`: the row JSON gains `evidence.exceptions` (exception type, top in-repo frame, redacted message, service) from the row's log window and `evidence.http` (status, error code, method, route, faults) from Hosting.Diagnostics lines and the step fields.
+3. `Results/RowVerdicts.cs`: passes both lists to `SignatureBuilder.BuildAll`.
+4. `Results/EvidenceCoverage.cs`: `exc` and `http` move from `NotBuiltKinds` to `BuiltKinds` in the same commit.
+5. Tests: a planted 500 with an unhandled exception gives one `exc` and one `http` signature; a planted secret in the exception message never appears in the row JSON or the DB; `EvidenceCoverage_KindsPartitionC12` stays green.
+
+**Checks:** build, then `FS` with `~Dhadgar.Lab.Tests.Results` and `~Dhadgar.Lab.Tests.Uat`; the last step runs the L26 check lines.
+
+**Docs owed:** none (L45).
+
+### L25f. Faults, pairs and history runs in the results index
+
+- **Branch / worktree / commit:** `ml/l25f-index` / `ml-l25f` / `feat(lab): faults, pairs and history runs in the results index`
+- **Depends on:** L25e, L53 (twin pairs), L51 (history bundles). **Security review:** yes.
+- **Origin:** L25-ruling-1, D-ML93. L25 creates the `faults` and `pairs` tables but fills neither, and refuses history bundles.
+- **Spec status:** outline. The architect writes the numbered step list against the L54 tip before dispatch.
+- **Rules:** R-PATH, R-RESULT, R-NULL, R-XUNIT, no `Success(null)`. Pairs are tested against L53's real writer, never a hand-written fixture only.
+
+**Contract excerpt:** C12 tables `faults` and `pairs`, `hist` signatures; C17 history bundle; D-ML93.
+
+**Scope**
+
+1. `Uat/Bundle/BundleWriter.cs`: each fault entry in `run.json` gains `target_id` and `kind`.
+2. `Results/BundleIngestor.cs`: inserts `faults` and `pairs` rows; ingests history bundles with `hist` signatures, replacing L25's refusal (`Ingest_HistoryBundle_IsRefused` becomes `Ingest_HistoryBundle_StoresHistSignatures`).
+3. `Results/EvidenceCoverage.cs`: `hist` moves to `BuiltKinds`; `faults`, `pairs` and `history_runs` leave `NotIngested`, in the same commit.
+4. Tests: a twin run written by L53's writer gives one `pairs` row; a faulted run gives its `faults` rows; a history bundle gives `hist` signatures.
+
+**Checks:** build, then `FS` with `~Dhadgar.Lab.Tests.Results`, `~Dhadgar.Lab.Tests.Uat` and `~Dhadgar.Lab.Tests.Twins`; the last step runs the L26 check lines.
 
 **Docs owed:** none (L45).
 
@@ -3026,6 +3110,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **A2, model expectations (D-ML87, D-ML49 default, F67).** `Enroll` while `pgDown` expects "no 2xx, token stays unused". A 500 there is matched by KI-F67 and is `known`, never `new`. An I1 violation is allowed only inside a `PgDown`…`PgUp` window and only on `Enroll`. Anywhere else, I1 is a model failure. `EnrollAgain` with a new key on a used token expects 401 (today's product), and a same-key retry is not an op. `PgDown` is `fault_proxy_disable nodes-postgres`. The hunter never waits on `/readyz` for it (F67: no Postgres readiness check); it waits 2 s, then goes on.
 - **A3, heal in `finally`.** Each iteration that ran `PgDown` runs `fault_reset` in `finally` under its own `using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30), _time)`, never the job's token (pattern: `HealAbandonedAsync`, `Uat/RowExecutor.cs:362`).
 - **A4.** `HunterDockerTests` has the D-ML84 shape and runs at the wave boundary, not in this packet's checks. `StatusDto.RunningJob` is nullable and absent while idle.
+- **A5, KI-F67 scope (L25-ruling-1, D-ML94).** L25 scopes KI-F67 to `sections = ["catalog-nodes"]`, `rows = ["nodes-pg-down-enroll"]`. This packet adds its hunter row's section and row id (as the hunter writes them for `hunt/enrollment`) to those two lists in `known-issues.toml`, and nothing else. Sections and rows are checked separately, so name only real pairs. `Hunter_PgDownEnroll500_IsKnownNotNew` loads the shipped file. Add `known-issues.toml` to this packet's files, after L26 in the merge order.
 
 **Steps (commit after each step, with the packet's subject plus ` (step N/4)`):**
 1. The CsCheck reference and restore (R-CPM as amended), with the API check first (record the real CsCheck calls in the report). Then file 1 with A1, `JobRunnerTests` and `GatewayPacerTests`. Checks: restore, build, `FS` with `~Dhadgar.Lab.Tests.Jobs`.
@@ -3049,7 +3134,7 @@ git -C <W> status --porcelain   # no lock file left modified
 ### L28. Contract fuzzer through the Gateway
 
 - **Branch / worktree / commit:** `ml/l28-fuzzer` / `ml-l28` / `feat(lab): seeded contract fuzzer with problem-details oracle`
-- **Depends on:** L27 (jobs, `GatewayPacer`), L25 (KI-F69). **Security review:** yes.
+- **Depends on:** L27 (jobs, `GatewayPacer`), L25, L26 (`KI-F69-HTTP`, L25-ruling-1). **Security review:** yes.
 - **Rules:**
   - R-REG: area Fuzz.
   - Rate limits (amended, D-ML88, F84): all lab traffic reaches the Gateway from one IP, and enroll is on the `Auth` policy (30 per 60 s, `src/Dhadgar.Gateway/Program.cs:202-203`). Every case waits on L27's `GatewayPacer` singleton from DI, never a copy. A 429 is recorded as `throttled` (no row, no failure) and retried once after `Retry-After`. **No Gateway limit is raised**, and the Gateway adapter is not edited. A 50-case run therefore takes about 2 minutes.
@@ -3072,6 +3157,8 @@ git -C <W> status --porcelain   # no lock file left modified
 **Tests and why they fail when reverted:** `Oracle_400WithoutProblemDetails_Fails` pins the error contract; `Mutators_SameSeed_SameCase` pins replay.
 
 **Amendments (wave 5 plan):** the 64 KiB and 1 MiB boundary strings on `enroll` are required, because D-ML76 moved the oversize enroll body out of L23 and into this packet. Test `Oracle_429_IsThrottledNotFailure`; test `Oracle_KiF69Signature_IsKnown`, which loads the shipped `known-issues.toml`. Regex rule as in L25.
+
+**Amendment (L25-ruling-1, D-ML94):** L26 moves KI-F69's `http` pattern to the entry `KI-F69-HTTP` (`services = ["nodes"]`), and KI-F69 itself keeps only the catalog row's clause signatures. Read "KI-F69" in this packet as `KI-F69-HTTP`: the oracle's case signatures are `http` with `Service = "nodes"`, and `Oracle_KiF69Signature_IsKnown` expects issue id `KI-F69-HTTP`. L28 therefore depends on L26 as well (it already starts after L26 merges).
 
 **Steps (commit after each step, with the packet's subject plus ` (step N/3)`):**
 1. Files 1-2 and `MutatorsTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Fuzz`.
@@ -3238,7 +3325,7 @@ Twins (D-ML50), mutants (D-ML51) and the lab's own self-check. Under the wave 5 
 2. `Twins/RunProjection.cs`: builds C19's projection from a finished run's row JSON (`grade`, step `status`, `error_code`, `outcome`, captures after redaction).
 3. `Twins/TwinComparer.cs`: masks GUIDs, ISO timestamps, `duration_ms` and 64-hex thumbprints in both values, then compares; `disjoint` compares two arrays from the variant; returns `held` and a diff list `[{pointer, base, variant}]`.
 4. `Uat/UatRunOverlay.cs`: `sealed record UatRunOverlay(IReadOnlyList<FaultSpec> ExtraFaults, string? PreSpec, IReadOnlyList<string> PreRows, PairInfo? Pair)`; `UatRunner` accepts it internally (not a tool argument): pre rows run first (graded, recorded), extra faults are added `before_steps` to every compared row, `Pair` goes to `run.json`.
-5. `Twins/TwinRunner.cs`: base: `stack_reset_data` → run `[base]` rows with `Pair(role = base)`; variant: `stack_reset_data` → run `[variant]` with the overlay; compare if every base row is PASS (else C19's precondition rule); write the synthetic row `twin/<id>` to both bundles; ingest both (L25 fills `pairs`).
+5. `Twins/TwinRunner.cs`: base: `stack_reset_data` → run `[base]` rows with `Pair(role = base)`; variant: `stack_reset_data` → run `[variant]` with the overlay; compare if every base row is PASS (else C19's precondition rule); write the synthetic row `twin/<id>` to both bundles; ingest both through `ResultsService.IngestAsync`. Amended (L25-ruling-1, D-ML93): L25 does not fill `pairs` (L25f does, tested against this packet's writer), and until then the ingest's `evidence.not_ingested` lists `pairs`.
 6. `Tools/Twins/TwinRunTool.cs` (`twin_run`, OwnLease).
 7. `docs/guides/uat-specs/catalog/twin-enroll.toml` (row `enroll-once`: mint, enroll via the Gateway, status 201, capture `node_id`) and `docs/guides/uat-specs/twins/enroll-latency-invariance.toml` (C19's example).
 8. `tests/Dhadgar.Lab.Tests/Seams/TenantTwinSeamTests.cs` (S-L12, `RequiresDocker`, `[Trait("Seam","S-L12")]`): `twin_run {experiment = "tenant-isolation-enroll", seed = 21}` must return `held = true`. Red now: the experiment file arrives in L56 (`[Lab.NotFound]`).
