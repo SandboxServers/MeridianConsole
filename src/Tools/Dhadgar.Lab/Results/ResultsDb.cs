@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Shared.Results;
 using Microsoft.Data.Sqlite;
@@ -397,6 +398,197 @@ public sealed class ResultsDb : IDisposable
         catch (SqliteException ex)
         {
             return Result.Failure("[Lab.IoError] results database write failed: SQLite " + ex.SqliteErrorCode);
+        }
+    }
+
+    /// <summary>The views <see cref="QueryView"/> reads.</summary>
+    public static readonly IReadOnlyList<string> Views = ["runs", "rows", "buckets", "flakes", "trend", "known_issues", "findings"];
+
+    private const int DefaultLimit = 50;
+    private const int MaxLimit = 500;
+
+    /// <summary>
+    /// Reads one view of the index for <c>results_query</c>. Every filter value is a bound parameter; the SQL is a literal per
+    /// view. Returns <c>[Lab.InvalidArgument]</c> for an unknown view or filter key. <c>known_issues</c> here lists the signatures
+    /// linked to an issue; the tool adds the shipped file's issues.
+    /// </summary>
+    /// <param name="view">One of <see cref="Views"/>.</param>
+    /// <param name="filter">Filter keys by view (strings); null or empty means no filter.</param>
+    /// <param name="limit">The row limit (default 50, max 500).</param>
+    public Result<IReadOnlyList<JsonObject>> QueryView(string view, IReadOnlyDictionary<string, string>? filter, int? limit)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        filter ??= new Dictionary<string, string>();
+        if (limit is < 1 or > MaxLimit)
+        {
+            return Result<IReadOnlyList<JsonObject>>.Failure("[Lab.InvalidArgument] limit must be between 1 and " + MaxLimit);
+        }
+
+        string[] allowed;
+        string sql;
+        switch (view)
+        {
+            case "runs":
+                allowed = ["run_id", "kind", "overall", "label"];
+                sql = """
+                    select run_id, kind, label, seed, build_id, commit_sha, dirty, started_at, ended_at, overall, fidelity,
+                      known_issues_json, evidence_json from runs
+                    where ($run_id is null or run_id = $run_id) and ($kind is null or kind = $kind)
+                      and ($overall is null or overall = $overall) and ($label is null or label = $label)
+                    order by coalesce(started_at, '') desc, run_id limit $limit;
+                    """;
+                break;
+            case "rows":
+                allowed = ["run_id", "section", "row_id", "grade"];
+                sql = """
+                    select run_id, section, row_id, grade, reason, seed, known_issue, signature_id, signatures_json, known_match
+                    from rows
+                    where ($run_id is null or run_id = $run_id) and ($section is null or section = $section)
+                      and ($row_id is null or row_id = $row_id) and ($grade is null or grade = $grade)
+                    order by run_id desc, section, row_id limit $limit;
+                    """;
+                break;
+            case "buckets":
+                allowed = ["kind", "state", "signature_id"];
+                sql = """
+                    select signature_id, kind, text, first_seen, last_seen, hits, state, known_issue_id from signatures
+                    where ($kind is null or kind = $kind) and ($state is null or state = $state)
+                      and ($signature_id is null or signature_id = $signature_id)
+                    order by hits desc, signature_id limit $limit;
+                    """;
+                break;
+            case "flakes":
+                allowed = ["section", "row_id"];
+                sql = """
+                    select section, row_id, seed, run_ids_json, grades_json, detected_at from flakes
+                    where ($section is null or section = $section) and ($row_id is null or row_id = $row_id)
+                    order by detected_at desc, section, row_id limit $limit;
+                    """;
+                break;
+            case "trend":
+                return Trend(filter, limit ?? DefaultLimit);
+            case "known_issues":
+                allowed = ["known_issue_id"];
+                sql = """
+                    select known_issue_id, count(*) as signatures, sum(hits) as hits, max(last_seen) as last_seen from signatures
+                    where known_issue_id is not null and ($known_issue_id is null or known_issue_id = $known_issue_id)
+                    group by known_issue_id order by known_issue_id limit $limit;
+                    """;
+                break;
+            case "findings":
+                allowed = ["state", "signature_id"];
+                sql = """
+                    select finding_id, signature_id, first_run_id, state, created_at from findings
+                    where ($state is null or state = $state) and ($signature_id is null or signature_id = $signature_id)
+                    order by created_at desc, finding_id limit $limit;
+                    """;
+                break;
+            default:
+                return Result<IReadOnlyList<JsonObject>>.Failure("[Lab.InvalidArgument] unknown view; use one of " + string.Join(", ", Views));
+        }
+
+        string? bad = UnknownKey(filter, allowed);
+        if (bad is not null)
+        {
+            return Result<IReadOnlyList<JsonObject>>.Failure(bad);
+        }
+
+        var parameters = new List<(string Name, object? Value)> { ("$limit", (long)(limit ?? DefaultLimit)) };
+        foreach (string key in allowed)
+        {
+            parameters.Add(("$" + key, filter.TryGetValue(key, out string? value) ? value : null));
+        }
+
+        return ReadObjects(sql, parameters.ToArray());
+    }
+
+    private Result<IReadOnlyList<JsonObject>> Trend(IReadOnlyDictionary<string, string> filter, int limit)
+    {
+        string? bad = UnknownKey(filter, ["section", "row_id", "signature_id"]);
+        if (bad is not null)
+        {
+            return Result<IReadOnlyList<JsonObject>>.Failure(bad);
+        }
+
+        if (filter.TryGetValue("signature_id", out string? signatureId))
+        {
+            return ReadObjects(
+                """
+                select substr(coalesce(runs.started_at, ''), 1, 10) as date, rows.run_id, count(*) as hits
+                from rows join runs on runs.run_id = rows.run_id
+                where instr(rows.signatures_json, char(34) || $signature_id || char(34)) > 0
+                group by rows.run_id order by coalesce(runs.started_at, '') desc, rows.run_id limit $limit;
+                """,
+                ("$signature_id", signatureId), ("$limit", (long)limit));
+        }
+
+        if (filter.TryGetValue("section", out string? section) && filter.TryGetValue("row_id", out string? rowId))
+        {
+            return ReadObjects(
+                """
+                select substr(coalesce(runs.started_at, ''), 1, 10) as date, rows.run_id, rows.grade
+                from rows join runs on runs.run_id = rows.run_id
+                where rows.section = $section and rows.row_id = $row_id
+                order by coalesce(runs.started_at, '') desc, rows.run_id limit $limit;
+                """,
+                ("$section", section), ("$row_id", rowId), ("$limit", (long)limit));
+        }
+
+        return Result<IReadOnlyList<JsonObject>>.Failure("[Lab.InvalidArgument] trend needs filter signature_id, or section and row_id");
+    }
+
+    private static string? UnknownKey(IReadOnlyDictionary<string, string> filter, string[] allowed)
+    {
+        foreach (string key in filter.Keys)
+        {
+            if (!allowed.Contains(key, StringComparer.Ordinal))
+            {
+                return "[Lab.InvalidArgument] unknown filter key; use one of " + string.Join(", ", allowed);
+            }
+        }
+
+        return null;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA2100",
+        Justification = "The SQL is a literal in this class; every value is bound as a parameter.")]
+    private Result<IReadOnlyList<JsonObject>> ReadObjects(string sql, params (string Name, object? Value)[] parameters)
+    {
+        try
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = sql;
+            foreach ((string name, object? value) in parameters)
+            {
+                command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+            }
+
+            var items = new List<JsonObject>();
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var item = new JsonObject();
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    object raw = reader.GetValue(i);
+                    item[reader.GetName(i)] = raw switch
+                    {
+                        DBNull => null,
+                        long number => JsonValue.Create(number),
+                        double real => JsonValue.Create(real),
+                        string text => JsonValue.Create(text),
+                        _ => JsonValue.Create(Convert.ToString(raw, System.Globalization.CultureInfo.InvariantCulture)),
+                    };
+                }
+
+                items.Add(item);
+            }
+
+            return Result<IReadOnlyList<JsonObject>>.Success(items);
+        }
+        catch (SqliteException ex)
+        {
+            return Result<IReadOnlyList<JsonObject>>.Failure("[Lab.IoError] results database read failed: SQLite " + ex.SqliteErrorCode);
         }
     }
 

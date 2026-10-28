@@ -1,4 +1,5 @@
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Tools;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Dhadgar.Lab.Mcp;
@@ -11,5 +12,6 @@ public static partial class LabMcpServer
     static partial void AddResultsArea(IServiceCollection services)
     {
         services.AddSingleton<ResultsService>();
+        AddLabTool<ResultsQueryTool>(services);
     }
 }

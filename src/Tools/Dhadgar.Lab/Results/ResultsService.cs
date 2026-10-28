@@ -151,6 +151,80 @@ public sealed class ResultsService : IDisposable
     }
 
     /// <summary>
+    /// One <c>results_query</c> view (read-only, under the gate). The <c>runs</c> view returns <c>known_issues</c> and
+    /// <c>evidence</c> parsed from the two migration 2 columns; <c>known_issues</c> adds the shipped file's issues the index has
+    /// not linked yet. Errors are redacted.
+    /// </summary>
+    /// <param name="view">The view name.</param>
+    /// <param name="filter">Filter values by key, per view.</param>
+    /// <param name="limit">The row limit (default 50, max 500).</param>
+    /// <param name="ct">The cancellation token.</param>
+    public async Task<Result<IReadOnlyList<JsonObject>>> QueryAsync(string view, IReadOnlyDictionary<string, string>? filter,
+        int? limit, CancellationToken ct)
+    {
+        Result<IReadOnlyList<JsonObject>> read = await ReadAsync(db => db.QueryView(view, filter, limit), ct).ConfigureAwait(false);
+        if (read.IsFailure)
+        {
+            return Result<IReadOnlyList<JsonObject>>.Failure(_redactor.Redact(read.Error));
+        }
+
+        var items = read.Value.ToList();
+        if (view == "runs")
+        {
+            foreach (JsonObject item in items)
+            {
+                item["known_issues"] = ParseColumn(item, "known_issues_json");
+                item["evidence"] = ParseColumn(item, "evidence_json");
+                item.Remove("known_issues_json");
+                item.Remove("evidence_json");
+            }
+        }
+        else if (view == "known_issues")
+        {
+            var linked = items.Select(i => i["known_issue_id"]?.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+            string? wanted = null;
+            filter?.TryGetValue("known_issue_id", out wanted);
+            IReadOnlyList<KnownIssue> shippedIssues = LoadKnownIssues().Issues.Issues;
+            foreach (KnownIssue issue in shippedIssues)
+            {
+                if (linked.Contains(issue.Id) || (wanted is not null && wanted != issue.Id))
+                {
+                    continue;
+                }
+
+                items.Add(new JsonObject { ["known_issue_id"] = issue.Id, ["signatures"] = 0, ["hits"] = 0, ["last_seen"] = null });
+            }
+
+            foreach (JsonObject item in items)
+            {
+                KnownIssue? shipped = shippedIssues.FirstOrDefault(i => i.Id == item["known_issue_id"]?.GetValue<string>());
+                item["title"] = shipped?.Title;
+                item["state"] = shipped?.State;
+            }
+        }
+
+        return Result<IReadOnlyList<JsonObject>>.Success(items);
+    }
+
+    private static JsonNode? ParseColumn(JsonObject item, string column)
+    {
+        string? text = item[column]?.GetValue<string>();
+        if (text is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonNode.Parse(text);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// The JSON an MCP tool returns for one ingest: <c>{"ok":true,"run_id","overall","rows","signatures","known_issues","evidence"}</c>
     /// on success, or <c>{"ok":false,"error"}</c> with the error redacted (R-LOG).
     /// </summary>
