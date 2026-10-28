@@ -241,7 +241,8 @@ public sealed class LabStack : ILabStatusSource, IDisposable
             return started;
         }
 
-        // The password reaches redis-server through the environment, never through its argument list.
+        // The shell expands $REDISCLI_AUTH, so the password is in redis-server's argv (visible to docker top and /proc inside the
+        // container). That is accepted for the lab: loopback only, a lab-only credential, and same-user docker access. Do not copy this pattern for a real credential.
         started = await StartContainerAsync(
             "redis", RedisImage, ["127.0.0.1:16379:6379"],
             [Secret("REDISCLI_AUTH", LabCredentialRefs.Redis)],
