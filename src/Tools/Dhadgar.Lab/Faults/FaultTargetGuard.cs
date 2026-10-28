@@ -25,12 +25,12 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
     private const string LabLabel = "meridian-lab";
     private const string LabNamePrefix = "/meridian-lab-";
 
-    private static readonly IReadOnlySet<string> KnownFaultKinds = new HashSet<string>(StringComparer.Ordinal)
+    private static readonly HashSet<string> KnownFaultKinds = new(StringComparer.Ordinal)
     {
         "toxic", "proxy_disable", "partition", "kill", "pause", "disk_fill", "corrupt_file", "corrupt_registry", "db", "reset",
     };
 
-    private static readonly IReadOnlyDictionary<LabTargetKind, IReadOnlySet<string>> AllowedKinds =
+    private static readonly Dictionary<LabTargetKind, IReadOnlySet<string>> AllowedKinds =
         new Dictionary<LabTargetKind, IReadOnlySet<string>>
         {
             [LabTargetKind.Container] = new HashSet<string>(StringComparer.Ordinal) { "kill", "pause", "disk_fill", "corrupt_file", "corrupt_registry" },

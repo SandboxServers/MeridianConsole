@@ -42,7 +42,7 @@ public sealed class FaultBookTests : IDisposable
     [Fact]
     public async Task FaultBook_DeadlineHealsAtHealAfterS()
     {
-        var book = Book();
+        using var book = Book();
         await book.StartAsync(CancellationToken.None);
         Assert.True((await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None)).IsSuccess);
 
@@ -59,7 +59,7 @@ public sealed class FaultBookTests : IDisposable
     [Fact]
     public async Task LeaseEnd_HealsAllFaults()
     {
-        var book = Book();
+        using var book = Book();
         Assert.True((await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None)).IsSuccess);
 
         var ended = new LeaseHistoryEntry("owner", "purpose", _time.GetUtcNow(), _time.GetUtcNow(), default, null, null);
@@ -73,7 +73,7 @@ public sealed class FaultBookTests : IDisposable
     public async Task FaultBook_RecoveryHealsJournalledEntry_AndRunsReconcile()
     {
         await _journal.WriteAsync([Entry("f-recover", FaultState.Active)], CancellationToken.None);
-        var book = Book();
+        using var book = Book();
 
         await book.StartAsync(CancellationToken.None);
 
@@ -87,7 +87,7 @@ public sealed class FaultBookTests : IDisposable
     [Fact]
     public async Task FaultBook_SecondSameKindSameTarget_FaultActive()
     {
-        var book = Book();
+        using var book = Book();
         var first = await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None);
         Assert.True(first.IsSuccess);
 
@@ -101,7 +101,7 @@ public sealed class FaultBookTests : IDisposable
     [Fact]
     public async Task FaultBook_HealErrorRetriedOnceThenReported()
     {
-        var book = Book();
+        using var book = Book();
         var fault = (await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None)).Value;
         _kind.HealError = "[Lab.FaultKind] still paused";
 
@@ -119,7 +119,7 @@ public sealed class FaultBookTests : IDisposable
     [Fact]
     public async Task FaultBook_IsFaulted_WindowAfterHeal()
     {
-        var book = Book();
+        using var book = Book();
         var fault = (await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None)).Value;
         Assert.True(book.IsFaulted(TargetId));
 
@@ -139,7 +139,7 @@ public sealed class FaultBookTests : IDisposable
         {
             seen = _journal.ReadAsync(CancellationToken.None).GetAwaiter().GetResult().Value.SingleOrDefault()?.State;
         };
-        var book = Book();
+        using var book = Book();
 
         Assert.True((await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None)).IsSuccess);
 
@@ -149,7 +149,7 @@ public sealed class FaultBookTests : IDisposable
     [Fact]
     public async Task FaultBook_CrashAfterInjectBeforeActive_RecoveryHeals()
     {
-        var book = Book(new ThrowOnActiveJournal(_journal));
+        using var book = Book(new ThrowOnActiveJournal(_journal));
 
         var begun = await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None);
 
@@ -157,7 +157,7 @@ public sealed class FaultBookTests : IDisposable
         Assert.Single(_kind.Injected);
 
         // A new book on the same state folder: recovery heals the entry that the journal still holds as Prepared.
-        var restarted = Book();
+        using var restarted = Book();
         await restarted.StartAsync(CancellationToken.None);
 
         Assert.Empty(_kind.Injected);
@@ -169,7 +169,7 @@ public sealed class FaultBookTests : IDisposable
     public async Task FaultBook_PreparedNeverInjected_HealSucceeds()
     {
         await _journal.WriteAsync([Entry("f-prepared", FaultState.Prepared)], CancellationToken.None);
-        var book = Book();
+        using var book = Book();
 
         await book.StartAsync(CancellationToken.None);
 
@@ -182,7 +182,7 @@ public sealed class FaultBookTests : IDisposable
     public async Task FaultBook_InjectFails_PartialHealed()
     {
         _kind.InjectError = "[Lab.FaultKind] inject failed halfway";
-        var book = Book();
+        using var book = Book();
 
         var begun = await book.BeginAsync(Kind, TargetId, Args("{}"), 120, CancellationToken.None);
 
@@ -195,7 +195,7 @@ public sealed class FaultBookTests : IDisposable
     [Fact]
     public async Task FaultBook_HealAfterSOutOfRange_IsInvalidArgument()
     {
-        var book = Book();
+        using var book = Book();
 
         var result = await book.BeginAsync(Kind, TargetId, Args("{}"), 0, CancellationToken.None);
 

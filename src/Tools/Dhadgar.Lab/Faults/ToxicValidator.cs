@@ -8,7 +8,7 @@ namespace Dhadgar.Lab.Faults;
 /// </summary>
 public static class ToxicValidator
 {
-    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, AttributeRange>> Allowed =
+    private static readonly Dictionary<string, IReadOnlyDictionary<string, AttributeRange>> Allowed =
         new Dictionary<string, IReadOnlyDictionary<string, AttributeRange>>(StringComparer.Ordinal)
         {
             ["latency"] = Ranges(("latency", 0, 60000), ("jitter", 0, 60000)),
@@ -62,7 +62,7 @@ public static class ToxicValidator
         return Result.Success();
     }
 
-    private static IReadOnlyDictionary<string, AttributeRange> Ranges(params (string Name, long Min, long Max)[] entries) =>
+    private static Dictionary<string, AttributeRange> Ranges(params (string Name, long Min, long Max)[] entries) =>
         entries.ToDictionary(entry => entry.Name, entry => new AttributeRange(entry.Min, entry.Max), StringComparer.Ordinal);
 
     private sealed record AttributeRange(long Min, long Max);

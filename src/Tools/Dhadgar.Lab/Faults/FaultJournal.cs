@@ -104,6 +104,11 @@ public sealed class FaultJournal : IFaultJournal
         }
     }
 
+    /// <summary>
+    /// Forces the bytes to the disk. Kept out of the async write: <see cref="FileStream.Flush(bool)"/> blocks, and this is the only call that reaches the disk.
+    /// </summary>
+    private static void FlushToDisk(FileStream stream) => stream.Flush(flushToDisk: true);
+
     /// <inheritdoc />
     public async Task<Result> WriteAsync(IReadOnlyList<FaultJournalEntry> entries, CancellationToken ct)
     {
@@ -119,7 +124,7 @@ public sealed class FaultJournal : IFaultJournal
             await using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
             {
                 await stream.WriteAsync(bytes, ct).ConfigureAwait(false);
-                stream.Flush(flushToDisk: true);
+                FlushToDisk(stream);
             }
 
             File.Move(temp, _path, overwrite: true);

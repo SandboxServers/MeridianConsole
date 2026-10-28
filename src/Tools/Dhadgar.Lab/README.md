@@ -101,6 +101,15 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 - `ContainerLogFollower` follows a lab container with `docker --context <Lab:Docker:LinuxContext|desktop-linux> logs -f --since <ISO> <container>`, only for names starting `meridian-lab-`, and never relaunches.
 - `logs_tail` reads the ring: `process` (required), `since` (ISO or `-<n>m` / `-<n>s`), `contains`, `level`, `category`, `max_lines` (default 200, cap 2000). `daemon` returns an empty list; unknown names return `[Lab.NotFound]`.
 
+## Faults and blast radius
+
+- Every mutating fault tool resolves its target through `FaultTargetGuard`, which runs three separate checks in order: the registry (the id is registered and the kind is allowed on that target kind), the live Docker inspect (stored id matches, label `meridian-lab=1`, name starts `/meridian-lab-`, lab context), and the tripwire (`postgres`, `cache`, `messaging`, anything starting `dhadgar`, or any named-volume mount is refused). `m:host` is refused for every fault kind.
+- Toxiproxy is reached only at `127.0.0.1:18474` through `LabHosts.IsLabInfraEndpoint`. Proxies must be in the C10 table (`ProxyCatalog`).
+- `FaultBook` is the one place faults start and end. Each fault is journalled as `Prepared` in `faults.json` (temp file, flush to disk, then move) before anything changes a target; a crash leaves either nothing changed or an entry that startup recovery heals. Recovery also runs each kind's reconcile, which for the Toxiproxy kinds is `ResetAsync`.
+- Lifetimes: `heal_after_s` defaults to 120 and must be 1 to 900. A 1 s sweeper heals overdue faults on `TimeProvider`. Lease end heals every fault. A heal error is retried once, then the entry stays journalled with `heal_error` and `faults_active` reports it. At most 16 faults are active, and one fault per kind per target.
+- Tools: `fault_list_targets` and `faults_active` (Open); `fault_toxic_add`, `fault_proxy_disable`, `fault_partition`, `fault_heal`, `fault_reset` (Leased). A partition disables every C10 proxy on the edge `<from>-<to>` or `<to>-<from>` under one fault id; an edge with no proxy is `[Lab.InvalidArgument]`.
+- Refused by design: any target the registry does not know, a labelled container that is not registered, an unlabelled container even when registered, and any fault kind not listed for the target kind. Fault arguments reach the audit log through `Redactor`.
+
 ## Tool tiers
 
 Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate before it runs anything.

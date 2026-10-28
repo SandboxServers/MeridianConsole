@@ -66,7 +66,7 @@ public sealed record FaultHealRecord(string FaultId, string Kind, string TargetI
 /// The fault book: write-ahead journal, deadlines, recovery and lease-end healing (L19). A singleton and a hosted service.
 /// Every mutating call runs under one gate, so the journal is written in the order the changes happen.
 /// </summary>
-public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, IHostedService
+public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, IHostedService, IDisposable
 {
     /// <summary>
     /// Most faults that may be journalled at once.
@@ -352,6 +352,14 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, 
     }
 
     /// <inheritdoc />
+    public void Dispose()
+    {
+        _sweeper?.Dispose();
+        _gate.Dispose();
+        _sweepGate.Dispose();
+    }
+
+    /// <inheritdoc />
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _sweeper?.Dispose();
@@ -437,7 +445,7 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource, 
     /// </summary>
     private async Task SweepOnceAsync(CancellationToken ct)
     {
-        if (!_sweepGate.Wait(0))
+        if (!_sweepGate.Wait(0, CancellationToken.None))
         {
             return;
         }
