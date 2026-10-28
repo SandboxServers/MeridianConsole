@@ -299,6 +299,62 @@ public sealed class ResultsDb : IDisposable
             ("$id", signatureId), ("$pattern", "%\"" + signatureId + "\"%"));
     }
 
+    /// <summary>
+    /// Replaces the coverage hits of one run (C12 <c>coverage</c>, L52): the run's rows are deleted, then each hit is written.
+    /// Re-ingesting a run therefore never doubles its hits.
+    /// </summary>
+    /// <param name="runId">The run.</param>
+    /// <param name="records">The run's hits; each record's <see cref="CoverageRecord.RunId"/> is this run.</param>
+    public Result ReplaceCoverage(string runId, IReadOnlyList<CoverageRecord> records)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        Result cleared = Execute("delete from coverage where run_id = $run_id;", ("$run_id", runId));
+        if (cleared.IsFailure)
+        {
+            return cleared;
+        }
+
+        foreach (CoverageRecord record in records)
+        {
+            Result written = Execute(
+                """
+                insert into coverage (run_id, kind, key, hits) values ($run_id, $kind, $key, $hits)
+                on conflict(run_id, kind, key) do update set hits = excluded.hits;
+                """,
+                ("$run_id", record.RunId), ("$kind", record.Kind), ("$key", record.Key), ("$hits", record.Hits));
+            if (written.IsFailure)
+            {
+                return written;
+            }
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// The coverage hits of the runs from <paramref name="sinceRunId"/> to the newest (all runs when null), summed per kind
+    /// and key, optionally for one kind. An unknown <paramref name="sinceRunId"/> is a failure.
+    /// </summary>
+    /// <param name="sinceRunId">The first run of the window, or null for all runs.</param>
+    /// <param name="kind">One coverage kind, or null for all.</param>
+    public Result<IReadOnlyList<JsonObject>> CoverageSince(string? sinceRunId, string? kind)
+    {
+        if (sinceRunId is not null && ScalarLong("select count(*) from runs where run_id = $id;", ("$id", sinceRunId)) == 0)
+        {
+            return Result<IReadOnlyList<JsonObject>>.Failure("[Lab.NotFound] no run has that since_run_id");
+        }
+
+        return ReadObjects(
+            """
+            select kind, key, sum(hits) as hits from coverage
+            where ($since is null or run_id in (select run_id from runs
+              where rowid >= (select rowid from runs where run_id = $since)))
+              and ($kind is null or kind = $kind)
+            group by kind, key order by kind, key;
+            """,
+            ("$since", sinceRunId), ("$kind", kind));
+    }
+
     /// <summary>Maps a nullable flag to the 0/1 integer SQLite stores.</summary>
     private static long? Flag(bool? value) => value is null ? null : value.Value ? 1L : 0L;
 
@@ -727,3 +783,7 @@ public sealed record FlakeRecord(string Section, string RowId, long Seed, string
 
 /// <summary>One run's grade of a row and seed, with the build that run used (<see cref="ResultsDb.GradesOf"/>).</summary>
 public sealed record RowGradeOf(string RunId, string Grade, string? BuildId);
+
+/// <summary>One behavioural-coverage hit count of a run (C12 <c>coverage</c>, L52). The key holds templates, status classes,
+/// error codes and check ids only (R-LOG).</summary>
+public sealed record CoverageRecord(string RunId, string Kind, string Key, long Hits);
