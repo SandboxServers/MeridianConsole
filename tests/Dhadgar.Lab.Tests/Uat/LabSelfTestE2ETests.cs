@@ -30,6 +30,7 @@ public sealed class LabSelfTestE2ETests
         string repoRoot = LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory);
         string home = Path.Combine(Path.GetTempPath(), "meridian-lab-s6-" + Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(home);
+        RemoveLabContainers();
         try
         {
             string token = NewToken();
@@ -84,6 +85,7 @@ public sealed class LabSelfTestE2ETests
         }
         finally
         {
+            RemoveLabContainers();
             if (Directory.Exists(home))
             {
                 Directory.Delete(home, recursive: true);
@@ -92,11 +94,45 @@ public sealed class LabSelfTestE2ETests
     }
 
     /// <summary>
+    /// Removes containers labelled <c>meridian-lab=1</c> (and their anonymous volumes). The daemon under test starts with an empty
+    /// target registry, so its <c>stack_up wipe</c> cannot see containers left by an earlier run; those would keep the old
+    /// Postgres roles and reject the new run's passwords. Only lab-labelled containers are touched.
+    /// </summary>
+    private static void RemoveLabContainers()
+    {
+        string ids = RunDocker(["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1"]);
+        foreach (string id in ids.Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            _ = RunDocker(["rm", "-f", "-v", id]);
+        }
+    }
+
+    private static string RunDocker(string[] args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("docker") { RedirectStandardOutput = true, RedirectStandardError = true };
+        psi.ArgumentList.Add("--context");
+        psi.ArgumentList.Add("desktop-linux");
+        foreach (string arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = System.Diagnostics.Process.Start(psi)!;
+        string output = process.StandardOutput.ReadToEnd();
+        _ = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return output;
+    }
+
+    /// <summary>
     /// Checks the <c>uat_run</c> result: overall pass, every row graded pass, the bundle's secret scan passed, and ledger.md written.
     /// </summary>
     private static void AssertRunPasses(JsonElement root, string home, string repoRoot)
     {
-        Assert.Equal("pass", root.GetProperty("overall").GetString());
+        string rowsText = root.GetProperty("rows").GetRawText();
+        Assert.True(
+            root.GetProperty("overall").GetString() == "pass",
+            "overall " + root.GetProperty("overall").GetString() + "; rows: " + rowsText[..Math.Min(3000, rowsText.Length)]);
         foreach (var row in root.GetProperty("rows").EnumerateArray())
         {
             Assert.Equal("pass", row.GetProperty("grade").GetString());
