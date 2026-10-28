@@ -57,14 +57,16 @@ public sealed class UatAttestTests : IDisposable
         }
     }
 
+    private static readonly AttestedBy Attester = new("owner-a", "mcp");
+
     [Fact]
     public void Attest_HumanClauseHeld_GradesRowPass()
     {
         using var vault = new SecretVault();
         var redactor = new Redactor(vault);
 
-        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "pass",
-            "checked by hand", At, redactor, _validator);
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+            "checked by hand", At, Attester, redactor, _validator);
 
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal("PASS", result.Value);
@@ -72,7 +74,7 @@ public sealed class UatAttestTests : IDisposable
         Assert.Contains("\"grade\": \"PASS\"", row);
         Assert.Contains("\"state\": \"Held\"", row);
         Assert.Contains("\"clause_id\": \"human-look\"", row);
-        Assert.Contains("\"verdict\": \"pass\"", row);
+        Assert.Contains("\"verdict\": \"held\"", row);
         string ledger = File.ReadAllText(Path.Combine(_folder, "ledger.md"));
         Assert.Contains("PASS", ledger);
     }
@@ -85,8 +87,93 @@ public sealed class UatAttestTests : IDisposable
         string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
         string before = File.ReadAllText(rowPath);
 
-        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "auto-check", "pass",
-            null, At, redactor, _validator);
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "auto-check", "held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument]", result.Error);
+        Assert.Equal(before, File.ReadAllText(rowPath));
+    }
+
+    [Fact]
+    public void Attest_PassVocabulary_IsRefused()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "pass",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument]", result.Error);
+    }
+
+    [Fact]
+    public void Attest_RecordsLeaseOwnerAndCaller()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string row = File.ReadAllText(Path.Combine(_folder, "rows", Section, Row + ".json"));
+        Assert.Contains("\"lease_owner\": \"owner-a\"", row);
+        Assert.Contains("\"caller\": \"mcp\"", row);
+        string ledger = File.ReadAllText(Path.Combine(_folder, "ledger.md"));
+        Assert.Contains("- Attested: human-look held by owner-a via mcp", ledger);
+    }
+
+    [Fact]
+    public void Attest_SetsFidelityEvidenceOnly()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "not_held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string run = File.ReadAllText(Path.Combine(_folder, "run.json"));
+        Assert.Contains("\"fidelity\": \"evidence_only\"", run);
+    }
+
+    [Fact]
+    public void Attest_SkippedRow_IsRefused()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
+        File.WriteAllText(rowPath, File.ReadAllText(rowPath).Replace("\"grade\": \"NEEDS_HUMAN\"", "\"grade\": \"SKIPPED\"", StringComparison.Ordinal));
+        string before = File.ReadAllText(rowPath);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument]", result.Error);
+        Assert.Equal(before, File.ReadAllText(rowPath));
+    }
+
+    public static TheoryData<string?, string> BadNoteOrClauseId => new()
+    {
+        { new string('a', 1001), "human-look" },
+        { "a\nb", "human-look" },
+        { "ok", "../x" },
+    };
+
+    [Theory]
+    [MemberData(nameof(BadNoteOrClauseId))]
+    public void Attest_LongNote_ControlCharNote_BadClauseId_AreRefused(string? note, string clauseId)
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
+        string before = File.ReadAllText(rowPath);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, clauseId, "held",
+            note, At, Attester, redactor, _validator);
 
         Assert.True(result.IsFailure);
         Assert.Contains("[Lab.InvalidArgument]", result.Error);
