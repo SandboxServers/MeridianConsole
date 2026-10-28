@@ -170,6 +170,7 @@
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="FluentAssertions" Version="8.11.0" />
+    <PackageVersion Include="CsCheck" Version="5.0.0" />
     <!-- >= 2.7.5 patches GHSA-v5pm-xwqc-g5wc -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.13.0" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.18.3" />

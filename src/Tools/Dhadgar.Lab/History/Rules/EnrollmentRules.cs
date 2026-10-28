@@ -78,21 +78,23 @@ public static class EnrollmentRules
         }
     }
 
-    /// <summary>E4: no 401 whose Complete precedes the Invoke of the op that took effect.</summary>
+    /// <summary>
+    /// E4: no 401 whose Complete precedes the Invoke of the op that took effect. That op is the earliest-invoked
+    /// winner (an Ok, or an Unknown whose node exists); a later same-key retry that returns the same node did not take effect.
+    /// </summary>
     private static void CheckRefusedBeforeEffect(IReadOnlyList<HistoryOp> ops, IReadOnlyList<JsonElement> nodes, List<HistoryViolation> violations)
     {
-        var winners = ops.Where(o => o.Outcome == OpOutcome.Ok || (o.Outcome == OpOutcome.Unknown && FindNodeByHostname(o, nodes) is not null)).ToList();
+        var effective = ops.FirstOrDefault(o => o.Outcome == OpOutcome.Ok || (o.Outcome == OpOutcome.Unknown && FindNodeByHostname(o, nodes) is not null));
+        if (effective is null)
+        {
+            return;
+        }
+
         foreach (var refusal in ops.Where(o => o.Outcome == OpOutcome.Fail && EnrollmentHistoryModel.Status(o) == 401))
         {
-            if (refusal.CompleteSeq is not long refusedAt)
+            if (refusal.CompleteSeq is long refusedAt && refusedAt < effective.InvokeSeq)
             {
-                continue;
-            }
-
-            var winner = winners.FirstOrDefault(w => w.InvokeSeq > refusedAt);
-            if (winner is not null)
-            {
-                Add(violations, "E4", [refusal.OpId, winner.OpId], "a 401 was returned before the token was used by a later enroll", required: true);
+                Add(violations, "E4", [refusal.OpId, effective.OpId], "a 401 was returned before the token was used by a later enroll", required: true);
             }
         }
     }
