@@ -25,7 +25,6 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
     private readonly AgentMeter _meter;
     private readonly AgentActivitySource _activitySource;
     private readonly ILogger<ControlPlaneClient> _logger;
-    private readonly IHubConnectionConfigurator[] _configurators;
     private readonly ControlPlaneHubTransport _transport;
     private readonly IAgentIdentityProvider _identity;
 
@@ -46,8 +45,7 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         AgentActivitySource activitySource,
         ILogger<ControlPlaneClient> logger,
         IAgentIdentityProvider identityProvider,
-        ControlPlaneHubTransport? transport = null,
-        IEnumerable<IHubConnectionConfigurator>? configurators = null)
+        ControlPlaneHubTransport? transport = null)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _certificateStore = certificateStore ?? throw new ArgumentNullException(nameof(certificateStore));
@@ -56,12 +54,6 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _identity = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
         _transport = transport ?? new ControlPlaneHubTransport();
-        _configurators = configurators?.ToArray() ?? [];
-
-        if (_configurators.Length > 0)
-        {
-            _logger.LogWarning("{Count} hub connection configurator(s) registered; test/diagnostic only", _configurators.Length);
-        }
     }
 
     public async Task<Result> ConnectAsync(CancellationToken cancellationToken = default)
@@ -128,27 +120,6 @@ public sealed class ControlPlaneClient : IControlPlaneClient, IAsyncDisposable
                     // certificate is presented when ConnectAsync rebuilds the connection; AgentBootstrapService disconnects after renewal.
                     options.ClientCertificates = [clientCert];
                     options.Headers[AgentHubProtocol.VersionHeader] = AgentHubProtocol.CurrentVersion;
-
-                    // Runs last: configurators see the agent's own options and may adjust them, but must not
-                    // remove the client certificate. Production registers none (see IHubConnectionConfigurator).
-                    foreach (var configurator in _configurators)
-                    {
-                        configurator.Configure(options);
-                    }
-
-                    // Fail closed: a configurator must not have moved the connection off HTTPS or removed the
-                    // client certificate the agent applied above.
-                    if (options.Url is null || options.Url.Scheme != Uri.UriSchemeHttps)
-                    {
-                        throw new InvalidOperationException(
-                            "Hub connection configurators must not change the endpoint away from HTTPS");
-                    }
-
-                    if (options.ClientCertificates is null || !options.ClientCertificates.Contains(clientCert))
-                    {
-                        throw new InvalidOperationException(
-                            "Hub connection configurators must not remove the client certificate");
-                    }
                 })
                 .WithAutomaticReconnect(new RetryPolicy(_options.ControlPlane))
                 .ConfigureLogging(logging =>
