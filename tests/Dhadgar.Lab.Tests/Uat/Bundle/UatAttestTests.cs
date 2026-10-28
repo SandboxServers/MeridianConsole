@@ -460,6 +460,135 @@ public sealed class UatAttestTests : IDisposable
     }
 
     [Fact]
+    public async Task Writer_KnownIssuesUnchecked_KnownFailuresNull()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l25-writer-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            (string folder, _) = await WriteRunBundleAsync(root, HiddenExpectSpec, "writer-unchecked.toml");
+
+            JsonNode? runJson = await ReadRunJsonAsync(folder);
+            Assert.Null(runJson?["known_failures"]);
+            Assert.False(runJson?["known_issues"]?["checked"]?.GetValue<bool>());
+            Assert.Equal(KnownIssueCheck.BundleUncheckedReason, runJson?["known_issues"]?["reason"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Attest_KnownIssuesUnchecked_KnownFailuresNull()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l25-attest-unchecked-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            (string folder, string runId) = await WriteRunBundleAsync(root, BuildLineSpec, "attest-unchecked.toml");
+            using var vault = new SecretVault();
+            var redactor = new Redactor(vault);
+
+            Result<string> result = BundleAttestor.Attest(folder, runId, "attest-build", "key-build", "human-look",
+                "held", null, At, Attester, redactor, _validator);
+
+            Assert.True(result.IsSuccess, result.Error);
+            JsonNode? runJson = await ReadRunJsonAsync(folder);
+            Assert.Null(runJson?["known_failures"]);
+            Assert.False(runJson?["known_issues"]?["checked"]?.GetValue<bool>());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Attest_ReingestsBundle_DbRowGradeUpdated()
+    {
+        string lab = Path.Combine(_root, "lab");
+        _ = Directory.CreateDirectory(Path.Combine(lab, "uat-runs"));
+        string bundle = Path.Combine(lab, "uat-runs", Path.GetFileName(_folder));
+        Directory.Move(_folder, bundle);
+        var time = new FakeTimeProvider(At);
+        var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+        LeaseGrant grant = leases.Acquire("owner-b", "uat", null, false, null).Value;
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        using var results = new ResultsService(LabPaths.FromRoot(lab), _validator, redactor, new ServiceCollection().BuildServiceProvider(),
+            NullLoggerFactory.Instance, time);
+        Assert.True((await results.IngestAsync(bundle, CancellationToken.None)).IsSuccess);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases, vault, results);
+        JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-3", grant.LeaseId, "mcp-test"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.True(result.Value.GetProperty("ingest").GetProperty("ok").GetBoolean());
+        Result<IReadOnlyList<RowGradeOf>> grades = await results.ReadAsync(db => db.GradesOf(Section, Row, 0), CancellationToken.None);
+        Assert.True(grades.IsSuccess, grades.Error);
+        Assert.Equal("PASS", Assert.Single(grades.Value).Grade);
+    }
+
+    [Fact]
+    public async Task Attest_IngestFails_AttestStillCommitted()
+    {
+        string lab = Path.Combine(_root, "lab");
+        _ = Directory.CreateDirectory(Path.Combine(lab, "uat-runs"));
+        await File.WriteAllTextAsync(Path.Combine(lab, "results"), "a file where the results folder belongs", CancellationToken.None);
+        string bundle = Path.Combine(lab, "uat-runs", Path.GetFileName(_folder));
+        Directory.Move(_folder, bundle);
+        var time = new FakeTimeProvider(At);
+        var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+        LeaseGrant grant = leases.Acquire("owner-b", "uat", null, false, null).Value;
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        using var results = new ResultsService(LabPaths.FromRoot(lab), _validator, redactor, new ServiceCollection().BuildServiceProvider(),
+            NullLoggerFactory.Instance, time);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases, vault, results);
+        JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-4", grant.LeaseId, "mcp-test"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string row = await File.ReadAllTextAsync(Path.Combine(bundle, "rows", Section, Row + ".json"));
+        Assert.Contains("\"lease_owner\": \"owner-b\"", row);
+        JsonElement ingest = result.Value.GetProperty("ingest");
+        Assert.False(ingest.GetProperty("ok").GetBoolean());
+        Assert.Contains("[Lab.Unavailable]", ingest.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>Runs one spec through the runner into a bundle under <paramref name="root"/> and returns the folder and run id.</summary>
+    private async Task<(string Folder, string RunId)> WriteRunBundleAsync(string root, string specText, string specName)
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        var time = new FakeTimeProvider(At);
+        using var audit = new AuditLog(LabPaths.FromRoot(root), _validator, redactor, time);
+        var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+        var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new AcceptingStub() }), leases, audit, redactor, time);
+        var runner = new UatRunner(dispatcher, leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), new ProbeYes(), time);
+        UatSpec spec = SpecLoader.LoadText(specName, specText).Spec!;
+        var writer = new BundleWriter(Path.Combine(root, "uat-runs"), _validator, redactor, new SecretScanner(vault), time,
+            "nobuild", "test-system", "test-build", null);
+
+        Result<UatRunResult> run = await runner.RunAsync(
+            new UatRunRequest(spec, null, 1UL, null, null, PlanOnly: false), writer, CancellationToken.None);
+
+        Assert.True(run.IsSuccess, run.Error);
+        Assert.NotNull(writer.Folder);
+        return (writer.Folder!, run.Value!.RunId);
+    }
+
+    private static async Task<JsonNode?> ReadRunJsonAsync(string folder) =>
+        JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(folder, "run.json"), CancellationToken.None));
+
+    [Fact]
     public void Attest_SetsFidelityEvidenceOnly()
     {
         using var vault = new SecretVault();
