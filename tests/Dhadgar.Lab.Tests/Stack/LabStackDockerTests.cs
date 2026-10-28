@@ -12,6 +12,7 @@ namespace Dhadgar.Lab.Tests.Stack;
 /// Drives the real lab stack against the Docker engine behind the <c>desktop-linux</c> context. Runs only where
 /// Docker and the network are available. Tears down with wipe in <c>finally</c>.
 /// </summary>
+[Collection("LabDockerStack")]
 public sealed class LabStackDockerTests
 {
     private const string LinuxContext = "desktop-linux";
