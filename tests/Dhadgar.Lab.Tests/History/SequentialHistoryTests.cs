@@ -17,11 +17,12 @@ public sealed class SequentialHistoryTests
     [Fact]
     public void SequentialHistories_AlwaysLinearizable()
     {
+        // A fixed seed makes the 200 generated cases the same on every run (the L50 determinism rule).
         Gen.Bool.Array[1, 10].Sample(actorBits =>
         {
             AssertSequentialLinearizable(idempotent: false, actorBits);
             AssertSequentialLinearizable(idempotent: true, actorBits);
-        }, iter: 200);
+        }, iter: 200, seed: "0N0XIzNsQ0O2");
     }
 
     /// <summary>

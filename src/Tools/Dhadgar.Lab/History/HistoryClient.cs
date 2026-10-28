@@ -54,6 +54,7 @@ public sealed class HistoryClient : IDisposable
     private readonly string _platform;
     private readonly List<ECDsa> _keys = [];
     private string? _reservedFirstOp;
+    private string? _reservedRetryOp;
 
     /// <summary>
     /// Creates the client for client number <paramref name="index"/> of a run.
@@ -118,6 +119,8 @@ public sealed class HistoryClient : IDisposable
 
         string? reserved = _reservedFirstOp;
         _reservedFirstOp = null;
+        string? reservedRetry = _reservedRetryOp;
+        _reservedRetryOp = null;
         Result<string> first = await EnrollOnceAsync(1, firstKey, _keyLabel, causedBy: null, ct, reserved).ConfigureAwait(false);
         if (first.IsFailure)
         {
@@ -132,7 +135,7 @@ public sealed class HistoryClient : IDisposable
 
         ECDsa retryKey = retry == HistoryRetry.SameKey ? firstKey : NewKey();
         string retryLabel = retry == HistoryRetry.SameKey ? _keyLabel : _keyLabel + "-retry";
-        Result<string> second = await EnrollOnceAsync(2, retryKey, retryLabel, first.Value, ct).ConfigureAwait(false);
+        Result<string> second = await EnrollOnceAsync(2, retryKey, retryLabel, first.Value, ct, reservedOpId: reservedRetry).ConfigureAwait(false);
         if (second.IsFailure)
         {
             return Result<HistoryClientOutcome>.Failure(second.Error);
@@ -147,8 +150,22 @@ public sealed class HistoryClient : IDisposable
     /// </summary>
     public Task<Result<HistoryClientOutcome>> RunAsync(HistoryRetry retry, string firstOpId, CancellationToken ct)
     {
+        return RunAsync(retry, firstOpId, null, ct);
+    }
+
+    /// <summary>
+    /// Runs the first enroll with a reserved op id and the retry with a reserved op id (the job arms both on the barrier proxy
+    /// before the requests; an unarmed retry op is answered 400 and never forwarded).
+    /// </summary>
+    /// <param name="retry">The retry mode.</param>
+    /// <param name="firstOpId">The reserved op id of the first enroll.</param>
+    /// <param name="retryOpId">The reserved op id of the retry, or null to allocate one.</param>
+    /// <param name="ct">The cancellation token.</param>
+    public Task<Result<HistoryClientOutcome>> RunAsync(HistoryRetry retry, string firstOpId, string? retryOpId, CancellationToken ct)
+    {
         ArgumentNullException.ThrowIfNull(firstOpId);
         _reservedFirstOp = firstOpId;
+        _reservedRetryOp = retryOpId;
         return RunAsync(retry, ct);
     }
 

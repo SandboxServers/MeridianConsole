@@ -118,6 +118,10 @@ public sealed class BarrierProxy : IAsyncDisposable
         {
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
             builder.Logging.ClearProviders();
+
+            // S-N5: no configuration source (Kestrel__Endpoints__* and the like) may add a listener; the one explicit loopback
+            // listener below is the only endpoint, and BoundPortOf refuses any other address.
+            builder.Configuration.Sources.Clear();
             builder.WebHost.ConfigureKestrel(k =>
             {
                 k.Listen(IPAddress.Loopback, port);
@@ -332,7 +336,13 @@ public sealed class BarrierProxy : IAsyncDisposable
         HttpResponseMessage response;
         try
         {
-            using HttpRequestMessage outbound = BuildOutbound(ctx, inbound.Bytes);
+            using HttpRequestMessage? outbound = BuildOutbound(ctx, inbound.Bytes);
+            if (outbound is null)
+            {
+                await WriteProblemAsync(ctx, 400, "lab.barrier.bad_target", "the request target does not stay on the lab upstream").ConfigureAwait(false);
+                return;
+            }
+
             response = await _client.SendAsync(outbound, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
@@ -377,10 +387,20 @@ public sealed class BarrierProxy : IAsyncDisposable
         }
     }
 
-    private HttpRequestMessage BuildOutbound(HttpContext ctx, byte[] body)
+    /// <summary>
+    /// Builds the forwarded request, or returns null when its target does not resolve to the upstream's scheme, host and port
+    /// (S-N1: a path that begins with two slashes is a network-path reference and would name another host).
+    /// </summary>
+    private HttpRequestMessage? BuildOutbound(HttpContext ctx, byte[] body)
     {
         string target = ctx.Request.Path.ToUriComponent() + ctx.Request.QueryString.ToUriComponent();
-        var request = new HttpRequestMessage(new HttpMethod(ctx.Request.Method), new Uri(_upstream, target));
+        var destination = new Uri(_upstream, target);
+        if (!StaysOnUpstream(destination))
+        {
+            return null;
+        }
+
+        var request = new HttpRequestMessage(new HttpMethod(ctx.Request.Method), destination);
         if (body.Length > 0)
         {
             request.Content = new ByteArrayContent(body);
@@ -438,14 +458,35 @@ public sealed class BarrierProxy : IAsyncDisposable
         || name.Equals("Expires", StringComparison.OrdinalIgnoreCase)
         || name.Equals("Last-Modified", StringComparison.OrdinalIgnoreCase);
 
+    private bool StaysOnUpstream(Uri destination) =>
+        Uri.Compare(destination, _upstream, UriComponents.SchemeAndServer, UriFormat.UriEscaped, StringComparison.OrdinalIgnoreCase) == 0
+        && LabHosts.IsLabEndpoint(destination);
+
     private static Result<int> BoundPortOf(WebApplication app)
     {
         IServerAddressesFeature? addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>();
-        string? first = addresses?.Addresses.FirstOrDefault();
-        return first is not null && Uri.TryCreate(first, UriKind.Absolute, out Uri? bound)
+        string[] all = addresses?.Addresses.ToArray() ?? [];
+        if (all.Length == 0)
+        {
+            return Result<int>.Failure("[Lab.Unavailable] the barrier proxy has no bound address");
+        }
+
+        // S-N5: every bound address must be loopback, whatever the configuration asked for.
+        if (!all.All(IsLoopbackAddress))
+        {
+            return Result<int>.Failure("[Lab.BlastRadius] the barrier proxy must bind only loopback addresses");
+        }
+
+        return Uri.TryCreate(all[0], UriKind.Absolute, out Uri? bound)
             ? Result<int>.Success(bound.Port)
             : Result<int>.Failure("[Lab.Unavailable] the barrier proxy has no bound address");
     }
+
+    private static bool IsLoopbackAddress(string address) =>
+        Uri.TryCreate(address, UriKind.Absolute, out Uri? uri)
+        && uri.Scheme == Uri.UriSchemeHttp
+        && IPAddress.TryParse(uri.Host.Trim('[', ']'), out IPAddress? ip)
+        && IPAddress.IsLoopback(ip);
 
     private static async Task<BoundedBody> ReadBoundedAsync(Stream stream, CancellationToken ct)
     {

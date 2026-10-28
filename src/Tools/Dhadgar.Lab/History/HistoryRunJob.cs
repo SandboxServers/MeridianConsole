@@ -49,7 +49,7 @@ public sealed record HistoryToken(string TokenId, string TokenRef);
 /// <param name="RunId">The run id; its first six hex characters form the hostname prefix.</param>
 /// <param name="RunFolder">The folder the observation lines are written to.</param>
 /// <param name="Scenario">The scenario from <c>enroll-history.toml</c>.</param>
-/// <param name="Clients">The number of clients (2..8).</param>
+/// <param name="Clients">The number of clients (1..8).</param>
 /// <param name="Seed">The run seed; client order and key labels come from <c>LabRandom(seed, "history:&lt;scenario&gt;")</c>.</param>
 /// <param name="Minimise">Whether a violation is minimised and re-run with fewer clients.</param>
 public sealed record HistoryRunRequest(
@@ -102,7 +102,10 @@ public sealed class HistoryRunJob
     /// <summary>The barrier that holds every client's first enroll until all have arrived (HoldRequest scenarios).</summary>
     public const string EnrollBarrier = "enroll-start";
 
-    /// <summary>The fewest clients a run uses (also the floor of the minimisation).</summary>
+    /// <summary>The fewest clients a run may be asked for (the shipped lost-response scenarios use one).</summary>
+    public const int MinRunClients = 1;
+
+    /// <summary>The fewest clients a minimisation re-run uses (the floor of the minimisation).</summary>
     public const int MinClients = 2;
 
     /// <summary>The most clients a run uses.</summary>
@@ -125,6 +128,7 @@ public sealed class HistoryRunJob
     private static readonly TimeSpan ClientsCap = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan BarrierWait = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan RunCap = TimeSpan.FromSeconds(300);
+    private static readonly TimeSpan CleanupCap = TimeSpan.FromSeconds(30);
 
     private readonly IHistoryEnvironment _environment;
     private readonly ILabObservationSink _sink;
@@ -169,13 +173,14 @@ public sealed class HistoryRunJob
     /// <summary>
     /// Runs the history, and when <see cref="HistoryRunRequest.Minimise"/> is set and the run violates, re-runs with the client
     /// count halved (down to two) while the violation recurs, at most <see cref="MaxReruns"/> times and inside 300 s.
+    /// A run of one client is accepted (<see cref="MinRunClients"/>); it is never minimised.
     /// </summary>
     public async Task<Result<HistoryRunResult>> RunAsync(HistoryRunRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.Clients < MinClients || request.Clients > MaxClients)
+        if (request.Clients < MinRunClients || request.Clients > MaxClients)
         {
-            return Result<HistoryRunResult>.Failure("[Lab.InvalidArgument] clients must be between 2 and 8");
+            return Result<HistoryRunResult>.Failure("[Lab.InvalidArgument] clients must be between 1 and 8");
         }
 
         DateTimeOffset started = _time.GetUtcNow();
@@ -189,10 +194,13 @@ public sealed class HistoryRunJob
         int reruns = 0;
         if (request.Minimise && best.Check.Verdict == LinearizabilityChecker.Violation)
         {
-            int clients = best.Clients;
-            while (clients > MinClients && reruns < _maxReruns && _time.GetUtcNow() - started < RunCap)
+            foreach (int clients in RerunClientCounts(best.Clients, _maxReruns))
             {
-                clients = Math.Max(MinClients, clients / 2);
+                if (_time.GetUtcNow() - started >= RunCap)
+                {
+                    break;
+                }
+
                 reruns++;
                 string rerunId = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
                 HistoryRunRequest rerun = request with
@@ -212,6 +220,54 @@ public sealed class HistoryRunJob
         }
 
         return Result<HistoryRunResult>.Success(new HistoryRunResult(best.RunId, best.Clients, reruns, best.History, best.Check));
+    }
+
+    /// <summary>
+    /// The client counts of the minimisation re-runs: the count halved (never below <see cref="MinClients"/>) each time, while it
+    /// is above <see cref="MinClients"/> and fewer than <paramref name="maxReruns"/> have been yielded.
+    /// </summary>
+    /// <param name="clients">The client count of the violating run.</param>
+    /// <param name="maxReruns">The re-run cap.</param>
+    /// <returns>For 8 and a cap of 20: 4, 2. For 8 and a cap of 1: 4. For 1: nothing.</returns>
+    internal static IEnumerable<int> RerunClientCounts(int clients, int maxReruns)
+    {
+        int current = clients;
+        int made = 0;
+        while (current > MinClients && made < maxReruns)
+        {
+            current = Math.Max(MinClients, current / 2);
+            made++;
+            yield return current;
+        }
+    }
+
+    /// <summary>
+    /// The barrier rules of one run: a hold or a drop for each client's first op, and a pass for each client's retry op (when the
+    /// scenario retries) so the retry reaches the upstream and is answered by the real endpoint.
+    /// </summary>
+    internal static IReadOnlyList<BarrierRule> BuildRules(
+        IReadOnlyList<int> order,
+        IReadOnlyDictionary<int, string> firstOps,
+        IReadOnlyDictionary<int, string> retryOps,
+        bool hold)
+    {
+        var rules = new List<BarrierRule>(order.Count * 2);
+        foreach (int index in order)
+        {
+            rules.Add(hold
+                ? new BarrierRule(firstOps[index], BarrierAction.HoldRequest, EnrollBarrier, 0)
+                : new BarrierRule(firstOps[index], BarrierAction.DropResponse, null, 0));
+        }
+
+        foreach (int index in order)
+        {
+            if (retryOps.TryGetValue(index, out string? retryOp))
+            {
+                rules.Add(new BarrierRule(retryOp, BarrierAction.Pass, null, 0));
+            }
+        }
+
+        return rules;
     }
 
     /// <summary>
@@ -292,6 +348,16 @@ public sealed class HistoryRunJob
             firstOps[index] = _sink.NextOp(request.RunId, ActorPrefix + index.ToString(CultureInfo.InvariantCulture)).ToString();
         }
 
+        // A retry gets its own reserved op id, so the barrier can forward it (an unarmed op is answered 400 and never sent).
+        var retryOps = new Dictionary<int, string>();
+        if (request.Scenario.Retry != HistoryRetry.None)
+        {
+            foreach (int index in order)
+            {
+                retryOps[index] = _sink.NextOp(request.RunId, ActorPrefix + index.ToString(CultureInfo.InvariantCulture)).ToString();
+            }
+        }
+
         Result<BarrierProxy> started = await BarrierProxy.StartAsync(upstream, LabPorts.Barrier, _sink, _time, ct, _listeners)
             .ConfigureAwait(false);
         if (started.IsFailure)
@@ -301,21 +367,11 @@ public sealed class HistoryRunJob
 
         await using BarrierProxy proxy = started.Value!;
         bool hold = request.Scenario.FirstOpAction == HistoryFirstOpAction.HoldRequest;
-        IReadOnlyList<BarrierRule> rules = order
-            .Select(index => hold
-                ? new BarrierRule(firstOps[index], BarrierAction.HoldRequest, EnrollBarrier, 0)
-                : new BarrierRule(firstOps[index], BarrierAction.DropResponse, null, 0))
-            .ToList();
+        IReadOnlyList<BarrierRule> rules = BuildRules(order, firstOps, retryOps, hold);
         Result armed = proxy.Arm(request.RunId, rules);
         if (armed.IsFailure)
         {
             return Result<Attempt>.Failure(armed.Error);
-        }
-
-        Result injected = await _environment.InjectFaultsAsync(request.Scenario.Faults, ct).ConfigureAwait(false);
-        if (injected.IsFailure)
-        {
-            return Result<Attempt>.Failure(injected.Error);
         }
 
         var endpoint = new Uri("http://127.0.0.1:" + LabPorts.Barrier.ToString(CultureInfo.InvariantCulture) + EnrollPath);
@@ -324,8 +380,20 @@ public sealed class HistoryRunJob
         using var http = new HttpClient(_handler, disposeHandler: false);
         var clients = new List<HistoryClient>();
         var tasks = new List<Task<Result<HistoryClientOutcome>>>();
+
+        // Faults are healed and the run is ended on every path once injection has begun (N7, S-N4): a failed or cancelled
+        // step must not leave a fault active or the run open. The cleanup uses its own short deadline, not the caller's token.
+        using var cleanup = new CancellationTokenSource(CleanupCap);
+        Result healed = Result.Success();
+        Result<long> ended = Result<long>.Success(0);
         try
         {
+            Result injected = await _environment.InjectFaultsAsync(request.Scenario.Faults, ct).ConfigureAwait(false);
+            if (injected.IsFailure)
+            {
+                return Result<Attempt>.Failure(injected.Error);
+            }
+
             foreach (int index in order)
             {
                 var client = new HistoryClient(
@@ -341,7 +409,7 @@ public sealed class HistoryRunJob
                     _redactor,
                     _time);
                 clients.Add(client);
-                tasks.Add(client.RunAsync(request.Scenario.Retry, firstOps[index], ct));
+                tasks.Add(client.RunAsync(request.Scenario.Retry, firstOps[index], retryOps.GetValueOrDefault(index), ct));
             }
 
             if (hold)
@@ -365,13 +433,19 @@ public sealed class HistoryRunJob
             {
                 client.Dispose();
             }
+
+            healed = await _environment.HealFaultsAsync(cleanup.Token).ConfigureAwait(false);
+            ended = await _sink.EndRunAsync(request.RunId, cleanup.Token).ConfigureAwait(false);
         }
 
-        _ = await _environment.HealFaultsAsync(ct).ConfigureAwait(false);
-        Result<long> ended = await _sink.EndRunAsync(request.RunId, ct).ConfigureAwait(false);
         if (ended.IsFailure)
         {
             return Result<Attempt>.Failure(ended.Error);
+        }
+
+        if (healed.IsFailure)
+        {
+            return Result<Attempt>.Failure("[Lab.Unavailable] a fault could not be healed: " + healed.Error);
         }
 
         Result<JsonElement> final = await _environment.SnapshotAsync(tokenId, run6, ct).ConfigureAwait(false);

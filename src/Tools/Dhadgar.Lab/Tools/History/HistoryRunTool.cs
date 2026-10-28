@@ -20,7 +20,7 @@ namespace Dhadgar.Lab.Tools;
 
 /// <summary>
 /// Arguments of <c>history_run</c>. <c>scenario</c> is a C19 scenario id from <c>catalog/enroll-history.toml</c>;
-/// <c>clients</c> (2..8) overrides the scenario default; <c>minimise</c> defaults to true; <c>replay</c> is the run id of an
+/// <c>clients</c> (1..8) overrides the scenario default; <c>minimise</c> defaults to true; <c>replay</c> is the run id of an
 /// earlier history bundle: its scenario, seed and client count are re-run (up to five attempts, schedule approximate) and
 /// compared by grade. <c>lease_id</c> is used when it matches the current lease; without it the run takes its own lease.
 /// </summary>
@@ -39,8 +39,8 @@ public sealed record HistoryRunArgs(
 public sealed class DispatchedHistoryEnvironment : IHistoryEnvironment
 {
     private const string FaultIdField = "fault_id";
-    private const string TokenSql = "SELECT \"IsRevoked\" AS revoked, \"UsedAt\" AS used_at FROM enrollment_tokens WHERE \"Id\" = CAST(@id AS uuid)";
-    private const string NodesSql = "SELECT n.\"Name\" AS name, (SELECT count(*) FROM agent_certificates c WHERE c.\"NodeId\" = n.\"Id\" AND NOT c.\"IsRevoked\") AS active_certificates FROM nodes n WHERE n.\"Name\" LIKE @prefix ORDER BY n.\"Name\"";
+    private const string TokenSql = "SELECT CAST(\"Id\" AS text) AS id, \"IsRevoked\" AS revoked, \"UsedAt\" AS used_at, CAST(\"UsedByNodeId\" AS text) AS used_by_node_id FROM enrollment_tokens WHERE \"Id\" = CAST(@id AS uuid)";
+    private const string NodesSql = "SELECT CAST(n.\"Id\" AS text) AS id, n.\"Name\" AS name, (SELECT count(*) FROM agent_certificates c WHERE c.\"NodeId\" = n.\"Id\" AND NOT c.\"IsRevoked\") AS active_certs FROM nodes n WHERE n.\"Name\" LIKE @prefix ORDER BY n.\"Name\"";
 
     private readonly LabToolDispatcher _dispatcher;
     private readonly string? _leaseId;
@@ -154,31 +154,50 @@ public sealed class DispatchedHistoryEnvironment : IHistoryEnvironment
             return Result<JsonElement>.Failure(nodes.Error);
         }
 
-        JsonNode tokenState = new JsonObject { ["revoked"] = false, ["used_at"] = null };
-        if (Rows(token.Value).FirstOrDefault() is { } tokenRow)
+        return Result<JsonElement>.Success(BuildSnapshot(tokenId, token.Value, nodes.Value));
+    }
+
+    /// <summary>
+    /// Maps the two <c>db_query</c> payloads to the snapshot shape the enrollment rules read: <c>token</c> with
+    /// <c>id</c>, <c>revoked</c>, <c>used_at</c> and <c>used_by_node_id</c>; <c>nodes</c> with <c>id</c>, <c>name</c> and
+    /// <c>active_certs</c>. Each payload is <c>{"rows":[...]}</c>; a missing row gives the unused, unrevoked default.
+    /// </summary>
+    /// <param name="tokenId">The token row id (the history key).</param>
+    /// <param name="tokenPayload">The token <c>db_query</c> payload.</param>
+    /// <param name="nodesPayload">The nodes <c>db_query</c> payload.</param>
+    /// <returns>The snapshot.</returns>
+    internal static JsonElement BuildSnapshot(string tokenId, JsonElement tokenPayload, JsonElement nodesPayload)
+    {
+        JsonNode tokenState = new JsonObject { ["id"] = tokenId, ["revoked"] = false, ["used_at"] = null, ["used_by_node_id"] = null };
+        if (Rows(tokenPayload).FirstOrDefault() is { } tokenRow)
         {
             tokenState = new JsonObject
             {
+                ["id"] = tokenId,
                 ["revoked"] = tokenRow.TryGetProperty("revoked", out JsonElement revoked) && revoked.ValueKind == JsonValueKind.True,
                 ["used_at"] = tokenRow.TryGetProperty("used_at", out JsonElement usedAt) && usedAt.ValueKind == JsonValueKind.String
                     ? usedAt.GetString()
+                    : null,
+                ["used_by_node_id"] = tokenRow.TryGetProperty("used_by_node_id", out JsonElement usedBy) && usedBy.ValueKind == JsonValueKind.String
+                    ? usedBy.GetString()
                     : null,
             };
         }
 
         var nodeList = new JsonArray();
-        foreach (JsonElement row in Rows(nodes.Value))
+        foreach (JsonElement row in Rows(nodesPayload))
         {
-            long certs = row.TryGetProperty("active_certificates", out JsonElement c) && c.ValueKind == JsonValueKind.Number && c.TryGetInt64(out long n) ? n : 0;
+            long certs = row.TryGetProperty("active_certs", out JsonElement c) && c.ValueKind == JsonValueKind.Number && c.TryGetInt64(out long n) ? n : 0;
             nodeList.Add(new JsonObject
             {
+                ["id"] = row.TryGetProperty("id", out JsonElement id) && id.ValueKind == JsonValueKind.String ? id.GetString() : string.Empty,
                 ["name"] = row.TryGetProperty("name", out JsonElement name) && name.ValueKind == JsonValueKind.String ? name.GetString() : string.Empty,
-                ["active_certificates"] = certs,
+                ["active_certs"] = certs,
             });
         }
 
         var snapshot = new JsonObject { ["token"] = tokenState, ["nodes"] = nodeList };
-        return Result<JsonElement>.Success(JsonSerializer.SerializeToElement(snapshot));
+        return JsonSerializer.SerializeToElement(snapshot);
     }
 
     private static List<JsonElement> Rows(JsonElement payload) =>
@@ -278,9 +297,9 @@ public sealed class HistoryRunTool : LabTool<HistoryRunArgs>
         }
 
         int clients = replay?.Clients ?? args.Clients ?? scenario.Value!.Clients;
-        if (clients < HistoryRunJob.MinClients || clients > HistoryRunJob.MaxClients)
+        if (clients < HistoryRunJob.MinRunClients || clients > HistoryRunJob.MaxClients)
         {
-            return Result<object>.Failure("[Lab.InvalidArgument] clients must be between 2 and 8");
+            return Result<object>.Failure("[Lab.InvalidArgument] clients must be between 1 and 8");
         }
 
         ulong seed = replay?.Seed ?? args.Seed ?? NewSeed();
@@ -333,7 +352,7 @@ public sealed class HistoryRunTool : LabTool<HistoryRunArgs>
                 ["run_id"] = final.Result.RunId,
                 ["verdict"] = final.Result.Check.Verdict,
                 ["violations"] = JsonSerializer.SerializeToNode(
-                    final.Result.Check.Violations.Select(v => new { rule = v.Rule, ops = v.OpIds }).ToList(), LabJson.Options),
+                    final.Result.Check.Violations.Select(v => new { rule = v.Rule, ops = v.OpIds, required = v.Required }).ToList(), LabJson.Options),
                 ["minimal_repro"] = final.Result.Check.Minimal is { } minimal ? JsonSerializer.SerializeToNode(minimal, LabJson.Options) : null,
                 ["bundle"] = Path.GetFileName(final.Folder),
             };
