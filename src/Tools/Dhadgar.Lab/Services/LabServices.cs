@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Processes;
@@ -24,6 +25,12 @@ public sealed class LabServices
 {
     /// <summary>How long a started service has to answer 200 on its health path.</summary>
     public const int ReadinessTimeoutSeconds = 90;
+
+    /// <summary>
+    /// Host header for readiness probes. Gateway's <c>AllowedHosts</c> lists <c>localhost</c> but not the IP literal, so
+    /// probing <c>127.0.0.1</c> with its own Host header is refused with 400 by host filtering.
+    /// </summary>
+    public const string ProbeHostHeader = "localhost";
 
     /// <summary>Seconds docker waits before killing a stopping container.</summary>
     public const string StopGrace = "10";
@@ -404,28 +411,39 @@ public sealed class LabServices
         };
         long started = _time.GetTimestamp();
         var deadline = TimeSpan.FromSeconds(ReadinessTimeoutSeconds);
+        string lastStatus = "no answer";
+        string failingChecks = string.Empty;
         while (true)
         {
             try
             {
-                using HttpResponseMessage response = await http.GetAsync(uri, ct).ConfigureAwait(false);
+                using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+                request.Headers.Host = ProbeHostHeader;
+                using HttpResponseMessage response = await http.SendAsync(request, ct).ConfigureAwait(false);
                 if (response.StatusCode == HttpStatusCode.OK)
                 {
                     return Result.Success();
                 }
+
+                lastStatus = $"HTTP {(int)response.StatusCode}";
+                failingChecks = FailingHealthChecks(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
             }
             catch (HttpRequestException)
             {
                 // Not listening yet; retry until the deadline.
+                lastStatus = "connection refused or reset";
             }
             catch (TaskCanceledException) when (!ct.IsCancellationRequested)
             {
                 // The per-attempt timeout elapsed; retry until the deadline.
+                lastStatus = "attempt timed out";
             }
 
             if (_time.GetElapsedTime(started) >= deadline)
             {
-                return Result.Failure($"[Lab.Timeout] {adapter.Name} did not answer 200 within {ReadinessTimeoutSeconds} s");
+                string checks = failingChecks.Length == 0 ? string.Empty : $"; failing checks: {failingChecks}";
+                return Result.Failure(
+                    $"[Lab.Timeout] {adapter.Name} did not answer 200 within {ReadinessTimeoutSeconds} s; last status {lastStatus}{checks}");
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
@@ -477,6 +495,47 @@ public sealed class LabServices
         {
             DeleteQuietly(path);
             return Result<string>.Failure("[Lab.Io] the container env file could not be written");
+        }
+    }
+
+    /// <summary>
+    /// Names of the checks that are not <c>Healthy</c> in an ASP.NET health JSON body. Names only: descriptions,
+    /// exceptions and data never leave this method (R-LOG). Returns empty for any other body.
+    /// </summary>
+    private static string FailingHealthChecks(string body)
+    {
+        if (!body.TrimStart().StartsWith('{'))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(body);
+            if (!document.RootElement.TryGetProperty("entries", out JsonElement entries)
+                || entries.ValueKind != JsonValueKind.Object)
+            {
+                return string.Empty;
+            }
+
+            var names = new List<string>();
+            foreach (JsonProperty entry in entries.EnumerateObject())
+            {
+                bool healthy = entry.Value.ValueKind == JsonValueKind.Object
+                    && entry.Value.TryGetProperty("status", out JsonElement status)
+                    && status.ValueKind == JsonValueKind.String
+                    && status.GetString() == "Healthy";
+                if (!healthy)
+                {
+                    names.Add(entry.Name);
+                }
+            }
+
+            return string.Join(", ", names);
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
         }
     }
 

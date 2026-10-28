@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Services;
@@ -61,6 +62,7 @@ public sealed class NodesAdapter : ILabServiceAdapter
             ["Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics"] = "Information",
             ["ConnectionStrings__Postgres"] = postgres,
             ["RabbitMq__Host"] = GatewayAdapter.ToxiproxyHost,
+            ["RabbitMq__Port"] = NodesRabbitMqProxyPort.ToString(CultureInfo.InvariantCulture),
             ["RabbitMq__Username"] = ctx.RabbitMqUsername,
             ["RabbitMq__Password"] = ctx.RabbitMqPassword,
             ["Nodes__CaStoragePath"] = ContainerCaPath,

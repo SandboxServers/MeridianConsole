@@ -21,6 +21,7 @@ public sealed class ServiceAdapterTests
         Assert.True(env.IsSuccess, env.Error);
         Assert.Contains("Port=20020", env.Value!["ConnectionStrings__Postgres"]);
         Assert.Equal("meridian-lab-toxiproxy", env.Value["RabbitMq__Host"]);
+        Assert.Equal("20021", env.Value["RabbitMq__Port"]);
     }
 
     [Fact]

@@ -39,6 +39,7 @@ public sealed class ServicesDockerTests
         using var vault = new SecretVault();
         using var toxi = new ToxiproxyClient();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        http.DefaultRequestHeaders.Host = LabServices.ProbeHostHeader;
         var refs = new LabCredentialRefs();
         var targets = new LabTargetRegistry(paths, docker, TimeProvider.System);
         using var stack = new LabStack(docker, targets, toxi, vault, refs, paths, validator, TimeProvider.System);
