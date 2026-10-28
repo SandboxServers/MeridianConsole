@@ -41,4 +41,32 @@ public sealed class AgentFootprintSeamTests
     {
         Assert.Equal(AgentWindowsFootprint.StateFileName, FileAgentStateStore.FileName);
     }
+
+    [Trait("Seam", "S-L3")]
+    [Fact]
+    public void RegistryKeyPath_MatchesAgent()
+    {
+        Assert.Equal(AgentWindowsFootprint.RegistryKeyPath, ReadAgentRegistryConstant("KeyPath"));
+    }
+
+    [Trait("Seam", "S-L3")]
+    [Fact]
+    public void EnrollmentTokenValueName_MatchesAgent()
+    {
+        Assert.Equal(AgentWindowsFootprint.EnrollmentTokenValueName, ReadAgentRegistryConstant("EnrollmentTokenValueName"));
+    }
+
+    /// <summary>
+    /// Reads an internal constant of the agent's <c>AgentRegistry</c> by reflection, so the agent project does not need
+    /// <c>InternalsVisibleTo</c> for the lab.
+    /// </summary>
+    private static string? ReadAgentRegistryConstant(string name)
+    {
+        Type registry = typeof(WindowsCertificateStore).Assembly
+            .GetType("Dhadgar.Agent.Windows.Installation.AgentRegistry", throwOnError: true)!;
+        FieldInfo? field = registry.GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+
+        Assert.NotNull(field);
+        return (string?)field.GetRawConstantValue();
+    }
 }
