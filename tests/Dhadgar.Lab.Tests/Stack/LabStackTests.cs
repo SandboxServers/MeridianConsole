@@ -80,6 +80,20 @@ public sealed class LabStackTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task UpAsync_ExistingContainerWithoutLabel_IsNotStarted()
+    {
+        // A container that only matches the name prefix (no meridian-lab=1 label) is foreign: it must not be started or registered.
+        _docker.ContainerInspectOutput = "abc123 ";
+        using LabStack stack = CreateStack(out _);
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("not lab-owned", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(_docker.Calls, c => c.Contains("start"));
+    }
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The LabStack returned to the caller owns the ToxiproxyClient and its fake handler; the test disposes the stack.")]
     private LabStack CreateStack(out LabTargetRegistry registry)
     {
@@ -120,11 +134,16 @@ public sealed class LabStackTests : IDisposable
     {
         public List<IReadOnlyList<string>> Calls { get; } = [];
 
+        /// <summary>The stdout of <c>container inspect</c>: the id and the lab label value. The default is a lab-owned container.</summary>
+        public string ContainerInspectOutput { get; set; } = "fake-id 1";
+
         public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct)
         {
             Calls.Add(args.ToArray());
             // redis-cli ping must answer PONG for the readiness probe to pass; every other probe exits 0.
-            string stdout = args.Contains("ping") ? "PONG" : string.Empty;
+            string stdout = args.Contains("ping")
+                ? "PONG"
+                : args.Contains("container") && args.Contains("inspect") ? ContainerInspectOutput : string.Empty;
             return Task.FromResult(Result<DockerOutput>.Success(new DockerOutput(0, stdout, string.Empty)));
         }
     }

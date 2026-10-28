@@ -396,7 +396,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         CancellationToken ct)
     {
         var containerName = ContainerName(name);
-        var exists = await Docker(["container", "inspect", "--format", "{{.Id}}", containerName], ct).ConfigureAwait(false);
+        var exists = await Docker(["container", "inspect", "--format", $"{{{{.Id}}}} {{{{index .Config.Labels \"{LabDefaults.ContainerLabel}\"}}}}", containerName], ct).ConfigureAwait(false);
         if (exists.IsFailure)
         {
             return Result.Failure(exists.Error);
@@ -405,8 +405,15 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         if (exists.Value.ExitCode == 0)
         {
             // A container the lab already created (not wiped): start it again and keep its registration.
+            // A name match alone is not ownership: the container must also carry the lab label (R-BLAST).
+            string[] inspected = exists.Value.StdOut.Trim().Split(' ', 2);
+            if (inspected.Length < 2 || inspected[1] != "1")
+            {
+                return Result.Failure("[Lab.Docker] the container name is not lab-owned");
+            }
+
             var restarted = Require(await Docker(["start", containerName], ct).ConfigureAwait(false), $"could not start {containerName}");
-            return restarted.IsFailure ? Result.Failure(restarted.Error) : Register(name, containerName, exists.Value.StdOut.Trim());
+            return restarted.IsFailure ? Result.Failure(restarted.Error) : Register(name, containerName, inspected[0]);
         }
 
         if (ports.Any(port => !port.StartsWith(LoopbackPrefix, StringComparison.Ordinal)))
