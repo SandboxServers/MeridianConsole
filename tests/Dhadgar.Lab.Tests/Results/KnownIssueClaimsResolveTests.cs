@@ -52,7 +52,12 @@ public sealed class KnownIssueClaimsResolveTests
     {
         Result<KnownIssues> shipped = KnownIssues.Load(ShippedPath());
         Assert.True(shipped.IsSuccess, shipped.Error);
-        FailureSignature[] signatures = [new FailureSignature("inv", "inv:I1|nodes|unhandled", "nodes", "I1")];
+        // The requires evidence of KI-F67 (L26 B5) is part of the claiming row; the outside row is new by scope either way.
+        FailureSignature[] signatures =
+        [
+            new FailureSignature("inv", "inv:I1|nodes|unhandled", "nodes", "I1"),
+            new FailureSignature("clause", "clause:catalog-nodes/nodes-pg-down-enroll/step:enroll-down|NotHeld", null, null),
+        ];
 
         KnownMatch outside = shipped.Value.Match(new RowFailure("catalog-other", "any-row", null, signatures));
         KnownMatch inside = shipped.Value.Match(new RowFailure("catalog-nodes", "nodes-pg-down-enroll", null, signatures));

@@ -27,9 +27,12 @@ public sealed record KnownIssuePattern(string Source, Regex Regex, string Kind);
 public sealed record KnownIssueScope(IReadOnlyList<string> Sections, IReadOnlyList<string> Rows, IReadOnlyList<string> Services,
     IReadOnlyList<string> Invariants);
 
-/// <summary>One known issue of <c>docs/guides/uat-specs/known-issues.toml</c>.</summary>
+/// <summary>
+/// One known issue of <c>docs/guides/uat-specs/known-issues.toml</c>. <paramref name="Requires"/> is the <c>requires</c> key (L26
+/// B4): every pattern must match at least one signature of the row, or the issue does not match.
+/// </summary>
 public sealed record KnownIssue(string Id, string Title, string Link, IReadOnlyList<string> Signatures,
-    IReadOnlyList<KnownIssuePattern> Patterns, string State, KnownIssueScope Scope);
+    IReadOnlyList<KnownIssuePattern> Patterns, string State, KnownIssueScope Scope, IReadOnlyList<KnownIssuePattern> Requires);
 
 /// <summary>
 /// The shipped known issues (C12). <see cref="Load"/> lists every problem and never throws for bad input; <see cref="Match"/>
@@ -52,7 +55,7 @@ public sealed class KnownIssues
     private static readonly HashSet<string> RootKeys = new(StringComparer.Ordinal) { "schema", "issue" };
     private static readonly HashSet<string> IssueKeys = new(StringComparer.Ordinal)
     {
-        "id", "title", "link", "signatures", "patterns", "state", "scope",
+        "id", "title", "link", "signatures", "patterns", "state", "scope", "requires",
     };
     private static readonly HashSet<string> ScopeKeys = new(StringComparer.Ordinal) { "sections", "rows", "services", "invariants" };
 
@@ -191,7 +194,10 @@ public sealed class KnownIssues
             KnownIssue? claimed = Issues.FirstOrDefault(i => i.Id == row.ClaimedKnownIssue);
             if (claimed is not null && MatchesAll(claimed, row))
             {
-                return Verdict(claimed);
+                string? absent = MissingRequirement(claimed, row);
+                return absent is null
+                    ? Verdict(claimed)
+                    : new KnownMatch(row.ClaimedKnownIssue, StateClaimedMismatch, "required evidence " + absent + " absent");
             }
 
             FailureSignature unmatched = claimed is null
@@ -201,9 +207,42 @@ public sealed class KnownIssues
                 "known_issue " + row.ClaimedKnownIssue + " claimed but signature " + unmatched.Text + " does not match");
         }
 
-        KnownIssue? matched = Issues.FirstOrDefault(i => i.State == OpenState && MatchesAll(i, row))
-            ?? Issues.FirstOrDefault(i => i.State == FixedState && MatchesAll(i, row));
+        KnownIssue? matched = Issues.FirstOrDefault(i => i.State == OpenState && MatchesAll(i, row) && MissingRequirement(i, row) is null)
+            ?? Issues.FirstOrDefault(i => i.State == FixedState && MatchesAll(i, row) && MissingRequirement(i, row) is null);
         return matched is null ? new KnownMatch(null, StateNew, null) : Verdict(matched);
+    }
+
+    /// <summary>
+    /// The first <c>requires</c> pattern of the issue that no signature of the row matches, or null when every one is present (L26 B4).
+    /// </summary>
+    private string? MissingRequirement(KnownIssue issue, RowFailure row)
+    {
+        foreach (KnownIssuePattern required in issue.Requires)
+        {
+            bool present = false;
+            foreach (FailureSignature signature in row.Signatures)
+            {
+                try
+                {
+                    if (required.Regex.IsMatch(signature.Text))
+                    {
+                        present = true;
+                        break;
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    _logger?.LogWarning(PatternTimeoutLog, issue.Id);
+                }
+            }
+
+            if (!present)
+            {
+                return required.Source;
+            }
+        }
+
+        return null;
     }
 
     private static KnownMatch Verdict(KnownIssue issue) =>
@@ -323,6 +362,16 @@ public sealed class KnownIssues
             problems.Add(label + ": needs signatures or patterns");
         }
 
+        var requires = new List<KnownIssuePattern>();
+        foreach (string source in StringArray(table, "requires", label, problems))
+        {
+            KnownIssuePattern? required = CompilePattern(source, label, problems);
+            if (required is not null)
+            {
+                requires.Add(required);
+            }
+        }
+
         KnownIssueScope scope = ParseScope(table, label, problems);
         ValidateScopeKinds(scope, signatures, patterns, label, problems);
         if (problems.Count > before || id is null)
@@ -330,7 +379,7 @@ public sealed class KnownIssues
             return null;
         }
 
-        return new KnownIssue(id, title, link, signatures, patterns, state!, scope);
+        return new KnownIssue(id, title, link, signatures, patterns, state!, scope, requires);
     }
 
     private static void ValidateScopeKinds(KnownIssueScope scope, List<string> signatures, List<KnownIssuePattern> patterns,

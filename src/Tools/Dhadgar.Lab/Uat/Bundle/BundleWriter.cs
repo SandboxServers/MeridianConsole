@@ -433,7 +433,7 @@ public sealed class BundleWriter : IUatRunSink
             {
                 foreach (UatStepResult step in recorded)
                 {
-                    stepJson.Add(new
+                    JsonNode stepNode = JsonSerializer.SerializeToNode(new
                     {
                         id = step.Id,
                         tool = step.Tool,
@@ -443,7 +443,14 @@ public sealed class BundleWriter : IUatRunSink
                         expected_error = step.ExpectedError,
                         duration_ms = step.DurationMs,
                         result = Evidence(step.Result),
-                    });
+                    }, JsonOptions)!;
+                    // L26 B3: expect_met is written only when the step declared an expected error.
+                    if (step.ExpectedError is { } expectedError)
+                    {
+                        stepNode["expect_met"] = RowExecutor.ExpectedErrorMet(expectedError, step.ErrorCode, step.Result);
+                    }
+
+                    stepJson.Add(stepNode);
                 }
             }
             var faultJson = new List<object>();

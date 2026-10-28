@@ -240,6 +240,8 @@ public sealed class KnownIssuesTests
         [
             new FailureSignature("http", Open, "nodes", null),
             new FailureSignature("inv", "inv:I1|nodes|unhandled", "nodes", "I1"),
+            // The requires evidence of KI-F67 (L26 B5): the enroll-down step's expected error was not met.
+            new FailureSignature("clause", "clause:catalog-nodes/nodes-pg-down-enroll/step:enroll-down|NotHeld", null, null),
         ]);
 
         KnownMatch match = issues.Match(row);
@@ -257,6 +259,26 @@ public sealed class KnownIssuesTests
 
         Assert.Equal("claimed_mismatch", match.State);
         Assert.Equal("KI-F69", match.IssueId);
+    }
+
+    [Fact]
+    public void Match_RequiresAbsent_IsClaimedMismatch()
+    {
+        KnownIssues issues = Load("""
+            schema = 1
+            [[issue]]
+            id = "KI-R"
+            signatures = ["http:500|-|POST|/api/v1/agents/enroll|none"]
+            requires = ['^inv:I1\|nodes\|unhandled$']
+            state = "open"
+            """);
+
+        KnownMatch claimed = issues.Match(new RowFailure("nodes", "R1", "KI-R", [Sig(Open)]));
+        KnownMatch unclaimed = issues.Match(new RowFailure("nodes", "R1", null, [Sig(Open)]));
+
+        Assert.Equal("claimed_mismatch", claimed.State);
+        Assert.Equal("required evidence ^inv:I1\\|nodes\\|unhandled$ absent", claimed.Reason);
+        Assert.Equal("new", unclaimed.State);
     }
 
     [Fact]

@@ -21,9 +21,15 @@ public sealed record RowVerdict(IReadOnlyList<FailureSignature> Signatures, IRea
 /// <summary>A standalone violation of a row, as read from a row file.</summary>
 internal sealed record ParsedViolation(ViolationEvidence Evidence, string? Detail, string? At);
 
-/// <summary>A graded row as read from a row file: the grade, the reason, its clauses and violations.</summary>
+/// <summary>
+/// One step of a row file. <paramref name="ExpectMet"/> is set only when the step declared an expected error (<c>expect_met</c>).
+/// </summary>
+internal sealed record ParsedStep(string Id, bool Ok, bool? ExpectMet);
+
+/// <summary>A graded row as read from a row file: the grade, the reason, its clauses, violations and steps.</summary>
 internal sealed record ParsedRow(string Section, string RowId, RowGrade Grade, string? Reason, string? StartedAt,
-    string? EndedAt, string? KnownIssue, IReadOnlyList<ClauseEvidence> Clauses, IReadOnlyList<ParsedViolation> Violations);
+    string? EndedAt, string? KnownIssue, IReadOnlyList<ClauseEvidence> Clauses, IReadOnlyList<ParsedViolation> Violations,
+    IReadOnlyList<ParsedStep> Steps);
 
 /// <summary>
 /// The one row-verdict path (L26 B1, D-ML92). The ingest, the run writer and the attestor all call <see cref="Of"/>, and
@@ -43,7 +49,7 @@ internal static class RowVerdicts
             return new RowVerdict([], [], null, null, null);
         }
 
-        var evidence = new RowEvidence(row.Section, row.RowId, [], [], row.Clauses,
+        var evidence = new RowEvidence(row.Section, row.RowId, [], [], row.Clauses.Concat(StepClauses(row)).ToList(),
             row.Violations.Select(v => v.Evidence).ToList(), [], []);
         List<FailureSignature> scrubbed = SignatureBuilder.BuildAll(evidence)
             .Select(signature => signature with { Text = scrub(signature.Text) })
@@ -76,6 +82,22 @@ internal static class RowVerdicts
         return new RowVerdict(scrubbed, ids, primaryId, match, knownMatchText);
     }
 
+    /// <summary>
+    /// The step pseudo-clauses of a row (L26 B3, C12 <c>clause</c>): a step whose expected error was not met is
+    /// <c>step:&lt;id&gt;|NotHeld</c>, and so is the step that errored and stopped the row (one with no expected error).
+    /// </summary>
+    private static IEnumerable<ClauseEvidence> StepClauses(ParsedRow row)
+    {
+        foreach (ParsedStep step in row.Steps)
+        {
+            bool notHeld = step.ExpectMet is { } met ? !met : !step.Ok;
+            if (notHeld)
+            {
+                yield return new ClauseEvidence(row.Section, row.RowId, "step:" + step.Id, "NotHeld");
+            }
+        }
+    }
+
     /// <summary>Parses one row file. Fails, never throws, for a row with no section or id.</summary>
     public static Result<ParsedRow> Parse(JsonObject obj)
     {
@@ -99,9 +121,14 @@ internal static class RowVerdicts
                 BundleIngestor.Text(v, "detail"), BundleIngestor.Text(v, "at")))
             .ToList();
 
+        var steps = BundleIngestor.Objects(obj, "steps")
+            .Select(s => new ParsedStep(BundleIngestor.Text(s, "id") ?? string.Empty, BundleIngestor.Bool(s, "ok") ?? true,
+                BundleIngestor.Bool(s, "expect_met")))
+            .ToList();
+
         return Result<ParsedRow>.Success(new ParsedRow(section, rowId, ParseGrade(BundleIngestor.Text(obj, "grade")),
             BundleIngestor.Text(obj, "reason"), BundleIngestor.Text(obj, "started_at"), BundleIngestor.Text(obj, "ended_at"),
-            BundleIngestor.Text(obj, "known_issue"), clauses, violations));
+            BundleIngestor.Text(obj, "known_issue"), clauses, violations, steps));
     }
 
     /// <summary>Maps a row grade text (C11) to its grade. Any other text is unverified.</summary>

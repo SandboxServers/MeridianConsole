@@ -19,9 +19,21 @@ sections = ["history"]
 id = "KI-F67"
 title = "Enroll returns 500 while nodes-postgres is cut (F67, D-ML87)"
 link = "docs/PROJECT-STATE.md"
-signatures = []
+# The row's clause texts are Unverified while the row is BLOCKED by a step error (L26 B5). The requires keys make the issue
+# match only when the enroll-down step's expected error was not met and the I1 violation is present.
+signatures = [
+  "clause:catalog-nodes/nodes-pg-down-enroll/down-503|Unverified",
+  "clause:catalog-nodes/nodes-pg-down-enroll/after-201|Unverified",
+  "clause:catalog-nodes/nodes-pg-down-enroll/recovered|Unverified",
+  "clause:catalog-nodes/nodes-pg-down-enroll/token-used|Unverified",
+  "clause:catalog-nodes/nodes-pg-down-enroll/step:enroll-down|NotHeld",
+]
 patterns = [
   '^http:5\d\d\|[^|]*\|POST\|/api/v1/agents/enroll\|',
+  '^inv:I1\|(nodes|gateway)\|(unhandled|unexplained-500)$',
+]
+requires = [
+  '^clause:catalog-nodes/nodes-pg-down-enroll/step:enroll-down\|NotHeld$',
   '^inv:I1\|(nodes|gateway)\|(unhandled|unexplained-500)$',
 ]
 state = "open"
@@ -33,6 +45,22 @@ rows = ["nodes-pg-down-enroll"]
 [[issue]]
 id = "KI-F69"
 title = "Nodes 400 without an application/problem+json body (F69, D-ML87)"
+link = "docs/PROJECT-STATE.md"
+# Row evidence only (L26 B5): a clause signature carries no service, so the HTTP case is KI-F69-HTTP.
+signatures = [
+  "clause:catalog-nodes/nodes-enroll-malformed/problem-json|NotHeld",
+  "clause:catalog-nodes/nodes-enroll-malformed/problem-json-empty|NotHeld",
+]
+patterns = []
+state = "open"
+
+[issue.scope]
+sections = ["catalog-nodes"]
+rows = ["nodes-enroll-malformed"]
+
+[[issue]]
+id = "KI-F69-HTTP"
+title = "Nodes 400 without problem+json, as an HTTP case (F69)"
 link = "docs/PROJECT-STATE.md"
 signatures = []
 patterns = [
