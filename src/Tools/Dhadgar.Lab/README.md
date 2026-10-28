@@ -175,7 +175,7 @@ Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate be
 | `agent_msi_uninstall` | Leased | yes, `lease_id` required |
 | `cli_run` | Leased | yes, `lease_id` required |
 | `ui_flow_run` | Leased | yes, `lease_id` required |
-| `uat_attest` | Leased | yes, `lease_id` required; user approval per call (O2) |
+| `uat_attest` | Leased | yes, `lease_id` required; user approval per call once O2 is applied (pending) |
 | `identity_user_token` | Leased | yes, `lease_id` required |
 | `results_flake_check` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
 | `hunt_model_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
@@ -204,7 +204,7 @@ A Leased call's lease is watched for the whole call. If the lease expires, is re
 - **Verdict.** `held` or `not_held`. `pass` and `fail` are refused.
 - **Rows.** Only a row graded `NEEDS_HUMAN` or `UNVERIFIED` is attested. FAIL, BLOCKED, SKIPPED and PASS rows are refused.
 - **Recorded.** Each attestation records the lease owner and the caller (`lease_owner`, `caller`) in the row JSON, and one `- Attested:` line in `ledger.md`. The run's `fidelity` becomes `evidence_only`.
-- **Limits.** The note is at most 1000 characters with no control characters. The clause id matches `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`. The ledger renders free text on one line and escapes pipes in table cells.
+- **Limits.** The note is at most 1000 characters with no control, format, line or paragraph separator, private-use or unassigned code points. The clause id matches `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\z` (no trailing newline). The ledger renders free text on one line and escapes pipes in table cells.
 
 ## Probe and Windows reads
 

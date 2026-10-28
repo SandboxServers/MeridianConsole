@@ -36,7 +36,7 @@ public static class BundleAttestor
     /// <param name="row">The row id.</param>
     /// <param name="clauseId">The clause id.</param>
     /// <param name="verdict">Either <c>held</c> or <c>not_held</c>. <c>pass</c> and <c>fail</c> are refused.</param>
-    /// <param name="note">An optional note of at most 1000 characters with no control characters, redacted before it is written.</param>
+    /// <param name="note">An optional note of at most 1000 characters with no control, format, line or paragraph separator, private-use or unassigned code points (<see cref="LedgerRenderer.IsUnsafeText"/>), redacted before it is written.</param>
     /// <param name="at">The time of the attestation.</param>
     /// <param name="by">The lease owner and the caller of the attest call.</param>
     /// <param name="redactor">Redacts every written text.</param>

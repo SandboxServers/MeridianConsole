@@ -152,7 +152,7 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
     public override string Name => "uat_attest";
 
     /// <inheritdoc />
-    public override string Description => "Records the user's held or not_held verdict on one pending human clause of a NEEDS_HUMAN or UNVERIFIED row, then regrades the row and rewrites the ledger and overall. The user approves each call.";
+    public override string Description => "Records the user's held or not_held verdict on one pending human clause of a NEEDS_HUMAN or UNVERIFIED row, then regrades the row and rewrites the ledger and overall. Ask the user before each call; the harness prompts only once owner action O2 is applied.";
 
     /// <inheritdoc />
     protected override Task<Result<object>> ExecuteAsync(UatAttestArgs args, LabCallContext context, CancellationToken ct)
