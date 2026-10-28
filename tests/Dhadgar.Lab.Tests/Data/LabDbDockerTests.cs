@@ -16,6 +16,7 @@ namespace Dhadgar.Lab.Tests.Data;
 /// <c>db_query</c> against the real lab Postgres behind the <c>desktop-linux</c> context. Each test brings the stack up and
 /// tears it down with wipe, so only lab-labelled containers are touched.
 /// </summary>
+[Collection(LabDockerGate.Name)]
 public sealed class LabDbDockerTests
 {
     private const string LinuxContext = "desktop-linux";
@@ -55,7 +56,7 @@ public sealed class LabDbDockerTests
     public async Task Query_NodesProxyDisabled_StillAnswers()
     {
         await using var lab = await DockerLab.StartAsync();
-        await lab.DisableProxyAsync("nodes-postgres");
+        await DockerLab.DisableProxyAsync("nodes-postgres");
 
         Result<DbQueryResult> result = await lab.Db.QueryAsync("nodes", "select 1 as one", new Dictionary<string, JsonElement>(), 10, CancellationToken.None);
 
@@ -110,9 +111,10 @@ public sealed class LabDbDockerTests
         /// <summary>
         /// Disables one Toxiproxy proxy through the loopback API port. Re-enabled by the teardown's wipe.
         /// </summary>
-        public async Task DisableProxyAsync(string proxy)
+        public static async Task DisableProxyAsync(string proxy)
         {
-            using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })
+            using var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+            using var http = new HttpClient(handler)
             {
                 BaseAddress = new Uri($"http://127.0.0.1:{LabPorts.ToxiproxyApi}/"),
             };

@@ -17,7 +17,7 @@ public sealed class LabHttpTests
     [Fact]
     public async Task HttpRequest_NonLabHost_IsRefused()
     {
-        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         using var vault = new SecretVault();
         var http = CreateProbe(handler, vault);
 
@@ -31,7 +31,7 @@ public sealed class LabHttpTests
     [Fact]
     public async Task HttpRequest_HostHeaderOverride_IsRefused()
     {
-        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         using var vault = new SecretVault();
         var http = CreateProbe(handler, vault);
         var headers = new Dictionary<string, string> { ["Host"] = "evil.example" };
@@ -46,7 +46,7 @@ public sealed class LabHttpTests
     [Fact]
     public async Task HttpRequest_Redirect_IsNotFollowed()
     {
-        var handler = new RecordingHandler(_ =>
+        using var handler = new RecordingHandler(_ =>
         {
             var response = new HttpResponseMessage(HttpStatusCode.Redirect);
             response.Headers.Location = new Uri($"http://127.0.0.1:{LabPorts.Gateway}/moved");
@@ -65,7 +65,8 @@ public sealed class LabHttpTests
     [Fact]
     public void CreateHandler_Production_DisallowsAutoRedirect()
     {
-        using var handler = Assert.IsType<SocketsHttpHandler>(LabHttp.CreateHandler());
+        using HttpMessageHandler created = LabHttp.CreateHandler();
+        var handler = Assert.IsType<SocketsHttpHandler>(created);
 
         Assert.False(handler.AllowAutoRedirect);
     }
@@ -74,7 +75,7 @@ public sealed class LabHttpTests
     public async Task HttpRequest_SecretPlaceholder_IsResolvedAndRedactedInEcho()
     {
         const string secret = "s3cret-value-123";
-        var handler = new RecordingHandler(request => new HttpResponseMessage(HttpStatusCode.OK)
+        using var handler = new RecordingHandler(request => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult(), Encoding.UTF8, "application/json"),
         });
