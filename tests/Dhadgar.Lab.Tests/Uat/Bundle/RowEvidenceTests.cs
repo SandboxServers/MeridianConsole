@@ -227,7 +227,7 @@ public sealed class RowEvidenceTests : IDisposable
         var redactor = new Redactor(_vault);
         var validator = new PathValidator(NullLogger<PathValidator>.Instance);
         LabPaths paths = LabPaths.FromRoot(_root);
-        var observations = new LabObservationSink(redactor, _time, validator, [paths.UatRuns]);
+        using var observations = new LabObservationSink(redactor, _time, validator, [paths.UatRuns]);
         var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
         var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new EvidenceTool() }), leases, _audit, redactor, _time);
         var evaluator = new ClauseEvaluator(new IClauseSource[] { new StepSource(), new FakeDbSource() }, redactor, _time);
