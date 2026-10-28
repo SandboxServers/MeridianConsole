@@ -20,7 +20,7 @@ namespace Dhadgar.Lab.Tools;
 /// and a spec whose sha256 differs from the recorded one is refused.
 /// </summary>
 public sealed record UatRunArgs(
-    string Spec,
+    string? Spec = null,
     string? SpecsDir = null,
     IReadOnlyList<string>? Sections = null,
     IReadOnlyList<string>? Rows = null,
@@ -95,10 +95,22 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(UatRunArgs args, LabCallContext context, CancellationToken ct)
     {
-        ReproSettings? repro = null;
-        if (args.Replay is not null)
+        bool hasSpec = !string.IsNullOrEmpty(args.Spec);
+        bool hasReplay = !string.IsNullOrEmpty(args.Replay);
+        if (!hasSpec && !hasReplay)
         {
-            Result<ReproSettings> loadedRepro = await LoadReproAsync(args.Replay, ct).ConfigureAwait(false);
+            return Result<object>.Failure("[Lab.InvalidArgument] spec or replay is required");
+        }
+
+        if (hasSpec && hasReplay)
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] give spec or replay, not both");
+        }
+
+        ReproSettings? repro = null;
+        if (hasReplay)
+        {
+            Result<ReproSettings> loadedRepro = await LoadReproAsync(args.Replay!, ct).ConfigureAwait(false);
             if (loadedRepro.IsFailure)
             {
                 return Result<object>.Failure(loadedRepro.Error);
@@ -107,7 +119,7 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             repro = loadedRepro.Value!;
         }
 
-        string specName = repro?.SpecFile ?? args.Spec;
+        string specName = repro?.SpecFile ?? args.Spec!;
         IReadOnlyList<string>? sectionFilter = repro is null ? args.Sections : [repro.Section];
         IReadOnlyList<string>? rowFilter = repro is null ? args.Rows : repro.Rows;
 
@@ -143,7 +155,7 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             return Result<object>.Failure("[Lab.Unavailable] the spec could not be read");
         }
 
-        SpecLoadOutcome loaded = SpecLoader.LoadText(args.Spec, text);
+        SpecLoadOutcome loaded = SpecLoader.LoadText(specName, text);
         if (loaded.Spec is null)
         {
             return Result<object>.Failure("[Lab.InvalidArgument] the spec does not load: " + loaded.Problems.Count + " problem(s)");
@@ -201,6 +213,10 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             return Result<object>.Failure(sink.WriteError);
         }
 
-        return Result<object>.Success(run.Value!);
+        // C4: the result carries the bundle folder name, or null when no bundle was written (plan_only).
+        var payload = System.Text.Json.JsonSerializer.SerializeToNode(run.Value!, LabJson.Options) as System.Text.Json.Nodes.JsonObject
+            ?? new System.Text.Json.Nodes.JsonObject();
+        payload["bundle"] = sink.Folder is { } folder ? Path.GetFileName(folder) : null;
+        return Result<object>.Success(payload);
     }
 }

@@ -216,11 +216,45 @@ public sealed class ReproTests : IDisposable
             CancellationToken.None);
 
         var tool = new UatRunTool(_paths, _validator, _services);
-        JsonElement args = JsonSerializer.SerializeToElement(new { spec = "a.toml", replay = "run1\\repro\\repro.toml" });
+        JsonElement args = JsonSerializer.SerializeToElement(new { replay = "run1\\repro\\repro.toml" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-l16", null, "test"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Contains("spec changed since the run", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Run_NeitherSpecNorReplay_IsRefused()
+    {
+        var tool = new UatRunTool(_paths, _validator, _services);
+
+        Result<JsonElement> result = await tool.InvokeAsync(JsonSerializer.SerializeToElement(new { }), new LabCallContext("call-l16b", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument] spec or replay is required", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Run_SpecAndReplay_IsRefused()
+    {
+        var tool = new UatRunTool(_paths, _validator, _services);
+        JsonElement args = JsonSerializer.SerializeToElement(new { spec = "a.toml", replay = "run1\\repro\\repro.toml" });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-l16c", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument] give spec or replay, not both", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UatRun_Schema_DoesNotRequireSpec()
+    {
+        // spec is optional when replay is given, so the advertised input schema must not list it as required.
+        JsonElement schema = LabJson.SchemaFor<UatRunArgs>();
+
+        bool requiresSpec = schema.TryGetProperty("required", out JsonElement required)
+            && required.EnumerateArray().Any(name => name.GetString() == "spec");
+        Assert.False(requiresSpec);
     }
 }
