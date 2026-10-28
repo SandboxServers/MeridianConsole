@@ -241,6 +241,17 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
     }
 
     /// <summary>
+    /// The log ring of one supervised process, or null for an unknown name. Log clauses read it (C7).
+    /// </summary>
+    public LogRing? RingFor(string name)
+    {
+        lock (_gate)
+        {
+            return _processes.TryGetValue(name, out ManagedProcess? entry) ? entry.Ring : null;
+        }
+    }
+
+    /// <summary>
     /// The captured lines of one process, oldest first. Fails with <c>[Lab.NotFound]</c> for an unknown name.
     /// </summary>
     public Result<IReadOnlyList<LogLine>> ReadLines(string name)
