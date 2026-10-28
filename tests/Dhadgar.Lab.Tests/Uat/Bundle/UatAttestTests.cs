@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
@@ -224,6 +225,55 @@ public sealed class UatAttestTests : IDisposable
         Assert.Contains("\"caller\": \"mcp\"", row);
         string ledger = File.ReadAllText(Path.Combine(_folder, "ledger.md"));
         Assert.Contains("- Attested: human-look held by owner-a via mcp", ledger);
+    }
+
+    [Fact]
+    public async Task UatAttestTool_RecordsTheLeaseOwnerAndTheCallContextCaller()
+    {
+        string lab = Path.Combine(_root, "lab");
+        _ = Directory.CreateDirectory(Path.Combine(lab, "uat-runs"));
+        string bundle = Path.Combine(lab, "uat-runs", Path.GetFileName(_folder));
+        Directory.Move(_folder, bundle);
+
+        var time = new FakeTimeProvider(At);
+        var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+        LeaseGrant grant = leases.Acquire("owner-b", "uat", null, false, null).Value;
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases);
+        JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-1", grant.LeaseId, "mcp-test"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string row = File.ReadAllText(Path.Combine(bundle, "rows", Section, Row + ".json"));
+        Assert.Contains("\"lease_owner\": \"owner-b\"", row);
+        Assert.Contains("\"caller\": \"mcp-test\"", row);
+        string ledger = File.ReadAllText(Path.Combine(bundle, "ledger.md"));
+        Assert.Contains("- Attested: human-look held by owner-b via mcp-test", ledger);
+    }
+
+    [Fact]
+    public async Task UatAttestTool_UnknownLease_IsRefusedAndTheRowIsUnchanged()
+    {
+        string lab = Path.Combine(_root, "lab");
+        _ = Directory.CreateDirectory(Path.Combine(lab, "uat-runs"));
+        string bundle = Path.Combine(lab, "uat-runs", Path.GetFileName(_folder));
+        Directory.Move(_folder, bundle);
+        string rowPath = Path.Combine(bundle, "rows", Section, Row + ".json");
+        string before = File.ReadAllText(rowPath);
+
+        var time = new FakeTimeProvider(At);
+        var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+        using var vault = new SecretVault();
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, new Redactor(vault), time, leases);
+        JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-2", "no-such-lease", "mcp-test"), CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("[Lab.", result.Error, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllText(rowPath));
     }
 
     [Fact]
