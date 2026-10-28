@@ -55,7 +55,7 @@ The Gateway service is a **stateless** component that provides:
 
 - **Reverse Proxy**: Routes requests to 13+ backend microservices using YARP (Yet Another Reverse Proxy)
 - **Authentication**: JWT Bearer token validation with configurable issuer/audience
-- **Authorization**: Policy-based authorization (TenantScoped, Agent, DenyAll)
+- **Authorization**: Policy-based authorization (TenantScoped, AgentCertificate, DenyAll)
 - **Rate Limiting**: Multiple policies (Global, Auth, PerTenant, PerAgent) with IPv6-aware throttling
 - **Circuit Breaker**: Prevents cascading failures to unhealthy backend services
 - **Security Headers**: Comprehensive protection against XSS, clickjacking, MIME sniffing, etc.
@@ -430,14 +430,16 @@ Routes are configured in `appsettings.json` under `ReverseProxy:Routes`. Each ro
 | `identity-internal-block` | `/api/v1/identity/internal/{**catch-all}` | identity | **DenyAll** | - | - |
 | `betterauth-route` | `/api/v1/betterauth/{**catch-all}` | betterauth | Anonymous | Auth | - |
 | `identity-route` | `/api/v1/identity/{**catch-all}` | identity | Anonymous | Auth | PathRemovePrefix |
-| `servers-route` | `/api/v1/servers/{**catch-all}` | servers | TenantScoped | PerTenant | PathRemovePrefix |
+| `servers-org-route` | `/api/v1/organizations/{organizationId}/servers/{**catch-all}` | servers | TenantScoped | PerTenant | PathRemovePrefix |
 | `nodes-route` | `/api/v1/nodes/{**catch-all}` | nodes | TenantScoped | PerTenant | PathRemovePrefix |
-| `console-api-route` | `/api/v1/console/{**catch-all}` | console | TenantScoped | PerTenant | PathRemovePrefix |
+| `console-org-route` | `/api/v1/organizations/{organizationId}/servers/{serverId}/console/{**catch-all}` | console | TenantScoped | PerTenant | PathRemovePrefix |
+| `nodes-reservations-block` | `/api/v1/organizations/{organizationId}/nodes/{nodeId}/reservations/{**catch-all}` | nodes | **DenyAll** | - | - |
 | `console-hub-route` | `/hubs/console/{**catch-all}` | console | TenantScoped | PerTenant | - |
 | `notifications-route` | `/api/v1/notifications/{**catch-all}` | notifications | TenantScoped | PerTenant | PathRemovePrefix |
 | `firewall-route` | `/api/v1/firewall/{**catch-all}` | firewall | TenantScoped | PerTenant | PathRemovePrefix |
 | `secrets-route` | `/api/v1/secrets/{**catch-all}` | secrets | TenantScoped | PerTenant | PathRemovePrefix |
 | `discord-route` | `/api/v1/discord/{**catch-all}` | discord | TenantScoped | PerTenant | PathRemovePrefix |
+| `agents-ca-route` | `/api/v1/agents/ca-certificate` | nodes | Anonymous | Auth | PathRemovePrefix |
 | `agents-route` | `/api/v1/agents/{**catch-all}` | nodes | **AgentCertificate** | PerAgent | PathRemovePrefix |
 | `agent-hub-route` | `/hubs/agent/{**catch-all}` | nodes | **AgentCertificate** | PerAgent | - |
 
@@ -447,6 +449,8 @@ Agents reach Nodes through two routes that authenticate with the agent's TLS cli
 
 - `agents-route` (`/api/v1/agents/*`) and `agent-hub-route` (`/hubs/agent/*`) use the `AgentCertificate` policy. It passes only when the presented certificate's issuer CN is the agent CA (`AgentCertificateProfile.CaCommonName`). Anything else is answered 401 and never proxied.
 - `agents-enroll-route` (`/api/v1/agents/enroll`) stays `Anonymous`. It carries no forwarding metadata.
+- `agents-ca-route` (`/api/v1/agents/ca-certificate`) is `Anonymous`: the agent CA certificate is public, while the rest of `/api/v1/agents/*` requires the client certificate. It matches that exact path only.
+- The org reservation endpoints (`/api/v1/organizations/{organizationId}/nodes/{nodeId}/reservations/*`) are blocked at the Gateway by `nodes-reservations-block` (`DenyAll`, D-45). Servers calls Nodes for them directly.
 - Kestrel requests client certificates per `AgentIngress:ClientCertificateMode` (`NoCertificate` by default, `AllowCertificate` in the dev compose file). When a certificate is allowed, Kestrel accepts any certificate at TLS level. Nodes is the validator (D-S25): it checks the chain, SPIFFE ID and revocation. The Gateway only checks the issuer and forwards.
 - Routes with `"Metadata": { "ForwardClientCertificate": "true" }` forward the certificate to Nodes as base64 DER in the `X-Client-Cert` header.
 - **Strip-everywhere rule:** the Gateway removes any incoming `X-Client-Cert` header on every route, including routes that do not forward. A caller cannot spoof the header to Nodes.
@@ -636,10 +640,9 @@ private static readonly string[] SecurityHeaders = new[]
 After stripping, the middleware re-injects these headers from validated JWT claims:
 - `X-Tenant-Id` <- `org_id` claim
 - `X-User-Id` <- `sub` claim
-- `X-Client-Type` <- `client_type` claim
-- `X-Agent-Id` <- `agent_id` claim
 - `X-Roles` <- `role` claims (comma-separated)
 - `X-Real-IP` <- `RemoteIpAddress` (validated by ForwardedHeaders middleware)
+- `X-Client-Type` and `X-Agent-Id` are stripped and never set: agents authenticate by certificate (D-31)
 
 ### Cloudflare Trusted Proxy
 
@@ -665,7 +668,6 @@ The Gateway trusts `X-Forwarded-For` headers only from Cloudflare IP ranges:
 | Policy | Requirements |
 |--------|--------------|
 | `TenantScoped` | Authenticated user required |
-| `Agent` | Authenticated user + `client_type=agent` claim |
 | `AgentCertificate` | TLS client certificate whose issuer CN is `AgentCertificateProfile.CaCommonName` (Nodes validates the rest) |
 | `DenyAll` | Always fails (blocks internal endpoints) |
 

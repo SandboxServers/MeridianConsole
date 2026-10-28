@@ -20,4 +20,4 @@ API Gateway and single public entry point for all traffic.
 ## Notes
 - Stateless - no database
 - All backend services are routed through here
-- Rate limit policies: Global, Auth, Tenant, Agent
+- Rate limit policies: `Auth`, `PerTenant`, `PerAgent` per route, plus `RouteRateLimiting.GlobalPolicy` (`Global`)

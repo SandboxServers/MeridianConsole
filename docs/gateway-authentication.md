@@ -46,8 +46,7 @@ The Gateway uses Authority-based JWT validation, meaning it fetches JWKS (JSON W
 | Policy | Description | Usage |
 |--------|-------------|-------|
 | `Anonymous` | No authentication required | Health checks, public endpoints |
-| `TenantScoped` | Requires valid JWT with `org_id` claim | Most API routes |
-| `Agent` | Requires valid JWT with `client_type: agent` (defined; no route uses it since D-S26) | Reserved |
+| `TenantScoped` | Any authenticated user. The Gateway does not compare the route's `organizationId` with the token's `org_id`; the backend service must (404 for another org's resource) | Most API routes |
 | `AgentCertificate` | Requires a TLS client certificate whose issuer CN is `AgentCertificateProfile.CaCommonName`; Nodes validates the rest (D-S25) | `agents-route`, `agent-hub-route` |
 | `DenyAll` | Always denies access | Internal endpoint blocking |
 
@@ -77,8 +76,6 @@ The `RequestEnrichmentMiddleware` extracts claims from validated JWTs and inject
 |-------|--------|-------------|
 | `org_id` | `X-Tenant-Id` | Organization/tenant identifier |
 | `sub` | `X-User-Id` | User identifier |
-| `client_type` | `X-Client-Type` | Client type (user, agent) |
-| `agent_id` | `X-Agent-Id` | Agent identifier (agents only) |
 | `role` | `X-Roles` | Comma-separated roles |
 
 ### Security Headers

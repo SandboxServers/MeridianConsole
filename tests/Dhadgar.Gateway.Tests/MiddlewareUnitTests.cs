@@ -82,7 +82,7 @@ public class MiddlewareUnitTests
 
         Assert.Equal("tenant-1", context.Request.Headers["X-Tenant-Id"].ToString());
         Assert.Equal("user-1", context.Request.Headers["X-User-Id"].ToString());
-        Assert.Equal("agent", context.Request.Headers["X-Client-Type"].ToString());
+        Assert.False(context.Request.Headers.ContainsKey("X-Client-Type"));
         // X-Real-IP now comes from RemoteIpAddress, not from header parsing
         Assert.Equal("203.0.113.5", context.Request.Headers["X-Real-IP"].ToString());
         Assert.Equal("request-123", context.Request.Headers["X-Request-Id"].ToString());
