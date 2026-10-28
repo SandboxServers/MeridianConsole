@@ -19,6 +19,4 @@ ignore: |
   .git/
   src/Dhadgar.Scope/node_modules/
   _swa_publish/
-  deploy/kubernetes/helm/**
-  deploy/kubernetes/helm/meridian-console/templates/
-  deploy/kubernetes/helm/meridian-console/templates/**
+  parked/

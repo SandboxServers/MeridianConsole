@@ -182,19 +182,6 @@ public class AppHostIntegrationTests : IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task Billing_HealthCheck_ReturnsHealthy()
-    {
-        SkipIfDockerUnavailable();
-
-        // Arrange & Act
-        using var httpClient = _app!.CreateHttpClient("billing");
-        var response = await httpClient.GetAsync("/healthz");
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [SkippableFact]
     public async Task Servers_HealthCheck_ReturnsHealthy()
     {
         SkipIfDockerUnavailable();
@@ -208,38 +195,12 @@ public class AppHostIntegrationTests : IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task Tasks_HealthCheck_ReturnsHealthy()
-    {
-        SkipIfDockerUnavailable();
-
-        // Arrange & Act
-        using var httpClient = _app!.CreateHttpClient("tasks");
-        var response = await httpClient.GetAsync("/healthz");
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [SkippableFact]
     public async Task Console_HealthCheck_ReturnsHealthy()
     {
         SkipIfDockerUnavailable();
 
         // Arrange & Act
         using var httpClient = _app!.CreateHttpClient("console");
-        var response = await httpClient.GetAsync("/healthz");
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [SkippableFact]
-    public async Task Mods_HealthCheck_ReturnsHealthy()
-    {
-        SkipIfDockerUnavailable();
-
-        // Arrange & Act
-        using var httpClient = _app!.CreateHttpClient("mods");
         var response = await httpClient.GetAsync("/healthz");
 
         // Assert

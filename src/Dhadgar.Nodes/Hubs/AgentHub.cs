@@ -1,3 +1,4 @@
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Data;
@@ -99,6 +100,22 @@ public sealed class AgentHub(
             _ => AgentHubErrorCodes.HeartbeatFailed
         });
     }
+
+    /// <summary>Stub until VS-08R: answers <see cref="AgentHubErrorCodes.NotSupported"/>.</summary>
+    public Task<AgentHubAck> Telemetry(AgentTelemetry telemetry) =>
+        Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NotSupported));
+
+    /// <summary>Stub until VS-33: answers <see cref="AgentHubErrorCodes.NotSupported"/>.</summary>
+    public Task<AgentHubAck> CommandResult(AgentCommandResult result) =>
+        Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NotSupported));
+
+    /// <summary>Stub until VS-33: answers <see cref="AgentHubErrorCodes.NotSupported"/>.</summary>
+    public Task<AgentHubAck> ServerStatusChanged(AgentServerStatus status) =>
+        Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NotSupported));
+
+    /// <summary>Stub until VS-33: answers <see cref="AgentHubErrorCodes.NotSupported"/>.</summary>
+    public Task<AgentHubAck> ConsoleOutput(AgentConsoleBatch batch) =>
+        Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NotSupported));
 
     private bool TryGetNodeId(out Guid nodeId) =>
         Guid.TryParse(Context.User?.FindFirst(AgentHubProtocol.NodeIdClaim)?.Value, out nodeId);
