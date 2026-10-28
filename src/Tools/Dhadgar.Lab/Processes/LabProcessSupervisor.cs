@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Secrets;
@@ -40,6 +41,9 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
 
     private readonly Dictionary<string, ManagedProcess> _processes = new(StringComparer.Ordinal);
     private readonly object _gate = new();
+
+    private static readonly Regex PemBegin = new("-----BEGIN [A-Z ]*PRIVATE KEY-----", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private const int MaxPemLines = 200;
     private readonly LogPathGuard _logPaths;
     private readonly Redactor _redactor;
     private readonly LeaseBook _leases;
@@ -561,7 +565,33 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
     private void Ingest(ManagedProcess entry, string rawLine)
     {
         _observer.Observe(entry.Name, rawLine.AsSpan());
-        string redacted = _redactor.Redact(rawLine);
+        string stored = rawLine;
+        lock (entry.PemGate)
+        {
+            if (entry.PemLines > 0)
+            {
+                // Inside a multi-line private key: the body never reaches the ring, the file or a bundle (security N2).
+                stored = "***pem";
+                bool end = rawLine.Contains("-----END", StringComparison.Ordinal);
+                entry.PemLines = end || entry.PemLines >= MaxPemLines ? 0 : entry.PemLines + 1;
+            }
+            else
+            {
+                try
+                {
+                    if (PemBegin.IsMatch(rawLine) && !rawLine.Contains("-----END", StringComparison.Ordinal))
+                    {
+                        entry.PemLines = 1;
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    stored = "***pem";
+                }
+            }
+        }
+
+        string redacted = _redactor.Redact(stored);
         LogLine parsed = JsonLogLineParser.Parse(redacted, _time.GetUtcNow());
         // The parser decodes JSON escapes, so a vault value written escaped in the child's output is only visible now.
         LogLine line = parsed with
@@ -626,5 +656,9 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
         public string? LogPath { get; set; }
 
         public TaskCompletionSource<bool>? ExitSignal { get; set; }
+
+        public int PemLines { get; set; }
+
+        public Lock PemGate { get; } = new();
     }
 }

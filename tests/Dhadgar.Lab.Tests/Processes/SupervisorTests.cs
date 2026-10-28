@@ -162,6 +162,31 @@ public sealed class SupervisorTests
         }
     }
 
+    [SkippableFact]
+    public async Task Supervisor_MultiLinePem_BodyIsNotStored()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        using var harness = new SupervisorHarness();
+        LabProcessSpec spec = SupervisorHarness.ChildSpec("tc-pem", relaunch: true, "--pem", "--sleep-ms", "60000");
+
+        _ = await harness.Supervisor.StartAsync(spec, CancellationToken.None);
+        bool captured = await SupervisorHarness.WaitUntilAsync(() => (harness.Supervisor.ReadLines("tc-pem").Value?.Count ?? 0) >= 4, Patience);
+        Assert.True(captured);
+        _ = await harness.Supervisor.StopAsync("tc-pem");
+
+        List<LogLine> ring = harness.Supervisor.ReadLines("tc-pem").Value!.ToList();
+        Assert.DoesNotContain(ring, line => line.Message.Contains("MIIEvQ", StringComparison.Ordinal));
+        Assert.Contains(ring, line => line.Message.Contains("after-pem", StringComparison.Ordinal));
+
+        string file = Path.Combine(harness.Paths.Logs, "tc-pem.jsonl");
+        foreach (string record in ReadSharedLines(file))
+        {
+            using JsonDocument document = JsonDocument.Parse(record);
+            string message = document.RootElement.GetProperty("Message").GetString() ?? string.Empty;
+            Assert.DoesNotContain("MIIEvQ", message, StringComparison.Ordinal);
+        }
+    }
+
     private static int CountMarker(string path, string marker) =>
         ReadSharedLines(path).Count(line => line.Contains(marker, StringComparison.Ordinal));
 
