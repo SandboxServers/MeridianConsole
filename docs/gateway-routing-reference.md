@@ -317,7 +317,6 @@ CORS is configured in `src/Dhadgar.Gateway/appsettings.json` under `Cors`.
 "Cors": {
   "AllowedOrigins": [
     "https://panel.meridianconsole.com",
-    "https://cart.meridianconsole.com",
     "https://meridianconsole.com",
     "https://dev.meridianconsole.com",
     "http://localhost:4321",
