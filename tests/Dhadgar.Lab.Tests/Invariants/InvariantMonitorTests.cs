@@ -29,6 +29,31 @@ public sealed class InvariantMonitorTests
         Assert.Contains(report.Errors, error => error.InvariantId == "I2" && error.Error == "source down");
     }
 
+    [Fact]
+    public async Task Monitor_SkippableInvariant_SkipsAreStampedWithTheRow_AndAreNotErrors()
+    {
+        var monitor = new InvariantMonitor([new SkippingFake("I2")]);
+
+        InvariantReport report = await monitor.CheckpointAsync(new InvariantWindow(DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddHours(1), null, "r1"), CancellationToken.None);
+
+        Assert.Empty(report.Errors);
+        InvariantSkip skip = Assert.Single(report.Skipped!);
+        Assert.Equal("r1", skip.Row);
+    }
+
+    private sealed class SkippingFake(string id) : ISkippableInvariant
+    {
+        public string Id { get; } = id;
+
+        public Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct) =>
+            Task.FromResult(Result<IReadOnlyList<InvariantViolation>>.Success(Array.Empty<InvariantViolation>()));
+
+        public Task<Result<InvariantOutcome>> CheckWithSkipsAsync(InvariantWindow window, CancellationToken ct) =>
+            Task.FromResult(Result<InvariantOutcome>.Success(new InvariantOutcome(
+                Array.Empty<InvariantViolation>(),
+                [new InvariantSkip(Id, "db:nodes", "stack not up (no lab credentials)")])));
+    }
+
     private sealed class FakeInvariant(string id, bool Throws = false, string? Fails = null, int Violations = 0) : IInvariant
     {
         public string Id { get; } = id;

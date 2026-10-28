@@ -43,6 +43,30 @@ public sealed class I3DbChecksInvariantTests
     }
 
     [Fact]
+    public async Task I3_StackNotUp_SkipsEachDatabaseOnce()
+    {
+        using var folder = new TempFolder();
+        folder.Write("nodes.toml", NodesToml);
+        using var vault = new SecretVault();
+        int calls = 0;
+        InvariantSqlQuery counting = (_, _, _) =>
+        {
+            calls++;
+            return Task.FromResult(Result<DbQueryResult>.Success(new DbQueryResult([], [], 0, false)));
+        };
+        InvariantDbGate gate = (_, _) => Task.FromResult(Result<DbApplicability>.Success(DbApplicability.StackNotUp));
+        var check = new I3DbChecksInvariant(folder.Path, counting, new Redactor(vault), gate);
+
+        Result<InvariantOutcome> result = await check.CheckWithSkipsAsync(Window, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Violations);
+        Assert.Equal(0, calls);
+        InvariantSkip skip = Assert.Single(result.Value.Skipped);
+        Assert.Equal("db:nodes", skip.Source);
+    }
+
+    [Fact]
     public async Task I3_CheckReturnsNoRows_NoViolation()
     {
         using var folder = new TempFolder();

@@ -78,6 +78,28 @@ public sealed class I5OrphanInvariantTests
         Assert.Equal(["ps", "-a", "--filter", "label=meridian-lab=1", "--format", "{{.Names}}"], docker.Args);
     }
 
+    [Fact]
+    public async Task I5_StackNotCreated_SkipsQueuesAndProxies_StillReportsOrphanContainer()
+    {
+        Func<CancellationToken, Task<Result<IReadOnlyList<BrokerQueueInfo>>>> queues = _ => throw new InvalidOperationException("queues must not be read");
+        Func<CancellationToken, Task<Result<IReadOnlyList<ProxySpec>>>> proxies = _ => throw new InvalidOperationException("proxies must not be read");
+        var check = new I5OrphanInvariant(
+            _ => Task.FromResult(Result<IReadOnlyList<string>>.Success(["meridian-lab-stray"])),
+            new FakeRegistry([]),
+            queues,
+            proxies,
+            () => [],
+            () => [],
+            stackCreated: () => false);
+
+        Result<InvariantOutcome> result = await check.CheckWithSkipsAsync(Window, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        InvariantViolation violation = Assert.Single(result.Value.Violations);
+        Assert.Equal("orphan-container", violation.CheckId);
+        Assert.Equal(new[] { "queues", "proxies" }, result.Value.Skipped.Select(s => s.Source).ToArray());
+    }
+
     private static I5OrphanInvariant Build(
         IReadOnlyList<string>? containers = null,
         IReadOnlyList<string>? registered = null,
