@@ -116,8 +116,6 @@ public static class ToolPolicy
         "triage_draft_issue",
         "triage_mark",
         // L27
-        "job_status",
-        "job_cancel",
         "results_flake_check",
         "hunt_model_run",
         // L28
