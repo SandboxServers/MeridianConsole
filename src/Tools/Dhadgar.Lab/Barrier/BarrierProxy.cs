@@ -40,6 +40,7 @@ public sealed class BarrierProxy : IAsyncDisposable
     private readonly TimeProvider _time;
     private readonly TimeSpan _holdCap;
     private readonly LabListenerPorts? _listeners;
+    private readonly SocketsHttpHandler _handler;
     private readonly HttpClient _client;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly object _gate = new();
@@ -55,7 +56,8 @@ public sealed class BarrierProxy : IAsyncDisposable
         _time = time;
         _holdCap = holdCap;
         _listeners = listeners;
-        _client = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, UseCookies = false });
+        _handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, UseCookies = false };
+        _client = new HttpClient(_handler);
     }
 
     /// <summary>
@@ -108,7 +110,9 @@ public sealed class BarrierProxy : IAsyncDisposable
             return Result<BarrierProxy>.Failure("[Lab.InvalidArgument] the hold cap must be positive");
         }
 
+#pragma warning disable CA2000 // ownership passes to the caller on success; every failure path below disposes it
         var proxy = new BarrierProxy(upstream, sink, time, holdCap, listeners);
+#pragma warning restore CA2000
         WebApplication? app = null;
         try
         {
@@ -264,7 +268,7 @@ public sealed class BarrierProxy : IAsyncDisposable
             return;
         }
 
-        _lifetime.Cancel();
+        await _lifetime.CancelAsync().ConfigureAwait(false);
         if (_app is not null)
         {
             await _app.StopAsync().ConfigureAwait(false);
@@ -272,6 +276,7 @@ public sealed class BarrierProxy : IAsyncDisposable
         }
 
         _client.Dispose();
+        _handler.Dispose();
         _listeners?.Release(BoundPort);
         _lifetime.Dispose();
     }
@@ -461,7 +466,7 @@ public sealed class BarrierProxy : IAsyncDisposable
                     return new BoundedBody(buffer.Length, [], TooLarge: true);
                 }
 
-                buffer.Write(chunk, 0, read);
+                await buffer.WriteAsync(chunk.AsMemory(0, read), ct).ConfigureAwait(false);
             }
         }
         finally

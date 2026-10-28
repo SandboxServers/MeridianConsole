@@ -112,7 +112,8 @@ public sealed class BarrierProxyTests
         await using BarrierProxy proxy = await StartProxyAsync(sink);
         Assert.True(proxy.Arm(RunId, [Rule(1, BarrierAction.Pass, null)]).IsSuccess);
 
-        using var client = NewClient();
+        using var handler = NewHandler();
+        using var client = new HttpClient(handler, disposeHandler: false);
         using var request = new HttpRequestMessage(HttpMethod.Get, ProxyUri(proxy, "/probe"));
         request.Headers.Add("X-Lab-Op-Id", OpText(1));
         request.Headers.TryAddWithoutValidation("Keep-Alive", "timeout=5");
@@ -171,7 +172,8 @@ public sealed class BarrierProxyTests
         await using BarrierProxy proxy = await StartProxyAsync(sink);
         Assert.True(proxy.Arm(RunId, [Rule(1, BarrierAction.Pass, null)]).IsSuccess);
 
-        using var client = NewClient();
+        using var handler = NewHandler();
+        using var client = new HttpClient(handler, disposeHandler: false);
         using var request = new HttpRequestMessage(HttpMethod.Post, ProxyUri(proxy, "/probe"))
         {
             Content = new ByteArrayContent(new byte[BarrierProxy.MaxBodyBytes + 1]),
@@ -228,14 +230,15 @@ public sealed class BarrierProxyTests
     private static Uri ProxyUri(BarrierProxy proxy, string path) =>
         new($"http://127.0.0.1:{proxy.BoundPort.ToString(System.Globalization.CultureInfo.InvariantCulture)}{path}");
 
-    private static HttpClient NewClient() =>
-        new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, UseCookies = false });
+    private static SocketsHttpHandler NewHandler() =>
+        new() { AllowAutoRedirect = false, UseProxy = false, UseCookies = false };
 
     private static async Task<HttpResponseMessage> Send(BarrierProxy proxy, int seq) => await SendRawAsync(proxy, OpText(seq));
 
     private static async Task<HttpResponseMessage> SendRawAsync(BarrierProxy proxy, string? opId)
     {
-        using HttpClient client = NewClient();
+        using SocketsHttpHandler handler = NewHandler();
+        using var client = new HttpClient(handler, disposeHandler: false);
         using var request = new HttpRequestMessage(HttpMethod.Get, ProxyUri(proxy, "/probe"));
         if (opId is not null)
         {
