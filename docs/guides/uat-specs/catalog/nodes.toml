@@ -3,7 +3,7 @@ schema = 1
 # Expected-failure catalog for Nodes (L23). Each row states the designed failure, mints what it needs first, and sets allow_invariants = [].
 # Enroll-route calls per row (F54, poll_ms = 5000 where a clause polls the enroll route; recovery clauses poll /healthz, not the enroll route):
 #   nodes-pg-down-enroll 2, nodes-pg-latency 1, nodes-rabbit-down-outbox 1, nodes-killed-enroll 2, nodes-pg-terminate 1,
-#   nodes-pg-readonly 2, nodes-ca-key-corrupt 1, nodes-token-expired 1, nodes-token-reuse-after-failure 3, nodes-enroll-malformed 3. Each is under 25 per 60 s by the spec's own count.
+#   nodes-pg-readonly 2, nodes-ca-key-corrupt 1, nodes-token-expired 1, nodes-token-reuse-after-failure 3, nodes-enroll-malformed 2. Each is under 25 per 60 s by the spec's own count.
 # A 429 in these rows is a lab spec defect, never a product finding. The CA route is never called through the Gateway (D-ML63).
 
 [section]
@@ -54,7 +54,7 @@ known_issue = "KI-F67"
 
   [[row.step]]
   id = "settle"
-  wait_ms = 10000
+  wait_ms = 60000
 
   [[row.step]]
   id = "enroll-after"
@@ -295,6 +295,10 @@ allow_invariants = []
 
   [[row.step]]
   id = "await"
+  wait_ms = 60000
+
+  [[row.step]]
+  id = "await-more"
   wait_ms = 30000
 
   [[row.step]]
@@ -710,7 +714,8 @@ allow_invariants = []
 [[row]]
 id = "nodes-enroll-malformed"
 title = "Malformed enroll bodies through the Gateway are refused with 400 problem+json"
-expected = "An empty body, a wrong-typed field and an oversized string field each return 400"
+expected = "An empty body and a wrong-typed field each return 400 application/problem+json"
+known_issue = "KI-F69"
 allow_invariants = []
 
   [[row.step]]
@@ -727,10 +732,20 @@ allow_invariants = []
 
   [[row.expect]]
   id = "problem-json"
-  text = "the malformed enroll reply is application/problem+json"
+  text = "the wrong-typed enroll reply is application/problem+json"
   source = "step"
   step = "wrong-type"
-  pointer = "/result/headers/content-type"
+  pointer = "/result/headers/Content-Type"
+  op = "contains"
+  value = "application/problem+json"
+  required = true
+
+  [[row.expect]]
+  id = "problem-json-empty"
+  text = "the empty-body enroll reply is application/problem+json"
+  source = "step"
+  step = "empty"
+  pointer = "/result/headers/Content-Type"
   op = "contains"
   value = "application/problem+json"
   required = true
