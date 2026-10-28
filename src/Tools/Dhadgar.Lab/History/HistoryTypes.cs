@@ -29,6 +29,8 @@ public sealed record HistoryOp(
 /// <summary>
 /// A recorded history of one run (C19). <see cref="FinalState"/> is the db_query snapshot taken at run end.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1724:Type names should not match namespaces",
+    Justification = "The record name History is fixed by C19; the namespace Dhadgar.Lab.History is the checker's own.")]
 public sealed record History(string RunId, string Scenario, IReadOnlyList<HistoryOp> Ops, JsonElement FinalState);
 
 /// <summary>
