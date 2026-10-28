@@ -200,7 +200,6 @@ dotnet user-secrets set "Auth:SigningKey" "your-development-signing-key"
   "Cors": {
     "AllowedOrigins": [
       "https://panel.meridianconsole.com",
-      "https://cart.meridianconsole.com",
       "https://meridianconsole.com",
       "https://dev.meridianconsole.com",
       "http://localhost:4321",
@@ -436,7 +435,6 @@ Routes are configured in `appsettings.json` under `ReverseProxy:Routes`. Each ro
 | `nodes-reservations-block` | `/api/v1/organizations/{organizationId}/nodes/{nodeId}/reservations/{**catch-all}` | nodes | **DenyAll** | - | - |
 | `console-hub-route` | `/hubs/console/{**catch-all}` | console | TenantScoped | PerTenant | - |
 | `notifications-route` | `/api/v1/notifications/{**catch-all}` | notifications | TenantScoped | PerTenant | PathRemovePrefix |
-| `firewall-route` | `/api/v1/firewall/{**catch-all}` | firewall | TenantScoped | PerTenant | PathRemovePrefix |
 | `secrets-route` | `/api/v1/secrets/{**catch-all}` | secrets | TenantScoped | PerTenant | PathRemovePrefix |
 | `discord-route` | `/api/v1/discord/{**catch-all}` | discord | TenantScoped | PerTenant | PathRemovePrefix |
 | `agents-ca-route` | `/api/v1/agents/ca-certificate` | nodes | Anonymous | Auth | PathRemovePrefix |
