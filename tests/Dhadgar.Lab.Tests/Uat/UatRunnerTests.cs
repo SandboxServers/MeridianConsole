@@ -103,6 +103,30 @@ public sealed class UatRunnerTests
           tool = "faults_active"
         """;
 
+    private const string RunnerFailsSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-faults"
+        title = "Runner faults"
+
+        [[row]]
+        id = "faulted"
+        title = "Faulted row"
+        expected = "pass"
+        depends_on = []
+
+          [[row.fault]]
+          id = "kill-it"
+          inject = { tool = "fault_kill", args = { target = "x" } }
+          start = "before_steps"
+          heal = "after_steps"
+
+          [[row.step]]
+          id = "probe"
+          tool = "probe_tool"
+        """;
+
     private const string SecondInjectFailsSpec = """
         schema = 1
 
@@ -288,6 +312,23 @@ public sealed class UatRunnerTests
             new UatRunRequest(Load(CancelledStepSpec), null, 1UL, null, null, PlanOnly: false), new NullSink(), cts.Token));
 
         Assert.Single(kill.Calls);
+        Assert.Equal("f-kill-1", Assert.Single(heal.Calls).FaultId);
+    }
+
+    [Fact(Timeout = 10000)]
+    public async Task FaultRow_RunnerThrowsMidRow_FaultStillHealedAndExceptionPropagates()
+    {
+        var kill = new ScriptedTool("fault_kill", () => Result<object>.Success(new { fault_id = "f-kill-1" }));
+        var heal = new ScriptedTool("fault_heal", () => Result<object>.Success(new { healed = true }));
+        var probe = new ScriptedTool("probe_tool", () => Result<object>.Success(new { ok = true }));
+        // Appends: 1 inject begin, 2 inject complete, 3 probe step begin. The third throws once, outside the dispatcher.
+        using var harness = new Harness(new FakeProbe(true), new ThrowOnceSink(failOnAppend: 3), kill, heal, probe);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Runner.RunAsync(
+            new UatRunRequest(Load(RunnerFailsSpec), null, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None));
+
+        Assert.Single(kill.Calls);
+        Assert.Empty(probe.Calls);
         Assert.Equal("f-kill-1", Assert.Single(heal.Calls).FaultId);
     }
 
@@ -672,6 +713,34 @@ public sealed class UatRunnerTests
         }
 
         public IReadOnlyList<LabObservation> Read(string runId, long afterSeq, int max) => Array.Empty<LabObservation>();
+    }
+
+    /// <summary>
+    /// Records like <see cref="RecordingSink"/>, but throws once on the given Append call, the way a runner-side failure outside the dispatcher would.
+    /// </summary>
+    private sealed class ThrowOnceSink(int failOnAppend) : ILabObservationSink
+    {
+        private readonly RecordingSink _inner = new();
+        private int _appends;
+
+        public Result BeginRun(string runId, string runFolder) => _inner.BeginRun(runId, runFolder);
+
+        public Task<Result<long>> EndRunAsync(string runId, CancellationToken ct) => _inner.EndRunAsync(runId, ct);
+
+        public OpId NextOp(string runId, string actor) => _inner.NextOp(runId, actor);
+
+        public Result<long> Append(LabObservation draft)
+        {
+            _appends++;
+            if (_appends == failOnAppend)
+            {
+                throw new InvalidOperationException("sink failed on append " + _appends.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            return _inner.Append(draft);
+        }
+
+        public IReadOnlyList<LabObservation> Read(string runId, long afterSeq, int max) => _inner.Read(runId, afterSeq, max);
     }
 
     private sealed class Harness : IDisposable

@@ -206,9 +206,9 @@ internal sealed class RowExecutor
             healError ??= await HealDueAsync(_ => true, vars, run, faults, ct).ConfigureAwait(false);
             faultError ??= healError;
         }
-        catch (OperationCanceledException)
+        catch (Exception)
         {
-            // A cancelled run (MCP cancel, daemon shutdown) still heals what it injected. FaultBook's deadline and lease-end heal are the backstop.
+            // A cancelled run (MCP cancel, daemon shutdown) or any other fault raised inside the row still heals what it injected. FaultBook's deadline and lease-end heal are the backstop.
             await HealAbandonedAsync(vars, run, faults).ConfigureAwait(false);
             throw;
         }
@@ -366,7 +366,7 @@ internal sealed class RowExecutor
     }
 
     /// <summary>
-    /// After a failed heal:<c>fault_reset</c>, then <c>faults_active</c>. Faults still in place make the lab not clean (R-REG), and
+    /// After a failed heal: <c>fault_reset</c>, then <c>faults_active</c>. Faults still in place make the lab not clean (R-REG), and
     /// every remaining row is BLOCKED.
     /// </summary>
     private async Task ResetAsync(FaultState faults, UatVars vars, RunContext run, CancellationToken ct)
