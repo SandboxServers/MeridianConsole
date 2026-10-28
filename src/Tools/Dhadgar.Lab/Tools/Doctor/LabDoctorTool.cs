@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Windows;
 using Dhadgar.Shared.Results;
@@ -31,13 +32,15 @@ public sealed class LabDoctorTool : LabTool<LabDoctorArgs>
     private static readonly TimeSpan CommandLimit = TimeSpan.FromSeconds(10);
 
     private readonly Redactor _redactor;
+    private readonly IDockerCli _docker;
 
     /// <summary>
-    /// Creates the tool over the redactor used for command output.
+    /// Creates the tool over the redactor used for command output and the docker client that runs the Docker check.
     /// </summary>
-    public LabDoctorTool(Redactor redactor)
+    public LabDoctorTool(Redactor redactor, IDockerCli docker)
     {
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
+        _docker = docker ?? throw new ArgumentNullException(nameof(docker));
     }
 
     /// <inheritdoc />
@@ -59,7 +62,7 @@ public sealed class LabDoctorTool : LabTool<LabDoctorArgs>
             new("os", "info", Environment.OSVersion.Platform.ToString()),
             BuildCheck(),
             await VersionCheckAsync("dotnet", ["--version"], "dotnet", ct).ConfigureAwait(false),
-            await VersionCheckAsync("docker", ["version", "--format", "{{.Server.Os}}"], "docker", ct).ConfigureAwait(false),
+            await DockerCheckAsync(ct).ConfigureAwait(false),
             new("ports", "info", "not checked in this packet"),
             new("docker-users", "info", "not checked in this packet"),
             new("token", "info", "not checked in this packet"),
@@ -88,6 +91,19 @@ public sealed class LabDoctorTool : LabTool<LabDoctorArgs>
         {
             return new DoctorCheck("build", "warn", "build number read denied");
         }
+    }
+
+    private async Task<DoctorCheck> DockerCheckAsync(CancellationToken ct)
+    {
+        Result<DockerOutput> run = await _docker.RunAsync(DockerEngine.Linux, ["version", "--format", "{{.Server.Os}}"], ct).ConfigureAwait(false);
+        if (run.IsFailure)
+        {
+            return new DoctorCheck("docker", "fail", _redactor.Redact(run.Error));
+        }
+
+        return run.Value!.ExitCode == 0
+            ? new DoctorCheck("docker", "ok", _redactor.Redact(run.Value.StdOut.Trim()))
+            : new DoctorCheck("docker", "fail", "docker server not reachable on the lab context");
     }
 
     private async Task<DoctorCheck> VersionCheckAsync(string name, string[] arguments, string command, CancellationToken ct)
