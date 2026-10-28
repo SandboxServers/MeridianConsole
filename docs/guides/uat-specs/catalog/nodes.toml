@@ -1,0 +1,736 @@
+schema = 1
+
+# Expected-failure catalog for Nodes (L23). Each row states the designed failure, mints what it needs first, and sets allow_invariants = [].
+# Enroll-route calls per row (F54, poll_ms = 5000 where a clause polls the enroll route; recovery clauses poll /healthz, not the enroll route):
+#   nodes-pg-down-enroll 2, nodes-pg-latency 1, nodes-rabbit-down-outbox 1, nodes-killed-enroll 2, nodes-pg-terminate 1,
+#   nodes-pg-readonly 2, nodes-ca-key-corrupt 1, nodes-token-expired 1, nodes-token-reuse-after-failure 3, nodes-enroll-malformed 3. Each is under 25 per 60 s by the spec's own count.
+# A 429 in these rows is a lab spec defect, never a product finding. The CA route is never called through the Gateway (D-ML63).
+
+[section]
+id = "catalog-nodes"
+title = "Nodes expected-failure catalog"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+
+[[row]]
+id = "nodes-pg-down-enroll"
+title = "An enroll while Nodes' Postgres is cut fails with the designed 503; the same token enrolls after the heal"
+expected = "The enroll returns 503 while Postgres is cut; the token is unused until a fresh enroll after the heal returns 201"
+known_issue = "KI-F67"
+
+  [[row.fault]]
+  id = "pg"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "nodes-postgres" } }
+  start = "after_step:mint"
+  heal = "after_step:enroll-down"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-pg-down-${run_id}" }
+  capture = { token_ref = "/token_ref", token_id = "/token_id" }
+
+  [[row.step]]
+  id = "enroll-down"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  expect_error = "http:503"
+
+  [[row.step]]
+  id = "settle"
+  wait_ms = 10000
+
+  [[row.step]]
+  id = "enroll-after"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.expect]]
+  id = "down-503"
+  text = "the enroll while Postgres is cut returns 503"
+  source = "step"
+  step = "enroll-down"
+  pointer = "/result/status"
+  op = "eq"
+  value = 503
+  required = true
+
+  [[row.expect]]
+  id = "after-201"
+  text = "the same token enrolls with 201 after the heal"
+  source = "step"
+  step = "enroll-after"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "recovered"
+  text = "Nodes GET /healthz returns 200 after the heal"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/healthz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:pg"
+  timeout_ms = 60000
+  poll_ms = 1000
+  required = true
+
+  [[row.expect]]
+  id = "token-used"
+  text = "the token row is used after the fresh enroll"
+  source = "db"
+  database = "nodes"
+  sql = 'select "UsedAt" as used_at from enrollment_tokens where "Id" = @id::uuid'
+  params = { id = "${token_id}" }
+  op = "truthy"
+  pointer = "/rows/0/used_at"
+  timeout_ms = 0
+  required = true
+
+[[row]]
+id = "nodes-pg-latency"
+title = "A 2000 ms Postgres latency is passed through; the enroll still succeeds"
+expected = "The enroll returns 201 after at least 2000 ms"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "pg-latency"
+  inject = { tool = "fault_toxic_add", args = { proxy = "nodes-postgres", toxic = "latency", stream = "downstream", toxicity = 1.0, attributes = { latency = 2000 } } }
+  start = "after_step:mint"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-pg-latency-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.expect]]
+  id = "enroll-201"
+  text = "the enroll returns 201 through the slow database"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "enroll-slow"
+  text = "the enroll took at least 2000 ms"
+  source = "step"
+  step = "probe"
+  pointer = "/duration_ms"
+  op = "gte"
+  value = 2000
+  required = true
+
+  [[row.expect]]
+  id = "recovered"
+  text = "Nodes GET /healthz returns 200 after the heal"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/healthz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:pg-latency"
+  timeout_ms = 60000
+  poll_ms = 1000
+  required = true
+
+[[row]]
+id = "nodes-rabbit-down-outbox"
+title = "With the broker cut the outbox decouples the enroll; Nodes stays 200 and the outbox drains after the heal"
+expected = "The enroll returns 201 and /healthz returns 200 (Degraded) while RabbitMQ is cut; undelivered outbox rows reach zero within 60 s of the heal"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "rabbit"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "nodes-rabbitmq" } }
+  start = "after_step:mint"
+  heal = "after_step:health-down"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-rabbit-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.step]]
+  id = "health-down"
+  tool = "http_request"
+  args = { via = "nodes", method = "GET", path = "/healthz" }
+
+  [[row.expect]]
+  id = "enroll-201"
+  text = "the enroll returns 201 while the broker is cut"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "health-200-degraded"
+  text = "Nodes /healthz is 200 (masstransit Degraded, F68) while the broker is cut"
+  source = "step"
+  step = "health-down"
+  pointer = "/result/status"
+  op = "eq"
+  value = 200
+  required = true
+
+  [[row.expect]]
+  id = "outbox-drained"
+  text = "undelivered outbox rows reach zero within 60 s of the heal"
+  source = "db"
+  database = "nodes"
+  sql = 'select count(*) as pending from "OutboxMessage" where "Delivered" is null'
+  op = "eq"
+  pointer = "/rows/0/pending"
+  value = 0
+  since = "fault_heal:rabbit"
+  timeout_ms = 60000
+  poll_ms = 5000
+  required = true
+
+[[row]]
+id = "nodes-killed-enroll"
+title = "A killed Nodes fails the enroll without burning the token; the same token enrolls once Nodes is back"
+expected = "The enroll returns 502 or 503 while Nodes is killed; after the heal the same token returns 201 within 90 s"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "kill"
+  inject = { tool = "fault_kill", args = { target = "c:nodes", signal = "KILL" } }
+  start = "after_step:mint"
+  heal = "after_step:kill-enroll"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-killed-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "kill-enroll"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.step]]
+  id = "await"
+  wait_ms = 30000
+
+  [[row.step]]
+  id = "enroll-again"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.expect]]
+  id = "killed-502-503"
+  text = "the enroll while Nodes is killed returns 502 or 503"
+  source = "step"
+  step = "kill-enroll"
+  pointer = "/result/status"
+  op = "any"
+  value = [502, 503]
+  required = true
+
+  [[row.expect]]
+  id = "same-token-201"
+  text = "the same token enrolls with 201 after Nodes is started again"
+  source = "step"
+  step = "enroll-again"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "recovered"
+  text = "Nodes GET /healthz returns 200 after the heal"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/healthz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:kill"
+  timeout_ms = 90000
+  poll_ms = 1000
+  required = true
+
+[[row]]
+id = "nodes-pg-terminate"
+title = "Terminated Postgres backends are recovered by the pool: the next enroll is 201 or a retryable 503, never a 500"
+expected = "The next enroll returns 201 or 503; Nodes /readyz returns 200 after the heal"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "term"
+  inject = { tool = "fault_db", args = { database = "d:nodes", action = "terminate_backends" } }
+  start = "after_step:mint"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-terminate-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.expect]]
+  id = "no-500"
+  text = "the enroll after terminated backends is 201 or a retryable 503"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "any"
+  value = [201, 503]
+  required = true
+
+  [[row.expect]]
+  id = "recovered"
+  text = "Nodes GET /readyz returns 200 after the heal"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/readyz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:term"
+  timeout_ms = 30000
+  poll_ms = 1000
+  required = true
+
+[[row]]
+id = "nodes-pg-readonly"
+title = "A read-only Postgres fails the enroll with the designed 503; the token enrolls after the heal"
+expected = "The enroll returns 503 while the database is read-only; the same token returns 201 after the heal"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "ro"
+  inject = { tool = "fault_db", args = { database = "d:nodes", action = "read_only" } }
+  start = "after_step:mint"
+  heal = "after_step:ro-enroll"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-readonly-${run_id}" }
+  capture = { token_ref = "/token_ref", token_id = "/token_id" }
+
+  [[row.step]]
+  id = "ro-enroll"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  expect_error = "http:503"
+
+  [[row.step]]
+  id = "settle"
+  wait_ms = 10000
+
+  [[row.step]]
+  id = "enroll-after"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.expect]]
+  id = "ro-503"
+  text = "the enroll on a read-only database returns 503"
+  source = "step"
+  step = "ro-enroll"
+  pointer = "/result/status"
+  op = "eq"
+  value = 503
+  required = true
+
+  [[row.expect]]
+  id = "after-201"
+  text = "the same token enrolls with 201 after the heal"
+  source = "step"
+  step = "enroll-after"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "recovered"
+  text = "Nodes GET /healthz returns 200 after the heal"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/healthz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:ro"
+  timeout_ms = 60000
+  poll_ms = 1000
+  required = true
+
+[[row]]
+id = "nodes-ca-key-corrupt"
+title = "A garbled Nodes CA key never yields a 500 or a node row without a certificate; the restart after the heal recovers"
+expected = "With the CA key garbled, Nodes refuses ready or the enroll fails with a designed status, never a 500; after the heal and restart the enroll returns 201"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "ca"
+  inject = { tool = "fault_corrupt_file", args = { file = "nodes-ca-key", mode = "garbage" } }
+  start = "after_step:start-nodes"
+  heal = "after_step:probe-corrupt"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-ca-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "restart-corrupt"
+  tool = "svc_restart"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "probe-corrupt"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "nodes" }
+
+  [[row.step]]
+  id = "restart-healed"
+  tool = "svc_restart"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "enroll-after"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "nodes" }
+
+  [[row.expect]]
+  id = "no-500"
+  text = "the enroll with a garbled CA key is never a 500"
+  source = "step"
+  step = "probe-corrupt"
+  pointer = "/result/status"
+  op = "ne"
+  value = 500
+  required = true
+
+  [[row.expect]]
+  id = "after-201"
+  text = "after the heal and restart the same token enrolls with 201"
+  source = "step"
+  step = "enroll-after"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "recovered"
+  text = "Nodes GET /readyz returns 200 after the heal and restart"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/readyz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:ca"
+  timeout_ms = 60000
+  poll_ms = 1000
+  required = true
+
+[[row]]
+id = "nodes-token-expired"
+title = "An enroll with a token past its one-minute validity is refused with 401"
+expected = "The enroll returns http:401 after the token expires"
+allow_invariants = []
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-expired-${run_id}", validity_minutes = 1 }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "wait-expiry"
+  wait_ms = 60000
+
+  [[row.step]]
+  id = "wait-more"
+  wait_ms = 5000
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "nodes" }
+  expect_error = "http:401"
+
+  [[row.expect]]
+  id = "expired-401"
+  text = "the expired token is refused with 401"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "eq"
+  value = 401
+  required = true
+
+[[row]]
+id = "nodes-token-reuse-after-failure"
+title = "A token whose enroll failed during a Postgres cut is usable once and refused on reuse"
+expected = "The enroll fails with 503 under the cut; after the heal the token enrolls 201; a second use returns http:401"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "pg"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "nodes-postgres" } }
+  start = "after_step:mint"
+  heal = "after_step:fail-enroll"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "catalog-reuse-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "fail-enroll"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  expect_error = "http:503"
+
+  [[row.step]]
+  id = "settle"
+  wait_ms = 10000
+
+  [[row.step]]
+  id = "first"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.step]]
+  id = "reuse"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  expect_error = "http:401"
+
+  [[row.expect]]
+  id = "failed-503"
+  text = "the enroll under the cut returns 503"
+  source = "step"
+  step = "fail-enroll"
+  pointer = "/result/status"
+  op = "eq"
+  value = 503
+  required = true
+
+  [[row.expect]]
+  id = "first-201"
+  text = "the first enroll after the heal returns 201"
+  source = "step"
+  step = "first"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "reuse-401"
+  text = "the reused token is refused with 401"
+  source = "step"
+  step = "reuse"
+  pointer = "/result/status"
+  op = "eq"
+  value = 401
+  required = true
+
+  [[row.expect]]
+  id = "recovered"
+  text = "Nodes GET /healthz returns 200 after the heal"
+  source = "http"
+  via = "nodes"
+  method = "GET"
+  path = "/healthz"
+  op = "eq"
+  pointer = "/status"
+  value = 200
+  since = "fault_heal:pg"
+  timeout_ms = 60000
+  poll_ms = 1000
+  required = true
+
+[[row]]
+id = "nodes-enroll-malformed"
+title = "Malformed enroll bodies through the Gateway are refused with 400 problem+json"
+expected = "An empty body, a wrong-typed field and an oversized string field each return 400"
+allow_invariants = []
+
+  [[row.step]]
+  id = "empty"
+  tool = "http_request"
+  args = { via = "gateway", method = "POST", path = "/api/v1/agents/enroll", body = {} }
+  expect_error = "http:400"
+
+  [[row.step]]
+  id = "wrong-type"
+  tool = "http_request"
+  args = { via = "gateway", method = "POST", path = "/api/v1/agents/enroll", body = { platform = 12345 } }
+  expect_error = "http:400"
+
+  [[row.expect]]
+  id = "problem-json"
+  text = "the malformed enroll reply is application/problem+json"
+  source = "step"
+  step = "wrong-type"
+  pointer = "/result/headers/content-type"
+  op = "contains"
+  value = "application/problem+json"
+  required = true

@@ -1,0 +1,28 @@
+schema = 1
+# Nodes DB consistency checks (C11, L23). Each [[check]] must return zero rows (I3). Tables are the Nodes model snapshot names.
+# EnrollmentFailed audit rows with reason invalid_platform are tolerated: the enroll probe writes one per call, and these checks read nodes, certificates and tokens only.
+service = "nodes"
+
+[[check]]
+id = "node-without-active-cert"
+database = "nodes"
+text = "A live node has no active (not revoked) agent certificate"
+sql = 'select n."Id" from nodes n where n."DeletedAt" is null and not exists (select 1 from agent_certificates c where c."NodeId" = n."Id" and c."IsRevoked" = false)'
+
+[[check]]
+id = "used-token-without-node"
+database = "nodes"
+text = "A used enrollment token names a node that does not exist"
+sql = 'select t."Id" from enrollment_tokens t where t."UsedAt" is not null and (t."UsedByNodeId" is null or not exists (select 1 from nodes n where n."Id" = t."UsedByNodeId"))'
+
+[[check]]
+id = "cert-without-node"
+database = "nodes"
+text = "An agent certificate names a node that does not exist"
+sql = 'select c."Id" from agent_certificates c where not exists (select 1 from nodes n where n."Id" = c."NodeId")'
+
+[[check]]
+id = "duplicate-active-thumbprint"
+database = "nodes"
+text = "Two active agent certificates share a thumbprint"
+sql = 'select c."Thumbprint" from agent_certificates c where c."IsRevoked" = false group by c."Thumbprint" having count(*) > 1'
