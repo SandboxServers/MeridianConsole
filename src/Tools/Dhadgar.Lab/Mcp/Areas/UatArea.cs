@@ -1,3 +1,4 @@
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Eval;
@@ -28,8 +29,7 @@ public static partial class LabMcpServer
         services.AddSingleton<IClauseSource, CertStoreSource>();
         services.AddSingleton<IClauseSource, RegistrySource>();
         services.AddSingleton<IClauseSource, StateFileSource>();
-        // No log ring is exposed by the supervisor yet, so log clauses stay UNVERIFIED until a ring accessor exists.
-        services.AddSingleton<IClauseSource>(new LogSource(_ => null));
+        services.AddSingleton<IClauseSource>(sp => new LogSource(sp.GetRequiredService<LabProcessSupervisor>().RingFor));
         services.AddSingleton<ClauseEvaluator>();
         services.AddSingleton<ICapabilityProbe, LabCapabilityProbe>();
         services.AddSingleton<UatRunner>();

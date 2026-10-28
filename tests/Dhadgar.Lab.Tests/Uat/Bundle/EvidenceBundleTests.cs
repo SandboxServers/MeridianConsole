@@ -1,9 +1,13 @@
 using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Audit;
+using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
+using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Configuration;
@@ -158,6 +162,8 @@ public sealed class ReproTests : IDisposable
     private readonly LabPaths _paths;
     private readonly PathValidator _validator = new(NullLogger<PathValidator>.Instance);
     private readonly ServiceProvider _services;
+    private readonly SecretVault _vault;
+    private readonly AuditLog _audit;
 
     public ReproTests()
     {
@@ -170,12 +176,28 @@ public sealed class ReproTests : IDisposable
             .Build();
         _paths = LabPaths.Create(config);
         var registry = new LabToolRegistry(new ILabTool[] { new RegistryReadTool() });
-        _services = new ServiceCollection().AddSingleton(registry).BuildServiceProvider();
+        _vault = new SecretVault();
+        var redactor = new Redactor(_vault);
+        TimeProvider time = TimeProvider.System;
+        _audit = new AuditLog(_paths, _validator, redactor, time);
+        var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+        var dispatcher = new LabToolDispatcher(registry, leases, _audit, redactor, time);
+        var runner = new UatRunner(dispatcher, leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), new ReproProbe(), time);
+        _services = new ServiceCollection()
+            .AddSingleton(registry)
+            .AddSingleton(_vault)
+            .AddSingleton(redactor)
+            .AddSingleton(time)
+            .AddSingleton(runner)
+            .AddSingleton<IDockerCli>(new ReproDocker())
+            .BuildServiceProvider();
     }
 
     public void Dispose()
     {
         _services.Dispose();
+        _audit.Dispose();
+        _vault.Dispose();
         if (Directory.Exists(_root))
         {
             Directory.Delete(_root, recursive: true);
@@ -216,11 +238,69 @@ public sealed class ReproTests : IDisposable
             CancellationToken.None);
 
         var tool = new UatRunTool(_paths, _validator, _services);
-        JsonElement args = JsonSerializer.SerializeToElement(new { spec = "a.toml", replay = "run1\\repro\\repro.toml" });
+        JsonElement args = JsonSerializer.SerializeToElement(new { replay = "run1\\repro\\repro.toml" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-l16", null, "test"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Contains("spec changed since the run", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Run_NeitherSpecNorReplay_IsRefused()
+    {
+        var tool = new UatRunTool(_paths, _validator, _services);
+
+        Result<JsonElement> result = await tool.InvokeAsync(JsonSerializer.SerializeToElement(new { }), new LabCallContext("call-l16b", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument] spec or replay is required", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Run_SpecAndReplay_IsRefused()
+    {
+        var tool = new UatRunTool(_paths, _validator, _services);
+        JsonElement args = JsonSerializer.SerializeToElement(new { spec = "a.toml", replay = "run1\\repro\\repro.toml" });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-l16c", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument] give spec or replay, not both", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UatRun_Schema_DoesNotRequireSpec()
+    {
+        // spec is optional when replay is given, so the advertised input schema must not list it as required.
+        JsonElement schema = LabJson.SchemaFor<UatRunArgs>();
+
+        bool requiresSpec = schema.TryGetProperty("required", out JsonElement required)
+            && required.EnumerateArray().Any(name => name.GetString() == "spec");
+        Assert.False(requiresSpec);
+    }
+
+    [Fact]
+    public async Task Run_RealRun_ResultBundleIsTheFolderUnderUatRuns()
+    {
+        var tool = new UatRunTool(_paths, _validator, _services);
+        JsonElement args = JsonSerializer.SerializeToElement(new { spec = "a.toml" });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-l16d", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string bundle = result.Value.GetProperty("bundle").GetString()!;
+        Assert.True(Directory.Exists(Path.Combine(_paths.UatRuns, bundle)));
+    }
+
+    private sealed class ReproProbe : ICapabilityProbe
+    {
+        public Task<bool> IsAvailableAsync(string capability, CancellationToken ct) => Task.FromResult(true);
+    }
+
+    private sealed class ReproDocker : IDockerCli
+    {
+        public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct) =>
+            Task.FromResult(Result<DockerOutput>.Success(new DockerOutput(0, "linux\n", string.Empty)));
     }
 }

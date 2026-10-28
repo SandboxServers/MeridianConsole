@@ -93,6 +93,21 @@ public sealed class LabStack : ILabStatusSource, IDisposable
                 return Result<StackStatusDto>.Failure("[Lab.Docker] the stack's passwords are gone from this daemon; run stack_up with wipe");
             }
 
+            if (!wipe && !hasContainers)
+            {
+                // Labelled containers this daemon does not know would collide with the stack's names; only wipe may remove them.
+                var orphans = await ListLabelledContainersAsync(ct).ConfigureAwait(false);
+                if (orphans.IsFailure)
+                {
+                    return Result<StackStatusDto>.Failure(orphans.Error);
+                }
+
+                if (orphans.Value!.Count > 0)
+                {
+                    return Result<StackStatusDto>.Failure("[Lab.Docker] labelled lab containers exist that this daemon does not know; run stack_up with wipe");
+                }
+            }
+
             if (wipe)
             {
                 var torn = await TearDownAsync(wipe: true, ct).ConfigureAwait(false);
@@ -762,6 +777,30 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         return created.IsFailure ? Result.Failure(created.Error) : Result.Success();
     }
 
+    /// <summary>
+    /// Lists the labelled lab containers whose names carry the lab prefix, registered or not. Only these names may be removed by wipe.
+    /// </summary>
+    private async Task<Result<IReadOnlyList<string>>> ListLabelledContainersAsync(CancellationToken ct)
+    {
+        var listed = await Docker(["ps", "-a", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--format", "{{.Names}}"], ct).ConfigureAwait(false);
+        if (listed.IsFailure)
+        {
+            return Result<IReadOnlyList<string>>.Failure(listed.Error);
+        }
+
+        if (listed.Value!.ExitCode != 0)
+        {
+            return Result<IReadOnlyList<string>>.Failure("[Lab.Docker] could not list lab containers");
+        }
+
+        // R-BLAST: the prefix check keeps any labelled container with a foreign name out of reach.
+        IReadOnlyList<string> names = listed.Value.StdOut
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(name => name.StartsWith(LabDefaults.ContainerPrefix, StringComparison.Ordinal))
+            .ToList();
+        return Result<IReadOnlyList<string>>.Success(names);
+    }
+
     private async Task<Result> TearDownAsync(bool wipe, CancellationToken ct)
     {
         var containers = _targets.All.Where(target => target.Kind == LabTargetKind.Container).Reverse().ToList();
@@ -799,6 +838,40 @@ public sealed class LabStack : ILabStatusSource, IDisposable
             if (wipe)
             {
                 _targets.Remove(target.TargetId);
+            }
+        }
+
+        if (wipe)
+        {
+            // Labelled containers that the registry does not know (a crash before registration) go too; the registry loop has handled the rest.
+            var known = containers.Select(target => target.Name).ToHashSet(StringComparer.Ordinal);
+            var orphans = await ListLabelledContainersAsync(ct).ConfigureAwait(false);
+            if (orphans.IsFailure)
+            {
+                return Result.Failure(orphans.Error);
+            }
+
+            foreach (string name in orphans.Value!.Where(name => !known.Contains(name)))
+            {
+                var removal = await Docker(["rm", "-f", "-v", name], ct).ConfigureAwait(false);
+                if (removal.IsFailure)
+                {
+                    return Result.Failure(removal.Error);
+                }
+
+                if (removal.Value!.ExitCode != 0)
+                {
+                    var stillThere = await Docker(["container", "inspect", "--format", "{{.Id}}", name], ct).ConfigureAwait(false);
+                    if (stillThere.IsFailure)
+                    {
+                        return Result.Failure(stillThere.Error);
+                    }
+
+                    if (stillThere.Value!.ExitCode == 0)
+                    {
+                        return Result.Failure($"[Lab.Docker] could not remove {name}");
+                    }
+                }
             }
         }
 

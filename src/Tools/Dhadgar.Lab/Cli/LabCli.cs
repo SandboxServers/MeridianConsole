@@ -249,7 +249,7 @@ public static class LabCli
         if (call.IsFailure)
         {
             await error.WriteLineAsync(call.Error).ConfigureAwait(false);
-            return call.Error.StartsWith("[Lab.InvalidArgument]", StringComparison.Ordinal) || call.Error.StartsWith("[Lab.NotFound]", StringComparison.Ordinal) ? 2 : 1;
+            return ExitCodeFor(call.Error);
         }
 
         using var result = call.Value!;
@@ -273,9 +273,13 @@ public static class LabCli
             }
         }
 
-        if (!options.PlanOnly)
+        // The daemon names the bundle folder (C4); the printed path is the real folder, and nothing is printed when there is none.
+        if (!options.PlanOnly
+            && root.TryGetProperty("bundle", out var bundleNode)
+            && bundleNode.ValueKind == JsonValueKind.String
+            && !string.IsNullOrEmpty(bundleNode.GetString()))
         {
-            var bundle = Path.Combine(LabPaths.Create(LabDaemon.LoadSettings()).UatRuns, Path.GetFileName(runId));
+            var bundle = Path.Combine(LabPaths.Create(LabDaemon.LoadSettings()).UatRuns, Path.GetFileName(bundleNode.GetString()!));
             await output.WriteLineAsync("bundle " + bundle).ConfigureAwait(false);
         }
 
@@ -293,6 +297,37 @@ public static class LabCli
         "pass_with_known" => 5,
         _ => 2,
     };
+
+    /// <summary>
+    /// Renders a tool error as <c>[code] message</c> from the MCP error envelope. Text that is not that envelope is returned unchanged;
+    /// blank text becomes <c>[Lab.Tool] &lt;tool&gt; failed</c>.
+    /// </summary>
+    internal static string ToolErrorText(string toolName, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "[Lab.Tool] " + toolName + " failed";
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.Object
+                && error.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String
+                && error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String)
+            {
+                return "[" + code.GetString() + "] " + message.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON: the text is the message as the daemon sent it.
+        }
+
+        return text;
+    }
 
     /// <summary>
     /// Calls one MCP tool on the loopback daemon's <c>/mcp</c> endpoint and returns the JSON text of its result.
@@ -321,7 +356,7 @@ public static class LabCli
             var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(block => block.Text));
             if (result.IsError == true)
             {
-                return Result<JsonDocument>.Failure(string.IsNullOrWhiteSpace(text) ? "[Lab.Tool] " + toolName + " failed" : text);
+                return Result<JsonDocument>.Failure(ToolErrorText(toolName, text));
             }
 
             return Result<JsonDocument>.Success(JsonDocument.Parse(text));
@@ -391,7 +426,7 @@ public static class LabCli
     /// </summary>
     internal static int ExitCodeFor(string error)
     {
-        if (error.StartsWith("[Lab.InvalidArgument]", StringComparison.Ordinal) || error.StartsWith("[Lab.Elevated]", StringComparison.Ordinal))
+        if (error.StartsWith("[Lab.InvalidArgument]", StringComparison.Ordinal) || error.StartsWith("[Lab.Elevated]", StringComparison.Ordinal) || error.StartsWith("[Lab.NotFound]", StringComparison.Ordinal))
         {
             return 2;
         }
