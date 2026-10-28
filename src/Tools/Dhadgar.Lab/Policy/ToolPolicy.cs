@@ -116,6 +116,10 @@ public static class ToolPolicy
         "job_cancel",
         "results_flake_check",
         "hunt_model_run",
+        "triage_show",
+        "results_known_issue_set",
+        "triage_draft_issue",
+        "triage_mark",
         // L28
         "fuzz_run",
         // L29
