@@ -1,0 +1,266 @@
+schema = 1
+
+# Expected-failure catalog for the Gateway (L23). Each row states the designed failure: the Gateway route to Nodes is cut, slowed or reset,
+# or Redis is cut, and the Gateway answers with the designed status, never a 500 (I1 stays unallowed), with no partial write (I3), and recovers after the heal.
+# The probe is `http_request via=gateway POST /api/v1/agents/enroll` with body {} (the enroll probe): healthy means 400 invalid_platform, which only Nodes emits (D-ML63, VS-07R).
+# Enroll-route calls per row (the rate rule, F54): gw-nodes-down 1 + up to 15 polls (poll_ms 5000 over 75 s); gw-nodes-latency 1; gw-reset-peer 1 + up to 6 polls (30 s); gw-redis-down 1 + up to 12 polls (60 s). Each polling clause sets poll_ms = 5000.
+# A 429 in these rows is a lab spec defect, never a product finding.
+
+[section]
+id = "catalog-gateway"
+title = "Gateway expected-failure catalog"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+
+[[row]]
+id = "gw-nodes-down"
+title = "The Gateway drops Nodes from rotation when gateway-nodes is disabled, and routes again after the heal"
+expected = "The enroll probe returns 502 or 503 while disabled; Gateway /readyz is not 200 within 75 s; after the heal the enroll probe returns 400 invalid_platform within 75 s"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "nodes-route"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "gateway-nodes" } }
+  start = "after_step:start-gateway"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "probe-down"
+  tool = "http_request"
+  args = { via = "gateway", method = "POST", path = "/api/v1/agents/enroll", body = {} }
+
+  [[row.step]]
+  id = "settle"
+  wait_ms = 60000
+
+  [[row.step]]
+  id = "readyz-down"
+  tool = "http_request"
+  args = { via = "gateway", method = "GET", path = "/readyz" }
+
+  [[row.expect]]
+  id = "enroll-down"
+  text = "the enroll probe returns 502 or 503 while gateway-nodes is disabled"
+  source = "step"
+  step = "probe-down"
+  pointer = "/result/status"
+  op = "any"
+  value = [502, 503]
+  required = true
+
+  [[row.expect]]
+  id = "readyz-not-ready"
+  text = "Gateway GET /readyz is not 200 within 75 s of the disable"
+  source = "step"
+  step = "readyz-down"
+  pointer = "/result/status"
+  op = "ne"
+  value = 200
+  required = true
+
+  [[row.expect]]
+  id = "enroll-recovered"
+  text = "after the heal the enroll probe returns 400 invalid_platform within 75 s"
+  source = "http"
+  via = "gateway"
+  method = "POST"
+  path = "/api/v1/agents/enroll"
+  body = {}
+  op = "eq"
+  pointer = "/body/errorCode"
+  value = "invalid_platform"
+  since = "fault_heal:nodes-route"
+  timeout_ms = 75000
+  poll_ms = 5000
+  required = true
+
+[[row]]
+id = "gw-nodes-latency"
+title = "A 3000 ms latency toxic on the Gateway's Nodes route is passed through, not turned into an error"
+expected = "The enroll probe returns 400 invalid_platform after at least 3000 ms"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "nodes-latency"
+  inject = { tool = "fault_toxic_add", args = { proxy = "gateway-nodes", toxic = "latency", stream = "downstream", toxicity = 1.0, attributes = { latency = 3000 } } }
+  start = "after_step:start-gateway"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "http_request"
+  args = { via = "gateway", method = "POST", path = "/api/v1/agents/enroll", body = {} }
+
+  [[row.expect]]
+  id = "enroll-status"
+  text = "the enroll probe returns 400 through the slow route"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "eq"
+  value = 400
+  required = true
+
+  [[row.expect]]
+  id = "enroll-invalid-platform"
+  text = "the forwarded reply names invalid_platform, which only Nodes emits"
+  source = "step"
+  step = "probe"
+  pointer = "/result/body/errorCode"
+  op = "eq"
+  value = "invalid_platform"
+  required = true
+
+  [[row.expect]]
+  id = "enroll-slow"
+  text = "the enroll probe took at least 3000 ms"
+  source = "step"
+  step = "probe"
+  pointer = "/duration_ms"
+  op = "gte"
+  value = 3000
+  required = true
+
+[[row]]
+id = "gw-reset-peer"
+title = "A reset_peer toxic on the Gateway's Nodes route fails the request, and the route recovers after the heal"
+expected = "The enroll probe returns 502 or 503 while the toxic is active; after the heal the enroll probe returns 400 invalid_platform within 30 s"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "nodes-reset"
+  inject = { tool = "fault_toxic_add", args = { proxy = "gateway-nodes", toxic = "reset_peer", stream = "downstream", toxicity = 1.0, attributes = { timeout = 0 } } }
+  start = "after_step:start-gateway"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "probe-reset"
+  tool = "http_request"
+  args = { via = "gateway", method = "POST", path = "/api/v1/agents/enroll", body = {} }
+
+  [[row.expect]]
+  id = "enroll-reset"
+  text = "the enroll probe returns 502 or 503 while the peer is reset"
+  source = "step"
+  step = "probe-reset"
+  pointer = "/result/status"
+  op = "any"
+  value = [502, 503]
+  required = true
+
+  [[row.expect]]
+  id = "enroll-recovered"
+  text = "after the heal the enroll probe returns 400 invalid_platform within 30 s"
+  source = "http"
+  via = "gateway"
+  method = "POST"
+  path = "/api/v1/agents/enroll"
+  body = {}
+  op = "eq"
+  pointer = "/body/errorCode"
+  value = "invalid_platform"
+  since = "fault_heal:nodes-reset"
+  timeout_ms = 30000
+  poll_ms = 5000
+  required = true
+
+[[row]]
+id = "gw-redis-down"
+title = "The Gateway answers routed requests while gateway-redis is disabled, and recovers after the heal"
+expected = "The enroll probe returns 400 (Redis optional, F28) or the documented 503 while disabled; after the heal the enroll probe returns 400 invalid_platform within 60 s"
+allow_invariants = []
+
+  [[row.fault]]
+  id = "redis"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "gateway-redis" } }
+  start = "after_step:start-gateway"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "probe-redis"
+  tool = "http_request"
+  args = { via = "gateway", method = "POST", path = "/api/v1/agents/enroll", body = {} }
+
+  [[row.expect]]
+  id = "enroll-while-down"
+  text = "the routed enroll probe returns 400 (Redis optional) or the documented 503 while gateway-redis is disabled"
+  source = "step"
+  step = "probe-redis"
+  pointer = "/result/status"
+  op = "any"
+  value = [400, 503]
+  required = true
+
+  [[row.expect]]
+  id = "enroll-recovered"
+  text = "after the heal the enroll probe returns 400 invalid_platform within 60 s"
+  source = "http"
+  via = "gateway"
+  method = "POST"
+  path = "/api/v1/agents/enroll"
+  body = {}
+  op = "eq"
+  pointer = "/body/errorCode"
+  value = "invalid_platform"
+  since = "fault_heal:redis"
+  timeout_ms = 60000
+  poll_ms = 5000
+  required = true
