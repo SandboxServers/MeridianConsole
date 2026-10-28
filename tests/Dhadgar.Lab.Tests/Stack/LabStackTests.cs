@@ -115,6 +115,45 @@ public sealed class LabStackTests : IDisposable
     }
 
     [Fact]
+    public async Task UpAsync_WipeWithOrphanedLabelledContainer_RemovesOnlyTheLabPrefixedName()
+    {
+        // R-N1: a labelled container the registry does not know is removed by wipe, but only under the lab prefix.
+        _docker.PsOutput = "meridian-lab-postgres\npostgres";
+        using LabStack stack = CreateStack(out _);
+
+        _ = await stack.UpAsync(wipe: true, CancellationToken.None);
+
+        Assert.Contains(_docker.Calls, c => string.Join(' ', c) == "rm -f -v meridian-lab-postgres");
+        Assert.DoesNotContain(_docker.Calls, c => c.Contains("rm") && c.Contains("postgres") && !c.Contains("meridian-lab-postgres"));
+    }
+
+    [Fact]
+    public async Task UpAsync_WithoutWipeOnEmptyRegistry_RefusesWhileLabelledContainersExist()
+    {
+        // R-N1: without wipe the daemon does not start a stack on top of containers it does not know.
+        _docker.PsOutput = "meridian-lab-postgres\npostgres";
+        using LabStack stack = CreateStack(out _);
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("labelled lab containers exist that this daemon does not know; run stack_up with wipe", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(_docker.Calls, c => c.Contains("run") || c.Contains("start"));
+    }
+
+    [Fact]
+    public async Task UpAsync_WithoutWipeAndNoLabelledContainers_IsNotRefused()
+    {
+        // The orphan check must not refuse a clean host: an empty listing lets the stack come up.
+        _docker.PsOutput = string.Empty;
+        using LabStack stack = CreateStack(out _);
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+    }
+
+    [Fact]
     public void WriteEnvFile_SecondSecretMissing_DeletesThePartialFile()
     {
         // The first secret is written, the second ref is not in the vault: the failure must leave no env-* file in State (N1).
@@ -179,12 +218,16 @@ public sealed class LabStackTests : IDisposable
         /// <summary>The stdout of <c>container inspect</c>: the id and the lab label value. The default is a lab-owned container.</summary>
         public string ContainerInspectOutput { get; set; } = "fake-id 1";
 
+        /// <summary>The stdout of <c>ps</c>: one container name per line, as listed by the labelled-container query.</summary>
+        public string PsOutput { get; set; } = string.Empty;
+
         public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct)
         {
             Calls.Add(args.ToArray());
             // redis-cli ping must answer PONG for the readiness probe to pass; every other probe exits 0.
             string stdout = args.Contains("ping")
                 ? "PONG"
+                : args.Contains("ps") ? PsOutput
                 : args.Contains("container") && args.Contains("inspect") ? ContainerInspectOutput : string.Empty;
             return Task.FromResult(Result<DockerOutput>.Success(new DockerOutput(0, stdout, string.Empty)));
         }
