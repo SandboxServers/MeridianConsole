@@ -312,6 +312,7 @@ public sealed class UatAttestTests : IDisposable
         { new string('a', 1001), "human-look" },
         { "a\nb", "human-look" },
         { "ok", "../x" },
+        { "ok", "human-look\n" },
     };
 
     [Theory]
@@ -328,6 +329,11 @@ public sealed class UatAttestTests : IDisposable
 
         Assert.True(result.IsFailure);
         Assert.Contains("[Lab.InvalidArgument]", result.Error);
+        if (clauseId.EndsWith('\n'))
+        {
+            // A trailing newline must fail the id pattern itself, not a later lookup.
+            Assert.Contains("clause id is not valid", result.Error, StringComparison.Ordinal);
+        }
         Assert.Equal(before, File.ReadAllText(rowPath));
     }
 }
