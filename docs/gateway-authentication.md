@@ -70,7 +70,7 @@ Internal endpoints (e.g., `/api/v1/identity/internal/*`) are blocked from extern
 
 ### Credential separation
 
-User JWTs and agent client certificates do not open each other's routes. Tenant routes (`TenantScoped`) accept only a bearer token, so a certificate-only request is rejected with 401. Agent routes (`agents-route`, `agent-hub-route`, `AgentCertificate`) accept only a certificate issued by the agent CA, so a valid user JWT on them is rejected with 403. The hub access token in a query string is read only for `/hubs/console`, never for agent routes or organization REST routes. Tokens and certificates must not reach the Gateway logs. `GatewayAuthSeparationTests` pins these rules: each rejection checks the Gateway status and that the forwarder recorded nothing, and each has a positive twin that differs only in the credential.
+User JWTs and agent client certificates do not open each other's routes. Tenant routes (`TenantScoped`) accept only a bearer token, so a certificate-only request is rejected with 401. Agent routes (`agents-route`, `agent-hub-route`, `AgentCertificate`) accept only a certificate whose issuer common name is the agent CA's; Nodes validates the chain, SPIFFE ID and revocation. A valid user JWT on them is rejected with 403. The hub access token in a query string is read only for `/hubs/console`, never for agent routes or organization REST routes. Tokens and certificates must not reach the Gateway logs. `GatewayAuthSeparationTests` pins these rules: each rejection checks the Gateway status and that the forwarder recorded nothing, and each has a positive twin that differs only in the credential.
 
 ## Request Enrichment
 
