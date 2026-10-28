@@ -13,6 +13,18 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 - `Secrets/`: `SecretVault` (secrets held by reference only) and `Redactor`.
 - `Nodes/`: the adapter into the Nodes product (`INodesLabAdapter`, `NodesLabAdapter`, `EnrollProbe`).
 
+## Lease
+
+`Leasing/LeaseBook` holds one lease for the whole lab stack (C3).
+
+- `owner` and `purpose` are required, 1 to 100 characters, with no control characters.
+- TTL defaults to 600 s and is clamped to 30 to 3600 s. `Touch` extends expiry by the lease's TTL; a lease is expired at exactly `ExpiresAt`.
+- A held lease refuses `Acquire` with `[Lab.LeaseHeld]`, naming the holder, purpose, start and expiry. `force` needs a `reason`; a forced takeover is recorded in history as `TakenOver`.
+- Wrong lease ids on `Renew`, `Release` and `Touch` return `[Lab.LeaseRequired]` when free and `[Lab.LeaseHeld]` when another holder has the lease.
+- Lease ids are 16 random bytes, hex encoded, and are never written to events, history or messages.
+- `LeaseSweeper` expires overdue leases every 5 s. Every change emits one `lab.lease` event (`acquired`, `renewed`, `released`, `expired`, `taken_over`, `refused`) carrying owner, purpose, action and reason.
+- History keeps the last `HistorySize` (50) ended leases.
+
 ## Ports (C1)
 
 | Service | Port | Owner |
