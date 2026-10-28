@@ -15,6 +15,7 @@ Users authenticate with JWT bearer tokens, so Nodes needs the same `Auth` keys a
 | `Auth:InternalBaseUrl` | Optional internal base URL for JWKS retrieval (https outside Development) |
 
 Agents authenticate with mTLS on `/agents` and `/hubs/agent`. mTLS cannot be disabled outside Development.
+
 ## Health Check Endpoints
 
 ### Available Endpoints

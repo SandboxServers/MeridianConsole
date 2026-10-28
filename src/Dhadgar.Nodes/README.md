@@ -529,6 +529,7 @@ Users call the tenant endpoints under `/organizations/{organizationId}/...` with
 The default scheme is the `NodesAuth` policy scheme (`NodesAuthenticationSchemes`). Requests under `AgentEndpointPrefix` (`/agents`) or `HubPathPrefix` (`/hubs/agent`) use mTLS; every other path uses the JWT bearer. A bearer token is never evaluated on agent paths and a client certificate is never evaluated on user paths.
 
 `AgentPolicy` accepts only an identity whose `node_id` came from mTLS client certificate validation. The node is read from the certificate's SPIFFE ID; no header, body or user token claim decides which node is calling.
+
 ### Agent Authentication
 
 Agents authenticate using mutual TLS (mTLS):

@@ -1,10 +1,14 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using Dhadgar.Contracts.Nodes;
+using Dhadgar.Nodes.Auth;
+using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Tests.Integration.AgentSeam;
 using Dhadgar.Testing.Authentication;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Dhadgar.AgentSeam.Tests;
@@ -125,10 +129,9 @@ public sealed class GatewayUserJwtSeamTests : IDisposable
         var (enrolled, store) = await harness.EnrollThroughGatewayAsync(orgId);
         using var client = ForwardedCertificateClient(harness, store);
 
-        using var response = await client.PostAsJsonAsync($"/agents/{enrolled.NodeId}/heartbeat", new { });
+        using var response = await client.PostAsJsonAsync($"/agents/{enrolled.NodeId}/heartbeat", new HeartbeatRequest(10, 10, 10, 0, null, null));
 
-        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -142,6 +145,26 @@ public sealed class GatewayUserJwtSeamTests : IDisposable
 
         // Nodes validated the chain against its own CA and answered; the client never sent a request it could refuse itself.
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AgentPolicy_RejectsBearerIdentityWithNodeId()
+    {
+        using var harness = new GatewayNodesHarness(_caDirectory, realUserAuth: true);
+        var authz = harness.Nodes.Services.GetRequiredService<IAuthorizationService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("node_id", Guid.NewGuid().ToString())], "Bearer"));
+
+        Assert.False((await authz.AuthorizeAsync(principal, "AgentPolicy")).Succeeded);
+    }
+
+    [Fact]
+    public async Task AgentPolicy_AcceptsMtlsIdentityWithNodeId()
+    {
+        using var harness = new GatewayNodesHarness(_caDirectory, realUserAuth: true);
+        var authz = harness.Nodes.Services.GetRequiredService<IAuthorizationService>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("node_id", Guid.NewGuid().ToString())], MtlsMiddleware.AuthenticationType));
+
+        Assert.True((await authz.AuthorizeAsync(principal, "AgentPolicy")).Succeeded);
     }
 
     /// <summary>A Nodes client whose connection comes from the Gateway address and carries the forwarded certificate.</summary>
