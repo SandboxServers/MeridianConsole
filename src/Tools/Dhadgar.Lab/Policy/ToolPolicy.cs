@@ -154,7 +154,6 @@ public static class ToolPolicy
         // L52
         "coverage_report",
         // L53
-        "twin_run",
         // L54
         "mutation_run",
         // L56
