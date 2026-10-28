@@ -4,32 +4,9 @@ using System.Text.Json.Serialization;
 namespace Dhadgar.Contracts.Agents;
 
 /// <summary>
-/// Wire-protocol constants shared by Nodes (hub host) and the agent (hub client).
-/// </summary>
-public static class AgentProtocol
-{
-    /// <summary>Current agent hub protocol version.</summary>
-    public const int Version = 1;
-
-    /// <summary>HTTP header carrying the protocol version on hub negotiate and connection.</summary>
-    public const string VersionHeader = "X-Agent-Protocol";
-
-    /// <summary>Hub path, identical on the public route and the Nodes service path.</summary>
-    public const string HubPath = "/hubs/agent";
-
-    /// <summary>
-    /// Maximum size in bytes of one SignalR JSON hub frame, after JSON escaping.
-    /// Nodes sets HubOptions.MaximumReceiveMessageSize to this. The content limits in
-    /// <see cref="AgentMessageLimits"/> are UTF-8 bytes or characters of the unescaped content;
-    /// a control character or non-ASCII character can grow to 6 bytes once escaped as \uXXXX,
-    /// so this value is sized for the worst case of the largest allowed message.
-    /// </summary>
-    public const int MaxHubMessageBytes = 512 * 1024;
-}
-
-/// <summary>
 /// Length and size limits applied to agent hub messages on both sides.
 /// Unless stated otherwise, string limits are in UTF-16 characters and byte limits are in UTF-8 bytes.
+/// The hub surface and its frame limit (<c>AgentHubProtocol.MaxReceiveMessageBytes</c>) live in <c>Contracts.Nodes</c>.
 /// </summary>
 public static class AgentMessageLimits
 {
@@ -38,13 +15,13 @@ public static class AgentMessageLimits
 
     /// <summary>
     /// Maximum UTF-8 size in bytes of <see cref="AgentCommandEnvelope.PayloadJson"/>, of the unescaped string.
-    /// The frame limit <see cref="AgentProtocol.MaxHubMessageBytes"/> is enforced separately.
+    /// The frame limit <c>Dhadgar.Contracts.Nodes.AgentHubProtocol.MaxReceiveMessageBytes</c> is enforced separately.
     /// </summary>
     public const int MaxPayloadJsonBytes = 64 * 1024;
 
     /// <summary>
     /// Maximum UTF-8 size in bytes of <see cref="AgentCommandResult.ResultJson"/>, of the unescaped string.
-    /// The frame limit <see cref="AgentProtocol.MaxHubMessageBytes"/> is enforced separately.
+    /// The frame limit <c>Dhadgar.Contracts.Nodes.AgentHubProtocol.MaxReceiveMessageBytes</c> is enforced separately.
     /// </summary>
     public const int MaxResultJsonBytes = 64 * 1024;
 
@@ -63,25 +40,13 @@ public static class AgentMessageLimits
     /// <summary>Maximum sum of line text lengths, in characters, in one <see cref="AgentConsoleBatch"/>.</summary>
     public const int MaxConsoleBatchChars = 64 * 1024;
 
-    /// <summary>Maximum number of warnings in one <see cref="AgentHeartbeat"/>.</summary>
-    public const int MaxHeartbeatWarnings = 20;
-
-    /// <summary>Maximum length of one warning in <see cref="AgentHeartbeat.Warnings"/>.</summary>
-    public const int MaxWarningLength = 256;
-
-    /// <summary>Maximum length of <see cref="AgentHeartbeat.AgentVersion"/> and <see cref="PingResult.AgentVersion"/>.</summary>
-    public const int MaxAgentVersionLength = 64;
-
-    /// <summary>Maximum number of server entries in one <see cref="AgentHeartbeat"/>.</summary>
-    public const int MaxServersPerHeartbeat = 64;
-
     /// <summary>Maximum number of metrics in one <see cref="AgentTelemetry"/>.</summary>
     public const int MaxTelemetryMetrics = 500;
 
     /// <summary>Maximum length of one metric name in <see cref="AgentTelemetry.Metrics"/>.</summary>
     public const int MaxMetricNameLength = 128;
 
-    /// <summary>Maximum length of the opaque nonce in <see cref="PingPayload.Nonce"/>, <see cref="PingResult.Nonce"/> and <see cref="IAgentHubClient.ReceivePing"/>.</summary>
+    /// <summary>Maximum length of the opaque nonce in <see cref="PingPayload.Nonce"/>, <see cref="PingResult.Nonce"/> and <c>IAgentHubClient.ReceivePing</c>.</summary>
     public const int MaxNonceLength = 64;
 
     /// <summary>
@@ -158,18 +123,20 @@ public static class AgentCommandTypes
 
 /// <summary>
 /// JSON options for PayloadJson and ResultJson on both sides (camelCase, enums as numbers).
+/// Lenient about unknown members (D-40), strict about everything else, and read-only: unknown properties
+/// are skipped; a missing required property, a null in a non-nullable member, a duplicate property
+/// or nesting deeper than 8 throws <see cref="JsonException"/>.
+/// </summary>
+/// <remarks>
 /// PayloadJson is untrusted input on the agent. Its signature must be verified over the raw
 /// PayloadJson string before it is parsed. Enum values parsed from it must be checked with
 /// <c>Enum.IsDefined</c>, because numeric enum values are not range-checked by the serializer.
-/// </summary>
-/// <remarks>
 /// The options are read-only once created, so no service or agent code can change the parse
-/// for the whole process. Missing required properties and unknown properties both throw
-/// <see cref="JsonException"/>, nullable reference annotations are enforced, and depth is capped at 8.
+/// for the whole process. Skipping unknown members never bypasses the depth limit.
 /// </remarks>
 public static class AgentJson
 {
-    /// <summary>Read-only serializer options built from <see cref="JsonSerializerDefaults.Web"/> with strict parsing.</summary>
+    /// <summary>Read-only serializer options built from <see cref="JsonSerializerDefaults.Web"/> with lenient unknown-member handling.</summary>
     public static JsonSerializerOptions Options { get; } = Create();
 
     private static JsonSerializerOptions Create()
@@ -178,7 +145,8 @@ public static class AgentJson
         {
             RespectNullableAnnotations = true,
             RespectRequiredConstructorParameters = true,
-            UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+            UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip, // D-40 (supersedes D-21's Disallow)
+            AllowDuplicateProperties = false,                          // D-40: one meaning per member
             MaxDepth = 8,
         };
         options.MakeReadOnly(populateMissingResolver: true);

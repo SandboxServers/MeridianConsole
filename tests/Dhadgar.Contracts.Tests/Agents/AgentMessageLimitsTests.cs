@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Dhadgar.Contracts.Agents;
+using Dhadgar.Contracts.Nodes;
 using Xunit;
 
 namespace Dhadgar.Contracts.Tests.Agents;
@@ -28,11 +29,8 @@ public class AgentMessageLimitsTests
     public void HubContentLimits_ArePinned()
     {
         Assert.Equal(64, AgentMessageLimits.MaxNonceLength);
-        Assert.Equal(64, AgentMessageLimits.MaxAgentVersionLength);
-        Assert.Equal(256, AgentMessageLimits.MaxWarningLength);
         Assert.Equal(128, AgentMessageLimits.MaxMetricNameLength);
-        Assert.Equal(64, AgentMessageLimits.MaxServersPerHeartbeat);
-        Assert.Equal(512 * 1024, AgentProtocol.MaxHubMessageBytes);
+        Assert.Equal(512 * 1024, AgentHubProtocol.MaxReceiveMessageBytes);
     }
 
     [Fact]
@@ -51,7 +49,7 @@ public class AgentMessageLimitsTests
     }
 
     [Fact]
-    public void WorstCaseEnvelope_FrameFitsMaxHubMessageBytes()
+    public void WorstCaseEnvelope_FrameFitsMaxReceiveMessageBytes()
     {
         var envelope = new AgentCommandEnvelope(
             Id, AgentCommandTypes.StartServer, Id, Id, Id, Now, Now.AddSeconds(60),
@@ -62,10 +60,10 @@ public class AgentMessageLimitsTests
     }
 
     [Fact]
-    public void WorstCaseCommandResult_FrameFitsMaxHubMessageBytes()
+    public void WorstCaseCommandResult_FrameFitsMaxReceiveMessageBytes()
     {
         var result = new AgentCommandResult(
-            Id, Id, AgentCommandStatus.Failed, Now, Now.AddSeconds(1),
+            Id, AgentCommandStatus.Failed, Now, Now.AddSeconds(1),
             new string(ControlChar, AgentMessageLimits.MaxResultJsonBytes),
             new string(ControlChar, AgentMessageLimits.MaxErrorMessageLength),
             "E1", null);
@@ -74,21 +72,7 @@ public class AgentMessageLimitsTests
     }
 
     [Fact]
-    public void WorstCaseHeartbeat_FrameFitsMaxHubMessageBytes()
-    {
-        var servers = Enumerable.Range(0, AgentMessageLimits.MaxServersPerHeartbeat)
-            .Select(_ => new AgentServerProcess(Id, AgentServerState.Running, int.MaxValue, 100.0, long.MaxValue, long.MaxValue))
-            .ToList();
-        var warnings = Enumerable.Repeat(new string(ControlChar, AgentMessageLimits.MaxWarningLength), AgentMessageLimits.MaxHeartbeatWarnings)
-            .ToList();
-        var heartbeat = new AgentHeartbeat(
-            Id, new string(ControlChar, AgentMessageLimits.MaxAgentVersionLength), Now, 100.0, 100.0, 100.0, servers, warnings);
-
-        AssertFrameFits("Heartbeat", heartbeat);
-    }
-
-    [Fact]
-    public void WorstCaseTelemetry_FrameFitsMaxHubMessageBytes()
+    public void WorstCaseTelemetry_FrameFitsMaxReceiveMessageBytes()
     {
         var metrics = new Dictionary<string, double>();
         for (var i = 0; i < AgentMessageLimits.MaxTelemetryMetrics; i++)
@@ -97,36 +81,36 @@ public class AgentMessageLimitsTests
             metrics[name] = double.MaxValue;
         }
 
-        AssertFrameFits("Telemetry", new AgentTelemetry(Id, Now, metrics));
+        AssertFrameFits("Telemetry", new AgentTelemetry(Now, metrics));
     }
 
     [Fact]
-    public void WorstCaseConsoleBatch_FrameFitsMaxHubMessageBytes()
+    public void WorstCaseConsoleBatch_FrameFitsMaxReceiveMessageBytes()
     {
         var lineCount = AgentMessageLimits.MaxConsoleBatchChars / AgentMessageLimits.MaxConsoleLineLength;
         var lines = Enumerable.Range(0, lineCount)
             .Select(_ => new AgentConsoleLine(Now, true, new string(ControlChar, AgentMessageLimits.MaxConsoleLineLength)))
             .ToList();
 
-        AssertFrameFits("ConsoleOutput", new AgentConsoleBatch(Id, Id, lines));
+        AssertFrameFits("ConsoleOutput", new AgentConsoleBatch(Id, lines));
     }
 
     [Fact]
-    public void WorstCaseServerStatus_FrameFitsMaxHubMessageBytes()
+    public void WorstCaseServerStatus_FrameFitsMaxReceiveMessageBytes()
     {
         AssertFrameFits("ServerStatusChanged", new AgentServerStatus(
-            Id, Id, AgentServerState.Crashed, 137, new string(ControlChar, AgentMessageLimits.MaxErrorMessageLength), Now));
+            Id, AgentServerState.Crashed, 137, new string(ControlChar, AgentMessageLimits.MaxErrorMessageLength), Now));
     }
 
     [Fact]
-    public void WorstCaseReceivePing_FrameFitsMaxHubMessageBytes()
+    public void WorstCaseReceivePing_FrameFitsMaxReceiveMessageBytes()
     {
         AssertFrameFits("ReceivePing", new string(ControlChar, AgentMessageLimits.MaxNonceLength));
     }
 
     /// <summary>
     /// Builds the hub frame (JSON invocation message plus the 0x1E record separator) and asserts it fits
-    /// <see cref="AgentProtocol.MaxHubMessageBytes"/>. Measures the escaped size, which is what the wire carries.
+    /// <see cref="AgentHubProtocol.MaxReceiveMessageBytes"/>. Measures the escaped size, which is what the wire carries.
     /// </summary>
     private static void AssertFrameFits<T>(string target, T argument)
     {
@@ -140,7 +124,7 @@ public class AgentMessageLimitsTests
         var frameBytes = Encoding.UTF8.GetByteCount(json) + 1;
 
         Assert.True(
-            frameBytes <= AgentProtocol.MaxHubMessageBytes,
-            $"{target} frame is {frameBytes} bytes, above MaxHubMessageBytes {AgentProtocol.MaxHubMessageBytes}.");
+            frameBytes <= AgentHubProtocol.MaxReceiveMessageBytes,
+            $"{target} frame is {frameBytes} bytes, above MaxReceiveMessageBytes {AgentHubProtocol.MaxReceiveMessageBytes}.");
     }
 }

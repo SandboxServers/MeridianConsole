@@ -9,7 +9,7 @@ public sealed record PingPayload(string? Nonce = null);
 /// <summary>
 /// Result of a <see cref="AgentCommandTypes.Ping"/> command.
 /// </summary>
-/// <param name="AgentVersion">Agent build version, at most <see cref="AgentMessageLimits.MaxAgentVersionLength"/> characters.</param>
+/// <param name="AgentVersion">Agent build version, at most <see cref="Dhadgar.Contracts.Nodes.AgentHeartbeatLimits.MaxAgentVersionLength"/> characters.</param>
 /// <param name="AgentTime">The agent's clock at the time of the reply.</param>
 /// <param name="Nonce">Nonce echoed from <see cref="PingPayload"/>.</param>
 public sealed record PingResult(string AgentVersion, DateTimeOffset AgentTime, string? Nonce);

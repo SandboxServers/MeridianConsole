@@ -62,7 +62,6 @@ public enum AgentCommandStatus
 /// Result of a command, sent from the agent to Nodes. Not signed; authenticated by mTLS only.
 /// </summary>
 /// <param name="CommandId">The command this result belongs to.</param>
-/// <param name="NodeId">Node that executed the command. Nodes must check it against the certificate claim.</param>
 /// <param name="Status">Terminal status.</param>
 /// <param name="StartedAt">When execution started.</param>
 /// <param name="CompletedAt">When execution finished.</param>
@@ -72,7 +71,6 @@ public enum AgentCommandStatus
 /// <param name="CorrelationId">Correlation id echoed from the command.</param>
 public sealed record AgentCommandResult(
     Guid CommandId,
-    Guid NodeId,
     AgentCommandStatus Status,
     DateTimeOffset StartedAt,
     DateTimeOffset CompletedAt,
@@ -106,49 +104,15 @@ public enum AgentServerState
 }
 
 /// <summary>
-/// Per-server process figures reported in a heartbeat.
-/// </summary>
-/// <param name="ServerId">Server id.</param>
-/// <param name="State">Current state.</param>
-/// <param name="OsPid">OS process id, when running.</param>
-/// <param name="CpuPercent">CPU usage of the process.</param>
-/// <param name="MemoryBytes">Resident memory of the process.</param>
-/// <param name="UptimeSeconds">Seconds since the process started.</param>
-public sealed record AgentServerProcess(
-    Guid ServerId, AgentServerState State, int? OsPid, double CpuPercent, long MemoryBytes, long UptimeSeconds);
-
-/// <summary>
-/// Periodic health report from the agent.
-/// </summary>
-/// <param name="NodeId">Reporting node.</param>
-/// <param name="AgentVersion">Agent build version, at most <see cref="AgentMessageLimits.MaxAgentVersionLength"/> characters.</param>
-/// <param name="Timestamp">When the report was taken.</param>
-/// <param name="CpuUsagePercent">Node CPU usage, 0 to 100.</param>
-/// <param name="MemoryUsagePercent">Node memory usage, 0 to 100.</param>
-/// <param name="DiskUsagePercent">Highest disk usage, 0 to 100.</param>
-/// <param name="Servers">Server processes on the node, at most <see cref="AgentMessageLimits.MaxServersPerHeartbeat"/> entries.</param>
-/// <param name="Warnings">Non-fatal warnings, at most <see cref="AgentMessageLimits.MaxHeartbeatWarnings"/>, each at most <see cref="AgentMessageLimits.MaxWarningLength"/> characters.</param>
-public sealed record AgentHeartbeat(
-    Guid NodeId,
-    string AgentVersion,
-    DateTimeOffset Timestamp,
-    double CpuUsagePercent,
-    double MemoryUsagePercent,
-    double DiskUsagePercent,
-    IReadOnlyList<AgentServerProcess> Servers,
-    IReadOnlyList<string> Warnings);
-
-/// <summary>
 /// A server process changed state.
 /// </summary>
-/// <param name="NodeId">Node the server runs on.</param>
 /// <param name="ServerId">Server id.</param>
 /// <param name="State">New state.</param>
 /// <param name="ExitCode">Process exit code, when it exited.</param>
 /// <param name="Message">Optional detail, bounded by <see cref="AgentMessageLimits.MaxErrorMessageLength"/> characters.</param>
 /// <param name="Timestamp">When the change happened.</param>
 public sealed record AgentServerStatus(
-    Guid NodeId, Guid ServerId, AgentServerState State, int? ExitCode, string? Message, DateTimeOffset Timestamp);
+    Guid ServerId, AgentServerState State, int? ExitCode, string? Message, DateTimeOffset Timestamp);
 
 /// <summary>
 /// One line of server console output.
@@ -166,15 +130,13 @@ public sealed record AgentConsoleLine(DateTimeOffset Timestamp, bool IsError, st
 /// <summary>
 /// A batch of console lines for one server.
 /// </summary>
-/// <param name="NodeId">Node the server runs on.</param>
 /// <param name="ServerId">Server id.</param>
 /// <param name="Lines">Lines, at most <see cref="AgentMessageLimits.MaxConsoleLinesPerBatch"/>, with a total of at most <see cref="AgentMessageLimits.MaxConsoleBatchChars"/> characters. Each line's text is untrusted.</param>
-public sealed record AgentConsoleBatch(Guid NodeId, Guid ServerId, IReadOnlyList<AgentConsoleLine> Lines);
+public sealed record AgentConsoleBatch(Guid ServerId, IReadOnlyList<AgentConsoleLine> Lines);
 
 /// <summary>
 /// Metrics report from the agent.
 /// </summary>
-/// <param name="NodeId">Reporting node.</param>
 /// <param name="Timestamp">When the metrics were sampled.</param>
 /// <param name="Metrics">Metric values by name, at most <see cref="AgentMessageLimits.MaxTelemetryMetrics"/> entries. Each name is at most <see cref="AgentMessageLimits.MaxMetricNameLength"/> characters.</param>
-public sealed record AgentTelemetry(Guid NodeId, DateTimeOffset Timestamp, IReadOnlyDictionary<string, double> Metrics);
+public sealed record AgentTelemetry(DateTimeOffset Timestamp, IReadOnlyDictionary<string, double> Metrics);

@@ -737,13 +737,14 @@ Agent hub, command, signing and event contracts, shared by Nodes and the Windows
 
 | File | Contents |
 | --- | --- |
-| `Agents/AgentProtocol.cs` | `AgentProtocol`, `AgentMessageLimits`, `AgentCommandTypes`, `AgentJson` |
-| `Agents/AgentHubContracts.cs` | `IAgentHub`, `IAgentHubClient` |
-| `Agents/AgentMessages.cs` | `AgentCommandEnvelope`, `AgentCommandStatus`, `AgentCommandResult`, `AgentServerState`, `AgentServerProcess`, `AgentHeartbeat`, `AgentServerStatus`, `AgentConsoleLine`, `AgentConsoleBatch`, `AgentTelemetry` |
+| `Agents/AgentProtocol.cs` | `AgentMessageLimits`, `AgentCommandTypes`, `AgentJson` |
+| `Agents/AgentMessages.cs` | `AgentCommandEnvelope`, `AgentCommandStatus`, `AgentCommandResult`, `AgentServerState`, `AgentServerStatus`, `AgentConsoleLine`, `AgentConsoleBatch`, `AgentTelemetry` |
 | `Agents/AgentCommandPayloads.cs` | `PingPayload`, `PingResult`, `StartServerPayload`, `StopServerPayload`, `ServerStatusPayload`, `ServerStatusResult` |
 | `Agents/AgentEvents.cs` | `AgentCommandCompleted`, `AgentServerStatusChanged`, `ServerConsoleOutput` |
 | `Agents/AgentCommandSigning.cs` | `AgentCommandSigning` (signing input and key id, pure functions) |
 | `Nodes/AgentCommandDispatchContracts.cs` | `DispatchAgentCommandRequest`, `DispatchAgentCommandResponse` |
+
+The agent hub surface is in `Contracts.Nodes`, in `Nodes/AgentHubContracts.cs` (D-26): the protocol constants (`AgentHubProtocol`, including the frame limit `MaxReceiveMessageBytes`), the error codes (`AgentHubErrorCodes`), the hub interfaces (`IAgentHub`, `IAgentHubClient`), the heartbeat DTOs (`AgentHeartbeat`, `AgentHeartbeatAck`) and the business acks (`AgentHubAck`). The messages, payloads, limits and signing are in `Contracts.Agents`. The agent sends no node id in any payload; Nodes takes the node from the client certificate (D-27).
 
 The wire layout is specified in [the contract](../../../docs/analysis/vertical-slice/work-packets.md#the-contract) (C-2 to C-4).
 
