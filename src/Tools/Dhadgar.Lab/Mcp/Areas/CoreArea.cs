@@ -15,6 +15,7 @@ public static partial class LabMcpServer
         AddLabTool<LeaseRenewTool>(services);
         AddLabTool<LeaseReleaseTool>(services);
         AddLabTool<LeaseStatusTool>(services);
+        services.AddSingleton<LabListenerPorts>();
         AddLabTool<LabDoctorTool>(services);
     }
 }
