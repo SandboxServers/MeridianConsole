@@ -103,7 +103,7 @@ if ($Status) {
         Write-Output $response.Content
     }
 
-    exit 0
+    exit $(if ($code -eq 200) { 0 } else { 1 })
 }
 
 $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
