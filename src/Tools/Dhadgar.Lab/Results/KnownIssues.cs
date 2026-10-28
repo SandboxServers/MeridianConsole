@@ -21,7 +21,7 @@ public sealed record RowFailure(string Section, string RowId, string? ClaimedKno
 public sealed record KnownMatch(string? IssueId, string State, string? Reason);
 
 /// <summary>A compiled issue pattern: the source text as written and its regex (1 s timeout, culture invariant).</summary>
-public sealed record KnownIssuePattern(string Source, Regex Regex);
+public sealed record KnownIssuePattern(string Source, Regex Regex, string Kind);
 
 /// <summary>The scope of an issue (C12). An empty list does not narrow.</summary>
 public sealed record KnownIssueScope(IReadOnlyList<string> Sections, IReadOnlyList<string> Rows, IReadOnlyList<string> Services,
@@ -324,12 +324,46 @@ public sealed class KnownIssues
         }
 
         KnownIssueScope scope = ParseScope(table, label, problems);
+        ValidateScopeKinds(scope, signatures, patterns, label, problems);
         if (problems.Count > before || id is null)
         {
             return null;
         }
 
         return new KnownIssue(id, title, link, signatures, patterns, state!, scope);
+    }
+
+    private static void ValidateScopeKinds(KnownIssueScope scope, List<string> signatures, List<KnownIssuePattern> patterns,
+        string label, List<string> problems)
+    {
+        if (scope.Services.Count == 0 && scope.Invariants.Count == 0)
+        {
+            return;
+        }
+
+        var kinds = new List<string>();
+        foreach (string signature in signatures)
+        {
+            string? kind = SignatureBuilder.Kinds.FirstOrDefault(k => signature.StartsWith(k + ":", StringComparison.Ordinal));
+            if (kind is not null)
+            {
+                kinds.Add(kind);
+            }
+        }
+
+        kinds.AddRange(patterns.Select(p => p.Kind));
+        foreach (string kind in kinds.Distinct(StringComparer.Ordinal))
+        {
+            if (scope.Services.Count > 0 && kind is not ("exc" or "http" or "inv"))
+            {
+                problems.Add(label + ": scope services cannot match a " + kind + " signature (it carries no service)");
+            }
+
+            if (scope.Invariants.Count > 0 && kind != "inv")
+            {
+                problems.Add(label + ": scope invariants cannot match a " + kind + " signature");
+            }
+        }
     }
 
     private static KnownIssuePattern? CompilePattern(string source, string label, List<string> problems)
@@ -358,7 +392,7 @@ public sealed class KnownIssues
             }
 
             var regex = new Regex(source, RegexOptions.CultureInvariant, RegexTimeout);
-            return new KnownIssuePattern(source, regex);
+            return new KnownIssuePattern(source, regex, kind);
         }
         catch (ArgumentException)
         {

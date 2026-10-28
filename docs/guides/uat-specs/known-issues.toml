@@ -22,12 +22,13 @@ link = "docs/PROJECT-STATE.md"
 signatures = []
 patterns = [
   '^http:5\d\d\|[^|]*\|POST\|/api/v1/agents/enroll\|',
-  '^inv:I1\|nodes\|',
+  '^inv:I1\|(nodes|gateway)\|(unhandled|unexplained-500)$',
 ]
 state = "open"
 
 [issue.scope]
-services = ["nodes"]
+sections = ["catalog-nodes"]
+rows = ["nodes-pg-down-enroll"]
 
 [[issue]]
 id = "KI-F69"

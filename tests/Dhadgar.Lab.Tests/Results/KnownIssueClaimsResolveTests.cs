@@ -37,4 +37,31 @@ public sealed class KnownIssueClaimsResolveTests
 
         Assert.Empty(unresolved);
     }
+
+    [Fact]
+    public void ShippedFile_LoadsWithNoProblems()
+    {
+        Result<KnownIssues> shipped = KnownIssues.Load(ShippedPath());
+
+        Assert.True(shipped.IsSuccess, shipped.Error);
+        Assert.NotEmpty(shipped.Value.Issues);
+    }
+
+    [Fact]
+    public void Match_KiF67_NodesI1OutsideClaimingRow_IsNew()
+    {
+        Result<KnownIssues> shipped = KnownIssues.Load(ShippedPath());
+        Assert.True(shipped.IsSuccess, shipped.Error);
+        FailureSignature[] signatures = [new FailureSignature("inv", "inv:I1|nodes|unhandled", "nodes", "I1")];
+
+        KnownMatch outside = shipped.Value.Match(new RowFailure("catalog-other", "any-row", null, signatures));
+        KnownMatch inside = shipped.Value.Match(new RowFailure("catalog-nodes", "nodes-pg-down-enroll", null, signatures));
+
+        Assert.Equal("new", outside.State);
+        Assert.Equal("known", inside.State);
+        Assert.Equal("KI-F67", inside.IssueId);
+    }
+
+    private static string ShippedPath() => Path.Combine(LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory),
+        "docs", "guides", "uat-specs", "known-issues.toml");
 }

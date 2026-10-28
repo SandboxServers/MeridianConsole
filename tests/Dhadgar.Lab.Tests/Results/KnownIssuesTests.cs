@@ -172,6 +172,56 @@ public sealed class KnownIssuesTests
     }
 
     [Fact]
+    public void Load_ServicesScopeWithClauseSignature_IsInvalid()
+    {
+        Result<KnownIssues> result = KnownIssues.LoadText("test.toml", """
+            schema = 1
+            [[issue]]
+            id = "KI-A"
+            signatures = ["clause:C1|x"]
+            state = "open"
+            [issue.scope]
+            services = ["nodes"]
+            """);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("scope services cannot match a clause signature", result.Error);
+    }
+
+    [Fact]
+    public void Load_InvariantsScopeWithHistPattern_IsInvalid()
+    {
+        Result<KnownIssues> result = KnownIssues.LoadText("test.toml", """
+            schema = 1
+            [[issue]]
+            id = "KI-A"
+            patterns = ['^hist:enrollment\|']
+            state = "open"
+            [issue.scope]
+            invariants = ["I1"]
+            """);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("scope invariants cannot match a hist signature", result.Error);
+    }
+
+    [Fact]
+    public void Load_ServicesScopeWithHttpPattern_IsValid()
+    {
+        Result<KnownIssues> result = KnownIssues.LoadText("test.toml", """
+            schema = 1
+            [[issue]]
+            id = "KI-A"
+            patterns = ['^http:4\d\d\|[^|]*\|POST\|/a\|']
+            state = "open"
+            [issue.scope]
+            services = ["nodes"]
+            """);
+
+        Assert.True(result.IsSuccess, result.Error);
+    }
+
+    [Fact]
     public void Load_AbsentFile_IsEmpty()
     {
         string path = Path.Combine(Path.GetTempPath(), "ki-absent-" + Path.GetRandomFileName() + ".toml");
@@ -186,10 +236,10 @@ public sealed class KnownIssuesTests
     public void Shipped_F67_MatchesEnrollFiveHundredAndI1()
     {
         KnownIssues issues = LoadShipped();
-        var row = new RowFailure("nodes", "R1", null,
+        var row = new RowFailure("catalog-nodes", "nodes-pg-down-enroll", null,
         [
             new FailureSignature("http", Open, "nodes", null),
-            new FailureSignature("inv", "inv:I1|nodes|orphan", "nodes", "I1"),
+            new FailureSignature("inv", "inv:I1|nodes|unhandled", "nodes", "I1"),
         ]);
 
         KnownMatch match = issues.Match(row);
