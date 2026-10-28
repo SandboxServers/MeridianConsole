@@ -86,7 +86,7 @@ internal sealed partial class WindowsJobObject : IDisposable
             return Result<WindowsJobObject>.Failure("[Lab.Unavailable] could not set the job object limits");
         }
 
-        return Result<WindowsJobObject>.Success(new WindowsJobObject(handle));
+        return new WindowsJobObject(handle);
     }
 
     [SupportedOSPlatform("windows")]
@@ -99,20 +99,24 @@ internal sealed partial class WindowsJobObject : IDisposable
 
     [SupportedOSPlatform("windows")]
     [LibraryImport("kernel32.dll", EntryPoint = "CreateJobObjectW", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial SafeJobObjectHandle NativeCreateJobObject(IntPtr attributes, IntPtr name);
 
     [SupportedOSPlatform("windows")]
     [LibraryImport("kernel32.dll", EntryPoint = "SetInformationJobObject", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool NativeSetInformationJobObject(SafeJobObjectHandle job, int infoClass, ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION info, uint length);
 
     [SupportedOSPlatform("windows")]
     [LibraryImport("kernel32.dll", EntryPoint = "AssignProcessToJobObject", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool NativeAssignProcessToJobObject(SafeJobObjectHandle job, IntPtr process);
 
     [SupportedOSPlatform("windows")]
     [LibraryImport("kernel32.dll", EntryPoint = "CloseHandle", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool NativeCloseHandle(IntPtr handle);
 

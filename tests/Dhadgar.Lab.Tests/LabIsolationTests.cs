@@ -86,15 +86,15 @@ public sealed class LabIsolationTests
         return dir!.FullName;
     }
 
-    private static IEnumerable<string> EnumerateRepoFiles(string root, string pattern)
+    private static List<string> EnumerateRepoFiles(string root, string pattern)
     {
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-        return new FileSystemEnumerable<string>(root, (ref FileSystemEntry e) => e.ToFullPath(), options)
+        return [.. new FileSystemEnumerable<string>(root, (ref FileSystemEntry e) => e.ToFullPath(), options)
         {
             ShouldIncludePredicate = (ref FileSystemEntry e) =>
                 !e.IsDirectory && FileSystemName.MatchesWin32Expression(pattern, e.FileName),
             ShouldRecursePredicate = (ref FileSystemEntry e) => Array.IndexOf(SkippedDirs, e.FileName.ToString()) < 0,
-        };
+        }];
     }
 
     private static List<string> ScanForCsprojViolations(string root)

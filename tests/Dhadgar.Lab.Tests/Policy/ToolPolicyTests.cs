@@ -208,6 +208,7 @@ public sealed class ToolPolicyTests
             Task.FromResult(Result<object>.Success(new { ok = true }));
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "FakeArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON, so the test never names new FakeArgs.")]
     private sealed record FakeArgs(string? LeaseId = null);
 
     /// <summary>

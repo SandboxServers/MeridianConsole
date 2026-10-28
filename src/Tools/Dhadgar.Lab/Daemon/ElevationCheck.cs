@@ -44,6 +44,7 @@ public static class ElevationCheck
 
     [DllImport("advapi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [SupportedOSPlatform("windows")]
     private static extern bool GetTokenInformation(
         IntPtr tokenHandle,
@@ -53,5 +54,6 @@ public static class ElevationCheck
         out int returnLength);
 
     [DllImport("libc", EntryPoint = "geteuid")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint geteuid();
 }

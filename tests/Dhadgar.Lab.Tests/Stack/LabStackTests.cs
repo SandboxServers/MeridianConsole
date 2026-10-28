@@ -80,6 +80,7 @@ public sealed class LabStackTests : IDisposable
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The LabStack returned to the caller owns the ToxiproxyClient and its fake handler; the test disposes the stack.")]
     private LabStack CreateStack(out LabTargetRegistry registry)
     {
         var paths = LabPaths.FromRoot(_root, repoRoot: FindRepoRoot());

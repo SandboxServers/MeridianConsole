@@ -5,7 +5,7 @@ namespace Dhadgar.Lab.Policy;
 /// </summary>
 public static class ToolPolicy
 {
-    private static readonly IReadOnlyDictionary<string, LabGate> GateTable = new Dictionary<string, LabGate>(StringComparer.Ordinal)
+    private static readonly Dictionary<string, LabGate> GateTable = new(StringComparer.Ordinal)
     {
         ["lab_status"] = LabGate.Open,
         ["lab_doctor"] = LabGate.Open,

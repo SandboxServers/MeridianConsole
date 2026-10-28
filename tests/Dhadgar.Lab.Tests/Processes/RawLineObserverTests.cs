@@ -28,7 +28,7 @@ public sealed class RawLineObserverTests
         Assert.DoesNotContain(Secret, ring, StringComparison.Ordinal);
         Assert.Contains("***" + reference, ring, StringComparison.Ordinal);
 
-        string file = File.ReadAllText(Path.Combine(harness.Paths.Logs, "tc-observe.jsonl"));
+        string file = await File.ReadAllTextAsync(Path.Combine(harness.Paths.Logs, "tc-observe.jsonl"));
         Assert.DoesNotContain(Secret, file, StringComparison.Ordinal);
         Assert.Contains("***" + reference, file, StringComparison.Ordinal);
     }

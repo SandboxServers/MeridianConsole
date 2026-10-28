@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using Dhadgar.Lab.Secrets;
 using Microsoft.AspNetCore.Builder;
@@ -30,11 +31,11 @@ public sealed class StatusBuilder
 
     public string StackState { get; set; } = "down";
 
-    public List<ProcessStatusDto> Processes { get; } = [];
+    public Collection<ProcessStatusDto> Processes { get; } = [];
 
     public int ActiveFaults { get; set; }
 
-    public List<string> LeasedMembers { get; } = [];
+    public Collection<string> LeasedMembers { get; } = [];
 
     public string? RunningJob { get; set; }
 }

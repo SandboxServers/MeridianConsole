@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using Dhadgar.Lab.Daemon;
@@ -52,6 +53,7 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
     /// <summary>
     /// Raised once for every child exit, after the watchdog decision. Feeds L21's I6.
     /// </summary>
+    [SuppressMessage("Design", "CA1003:Use generic event handler instances", Justification = "ProcessExit is a positional record and cannot derive from EventArgs (records may only inherit a sealed type), so EventHandler<ProcessExit> is the shape the L07 spec and its tests use.")]
     public event EventHandler<ProcessExit>? Exited;
 
     /// <summary>
@@ -262,7 +264,10 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
     public void Contribute(StatusBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        builder.Processes.AddRange(Snapshot());
+        foreach (ProcessStatusDto process in Snapshot())
+        {
+            builder.Processes.Add(process);
+        }
     }
 
     /// <summary>
@@ -340,7 +345,7 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
         try
         {
             var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
-            return Result<StreamWriter>.Success(new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true });
+            return new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -508,7 +513,7 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
     /// <summary>
     /// True when the relaunch fits the budget; records the attempt. Caller holds <see cref="_gate"/>.
     /// </summary>
-    private bool TakeRelaunchBudget(ManagedProcess entry, DateTimeOffset now)
+    private static bool TakeRelaunchBudget(ManagedProcess entry, DateTimeOffset now)
     {
         _ = entry.Relaunches.RemoveAll(at => now - at >= RelaunchWindow);
         if (entry.Relaunches.Count >= MaxRelaunchesPerWindow)
