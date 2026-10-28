@@ -21,7 +21,6 @@
     <PackageReference Include="ModelContextProtocol.AspNetCore" />
     <PackageReference Include="Tomlyn" />
     <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>

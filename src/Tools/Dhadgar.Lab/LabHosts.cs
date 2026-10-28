@@ -14,6 +14,11 @@ public static class LabHosts
     {
         ArgumentNullException.ThrowIfNull(uri);
 
+        if (!uri.IsAbsoluteUri)
+        {
+            return false;
+        }
+
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
         {
             return false;
@@ -29,6 +34,11 @@ public static class LabHosts
     {
         ArgumentNullException.ThrowIfNull(uri);
 
+        if (!uri.IsAbsoluteUri)
+        {
+            return false;
+        }
+
         if (uri.Scheme != Uri.UriSchemeHttp)
         {
             return false;
@@ -38,5 +48,5 @@ public static class LabHosts
     }
 
     private static bool IsLoopback(Uri uri) =>
-        uri.IsAbsoluteUri && Array.IndexOf(LoopbackHosts, uri.Host) >= 0;
+        Array.IndexOf(LoopbackHosts, uri.Host) >= 0;
 }

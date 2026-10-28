@@ -1,3 +1,5 @@
+using System.IO.Enumeration;
+
 namespace Dhadgar.Lab.Tests;
 
 /// <summary>
@@ -7,12 +9,39 @@ public sealed class LabIsolationTests
 {
     private static readonly string[] ProductScanRoots = ["deploy", Path.Combine("src", "Dhadgar.AppHost"), Path.Combine(".github", "workflows")];
 
+    // Nested lab worktrees live under .claude/worktrees; skip them and the build and VCS folders during repo-wide scans.
+    private static readonly string[] SkippedDirs = [".git", ".claude", "node_modules", "bin", "obj"];
+
     [Fact]
     public void LabIsolation_ProductProjectsDoNotReferenceLab()
     {
         var root = FindRepoRoot(AppContext.BaseDirectory);
         var violations = ScanForCsprojViolations(root);
         Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void LabIsolation_IgnoresNestedWorktrees()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "lab-isolation-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(temp);
+            File.WriteAllText(Path.Combine(temp, "Dhadgar.sln"), string.Empty);
+            var worktreeProject = Path.Combine(temp, ".claude", "worktrees", "w", "src", "Tools", "Dhadgar.Lab", "Dhadgar.Lab.csproj");
+            Directory.CreateDirectory(Path.GetDirectoryName(worktreeProject)!);
+            File.WriteAllText(worktreeProject, "<Project><ItemGroup><ProjectReference Include=\"Dhadgar.Lab\" /></ItemGroup></Project>");
+
+            var violations = ScanForCsprojViolations(temp);
+            Assert.Empty(violations);
+        }
+        finally
+        {
+            if (Directory.Exists(temp))
+            {
+                Directory.Delete(temp, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -57,10 +86,21 @@ public sealed class LabIsolationTests
         return dir!.FullName;
     }
 
+    private static IEnumerable<string> EnumerateRepoFiles(string root, string pattern)
+    {
+        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        return new FileSystemEnumerable<string>(root, (ref FileSystemEntry e) => e.ToFullPath(), options)
+        {
+            ShouldIncludePredicate = (ref FileSystemEntry e) =>
+                !e.IsDirectory && FileSystemName.MatchesWin32Expression(pattern, e.FileName),
+            ShouldRecursePredicate = (ref FileSystemEntry e) => Array.IndexOf(SkippedDirs, e.FileName.ToString()) < 0,
+        };
+    }
+
     private static List<string> ScanForCsprojViolations(string root)
     {
         var violations = new List<string>();
-        foreach (var csproj in Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories))
+        foreach (var csproj in EnumerateRepoFiles(root, "*.csproj"))
         {
             var rel = Path.GetRelativePath(root, csproj);
             if (rel.StartsWith(Path.Combine("src", "Tools") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
@@ -91,8 +131,8 @@ public sealed class LabIsolationTests
             }
         }
 
-        candidates.AddRange(Directory.EnumerateFiles(root, "Dockerfile*", SearchOption.AllDirectories));
-        candidates.AddRange(Directory.EnumerateFiles(root, "*.Dockerfile", SearchOption.AllDirectories));
+        candidates.AddRange(EnumerateRepoFiles(root, "Dockerfile*"));
+        candidates.AddRange(EnumerateRepoFiles(root, "*.Dockerfile"));
 
         foreach (var file in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
         {

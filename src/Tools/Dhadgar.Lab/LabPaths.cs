@@ -4,6 +4,9 @@ namespace Dhadgar.Lab;
 
 /// <summary>
 /// Every directory the lab owns. All paths hang off <see cref="Root"/>; nothing is written elsewhere.
+/// The fixed folder names only: no containment check on input paths yet. Any path taken from a tool or the network
+/// must be validated (<c>..</c>, null bytes, control characters, roots outside <see cref="Root"/>, symlinks and junctions)
+/// before use; that check lands with the first packet that accepts such a path.
 /// </summary>
 public sealed class LabPaths
 {

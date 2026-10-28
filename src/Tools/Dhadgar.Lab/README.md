@@ -40,5 +40,5 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 
 - The daemon binds to loopback only and requires a bearer token. Host and Origin headers are checked.
 - Secrets are referenced by name, never printed or returned as plain text.
-- Paths from any input go through `LabPaths` before use.
+- Paths from any input must be validated before use (the product `PathValidator` rules: `..`, null bytes, control characters, roots outside `LabPaths.Root`, symlinks and junctions). L01 ships the fixed folder names only; the containment check lands with the first packet that accepts a path from a tool or from the network.
 - Processes are started with `ProcessStartInfo.ArgumentList`.

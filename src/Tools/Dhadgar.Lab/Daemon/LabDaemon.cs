@@ -36,8 +36,19 @@ public sealed class LabDaemon : IAsyncDisposable
 
 /// <summary>
 /// Options for <see cref="LabDaemon.StartAsync"/>. Port 0 binds an ephemeral port (tests only).
+/// <c>ToString</c> omits <c>Token</c>.
 /// </summary>
 public sealed record LabDaemonOptions(
     int Port, string Token, string DataRoot,
     bool EnforceSingleInstance = true, bool RefuseElevated = true,
-    TimeProvider? Time = null, string? RepoRoot = null);
+    TimeProvider? Time = null, string? RepoRoot = null)
+{
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("Port = ").Append(Port)
+            .Append(", DataRoot = ").Append(DataRoot)
+            .Append(", EnforceSingleInstance = ").Append(EnforceSingleInstance)
+            .Append(", RefuseElevated = ").Append(RefuseElevated);
+        return true;
+    }
+}

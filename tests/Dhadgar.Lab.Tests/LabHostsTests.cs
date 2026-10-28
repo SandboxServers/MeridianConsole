@@ -16,6 +16,24 @@ public sealed class LabHostsTests
     }
 
     [Fact]
+    public void IsLabEndpoint_RelativeUri_ReturnsFalseWithoutThrowing()
+    {
+        Assert.False(LabHosts.IsLabEndpoint(new Uri("/x", UriKind.Relative)));
+    }
+
+    [Fact]
+    public void IsLabEndpoint_UserinfoTrick_Refused()
+    {
+        Assert.False(LabHosts.IsLabEndpoint(new Uri("http://127.0.0.1@evil.com:15040/")));
+    }
+
+    [Fact]
+    public void IsLabInfraEndpoint_RelativeUri_ReturnsFalseWithoutThrowing()
+    {
+        Assert.False(LabHosts.IsLabInfraEndpoint(new Uri("/x", UriKind.Relative)));
+    }
+
+    [Fact]
     public void IsLabInfraEndpoint_RabbitMqManagementOnLoopback_Accepted()
     {
         Assert.True(LabHosts.IsLabInfraEndpoint(new Uri($"http://127.0.0.1:{LabPorts.RabbitMqManagement}/")));
