@@ -216,6 +216,96 @@ public sealed class LabToolDispatcherTests
         return document.RootElement.GetProperty(name).GetString() ?? string.Empty;
     }
 
+    [Fact]
+    public async Task Leased_RealLabTool_StripsLeaseIdBeforeBinding()
+    {
+        var tool = new EchoTool("echo_leased");
+        using var rig = new Rig(new() { ["echo_leased"] = LabGate.Leased }, tool);
+        var acquired = rig.Leases.Acquire("session-a", "chaos", null, false, null);
+        Assert.True(acquired.IsSuccess);
+
+        var result = await rig.Dispatcher.InvokeAsync("echo_leased", Json($"{{\"lease_id\":\"{acquired.Value.LeaseId}\",\"value\":\"v\"}}"), Context("c-strip"), NoCancel);
+
+        Assert.False(result.IsError, result.Payload.GetRawText());
+        Assert.Equal("v", result.Payload.GetProperty("value").GetString());
+        Assert.True(result.Payload.GetProperty("has_lease").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Leased_RealLabTool_DuplicateLeaseIdKeys_AreAllStripped()
+    {
+        var tool = new EchoTool("echo_dup");
+        using var rig = new Rig(new() { ["echo_dup"] = LabGate.Leased }, tool);
+        var acquired = rig.Leases.Acquire("session-a", "chaos", null, false, null);
+        Assert.True(acquired.IsSuccess);
+
+        string raw = $"{{\"lease_id\":\"{acquired.Value.LeaseId}\",\"lease_id\":\"{acquired.Value.LeaseId}\",\"value\":\"v\"}}";
+        var result = await rig.Dispatcher.InvokeAsync("echo_dup", Json(raw), Context("c-dup"), NoCancel);
+
+        Assert.False(result.IsError, result.Payload.GetRawText());
+        Assert.Equal("v", result.Payload.GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public async Task OwnLease_RealLabTool_KeepsLeaseIdForItsArgs()
+    {
+        var tool = new OwnEchoTool("echo_own");
+        using var rig = new Rig(new() { ["echo_own"] = LabGate.OwnLease }, tool);
+        var acquired = rig.Leases.Acquire("session-a", "chaos", null, false, null);
+        Assert.True(acquired.IsSuccess);
+
+        var result = await rig.Dispatcher.InvokeAsync("echo_own", Json($"{{\"lease_id\":\"{acquired.Value.LeaseId}\"}}"), Context("c-own"), NoCancel);
+
+        Assert.False(result.IsError, result.Payload.GetRawText());
+        Assert.Equal(acquired.Value.LeaseId, result.Payload.GetProperty("lease").GetString());
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "EchoArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]
+    private sealed record EchoArgs(string Value);
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "OwnArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]
+    private sealed record OwnArgs(string? LeaseId = null);
+
+    /// <summary>
+    /// A real lab tool over <see cref="EchoArgs"/>. Reports only whether the call context carries a lease.
+    /// </summary>
+    private sealed class EchoTool : LabTool<EchoArgs>
+    {
+        private readonly string _name;
+
+        public EchoTool(string name)
+        {
+            _name = name;
+        }
+
+        public override string Name => _name;
+
+        public override string Description => "test echo";
+
+        protected override Task<Result<object>> ExecuteAsync(EchoArgs args, LabCallContext context, CancellationToken ct) =>
+            Task.FromResult(Result<object>.Success(new { value = args.Value, has_lease = context.LeaseId is not null }));
+    }
+
+    /// <summary>
+    /// A real OwnLease lab tool over <see cref="OwnArgs"/>. Reports the lease id its own arguments carry.
+    /// </summary>
+    private sealed class OwnEchoTool : LabTool<OwnArgs>
+    {
+        private readonly string _name;
+
+        public OwnEchoTool(string name)
+        {
+            _name = name;
+        }
+
+        public override string Name => _name;
+
+        public override string Description => "test own echo";
+
+        protected override Task<Result<object>> ExecuteAsync(OwnArgs args, LabCallContext context, CancellationToken ct) =>
+            Task.FromResult(Result<object>.Success(new { lease = args.LeaseId }));
+    }
+
     /// <summary>
     /// One tool with a fixed behaviour. Counts how often the dispatcher invoked it.
     /// </summary>

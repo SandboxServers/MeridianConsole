@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Tools;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,7 +18,6 @@ namespace Dhadgar.Lab.Mcp;
 /// </summary>
 public static partial class LabMcpServer
 {
-    private const string LeaseIdField = "lease_id";
     private const int CallIdBytes = 8;
 
     // Area hooks (D-ML65, R-REG). A hook with no implementing file compiles away. Order is fixed; never reorder.
@@ -119,6 +120,47 @@ public static partial class LabMcpServer
     }
 
     /// <summary>
+    /// The schema an MCP client sees for a tool (C3, D-ML66). A Leased tool advertises <c>lease_id</c> as a required string,
+    /// because the dispatcher takes it as an envelope field. Every other gate, and a missing gate, returns the schema unchanged.
+    /// The raw schema that the spec validator checks is never changed.
+    /// </summary>
+    internal static JsonElement AdvertisedSchema(JsonElement schema, LabGate? gate)
+    {
+        if (gate != LabGate.Leased || JsonNode.Parse(schema.GetRawText()) is not JsonObject root)
+        {
+            return schema;
+        }
+
+        if (root["properties"] is not JsonObject properties)
+        {
+            properties = new JsonObject();
+            root["properties"] = properties;
+        }
+
+        properties[LabToolDispatcher.LeaseIdArgument] = new JsonObject
+        {
+            ["type"] = "string",
+            ["description"] = "The lease_id from lab_lease_acquire.",
+        };
+
+        if (root["required"] is not JsonArray required)
+        {
+            required = new JsonArray();
+            root["required"] = required;
+        }
+
+        bool listed = required.Any(item => item is JsonValue value
+            && value.TryGetValue(out string? name)
+            && string.Equals(name, LabToolDispatcher.LeaseIdArgument, StringComparison.Ordinal));
+        if (!listed)
+        {
+            required.Add(LabToolDispatcher.LeaseIdArgument);
+        }
+
+        return JsonSerializer.SerializeToElement(root, LabJson.Options);
+    }
+
+    /// <summary>
     /// One lab tool as an MCP tool. Name, description and schema come from the lab tool.
     /// </summary>
     internal sealed class LabMcpTool : McpServerTool
@@ -135,7 +177,7 @@ public static partial class LabMcpServer
             {
                 Name = tool.Name,
                 Description = tool.Description,
-                InputSchema = tool.InputSchema,
+                InputSchema = AdvertisedSchema(tool.InputSchema, ToolPolicy.GateFor(tool.Name)),
             };
         }
 
@@ -163,7 +205,7 @@ public static partial class LabMcpServer
                 }
             }
 
-            string? leaseId = arguments.TryGetValue(LeaseIdField, out JsonElement lease) && lease.ValueKind == JsonValueKind.String
+            string? leaseId = arguments.TryGetValue(LabToolDispatcher.LeaseIdArgument, out JsonElement lease) && lease.ValueKind == JsonValueKind.String
                 ? lease.GetString()
                 : null;
 

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Dhadgar.Lab.Audit;
@@ -20,7 +21,11 @@ public sealed record LabToolResult(bool IsError, JsonElement Payload);
 /// </summary>
 public sealed class LabToolDispatcher
 {
-    private const string LeaseIdField = "lease_id";
+    /// <summary>
+    /// The reserved envelope argument for Leased and OwnLease tools (C3). The dispatcher reads it, and strips it from the
+    /// arguments of a Leased tool before the tool binds them. The MCP projection and the UAT runner use the same name.
+    /// </summary>
+    public const string LeaseIdArgument = "lease_id";
     private const string LeaseHeldCode = "Lab.LeaseHeld";
     private const string LeaseLostCode = "Lab.LeaseLost";
     private const string DefaultErrorCode = "Lab.Unavailable";
@@ -117,6 +122,9 @@ public sealed class LabToolDispatcher
             watch?.Hold(touched.Value);
         }
 
+        // Leased tools take lease_id as an envelope field (C3): it is consumed here and never reaches the tool's binder.
+        JsonElement toolArguments = gate == LabGate.Leased ? WithoutLeaseId(arguments) : arguments;
+
         // 4: the audit start carries no arguments. A start that cannot be written refuses the call. The decision reads this
         // write's own result, not the shared LastFailure (N5).
         DateTimeOffset started = _time.GetUtcNow();
@@ -139,7 +147,7 @@ public sealed class LabToolDispatcher
         string outcomeCode = InternalErrorCode;
         try
         {
-            LabToolResult outcome = await RunToolAsync(tool, arguments, context, leaseId, watch, ct).ConfigureAwait(false);
+            LabToolResult outcome = await RunToolAsync(tool, toolArguments, context, leaseId, watch, ct).ConfigureAwait(false);
             outcomeCode = outcome.IsError ? ErrorCodeOf(outcome.Payload) : "ok";
             return outcome;
         }
@@ -202,14 +210,44 @@ public sealed class LabToolDispatcher
         return Refusal(code, message, holder);
     }
 
+    /// <summary>
+    /// Writes the object again without every top-level <c>lease_id</c> property. Duplicate keys are all dropped, and nothing
+    /// throws on them, unlike <c>JsonNode.Parse</c>. A non-object is returned unchanged.
+    /// </summary>
+    private static JsonElement WithoutLeaseId(JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object)
+        {
+            return arguments;
+        }
+
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (JsonProperty property in arguments.EnumerateObject())
+            {
+                if (!string.Equals(property.Name, LeaseIdArgument, StringComparison.Ordinal))
+                {
+                    property.WriteTo(writer);
+                }
+            }
+
+            writer.WriteEndObject();
+        }
+
+        using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
+        return document.RootElement.Clone();
+    }
+
     private static bool HasLeaseIdField(JsonElement arguments) =>
-        arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty(LeaseIdField, out _);
+        arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty(LeaseIdArgument, out _);
 
     private static bool TryReadLeaseId(JsonElement arguments, out string leaseId)
     {
         leaseId = string.Empty;
         if (arguments.ValueKind != JsonValueKind.Object
-            || !arguments.TryGetProperty(LeaseIdField, out JsonElement value)
+            || !arguments.TryGetProperty(LeaseIdArgument, out JsonElement value)
             || value.ValueKind != JsonValueKind.String)
         {
             return false;

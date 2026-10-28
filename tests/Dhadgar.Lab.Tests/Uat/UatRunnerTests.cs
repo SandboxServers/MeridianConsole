@@ -2,6 +2,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
@@ -139,6 +140,47 @@ public sealed class UatRunnerTests
         Assert.Equal(first.Value.Seed, second.Value!.Seed);
     }
 
+    [Fact]
+    public async Task LeasedStep_BindsAndItsObservationNeverCarriesTheLeaseId()
+    {
+        var stack = new StackUpStub();
+        var sink = new RecordingSink();
+        using var harness = new Harness(new FakeProbe(true), sink, stack);
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(LeasedStepSpec), null, 3UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        Assert.Equal(1, stack.Invocations);
+        Assert.Equal(true, stack.Wipe);
+        Assert.False(string.IsNullOrEmpty(stack.LeaseId));
+        Assert.NotEmpty(sink.Drafts);
+        foreach (LabObservation draft in sink.Drafts)
+        {
+            string raw = draft.Args.GetRawText();
+            Assert.DoesNotContain("lease_id", raw, StringComparison.Ordinal);
+            Assert.DoesNotContain(stack.LeaseId!, raw, StringComparison.Ordinal);
+        }
+    }
+
+    private const string LeasedStepSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-leased"
+        title = "Runner leased step"
+
+        [[row]]
+        id = "leased-step"
+        title = "Leased step"
+        expected = "pass"
+        depends_on = []
+
+          [[row.step]]
+          tool = "stack_up"
+          args = { wipe = true }
+        """;
+
     private static UatSpec Load(string text)
     {
         SpecLoadOutcome loaded = SpecLoader.LoadText("runner-selftest.toml", text);
@@ -170,13 +212,64 @@ public sealed class UatRunnerTests
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "StubArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]
+    private sealed record StubArgs(bool? Wipe = null);
+
+    /// <summary>
+    /// A real Leased lab tool under the name <c>stack_up</c>. Records what it bound and the lease id its call context carried.
+    /// </summary>
+    private sealed class StackUpStub : LabTool<StubArgs>
+    {
+        public override string Name => "stack_up";
+
+        public override string Description => "test stack_up";
+
+        public int Invocations { get; private set; }
+
+        public bool? Wipe { get; private set; }
+
+        public string? LeaseId { get; private set; }
+
+        protected override Task<Result<object>> ExecuteAsync(StubArgs args, LabCallContext context, CancellationToken ct)
+        {
+            Invocations++;
+            Wipe = args.Wipe;
+            LeaseId = context.LeaseId;
+            return Task.FromResult(Result<object>.Success(new { ok = true }));
+        }
+    }
+
+    /// <summary>
+    /// Keeps every observation draft the runner appends, so a test can read what was recorded.
+    /// </summary>
+    private sealed class RecordingSink : ILabObservationSink
+    {
+        private long _seq;
+
+        public List<LabObservation> Drafts { get; } = [];
+
+        public Result BeginRun(string runId, string runFolder) => Result.Success();
+
+        public Task<Result<long>> EndRunAsync(string runId, CancellationToken ct) => Task.FromResult(Result<long>.Success(0));
+
+        public OpId NextOp(string runId, string actor) => new(runId, actor, ++_seq);
+
+        public Result<long> Append(LabObservation draft)
+        {
+            Drafts.Add(draft);
+            return Result<long>.Success(Drafts.Count);
+        }
+
+        public IReadOnlyList<LabObservation> Read(string runId, long afterSeq, int max) => Array.Empty<LabObservation>();
+    }
+
     private sealed class Harness : IDisposable
     {
         private readonly string _root;
         private readonly SecretVault _vault;
         private readonly AuditLog _audit;
 
-        public Harness(ICapabilityProbe probe)
+        public Harness(ICapabilityProbe probe, ILabObservationSink? observations = null, params ILabTool[] tools)
         {
             _root = Path.Combine(Path.GetTempPath(), "lab-l15-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
@@ -185,8 +278,8 @@ public sealed class UatRunnerTests
             var redactor = new Redactor(_vault);
             _audit = new AuditLog(LabPaths.FromRoot(_root), new PathValidator(NullLogger<PathValidator>.Instance), redactor, time);
             Leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
-            var dispatcher = new LabToolDispatcher(new LabToolRegistry(Array.Empty<ILabTool>()), Leases, _audit, redactor, time);
-            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), probe, time);
+            var dispatcher = new LabToolDispatcher(new LabToolRegistry(tools), Leases, _audit, redactor, time);
+            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), probe, time, observations);
         }
 
         public LeaseBook Leases { get; }
