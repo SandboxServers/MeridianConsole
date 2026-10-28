@@ -246,10 +246,10 @@ public sealed class UatAttestTests : IDisposable
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-1", grant.LeaseId, "mcp-test"), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        string row = File.ReadAllText(Path.Combine(bundle, "rows", Section, Row + ".json"));
+        string row = await File.ReadAllTextAsync(Path.Combine(bundle, "rows", Section, Row + ".json"));
         Assert.Contains("\"lease_owner\": \"owner-b\"", row);
         Assert.Contains("\"caller\": \"mcp-test\"", row);
-        string ledger = File.ReadAllText(Path.Combine(bundle, "ledger.md"));
+        string ledger = await File.ReadAllTextAsync(Path.Combine(bundle, "ledger.md"));
         Assert.Contains("- Attested: human-look held by owner-b via mcp-test", ledger);
     }
 
@@ -261,7 +261,7 @@ public sealed class UatAttestTests : IDisposable
         string bundle = Path.Combine(lab, "uat-runs", Path.GetFileName(_folder));
         Directory.Move(_folder, bundle);
         string rowPath = Path.Combine(bundle, "rows", Section, Row + ".json");
-        string before = File.ReadAllText(rowPath);
+        string before = await File.ReadAllTextAsync(rowPath);
 
         var time = new FakeTimeProvider(At);
         var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
@@ -273,7 +273,7 @@ public sealed class UatAttestTests : IDisposable
 
         Assert.False(result.IsSuccess);
         Assert.Contains("[Lab.", result.Error, StringComparison.Ordinal);
-        Assert.Equal(before, File.ReadAllText(rowPath));
+        Assert.Equal(before, await File.ReadAllTextAsync(rowPath));
     }
 
     [Fact]
