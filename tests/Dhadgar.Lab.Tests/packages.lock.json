@@ -8,6 +8,12 @@
         "resolved": "10.1.0",
         "contentHash": "SlYCIHnBYxINSUpR75SiM5JEmnx11pqT+Ac/C/fUqTTA0dLPl9eYzmFXKKuxmQhL3ZdTQl4PBD3YdAxAauaKLQ=="
       },
+      "CsCheck": {
+        "type": "Direct",
+        "requested": "[5.0.0, )",
+        "resolved": "5.0.0",
+        "contentHash": "8ZsMaq9jLGohuIKi8Eb6KdNEamwpFi67FaY6l+DMKXalb/hyFFyY1A/6vAo3rHDlwhsW5xTE6zgVfpPaqVe1ww=="
+      },
       "Microsoft.AspNetCore.Mvc.Testing": {
         "type": "Direct",
         "requested": "[10.0.14, )",
