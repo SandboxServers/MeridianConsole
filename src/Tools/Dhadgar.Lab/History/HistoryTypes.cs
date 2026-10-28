@@ -58,7 +58,8 @@ public interface IHistoryModel<TState> where TState : IEquatable<TState>
 /// <param name="Rule">The rule id, e.g. <c>linearizability</c> or <c>E1</c>.</param>
 /// <param name="OpIds">The op ids involved, in InvokeSeq order.</param>
 /// <param name="Detail">A short human-readable explanation.</param>
-public sealed record HistoryViolation(string Rule, IReadOnlyList<string> OpIds, string Detail);
+/// <param name="Required">Whether the violation fails the row. E5 is reported with <c>false</c> until D-ML49 (C19).</param>
+public sealed record HistoryViolation(string Rule, IReadOnlyList<string> OpIds, string Detail, bool Required = true);
 
 /// <summary>
 /// The outcome of a check (C19). <see cref="Verdict"/> is <c>linearizable</c>, <c>violation</c> or <c>unknown</c>.
