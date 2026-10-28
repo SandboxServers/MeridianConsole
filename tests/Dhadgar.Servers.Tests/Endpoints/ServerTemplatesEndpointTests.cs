@@ -163,7 +163,17 @@ public sealed class ServerTemplatesEndpointTests
     // --- List Public ---
 
     [Fact]
-    public async Task ListPublicTemplates_NoAuth_Returns200()
+    public async Task ListPublicTemplates_NoAuth_Returns401()
+    {
+        // Anonymous access to the public catalog is refused
+        using var client = _factory.CreateClient();
+        var response = await client.GetAsync("/templates/public");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ListPublicTemplates_Authenticated_Returns200()
     {
         // Create a public template first
         var userId = Guid.NewGuid();
@@ -172,9 +182,8 @@ public sealed class ServerTemplatesEndpointTests
         await authClient.PostAsJsonAsync(BaseUrl(orgId),
             ValidCreateRequest() with { IsPublic = true });
 
-        // Access public templates without auth
-        using var client = _factory.CreateClient();
-        var response = await client.GetAsync("/templates/public");
+        // Access public templates with a valid token
+        var response = await authClient.GetAsync("/templates/public");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadAsStringAsync();

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -31,6 +32,18 @@ public class ServersWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        // Dummy RabbitMQ credentials: RabbitMqOptions is [Required]-validated with
+        // ValidateOnStart, so the test host needs non-blank values even though the bus
+        // never starts. Same approach as NodesWebApplicationFactory.
+        builder.ConfigureAppConfiguration((context, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RabbitMq:Username"] = "test-rabbit-user",
+                ["RabbitMq:Password"] = "test-rabbit-password"
+            });
+        });
 
         builder.ConfigureServices(services =>
         {

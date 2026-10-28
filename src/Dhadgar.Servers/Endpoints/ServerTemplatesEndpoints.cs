@@ -51,7 +51,8 @@ public static class ServerTemplatesEndpoints
 
         // Public templates endpoint (no org required)
         var publicGroup = app.MapGroup("/templates")
-            .WithTags("Server Templates");
+            .WithTags("Server Templates")
+            .RequireAuthorization();
 
         publicGroup.MapGet("/public", ListPublicTemplates)
             .WithName("ListPublicServerTemplates")
