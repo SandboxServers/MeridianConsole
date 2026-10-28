@@ -133,6 +133,8 @@ public static class AgentCommandTypes
 /// <c>Enum.IsDefined</c>, because numeric enum values are not range-checked by the serializer.
 /// The options are read-only once created, so no service or agent code can change the parse
 /// for the whole process. Skipping unknown members never bypasses the depth limit.
+/// Unknown members are dropped silently; see <c>AgentHubProtocol.CurrentVersion</c> for fields that must not be dropped.
+/// <c>AgentJson</c> enforces <c>MaxDepth</c> but not size. The caller checks <c>Encoding.UTF8.GetByteCount(json) &lt;= MaxPayloadJsonBytes</c> (or <c>MaxResultJsonBytes</c>) BEFORE <c>Deserialize</c>, and converts <c>JsonException</c> to a rejection (<c>Rejected</c> on the agent, an error result in Nodes); it never lets it escape.
 /// </remarks>
 public static class AgentJson
 {

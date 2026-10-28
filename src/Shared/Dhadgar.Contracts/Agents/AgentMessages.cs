@@ -12,6 +12,11 @@ namespace Dhadgar.Contracts.Agents;
 /// answers <c>Rejected</c>. The dedupe cache must retain <see cref="CommandId"/> values only up to
 /// <see cref="ExpiresAt"/> plus the clock skew. Its key is <see cref="CommandId"/>, never the signature, because an ECDSA
 /// signature can be re-encoded into a second valid signature over the same input.
+/// The lifetime must be greater than zero and at most <see cref="AgentMessageLimits.MaxCommandLifetimeSeconds"/>. The agent
+/// rejects a command whose <see cref="IssuedAt"/> is earlier than its own process start time minus
+/// <see cref="AgentMessageLimits.MaxClockSkewSeconds"/>, or persists dedupe entries, so a restart does not reopen the replay
+/// window. <see cref="IssuedAt"/> and <see cref="ExpiresAt"/> are signed at millisecond resolution, so the agent should compare
+/// them using the same truncation (the sub-millisecond ticks are not covered by the signature).
 /// </remarks>
 /// <param name="CommandId">Unique id of the command.</param>
 /// <param name="CommandType">One of <see cref="AgentCommandTypes"/>.</param>

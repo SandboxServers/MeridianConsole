@@ -23,6 +23,9 @@ public static class AgentCommandSigning
     /// <summary>
     /// Builds the signing input for an envelope. Equivalent to the field overload with the envelope's values.
     /// </summary>
+    /// <remarks>
+    /// <c>payloadJson</c> must be the re-serialization of a validated typed record on the Nodes side, never a caller-supplied string. On the agent it is the raw string received.
+    /// </remarks>
     /// <param name="envelope">The command envelope.</param>
     /// <returns>UTF-8 bytes of the signing input.</returns>
     /// <exception cref="EncoderFallbackException">A field contains an unpaired surrogate.</exception>
@@ -79,6 +82,9 @@ public static class AgentCommandSigning
     /// Builds the signing input: UTF-8 of ten fields joined by LF with no trailing newline.
     /// Strings are encoded with a strict UTF-8 encoder, so a lone surrogate throws instead of being replaced.
     /// </summary>
+    /// <remarks>
+    /// <c>payloadJson</c> must be the re-serialization of a validated typed record on the Nodes side, never a caller-supplied string. On the agent it is the raw string received.
+    /// </remarks>
     /// <param name="commandId">Command id, formatted "D".</param>
     /// <param name="nodeId">Target node id, formatted "D".</param>
     /// <param name="organizationId">Owning organization id, formatted "D".</param>

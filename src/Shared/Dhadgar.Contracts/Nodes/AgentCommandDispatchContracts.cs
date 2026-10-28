@@ -4,7 +4,7 @@ namespace Dhadgar.Contracts.Nodes;
 /// Request to dispatch a command to a node's agent through the control plane.
 /// </summary>
 /// <param name="CommandType">One of <see cref="Agents.AgentCommandTypes"/>.</param>
-/// <param name="PayloadJson">Command payload JSON.</param>
+/// <param name="PayloadJson">Untrusted caller input. Nodes parses it with <c>AgentJson.Options</c>, validates the typed record, and signs <c>JsonSerializer.Serialize(typed, AgentJson.Options)</c>, never this string (D-40).</param>
 /// <param name="ServerId">Server the command targets, if any.</param>
 /// <param name="CorrelationId">Optional caller correlation id.</param>
 public sealed record DispatchAgentCommandRequest(string CommandType, string PayloadJson, Guid? ServerId, string? CorrelationId);

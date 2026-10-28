@@ -11,7 +11,10 @@ public static class AgentHubProtocol
     /// <summary>Request header carrying the hub protocol version (#116).</summary>
     public const string VersionHeader = "X-Agent-Protocol";
 
-    /// <summary>The only version Nodes accepts. A missing header is treated as this value.</summary>
+    /// <summary>
+    /// The only version Nodes accepts. A missing header is treated as this value.
+    /// Adding a field that an older receiver must not ignore (a new restriction, limit or safety setting) requires a new version. Until Nodes accepts several versions and records the announced version per connection, a bump refuses older agents. Nodes sends such a field only to connections that announced the new version (D-40).
+    /// </summary>
     public const string CurrentVersion = "1";
 
     /// <summary>Claim that carries the node ID taken from the client certificate's SPIFFE ID.</summary>

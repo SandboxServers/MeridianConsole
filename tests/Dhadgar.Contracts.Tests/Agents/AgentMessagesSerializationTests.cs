@@ -174,11 +174,34 @@ public class AgentMessagesSerializationTests
     }
 
     [Fact]
+    public void StartServerPayload_UnknownMemberAtDepthLimit_IsIgnored()
+    {
+        // The payload object is depth 1; the unknown member adds 7 objects, so depth 8 equals MaxDepth and is accepted.
+        var nested = string.Concat(Enumerable.Repeat("{\"a\":", 7)) + "1" + new string('}', 7);
+        var json = $"{{\"serverId\":\"{Id:D}\",\"minecraftVersion\":\"1.21.1\",\"serverJarUrl\":\"https://example.test/server.jar\",\"serverJarSha1\":\"abcdef\",\"memoryMb\":2048,\"port\":25565,\"eulaAccepted\":true,\"extra\":{nested}}}";
+
+        var payload = JsonSerializer.Deserialize<StartServerPayload>(json, AgentJson.Options);
+
+        Assert.Equal(SampleStartServer(), payload);
+    }
+
+    [Fact]
+    public void StartServerPayload_UnknownMemberOneOverDepthLimit_Throws()
+    {
+        // The payload object is depth 1; the unknown member adds 8 objects, so depth 9 exceeds MaxDepth 8.
+        var nested = string.Concat(Enumerable.Repeat("{\"a\":", 8)) + "1" + new string('}', 8);
+        var json = $"{{\"serverId\":\"{Id:D}\",\"minecraftVersion\":\"1.21.1\",\"serverJarUrl\":\"https://example.test/server.jar\",\"serverJarSha1\":\"abcdef\",\"memoryMb\":2048,\"port\":25565,\"eulaAccepted\":true,\"extra\":{nested}}}";
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<StartServerPayload>(json, AgentJson.Options));
+    }
+
+    [Fact]
     public void AgentJson_Options_AreReadOnly()
     {
         Assert.True(AgentJson.Options.IsReadOnly);
         Assert.Equal(JsonUnmappedMemberHandling.Skip, AgentJson.Options.UnmappedMemberHandling);
         Assert.False(AgentJson.Options.AllowDuplicateProperties);
+        Assert.Equal(8, AgentJson.Options.MaxDepth);
     }
 
     [Fact]
