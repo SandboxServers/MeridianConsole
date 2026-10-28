@@ -1,3 +1,5 @@
+using Dhadgar.Lab.Cli;
+
 namespace Dhadgar.Lab;
 
 /// <summary>
@@ -5,5 +7,5 @@ namespace Dhadgar.Lab;
 /// </summary>
 public static class LabProgram
 {
-    public static Task<int> Main(string[] args) => Task.FromResult(0);
+    public static Task<int> Main(string[] args) => LabCli.RunAsync(args);
 }
