@@ -108,6 +108,7 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 - Toxiproxy is reached only at `127.0.0.1:18474` through `LabHosts.IsLabInfraEndpoint`. Proxies must be in the C10 table (`ProxyCatalog`).
 - `FaultBook` is the one place faults start and end. Each fault is journalled as `Prepared` in `faults.json` (temp file, flush to disk, then move) before anything changes a target; a crash leaves either nothing changed or an entry that startup recovery heals. Recovery also runs each kind's reconcile, which for the Toxiproxy kinds is `ResetAsync`.
 - Lifetimes: `heal_after_s` defaults to 120 and must be 1 to 900. A 1 s sweeper heals overdue faults on `TimeProvider`. Lease end heals every fault. A heal error is retried once, then the entry stays journalled with `heal_error` and `faults_active` reports it. At most 16 faults are active, and one fault per kind per target.
+- A heal that fails stays HealFailed and is retried by the sweeper every 60 s; before a kill, pause or disk_fill heal touches a container named by the journal, the lab checks the reference and the meridian-lab label.
 - Tools: `fault_list_targets` and `faults_active` (Open); `fault_toxic_add`, `fault_proxy_disable`, `fault_partition`, `fault_kill`, `fault_pause`, `fault_disk_fill`, `fault_corrupt_file`, `fault_db`, `fault_heal`, `fault_reset` (Leased). A partition disables every C10 proxy on the edge `<from>-<to>` or `<to>-<from>` under one fault id; an edge with no proxy is `[Lab.InvalidArgument]`.
 - Fault kinds (L20 adds the last five; all are Leased tools):
 
@@ -118,8 +119,8 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 | `partition` | `fault_partition` | proxy edge | disable every proxy on the edge | enable them |
 | `kill` | `fault_kill` | lab container | `docker kill --signal KILL` or `TERM` | `docker start`; `restart_after_s` is the heal window |
 | `pause` | `fault_pause` | lab container | `docker pause` | `docker unpause` |
-| `disk_fill` | `fault_disk_fill` | Linux service container | fill the declared `/tmp` mount, leaving `leave_kib` (64) | `rm -f /tmp/.lab-fill` |
-| `corrupt_file` | `fault_corrupt_file` | `nodes-ca-key`, `nodes-ca-cert` | `truncate`, `garbage` (seeded) or `delete`; original backed up under `fault-backups\<fault_id>\` | restore, verify SHA-256, delete the backup |
+| `disk_fill` | `fault_disk_fill` | Linux service container with a bounded tmpfs `/tmp` (≤ 256 MiB; others refused, D-ML82) | fill the declared `/tmp` mount, leaving `leave_kib` (64) | `rm -f /tmp/.lab-fill` |
+| `corrupt_file` | `fault_corrupt_file` | `nodes-ca-key`, `nodes-ca-cert` | `truncate`, `garbage` (seeded; inside a run the seed comes from the run seed, D-ML81) or `delete`; original backed up under `fault-backups\<fault_id>\` | restore, verify SHA-256, delete the backup |
 | `db` | `fault_db` | lab database (`d:<service>`) | `terminate_backends`, `connection_limit`, `lock_table` or `read_only` | reset the setting, release the lock |
 
 - The `db` kind validates the database name (`^meridian_lab_[a-z]+$`) and the table name before any SQL runs and double-quotes both. `member` on `fault_corrupt_file` returns `[Lab.Unavailable]` until L33.
@@ -230,6 +231,8 @@ A Leased call's lease is watched for the whole call. If the lease expires, is re
 ## Invariants
 
 Six monitors run at the start and end of every `uat_run` and on demand through `invariants_check` (Open gate). The windows and violations land in `invariants.json` in the bundle, and `run.json` carries the violation count.
+
+A source that does not exist yet is skipped, not an error: I2 and I3 skip a database while the stack has no credentials or before the service has migrated, and I5 skips queues and proxies until stack_up. Skips are listed under skipped in invariants.json and invariants_check, labelled with the row or (run-start) / (run-end), and never change a grade (D-ML80).
 
 | Id | Watches |
 | --- | --- |
