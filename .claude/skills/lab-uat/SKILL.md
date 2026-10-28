@@ -45,7 +45,7 @@ After each batch, read the results yourself:
 2. `bundle_read` on the bundle's `ledger.md`.
 3. Check every claim the driver made against `ledger.md`. A claim the ledger does not show is a finding, not a pass.
 
-Human clauses (anything that needs someone to look at the screen) are closed only by `uat_attest`, and only after the user says what they saw. Never attest a clause on the driver's word.
+Human clauses (anything that needs someone to look at the screen) are closed only by `uat_attest`, and only after the user says what they saw. Never attest a clause on the driver's word. The verdict is `held` or `not_held`; `pass` and `fail` are refused. The user approves each `uat_attest` call in the harness (O2), so the call is shown with its exact arguments before it runs.
 
 When the ledger is evidence for a status change, copy `ledger.md` into the campaign `worknotes/` folder under the packet's name.
 

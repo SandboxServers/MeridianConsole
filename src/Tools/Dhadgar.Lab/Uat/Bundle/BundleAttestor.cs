@@ -8,9 +8,17 @@ using Dhadgar.Shared.Results;
 namespace Dhadgar.Lab.Uat.Bundle;
 
 /// <summary>
+/// Who made an attest call: the owner of the lease it carried and the caller that sent it (D-ML67).
+/// </summary>
+/// <param name="LeaseOwner">The owner of the lease.</param>
+/// <param name="Caller">The caller, for example <c>mcp</c>.</param>
+public sealed record AttestedBy(string LeaseOwner, string Caller);
+
+/// <summary>
 /// Records a human verdict on one pending human clause (C8). It rewrites the row JSON, regrades the row with
 /// <see cref="RowGrader"/>, rewrites <c>ledger.md</c> from every row file, and recomputes <c>overall</c> in <c>run.json</c>.
-/// Non-human clauses, BLOCKED rows and runs whose secret scan failed are refused.
+/// Only a <c>NEEDS_HUMAN</c> or <c>UNVERIFIED</c> row is attested. Every other grade (FAIL, BLOCKED, SKIPPED, PASS), non-human clauses
+/// and runs whose secret scan failed are refused. Each attestation records the lease owner and the caller (D-ML67).
 /// </summary>
 public static class BundleAttestor
 {
@@ -27,22 +35,28 @@ public static class BundleAttestor
     /// <param name="section">The section id of the row.</param>
     /// <param name="row">The row id.</param>
     /// <param name="clauseId">The clause id.</param>
-    /// <param name="verdict">Either <c>pass</c> or <c>fail</c>.</param>
-    /// <param name="note">An optional note, redacted before it is written.</param>
+    /// <param name="verdict">Either <c>held</c> or <c>not_held</c>. <c>pass</c> and <c>fail</c> are refused.</param>
+    /// <param name="note">An optional note of at most 1000 characters with no control characters, redacted before it is written.</param>
     /// <param name="at">The time of the attestation.</param>
+    /// <param name="by">The lease owner and the caller of the attest call.</param>
     /// <param name="redactor">Redacts every written text.</param>
     /// <param name="validator">Validates every path.</param>
     public static Result<string> Attest(string folder, string runId, string section, string row, string clauseId, string verdict,
-        string? note, DateTimeOffset at, Redactor redactor, IPathValidator validator)
+        string? note, DateTimeOffset at, AttestedBy by, Redactor redactor, IPathValidator validator)
     {
-        if (verdict is not ("pass" or "fail"))
+        if (verdict is not ("held" or "not_held"))
         {
-            return Result<string>.Failure("[Lab.InvalidArgument] verdict must be pass or fail");
+            return Result<string>.Failure("[Lab.InvalidArgument] verdict must be held or not_held");
         }
 
-        if (!IdPattern.IsMatch(section ?? string.Empty) || !IdPattern.IsMatch(row ?? string.Empty))
+        if (!IdPattern.IsMatch(section ?? string.Empty) || !IdPattern.IsMatch(row ?? string.Empty) || !IdPattern.IsMatch(clauseId ?? string.Empty))
         {
-            return Result<string>.Failure("[Lab.InvalidArgument] section or row is not valid");
+            return Result<string>.Failure("[Lab.InvalidArgument] section, row or clause id is not valid");
+        }
+
+        if (note is not null && (note.Length > 1000 || note.Any(c => char.IsControl(c))))
+        {
+            return Result<string>.Failure("[Lab.InvalidArgument] note must be at most 1000 characters without control characters");
         }
 
         try
@@ -74,9 +88,10 @@ public static class BundleAttestor
                 return Result<string>.Failure("[Lab.Unavailable] the row file is not a bundle row");
             }
 
-            if (rowObj["grade"]?.GetValue<string>() == "BLOCKED")
+            string? storedGrade = rowObj["grade"]?.GetValue<string>();
+            if (storedGrade is not ("NEEDS_HUMAN" or "UNVERIFIED"))
             {
-                return Result<string>.Failure("[Lab.InvalidArgument] a BLOCKED row cannot be attested");
+                return Result<string>.Failure("[Lab.InvalidArgument] only a NEEDS_HUMAN or UNVERIFIED row is attested");
             }
 
             JsonObject? clause = clauses.OfType<JsonObject>().FirstOrDefault(candidate => candidate["id"]?.GetValue<string>() == clauseId);
@@ -95,7 +110,7 @@ public static class BundleAttestor
                 return Result<string>.Failure("[Lab.InvalidArgument] the clause is not pending");
             }
 
-            clause["state"] = verdict == "pass" ? nameof(ClauseState.Held) : nameof(ClauseState.NotHeld);
+            clause["state"] = verdict == "held" ? nameof(ClauseState.Held) : nameof(ClauseState.NotHeld);
             if (rowObj["attestations"] is not JsonArray attestations)
             {
                 attestations = new JsonArray();
@@ -108,6 +123,8 @@ public static class BundleAttestor
                 ["verdict"] = verdict,
                 ["note"] = note ?? string.Empty,
                 ["at"] = at.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                ["lease_owner"] = by.LeaseOwner,
+                ["caller"] = by.Caller,
             });
 
             var inputs = clauses.OfType<JsonObject>()
@@ -182,6 +199,13 @@ public static class BundleAttestor
                 clause["error"]?.GetValue<string>(),
                 clause["source"]?.GetValue<string>() ?? string.Empty,
                 clause["required"]?.GetValue<bool>() ?? true)).ToList();
+            var attestations = (obj["attestations"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(attestation => new LedgerAttestation(
+                attestation["clause_id"]?.GetValue<string>() ?? string.Empty,
+                attestation["verdict"]?.GetValue<string>() ?? string.Empty,
+                attestation["note"]?.GetValue<string>() ?? string.Empty,
+                attestation["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
+                attestation["lease_owner"]?.GetValue<string>() ?? string.Empty,
+                attestation["caller"]?.GetValue<string>() ?? string.Empty)).ToList();
             rows.Add(new LedgerRow(
                 obj["section"]?.GetValue<string>() ?? string.Empty,
                 obj["id"]?.GetValue<string>() ?? string.Empty,
@@ -189,7 +213,8 @@ public static class BundleAttestor
                 obj["expected"]?.GetValue<string>() ?? string.Empty,
                 ParseGrade(obj["grade"]?.GetValue<string>()),
                 obj["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
-                clauses));
+                clauses,
+                attestations));
         }
 
         return rows
@@ -220,6 +245,7 @@ public static class BundleAttestor
             RunOverall.Incomplete => "incomplete",
             _ => "fail",
         };
+        runObj["fidelity"] = "evidence_only";
     }
 
     private static Result WriteRedacted(string folder, string relative, string text, Redactor redactor, IPathValidator validator)
