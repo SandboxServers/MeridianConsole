@@ -25,13 +25,13 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void ReverseProxyShouldHave14Routes()
+    public void ReverseProxyShouldHave16Routes()
     {
-        // 6 backend service routes (identity, servers, console, notifications, secrets, discord) + Better Auth + console hub route + agent hub route + nodes-org + enrollment + agents + agents-enroll + internal-block = 14 total (billing, tasks, files, mods are parked, D-03)
+        // 6 backend service routes (identity, servers, console, notifications, secrets, discord) + Better Auth + console hub route + agent hub route + nodes-org + enrollment + agents + agents-enroll + agents-ca + internal-block + nodes-reservations-block = 16 total (billing, tasks, files, mods are parked, D-03). servers and console are organization-scoped (VS-07R).
         var routesSection = _configuration.GetSection("ReverseProxy:Routes");
         var routes = routesSection.GetChildren().ToList();
 
-        Assert.Equal(14, routes.Count);
+        Assert.Equal(16, routes.Count);
     }
 
     [Fact]
@@ -111,9 +111,12 @@ public class RouteConfigurationTests
     [Theory]
     [InlineData("identity-route", "/api/v1/identity/{**catch-all}")]
     [InlineData("betterauth-route", "/api/v1/betterauth/{**catch-all}")]
-    [InlineData("servers-route", "/api/v1/servers/{**catch-all}")]
+    [InlineData("servers-org-route", "/api/v1/organizations/{organizationId}/servers/{**catch-all}")]
+    [InlineData("console-org-route", "/api/v1/organizations/{organizationId}/servers/{serverId}/console/{**catch-all}")]
     [InlineData("console-hub-route", "/hubs/console/{**catch-all}")]
     [InlineData("agent-hub-route", "/hubs/agent/{**catch-all}")]
+    [InlineData("agents-ca-route", "/api/v1/agents/ca-certificate")]
+    [InlineData("nodes-reservations-block", "/api/v1/organizations/{organizationId}/nodes/{nodeId}/reservations/{**catch-all}")]
     public void RouteShouldHaveCorrectPathPattern(string routeName, string expectedPath)
     {
         var path = _configuration[$"ReverseProxy:Routes:{routeName}:Match:Path"];
@@ -142,30 +145,62 @@ public class RouteConfigurationTests
     }
 
     [Fact]
-    public void InternalBlockRoute_ShouldHaveLowestOrder()
+    public void NodesReservationsBlockRoute_ShouldBeDenyAllOnNodesWithoutTransforms()
     {
-        var routesSection = _configuration.GetSection("ReverseProxy:Routes");
-        var routes = routesSection.GetChildren()
-            .Select(r => new
-            {
-                RouteId = r.Key,
-                Order = r.GetValue<int?>("Order") ?? 999
-            })
-            .OrderBy(r => r.Order)
+        var route = _configuration.GetSection("ReverseProxy:Routes:nodes-reservations-block");
+
+        Assert.Equal("DenyAll", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.Equal("nodes", route.GetValue<string>("ClusterId"));
+        Assert.Empty(route.GetSection("Transforms").GetChildren());
+    }
+
+    [Fact]
+    public void AgentsCaRoute_ShouldBeAnonymousWithoutMetadata()
+    {
+        var route = _configuration.GetSection("ReverseProxy:Routes:agents-ca-route");
+
+        Assert.Equal("Anonymous", route.GetValue<string>("AuthorizationPolicy"));
+        Assert.Equal("nodes", route.GetValue<string>("ClusterId"));
+        Assert.False(route.GetSection("Metadata").Exists());
+    }
+
+    [Theory]
+    [InlineData("servers-org-route")]
+    [InlineData("console-org-route")]
+    public void OrgScopedRoutes_ShouldStripApiV1Prefix(string routeName)
+    {
+        var transforms = _configuration.GetSection($"ReverseProxy:Routes:{routeName}:Transforms")
+            .GetChildren()
+            .Select(t => t.GetValue<string>("PathRemovePrefix"))
             .ToList();
 
-        // Internal block route should be first (Order=1)
-        Assert.Equal("identity-internal-block", routes.First().RouteId);
+        Assert.Equal(new[] { "/api/v1" }, transforms);
+    }
+
+    [Theory]
+    [InlineData("identity-internal-block", "identity-route")]
+    [InlineData("nodes-reservations-block", "nodes-org-route")]
+    public void BlockRoute_PrecedesTheRouteItShadows(string blockRoute, string shadowedRoute)
+    {
+        var blockOrder = _configuration.GetValue<int?>($"ReverseProxy:Routes:{blockRoute}:Order");
+        var shadowedOrder = _configuration.GetValue<int?>($"ReverseProxy:Routes:{shadowedRoute}:Order");
+
+        Assert.NotNull(blockOrder);
+        Assert.NotNull(shadowedOrder);
+        Assert.True(blockOrder < shadowedOrder, $"{blockRoute} ({blockOrder}) must precede {shadowedRoute} ({shadowedOrder})");
     }
 
     [Theory]
     [InlineData("identity-internal-block", 1)]
     [InlineData("identity-route", 10)]
     [InlineData("betterauth-route", 10)]
-    [InlineData("servers-route", 20)]
+    [InlineData("servers-org-route", 20)]
+    [InlineData("console-org-route", -1)]
     [InlineData("agent-hub-route", 20)]
     [InlineData("nodes-org-route", 20)]
     [InlineData("enrollment-route", 20)]
+    [InlineData("nodes-reservations-block", 1)]
+    [InlineData("agents-ca-route", 22)]
     [InlineData("agents-enroll-route", 25)]
     [InlineData("agents-route", 30)]
     public void RouteShouldHaveCorrectOrder(string routeName, int expectedOrder)
