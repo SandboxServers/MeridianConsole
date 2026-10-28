@@ -1,4 +1,3 @@
-using System.Text;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Bundle;
@@ -109,5 +108,106 @@ public sealed class BundleStagingTests : IDisposable
         Assert.Equal("new run", File.ReadAllText(Path.Combine(_folder, "run.json")));
         Assert.Equal("old ledger", File.ReadAllText(Path.Combine(_folder, "ledger.md")));
         Assert.False(Directory.Exists(staging));
+    }
+
+    [Fact]
+    public void Attest_StagingWriteFails_BundleUnchanged()
+    {
+        WriteAttestableBundle(_folder);
+        SortedDictionary<string, string> before = Snapshot(_folder);
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        var validator = new RefuseNthStagedPath(_validator, refuseAt: 3);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, KeyHeld, "human-look", "held", null, At, Attester,
+            redactor, validator);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(before, Snapshot(_folder));
+        Assert.False(Directory.Exists(Path.Combine(_folder, BundleStaging.FolderName)));
+    }
+
+    [Fact]
+    public void Attest_InterruptedBeforeMarker_RetrySucceeds()
+    {
+        WriteAttestableBundle(_folder);
+        string staging = Path.Combine(_folder, BundleStaging.FolderName);
+        _ = Directory.CreateDirectory(Path.Combine(staging, "rows", Section));
+        File.WriteAllText(Path.Combine(staging, "rows", Section, "key-held.json"), "partial staged row");
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, KeyHeld, "human-look", "held", null, At, Attester,
+            redactor, _validator);
+
+        Assert.False(result.IsFailure, result.Error);
+        Assert.NotEqual("partial staged row", File.ReadAllText(Path.Combine(_folder, Row)));
+        Assert.False(Directory.Exists(staging));
+    }
+
+    private const string RunId = "stage1";
+    private const string Section = "plan-check";
+    private const string KeyHeld = "key-held";
+    private static readonly DateTimeOffset At = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly AttestedBy Attester = new("owner-a", "mcp");
+
+    private static void WriteAttestableBundle(string folder)
+    {
+        File.WriteAllText(Path.Combine(folder, "run.json"), """
+            {
+              "run_id": "stage1",
+              "os": "linux",
+              "secret_scan": "passed",
+              "overall": "fail",
+              "summary": {}
+            }
+            """);
+        File.WriteAllText(Path.Combine(folder, Row), """
+            {
+              "section": "plan-check",
+              "id": "key-held",
+              "title": "Operator confirms the key",
+              "expected": "present",
+              "grade": "NEEDS_HUMAN",
+              "reason": "a human clause is pending",
+              "at": "2026-01-01T00:00:00+00:00",
+              "clauses": [
+                { "id": "human-look", "pointer": "", "state": "Pending", "source": "human", "required": true }
+              ]
+            }
+            """);
+    }
+
+    private static SortedDictionary<string, string> Snapshot(string folder)
+    {
+        var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+        {
+            files[Path.GetRelativePath(folder, file)] = Convert.ToBase64String(File.ReadAllBytes(file));
+        }
+
+        return files;
+    }
+
+    /// <summary>
+    /// Passes every path through to the real validator, except the staged path that is validated the <c>refuseAt</c>-th time.
+    /// </summary>
+    private sealed class RefuseNthStagedPath(IPathValidator inner, int refuseAt) : IPathValidator
+    {
+        private int _staged;
+
+        public Result<string> ValidatePath(string path, IEnumerable<string> allowedBasePaths)
+        {
+            if (path.Contains(BundleStaging.FolderName + Path.DirectorySeparatorChar, StringComparison.Ordinal) && ++_staged == refuseAt)
+            {
+                return Result<string>.Failure("[Lab.InvalidArgument] refused by the test stub");
+            }
+
+            return inner.ValidatePath(path, allowedBasePaths);
+        }
+
+        public bool IsSafePath(string path) => inner.IsSafePath(path);
+
+        public Result<string> NormalizePath(string path) => inner.NormalizePath(path);
     }
 }

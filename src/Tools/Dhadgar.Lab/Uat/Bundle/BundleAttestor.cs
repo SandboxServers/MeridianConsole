@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
@@ -62,6 +61,13 @@ public static class BundleAttestor
 
         try
         {
+            // An interrupted earlier attestation is completed or rolled back before this one reads the bundle (OD-1).
+            Result recovered = BundleStaging.Recover(folder, validator);
+            if (recovered.IsFailure)
+            {
+                return Result<string>.Failure(recovered.Error);
+            }
+
             Result<string> runFile = BundleFolders.ResolveFile(folder, "run.json", validator);
             if (runFile.IsFailure)
             {
@@ -158,13 +164,11 @@ public static class BundleAttestor
                 return Result<string>.Failure("[Lab.Unavailable] the attestation would write a secret; nothing was written");
             }
 
-            foreach ((string relative, string text) in texts)
+            // Staged, flushed, marked, then rolled forward (OD-1). A failure before the marker leaves the bundle unchanged.
+            Result committed = BundleStaging.Commit(folder, texts, redactor, validator);
+            if (committed.IsFailure)
             {
-                Result written = WriteRedacted(folder, relative, text, redactor, validator);
-                if (written.IsFailure)
-                {
-                    return Result<string>.Failure(written.Error);
-                }
+                return Result<string>.Failure(committed.Error);
             }
 
             return Result<string>.Success(LedgerRenderer.ResultText(grade));
@@ -290,15 +294,4 @@ public static class BundleAttestor
         return FidelityLine.Replace(File.ReadAllText(file.Value!), "fidelity = \"evidence_only\"", 1);
     }
 
-    private static Result WriteRedacted(string folder, string relative, string text, Redactor redactor, IPathValidator validator)
-    {
-        Result<string> path = validator.ValidatePath(Path.Combine(folder, relative), [folder]);
-        if (path.IsFailure)
-        {
-            return Result.Failure("[Lab.InvalidArgument] the bundle path is outside the bundle folder");
-        }
-
-        File.WriteAllText(path.Value!, redactor.Redact(text), new UTF8Encoding(false));
-        return Result.Success();
-    }
 }
