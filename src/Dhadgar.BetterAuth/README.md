@@ -251,7 +251,7 @@ The limit is keyed on `req.ip`, so `TRUST_PROXY` must match the deployment. Behi
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `BETTER_AUTH_URL` | Public URL of this service | `http://localhost:5130/api/v1/betterauth` |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated exact origins (`scheme://host[:port]`, no path or trailing slash). Required outside `NODE_ENV=development`: the service refuses to start if it is empty, contains `*`, or holds a non-origin entry | required outside development |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated exact origins (`scheme://host[:port]`, no path or trailing slash). Required outside `NODE_ENV=development`: the service refuses to start if it is empty, contains `*`, holds a non-origin entry, or holds a plaintext `http://` entry other than localhost or 127.0.0.1 | required outside development |
 | `BETTER_AUTH_SECRET` | Secret key for session encryption | Loaded from Secrets service |
 | `BETTER_AUTH_CLIENT_APPS` | Allowed client app identifiers | `panel,shop` |
 
@@ -519,11 +519,12 @@ session: {
 
 ### Cookie Configuration
 
-Session and OAuth state cookies are host-only (D-48): no `Domain` attribute and no `crossSubDomainCookies`, so a cookie reaches only the host that set it, the Gateway host that serves `/api/v1/betterauth`. That host must equal the Panel's `PUBLIC_GATEWAY_URL` host, or the state cookie set at sign-in is missing at the callback.
+Session and OAuth state cookies are host-only (D-48): no `Domain` attribute and no `crossSubDomainCookies`, so a cookie reaches only the host that set it, the Gateway host that serves `/api/v1/betterauth`. That host must equal the Panel's `PUBLIC_GATEWAY_URL` host and the Panel's `PUBLIC_BETTER_AUTH_URL` host, or the state cookie set at sign-in is missing at the callback. `deploy/compose` and `AllowedOriginsGuardTests` check the compose values.
 
 ```javascript
 // buildAdvancedOptions() in src/config.js
 advanced: {
+  cookiePrefix: "meridian", // Cookie names become meridian.* (HF-02 N1)
   defaultCookieAttributes: {
     sameSite: "none",    // Required for cross-origin
     secure: true,        // HTTPS only
@@ -537,8 +538,10 @@ advanced: {
 
 | Cookie | Purpose |
 |--------|---------|
-| `better-auth.session_token` | Session identifier |
-| `better-auth.state` | OAuth state for CSRF protection |
+| `__Secure-meridian.session_token` | Session identifier (HTTPS; `meridian.session_token` without the `__Secure-` prefix on plain HTTP) |
+| `__Secure-meridian.state` | OAuth state for CSRF protection (HTTPS; same prefix rule) |
+
+The `meridian` prefix is set by `cookiePrefix` in `buildAdvancedOptions()` (HF-02 N1). Earlier builds used `better-auth.*` names on a zone-wide `Domain`; those cookies are no longer read.
 
 ### Checking Session Status
 
@@ -715,7 +718,7 @@ Response:
 
 ```bash
 curl -X POST http://localhost:5130/api/v1/betterauth/exchange \
-  -H "Cookie: better-auth.session_token=..." \
+  -H "Cookie: __Secure-meridian.session_token=..." \
   -H "Content-Type: application/json" \
   -d '{"clientApp": "panel"}'
 ```
@@ -1027,11 +1030,11 @@ open "http://localhost:5000/api/v1/betterauth/sign-in/social?provider=discord&ca
 
 # 3. After OAuth callback, check session
 curl -v http://localhost:5000/api/v1/betterauth/session \
-  --cookie "better-auth.session_token=..."
+  --cookie "__Secure-meridian.session_token=..."
 
 # 4. Get exchange token
 curl -X POST http://localhost:5000/api/v1/betterauth/exchange \
-  --cookie "better-auth.session_token=..." \
+  --cookie "__Secure-meridian.session_token=..." \
   -H "Content-Type: application/json" \
   -d '{}'
 
@@ -1140,7 +1143,7 @@ export BETTER_AUTH_TRUSTED_ORIGINS=https://panel.meridianconsole.com,http://loca
 
 **Possible causes:**
 1. **Cross-origin issues:** Ensure `SameSite=None` and `Secure=true` are set
-2. **Host mismatch:** Cookies are host-only. `BETTER_AUTH_URL`'s host must equal the Panel's `PUBLIC_GATEWAY_URL` host
+2. **Host mismatch:** Cookies are host-only. `BETTER_AUTH_URL`'s host must equal the Panel's `PUBLIC_GATEWAY_URL` and `PUBLIC_BETTER_AUTH_URL` hosts
 3. **Browser privacy:** Some browsers block third-party cookies
 
 ### Debugging

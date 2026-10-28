@@ -60,6 +60,33 @@ public sealed class AllowedOriginsGuardTests
         AssertSameSet(ComposeFrontends, origins, "BETTER_AUTH_TRUSTED_ORIGINS in deploy/compose/docker-compose.services.yml");
     }
 
+    /// <summary>
+    /// HF-02 N2: cookies are host-only, so BETTER_AUTH_URL, the Panel's PUBLIC_GATEWAY_URL and the Panel's
+    /// PUBLIC_BETTER_AUTH_URL must all name the Gateway host. A mismatch breaks sign-in at the callback.
+    /// </summary>
+    [Fact]
+    public void BetterAuthAndPanelUrls_ShareOneHost()
+    {
+        var root = RepoFiles.FindRepoRoot();
+        var lines = File.ReadAllLines(Path.Combine(root, "deploy", "compose", "docker-compose.services.yml"));
+
+        var hosts = new List<(string Key, string Host)>();
+        foreach (var key in new[] { "BETTER_AUTH_URL", "PUBLIC_GATEWAY_URL", "PUBLIC_BETTER_AUTH_URL" })
+        {
+            var line = lines.FirstOrDefault(l => l.TrimStart().StartsWith(key + ":", StringComparison.Ordinal));
+            Assert.True(line is not null, $"{key} was not found in docker-compose.services.yml.");
+
+            var value = line!.TrimStart()[(key.Length + 1)..].Trim();
+            Assert.True(Uri.TryCreate(value, UriKind.Absolute, out var uri), $"{key} is not an absolute URL: {value}");
+            hosts.Add((key, uri!.Host));
+        }
+
+        var distinct = hosts.Select(h => h.Host).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        Assert.True(
+            distinct.Count == 1,
+            $"BETTER_AUTH_URL, PUBLIC_GATEWAY_URL and PUBLIC_BETTER_AUTH_URL must share one host. Found: {string.Join(", ", hosts.Select(h => $"{h.Key}={h.Host}"))}.");
+    }
+
     private static void AssertSameSet(string[] expected, List<string> actual, string source)
     {
         var extra = actual.Except(expected, StringComparer.Ordinal).ToList();

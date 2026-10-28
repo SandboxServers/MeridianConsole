@@ -62,12 +62,21 @@ test("isCorsOriginAllowed refuses an unlisted origin with a non-empty list in bo
   assert.equal(isCorsOriginAllowed("http://localhost:4322", COMPOSE_ORIGINS, DEV), false);
 });
 
+test("assertTrustedOrigins refuses plaintext http outside development except for localhost", () => {
+  assert.throws(() => assertTrustedOrigins(["http://panel.example"], PROD), /must use https/);
+  assert.throws(() => assertTrustedOrigins(["http://panel.example"], {}), /must use https/);
+  assert.doesNotThrow(() => assertTrustedOrigins(["http://localhost:4321"], PROD));
+  assert.doesNotThrow(() => assertTrustedOrigins(["http://127.0.0.1:4321"], PROD));
+  assert.doesNotThrow(() => assertTrustedOrigins(["http://panel.example"], DEV));
+});
+
 test("buildAdvancedOptions has no cross-subdomain or domain settings and exactly the four cookie attributes", () => {
   const options = buildAdvancedOptions();
   const json = JSON.stringify(options);
   assert.equal("crossSubDomainCookies" in options, false);
   assert.equal(json.includes('"domain"'), false);
   assert.deepEqual(options, {
+    cookiePrefix: "meridian",
     defaultCookieAttributes: { sameSite: "none", secure: true, httpOnly: true, partitioned: true },
   });
 });

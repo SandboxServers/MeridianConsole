@@ -18,6 +18,11 @@ export function assertTrustedOrigins(origins, env) {
     if ((url.protocol !== "https:" && url.protocol !== "http:") || url.origin !== o) {
       throw new Error(`BETTER_AUTH_TRUSTED_ORIGINS entry must be an exact origin (scheme://host[:port], no path or trailing slash): ${o}`);
     }
+    // HF-02 N3: plaintext http is allowed only for loopback hosts outside development.
+    const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol === "http:" && !loopback) {
+      throw new Error(`BETTER_AUTH_TRUSTED_ORIGINS entry must use https (http is allowed only for localhost or 127.0.0.1): ${o}`);
+    }
   }
 }
 
@@ -34,8 +39,11 @@ export function isCorsOriginAllowed(origin, origins, env) {
 }
 
 // D-48 (a): no crossSubDomainCookies and no Domain attribute, so cookies are host-only.
+// HF-02 N1: a new cookiePrefix gives the host-only cookies new names, so browsers' old zone-wide
+// cookies (Domain=meridianconsole.com, named better-auth.*) are never read as the session.
 export function buildAdvancedOptions() {
   return {
+    cookiePrefix: "meridian",
     defaultCookieAttributes: { sameSite: "none", secure: true, httpOnly: true, partitioned: true },
   };
 }
