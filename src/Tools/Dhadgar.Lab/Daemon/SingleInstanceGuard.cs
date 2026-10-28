@@ -47,7 +47,7 @@ public sealed class SingleInstanceGuard : IDisposable
             var pid = Encoding.ASCII.GetBytes(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
             pidFile.Write(pid);
             pidFile.Flush();
-            return Result<SingleInstanceGuard>.Success(new SingleInstanceGuard(mutex, pidFile, paths.PidFile));
+            return new SingleInstanceGuard(mutex, pidFile, paths.PidFile);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {

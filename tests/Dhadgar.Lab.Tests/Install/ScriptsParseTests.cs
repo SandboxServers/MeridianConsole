@@ -35,7 +35,20 @@ public sealed class ScriptsParseTests
         process.Start();
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
-        var exited = process.WaitForExit(60_000);
+        bool exited;
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
+        {
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+                exited = true;
+            }
+            catch (OperationCanceledException)
+            {
+                exited = false;
+            }
+        }
+
         Assert.True(exited, "pwsh did not finish parsing " + script + " within 60 seconds");
 
         var stdout = await stdoutTask;

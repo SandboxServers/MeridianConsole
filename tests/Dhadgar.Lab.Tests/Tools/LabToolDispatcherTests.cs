@@ -60,7 +60,7 @@ public sealed class LabToolDispatcherTests
         var tool = new StubTool("open_tool", OkAsync("{}"));
         using var rig = new Rig(new() { ["open_tool"] = LabGate.Open }, tool);
         // A file where the audit directory must be makes every audit write fail.
-        File.WriteAllText(rig.Paths.Audit, "not a directory");
+        await File.WriteAllTextAsync(rig.Paths.Audit, "not a directory");
 
         var result = await rig.Dispatcher.InvokeAsync("open_tool", Json("{}"), Context("c-audit"), NoCancel);
 

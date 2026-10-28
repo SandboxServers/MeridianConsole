@@ -25,10 +25,7 @@ public sealed class LogRing
     /// </summary>
     public LogRing(int capacity = DefaultCapacity)
     {
-        if (capacity < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(capacity));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
 
         _items = new LogLine?[capacity];
     }

@@ -201,19 +201,19 @@ public static class FootprintReader
         return parts[^1];
     }
 
-    private static IReadOnlyList<CertInfo> ReadStore(string storeName, StoreLocation location)
+    private static List<CertInfo> ReadStore(string storeName, StoreLocation location)
     {
         using var store = new X509Store(storeName, location);
         return ReadOpenStore(store);
     }
 
-    private static IReadOnlyList<CertInfo> ReadStore(StoreName storeName, StoreLocation location)
+    private static List<CertInfo> ReadStore(StoreName storeName, StoreLocation location)
     {
         using var store = new X509Store(storeName, location);
         return ReadOpenStore(store);
     }
 
-    private static IReadOnlyList<CertInfo> ReadOpenStore(X509Store store)
+    private static List<CertInfo> ReadOpenStore(X509Store store)
     {
         try
         {

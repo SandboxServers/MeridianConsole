@@ -7,17 +7,17 @@ public sealed class ProxyCatalogTests
     [Fact]
     public void All_Names_AreUnique()
     {
-        IEnumerable<string> names = ProxyCatalog.All.Select(p => p.Name);
+        List<string> names = ProxyCatalog.All.Select(p => p.Name).ToList();
 
-        Assert.Equal(names.Count(), names.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
     public void All_ListenPorts_AreUnique()
     {
-        IEnumerable<int> ports = ProxyCatalog.All.Select(p => p.ListenPort);
+        List<int> ports = ProxyCatalog.All.Select(p => p.ListenPort).ToList();
 
-        Assert.Equal(ports.Count(), ports.Distinct().Count());
+        Assert.Equal(ports.Count, ports.Distinct().Count());
     }
 
     [Fact]

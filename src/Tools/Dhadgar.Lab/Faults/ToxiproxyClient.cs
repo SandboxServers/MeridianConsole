@@ -22,6 +22,7 @@ public sealed class ToxiproxyClient : IDisposable
     private static readonly Uri BaseUri = new($"http://127.0.0.1:{LabPorts.ToxiproxyApi}/");
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
 
+    private readonly HttpMessageHandler _handler;
     private readonly HttpClient _http;
 
     /// <summary>
@@ -29,7 +30,8 @@ public sealed class ToxiproxyClient : IDisposable
     /// </summary>
     public ToxiproxyClient(HttpMessageHandler? handler = null)
     {
-        _http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false }, disposeHandler: true)
+        _handler = handler ?? new SocketsHttpHandler { AllowAutoRedirect = false };
+        _http = new HttpClient(_handler, disposeHandler: false)
         {
             BaseAddress = BaseUri,
             Timeout = RequestTimeout,
@@ -125,7 +127,11 @@ public sealed class ToxiproxyClient : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+        _handler.Dispose();
+    }
 
     private static readonly System.Text.RegularExpressions.Regex ProxyName =
         new("^[a-z0-9][a-z0-9-]{0,62}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);

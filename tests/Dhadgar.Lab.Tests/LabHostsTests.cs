@@ -10,9 +10,9 @@ public sealed class LabHostsTests
     [InlineData("http://10.0.0.5:15040/", false)]
     [InlineData("file:///", false)]
     [InlineData("http://localhost.evil.com:15040/", false)]
-    public void IsLabEndpoint_KnownCases_MatchesExpectation(string uri, bool expected)
+    public void IsLabEndpoint_KnownCases_MatchesExpectation(string endpoint, bool expected)
     {
-        Assert.Equal(expected, LabHosts.IsLabEndpoint(new Uri(uri)));
+        Assert.Equal(expected, LabHosts.IsLabEndpoint(new Uri(endpoint)));
     }
 
     [Fact]

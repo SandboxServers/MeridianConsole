@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -25,6 +26,7 @@ public sealed record StackStatusDto(string State, string Network, IReadOnlyList<
 /// Only containers, proxies and databases it registered are ever touched (R-BLAST). Every docker call goes through
 /// <see cref="IDockerCli"/> with the Linux context. Passwords reach containers only through a user-only env file.
 /// </summary>
+[SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "LabStack is the name the L08 spec and its tests use for the lab infrastructure owner; renaming it ripples through tools, DI and tests.")]
 public sealed class LabStack : ILabStatusSource, IDisposable
 {
     private const string PostgresImage = "postgres:17";

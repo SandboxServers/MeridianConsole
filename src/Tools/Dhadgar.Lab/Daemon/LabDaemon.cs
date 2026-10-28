@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -48,6 +49,7 @@ public sealed class LabDaemon : IAsyncDisposable
     /// Starts the daemon. Refusals, in order: <c>Lab:BindAddress</c> not loopback, bad token (<c>[Lab.InvalidArgument]</c>),
     /// elevated process (<c>[Lab.Elevated]</c>), second instance (<c>[Lab.AlreadyRunning]</c>), bind failure (<c>[Lab.Unavailable]</c>).
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The EdgeState and SingleInstanceGuard are handed to the LabDaemon this method returns on success; the finally block disposes them on every failure path, gated by the started flag, which the analyzer cannot follow.")]
     public static async Task<Result<LabDaemon>> StartAsync(LabDaemonOptions options, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -144,7 +146,7 @@ public sealed class LabDaemon : IAsyncDisposable
             edge.Bind(port.Value);
             var baseAddress = new Uri("http://127.0.0.1:" + port.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/");
             started = true;
-            return Result<LabDaemon>.Success(new LabDaemon(app, baseAddress, edge, guard));
+            return new LabDaemon(app, baseAddress, edge, guard);
         }
         catch (Exception ex) when (ex is IOException or SocketException or InvalidOperationException)
         {

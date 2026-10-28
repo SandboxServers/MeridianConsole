@@ -11,6 +11,7 @@ namespace Dhadgar.Lab.Tests.Processes;
 /// <summary>
 /// Serialises the L07 process tests: they share the <c>MERIDIAN_LAB_HOME</c> environment variable and real child processes.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "xUnit collection marker; the name is the collection fixture convention and is referenced by its CollectionDefinition string.")]
 [CollectionDefinition("LabProcesses", DisableParallelization = true)]
 public sealed class LabProcessesCollection
 {

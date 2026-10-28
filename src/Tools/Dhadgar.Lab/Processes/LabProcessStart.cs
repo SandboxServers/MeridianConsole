@@ -50,7 +50,7 @@ internal static class LabProcessStart
             }
         }
 
-        return Result<Process>.Success(new Process { StartInfo = startInfo, EnableRaisingEvents = true });
+        return new Process { StartInfo = startInfo, EnableRaisingEvents = true };
     }
 
     /// <summary>
