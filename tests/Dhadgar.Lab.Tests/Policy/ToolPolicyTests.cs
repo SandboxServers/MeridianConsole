@@ -18,6 +18,7 @@ namespace Dhadgar.Lab.Tests.Policy;
 /// <summary>
 /// The gate table, the registry it must cover, and the dispatcher's refusals in C3 order.
 /// </summary>
+[Collection("LabHome")]
 public sealed class ToolPolicyTests
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 2, 10, 0, 0, TimeSpan.Zero);
