@@ -372,6 +372,9 @@ public sealed class LabServices
             env[entry.Key] = entry.Value;
         }
 
+        // L21: I1 reads the unhandled-request lines, which the Hosting.Diagnostics category logs at Information.
+        env["Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics"] = "Information";
+
         return Result<IReadOnlyDictionary<string, string>>.Success(env);
     }
 
