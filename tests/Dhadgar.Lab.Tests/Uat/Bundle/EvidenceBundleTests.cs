@@ -208,9 +208,10 @@ public sealed class ReproTests : IDisposable
     {
         string runFolder = Path.Combine(_paths.UatRuns, "20260101-nobuild-run1", "repro");
         _ = Directory.CreateDirectory(runFolder);
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(runFolder, "repro.toml"),
-            "seed = 42\nbuild_id = \"nobuild\"\nsection = \"plan-check\"\nrows = [\"read-key\"]\nlabel = \"\"\n\n[[specs]]\nfile = \"a.toml\"\nsha256 = \"NOT-THE-HASH\"\n");
+            "seed = 42\nbuild_id = \"nobuild\"\nsection = \"plan-check\"\nrows = [\"read-key\"]\nlabel = \"\"\n\n[[specs]]\nfile = \"a.toml\"\nsha256 = \"NOT-THE-HASH\"\n",
+            CancellationToken.None);
 
         var tool = new UatRunTool(_paths, _validator, _services);
         JsonElement args = JsonSerializer.SerializeToElement(new { spec = "a.toml", replay = "run1\\repro\\repro.toml" });
