@@ -85,6 +85,7 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | F53 | The Gateway has no anonymous route for the CA certificate: `/api/v1/agents/ca-certificate` falls into `agents-route` (`AgentCertificate`), so it is 401 without a client certificate. Four lab specs (L09 item 8, L17 `gateway-up`, L19 S-L7, L23 `gw-nodes-down`) assumed it was open. | `src/Dhadgar.Gateway/appsettings.json:187-207`; [ruling L09-2](worknotes/L09-ruling-2.md) | D-ML63; L09, L17, L19, L23 |
 | F54 | `/api/v1/agents/enroll` is under the Gateway's `Auth` limiter, 30 per 60 s per client IP; agent routes use `PerAgent`, 500 per 60 s; global 1000 per 60 s. All lab traffic reaches the Gateway from one IP, and the clause default `poll_ms = 500` would trip `Auth` within a 30 s recovery poll. | `src/Dhadgar.Gateway/Program.cs:194-240`; `appsettings.json`; C7; [ruling W2-3](worknotes/W2-ruling-3.md) | L17, L19, L23, L28, L42, L57 |
 | F55 | All tool registrations sat in one list in `AddLabMcp`, and the DI test pinned a literal tool count, so every pair of tool packets conflicted on the same two files in wave 2. `PlannedTools` also kept 9 names that were already registered. | `LabMcpServer.cs:48-88`; `LabDaemonServiceLifetimeTests.cs:47`; `ToolPolicy.cs`; wave 2 review M1 | L12a (D-ML65) |
+| F56 | No real Leased tool could be called with a lease. The dispatcher reads `lease_id` from the arguments but passes them on unchanged, and `LabTool<TArgs>` refuses unknown members, so every Leased tool returns `Lab.InvalidArgument` over MCP and from the UAT runner. The MCP schemas never advertised `lease_id`. The runner also wrote the injected lease id into `events.jsonl`, which the Open tools `events_read` and `bundle_read` expose. | `Tools/LabToolDispatcher.cs:95-142`; `Tools/LabTool.cs:66-82`; `Tools/LabJson.cs:39`; `Uat/UatRunner.cs:353-359`; [ruling L17-1](worknotes/L17-ruling-1.md) | L05f (D-ML66); L17 |
 
 ## Decisions
 
@@ -155,6 +156,7 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | D-ML63 | No product change for the Gateway CA route in this campaign. Lab specs probe the forwarded enroll route (`POST /api/v1/agents/enroll` `{}` → 400 `invalid_platform`) and `/healthz`; the fix is vertical-slice VS-07R. | Accepted | F53; a second copy of the fix would race VS-07R and skip its security review. |
 | D-ML64 | `lab_doctor` returns `{ok, checks:[{name, status, detail}]}` with `status` ∈ `ok`, `warn`, `fail`, `info`; `ok` is false iff a check fails; an unimplemented check is not emitted. L12 implements nine checks; `windows-*` come in L31, `playwright` in L35. | Accepted | Informational checks have no honest boolean; nothing consumed the old shape. |
 | D-ML65 | Tool registration by area: `LabMcpServer` declares one `static partial void Add<Area>Area` hook per area; packets register only in their area file and remove their names from their `// Lnn` group in `PlannedTools`; the DI test derives the tool set from `ToolPolicy` (rule R-REG). Packet L12a does it before wave 3. | Accepted | F55; otherwise every parallel wave conflicts on every merge. |
+| D-ML66 | `lease_id` is a reserved envelope argument for Leased tools. The dispatcher checks it, passes it as `LabCallContext.LeaseId` and strips it before binding. Leased argument records never declare it. The MCP projection advertises it as a required string. OwnLease records declare `lease_id?` and get it unchanged. The lease id never enters an observation. Fix packet L05f; R-LEASE test. | Accepted | F56; one rule in the gate instead of a field in ~43 records. |
 
 ## Seam tests
 
@@ -200,7 +202,8 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L14 | 3 | Clause evaluator: sources (incl. `step`), ops, `${var}`, capture | L13, L10, L12 | yes | BlockedDependency |
 | L15 | 3 | Runner and grader, seeds, `uat_run` (OwnLease); fault rows BLOCKED until L22 | L14 | yes | BlockedDependency |
 | L16 | 3 | Evidence bundle, `ledger.md`, secret scan, report, attest, `bundle_read` | L15 | yes | BlockedDependency |
-| L17 | 3 | CLI `status`/`uat`, `lab-selftest.toml`, S-L6 | L16, L11 | yes | BlockedDependency |
+| L05f | 3 | Lease id as a dispatcher envelope field; observation leak (D-ML66) | - | yes | Ready |
+| L17 | 3 | CLI `status`/`uat`, `lab-selftest.toml`, S-L6 | L16, L11, L05f | yes | BlockedDependency |
 | L18 | 3 | `uat-driver` agent, `lab-uat` skill, S-L5 | L16 | yes | BlockedDependency |
 | L48 | 3 | Observation stream, actor and op ids, fingerprint, pairing, replay fidelity (C18) | L16 | yes | BlockedDependency |
 | L19 | 4 | Blast-radius guard, write-ahead `FaultBook`, Toxiproxy faults and partitions; S-L7, BR | L08, L09, L48 | yes | BlockedDependency |
@@ -254,7 +257,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | 0 | L00 | Facts that decide the pool | no merge (worknote only, committed by L01's branch or ops) | beside wave 1 |
 | 1 | L01-L06 | Claude can reach a leased, audited daemon | L01 → L02 → L03 → L04 → L05 → L06 | L02, L03, L04 after L01 |
 | 2 | L07-L12, L09f | Real Gateway and Nodes on a wipeable stack, probed and read | L07 → L08 → L12 → L09f (own PR to `main`, #237) → L09 → L10 → L11 | L07, L08, L12; L09, L10 after L08 |
-| 3 | L12a, L13-L18, L48 | Graded, evidenced UAT runs by a driver agent; the observation stream | L12a → L13 → L14 → L15 → L16 → L48 → L17 → L18 | L48, L17, L18 after L16 |
+| 3 | L12a, L13-L18, L48, L05f | Graded, evidenced UAT runs by a driver agent; the observation stream | L12a → L13 → L14 → L15 → L16 → L48 → L05f → L17 → L18 | L48, L17, L18 after L16; L17 resumes after L05f |
 | 4 | L19-L24 | Faults, invariants and the first expected-failure catalogs | L19 → L20 → L21 → L22 → L23 → L24 | L21 beside L20 |
 | 4H | L49-L51 | Enrollment histories checked for linearizability | L49 → L50 → L51 | L49, L50 together (L49 after L48; L51 after wave 4) |
 | 5 | L25-L29, L52 | Results DB, triage, model-based hunting, fuzzing, chaos, soak, behavioural coverage | L25 → L26 → L27 → L52 → L28 → L29 | L26, L27, L52 after L25; L28, L29 after L27 |

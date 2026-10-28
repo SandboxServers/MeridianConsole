@@ -45,6 +45,75 @@ public sealed class McpEdgeSeamTests
 
     [Fact]
     [Trait("Seam", "S-L1")]
+    public async Task Mcp_LeasedTool_TakesLeaseIdAsEnvelope()
+    {
+        var token = NewToken();
+        var dataRoot = NewDataRoot();
+        try
+        {
+            await using var daemon = await StartDaemonAsync(token, dataRoot);
+
+            await using var transport = new HttpClientTransport(new HttpClientTransportOptions
+            {
+                Endpoint = new Uri(daemon.BaseAddress, LabDefaults.McpPath.TrimStart('/')),
+                AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = "Bearer " + token }
+            });
+            await using var client = await McpClient.CreateAsync(transport, null, null, CancellationToken.None);
+
+            // C3, D-ML66: lab_build advertises lease_id as required; uat_run advertises it as optional.
+            var tools = await client.ListToolsAsync(cancellationToken: CancellationToken.None);
+            System.Text.Json.JsonElement buildSchema = tools.First(t => t.Name == "lab_build").JsonSchema;
+            Assert.Contains("lease_id", buildSchema.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+            System.Text.Json.JsonElement runSchema = tools.First(t => t.Name == "uat_run").JsonSchema;
+            Assert.True(runSchema.GetProperty("properties").TryGetProperty("lease_id", out _));
+            Assert.DoesNotContain("lease_id", runSchema.TryGetProperty("required", out System.Text.Json.JsonElement runRequired)
+                ? runRequired.EnumerateArray().Select(item => item.GetString())
+                : Array.Empty<string?>());
+
+            var acquired = await client.CallToolAsync(
+                "lab_lease_acquire",
+                new Dictionary<string, object?> { ["owner"] = "s-l1", ["purpose"] = "seam" },
+                null,
+                null,
+                CancellationToken.None);
+            Assert.NotEqual(true, acquired.IsError);
+            string leaseId = acquired.StructuredContent!.Value.GetProperty("lease_id").GetString()!;
+
+            try
+            {
+                var missing = await client.CallToolAsync("lab_build", new Dictionary<string, object?>(), null, null, CancellationToken.None);
+                Assert.Equal(true, missing.IsError);
+                Assert.Equal("Lab.LeaseRequired", missing.StructuredContent!.Value.GetProperty("error").GetProperty("code").GetString());
+
+                var bound = await client.CallToolAsync(
+                    "lab_build",
+                    new Dictionary<string, object?> { ["lease_id"] = leaseId },
+                    null,
+                    null,
+                    CancellationToken.None);
+                Assert.Equal(true, bound.IsError);
+                System.Text.Json.JsonElement error = bound.StructuredContent!.Value.GetProperty("error");
+                Assert.Equal("Lab.InvalidArgument", error.GetProperty("code").GetString());
+                Assert.Contains("checkout is required", error.GetProperty("message").GetString(), StringComparison.Ordinal);
+            }
+            finally
+            {
+                await client.CallToolAsync(
+                    "lab_lease_release",
+                    new Dictionary<string, object?> { ["lease_id"] = leaseId },
+                    null,
+                    null,
+                    CancellationToken.None);
+            }
+        }
+        finally
+        {
+            DeleteDataRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    [Trait("Seam", "S-L1")]
     public async Task Edge_NoToken_Returns401()
     {
         var dataRoot = NewDataRoot();

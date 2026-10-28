@@ -283,9 +283,11 @@ Error JSON (the payload when `IsError` is true):
 
 `holder` appears only for `Lab.LeaseHeld`. The code comes from the `[Lab.Code]` prefix of the `Result` error.
 
+`lease_id` is a reserved envelope argument (D-ML66, [ruling L17-1](worknotes/L17-ruling-1.md)). For a Leased tool the dispatcher reads it at step 3, removes every top-level `lease_id` property before step 5 and passes the validated id as `LabCallContext.LeaseId`; Leased argument records never declare `LeaseId`. The MCP projection adds `lease_id` (string) to the properties and `required` of every Leased tool's advertised schema; `ILabTool.InputSchema` stays the raw record schema. OwnLease records declare `string? LeaseId = null` and receive their arguments unchanged. The lease id never enters an observation, audit line, log or bundle.
+
 ### C4. Tool catalogue
 
-Every Leased tool takes a required `lease_id` string; it is not repeated below. Arguments and results are snake_case JSON. `target` in a fault tool is always a lab target id from `fault_list_targets` (C10), never a container name, PID, volume or path. `member` is a pool member id from `pool_acquire` (C13).
+Every Leased tool takes a required `lease_id` string; it is not repeated below. It is the C3 envelope field: the dispatcher consumes it, so the tool's argument record does not declare it. Arguments and results are snake_case JSON. `target` in a fault tool is always a lab target id from `fault_list_targets` (C10), never a container name, PID, volume or path. `member` is a pool member id from `pool_acquire` (C13).
 
 | Tool | Gate | Arguments | Result | Packet |
 | --- | --- | --- | --- | --- |
@@ -1873,10 +1875,16 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Docs owed:** none (L45).
 
+### L05f. Lease id as a dispatcher envelope field; observation leak
+
+- **Branch / worktree / commit:** `ml/l05f-lease-envelope` / `ml-l05f` (from the `campaign/meridian-lab` tip) / `fix(lab): lease_id is a dispatcher envelope field for Leased tools [L05f]`
+- **Depends on:** none. **Blocks:** L17, L18 and every packet that adds a Leased tool. **Security review:** yes (policy gate; lease-id disclosure).
+- **Spec:** [worknotes/L17-ruling-1.md](worknotes/L17-ruling-1.md) section "L05f" (D-ML66, F56). The dispatcher strips `lease_id` for Leased tools after Touch. `LabMcpServer.AdvertisedSchema` adds it as required to Leased schemas. `UatRunner` observes the step args before the lease is injected. One shared `LabToolDispatcher.LeaseIdArgument` constant. Tests: dispatcher facts with a real `LabTool<TArgs>`, `LabMcpSchemaTests`, R-LEASE `LeaseIdArgument_FollowsTheGate`, S-L1 `Mcp_LeasedTool_TakesLeaseIdAsEnvelope`, `UatRunnerTests.LeasedStep_BindsAndItsObservationNeverCarriesTheLeaseId`.
+
 ### L17. CLI `status` and `uat`, `lab-selftest.toml`, S-L6
 
 - **Branch / worktree / commit:** `ml/l17-cli-selftest` / `meridian-lab-l17` / `feat(lab): uat cli and lab self-test spec`
-- **Depends on:** L16, L11. **Security review:** yes.
+- **Depends on:** L16, L11, L05f ([ruling L17-1](worknotes/L17-ruling-1.md)). **Security review:** yes.
 - **Rules:**
   - R-REG: area Uat.
   - Rate limits (F54): enroll-route probes and enrolls through the Gateway follow L23's rate-limit rule (`poll_ms = 5000` when polling; at most 25 enroll-route calls per 60 s per section; a 429 is a spec defect).

@@ -90,6 +90,8 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 - `ILabEvents.Emit` returns void, so a failed audit write is kept in `AuditLog.LastFailure`. `RecordCall` and `TryEmit` return the failure as a `Result`. The dispatcher refuses a call whose `lab.call.begin` cannot be written, deciding on the `TryEmit` result and never on `LastFailure`.
 - Every refused attempt is audited as one `lab.call` with the refusal code as its outcome, including unknown names (recorded as `<unknown>`), unclassified or machine-gated tools, and a missing `lease_id`. A tool that throws is audited once with outcome `Lab.Internal`; its exception text is never returned or logged.
 
+`lease_id` is an envelope field. Leased tools list it as required in their MCP schema; the dispatcher checks it, passes it to the tool in the call context and strips it from the arguments. It never appears in a spec, an observation, an audit line or a bundle.
+
 ## Processes and logs
 
 - `LabProcessSupervisor` starts child processes with `ProcessStartInfo.ArgumentList` and `UseShellExecute=false`, redirects stdout and stderr, and removes `MERIDIAN_LAB_TOKEN` from every child environment. Each child is assigned to a Windows Job Object with kill-on-close, so a daemon exit takes its children with it. Stop uses `Kill(entireProcessTree: true)`.
