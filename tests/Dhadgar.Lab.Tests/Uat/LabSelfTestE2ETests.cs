@@ -129,18 +129,22 @@ public sealed class LabSelfTestE2ETests
     /// </summary>
     private static void AssertRunPasses(JsonElement root, string home, string repoRoot)
     {
+        // nodes-log is UNVERIFIED by design until UatArea wires a LogSource ring (L17 report); every other row must pass.
         string rowsText = root.GetProperty("rows").GetRawText();
-        Assert.True(
-            root.GetProperty("overall").GetString() == "pass",
-            "overall " + root.GetProperty("overall").GetString() + "; rows: " + rowsText[..Math.Min(3000, rowsText.Length)]);
+        string diag = "overall " + root.GetProperty("overall").GetString() + "; rows: " + rowsText[..Math.Min(3000, rowsText.Length)];
         foreach (var row in root.GetProperty("rows").EnumerateArray())
         {
-            Assert.Equal("pass", row.GetProperty("grade").GetString());
+            string expected = row.GetProperty("row_id").GetString() == "nodes-log" ? "unverified" : "pass";
+            Assert.True(row.GetProperty("grade").GetString() == expected, diag);
         }
 
         string runId = root.GetProperty("run_id").GetString() ?? string.Empty;
-        string bundle = Path.Combine(LabPaths.FromRoot(home, repoRoot).UatRuns, Path.GetFileName(runId));
-        Assert.True(Directory.Exists(bundle), bundle);
+        // The bundle folder is named "<timestamp>-<run_id>" (BundleFolders.Find matches on the suffix).
+        string uatRuns = LabPaths.FromRoot(home, repoRoot).UatRuns;
+        string? bundle = Directory.Exists(uatRuns)
+            ? Directory.EnumerateDirectories(uatRuns).FirstOrDefault(dir => Path.GetFileName(dir).EndsWith("-" + runId, StringComparison.Ordinal))
+            : null;
+        Assert.True(bundle is not null, "no bundle folder for run " + runId + " under " + uatRuns);
 
         using var runJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
         Assert.Equal("passed", runJson.RootElement.GetProperty("secret_scan").GetString());

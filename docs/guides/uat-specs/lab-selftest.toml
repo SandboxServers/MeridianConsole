@@ -100,8 +100,8 @@ depends_on = ["nodes-up"]
   method = "POST"
   path = "/api/v1/agents/enroll"
   body = {}
-  op = "contains"
-  pointer = "/body"
+  op = "eq"
+  pointer = "/body/errorCode"
   value = "invalid_platform"
   timeout_ms = 0
 
@@ -124,7 +124,7 @@ depends_on = ["nodes-up"]
   database = "nodes"
   sql = 'select "UsedAt" as used_at from enrollment_tokens where "Id" = @id::uuid'
   params = { id = "${token_id}" }
-  op = "absent"
+  op = "falsy"
   pointer = "/rows/0/used_at"
   timeout_ms = 0
   required = true
@@ -257,8 +257,8 @@ depends_on = ["gateway-up"]
   source = "step"
   step = "reuse"
   op = "eq"
-  pointer = "/error_code"
-  value = "http:401"
+  pointer = "/result/status"
+  value = 401
 
 [[row]]
 id = "nodes-log"
