@@ -2,6 +2,7 @@ using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Processes;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
@@ -20,17 +21,30 @@ namespace Dhadgar.Lab.Tests.Uat;
 public sealed class LabSelfTestE2ETests
 {
     private const string SelfTestSpec = "lab-selftest.toml";
+    private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";
 
-    [Fact(Timeout = 900_000)]
+    [SkippableFact(Timeout = 900_000)]
     [Trait("Seam", "S-L6")]
     [Trait("RequiresDocker", "true")]
     [Trait("RequiresNetwork", "true")]
     public async Task LabSelfTest_EveryRowPasses_SecretScanPasses_LedgerWritten()
     {
+        string context = Environment.GetEnvironmentVariable("Lab__Docker__LinuxContext") is { Length: > 0 } configured
+            ? configured
+            : ContainerLogFollower.DefaultLinuxContext;
+        (int versionExit, _) = RunDocker(context, ["version", "--format", "{{.Server.Version}}"]);
+        Skip.IfNot(versionExit == 0, "docker is not reachable on context " + context);
+
+        // The guard runs before any daemon starts. Labelled containers are never removed here: stack_up wipe does that, and only with the opt-in.
+        (int _, string labelled) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1"]);
+        if (labelled.Trim().Length > 0 && Environment.GetEnvironmentVariable(WipeEnvVar) != "1")
+        {
+            Assert.Fail("labelled lab containers exist; set MERIDIAN_LAB_S6_WIPE=1 to let the self-test's stack_up wipe remove them");
+        }
+
         string repoRoot = LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory);
         string home = Path.Combine(Path.GetTempPath(), "meridian-lab-s6-" + Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(home);
-        RemoveLabContainers();
         try
         {
             string token = NewToken();
@@ -85,7 +99,7 @@ public sealed class LabSelfTestE2ETests
         }
         finally
         {
-            RemoveLabContainers();
+            RemoveLabContainers(context);
             if (Directory.Exists(home))
             {
                 Directory.Delete(home, recursive: true);
@@ -98,30 +112,40 @@ public sealed class LabSelfTestE2ETests
     /// target registry, so its <c>stack_up wipe</c> cannot see containers left by an earlier run; those would keep the old
     /// Postgres roles and reject the new run's passwords. Only lab-labelled containers are touched.
     /// </summary>
-    private static void RemoveLabContainers()
+    private static void RemoveLabContainers(string context)
     {
-        string ids = RunDocker(["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1"]);
+        (int _, string ids) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1"]);
         foreach (string id in ids.Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            _ = RunDocker(["rm", "-f", "-v", id]);
+            _ = RunDocker(context, ["rm", "-f", "-v", id]);
         }
     }
 
-    private static string RunDocker(string[] args)
+    /// <summary>
+    /// Runs the docker CLI on the given context with an argument list. Returns the exit code (-1 when docker cannot start) and stdout.
+    /// </summary>
+    private static (int ExitCode, string Output) RunDocker(string context, string[] args)
     {
         var psi = new System.Diagnostics.ProcessStartInfo("docker") { RedirectStandardOutput = true, RedirectStandardError = true };
         psi.ArgumentList.Add("--context");
-        psi.ArgumentList.Add("desktop-linux");
+        psi.ArgumentList.Add(context);
         foreach (string arg in args)
         {
             psi.ArgumentList.Add(arg);
         }
 
-        using var process = System.Diagnostics.Process.Start(psi)!;
-        string output = process.StandardOutput.ReadToEnd();
-        _ = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return output;
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(psi)!;
+            string output = process.StandardOutput.ReadToEnd();
+            _ = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return (process.ExitCode, output);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return (-1, string.Empty);
+        }
     }
 
     /// <summary>
@@ -129,22 +153,19 @@ public sealed class LabSelfTestE2ETests
     /// </summary>
     private static void AssertRunPasses(JsonElement root, string home, string repoRoot)
     {
-        // nodes-log is UNVERIFIED by design until UatArea wires a LogSource ring (L17 report); every other row must pass.
+        // Every row must pass, nodes-log included: its log clause reads the supervisor's ring (S-L6 since = run_start).
         string rowsText = root.GetProperty("rows").GetRawText();
         string diag = "overall " + root.GetProperty("overall").GetString() + "; rows: " + rowsText[..Math.Min(3000, rowsText.Length)];
         foreach (var row in root.GetProperty("rows").EnumerateArray())
         {
-            string expected = row.GetProperty("row_id").GetString() == "nodes-log" ? "unverified" : "pass";
-            Assert.True(row.GetProperty("grade").GetString() == expected, diag);
+            Assert.True(row.GetProperty("grade").GetString() == "pass", diag);
         }
 
-        string runId = root.GetProperty("run_id").GetString() ?? string.Empty;
-        // The bundle folder is named "<timestamp>-<run_id>" (BundleFolders.Find matches on the suffix).
-        string uatRuns = LabPaths.FromRoot(home, repoRoot).UatRuns;
-        string? bundle = Directory.Exists(uatRuns)
-            ? Directory.EnumerateDirectories(uatRuns).FirstOrDefault(dir => Path.GetFileName(dir).EndsWith("-" + runId, StringComparison.Ordinal))
-            : null;
-        Assert.True(bundle is not null, "no bundle folder for run " + runId + " under " + uatRuns);
+        // The result names its bundle folder (C4); the folder sits directly under UatRuns.
+        string bundleName = root.TryGetProperty("bundle", out JsonElement bundleElement) ? bundleElement.GetString() ?? string.Empty : string.Empty;
+        Assert.True(bundleName.Length > 0, "the uat_run result has no bundle: " + diag);
+        string bundle = Path.Combine(LabPaths.FromRoot(home, repoRoot).UatRuns, bundleName);
+        Assert.True(Directory.Exists(bundle), "bundle folder missing: " + bundle);
 
         using var runJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
         Assert.Equal("passed", runJson.RootElement.GetProperty("secret_scan").GetString());
