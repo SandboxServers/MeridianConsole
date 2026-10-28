@@ -190,7 +190,7 @@ public sealed class BundleWriter : IUatRunSink
         Write("run.json", JsonSerializer.Serialize(run, JsonOptions));
         foreach (LedgerRow row in rows)
         {
-            var clauseJson = row.Clauses.Select(clause => new { id = clause.Id, pointer = clause.Pointer, source = clause.Source, required = clause.Required, state = clause.State.ToString(), error = clause.Error });
+            var clauseJson = row.Clauses.Select(clause => new { id = clause.Id, pointer = clause.Locator, source = clause.Source, required = clause.Required, state = clause.State.ToString(), error = clause.Error });
             string reason = secretFailed ? SecretScanFailed : _results.FirstOrDefault(candidate => candidate.RowId == row.Row)?.Reason ?? string.Empty;
             var rowJson = new { section = row.Section, id = row.Row, title = row.Title, expected = row.Expected, grade = LedgerRenderer.ResultText(row.Grade), reason, at = row.At, clauses = clauseJson };
             Write(Path.Combine("rows", row.Section, row.Row + ".json"), JsonSerializer.Serialize(rowJson, JsonOptions));

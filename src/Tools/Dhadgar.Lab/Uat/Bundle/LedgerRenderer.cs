@@ -7,10 +7,10 @@ namespace Dhadgar.Lab.Uat.Bundle;
 /// One clause as the ledger shows it: its id, its pointer and its state.
 /// </summary>
 /// <param name="Id">The clause id.</param>
-/// <param name="Pointer">The JSON pointer or the source name when the clause has no pointer.</param>
+/// <param name="Locator">The JSON pointer or the source name when the clause has no pointer.</param>
 /// <param name="State">The clause state after evaluation.</param>
 /// <param name="Error">The error text, or null.</param>
-public sealed record LedgerClause(string Id, string Pointer, ClauseState State, string? Error, string Source = "", bool Required = true);
+public sealed record LedgerClause(string Id, string Locator, ClauseState State, string? Error, string Source = "", bool Required = true);
 
 /// <summary>
 /// One row as the ledger shows it.
@@ -95,7 +95,7 @@ public static class LedgerRenderer
         }
 
         return string.Join("; ", clauses.Select(clause =>
-            clause.Id + ": " + clause.Pointer + " (" + StateText(clause.State) + ")" +
+            clause.Id + ": " + clause.Locator + " ("+ StateText(clause.State) + ")" +
             (clause.Error is { Length: > 0 } error ? " error: " + error : string.Empty)));
     }
 
