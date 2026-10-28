@@ -101,4 +101,61 @@ public sealed class SpecValidatorTests
         Assert.NotNull(loaded.Spec);
         Assert.Empty(SpecValidator.Validate(loaded.Spec!, text, Registry));
     }
+
+    [Fact]
+    public void Validate_DbSourceWithDatabase_IsAccepted()
+    {
+        string text = BaseRow
+            .Replace("source = \"step\"", "source = \"db\"", StringComparison.Ordinal)
+            .Replace("step = \"read\"", "database = \"nodes\"\n  sql = \"select 1\"", StringComparison.Ordinal);
+
+        SpecLoadOutcome loaded = SpecLoader.LoadText("db.toml", text);
+
+        Assert.NotNull(loaded.Spec);
+        Assert.Empty(SpecValidator.Validate(loaded.Spec!, text, Registry));
+    }
+
+    [Fact]
+    public void Validate_DbSourceWithoutDatabase_IsRefused()
+    {
+        string text = BaseRow
+            .Replace("source = \"step\"", "source = \"db\"", StringComparison.Ordinal)
+            .Replace("step = \"read\"", "sql = \"select 1\"", StringComparison.Ordinal);
+
+        SpecLoadOutcome loaded = SpecLoader.LoadText("db.toml", text);
+
+        Assert.NotNull(loaded.Spec);
+        IReadOnlyList<UatProblem> problems = SpecValidator.Validate(loaded.Spec!, text, Registry);
+        Assert.Contains(problems, p => p.Message.Contains("needs field database", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("certstore", "store = \"My\"\n  member = \"m1\"")]
+    [InlineData("registry", "key = \"x\"\n  member = \"m1\"")]
+    [InlineData("state_file", "file = \"x\"\n  member = \"m1\"")]
+    public void Validate_WindowsSourceWithMember_IsAccepted(string source, string fields)
+    {
+        string text = BaseRow
+            .Replace("source = \"step\"", "source = \"" + source + "\"", StringComparison.Ordinal)
+            .Replace("step = \"read\"", fields, StringComparison.Ordinal);
+
+        SpecLoadOutcome loaded = SpecLoader.LoadText("windows.toml", text);
+
+        Assert.NotNull(loaded.Spec);
+        Assert.Empty(SpecValidator.Validate(loaded.Spec!, text, Registry));
+    }
+
+    [Fact]
+    public void Validate_DbSourceWithUnknownField_IsRefused()
+    {
+        string text = BaseRow
+            .Replace("source = \"step\"", "source = \"db\"", StringComparison.Ordinal)
+            .Replace("step = \"read\"", "database = \"nodes\"\n  sql = \"select 1\"\n  schema_x = \"y\"", StringComparison.Ordinal);
+
+        SpecLoadOutcome loaded = SpecLoader.LoadText("db.toml", text);
+
+        Assert.NotNull(loaded.Spec);
+        IReadOnlyList<UatProblem> problems = SpecValidator.Validate(loaded.Spec!, text, Registry);
+        Assert.Contains(problems, p => p.Message.Contains("has no field schema_x", StringComparison.Ordinal));
+    }
 }
