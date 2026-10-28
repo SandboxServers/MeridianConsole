@@ -596,8 +596,38 @@ public sealed class BundleWriter : IUatRunSink
         return text.ToString();
     }
 
-    private static string Quote(string value) =>
-        "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+    /// <summary>
+    /// Writes the value as a TOML basic string. Backslash and quote are escaped; tab, newline and carriage return use their short
+    /// escapes; any other control character (below U+0020 or U+007F) becomes <c>\uXXXX</c>.
+    /// </summary>
+    private static string Quote(string value)
+    {
+        var text = new StringBuilder("\"");
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '\\': text.Append("\\\\"); break;
+                case '"': text.Append("\\\""); break;
+                case '\n': text.Append("\\n"); break;
+                case '\r': text.Append("\\r"); break;
+                case '\t': text.Append("\\t"); break;
+                default:
+                    if (c < 0x20 || c == 0x7F)
+                    {
+                        text.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        text.Append(c);
+                    }
+
+                    break;
+            }
+        }
+
+        return text.Append('"').ToString();
+    }
 
     private static string OverallText(RunOverall overall) => overall switch
     {

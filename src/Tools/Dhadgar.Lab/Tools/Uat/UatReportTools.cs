@@ -135,17 +135,19 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
     private readonly Redactor _redactor;
     private readonly TimeProvider _time;
     private readonly LeaseBook _leases;
+    private readonly SecretVault _vault;
 
     /// <summary>
     /// Creates the tool.
     /// </summary>
-    public UatAttestTool(LabPaths paths, IPathValidator validator, Redactor redactor, TimeProvider time, LeaseBook leases)
+    public UatAttestTool(LabPaths paths, IPathValidator validator, Redactor redactor, TimeProvider time, LeaseBook leases, SecretVault vault)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
+        _vault = vault ?? throw new ArgumentNullException(nameof(vault));
     }
 
     /// <inheritdoc />
@@ -171,7 +173,8 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
         }
 
         Result<string> grade = BundleAttestor.Attest(folder.Value!, args.RunId!, args.Section!, args.Row!, args.ClauseId!,
-            args.Verdict!, args.Note, _time.GetUtcNow(), new AttestedBy(touched.Value!.Owner, context.Caller), _redactor, _validator);
+            args.Verdict!, args.Note, _time.GetUtcNow(), new AttestedBy(touched.Value!.Owner, context.Caller), _redactor, _validator,
+            new SecretScanner(_vault));
         if (grade.IsFailure)
         {
             return Task.FromResult(Result<object>.Failure(grade.Error));

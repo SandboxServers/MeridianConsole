@@ -379,6 +379,21 @@ public sealed class RowEvidenceTests : IDisposable
         Assert.Equal(new[] { "inside" }, kept.Select(line => line.Message));
     }
 
+    [Fact]
+    public async Task Repro_LabelWithNewline_RoundTripsThroughTomlyn()
+    {
+        const string label = "a\nb\t\"c\"";
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, new Redactor(_vault), new SecretScanner(_vault), _time,
+            "abcd1234", "linux", "build", label);
+
+        await RunSpecAsync(writer);
+
+        string text = await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "repro", "repro.toml"));
+        Dictionary<string, object?> model = Tomlyn.TomlSerializer.Deserialize<Dictionary<string, object?>>(text)!;
+        Assert.Equal(label, (string?)model["label"]);
+    }
+
     private string RowPath(string rowId) => Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
 
     private async Task<UatRunResult> RunSpecAsync(BundleWriter? sink = null)

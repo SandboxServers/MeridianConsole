@@ -331,6 +331,43 @@ public sealed class UatAttestTests : IDisposable
     }
 
     [Fact]
+    public void Attest_NoteWithPasswordSegment_WritesNothing()
+    {
+        string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
+        string ledgerPath = Path.Combine(_folder, "ledger.md");
+        File.WriteAllText(ledgerPath, "# ledger before\n");
+        string runPath = Path.Combine(_folder, "run.json");
+        string[] before = [File.ReadAllText(rowPath), File.ReadAllText(ledgerPath), File.ReadAllText(runPath)];
+
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held", "Password=hunter2x",
+            At, Attester, redactor, _validator, new SecretScanner(vault));
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.Unavailable]", result.Error, StringComparison.Ordinal);
+        string[] after = [File.ReadAllText(rowPath), File.ReadAllText(ledgerPath), File.ReadAllText(runPath)];
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void Attest_SetsReproFidelityToEvidenceOnly()
+    {
+        string reproPath = Path.Combine(_folder, "repro", "repro.toml");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(reproPath)!);
+        File.WriteAllText(reproPath, "seed = 1\nfidelity = \"exact\"\n");
+
+        using var vault = new SecretVault();
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held", null,
+            At, Attester, new Redactor(vault), _validator, new SecretScanner(vault));
+
+        Assert.True(result.IsSuccess, result.Error);
+        string repro = File.ReadAllText(reproPath);
+        Assert.Contains("fidelity = \"evidence_only\"", repro, StringComparison.Ordinal);
+        Assert.DoesNotContain("fidelity = \"exact\"", repro, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UatAttestTool_RecordsTheLeaseOwnerAndTheCallContextCaller()
     {
         string lab = Path.Combine(_root, "lab");
@@ -343,7 +380,7 @@ public sealed class UatAttestTests : IDisposable
         LeaseGrant grant = leases.Acquire("owner-b", "uat", null, false, null).Value;
         using var vault = new SecretVault();
         var redactor = new Redactor(vault);
-        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, redactor, time, leases, vault);
         JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-1", grant.LeaseId, "mcp-test"), CancellationToken.None);
@@ -369,7 +406,7 @@ public sealed class UatAttestTests : IDisposable
         var time = new FakeTimeProvider(At);
         var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
         using var vault = new SecretVault();
-        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, new Redactor(vault), time, leases);
+        var tool = new UatAttestTool(LabPaths.FromRoot(lab), _validator, new Redactor(vault), time, leases, vault);
         JsonElement args = JsonSerializer.SerializeToElement(new { run_id = RunId, section = Section, row = Row, clause_id = "human-look", verdict = "held" });
 
         Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-2", "no-such-lease", "mcp-test"), CancellationToken.None);
