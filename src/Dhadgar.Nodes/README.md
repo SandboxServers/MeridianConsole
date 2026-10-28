@@ -512,6 +512,7 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 | `ConnectionStrings__RabbitMqHost` | RabbitMQ host |
 | `RabbitMq__Username` | RabbitMQ username |
 | `RabbitMq__Password` | RabbitMQ password |
+| `RabbitMq__Port` | RabbitMQ AMQP port, 1-65535 (default `5672`) |
 | `Nodes__HeartbeatThresholdMinutes` | Offline detection threshold |
 | `ASPNETCORE_ENVIRONMENT` | Runtime environment |
 
