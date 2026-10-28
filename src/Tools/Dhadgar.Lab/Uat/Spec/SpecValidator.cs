@@ -560,7 +560,8 @@ public static class SpecValidator
 
         private void CheckSince(string since, string needle, HashSet<string> stepIds, HashSet<string> faultIds)
         {
-            if (string.IsNullOrEmpty(since))
+            // row_start is the loader's default (the clause is measured from the row's first step).
+            if (string.IsNullOrEmpty(since) || since == "row_start")
             {
                 return;
             }
