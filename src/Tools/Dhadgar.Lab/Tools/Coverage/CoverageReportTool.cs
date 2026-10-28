@@ -23,16 +23,29 @@ public sealed class CoverageReportTool : LabTool<CoverageReportArgs>
 
     private readonly ResultsService _results;
     private readonly IPathValidator _validator;
+    private readonly string _labRoot;
 
     /// <summary>
-    /// Creates the tool.
+    /// Creates the tool; the universe is read from the lab's own folder.
     /// </summary>
     /// <param name="results">The results service.</param>
     /// <param name="validator">Validates the universe path.</param>
     public CoverageReportTool(ResultsService results, IPathValidator validator)
+        : this(results, validator, AppContext.BaseDirectory)
+    {
+    }
+
+    /// <summary>
+    /// Creates the tool with the folder that holds <c>coverage-universe.json</c> (tests point it at the source folder).
+    /// </summary>
+    /// <param name="results">The results service.</param>
+    /// <param name="validator">Validates the universe path.</param>
+    /// <param name="labRoot">The folder that holds <c>coverage-universe.json</c>.</param>
+    internal CoverageReportTool(ResultsService results, IPathValidator validator, string labRoot)
     {
         _results = results ?? throw new ArgumentNullException(nameof(results));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _labRoot = labRoot ?? throw new ArgumentNullException(nameof(labRoot));
     }
 
     /// <inheritdoc />
@@ -50,7 +63,7 @@ public sealed class CoverageReportTool : LabTool<CoverageReportArgs>
             return Result<object>.Failure("[Lab.InvalidArgument] kind must be one of " + string.Join(", ", CoverageKeys.Kinds));
         }
 
-        Result<CoverageUniverse> universe = CoverageUniverse.Load(AppContext.BaseDirectory, _validator);
+        Result<CoverageUniverse> universe = CoverageUniverse.Load(_labRoot, _validator);
         if (universe.IsFailure)
         {
             return Result<object>.Failure(universe.Error);
