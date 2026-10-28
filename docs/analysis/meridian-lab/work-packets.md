@@ -710,7 +710,15 @@ public interface IInvariant
     Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct);
 }
 public sealed record InvariantCheckError(string InvariantId, string Error);   // the check could not run (source down, parse error)
-public sealed record InvariantReport(IReadOnlyList<InvariantViolation> Violations, IReadOnlyList<InvariantCheckError> Errors);
+public sealed record InvariantSkip(string InvariantId, string Source, string Reason, string? Row = null); // not applicable yet (D-ML80); never an error
+public sealed record InvariantReport(IReadOnlyList<InvariantViolation> Violations, IReadOnlyList<InvariantCheckError> Errors, IReadOnlyList<InvariantSkip>? Skipped = null);
+public sealed record InvariantOutcome(IReadOnlyList<InvariantViolation> Violations, IReadOnlyList<InvariantSkip> Skipped);
+public interface ISkippableInvariant : IInvariant
+{
+    Task<Result<InvariantOutcome>> CheckWithSkipsAsync(InvariantWindow window, CancellationToken ct);
+}
+public enum DbApplicability { Applicable, StackNotUp, SchemaNotReady }
+public delegate Task<Result<DbApplicability>> InvariantDbGate(string database, CancellationToken ct);
 public sealed class InvariantMonitor
 {
     // Runs every registered invariant; one failing check becomes an InvariantCheckError and the others still run.
@@ -719,6 +727,8 @@ public sealed class InvariantMonitor
 ```
 
 A check error inside a row window turns that row's PASS or NEEDS_HUMAN into UNVERIFIED with reason `invariant <id> unchecked: <error>`; outside any row it becomes a synthetic `invariants/<id>` row graded UNVERIFIED.
+
+A source that does not exist yet is **not applicable** (D-ML80): the invariant returns an `InvariantSkip`, which is never a check error and never changes a grade. I2 and I3 skip a database when `InvariantDbGate` says `StackNotUp` (no `lab_reader` credential) or `SchemaNotReady` (`__EFMigrationsHistory` missing); a gate failure is a check error, and so is any query failure on an applicable database, 42P01 included. I5 skips `queues` and `proxies` until `stack_up` has created the credentials, and always checks containers and backups. The monitor stamps each skip with the window's row; the runner labels checkpoint skips `(run-start)` and `(run-end)`. `invariants.json` and `invariants_check` list them under `skipped`.
 
 | Id | Invariant | How it is checked | Packet |
 | --- | --- | --- | --- |
@@ -2299,7 +2309,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
   - R-BLAST, R-DOCKER, R-ARGS (`docker exec <id> <tool> <args...>` as separate `ArgumentList` items; never `sh -c` with built text).
   - R-PATH: logical files resolve only from the C10 table; backups under `LabPaths.FaultBackups\<fault_id>\`.
   - R-ZERO: the CA key backup buffer is zeroed after restore; the backup file is deleted after a successful heal.
-  - R-SEED: `garbage` bytes come from `LabRandom(runSeed, "fault:<fault_id>")` (seed from the call context; `LabRandom.NewSeed()` outside a run).
+  - R-SEED (D-ML81): `garbage` bytes come from `LabRandom(seed, "corrupt_file:garbage")`. The tool takes an optional `seed`; inside a UAT run the runner sets it to `LabRandom(runSeed, "fault:<section>/<row>/<fault id>").NextUInt64() >> 11` unless the spec gives one, and outside a run it is `LabRandom.NewSeed()`. Never seed from the fault id: it is random per call.
   - SQL identifiers: database names must match `^meridian_lab_[a-z]+$` and exist in `pg_database`; table names must exist in `information_schema.tables` (schema `public`) for that database; both are then double-quoted. DDL cannot take parameters, so nothing else reaches the SQL text.
   - R-RESULT, R-USING (`NpgsqlConnection`), R-TIME, R-LOG, R-NULL, R-XUNIT.
 
@@ -2358,7 +2368,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
   - R-REG: area Invariants. `Uat/Eval/InvariantSource.cs` (an `IClauseSource`) is registered in `InvariantsArea.cs` as `services.AddSingleton<IClauseSource, InvariantSource>();`, not in `UatArea.cs`. `BundleWriter` names its folder only through `BundleFolders.Name` (L16f); write `invariants.json` with the existing `Write` helper.
   - R-OBSERVE: invariant SQL uses `LabConnectionStrings.Reader(service)`; RabbitMQ management on `127.0.0.1:16672` and Toxiproxy on 18474 through `LabHosts.IsLabInfraEndpoint`.
   - R-LOG / R-ZERO: I4 sees raw lines through L07's `IRawLineObserver` and stores only the redacted line; it never logs the raw line, never keeps it after the check.
-  - R-RESULT: one failing invariant is an `InvariantCheckError`; the others still run (C11).
+  - R-RESULT: one failing invariant is an `InvariantCheckError`; the others still run (C11). A source that does not exist yet is an `InvariantSkip`, not an error (C11, D-ML80).
   - R-TIME, R-DI, R-USING, R-NULL, R-XUNIT.
 
 **Contract excerpt:** C11 in full (types, the I1-I7 table, invariant TOML, the check-error rule); C7 `invariant` source; C9 `invariants.json`.
@@ -2405,7 +2415,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Rules:**
   - R-REG: area Uat.
   - R-CONTRACT: faults are injected by dispatching the C4 fault tool through `LabToolDispatcher` with the run's lease and caller `uat:<runId>`; the runner never calls `FaultBook` directly (one path, one guard).
-  - R-SEED: fault args that take randomness get the stream `fault:<section>/<row>/<fault id>`.
+  - R-SEED: fault args that take randomness get the stream `fault:<section>/<row>/<fault id>`; `RowExecutor` writes the derived value into the fault's `seed` arg for the tools in `SeededFaultTools` (today `fault_corrupt_file`, D-ML81).
   - R-RESULT, R-TIME, R-LOG, R-NULL, R-XUNIT.
 
 **Contract excerpt:** C7 `[[row.fault]]`, `allow_invariants`, `since = "fault_heal:<id>"`; C8 invariants paragraph; C11 check-error rule; C9 row JSON `faults`, `violations`, `repro.toml`.
@@ -2417,7 +2427,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 3. `UatRunner`: delete the "faults arrive in L22" branch; synthetic rows `invariants/<id>` (FAIL for violations, UNVERIFIED for check errors) for anything outside row windows.
 4. `Uat/Bundle/BundleWriter.cs` and `ReproWriter`: row `faults` with `fault_id`, `injected_at`, `healed_at`, `heal_error`; `repro.toml` gains `[[fault]]` entries `{row, id, tool, args (redacted), injected_ms, healed_ms}` relative to row start. Replay re-runs the rows; the timeline is evidence, not a schedule (the spec drives injection). A run with any `fault_toxic_add` of `latency`, `bandwidth`, `slow_close` or `timeout`, or any `fault_pause`, passes `TimingFaults = true` to L48's `FidelityRules`, so its fidelity is `schedule_approximate`.
 5. `uat_report`: `violations` and per-row `violations`.
-6. Tests (`RowExecutorTests` with fake tools): `FaultRow_StepBlocks_FaultStillHealed`; `FaultRow_InjectFails_IsBlockedAndOthersHealed`; `HealFails_LabNotClean_RemainingRowsBlocked`; `Violation_NotAllowed_FailsPassRow`; `Violation_Allowed_RecordedNotFailed`; `CheckError_InRow_IsUnverified`; `Violation_OutsideRows_SyntheticRow`; `SinceFaultHeal_UsesHealTime`. Docker: `tests/Dhadgar.Lab.Tests/Uat/Specs/fault-smoke.toml` (one row: disable `nodes-postgres`; Nodes `/readyz` not 200; recovery clause `since = "fault_heal:pg"`, `timeout_ms = 30000`, status 200) passes in `FaultSmokeE2ETests` (`RequiresDocker`).
+6. Tests (`RowExecutorTests` with fake tools): `FaultRow_StepBlocks_FaultStillHealed`; `FaultRow_InjectFails_IsBlockedAndOthersHealed`; `HealFails_LabNotClean_RemainingRowsBlocked`; `Violation_NotAllowed_FailsPassRow`; `Violation_Allowed_RecordedNotFailed`; `CheckError_InRow_IsUnverified`; `Violation_OutsideRows_SyntheticRow`; `SinceFaultHeal_UsesHealTime`. Docker: `tests/Dhadgar.Lab.Tests/Uat/Specs/fault-smoke.toml` passes in `FaultSmokeE2ETests` (`RequiresDocker`). It has one row (D-ML83, F78): mint a token, then disable `nodes-postgres`. A direct-port `nodes_enroll_probe` during the cut returns a 5xx (`gte 500`, `lt 600`). After the heal the same token returns 201, and the recovery clause (`since = "fault_heal:pg"`, `timeout_ms = 30000`) gets `/readyz` 200. The row allows I1. There is no readiness clause during the cut until D-ML71. `FaultSmokeSpecValidateTests` pins this shape.
 
 **Tests and why they fail when reverted:** `FaultRow_StepBlocks_FaultStillHealed` fails if a blocked row leaks its fault; `Violation_NotAllowed_FailsPassRow` fails if invariants stop grading.
 
@@ -2459,14 +2469,14 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 2. `docs/guides/uat-specs/catalog/nodes.toml`, section `catalog-nodes`, `requires = ["docker"]`, rows:
    - `nodes-pg-down-enroll`: mint, then disable `nodes-postgres` (`start = "after_step:mint"`); enroll `via=gateway` with `expect_error` per the designed status (503 from the DB health path; the coder confirms); the token row is still unused after heal; a fresh enroll with the same token after heal → 201 within 60 s. F67: today no product path gives 503. Nodes `/readyz` and `/healthz` have no Postgres check, so Nodes answers 500, which `FaultImpactMap` never excuses (D-ML46). Per D-ML23 the expectation stays 503, and the row carries a known issue for F67 until D-ML71 is ruled and shipped.
    - `nodes-pg-latency`: 2000 ms latency on `nodes-postgres`; enroll 201; `/duration_ms` `gte 2000`.
-   - `nodes-rabbit-down-outbox`: disable `nodes-rabbitmq`; enroll 201 (the outbox decouples it. The Gateway active-checks Nodes `/healthz`, which includes `masstransit`, but a broker outage makes `masstransit` Degraded, which is HTTP 200 (F68, D-ML73 option A), so the Gateway keeps Nodes in rotation and no 503 is expected. The L23 spec takes S-L7's measured `rabbit-disable-to-degraded` and `rabbit-heal-to-healthy` times (L19 report, D-ML72). A 503 there is a finding, not a changed expectation, unless D-ML73 rules B); after heal the outbox rows for the enrollment are delivered within 60 s (db clause on `OutboxMessage`); I2 clean at row end.
+   - `nodes-rabbit-down-outbox`: disable `nodes-rabbitmq`; enroll 201 (the outbox decouples it. The Gateway active-checks Nodes `/healthz`, which includes `masstransit`, but a broker outage makes `masstransit` Degraded, which is HTTP 200 (F68, D-ML73 option A), so the Gateway keeps Nodes in rotation and no 503 is expected. The L23 spec takes S-L7's measured `rabbit-disable-to-degraded` and `rabbit-heal-to-healthy` times (L19 report, D-ML72). A 503 there is a finding, not a changed expectation, unless D-ML73 rules B); after heal the outbox rows for the enrollment are delivered within 60 s (db clause counting `OutboxMessage` rows plus `OutboxState` rows with `Delivered` null, as I2 does); I2 clean at row end.
    - `nodes-killed-enroll`: mint; `fault_kill c:nodes`; enroll via gateway → `any [502, 503]`; heal starts Nodes; the same token enrolls (201) within 90 s: a failed attempt never burns a token.
    - `nodes-pg-terminate`: `fault_db terminate_backends d:nodes`; the next enroll → 201 (pool recovery) or one documented retryable status; no 500.
    - `nodes-pg-readonly`: `fault_db read_only d:nodes`; enroll fails with the designed status; token unused; after heal enroll 201.
    - `nodes-ca-key-corrupt`: `fault_corrupt_file nodes-ca-key garbage`, then `svc_restart nodes`; Nodes either refuses to become ready or enroll fails with a designed status, never a 500 and never a node row without a certificate; heal, `svc_restart nodes`, enroll 201.
    - `nodes-token-expired`: mint with `validity_minutes = 1`; two `wait_ms = 60000`/`5000` steps; enroll `expect_error = "http:401"`.
    - `nodes-token-reuse-after-failure`: enroll fails under `nodes-postgres` disabled, heal, enroll 201, enroll again with the same token `expect_error = "http:401"`.
-   - `nodes-enroll-malformed`: `http_request via=gateway POST /api/v1/agents/enroll` with an empty body, a wrong-typed field and a 1 MiB string field (three steps, each `expect_error = "http:400"`); `step` clauses show `application/problem+json`.
+   - `nodes-enroll-malformed`: `http_request via=gateway POST /api/v1/agents/enroll` with an empty body and a wrong-typed field (two steps, each `expect_error = "http:400"`); a `step` clause per step shows `application/problem+json` at `/result/headers/Content-Type`. Oversize bodies are L28's and L58's (D-ML76).
 3. `docs/guides/uat-specs/invariants/nodes.toml` (C11): `node-without-active-cert`, `used-token-without-node`, `cert-without-node`, `duplicate-active-thumbprint`. The Nodes invariant checks tolerate `EnrollmentFailed` audit rows with reason `invalid_platform`: the enroll probe writes one per call.
 4. `tests/Dhadgar.Lab.Tests/Uat/ShippedSpecsValidateTests.cs` does **not** cover `catalog/` today: it reads `docs/guides/uat-specs/*.toml` with `SearchOption.TopDirectoryOnly` (F65). Change it to classify files by path:
    - specs: `uat-specs/*.toml` except `known-issues.toml`, plus `uat-specs/catalog/*.toml` except `enroll-history.toml`; each loads and validates through the existing spec loader with no problems;
@@ -2577,7 +2587,7 @@ Jepsen-style histories over enrollment (D-ML47, D-ML48). L49 and L50 run in para
    - `Body_Over1MiB_413`.
    - `BarrierProxy_HoldsItsPortWhileRunning`: with a `LabListenerPorts`, `Held` contains `BoundPort` after start and not after dispose.
 4a. D-ML69 tests: `DoctorPortsTests` (or the existing ports cases in `LabDoctorToolTests`) gain `EvaluatePorts_DaemonHeldPort_IsOk_WhenDockerUnreachable` (`labOwned` null, the port `InUse` and in `daemonHeld` → ok, not warn) and `EvaluatePorts_InUseNotHeld_StillFails` (`labOwned` empty, the port `InUse`, not held → fail "in use by something else"). `LabDaemonServiceLifetimeTests.LabListenerPorts_FromTheContainer_IsOneSingleton`, beside `LogClauseSource_FromTheContainer_ReadsTheSupervisorRing` and built the same way: two `GetRequiredService<LabListenerPorts>()` calls return the same instance (`Assert.Same`), and resolving `LabDoctorTool` succeeds.
-5. `tests/Dhadgar.Lab.Tests/Seams/EnrollHistorySeamTests.cs` (S-L11, `[Trait("Seam","S-L11")]`, `RequiresDocker`): daemon in process with the stack up (S-L6's fixture); `history_run {scenario = "enroll-race", clients = 4, seed = 11}` through `LabToolDispatcher`; asserts success, `verdict = "linearizable"`, no required violation, and that the run's `events.jsonl` holds 4 `Invoke` and 4 `Complete` lines for actors `client:1`..`client:4`; then `history_run {scenario = "enroll-lost-response", seed = 12}` asserts `verdict` is not `unknown` and E1-E4 and E6 hold. Red now: `history_run` is not registered (`[Lab.UnknownTool]`).
+5. `tests/Dhadgar.Lab.Tests/Seams/EnrollHistorySeamTests.cs` (S-L11, `[Trait("Seam","S-L11")]`, `RequiresDocker`): daemon in process with the stack up (S-L6's fixture), then `svc_start` `nodes` and `gateway` under the lease (D-ML85, F80); the barrier forwards with `Host: LabServices.ProbeHostHeader` (F81); `history_run {scenario = "enroll-race", clients = 4, seed = 11}` through `LabToolDispatcher`; asserts success, `verdict = "linearizable"`, no required violation, and that the run's `events.jsonl` holds 4 `Invoke` and 4 `Complete` lines for actors `client:1`..`client:4`; then `history_run {scenario = "enroll-lost-response", seed = 12}` asserts `verdict` is not `unknown` and E1-E4 and E6 hold. Red now: `history_run` is not registered (`[Lab.UnknownTool]`).
 
 **Tests and why they fail when reverted:** `DropResponse_UpstreamCompletedClientUnknown` fails if the proxy drops before forwarding (the history would then wrongly know the op never ran). `OpHeader_StrippedBeforeUpstream` fails if lab metadata reaches the product. `NonLabUpstream_Refused` fails if the proxy can be pointed outside the lab. `EvaluatePorts_DaemonHeldPort_IsOk_WhenDockerUnreachable` fails if `lab_doctor` again reports the barrier as a foreign or unknown listener (F63).
 
@@ -2672,7 +2682,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 6. `Tools/History/HistoryRunTool.cs` (`history_run`, OwnLease; `replay` re-runs with the stored seed and compares through L48's `ReplayJudge`); register in `ToolPolicy`.
 7. `Nodes/NodesAdapter.cs` (L11): `nodes_enroll_probe` gains `hostname?` (`^[a-z0-9-]{1,48}$`, default `meridian-lab-probe`) and `key_ref?` (reuse a key the vault holds; new keys are stored as `key-N` and returned as `key_ref`).
 8. `docs/guides/uat-specs/known-issues.toml`: seed `KI-ENROLL-RETRY` (`signatures = ["hist:enrollment|E5|enroll-lost-response", "hist:enrollment|E5|enroll-lost-response-new-key"]`, `[issue.scope] sections = ["history"]`, title "A lost enroll response plus a retry leaves an orphan node and a 401 (D-ML49)"). It matches nothing while E5 is non-required (no signature is emitted); it exists so that the day D-ML49 makes E5 required, the failure is linked rather than new until the product changes.
-9. `tests/Dhadgar.Lab.Tests/Faults/ToxiproxyTimeoutToxicDockerTests.cs` (`RequiresDocker`): open a keep-alive connection through `agent-ingress`, send one request (200), add a `timeout` toxic with `timeout = 0`, send a second request on the same connection, assert it does not complete in 3 s, remove the toxic. If the assumption is false (the second request completes), delete the test, record "Toxiproxy does not apply new toxics to open connections" in the report, and leave the C19 fallback marked unverified; nothing else depends on it.
+9. `tests/Dhadgar.Lab.Tests/Faults/ToxiproxyTimeoutToxicDockerTests.cs` (`RequiresDocker`, `[Collection(LabDockerGate.Name)]`). It brings up its own stack plus Nodes and the Gateway, and tears them down with `DownAsync(wipe: true)` (D-ML84, F79). The request sends `Host: LabServices.ProbeHostHeader`. Then: open a keep-alive connection through `agent-ingress`, send one request (200), add a `timeout` toxic with `timeout = 0`, send a second request on the same connection, assert it does not complete in 3 s, remove the toxic. If the assumption is false (the second request completes), delete the test, record "Toxiproxy does not apply new toxics to open connections" in the report, and leave the C19 fallback marked unverified; nothing else depends on it.
 10. Tests: `HistoryScenarioLoaderTests` (unknown key refused; every shipped scenario loads), `HistoryClientTests` (fake handler: body is `EnrollNodeRequest`; the token never appears in the `Invoke` args; `same_key` retry sends the same SPKI, `new_key` a different one), `HistoryRunJobTests` (fakes: a straggler is `Unknown`; a required violation grades the row FAIL; `unknown` grades UNVERIFIED; minimisation reruns stop at 20), `NodesEnrollProbeTests` (`Hostname_Invalid_Refused`).
 
 **Tests and why they fail when reverted:** S-L11 (`EnrollHistorySeamTests`) goes green here and fails if the history client and Nodes disagree on the route, the body or the status codes, or if the checker's model disagrees with Nodes' enrollment behaviour. `HistoryClientTests` fails if the token reaches the evidence. `HistoryRunJobTests` fails if `unknown` is graded PASS.
@@ -2699,16 +2709,197 @@ Then, with the daemon from this worktree and the lease, one `history_run` of eac
 
 ## Wave 5: results, triage and hunting (no Sprint 2 dependency)
 
+### Wave 5 plan (architect, 2026-10-28)
+
+Waves 5 and 5E run together as one boundary of 10 packets: L16g (new, OD-1), L25-L29 and L52 (wave 5), and L53-L55 (wave 5E). The campaign tip is 716e331b, with wave 4 and 4H Integrated. Rulings made with this plan, in the ledger README: F82-F86 and D-ML86-D-ML90. No packet waits for an owner decision. Parked, unchanged: L00, L31-L33 and the container parts of wave 8. Reviews happen at the boundary only, and the campaign ships as one PR at the end (D-ML16, D-ML39).
+
+**Order and parallel groups.** Every packet worktree is cut from the campaign tip once the packets it depends on are merged there.
+
+| Step | Packets started together | Starts when | Area files (R-REG) |
+| --- | --- | --- | --- |
+| A | L16g ‖ L25 | now (716e331b). L25 steps 1-3 run beside L16g; L25 step 4 starts only after L16g merges and L25 rebases | none (L16g registers nothing); Results (L25 creates `ResultsArea.cs`) |
+| B | L26 ‖ L27 ‖ L52 ‖ L53 | L25 merged | Results; Jobs; Coverage; Twins |
+| C | L28 ‖ L29 ‖ L54 | L27 merged (L54 also needs L51 and L23, both Integrated) | Fuzz; Chaos (plus one I7 line in `InvariantsArea.cs`); Mutants (plus `{mutant}` in `Tools/Services/BuildTool.cs`) |
+| D | L55 | L54 merged | Mutants |
+
+**Merge order:** L16g → L25 → L26 → L27 → L52 → L53 → L28 → L29 → L54 → L55. Each packet rebases on the tip before its merge.
+
+**Files each parallel packet touches** (under `src/Tools/Dhadgar.Lab/` unless named; overlaps are what make the order above):
+
+| Packet | Files |
+| --- | --- |
+| L16g | new `Uat/Bundle/BundleStaging.cs`, `Uat/Bundle/BundleAttestor.cs`, `Tools/Uat/UatReportTools.cs`; tests under `Uat/Bundle/` |
+| L25 | `Directory.Packages.props` (one line), `Dhadgar.Lab.csproj`, both lab lock files, `Results/*`, `Mcp/Areas/ResultsArea.cs`, the `// L25` group, `docs/guides/uat-specs/known-issues.toml` (KI-F67, KI-F69), `Uat/IUatRunSink.cs`, `Uat/UatRunner.cs`, `Uat/Bundle/BundleWriter.cs`, `Uat/Bundle/BundleAttestor.cs`, `Tools/Uat/UatRunTool.cs`, `Tools/Uat/UatReportTools.cs`, `Observe/ReplayJudge.cs`, `Tools/Results/ResultsQueryTool.cs`; tests under `Results/`, `Uat/` |
+| L26 | `known-issues.toml` (the seeds), `Triage/*`, `Tools/Triage/TriageTools.cs`, `Mcp/Areas/ResultsArea.cs`, the `// L26` group, `.claude/skills/lab-uat/SKILL.md`, `.claude/agents/uat-driver.md`; tests under `Triage/`, `Results/` |
+| L27 | `Dhadgar.Lab.csproj` (CsCheck), both lab lock files, `Jobs/*`, `Hunt/*`, `Results/FlakeCheckJob.cs`, `Tools/Jobs/JobTools.cs`, `Mcp/Areas/JobsArea.cs`, the `// L27` group, `StatusDto.RunningJob`; tests under `Jobs/`, `Hunt/` |
+| L52 | `coverage-universe.json`, `Dhadgar.Lab.csproj` (copy to output), `Coverage/*`, `Tools/Coverage/CoverageReportTool.cs`, `Mcp/Areas/CoverageArea.cs`, the `// L52` group, `tests/Dhadgar.Nodes.Tests/Lab/NodesEndpointUniverseTests.cs`; tests under `tests/Dhadgar.Lab.Tests/Coverage/` (beside L24's `LabCoverageTests`) |
+| L53 | `Twins/*`, `Uat/UatRunOverlay.cs`, `Uat/UatRunner.cs`, `Tools/Twins/TwinRunTool.cs`, `Mcp/Areas/TwinsArea.cs`, the `// L53` group, `catalog/twin-enroll.toml`, `twins/enroll-latency-invariance.toml`, `Seams/TenantTwinSeamTests.cs`; tests under `Twins/` |
+| L28 | `Fuzz/*`, `Tools/Fuzz/FuzzRunTool.cs`, `Mcp/Areas/FuzzArea.cs`, the `// L28` group; tests under `Fuzz/` |
+| L29 | `Chaos/*`, `Soak/*`, `Invariants/I7ResourceTrendInvariant.cs`, one line of `Mcp/Areas/InvariantsArea.cs`, `Tools/Chaos/*`, `Mcp/Areas/ChaosArea.cs`, the `// L29` group, `chaos/nodes-enroll.toml`, `invariants/soak.toml`; tests under `Chaos/`, `Soak/`, `Invariants/` |
+| L54 | `tools/lab/mutants/M1-*`, `M4-*`, `M5-*`, `tools/lab/mutants/README.md`, `Mutants/*`, `Tools/Services/BuildTool.cs`, `Invariants/I5OrphanInvariant.cs`, `Mcp/Areas/MutantsArea.cs`, the `// L54` group, `tests/Dhadgar.Lab.Tests/LabIsolationTests.cs`; tests under `Mutants/` |
+| L55 | `tools/lab/mutants/LM*`, `tools/lab/mutants/README.md` (LM rows), new `src/Tools/Dhadgar.Lab.SelfCheck/*` and its lock file, `Dhadgar.sln` (Tools folder), `tests/Dhadgar.Lab.Tests/Dhadgar.Lab.Tests.csproj` and lock file, `LabIsolationTests.cs`, `ObservationPathTests.cs`, lab `README.md` "Self-check"; tests under `SelfCheck/` |
+
+Files with more than one owner, in merge order:
+- `BundleAttestor.cs`, `UatReportTools.cs`: L16g → L25.
+- `known-issues.toml`, `ResultsArea.cs`: L25 → L26.
+- `UatRunner.cs`: L25 → L53.
+- `Dhadgar.Lab.csproj`: L25 → L27 → L52, each in its own `ItemGroup` line.
+- The two lab lock files: L25 → L27 → L55. On a lock-file conflict, take the tip's file and rerun the locked restore; never hand-merge a lock file.
+- `InvariantsArea.cs`: L29 → L54 (only if L54 needs a wiring line).
+- `LabIsolationTests.cs`: L54 → L55.
+- `tools/lab/mutants/README.md`: L54 → L55.
+- `ToolPolicy.cs`: every packet, each in its own `// Lnn` group (R-REG).
+
+**Seams inside the wave (contract first).** Three shared shapes are fixed now, so parallel packets build against them instead of editing each other's files:
+- **`IIngestObserver`.** L25 adds `public interface IIngestObserver { Task OnIngestedAsync(string runId, CancellationToken ct); }` in `Results/`. `BundleIngestor` resolves every registration from DI after each ingest and calls them in registration order. An observer failure is logged redacted and never fails the ingest. L26 (`TriageService`) and L52 (`CoverageCollector`) each register one in their own area file and never edit `BundleIngestor`.
+- **`RunSummary` (D-ML89).** L25 adds the one `overall`, `new_failures` and `known_failures` computation. L53 and every later writer of a run's grades call it.
+- **`GatewayPacer` (D-ML88).** L27 adds `Jobs/GatewayPacer.cs` as a singleton. L28 takes it from DI and does not copy it.
+
+**Dependency amendments made with this plan.**
+- L25 depends on L16g before its step 4: both edit `BundleAttestor` (D-ML89).
+- L28 depends on L25 for the KI-F69 entry it matches, and on L27 for jobs and `GatewayPacer`.
+- L53 merges after L52, and L54 after L29. L54's own dependencies (L27, L51, L23) are unchanged.
+- L16g is new (OD-1, ruled as its default in D-ML89).
+
+**Carry-overs from wave 4 that bind wave 5.** Every packet in this wave inlines the ones it touches:
+- **C11 skip rule (D-ML80).** A monitor, snapshotter or checker that reads a lab DB uses `InvariantWiring.DbGate(LabDb, LabCredentialRefs)` (`Invariants/InvariantWiring.cs:175`). `StackNotUp` and `SchemaNotReady` become `InvariantSkip`, which is never an error and never a grade. 42P01 on a migrated DB is still an error. Each such reader has three outcomes (ok, not applicable, error) and an anti-always-skip test: a migrated fake gate with changing data must produce a result. This binds I7 (L29), `TransitionSnapshotter` (L52) and the L55 recovery assertions.
+- **Nodes `/readyz` has no Postgres check (F67).** Never wait on, or assert, a readiness change for a Postgres cut. An enroll during a cut is a 500 that I1 never excuses; it is known as KI-F67 (D-ML87). Readiness is HTTP 200 while Degraded (F68, D-ML72), so assert on the `/readyz` body. The only `ready` check is `masstransit` (`src/Dhadgar.Nodes/Program.cs:104-109`).
+- **Lab Host header (D-ML84, D-ML85).** A request to the Gateway ports 15000 or 25000 goes through `LabHttp`, which sets `Host: LabServices.ProbeHostHeader` (`Http/LabHttp.cs:133`), or through the barrier (`Barrier/BarrierProxy.cs:429`). There is never a raw `HttpClient` to the Gateway. Every URI is checked by `LabHosts.IsLabEndpoint` first.
+- **Heal in `finally` with its own token.** A job that injects faults (hunter PgDown, chaos, twin variants, mutation runs and the plain-build restore) heals in `finally` under its own `using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30), _time)`. It catches `OperationCanceledException when (budget.IsCancellationRequested)` and leaves the rest to `FaultBook`'s 60 s HealFailed retry. The pattern is `HealAbandonedAsync` (`Uat/RowExecutor.cs:362`). The job's cancelled token is never reused for cleanup.
+- **Label-only Docker cleanup (D-ML84, D-ML21).** Containers are found and removed only through the target registry plus the `meridian-lab=1` label (mutants also `meridian-lab-mutant=<id>`), never by a name pattern. `DownAsync(wipe: true)` is the only teardown. No tool deletes a volume.
+- **Seeds (D-ML81, R-SEED).** Every random choice comes from `LabRandom(seed, stream)` with the stream named in the packet. `System.Random` and `Guid.NewGuid()` never feed a schedule or a case.
+- **Rules from the wave 4 rulings:**
+  - `Result<T>.Success(null)` throws, so use `Result.Success()` for no value.
+  - Every new `Regex` gets `RegexOptions.CultureInvariant` and a 1 s timeout.
+  - Windows-only facts use `[SkippableFact]`.
+  - Tests that start a daemon join `[Collection("LabHome")]`.
+  - A `RequiresDocker` test has the D-ML84 shape: `[Collection(LabDockerGate.Name)]`, its own `UpAsync(wipe: true)` plus `StartAsync`, and a `finally` with `StopAsync` per service and then `DownAsync(wipe: true)`.
+  - Never log a token, a lease id or a vault value.
+- **Config keys.** A packet that relies on a product config key cites the line that reads it. D-ML88 cites `src/Dhadgar.Gateway/Program.cs:202` for `RateLimiting:Policies:Auth:PermitLimit`.
+- **Packages (D-ML86, D-S241).** Run a RID-less `dotnet restore <csproj> --force-evaluate`, then `dotnet build ... --no-restore`. Never run a bare `publish -r`. Grep `Directory.Packages.props` before citing a pin.
+- **Catalog tool names (wave4-R2-ruling-1 D3).** L25 step 5 adds `ShippedSpecsRegistryValidateTests`, which runs `SpecValidator.Validate(spec, text, registry)` over every spec under `docs/guides/uat-specs/` with the daemon's real registry. Later packets that add a spec (L29 chaos plans are not specs; L53 `catalog/twin-enroll.toml` is) get that check for free.
+
+**Sliced packets.** Every packet except L16g has a **Steps** list of 3-5 steps, each touching about 3-4 files. The coder commits after each step with the packet's subject plus ` (step N/M)`, and runs that step's checks before committing. If its context runs low, it commits the finished step and returns `<packet> blocked <sha> <report> context: next step N`. The orchestrator then dispatches a fresh `packet-coder` in the same worktree from step N. The last step runs the packet's full non-Docker checks.
+
+**Docker and E2E tests (D-ML74).** Step checks run only the non-Docker filter:
+
+```text
+FS = "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
+```
+
+Docker, Testcontainers and network tests are written in their packet (red or green as specified) and run once, at the wave boundary:
+
+| Packet | Runs in its steps (non-Docker) | Written in the packet, run at the boundary |
+| --- | --- | --- |
+| L16g | `FS` over `Dhadgar.Lab.Tests.Uat` | none |
+| L25 | `FS` | wave 4 regression: S-L6 `LabSelfTestE2ETests` (now ingests and computes `overall`) |
+| L26 | `FS` | none |
+| L27 | `FS` | `HunterDockerTests` |
+| L52 | `FS`; `Dhadgar.Nodes.Tests` `~NodesEndpointUniverseTests` (in-memory, no Docker) | none |
+| L53 | `FS` | `TwinLatencyDockerTests`; S-L12 `Seam=S-L12` (expected red: record the failure line) |
+| L28 | `FS` | none (the live gate below) |
+| L29 | `FS` | none (the live gate below) |
+| L54 | `FS`; `MutantPatchesApplyTests` (needs `git`, not Docker) | `MutationDockerTests` (30 min); `mutation_run` M1, M4 and M5 with the daemon and a lease |
+| L55 | `FS`; `LabMutantPatchesApplyTests` | `SelfCheckRecoveryTests` (Docker, with the user's daemon stopped, D-ML90); `SelfCheckE2ETests` (`RequiresNetwork`); `selfcheck` (every LM `caught`) |
+
+**Boundary run** (one `packet-coder` in the campaign worktree after L55 merges, as at df22a313):
+1. The table's right column.
+2. The wave 4 Docker set (S-L6, S-L7, `BlastRadiusDockerTests`, `FaultSmokeE2ETests`, S-L11), because L25 and L53 change the runner and the bundle.
+3. The live gates: a seeded `hunt_model_run` with a 10-minute budget. Either it finds a failure and `hunt_model_run {replay}` reproduces it, or it reports none in budget. Then a `fuzz_run` on `enroll` at 50 cases, a 10-minute `chaos_run nodes-enroll`, and `coverage_report` listing unhit keys.
+
+The report goes to `worknotes/wave5-docker-run.md`. Failures go to a ruling, not to a wider fix (the wave4-docker-ruling-1 stop rules).
+
+**Rulings needed first.** None block. Made with this plan:
+- D-ML86: the SQLite package and the CsCheck reference.
+- D-ML87: KI-F67 and KI-F69 through `KnownIssues`.
+- D-ML88: `GatewayPacer`, with no rate-limit raise.
+- D-ML89: one `RunSummary`, ingest as an upsert, and the L16g ordering.
+- D-ML90: the self-check recovery mutex and token.
+
+`worknotes/W8-sprint2-deltas.md` is still needed only before L40.
+
+**Owner decisions that touch this wave** (all non-blocking; the default holds until ruled):
+
+| ID | Effect on wave 5 | Default used |
+| --- | --- | --- |
+| D-ML42 | L26 skill text on filing drafts | the filing sentence is left out; "never file; report the draft path to the user" |
+| D-ML49 | L27 model op `EnrollAgain` | the model encodes today's product: a used token with a new key gives 401. A same-key retry stays out of the model and remains `KI-ENROLL-RETRY` |
+| D-ML71 | KI-F67; L29 chaos plan | KI-F67 stays `open`. `chaos/nodes-enroll.toml` puts only `latency` toxics on `nodes-postgres` (no `timeout` toxic and no disable there, since either is a Postgres cut and gives F67's 500s); `timeout` toxics go only on `gateway-nodes` and `nodes-rabbitmq` (`Faults/ProxyCatalog.cs:24,29`) |
+| D-ML73 | none (S-L7 holds under either answer) | A |
+| D-ML57 | none until L62 | guided mode off |
+
+**Boundary review.** One pass after the boundary run, in three slices. Each slice gets a `packet-reviewer` and a `security-advisor`, with the boundary-run report as input:
+- R1 = L16g, L25, L26 (evidence and triage).
+- R2 = L27, L28, L29, L52 (jobs and hunting). L52 has no security review of its own; the R2 security-advisor reads it only for R-LOG.
+- R3 = L53, L54, L55 (experiments and planted defects).
+
+Then the ruling check, as in wave 4. The wave 5 and 5E gates are README "Gates" for waves 5 and 5E.
+
+### L16g. Atomic attestation write (OD-1)
+
+- **Branch / worktree / commit:** `ml/l16g-atomic-attest` / `ml-l16g` / `fix(lab): write attestations through a staged, roll-forward commit`
+- **Depends on:** wave 4. **Security review:** yes (evidence bundle).
+- **Rules:**
+  - R-PATH: every staged and final path is resolved with `validator.ValidatePath(path, [folder])`, as `WriteRedacted` does today (`BundleAttestor.cs:293-301`).
+  - R-RESULT: IO failures return `Result.Failure`, and nothing escapes `Attest`. Use `Result.Success()` for no value, never `Success(null)`.
+  - R-LOG: staged texts are the already-redacted texts, and the secret scan at `BundleAttestor.cs:156` still runs before the first write.
+  - R-USING: write each file through a `using` `FileStream` and `Flush(flushToDisk: true)` before the marker.
+  - R-NULL, R-XUNIT.
+
+**Contract excerpt:** C9 (bundle layout, unchanged); wave4-R1-ruling-1 OD-1; D-ML89.
+
+**Files**
+
+1. New `Uat/Bundle/BundleStaging.cs`:
+
+   ```csharp
+   internal static class BundleStaging
+   {
+       internal const string FolderName = "attest-staging";   // under the bundle folder; outside rows/, so ReadRows never sees it
+       internal const string CommitMarker = "commit";         // empty file, written after every staged file is flushed
+
+       // Recover first; then write each text to <folder>\attest-staging\<relative>, flush, write the marker, then roll forward.
+       // Each text is redacted again with redactor.Redact before staging, as WriteRedacted does today (:301).
+       internal static Result Commit(string folder, IReadOnlyList<(string Relative, string Text)> texts, Redactor redactor, IPathValidator validator);
+
+       // Marker present: move each staged file over its target (File.Move(src, dst, overwrite: true)), then delete the staging folder.
+       // Marker absent: delete the staging folder. No staging folder: success. Idempotent.
+       internal static Result Recover(string folder, IPathValidator validator);
+   }
+   ```
+
+2. `Uat/Bundle/BundleAttestor.cs`: `Attest` calls `BundleStaging.Recover` before it reads `run.json`. The write loop at :161-168 becomes one `BundleStaging.Commit(folder, texts, redactor, validator)`. `WriteRedacted` (:293-303) is deleted, and its path check and redact pass move into `BundleStaging`.
+3. `Tools/Uat/UatReportTools.cs`: `uat_report` and `bundle_read` call `BundleStaging.Recover` before they read a bundle. `bundle_read` never lists `attest-staging/`.
+4. Tests `tests/Dhadgar.Lab.Tests/Uat/Bundle/BundleStagingTests.cs`:
+   - `Commit_WritesEveryFile`
+   - `Recover_MarkerPresent_RollsForward`: the targets hold the staged text and the staging folder is gone.
+   - `Recover_NoMarker_RollsBack`: the targets are unchanged and the staging folder is gone.
+   - `Attest_StagingWriteFails_BundleUnchanged`: a validator stub refuses the third staged path, and the row JSON, `ledger.md` and `run.json` are byte-equal to before.
+   - `Attest_InterruptedBeforeMarker_RetrySucceeds`
+
+**Tests and why they fail when reverted:** with the per-file writes back, `Attest_StagingWriteFails_BundleUnchanged` sees a changed row JSON beside an old `run.json`, and `Attest_InterruptedBeforeMarker_RetrySucceeds` is refused as already attested.
+
+**Checks** (one step, no slicing)
+
+```powershell
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~Dhadgar.Lab.Tests.Uat&RequiresDocker!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
+```
+
+**Docs owed:** none (L45).
+
 ### L25. Results DB, ingest, signatures, known-issue matching, `overall`, `results_query`
 
 - **Branch / worktree / commit:** `ml/l25-results-db` / `ml-l25` / `feat(lab): results database, signatures and overall grading`
-- **Depends on:** L22. **Security review:** yes (evidence store).
+- **Depends on:** L22 and L51 (both Integrated; both edit `BundleWriter`); L16g merged before step 4 (both edit `BundleAttestor`, D-ML89). **Security review:** yes (evidence store).
 - **Rules:**
-  - R-REG: area Results.
+  - R-REG: area Results; register in a new `Mcp/Areas/ResultsArea.cs` and remove `results_query` from the `// L25` PlannedTools group.
   - R-PATH: the DB is `LabPaths.Results\lab-results.db`; ingest reads only bundles under `LabPaths.UatRuns` and `LabPaths.Jobs`.
-  - SQL: `Microsoft.Data.Sqlite` with parameters only; `PRAGMA journal_mode=WAL`; a schema version table and forward-only migrations.
+  - SQL: `Microsoft.Data.Sqlite` (from `Microsoft.Data.Sqlite.Core`, D-ML86) with parameters only; `PRAGMA journal_mode=WAL`; a schema version table and forward-only migrations.
   - R-LOG: only redacted text from bundles enters the DB.
-  - R-CPM (`Microsoft.Data.Sqlite` is pinned; keep the `SQLitePCLRaw.bundle_e_sqlite3` security pin), R-RESULT, R-USING, R-TIME, R-NULL, R-XUNIT.
+  - R-CPM (amended, D-ML86, F82): `Microsoft.Data.Sqlite` is **not** pinned today. Add exactly `<PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.14" />` to `Directory.Packages.props`; in `Dhadgar.Lab.csproj` add `<PackageReference Include="Microsoft.Data.Sqlite.Core" />` and `<PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />` with no versions. Keep the `SQLitePCLRaw.bundle_e_sqlite3` security pin as it is. Regenerate the lock files with `dotnet restore <csproj> --force-evaluate` (RID-less), then build with `--no-restore`, and commit both lock files.
+  - Regex (wave 4 rulings): every `Regex` gets `RegexOptions.CultureInvariant` and `TimeSpan.FromSeconds(1)`.
+  - No `Result<T>.Success(null)`; R-RESULT, R-USING, R-TIME, R-NULL, R-XUNIT.
 
 **Contract excerpt:** C12 in full (schema, signature kinds and normalisation, known-issue TOML, run summary, `overall`, flakes); C8 `overall`; C4 `results_query`.
 
@@ -2730,12 +2921,31 @@ Then, with the daemon from this worktree and the lease, one `history_run` of eac
 
 **Tests and why they fail when reverted:** `Overall_UnlinkedViolation_IsFail` pins status honesty; `Match_ClaimedIssueSignatureDiffers_IsNew` and `Match_OneOfTwoSignaturesUnmatched_IsNew` fail if a claim or one matching signature hides a new failure (D-ML46); `Signature_CompilerFrames_Normalised` keeps buckets stable across builds.
 
+**Amendments (wave 5 plan; they win over the file list above where they differ):**
+- **A1, `RunSummary` (D-ML89, F85).** New `Results/RunSummary.cs`: `static RunSummary Compute(IReadOnlyList<GradedRow> rows, IReadOnlyDictionary<string, KnownMatch> matches)` returns `overall`, `new_failures` and `known_failures` per C12. `UatRunner` (the overall it returns, `UatRunner.cs:207,224`), `BundleWriter` and `BundleAttestor.RecomputeRun` (:249-272) all call it; none keeps its own rule. `RowGrader` (:159-184) keeps grading rows only.
+- **A2, ingest is an upsert by `run_id`.** "Ingest twice → one run" stays, and the second ingest replaces rows, `known_match` and the summary. `uat_attest` re-ingests the bundle after it writes, so an attested row's grade reaches the DB.
+- **A3, `IIngestObserver`** (plan "Seams inside the wave"): `BundleIngestor` calls every registered observer after each ingest; an observer failure is logged redacted and never fails the ingest. L25 registers none.
+- **A4, `uat_run` returns the run's own `overall`.** Add a default member `string? FinalOverall => null;` to `IUatRunSink`; the bundle sink returns the `overall` it wrote to `run.json`, and `UatRunTool` returns that value whenever it is not null.
+- **A5, KI-F67 and KI-F69 (D-ML87, F83).** Add both to `docs/guides/uat-specs/known-issues.toml` with `scope = { service = "nodes" }` and anchored patterns that pass C12's loader rules. KI-F67: the enroll 500 while `nodes-postgres` is cut (the `http` signature for `POST /api/v1/agents/enroll` and the I1 violation in that window). KI-F69: a Nodes 400 without an `application/problem+json` body (F69), with a pattern that cannot match any 5xx. Both are `open`. Add `KnownIssueClaimsResolveTests`: every `known_issue = "..."` under `docs/guides/uat-specs/` names an id in the shipped file.
+- **A6, shipped specs against the real registry (wave4-R2-ruling-1 D3).** `ShippedSpecsRegistryValidateTests` runs `SpecValidator.Validate` with the daemon's real tool registry over `lab-selftest.toml` and `catalog/*.toml`. It skips `known-issues.toml`, `invariants/`, `chaos/` and `twins/`, and follows the `LabSelfTestSpecValidateTests` pattern. A failure is a finding: report it, and never edit an expected value to make the test pass.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/5)`; the wave 5 plan's slicing rule applies):**
+1. Packages (R-CPM as amended), the restore, `Results/ResultsDb.cs`, `ResultsDbTests` (migrate twice, WAL on, parameters only). Checks: restore, build, `FS` with `FullyQualifiedName~Dhadgar.Lab.Tests.Results`.
+2. Files 2-3 (`SignatureBuilder`, `KnownIssues`), A5's TOML entries, `SignatureBuilderTests`, `KnownIssuesTests`, `KnownIssueClaimsResolveTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Results`.
+3. File 4 with A2 and A3, A1's `RunSummary`, `BundleIngestorTests`, `OverallTests`, `FlakeOnIngestTests`. Checks: as step 2.
+4. Starts only after L16g has merged and this worktree has rebased. File 5 with A1 (`UatRunner`, `BundleWriter`, `BundleAttestor.RecomputeRun`), A4, the re-ingest in `uat_attest`, and `UatRun_ReturnedOverallEqualsRunJson`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Uat` and `~Dhadgar.Lab.Tests.Results`.
+5. File 5's `ReplayJudge` rule, file 6, `ResultsArea.cs` and the group edit, A6. Checks: the full lines below.
+
 **Checks**
 
 ```powershell
-dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet restore <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj --force-evaluate
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true --no-restore
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --no-restore --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
+git -C <W> status --porcelain   # no lock file left modified
 ```
+
+S-L6 (`LabSelfTestE2ETests`) is rerun at the wave boundary (D-ML74).
 
 **Docs owed:** none (L45).
 
@@ -2764,11 +2974,23 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Tests and why they fail when reverted:** `NoGitHubCallsTests` fails if anything starts filing; `Draft_PlantedSecret_IsRefused` fails if the scan is skipped.
 
+**Amendments (wave 5 plan):**
+- File 1 adds the seeds below L25's KI-F67 and KI-F69 and never edits those two entries.
+- File 2: `TriageService` implements L25's `IIngestObserver`. It is registered in this packet's part of `ResultsArea.cs`, and `BundleIngestor` is never edited.
+- File 4's tools register in `ResultsArea.cs` and are removed from the `// L26` group (R-REG).
+- File 5: D-ML42 is unruled, so leave the filing sentence out (default).
+- Regex rule as in L25. No `Success(null)`.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/3)`):**
+1. File 1 and `KnownIssuesShippedFileTests`; file 2 and `TriageServiceTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Triage` and `~Dhadgar.Lab.Tests.Results`.
+2. Files 3-4, the area and group edits, `DraftWriterTests`, `TriageMarkTests`, `NoGitHubCallsTests`. Checks: as step 1.
+3. File 5 (SKILL.md, uat-driver.md), with `DriverToolListTests` green. Checks: the full lines below.
+
 **Checks**
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
 ```
 
 **Docs owed:** none (L45).
@@ -2782,7 +3004,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
   - R-SEED: the hunter's CsCheck seed derives from the run seed (below); every op choice comes from CsCheck's generator, nothing from `System.Random`.
   - R-CONTRACT: hunter ops dispatch lab tools through `LabToolDispatcher` with the job's lease; no direct `NodesLabAdapter` calls.
   - R-RESULT: a CsCheck failure is caught where `Sample` is called and becomes a `Result` with the shrunk case; nothing else throws.
-  - R-TIME, R-PATH (job folders under `LabPaths.Jobs\<job_id>\`), R-CPM (add `CsCheck` 5.0.0 to `Directory.Packages.props`), R-DI, R-NULL, R-XUNIT.
+  - R-TIME, R-PATH (job folders under `LabPaths.Jobs\<job_id>\`), R-DI, R-NULL, R-XUNIT.
+  - R-CPM (amended, D-ML86): `CsCheck` is already pinned in `Directory.Packages.props` (L50). Add only `<PackageReference Include="CsCheck" />` to `Dhadgar.Lab.csproj` and never touch the props file. Restore RID-less with `--force-evaluate`, build with `--no-restore`, and commit both lab lock files.
   - **API check first:** read CsCheck 5.0.0's XML docs in the NuGet cache. The packet assumes `PCG(uint stream, ulong seed)`, `PCG.ToString()` as the seed string, and `Gen<T>.Sample(Func<T,bool>, ..., seed: string, iter: long, time: int, threads: int)`. If a shape differs, apply the Stop rule and record the real calls in the report.
 
 **Contract excerpt:** C4 `job_status`, `job_cancel`, `hunt_model_run`, `results_flake_check`; C12 `runs.kind`, flakes; C17 seeds.
@@ -2798,24 +3021,40 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Tests and why they fail when reverted:** `Hunter_PlantedReuseBug_ShrinksAndReplays` fails if shrinking or replay breaks; `Job_LeaseEnd_Cancels` fails if a job outlives its lease.
 
+**Amendments (wave 5 plan):**
+- **A1, `GatewayPacer` (D-ML88, F84).** New `Jobs/GatewayPacer.cs`, a DI singleton on `TimeProvider`: `ValueTask<Result> WaitAsync(CancellationToken ct)` grants at most 25 Gateway enroll calls per rolling 60 s. That stays under the `Auth` limit of 30 per 60 s (`src/Dhadgar.Gateway/Program.cs:202-203`), and enroll is on that policy. Every hunter op that enrolls through the Gateway waits on it. A 429 is recorded as `throttled` (never a failure, never a shrink target) and retried once after `Retry-After`, or after 60 s if the header is missing. A second 429 ends the iteration as `throttled`. No lab job raises a Gateway limit. Test `GatewayPacer_26thCallIn60s_Waits` uses `FakeTimeProvider`.
+- **A2, model expectations (D-ML87, D-ML49 default, F67).** `Enroll` while `pgDown` expects "no 2xx, token stays unused". A 500 there is matched by KI-F67 and is `known`, never `new`. An I1 violation is allowed only inside a `PgDown`…`PgUp` window and only on `Enroll`. Anywhere else, I1 is a model failure. `EnrollAgain` with a new key on a used token expects 401 (today's product), and a same-key retry is not an op. `PgDown` is `fault_proxy_disable nodes-postgres`. The hunter never waits on `/readyz` for it (F67: no Postgres readiness check); it waits 2 s, then goes on.
+- **A3, heal in `finally`.** Each iteration that ran `PgDown` runs `fault_reset` in `finally` under its own `using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30), _time)`, never the job's token (pattern: `HealAbandonedAsync`, `Uat/RowExecutor.cs:362`).
+- **A4.** `HunterDockerTests` has the D-ML84 shape and runs at the wave boundary, not in this packet's checks. `StatusDto.RunningJob` is nullable and absent while idle.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/4)`):**
+1. The CsCheck reference and restore (R-CPM as amended), with the API check first (record the real CsCheck calls in the report). Then file 1 with A1, `JobRunnerTests` and `GatewayPacerTests`. Checks: restore, build, `FS` with `~Dhadgar.Lab.Tests.Jobs`.
+2. Files 2-3, `Mcp/Areas/JobsArea.cs`, removing `job_status`, `job_cancel` and `results_flake_check` from the `// L27` group, and `FlakeCheckJobTests`. Checks: as step 1.
+3. Files 4-5 with A2 and A3, and `ModelHunterTests`, including `Hunter_PlantedReuseBug_ShrinksAndReplays`, `Hunter_PgDownEnroll500_IsKnownNotNew`, `Hunter_I1OutsidePgDown_Fails` and `Hunter_Cancelled_HealsWithOwnToken`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Hunt`.
+4. `HunterDockerTests` written, `hunt_model_run` registered, its group entry removed. Checks: the full lines below.
+
 **Checks**
 
 ```powershell
 dotnet restore <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj --force-evaluate
-dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~HunterDockerTests"   # Docker running
+dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true --no-restore
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --no-restore --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
+git -C <W> status --porcelain   # no lock file left modified
 ```
+
+`HunterDockerTests` runs at the wave boundary (D-ML74).
 
 **Docs owed:** none (L45).
 
 ### L28. Contract fuzzer through the Gateway
 
 - **Branch / worktree / commit:** `ml/l28-fuzzer` / `ml-l28` / `feat(lab): seeded contract fuzzer with problem-details oracle`
-- **Depends on:** L27. **Security review:** yes.
+- **Depends on:** L27 (jobs, `GatewayPacer`), L25 (KI-F69). **Security review:** yes.
 - **Rules:**
   - R-REG: area Fuzz.
-  - Rate limits (F54): all lab traffic reaches the Gateway from one IP (`Auth` 30 per 60 s, `PerAgent` 500 per 60 s, global 1000 per 60 s). Size the run under those buckets, or raise them for the lab only with Gateway env `RateLimiting__Policies__<Policy>__PermitLimit` in this packet's adapter change, with a report line. Rows that test the limiter itself keep product values.
+  - Rate limits (amended, D-ML88, F84): all lab traffic reaches the Gateway from one IP, and enroll is on the `Auth` policy (30 per 60 s, `src/Dhadgar.Gateway/Program.cs:202-203`). Every case waits on L27's `GatewayPacer` singleton from DI, never a copy. A 429 is recorded as `throttled` (no row, no failure) and retried once after `Retry-After`. **No Gateway limit is raised**, and the Gateway adapter is not edited. A 50-case run therefore takes about 2 minutes.
+  - Host header: cases go through `LabHttp` (`via = "gateway"` sets `Host: LabServices.ProbeHostHeader`, `Http/LabHttp.cs:133`), never a raw `HttpClient`.
+  - Known issues (D-ML87): the oracle hands each failing case's signatures to `KnownIssues.Match`. A case matched by KI-F69 is `known`. A 5xx is never matched by KI-F69's pattern; it stays a failure.
   - R-CONTRACT: request bodies are built from the `Dhadgar.Contracts` type named by the target, serialised with the product's JSON options, then mutated.
   - R-SEED: case `n` uses `LabRandom(seed, "fuzz:<target>:<n>")`, so any single case replays alone.
   - R-HOST (`http_request` only), R-LOG (bodies redacted in the bundle), R-RESULT, R-NULL, R-XUNIT.
@@ -2832,19 +3071,28 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Tests and why they fail when reverted:** `Oracle_400WithoutProblemDetails_Fails` pins the error contract; `Mutators_SameSeed_SameCase` pins replay.
 
+**Amendments (wave 5 plan):** the 64 KiB and 1 MiB boundary strings on `enroll` are required, because D-ML76 moved the oversize enroll body out of L23 and into this packet. Test `Oracle_429_IsThrottledNotFailure`; test `Oracle_KiF69Signature_IsKnown`, which loads the shipped `known-issues.toml`. Regex rule as in L25.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/3)`):**
+1. Files 1-2 and `MutatorsTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Fuzz`.
+2. File 3 with the known-issue rule, `FuzzOracleTests` and the two amendment tests. Checks: as step 1.
+3. File 4, `Mcp/Areas/FuzzArea.cs`, removing `fuzz_run` from the `// L28` group, and `FuzzJobTests`. Checks: the full lines below.
+
 **Checks**
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
 ```
+
+The live 50-case `fuzz_run` on `enroll` runs at the wave boundary.
 
 **Docs owed:** none (L45).
 
 ### L29. Chaos scheduler, soak runs, resource sampler, I7
 
 - **Branch / worktree / commit:** `ml/l29-chaos-soak` / `ml-l29` / `feat(lab): seeded chaos plans, soak runs and resource-trend invariant`
-- **Depends on:** L27 (parallel with L28). **Security review:** yes (unattended faults).
+- **Depends on:** L27 (parallel with L28 and L54); uses L27's `GatewayPacer`. **Security review:** yes (unattended faults).
 - **Rules:**
   - R-REG: area Chaos.
   - R-SEED: the schedule (which fault, when, how long) comes from `LabRandom(seed, "chaos")`; the timeline is written as it happens.
@@ -2878,19 +3126,35 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Tests and why they fail when reverted:** `ChaosJob_Cancelled_HealsEverything` and `ChaosSchedule_SameSeed_SameTimeline`.
 
+**Amendments (wave 5 plan):**
+- **A1, the shipped plan (D-ML71 default, F67).** `chaos/nodes-enroll.toml` puts only `latency` toxics on `nodes-postgres`. `timeout` toxics go only on `gateway-nodes` and `nodes-rabbitmq` (`Faults/ProxyCatalog.cs:24,29`). The plan has no `fault_proxy_disable` and no `fault_db`. `ChaosPlanTests` adds `ShippedPlan_NoPostgresCut`, which fails if a later edit adds a cut while D-ML71 is open. The checkpoint never waits on `/readyz`, and readiness is not a chaos oracle (F67, F68).
+- **A1b, pacing (D-ML88).** The workload row `enroll-gateway` enrolls through the Gateway's `Auth` policy. `ChaosJob` and `SoakJob` therefore wait on L27's `GatewayPacer` before each workload loop, so a looped workload never meets the 30 per 60 s limit. No limit is raised.
+- **A2, heal on cancel.** `ChaosJob` and `SoakJob` heal in `finally` under their own `using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30), _time)`, catching `OperationCanceledException when (budget.IsCancellationRequested)`. `FaultBook` is the backstop. `ChaosJob_Cancelled_HealsEverything` cancels the job token before the heal and asserts that the heal call still ran with a live token.
+- **A3, I7 three outcomes (C11, D-ML80).** `I7ResourceTrendInvariant` implements `ISkippableInvariant` (`Invariants/InvariantTypes.cs:54`). It returns `InvariantSkip` (reason `fewer than 3 samples`) outside a soak or below 3 samples. A sampler failure (`docker stats` exit code other than 0, or JSON it cannot parse) is a check error, never a skip. Add `I7_ThreeSamplesRising_ProducesViolation` (anti-always-skip) and `I7_SamplerError_IsCheckError`. Wire it with one line in `Mcp/Areas/InvariantsArea.cs`.
+- **A4, labelled containers only.** `ResourceSampler` passes `docker stats` only the ids of containers from the target registry that carry `meridian-lab=1`, through `ArgumentList` (R-ARGS). It never uses `--all` and never matches a name pattern.
+- Tools register in `Mcp/Areas/ChaosArea.cs`. `chaos_run` and `soak_run` leave the `// L29` group.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/4)`):**
+1. Files 1 and 4 (`chaos/nodes-enroll.toml` only), `Chaos/ChaosPlan.cs`, `ChaosPlanTests` and `ChaosScheduleTests` (the schedule builder lives in `ChaosPlan`). Checks: build, `FS` with `~Dhadgar.Lab.Tests.Chaos`.
+2. `Chaos/ChaosJob.cs` with A2, `chaos_run`, `ChaosArea.cs`, the group edit and `ChaosJobTests`. Checks: as step 1.
+3. `Soak/ResourceSampler.cs` with A4, `I7ResourceTrendInvariant` with A3, `invariants/soak.toml`, the `InvariantsArea` line and `I7Tests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Soak` and `~Dhadgar.Lab.Tests.Invariants`.
+4. `Soak/SoakJob.cs`, `soak_run` and `SoakJobTests` (fakes: samples go to I7, heal on cancel). Checks: the full lines below.
+
 **Checks**
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
 ```
+
+The live 10-minute `chaos_run nodes-enroll` runs at the wave boundary.
 
 **Docs owed:** none (L45).
 
 ### L52. Behavioural coverage and `coverage_report`
 
 - **Branch / worktree / commit:** `ml/l52-coverage` / `ml-l52` / `feat(lab): behavioural coverage of routes, faults, error codes, invariants and transitions`
-- **Depends on:** L25, L23 (parallel with L26 to L29). **Security review:** no (read-only accounting over redacted evidence); the reviewer checks that `NodesEndpointUniverseTests` adds no product code and no project reference.
+- **Depends on:** L25, L23 (wave 5 plan step B, parallel with L26, L27 and L53). **Security review:** no (read-only accounting over redacted evidence); the reviewer checks that `NodesEndpointUniverseTests` adds no product code and no project reference.
 - **Rules:**
   - R-REG: area Coverage.
   - Lab isolation: `tests/Dhadgar.Nodes.Tests` reads `src/Tools/Dhadgar.Lab/coverage-universe.json` as a file found from the repo root (walk up to the folder holding `Dhadgar.sln`); it gains no `ProjectReference`. `LabIsolationTests` stays green.
@@ -2925,13 +3189,27 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Tests and why they fail when reverted:** `NodesEndpointUniverseTests` fails when a Nodes route is added without updating the universe, so "unhit" never silently shrinks. `CoverageCollectorTests` fails if a 5xx inflates coverage.
 
+**Amendments (wave 5 plan):**
+- File 4: `CoverageCollector` implements L25's `IIngestObserver` and registers in `Mcp/Areas/CoverageArea.cs`. It never edits `BundleIngestor`.
+- File 5, three outcomes (C11, D-ML80): before it reads, `TransitionSnapshotter` asks `InvariantWiring.DbGate(LabDb, LabCredentialRefs)` (`Invariants/InvariantWiring.cs:175`) about `nodes`. `StackNotUp` and `SchemaNotReady` give "not applicable", which records no transition and is no error. A gate failure or a query error is a reported error. 42P01 after the gate said `Applicable` is an error, never a skip. Add `Snapshotter_SchemaNotReady_NotApplicable`, `Snapshotter_QueryError_IsError` and the anti-always-skip test `Snapshotter_ApplicableChangingRows_RecordsTransition`.
+- `tests/Dhadgar.Lab.Tests/Coverage/LabCoverageTests` (L24) is a different test, and this packet leaves it alone. Name the new test classes so none collides with it.
+- `coverage_report` leaves the `// L52` group (R-REG).
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/4)`):**
+1. File 1 (with the `Dhadgar.Lab.csproj` copy-to-output line), files 2-3, `CoverageUniverseTests`, `PathTemplateMatcherTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Coverage`.
+2. File 7. Checks: `dotnet test` of `Dhadgar.Nodes.Tests` with `~NodesEndpointUniverseTests`. If the test finds routes the file lacks, fix the file, never the test.
+3. Files 4-5 with the amendments, `CoverageCollectorTests`, `TransitionSnapshotterTests`. Checks: as step 1.
+4. File 6, `CoverageArea.cs`, the group edit, `CoverageReportToolTests`. Checks: the full lines below.
+
 **Checks**
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
 dotnet test <W>\tests\Dhadgar.Nodes.Tests\Dhadgar.Nodes.Tests.csproj -c Release --filter "FullyQualifiedName~NodesEndpointUniverseTests"
 ```
+
+The unhit-keys `coverage_report` runs at the wave boundary, after the live gates.
 
 **Docs owed:** none (L45).
 
@@ -2939,12 +3217,12 @@ dotnet test <W>\tests\Dhadgar.Nodes.Tests\Dhadgar.Nodes.Tests.csproj -c Release 
 
 ## Wave 5E: experiments and planted defects (no Sprint 2 dependency)
 
-Twins (D-ML50), mutants (D-ML51) and the lab's own self-check. L53 and L54 run in parallel; L55 needs L54. Every packet gets a `security-advisor` pass (mutants build deliberately broken product images; self-check plants defects in the lab). Base filter `F`.
+Twins (D-ML50), mutants (D-ML51) and the lab's own self-check. Under the wave 5 plan, L53 runs in step B, L54 in step C (after L27) and L55 in step D. Every packet gets a `security-advisor` pass (mutants build deliberately broken product images; self-check plants defects in the lab). Base filter `F`.
 
 ### L53. Twin engine; red S-L12
 
 - **Branch / worktree / commit:** `ml/l53-twins` / `ml-l53` / `feat(lab): paired twin experiments with equal-outcome and isolation relations`
-- **Depends on:** L25, L22. **Security review:** yes (variant worlds inject faults).
+- **Depends on:** L25, L22 (wave 5 plan step B; merges after L52). **Security review:** yes (variant worlds inject faults).
 - **Rules:**
   - R-REG: area Twins.
   - R-BLAST / R-CONTRACT: variant faults are C4 fault tools dispatched through `LabToolDispatcher` by `RowExecutor`, exactly like spec faults; `TwinSpec` validation refuses any tool that is not a C4 fault tool.
@@ -2968,21 +3246,34 @@ Twins (D-ML50), mutants (D-ML51) and the lab's own self-check. L53 and L54 run i
 
 **Tests and why they fail when reverted:** `Twin_PreconditionFailed_IsIncompleteNotPass` fails if a broken base world reports "relation held" (the twin defect class: comparing two failures as equal). `Disjoint_Overlap_NotHeld` fails if a leak between tenants compares as isolated.
 
+**Amendments (wave 5 plan):**
+- File 4: the overlay goes through `RowExecutor`, so extra faults inject and heal exactly like spec faults, including the heal-on-cancel budget (`Uat/RowExecutor.cs:362`). `UatRunner` keeps computing `overall` only through L25's `RunSummary` (D-ML89). The synthetic `twin/<id>` row is graded by `RunSummary` like every other row.
+- New `Regex` (file 3 masks): `CultureInvariant` and a 1 s timeout.
+- `twin_run` registers in `Mcp/Areas/TwinsArea.cs` and leaves the `// L53` group.
+- File 7's `catalog/twin-enroll.toml` must pass L25's `ShippedSpecsRegistryValidateTests`.
+- File 8 and `TwinLatencyDockerTests` have the D-ML84 shape and run at the wave boundary.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/4)`):**
+1. Files 1-3, `TwinSpecTests`, `TwinComparerTests`, `RunProjectionTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Twins`.
+2. File 4 and `UatRunOverlayTests` (pre rows graded; extra faults before steps and healed; `Pair` in `run.json`). Checks: build, `FS` with `~Dhadgar.Lab.Tests.Uat` and `~Dhadgar.Lab.Tests.Twins`.
+3. Files 5-6, `TwinsArea.cs`, the group edit, `TwinRunnerTests`. Checks: as step 1.
+4. Files 7-8, `TwinLatencyDockerTests` written. Checks: the full lines below.
+
 **Checks**
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~TwinLatencyDockerTests"   # Docker running
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "Seam=S-L12"   # Docker running; expected red, record the failure line
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
 ```
+
+`TwinLatencyDockerTests` and S-L12 run at the wave boundary (D-ML74). S-L12 is expected red there; record its failure line.
 
 **Docs owed:** none (L45).
 
 ### L54. Mutant infrastructure; M1, M4, M5
 
 - **Branch / worktree / commit:** `ml/l54-mutants` / `ml-l54` / `feat(lab): lab-only product mutants and mutation runs`
-- **Depends on:** L27, L51, L23 (parallel with L53). **Security review:** yes (deliberately broken product images; `git` processes).
+- **Depends on:** L27, L51, L23 (wave 5 plan step C, parallel with L28 and L29). **Security review:** yes (deliberately broken product images; `git` processes).
 - **Rules:**
   - R-REG: area Mutants.
   - Isolation (D-ML51): patches live only under `tools/lab/mutants/`; no product project, props file or workflow references that folder; a product mutant is applied only in a `git archive` copy under `LabPaths.Builds`; the coder **never commits a product change**: make each patch by editing the product file in the worktree, `git diff -- <file> > tools/lab/mutants/<id>/change.patch`, then `git checkout -- <file>`, and confirm `git status` shows only `tools/lab/` and `src/Tools/` changes before committing.
@@ -3006,16 +3297,28 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 **Tests and why they fail when reverted:** `MutationRunJob_DetectorFails_PlainBuildRestored` fails if a mutant can outlive its job. `MutantPatchesTouchOnlyDeclaredFiles` fails if a patch reaches beyond its declared files. `MutationDockerTests` fails if the history checker cannot see a missing concurrency token (then the verdict is `survived` and the orchestrator asks for a ruling; never weaken the mutant).
 
+**Amendments (wave 5 plan):**
+- **A1, restore in `finally`.** `MutationRunJob` runs `svc_start` of the last plain build in `finally` under its own `using var budget = new CancellationTokenSource(TimeSpan.FromMinutes(5), _time)` (a start takes longer than a heal; the shape is `HealAbandonedAsync`, `Uat/RowExecutor.cs:362`). It never uses the job's cancelled token. If that restore fails, the job result says so and I5 reports the remaining mutant container.
+- **A2, labels only.** Mutant containers are found by `meridian-lab=1` plus `meridian-lab-mutant=<id>` through the target registry, never by an image or container name pattern. I5 reads the label.
+- **A3, D-S241.** `MutantBuilder` reuses `LabBuilder`'s argument builders (`Build/LabBuilder.cs:81,85`: `restore <csproj> --locked-mode`, then `publish ... --no-restore`) on the extracted copy. It never builds its own command line, and it never passes `-r`.
+- The detectors run through `LabToolDispatcher` with the job's lease (D-ML66, `LabCallContext.LeaseId`), and M5's `uat_run` detector paces on `GatewayPacer` like any job.
+- `mutation_run` registers in `Mcp/Areas/MutantsArea.cs` and leaves the `// L54` group.
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/4)`):**
+1. File 1 (patches made and reverted as R-isolation says; `git status` clean apart from `tools/lab/`), file 2, file 7, `MutantSpecTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Mutants`, `git status --porcelain`.
+2. File 6 (`LabIsolationTests` additions), file 5 with A2, the I5 test. Checks: build, `FS` with `~LabIsolationTests` and `~Dhadgar.Lab.Tests.Invariants`.
+3. File 3 with A3 (`BuildTool {mutant}`), `MutantBuilderTests`. Checks: build, `FS` with `~Dhadgar.Lab.Tests.Mutants`.
+4. File 4 with A1, `MutantsArea.cs`, the group edit, `MutationRunJobTests`, `MutationDockerTests` written. Checks: the full lines below.
+
 **Checks**
 
 ```powershell
 dotnet build <W>\src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~MutationDockerTests"   # Docker running
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
 git -C <W> status --porcelain   # only tools/lab/, src/Tools/ and tests/Dhadgar.Lab.Tests/ paths
 ```
 
-Then, with the daemon and the lease, `mutation_run` for M1, M4 and M5; record each verdict in the report. `survived` is a finding for the orchestrator.
+At the wave boundary (D-ML74): `MutationDockerTests`, then `mutation_run` for M1, M4 and M5 with the daemon and a lease. Each verdict is recorded; `survived` is a finding for the orchestrator.
 
 **Docs owed:** `tools/lab/mutants/README.md` (above).
 
@@ -3025,7 +3328,7 @@ Then, with the daemon and the lease, `mutation_run` for M1, M4 and M5; record ea
 - **Depends on:** L54, L19, L21, L25, L03. **Security review:** yes (spawns `dotnet test` and a child daemon).
 - **Rules:**
   - R-REG: area Mutants.
-  - Lab isolation: `src/Tools/Dhadgar.Lab.SelfCheck` is a console project referenced by nothing; add it to the lab project set in `LabIsolationTests` and to the solution in the `Tools` folder.
+  - Lab isolation (amended, D-ML90): `src/Tools/Dhadgar.Lab.SelfCheck` is a console project that no product project references. `tests/Dhadgar.Lab.Tests` may reference it, for `TrxReaderTests`, `SelfCheckJudgeTests` and the recovery test. Add it to the lab project set in `LabIsolationTests` (so that reference is allowed and any product reference fails) and to the solution's `Tools` folder. Its csproj has no package versions; restore RID-less with `--force-evaluate`, commit its lock file and the Lab.Tests lock file, and build with `--no-restore`.
   - R-ARGS / R-USING: `git` and `dotnet` run with `ArgumentList` in `using var process`; `dotnet test <copy>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~<test>" --logger "trx;LogFileName=<id>.trx" --results-directory <dir>`.
   - R-PATH: copies only under `%TEMP%\meridian-lab-selfcheck\<guid>\`, deleted at the end (kept with `--keep`).
   - Judging: a lab mutant is `caught` only when the named test **ran** and **failed** in the TRX (`outcome="Failed"`); a build failure, zero tests run or a skipped test is `invalid`, never `caught`. A baseline pass over the unmodified copy runs first: every named test must pass there, else the whole self-check is `invalid`.
@@ -3044,14 +3347,28 @@ Then, with the daemon and the lease, `mutation_run` for M1, M4 and M5; record ea
 
 **Tests and why they fail when reverted:** `BuildFailed_IsInvalidNotCaught` fails if a patch that breaks the build counts as "the test caught it". `SelfCheckRecoveryTests` fails if a daemon crash leaves a toxic or a lease behind (the D-ML46 write-ahead fix, now proven end to end).
 
+**Amendments (wave 5 plan; D-ML90, F86):**
+- **A1, the mutex.** `SingleInstanceGuard` takes one mutex per user, `Local\MeridianLab-<user>` (`Daemon/SingleInstanceGuard.cs:35,139`). `--recovery` and `SelfCheckRecoveryTests` first check whether another daemon holds it. If one does, the result is `invalid` with the reason "stop the running lab daemon first", never `caught` or a pass. Nothing bypasses or renames the mutex, and the product guard is not edited.
+- **A2, the child's environment.** The child's `ProcessStartInfo.Environment` removes the inherited `MERIDIAN_LAB_TOKEN` and sets a fresh 32-byte token from `RandomNumberGenerator`, base64url-encoded. That token is never logged or written to `selfcheck.md`, and it is zeroed after use (`CryptographicOperations.ZeroMemory` on the bytes). `MERIDIAN_LAB_HOME` points at the temp folder.
+- **A3, the stack.** The child owns its own stack: `UpAsync(wipe: true)` before the first start, and `DownAsync(wipe: true)` in `finally` (D-ML84 shape; cleanup by registry and label only). Readiness is shown by polling the child's `/status` until it answers, within 60 s on `TimeProvider`, never by a fixed sleep. A child still running at the end is killed in `finally` with `Kill(entireProcessTree: true)` inside `using var process`.
+- **A4.** "The run that was open is not ingested as `pass`" is asserted through `results_query` (L25). The I5 assertion accepts `InvariantSkip` only when the gate says so, and the test plants a labelled container once to show that I5 can fail (anti-always-skip).
+
+**Steps (commit after each step, with the packet's subject plus ` (step N/4)`):**
+1. File 2's csproj and a `Program.cs` skeleton that parses arguments, file 3, the sln entry, `LabIsolationTests` (lab set), the Lab.Tests reference, the restore and lock files, `TrxReaderTests`. Checks: restore, build both projects, `FS` with `~TrxReaderTests` and `~LabIsolationTests`.
+2. File 1 (LM1-LM8 patches, made and reverted as in L54; `git status` clean apart from `tools/lab/`), the LM rows in `tools/lab/mutants/README.md`, file 4, `LabMutantPatchesApplyTests`. Checks: build, `FS` with `~ObservationPathTests` and `~LabMutantPatchesApplyTests`, `git status --porcelain`.
+3. The judge and baseline in `Program.cs`, `selfcheck.json` and `selfcheck.md`, `SelfCheckJudgeTests`. Checks: build, `FS` with `~SelfCheckJudgeTests`.
+4. File 5 with A1-A4. `SelfCheckRecoveryTests` and `SelfCheckE2ETests` written, plus the lab `README.md` section "Self-check". Checks: the full lines below.
+
 **Checks**
 
 ```powershell
-dotnet build <W>\src\Tools\Dhadgar.Lab.SelfCheck\Dhadgar.Lab.SelfCheck.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"
-dotnet run --project <W>\src\Tools\Dhadgar.Lab.SelfCheck -c Release -- selfcheck   # every LM caught; attach selfcheck.md to the report
-dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~SelfCheckRecoveryTests"   # Docker running
+dotnet restore <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj --force-evaluate
+dotnet build <W>\src\Tools\Dhadgar.Lab.SelfCheck\Dhadgar.Lab.SelfCheck.csproj -c Release -p:TreatWarningsAsErrors=true --no-restore
+dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --no-restore --filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true&FullyQualifiedName!~DockerTests&FullyQualifiedName!~E2ETests"
+git -C <W> status --porcelain   # only tools/lab/, src/Tools/, tests/Dhadgar.Lab.Tests/ and Dhadgar.sln
 ```
+
+At the wave boundary (D-ML74), with the user's lab daemon stopped: `dotnet run --project <W>\src\Tools\Dhadgar.Lab.SelfCheck -c Release -- selfcheck`, where every LM must be `caught` (attach `selfcheck.md`); then `SelfCheckRecoveryTests` (Docker) and `SelfCheckE2ETests` (`RequiresNetwork`).
 
 **Docs owed:** `src/Tools/Dhadgar.Lab/README.md` section "Self-check" (what gate LS means and how to run it).
 
