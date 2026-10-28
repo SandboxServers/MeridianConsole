@@ -99,78 +99,98 @@ public static class ToolPolicy
     public static IReadOnlyDictionary<string, LabGate> Gates => GateTable;
 
     /// <summary>
-    /// Names in the table that no registered tool implements yet. Later packets remove their names as they register the tools.
+    /// Names in the table that no registered tool implements yet. Grouped by the packet that registers them. A packet removes only its own names and keeps its `// Lnn` line, so parallel packets never edit adjacent lines.
     /// </summary>
     public static IReadOnlySet<string> PlannedTools { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
-        "stack_status",
-        "db_query",
+        // L13
         "uat_list_specs",
         "uat_plan",
+        // L15
+        "uat_run",
+        // L16
         "uat_report",
         "bundle_read",
+        "uat_attest",
+        // L19
         "fault_list_targets",
         "faults_active",
-        "invariants_check",
-        "results_query",
-        "triage_show",
-        "job_status",
-        "pool_list",
-        "ui_flow_list",
-        "stack_up",
-        "stack_down",
-        "stack_reset_data",
-        "http_request",
-        "nodes_token_mint",
-        "nodes_enroll_probe",
-        "nodes_cert_time_shift",
-        "nodes_decommission",
         "fault_toxic_add",
         "fault_proxy_disable",
         "fault_partition",
         "fault_heal",
         "fault_reset",
+        // L20
         "fault_kill",
         "fault_pause",
         "fault_disk_fill",
         "fault_corrupt_file",
-        "fault_corrupt_registry",
         "fault_db",
-        "results_flake_check",
+        // L21
+        "invariants_check",
+        // L25
+        "results_query",
+        // L26
+        "triage_show",
         "results_known_issue_set",
         "triage_draft_issue",
         "triage_mark",
+        // L27
+        "job_status",
+        "job_cancel",
+        "results_flake_check",
         "hunt_model_run",
+        // L28
         "fuzz_run",
+        // L29
         "chaos_run",
         "soak_run",
-        "fleet_run",
-        "job_cancel",
+        // L30
+        "pool_list",
         "pool_acquire",
         "pool_release",
         "member_reset",
+        // L32
         "agent_install",
         "agent_uninstall",
         "agent_start",
         "agent_stop",
-        "agent_kill",
         "agent_token_write",
         "agent_config_set",
+        // L33
+        "fault_corrupt_registry",
+        // L35
+        "ui_flow_list",
+        "ui_flow_run",
+        // L37
+        "cli_run",
+        // L42
+        "fleet_run",
+        // L43
         "agent_msi_install",
         "agent_msi_uninstall",
-        "cli_run",
-        "ui_flow_run",
-        "uat_run",
-        "uat_attest",
-        "identity_user_token",
+        // L48
         "events_read",
+        // L51
         "history_run",
-        "twin_run",
-        "mutation_run",
+        // L52
         "coverage_report",
+        // L53
+        "twin_run",
+        // L54
+        "mutation_run",
+        // L56
+        "identity_user_token",
+        // L57
         "envelope_run",
+        // L58
+        "nodes_decommission",
         "peer_run",
+        // L59
+        "agent_kill",
+        // L60
         "version_run",
+        // L62
         "guided_ab_run",
     };
 
