@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.History;
 using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Processes;
@@ -260,6 +261,72 @@ public sealed class BundleWriter : IUatRunSink
         {
             WriteError = "[Lab.Unavailable] the bundle could not be written";
             MarkFailedAfterWriteError(checkedFolder.Value);
+        }
+    }
+
+    /// <summary>
+    /// Writes a history run's bundle (C19): a normal run folder with <c>run.json</c> (<c>kind = history</c>),
+    /// <c>history.json</c>, <c>check.json</c>, <c>minimal.json</c> when minimised, and the synthetic row <c>row.json</c>
+    /// (<c>history/&lt;scenario&gt;</c>, with <c>history:{verdict, violations:[{rule, ops, required}]}</c>). The folder is checked
+    /// against the UAT runs root, and the whole folder is scanned for secrets; a secret fails the write (no rewrite).
+    /// </summary>
+    /// <returns>The bundle folder, or a failure with a <c>[Lab.*]</c> code.</returns>
+    public Result<string> WriteHistoryRun(HistoryBundle bundle)
+    {
+        ArgumentNullException.ThrowIfNull(bundle);
+        string folder = Path.Combine(_uatRuns, BundleFolders.Name(bundle.Started, _buildId, bundle.RunId));
+        Result<string> checkedFolder = _validator.ValidatePath(folder, [_uatRuns]);
+        if (checkedFolder.IsFailure)
+        {
+            return Result<string>.Failure("[Lab.InvalidArgument] the bundle folder is outside the UAT runs root");
+        }
+
+        Folder = checkedFolder.Value;
+        try
+        {
+            _passRedactions = 0;
+            Write("run.json", JsonSerializer.Serialize(new
+            {
+                run_id = bundle.RunId,
+                kind = "history",
+                scenario = bundle.Scenario,
+                seed = bundle.Seed,
+                clients = bundle.Clients,
+                reruns = bundle.Reruns,
+                verdict = bundle.Check.Verdict,
+                grade = bundle.Grade.ToString(),
+                secret_scan = "passed",
+            }, JsonOptions) + "\n");
+            Write("history.json", JsonSerializer.Serialize(bundle.History, JsonOptions) + "\n");
+            Write("check.json", JsonSerializer.Serialize(bundle.Check, JsonOptions) + "\n");
+            if (bundle.Check.Minimal is not null)
+            {
+                Write("minimal.json", JsonSerializer.Serialize(bundle.Check.Minimal, JsonOptions) + "\n");
+            }
+
+            Write("row.json", JsonSerializer.Serialize(new
+            {
+                id = "history/" + bundle.Scenario,
+                grade = bundle.Grade.ToString(),
+                history = new
+                {
+                    verdict = bundle.Check.Verdict,
+                    violations = bundle.Check.Violations.Select(v => new { rule = v.Rule, ops = v.OpIds, required = v.Required }).ToList(),
+                },
+            }, JsonOptions) + "\n");
+
+            SecretScanResult scan = _scanner.ScanFolder(Folder);
+            if (!scan.Passed)
+            {
+                return Result<string>.Failure("[Lab.Unavailable] the history bundle held a secret and was not kept");
+            }
+
+            return Result<string>.Success(Folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)
+        {
+            WriteError = "[Lab.Unavailable] the bundle could not be written";
+            return Result<string>.Failure(WriteError);
         }
     }
 

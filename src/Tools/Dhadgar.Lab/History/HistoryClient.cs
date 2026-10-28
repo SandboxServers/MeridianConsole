@@ -53,6 +53,7 @@ public sealed class HistoryClient : IDisposable
     private readonly string _keyLabel;
     private readonly string _platform;
     private readonly List<ECDsa> _keys = [];
+    private string? _reservedFirstOp;
 
     /// <summary>
     /// Creates the client for client number <paramref name="index"/> of a run.
@@ -115,7 +116,9 @@ public sealed class HistoryClient : IDisposable
         var opIds = new List<string>();
         ECDsa firstKey = NewKey();
 
-        Result<string> first = await EnrollOnceAsync(1, firstKey, _keyLabel, causedBy: null, ct).ConfigureAwait(false);
+        string? reserved = _reservedFirstOp;
+        _reservedFirstOp = null;
+        Result<string> first = await EnrollOnceAsync(1, firstKey, _keyLabel, causedBy: null, ct, reserved).ConfigureAwait(false);
         if (first.IsFailure)
         {
             return Result<HistoryClientOutcome>.Failure(first.Error);
@@ -137,6 +140,16 @@ public sealed class HistoryClient : IDisposable
 
         opIds.Add(second.Value!);
         return Result<HistoryClientOutcome>.Success(new HistoryClientOutcome(opIds));
+    }
+
+    /// <summary>
+    /// Runs the first enroll with a reserved op id (the job reserves it to arm the barrier rule before the request), then the retry.
+    /// </summary>
+    public Task<Result<HistoryClientOutcome>> RunAsync(HistoryRetry retry, string firstOpId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(firstOpId);
+        _reservedFirstOp = firstOpId;
+        return RunAsync(retry, ct);
     }
 
     /// <inheritdoc />
@@ -162,11 +175,11 @@ public sealed class HistoryClient : IDisposable
         ECDsa key,
         string keyLabel,
         string? causedBy,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? reservedOpId = null)
     {
         string hostname = "lab-" + _run6 + "-c" + _index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + attempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        OpId op = _sink.NextOp(_runId, _actor);
-        string opId = op.ToString();
+        string opId = reservedOpId ?? _sink.NextOp(_runId, _actor).ToString();
 
         // The arguments carry the hostname and the key label only; the key and the token never reach the line.
         JsonElement invokeArgs = _redactor.Redact(JsonSerializer.SerializeToElement(
