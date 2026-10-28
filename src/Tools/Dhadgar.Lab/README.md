@@ -9,8 +9,8 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 - `Daemon/`: the loopback daemon that exposes the lab over HTTP with a bearer token.
 - `Policy/`: `LabGate`, the policy check every tool call passes through.
 - `Tools/`: `LabCallContext`, the per-call context.
-- `Audit/`: `LabEvent` and the event sink.
-- `Secrets/`: `SecretVault`, which holds secrets by reference only.
+- `Audit/`: `LabEvent`, `ILabEvents` and `AuditLog`, the daily JSON-lines audit writer.
+- `Secrets/`: `SecretVault` (secrets held by reference only) and `Redactor`.
 - `Nodes/`: the adapter into the Nodes product (`INodesLabAdapter`, `NodesLabAdapter`, `EnrollProbe`).
 
 ## Ports (C1)
@@ -42,3 +42,10 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 - Secrets are referenced by name, never printed or returned as plain text.
 - Paths from any input must be validated before use (the product `PathValidator` rules: `..`, null bytes, control characters, roots outside `LabPaths.Root`, symlinks and junctions). L01 ships the fixed folder names only; the containment check lands with the first packet that accepts a path from a tool or from the network.
 - Processes are started with `ProcessStartInfo.ArgumentList`.
+
+## Secrets and audit
+
+- `SecretVault` stores each secret as a `char[]` and returns a reference: `tok-N`, `key-N`, `pwd-N` or `brr-N` (a counter per kind). `Use` hands the caller a `ReadOnlySpan<char>` over the stored array and copies nothing out. `Remove` and `Dispose` zero the storage.
+- `Redactor` replaces every vault value of 8 or more characters (longest first) with `***<ref>`. It also masks PEM private key blocks (`***pem`), `Bearer <token>` (`Bearer ***`) and `Password=` / `Pwd=` segments (`$1=***`). Each pattern has a 1 second timeout; on timeout the text becomes `***redaction-timeout***`.
+- `AuditLog` writes one JSON line per event to `audit/audit-<yyyyMMdd>.jsonl` under the lab root, using the UTC day, and closes the previous day's file on roll-over. A `lab.call` entry records call id, tool, gate, caller, lease owner, outcome and duration. It never records tool arguments. Every value passes through `Redactor`.
+- `ILabEvents.Emit` returns void, so a failed audit write is kept in `AuditLog.LastFailure`. `RecordCall` returns the failure as a `Result`.
