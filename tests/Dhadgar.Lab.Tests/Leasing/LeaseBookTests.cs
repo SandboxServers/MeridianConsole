@@ -220,28 +220,168 @@ public sealed class LeaseBookTests
     }
 
     [Fact]
+    public void Release_Success_EmitsReleasedEvent()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents events) = Create();
+        LeaseGrant grant = Grant(book.Acquire("s1", "uat", null, false, null));
+
+        Assert.True(book.Release(grant.LeaseId).IsSuccess);
+
+        LabEvent released = events.Items[^1];
+        Assert.Equal("released", released.Fields["action"]);
+        Assert.Equal("s1", released.Fields["owner"]);
+    }
+
+    [Fact]
+    public void Sweep_Expiry_EmitsExpiredEvent()
+    {
+        (LeaseBook book, FakeTimeProvider time, RecordingEvents events) = Create();
+        Grant(book.Acquire("s1", "uat", 30, false, null));
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        Assert.Equal(1, book.Sweep());
+
+        LabEvent expired = events.Items[^1];
+        Assert.Equal("expired", expired.Fields["action"]);
+        Assert.Equal("s1", expired.Fields["owner"]);
+    }
+
+    [Fact]
+    public void Acquire_ForcedTakeover_EmitsTakenOverEventWithReason()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents events) = Create();
+        Grant(book.Acquire("s1", "uat", null, false, null));
+
+        Grant(book.Acquire("s2", "soak", null, true, "s1 wedged"));
+
+        LabEvent takeover = Assert.Single(events.Items, e => e.Fields["action"] == "taken_over");
+        Assert.Equal("s2", takeover.Fields["owner"]);
+        Assert.Equal("s1", takeover.Fields["previous_owner"]);
+        Assert.Equal("s1 wedged", takeover.Fields["reason"]);
+    }
+
+    [Fact]
+    public void Acquire_WhileHeld_EmitsRefusedEvent()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents events) = Create();
+        Grant(book.Acquire("s1", "uat", null, false, null));
+
+        Assert.True(book.Acquire("s2", "soak", null, false, null).IsFailure);
+
+        LabEvent refused = events.Items[^1];
+        Assert.Equal("refused", refused.Fields["action"]);
+        Assert.Equal("s1", refused.Fields["holder"]);
+    }
+
+    [Fact]
+    public void Touch_AfterExpiryWithoutSweep_ReturnsLeaseRequired()
+    {
+        (LeaseBook book, FakeTimeProvider time, RecordingEvents _) = Create();
+        LeaseGrant grant = Grant(book.Acquire("s1", "uat", 30, false, null));
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        Result<LeaseInfo> touched = book.Touch(grant.LeaseId);
+
+        Assert.True(touched.IsFailure);
+        Assert.StartsWith("[Lab.LeaseRequired]", touched.Error, StringComparison.Ordinal);
+        LeaseHistoryEntry entry = Assert.Single(book.History);
+        Assert.Equal(LeaseEndReason.Expired, entry.Reason);
+    }
+
+    [Fact]
+    public void Acquire_AfterExpiryWithoutSweep_GrantsNewLease()
+    {
+        (LeaseBook book, FakeTimeProvider time, RecordingEvents _) = Create();
+        Grant(book.Acquire("s1", "uat", 30, false, null));
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        LeaseGrant next = Grant(book.Acquire("s2", "soak", null, false, null));
+
+        Assert.Equal("s2", next.Info.Owner);
+        Assert.Equal(LeaseEndReason.Expired, book.History[0].Reason);
+    }
+
+    [Fact]
+    public void Renew_TtlAboveMaximum_ClampsToOneHour()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+        LeaseGrant grant = Grant(book.Acquire("s1", "uat", null, false, null));
+
+        Result<LeaseInfo> renewed = book.Renew(grant.LeaseId, 9999);
+
+        Assert.True(renewed.IsSuccess);
+        Assert.Equal(3600, renewed.Value.TtlSeconds);
+        Assert.Equal(Start.AddSeconds(3600), renewed.Value.ExpiresAt);
+    }
+
+    [Fact]
     public void Events_NeverContainLeaseId()
     {
         (LeaseBook book, FakeTimeProvider _, RecordingEvents events) = Create();
         LeaseGrant grant = Grant(book.Acquire("s1", "uat", null, false, null));
         Assert.True(book.Renew(grant.LeaseId, null).IsSuccess);
         Assert.True(book.Release(grant.LeaseId).IsSuccess);
-        Assert.True(book.Acquire("s2", "soak", null, false, null).IsSuccess);
-        Assert.True(book.Release("wrong").IsFailure);
+        LeaseGrant second = Grant(book.Acquire("s2", "soak", null, false, null));
+        Result refused = book.Release("wrong-id-0123456789abcdef");
 
+        Assert.True(refused.IsFailure);
         Assert.NotEmpty(events.Items);
         foreach (LabEvent labEvent in events.Items)
         {
             foreach (string? value in labEvent.Fields.Values)
             {
                 Assert.DoesNotContain(grant.LeaseId, value ?? string.Empty, StringComparison.Ordinal);
+                Assert.DoesNotContain(second.LeaseId, value ?? string.Empty, StringComparison.Ordinal);
+                Assert.DoesNotContain("wrong-id-0123456789abcdef", value ?? string.Empty, StringComparison.Ordinal);
             }
         }
+
+        Assert.DoesNotContain(second.LeaseId, refused.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LeaseGrant_ToString_OmitsLeaseId()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+        LeaseGrant grant = Grant(book.Acquire("s1", "uat", null, false, null));
+
+        Assert.DoesNotContain(grant.LeaseId, grant.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(grant.LeaseId, Result<LeaseGrant>.Success(grant).ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LeaseEnded_FirstHandlerThrows_SecondStillRuns()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+        LeaseGrant grant = Grant(book.Acquire("s1", "uat", null, false, null));
+        book.LeaseEnded += (_, _) => throw new InvalidOperationException("subscriber failure");
+        List<LeaseHistoryEntry> ended = CaptureEnded(book);
+
+        Assert.True(book.Release(grant.LeaseId).IsSuccess);
+
+        Assert.Single(ended);
+    }
+
+    [Fact]
+    public void ForcedTakeover_HandlerThrows_StillReturnsNewLeaseId()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+        Grant(book.Acquire("s1", "uat", null, false, null));
+        book.LeaseEnded += (_, _) => throw new InvalidOperationException("subscriber failure");
+
+        LeaseGrant takeover = Grant(book.Acquire("s2", "soak", null, true, "s1 wedged"));
+
+        Assert.Equal("s2", takeover.Info.Owner);
+        Assert.True(book.Renew(takeover.LeaseId, null).IsSuccess);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("bad\nowner")]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    [InlineData("s1\u2028[Lab.LeaseHeld] forged")]
+    [InlineData("s1\u202Eforged")]
     public void Acquire_InvalidOwner_IsRefusedAsInvalidArgument(string owner)
     {
         (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
@@ -258,6 +398,17 @@ public sealed class LeaseBookTests
         (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
 
         Result<LeaseGrant> result = book.Acquire(new string('x', 101), "uat", null, false, null);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Acquire_LoneSurrogateInOwner_IsRefusedAsInvalidArgument()
+    {
+        (LeaseBook book, FakeTimeProvider _, RecordingEvents _) = Create();
+
+        Result<LeaseGrant> result = book.Acquire("s1" + (char)0xD800, "uat", null, false, null);
 
         Assert.True(result.IsFailure);
         Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);

@@ -18,8 +18,16 @@ public sealed record LeaseInfo(string Owner, string Purpose, DateTimeOffset Sinc
 
 /// <summary>
 /// Returned by <see cref="LeaseBook.Acquire"/>: the one-time lease id (the caller's proof of ownership) plus the lease info.
+/// <c>ToString</c> omits <c>LeaseId</c>.
 /// </summary>
-public sealed record LeaseGrant(string LeaseId, LeaseInfo Info);
+public sealed record LeaseGrant(string LeaseId, LeaseInfo Info)
+{
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("Info = ").Append(Info);
+        return true;
+    }
+}
 
 /// <summary>
 /// Why a lease ended.
@@ -418,11 +426,29 @@ public sealed class LeaseBook
         _events.Emit(new LabEvent(LeaseEventName, _time.GetUtcNow(), fields));
     }
 
+    /// <summary>
+    /// Invokes each subscriber on its own, so a throwing subscriber neither escapes the public call (a forced takeover
+    /// has already granted the new lease) nor stops later subscribers. Only the exception type is kept; messages are not.
+    /// </summary>
     private void RaiseLeaseEnded(LeaseHistoryEntry? ended)
     {
-        if (ended is not null)
+        if (ended is null)
         {
-            LeaseEnded?.Invoke(this, ended);
+            return;
+        }
+
+        Delegate[] handlers = LeaseEnded?.GetInvocationList() ?? [];
+        foreach (Delegate handler in handlers)
+        {
+            try
+            {
+                ((EventHandler<LeaseHistoryEntry>)handler)(this, ended);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Contained: the lease change has already been committed, so the subscriber cannot undo it.
+                // No message or type is emitted here; a subscriber that needs to report failures does so itself.
+            }
         }
     }
 
@@ -461,16 +487,39 @@ public sealed class LeaseBook
     private static string FormatInstant(DateTimeOffset instant) =>
         instant.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// Text that is echoed into messages, events and history: 1 to <paramref name="maxLength"/> characters, not blank,
+    /// with no control, format (bidi overrides, zero-width) or line/paragraph separator characters and no unpaired surrogate.
+    /// </summary>
     private static bool IsValidText(string value, int maxLength)
     {
-        if (value.Length < 1 || value.Length > maxLength)
+        if (value.Length < 1 || value.Length > maxLength || string.IsNullOrWhiteSpace(value))
         {
             return false;
         }
 
-        foreach (char c in value)
+        for (int i = 0; i < value.Length; i++)
         {
+            char c = value[i];
+
+            if (char.IsHighSurrogate(c) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+            {
+                i++;
+                continue;
+            }
+
+            if (char.IsSurrogate(c))
+            {
+                return false;
+            }
+
             if (char.IsControl(c))
+            {
+                return false;
+            }
+
+            UnicodeCategory category = char.GetUnicodeCategory(c);
+            if (category is UnicodeCategory.Format or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
             {
                 return false;
             }
