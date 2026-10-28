@@ -30,7 +30,7 @@ public sealed class ToxiproxyClient : IDisposable
     /// </summary>
     public ToxiproxyClient(HttpMessageHandler? handler = null)
     {
-        _handler = handler ?? new SocketsHttpHandler { AllowAutoRedirect = false };
+        _handler = handler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
         _http = new HttpClient(_handler, disposeHandler: false)
         {
             BaseAddress = BaseUri,

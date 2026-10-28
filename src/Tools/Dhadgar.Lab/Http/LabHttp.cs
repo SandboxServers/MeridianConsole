@@ -78,7 +78,7 @@ public sealed class LabHttp
     /// <summary>
     /// The primary handler for the probes. Redirects are never followed; the caller sees the 3xx response.
     /// </summary>
-    public static HttpMessageHandler CreateHandler() => new SocketsHttpHandler { AllowAutoRedirect = false };
+    public static HttpMessageHandler CreateHandler() => new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
 
     /// <summary>
     /// Sends one probe to <paramref name="via"/> (<c>gateway</c>, <c>agent_ingress</c> or a lab service name).

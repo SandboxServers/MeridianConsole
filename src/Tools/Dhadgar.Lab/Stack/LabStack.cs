@@ -84,6 +84,8 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // An env file left by a crash between its write and its delete is removed before anything new is written.
+            SweepStaleEnvFiles();
             var hasContainers = _targets.All.Any(target => target.Kind == LabTargetKind.Container);
             if (hasContainers && !wipe && _refs.Get(LabCredentialRefs.Postgres) is null)
             {
@@ -239,7 +241,8 @@ public sealed class LabStack : ILabStatusSource, IDisposable
             return started;
         }
 
-        // The password reaches redis-server through the environment, never through its argument list.
+        // The shell expands $REDISCLI_AUTH, so the password is in redis-server's argv (visible to docker top and /proc inside the
+        // container). That is accepted for the lab: loopback only, a lab-only credential, and same-user docker access. Do not copy this pattern for a real credential.
         started = await StartContainerAsync(
             "redis", RedisImage, ["127.0.0.1:16379:6379"],
             [Secret("REDISCLI_AUTH", LabCredentialRefs.Redis)],
@@ -396,7 +399,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         CancellationToken ct)
     {
         var containerName = ContainerName(name);
-        var exists = await Docker(["container", "inspect", "--format", "{{.Id}}", containerName], ct).ConfigureAwait(false);
+        var exists = await Docker(["container", "inspect", "--format", $"{{{{.Id}}}} {{{{index .Config.Labels \"{LabDefaults.ContainerLabel}\"}}}}", containerName], ct).ConfigureAwait(false);
         if (exists.IsFailure)
         {
             return Result.Failure(exists.Error);
@@ -405,8 +408,15 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         if (exists.Value.ExitCode == 0)
         {
             // A container the lab already created (not wiped): start it again and keep its registration.
+            // A name match alone is not ownership: the container must also carry the lab label (R-BLAST).
+            string[] inspected = exists.Value.StdOut.Trim().Split(' ', 2);
+            if (inspected.Length < 2 || inspected[1] != "1")
+            {
+                return Result.Failure("[Lab.Docker] the container name is not lab-owned");
+            }
+
             var restarted = Require(await Docker(["start", containerName], ct).ConfigureAwait(false), $"could not start {containerName}");
-            return restarted.IsFailure ? Result.Failure(restarted.Error) : Register(name, containerName, exists.Value.StdOut.Trim());
+            return restarted.IsFailure ? Result.Failure(restarted.Error) : Register(name, containerName, inspected[0]);
         }
 
         if (ports.Any(port => !port.StartsWith(LoopbackPrefix, StringComparison.Ordinal)))
@@ -496,26 +506,35 @@ public sealed class LabStack : ILabStatusSource, IDisposable
                 options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
             }
 
-            using var stream = new FileStream(path, options);
-
-            foreach (var entry in entries)
+            Result<string>? failure = null;
+            using (var stream = new FileStream(path, options))
             {
-                if (entry.SecretRef is null)
+                foreach (var entry in entries)
                 {
-                    WriteEntry(stream, entry.Key, (entry.Literal ?? string.Empty).AsSpan());
-                    continue;
-                }
+                    if (entry.SecretRef is null)
+                    {
+                        WriteEntry(stream, entry.Key, (entry.Literal ?? string.Empty).AsSpan());
+                        continue;
+                    }
 
-                var written = _vault.Use(entry.SecretRef, value =>
-                {
-                    WriteEntry(stream, entry.Key, value);
-                    return true;
-                });
-                if (written.IsFailure)
-                {
-                    DeleteQuietly(path);
-                    return Result<string>.Failure(written.Error);
+                    var written = _vault.Use(entry.SecretRef, value =>
+                    {
+                        WriteEntry(stream, entry.Key, value);
+                        return true;
+                    });
+                    if (written.IsFailure)
+                    {
+                        failure = Result<string>.Failure(written.Error);
+                        break;
+                    }
                 }
+            }
+
+            // The stream is closed before the delete: on Windows an open handle makes the delete fail (FileShare.None).
+            if (failure is { } failed)
+            {
+                DeleteQuietly(path);
+                return failed;
             }
 
             return Result<string>.Success(path);
@@ -527,7 +546,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         }
     }
 
-    private static void WriteEntry(Stream stream, string key, ReadOnlySpan<char> value)
+    internal static void WriteEntry(Stream stream, string key, ReadOnlySpan<char> value)
     {
         char[] line = new char[key.Length + 1 + value.Length];
         try
@@ -550,6 +569,33 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         finally
         {
             CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(line.AsSpan()));
+        }
+    }
+
+    /// <summary>
+    /// Deletes every <c>env-*</c> file left in <see cref="LabPaths.State"/>. Each candidate goes through the path validator first.
+    /// </summary>
+    private void SweepStaleEnvFiles()
+    {
+        if (!Directory.Exists(_paths.State))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(_paths.State, "env-*"))
+            {
+                Result<string> validated = _validator.ValidatePath(file, [_paths.State]);
+                if (validated.IsSuccess)
+                {
+                    DeleteQuietly(validated.Value!);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Best effort: a locked or unreadable state folder is reported by the stack operation that needs it.
         }
     }
 

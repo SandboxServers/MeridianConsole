@@ -266,9 +266,15 @@ public static class LabBuilder
                 ? Result<string>.Failure(LockDriftError)
                 : Result<string>.Failure($"[Lab.ProcessFailed] {fileName} exited with code {process.ExitCode}");
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            // Either the build's own timeout or the caller's cancellation: the whole tree (MSBuild nodes included) is stopped.
             KillQuietly(process);
+            if (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+
             return Result<string>.Failure($"[Lab.Timeout] {fileName} did not finish in time");
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)

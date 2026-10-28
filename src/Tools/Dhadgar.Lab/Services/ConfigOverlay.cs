@@ -55,7 +55,13 @@ public sealed class ConfigOverlay
             var overlay = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (JsonProperty property in document.RootElement.EnumerateObject())
             {
-                if (property.Value.ValueKind == JsonValueKind.String && property.Value.GetString() is { } value)
+                // Entries outside the same rules as Set (allowlisted key, length, no control characters) are skipped, so a
+                // hand-edited file cannot inject variables through the env file.
+                if (property.Value.ValueKind == JsonValueKind.String
+                    && property.Value.GetString() is { } value
+                    && adapter.OverlayKeys.Contains(property.Name)
+                    && value.Length <= MaxValueLength
+                    && !value.Any(char.IsControl))
                 {
                     overlay[property.Name] = value;
                 }

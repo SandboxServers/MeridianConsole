@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Docker;
@@ -80,6 +81,42 @@ public sealed class LabStackTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task UpAsync_ExistingContainerWithoutLabel_IsNotStarted()
+    {
+        // A container that only matches the name prefix (no meridian-lab=1 label) is foreign: it must not be started or registered.
+        _docker.ContainerInspectOutput = "abc123 ";
+        using LabStack stack = CreateStack(out _);
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("not lab-owned", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(_docker.Calls, c => c.Contains("start"));
+    }
+
+    [Fact]
+    public void WriteEnvFile_SecondSecretMissing_DeletesThePartialFile()
+    {
+        // The first secret is written, the second ref is not in the vault: the failure must leave no env-* file in State (N1).
+        using LabStack stack = CreateStack(out _);
+        string state = LabPaths.FromRoot(_root, repoRoot: FindRepoRoot()).State;
+        string present = _vault.Add(SecretKind.EnrollmentToken, "first-secret-value".AsSpan());
+
+        // EnvEntry is a private nested record; it is built by reflection because the writer is private.
+        Type entryType = typeof(LabStack).GetNestedType("EnvEntry", BindingFlags.NonPublic) ?? throw new InvalidOperationException("EnvEntry not found");
+        var entries = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(entryType))!;
+        entries.Add(Activator.CreateInstance(entryType, "FIRST", present, null));
+        entries.Add(Activator.CreateInstance(entryType, "SECOND", "ref-not-in-vault", null));
+        MethodInfo write = typeof(LabStack).GetMethod("WriteEnvFile", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("WriteEnvFile not found");
+
+        Result<string> outcome = Assert.IsType<Result<string>>(write.Invoke(stack, [entries]));
+
+        Assert.True(outcome.IsFailure);
+        Assert.Empty(Directory.GetFiles(state, "env-*"));
+    }
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The LabStack returned to the caller owns the ToxiproxyClient and its fake handler; the test disposes the stack.")]
     private LabStack CreateStack(out LabTargetRegistry registry)
     {
@@ -120,11 +157,16 @@ public sealed class LabStackTests : IDisposable
     {
         public List<IReadOnlyList<string>> Calls { get; } = [];
 
+        /// <summary>The stdout of <c>container inspect</c>: the id and the lab label value. The default is a lab-owned container.</summary>
+        public string ContainerInspectOutput { get; set; } = "fake-id 1";
+
         public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct)
         {
             Calls.Add(args.ToArray());
             // redis-cli ping must answer PONG for the readiness probe to pass; every other probe exits 0.
-            string stdout = args.Contains("ping") ? "PONG" : string.Empty;
+            string stdout = args.Contains("ping")
+                ? "PONG"
+                : args.Contains("container") && args.Contains("inspect") ? ContainerInspectOutput : string.Empty;
             return Task.FromResult(Result<DockerOutput>.Success(new DockerOutput(0, stdout, string.Empty)));
         }
     }
