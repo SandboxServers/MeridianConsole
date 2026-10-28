@@ -99,4 +99,65 @@ public class RabbitMqOptionsValidationTests
 
         validator.Validate();
     }
+
+    private static ServiceProvider BuildProviderWithPort(string? port)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["RabbitMq:Host"] = "localhost",
+            ["RabbitMq:Username"] = "valid-user",
+            ["RabbitMq:Password"] = "valid-password"
+        };
+        if (port is not null)
+        {
+            values["RabbitMq:Port"] = port;
+        }
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var services = new ServiceCollection();
+
+        // Mirror the wiring in src/Dhadgar.Nodes/Program.cs
+        services.AddOptions<RabbitMqOptions>()
+            .Bind(config.GetSection(RabbitMqOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public void RabbitMqOptions_Port_BindsFromConfiguration()
+    {
+        using var provider = BuildProviderWithPort("20021");
+
+        var options = provider.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
+
+        Assert.Equal(20021, options.Port);
+    }
+
+    [Fact]
+    public void RabbitMqOptions_Port_DefaultsTo5672WhenMissing()
+    {
+        using var provider = BuildProviderWithPort(null);
+
+        var options = provider.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
+
+        Assert.Equal(5672, options.Port);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("70000")]
+    public void RabbitMqOptions_OutOfRangePort_FailsValidation(string port)
+    {
+        using var provider = BuildProviderWithPort(port);
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IOptions<RabbitMqOptions>>().Value);
+
+        Assert.Contains("Port", ex.Message);
+    }
 }
