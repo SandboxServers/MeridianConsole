@@ -325,7 +325,7 @@ public sealed class BundleWriter : IUatRunSink
     /// Returns the evidence value redacted, or a truncated stand-in when its text is longer than
     /// <see cref="MaxEvidenceChars"/>. The redactions it makes are added to the pass counter.
     /// </summary>
-    private object? Evidence(JsonElement? element)
+    private JsonElement? Evidence(JsonElement? element)
     {
         if (element is not { } value)
         {
@@ -337,7 +337,7 @@ public sealed class BundleWriter : IUatRunSink
         JsonElement redacted = _redactor.Redact(value);
         string text = redacted.GetRawText();
         return text.Length > MaxEvidenceChars
-            ? new { truncated = true, text = text[..MaxEvidenceChars] }
+            ? JsonSerializer.SerializeToElement(new { truncated = true, text = text[..MaxEvidenceChars] })
             : redacted;
     }
 

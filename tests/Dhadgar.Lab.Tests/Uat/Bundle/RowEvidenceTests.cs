@@ -23,6 +23,8 @@ public sealed class RowEvidenceTests : IDisposable
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 2, 10, 0, 0, TimeSpan.Zero);
 
+    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
+
     private const string Secret = "rowsecret-7731";
 
     private const string EvidenceSpec = """
@@ -108,7 +110,7 @@ public sealed class RowEvidenceTests : IDisposable
     {
         await RunSpecAsync();
 
-        using JsonDocument row = JsonDocument.Parse(File.ReadAllText(RowPath("evidence")));
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(RowPath("evidence")));
         JsonElement clause = row.RootElement.GetProperty("clauses")[0];
         Assert.Equal("rows-read", clause.GetProperty("id").GetString());
         Assert.Equal(1, clause.GetProperty("observed").GetProperty("a").GetInt32());
@@ -128,14 +130,14 @@ public sealed class RowEvidenceTests : IDisposable
     {
         await RunSpecAsync();
 
-        using JsonDocument row = JsonDocument.Parse(File.ReadAllText(RowPath("expected-error")));
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(RowPath("expected-error")));
         JsonElement step = row.RootElement.GetProperty("steps")[0];
         Assert.Equal("Lab.Unavailable", step.GetProperty("expected_error").GetString());
         Assert.True(step.GetProperty("ok").GetBoolean());
     }
 
     [Fact]
-    public void RunJson_CountsRedactions_WhenAClauseErrorHeldAVaultValue()
+    public async Task RunJson_CountsRedactions_WhenAClauseErrorHeldAVaultValue()
     {
         SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
         Assert.NotNull(loaded.Spec);
@@ -151,11 +153,11 @@ public sealed class RowEvidenceTests : IDisposable
 
         Assert.Null(_writer.WriteError);
         Assert.NotNull(_writer.Folder);
-        string rowText = File.ReadAllText(RowPath("evidence"));
+        string rowText = await File.ReadAllTextAsync(RowPath("evidence"));
         Assert.DoesNotContain(Secret, rowText, StringComparison.Ordinal);
         Assert.Contains("***", rowText, StringComparison.Ordinal);
 
-        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(_writer.Folder!, "run.json")));
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "run.json")));
         Assert.True(run.RootElement.GetProperty("redactions").GetInt32() > 0);
         Assert.Equal("passed", run.RootElement.GetProperty("secret_scan").GetString());
     }
@@ -165,7 +167,7 @@ public sealed class RowEvidenceTests : IDisposable
     {
         UatRunResult run = await RunSpecAsync();
 
-        string json = JsonSerializer.Serialize(run, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        string json = JsonSerializer.Serialize(run, WebOptions);
 
         Assert.DoesNotContain("\"observed\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"steps\"", json, StringComparison.Ordinal);

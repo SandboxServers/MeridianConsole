@@ -87,11 +87,11 @@ public sealed class Redactor
                 }
             }
 
-            total += PemBlock.Matches(redacted).Count;
+            total += PemBlock.Count(redacted);
             redacted = PemBlock.Replace(redacted, "***pem");
-            total += BearerToken.Matches(redacted).Count;
+            total += BearerToken.Count(redacted);
             redacted = BearerToken.Replace(redacted, "Bearer ***");
-            total += PasswordSegment.Matches(redacted).Count;
+            total += PasswordSegment.Count(redacted);
             redacted = PasswordSegment.Replace(redacted, "$1=***");
             count = total;
             return redacted;
