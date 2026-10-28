@@ -255,6 +255,7 @@ public sealed class LabDaemon : IAsyncDisposable
 
         builder.Services.AddSingleton(time);
         builder.Services.AddSingleton(edge);
+        builder.Services.AddSingleton(new DaemonTokenInfo(edge.Token.Length));
         builder.Services.AddSingleton(paths);
         builder.Services.AddSingleton(new DaemonIdentity(Environment.ProcessId, startedAt));
         builder.Services.AddSingleton(new LeaseOptions());
