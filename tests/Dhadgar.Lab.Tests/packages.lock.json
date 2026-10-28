@@ -1074,6 +1074,7 @@
       "meridian-lab": {
         "type": "Project",
         "dependencies": {
+          "CsCheck": "[5.0.0, )",
           "Dhadgar.Agent.Core": "[1.0.0, )",
           "Dhadgar.Contracts": "[1.0.0, )",
           "Dhadgar.Nodes": "[1.0.0, )",

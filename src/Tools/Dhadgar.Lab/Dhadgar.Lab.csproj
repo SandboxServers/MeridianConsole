@@ -25,6 +25,7 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="Tomlyn" />
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="CsCheck" />
   </ItemGroup>
 
   <ItemGroup>
