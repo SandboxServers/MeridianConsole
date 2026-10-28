@@ -359,8 +359,8 @@ Every Leased tool takes a required `lease_id` string; it is not repeated below. 
 | `agent_msi_install`, `agent_msi_uninstall` | Leased | `member`, `build_id?`, `token_ref?` | `{member, exit_code, log_path}` | L43 |
 | `cli_run` | Leased | `member`, `args` (array; first token in the C10 CLI verb allowlist) | `{exit_code, stdout, stderr, duration_ms}` (redacted) | L37 |
 | `ui_flow_run` | Leased | `flow` (C14), `seed?` | C14 `UiFlowResult` | L35 |
-| `uat_run` | OwnLease | `specs`, `sections?`, `rows?`, `plan_only?`, `label?`, `seed?`, `replay?` (bundle-relative `repro/*.toml`), `lease_id?` | `{run_id, bundle, seed, overall, summary, rows:[...]}` | L15, L22 |
-| `uat_attest` | Leased | `run_id`, `section`, `row`, `clause_id`, `verdict` (`held`, `not_held`), `note` | `{section, row, grade}` | L16 |
+| `uat_run` | OwnLease | exactly one of `spec` (file name under `specs_dir?`) and `replay` (bundle-relative `repro/*.toml`); `sections?`, `rows?`, `plan_only?`, `label?`, `seed?`, `lease_id?` (W3-ruling-1) | `{run_id, bundle, seed, overall, summary, rows:[...]}`; `bundle` is the folder name, null for `plan_only` | L15, L22 |
+| `uat_attest` | Leased | `run_id`, `section`, `row`, `clause_id` (id pattern), `verdict` (`held`, `not_held`), `note?` (at most 1000 chars, no control characters). Only a `NEEDS_HUMAN` or `UNVERIFIED` row; each call is approved by the user in the harness (D-ML67, O2) | `{run_id, section, row, clause_id, grade}` | L16, W3-fix-A |
 | `identity_user_token` | Leased | `tenant` (`a`, `b`) | `{bearer_ref, organization_id, user_id}` (signs up or signs in a seeded lab user per tenant through the Gateway, exchanges for an Identity access token with `org_id`; the token goes to the vault as `brr-N`) | L56 |
 | `events_read` | Open | `run_id`, `after_seq?` (0), `actor?`, `kind?`, `max?` (500, max 5000) | `{events:[LabObservation], next_seq}` (C18) | L48 |
 | `history_run` | OwnLease | `scenario` (C19 scenario id), `clients?` (2..8), `seed?`, `minimise?` (true), `replay?`, `lease_id?` | `{run_id, verdict:"linearizable"\|"violation"\|"unknown", violations:[{rule, ops}], minimal_repro?}` (synchronous, at most 300 s) | L51 |
@@ -568,9 +568,9 @@ CLI exit codes (`meridian-lab uat run`, L17): 0 `pass`, 1 `fail`, 2 config or pl
   ledger.md
 ```
 
-`run.json`: `{schema:1, run_id, label, seed, started_at, ended_at, daemon_version, os, build:{id, commit, dirty, checkout}, lease_owner, members:[{id, dims}], specs:[{file, sha256}], tools:[...], summary:{PASS, FAIL, BLOCKED, SKIPPED, NEEDS_HUMAN, UNVERIFIED}, overall:"pass"|"pass_with_known"|"incomplete"|"fail", incomplete_reasons:[<text>], new_failures:[<signature id>], known_failures:[{signature, known_issue}], violations:<int>, redactions, secret_scan:"passed"|"failed", fingerprint_sha256, fidelity:"exact"|"schedule_approximate"|"evidence_only", pair:null|{experiment_id, role, partner_run_id, relation}, replay:null|{of, fingerprint_diff:[<text>], reproduced:true|false|null}, events:<int>}`. Fields from later packets are present from L16 (L48 for the C18 fields) with empty, null or zero values.
+`run.json`: `{schema:1, run_id, label, seed, started_at, ended_at, daemon_version, os, build:{id, commit, dirty, checkout}, lease_owner, members:[{id, dims}], specs:[{file, sha256}], tools:[...], summary:{PASS, FAIL, BLOCKED, SKIPPED, NEEDS_HUMAN, UNVERIFIED}, overall:"pass"|"pass_with_known"|"incomplete"|"fail", incomplete_reasons:[<text>], new_failures:[<signature id>], known_failures:[{signature, known_issue}], violations:<int>, redactions, secret_scan:"passed"|"failed", secret_scan_removed:[<bundle-relative path>], fingerprint_sha256, fidelity:"exact"|"schedule_approximate"|"evidence_only", pair:null|{experiment_id, role, partner_run_id, relation}, replay:null|{of, fingerprint_diff:[<text>], reproduced:true|false|null}, events:<int>}`. Fields from later packets are present from L16 (L48 for the C18 fields) with empty, null or zero values.
 
-Row JSON: `{section, id, title, expected, grade, reason, started_at, ended_at, member, faults:[{id, tool, target, fault_id, injected_at, healed_at, heal_error}], steps:[{id, tool, ok, error, error_code, expected_error, duration_ms, result}], clauses:[{id, text, source, op, value, required, state, observed, attempts, checked_at}], violations:[{id, summary, at}], attestations:[{clause_id, verdict, note, at}]}`. `result` and `observed` are redacted and truncated to 16 KiB.
+Row JSON: `{section, id, title, expected, grade, reason, started_at, ended_at, member, faults:[{id, tool, target, fault_id, injected_at, healed_at, heal_error}], steps:[{id, tool, ok, error, error_code, expected_error, duration_ms, result}], clauses:[{id, text, source, op, value, required, state, observed, attempts, checked_at}], violations:[{id, summary, at}], attestations:[{clause_id, verdict, note, at, lease_owner, caller}]}`. `result` and `observed` are redacted and truncated to 16 KiB (a longer value is written as `{truncated: true, text}`). Each vault value is redacted and scanned in its raw form and in every JSON-escaped form (W3-ruling-1). The ledger shows one `- Attested:` line per attestation; free text in the ledger has control characters replaced and `|` escaped in table cells. Wave 3 fills the fields D-ML68 lists; L16f fills the rest.
 
 `ledger.md`:
 
@@ -594,7 +594,7 @@ Row JSON: `{section, id, title, expected, grade, reason, started_at, ended_at, m
 - Expected: One enrollment token row with the label, not used
 ```
 
-Secret scan: before finalising, `SecretScanner` checks every file for vault values, the daemon token, PEM private key blocks, `Bearer <20+ chars>` and `Password=`/`Pwd=`. A hit deletes that file, sets `secret_scan:"failed"` and forces every row to BLOCKED with reason `secret scan failed`.
+Secret scan: before finalising, `SecretScanner` checks every file for vault values, the daemon token, PEM private key blocks, `Bearer <20+ chars>` and `Password=`/`Pwd=`. A hit deletes that file, sets `secret_scan:"failed"`, names the removed files in `secret_scan_removed` and forces every row to BLOCKED with reason `secret scan failed`. The rewrite skips `fingerprint.json` and is scanned again; a second hit fails the run with `[Lab.Unavailable]`.
 
 ### C10. Lab topology, targets and fault surface
 
