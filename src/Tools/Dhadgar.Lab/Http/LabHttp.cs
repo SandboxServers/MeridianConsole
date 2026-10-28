@@ -127,6 +127,12 @@ public sealed class LabHttp
             }
 
             using var request = new HttpRequestMessage(verb.Value, uri.Value);
+            if (string.Equals(via, "gateway", StringComparison.Ordinal) || string.Equals(via, "agent_ingress", StringComparison.Ordinal))
+            {
+                // The Gateway's AllowedHosts refuse the loopback authority (L09 ruling 2 context); the lab identifies itself as the probe host.
+                request.Headers.Host = Dhadgar.Lab.Services.LabServices.ProbeHostHeader;
+            }
+
             if (headers is not null)
             {
                 foreach (KeyValuePair<string, string> header in headers)
