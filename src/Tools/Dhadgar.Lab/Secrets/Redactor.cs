@@ -7,7 +7,7 @@ namespace Dhadgar.Lab.Secrets;
 
 /// <summary>
 /// Removes secrets from text and JSON before they reach a log, an audit line or a tool result. Vault values of at least
-/// eight characters are replaced longest first with <c>***&lt;ref&gt;</c>; then PEM private key blocks, bearer tokens and
+/// eight characters are replaced longest first with <c>***&lt;ref&gt;</c> in their raw and JSON-escaped forms; then PEM private key blocks, bearer tokens and
 /// <c>Password=</c>/<c>Pwd=</c> segments are masked. Pattern matching has a one second timeout; a timeout masks the whole text.
 /// </summary>
 public sealed class Redactor
@@ -42,10 +42,19 @@ public sealed class Redactor
     /// <summary>
     /// Returns <paramref name="text"/> with every secret masked.
     /// </summary>
-    public string Redact(string text)
+    public string Redact(string text) => Redact(text, out _);
+
+    /// <summary>
+    /// Returns <paramref name="text"/> with every secret masked, and sets <paramref name="count"/> to the number of
+    /// replacements. Each vault value is matched in its raw form and in its JSON-escaped forms; each match counts once.
+    /// </summary>
+    /// <param name="text">The text to redact.</param>
+    /// <param name="count">The number of replacements made.</param>
+    public string Redact(string text, out int count)
     {
         ArgumentNullException.ThrowIfNull(text);
 
+        var total = 0;
         try
         {
             var redacted = text;
@@ -59,20 +68,37 @@ public sealed class Redactor
                 }
 
                 var replacement = "***" + reference;
-                var masked = _vault.Use(reference, secret => ReplaceAll(redacted, secret, replacement));
+                var masked = _vault.Use(reference, secret =>
+                {
+                    var hits = 0;
+                    SecretForms.ForEachForm(secret, form =>
+                    {
+                        redacted = ReplaceAll(redacted, form, replacement, out var replaced);
+                        hits += replaced;
+                        return true;
+                    });
+
+                    return hits;
+                });
+
                 if (masked.IsSuccess)
                 {
-                    redacted = masked.Value;
+                    total += masked.Value;
                 }
             }
 
+            total += PemBlock.Matches(redacted).Count;
             redacted = PemBlock.Replace(redacted, "***pem");
+            total += BearerToken.Matches(redacted).Count;
             redacted = BearerToken.Replace(redacted, "Bearer ***");
+            total += PasswordSegment.Matches(redacted).Count;
             redacted = PasswordSegment.Replace(redacted, "$1=***");
+            count = total;
             return redacted;
         }
         catch (RegexMatchTimeoutException)
         {
+            count = total + 1;
             return FailClosedText;
         }
     }
@@ -121,8 +147,9 @@ public sealed class Redactor
         }
     }
 
-    private static string ReplaceAll(string text, ReadOnlySpan<char> secret, string replacement)
+    private static string ReplaceAll(string text, ReadOnlySpan<char> secret, string replacement, out int replaced)
     {
+        replaced = 0;
         if (secret.IsEmpty)
         {
             return text;
@@ -141,6 +168,12 @@ public sealed class Redactor
 
             builder.Append(source.Slice(position, relative)).Append(replacement);
             position += relative + secret.Length;
+            replaced++;
+        }
+
+        if (replaced == 0)
+        {
+            return text;
         }
 
         builder.Append(source.Slice(position));
