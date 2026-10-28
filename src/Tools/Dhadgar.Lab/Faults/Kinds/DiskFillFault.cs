@@ -30,6 +30,9 @@ public sealed class DiskFillFault(
     internal const string FillFile = "/tmp/.lab-fill";
     private const int DefaultLeaveKib = 64;
 
+    /// <summary>The largest tmpfs <c>/tmp</c> that disk_fill will fill (D-ML82): 256 MiB.</summary>
+    internal const int MaxTmpfsKib = 262144;
+
     private readonly IDockerCli _docker = docker ?? throw new ArgumentNullException(nameof(docker));
     private readonly ILabTargetRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
     private readonly FaultTargetGuard _guard = guard ?? throw new ArgumentNullException(nameof(guard));
@@ -68,18 +71,29 @@ public sealed class DiskFillFault(
         }
 
         Result<DockerOutput> df = await ContainerSupport.RunAsync(
-            _docker, ct, "exec", containerId.Value, "df", "-k", "--output=avail", DeclaredMount).ConfigureAwait(false);
+            _docker, ct, "exec", containerId.Value, "df", "-k", "--output=fstype,size,avail", DeclaredMount).ConfigureAwait(false);
         if (df.IsFailure || df.Value.ExitCode != 0)
         {
             return Result<JsonElement>.Failure("[Lab.Docker] free space of /tmp could not be read");
         }
 
-        // The output is a header line then the number of KiB available.
+        // A header line, then "<fstype> <size KiB> <avail KiB>".
         string last = df.Value.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? string.Empty;
-        if (!int.TryParse(last, NumberStyles.None, CultureInfo.InvariantCulture, out int available))
+        string[] columns = last.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (columns.Length != 3
+            || !long.TryParse(columns[1], NumberStyles.None, CultureInfo.InvariantCulture, out long size)
+            || !int.TryParse(columns[2], NumberStyles.None, CultureInfo.InvariantCulture, out int avail))
         {
             return Result<JsonElement>.Failure("[Lab.Docker] free space output is unreadable");
         }
+
+        // D-ML82: only a bounded tmpfs can be filled; an overlay /tmp is the Docker VM disk that the dev stack shares.
+        if (!string.Equals(columns[0], "tmpfs", StringComparison.Ordinal) || size > MaxTmpfsKib)
+        {
+            return Result<JsonElement>.Failure("[Lab.BlastRadius] /tmp is not a bounded tmpfs");
+        }
+
+        int available = (int)Math.Min(avail, size);
 
         if (available <= leave)
         {
@@ -131,6 +145,12 @@ public sealed class DiskFillFault(
         if (heal.IsFailure)
         {
             return Result.Success();
+        }
+
+        Result owned = await ContainerSupport.CheckHealRefAsync(_docker, heal.Value.ContainerId, ct).ConfigureAwait(false);
+        if (owned.IsFailure)
+        {
+            return owned;
         }
 
         return await RemoveFillAsync(heal.Value.ContainerId, ct).ConfigureAwait(false);

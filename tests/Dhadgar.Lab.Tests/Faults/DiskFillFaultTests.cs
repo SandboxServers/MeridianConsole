@@ -17,7 +17,7 @@ public sealed class DiskFillFaultTests
     [Fact]
     public async Task PrepareAsync_RecordsAvailableSpaceAndLeave()
     {
-        var docker = new FakeDocker(_ => Ok("Avail\n5000\n"));
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\ntmpfs 65536 5000\n"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs("/tmp", 64)), "f1", CancellationToken.None);
@@ -27,7 +27,7 @@ public sealed class DiskFillFaultTests
         Assert.Equal(ContainerId, heal.GetProperty("container_id").GetString());
         Assert.Equal(5000, heal.GetProperty("available_kib").GetInt32());
         Assert.Equal(64, heal.GetProperty("leave_kib").GetInt32());
-        Assert.Equal(new[] { "exec", ContainerId, "df", "-k", "--output=avail", "/tmp" }, docker.Calls.Single());
+        Assert.Equal(new[] { "exec", ContainerId, "df", "-k", "--output=fstype,size,avail", "/tmp" }, docker.Calls.Single());
     }
 
     [Theory]
@@ -36,7 +36,7 @@ public sealed class DiskFillFaultTests
     [InlineData(null)]
     public async Task PrepareAsync_UndeclaredMount_IsRefusedBeforeDocker(string? mount)
     {
-        var docker = new FakeDocker(_ => Ok("Avail\n5000\n"));
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\ntmpfs 65536 5000\n"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs(mount, 64)), "f1", CancellationToken.None);
@@ -49,7 +49,7 @@ public sealed class DiskFillFaultTests
     [Fact]
     public async Task PrepareAsync_NegativeLeave_IsRefusedBeforeDocker()
     {
-        var docker = new FakeDocker(_ => Ok("Avail\n5000\n"));
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\ntmpfs 65536 5000\n"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs("/tmp", -1)), "f1", CancellationToken.None);
@@ -62,7 +62,7 @@ public sealed class DiskFillFaultTests
     [Fact]
     public async Task PrepareAsync_NoSpaceAboveLeave_IsRefused()
     {
-        var docker = new FakeDocker(_ => Ok("Avail\n50\n"));
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\ntmpfs 65536 50\n"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs("/tmp", 64)), "f1", CancellationToken.None);
@@ -74,13 +74,50 @@ public sealed class DiskFillFaultTests
     [Fact]
     public async Task PrepareAsync_UnreadableDfOutput_IsRefused()
     {
-        var docker = new FakeDocker(_ => Ok("Avail\nlots\n"));
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\ntmpfs 65536 lots\n"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs("/tmp", 64)), "f1", CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.StartsWith("[Lab.Docker]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_OverlayTmp_IsBlastRadius()
+    {
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\noverlay 61202244 58000000\n"));
+        var fault = Fault(docker, Registry(), Inspector());
+
+        var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs("/tmp", 64)), "f1", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("[Lab.BlastRadius] /tmp is not a bounded tmpfs", result.Error);
+        Assert.Single(docker.Calls);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_TmpfsTooLarge_IsBlastRadius()
+    {
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\ntmpfs 1048576 1000000\n"));
+        var fault = Fault(docker, Registry(), Inspector());
+
+        var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs("/tmp", 64)), "f1", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("[Lab.BlastRadius] /tmp is not a bounded tmpfs", result.Error);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_BoundedTmpfs_Succeeds()
+    {
+        var docker = new FakeDocker(_ => Ok("Type 1K-blocks Avail\ntmpfs 65536 65000\n"));
+        var fault = Fault(docker, Registry(), Inspector());
+
+        var result = await fault.PrepareAsync(Target(), Json(new DiskFillArgs("/tmp", 64)), "f1", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(65000, result.Value.GetProperty("available_kib").GetInt32());
     }
 
     [Fact]
@@ -123,19 +160,20 @@ public sealed class DiskFillFaultTests
     [Fact]
     public async Task HealAsync_RemovesTheFillFile()
     {
-        var docker = new FakeDocker(_ => Ok(""));
+        var docker = HealDocker(_ => Ok(""));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        Assert.Equal(new[] { "exec", ContainerId, "rm", "-f", Fill }, docker.Calls.Single());
+        Assert.Equal(2, docker.Calls.Count);
+        Assert.Equal(new[] { "exec", ContainerId, "rm", "-f", Fill }, docker.Calls.Last());
     }
 
     [Fact]
     public async Task HealAsync_ContainerNotRunning_IsSuccess()
     {
-        var docker = new FakeDocker(_ => new DockerOutput(1, "", "container is not running"));
+        var docker = HealDocker(_ => new DockerOutput(1, "", "container is not running"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
@@ -146,12 +184,25 @@ public sealed class DiskFillFaultTests
     [Fact]
     public async Task HealAsync_RemoveFails_IsFailure()
     {
-        var docker = new FakeDocker(_ => new DockerOutput(1, "", "permission denied"));
+        var docker = HealDocker(_ => new DockerOutput(1, "", "permission denied"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task HealAsync_UnlabelledContainer_IsRefusedBeforeRm()
+    {
+        var docker = new FakeDocker(args => args[0] == "inspect" ? Ok("<no value>") : Ok(""));
+        var fault = Fault(docker, Registry(), Inspector());
+
+        var result = await fault.HealAsync(Entry(), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("not labelled", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(docker.Calls, c => c[0] == "exec");
     }
 
     [Fact]

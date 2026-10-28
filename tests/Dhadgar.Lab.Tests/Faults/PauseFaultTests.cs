@@ -53,19 +53,33 @@ public sealed class PauseFaultTests
     [Fact]
     public async Task HealAsync_RunsDockerUnpause()
     {
-        var docker = new FakeDocker(_ => Ok(""));
+        var docker = HealDocker(_ => Ok(""));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        Assert.Equal(new[] { "unpause", ContainerId }, docker.Calls.Single());
+        Assert.Equal(2, docker.Calls.Count);
+        Assert.Equal(new[] { "unpause", ContainerId }, docker.Calls.Last());
+    }
+
+    [Fact]
+    public async Task HealAsync_UnlabelledContainer_IsRefusedBeforeUnpause()
+    {
+        var docker = new FakeDocker(args => args[0] == "inspect" ? Ok("<no value>") : Ok(""));
+        var fault = Fault(docker, Registry(), Inspector());
+
+        var result = await fault.HealAsync(Entry(), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("not labelled", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(docker.Calls, c => c[0] == "unpause");
     }
 
     [Fact]
     public async Task HealAsync_NotPaused_IsSuccess()
     {
-        var docker = new FakeDocker(_ => new DockerOutput(1, "", "Error response from daemon: Container is not paused"));
+        var docker = HealDocker(_ => new DockerOutput(1, "", "Error response from daemon: Container is not paused"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
@@ -76,7 +90,7 @@ public sealed class PauseFaultTests
     [Fact]
     public async Task HealAsync_UnpauseFailsForAnotherReason_IsFailure()
     {
-        var docker = new FakeDocker(_ => new DockerOutput(1, "", "Error response from daemon: permission denied"));
+        var docker = HealDocker(_ => new DockerOutput(1, "", "Error response from daemon: permission denied"));
         var fault = Fault(docker, Registry(), Inspector());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);

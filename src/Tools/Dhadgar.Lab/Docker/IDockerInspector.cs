@@ -52,17 +52,33 @@ public interface IDockerInspector
 /// </summary>
 public sealed class DockerInspector(IDockerCli docker, DockerOptions options) : IDockerInspector
 {
+    // \z, not $: $ accepts a trailing newline (security N4).
     private static readonly System.Text.RegularExpressions.Regex ContainerRef =
-        new("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        new("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <inheritdoc />
     public string LabContext { get; } = options.LinuxContext;
+
+    /// <summary>
+    /// True when the value is a valid container reference (letters, digits, <c>_.-</c>, at most 128 characters).
+    /// </summary>
+    internal static bool IsValidContainerRef(string value)
+    {
+        try
+        {
+            return ContainerRef.IsMatch(value);
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            return false;
+        }
+    }
 
     /// <inheritdoc />
     public async Task<Result<ContainerInspection>> InspectAsync(string containerId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(containerId);
-        if (!ContainerRef.IsMatch(containerId))
+        if (!IsValidContainerRef(containerId))
         {
             return Result<ContainerInspection>.Failure("[Lab.InvalidArgument] container reference is not valid");
         }

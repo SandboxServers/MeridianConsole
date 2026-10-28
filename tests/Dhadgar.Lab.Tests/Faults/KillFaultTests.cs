@@ -87,19 +87,20 @@ public sealed class KillFaultTests
     [Fact]
     public async Task HealAsync_StartsTheContainer()
     {
-        var docker = new FakeDocker(_ => Ok(ContainerId));
+        var docker = HealDocker(_ => Ok(ContainerId));
         var fault = Fault(docker, Registry(), Inspector(), new FakeJournal());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        Assert.Equal(new[] { "start", ContainerId }, docker.Calls.Single());
+        Assert.Equal(new[] { "start", ContainerId }, docker.Calls.Last());
+        Assert.Equal(2, docker.Calls.Count);
     }
 
     [Fact]
     public async Task HealAsync_AlreadyRunning_IsSuccess()
     {
-        var docker = new FakeDocker(_ => new DockerOutput(1, "", "Error: container is already running"));
+        var docker = HealDocker(_ => new DockerOutput(1, "", "Error: container is already running"));
         var fault = Fault(docker, Registry(), Inspector(), new FakeJournal());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
@@ -110,13 +111,54 @@ public sealed class KillFaultTests
     [Fact]
     public async Task HealAsync_StartFailsForAnotherReason_IsFailure()
     {
-        var docker = new FakeDocker(_ => new DockerOutput(1, "", "Error response from daemon: driver failed programming external connectivity"));
+        var docker = HealDocker(_ => new DockerOutput(1, "", "Error response from daemon: driver failed programming external connectivity"));
         var fault = Fault(docker, Registry(), Inspector(), new FakeJournal());
 
         var result = await fault.HealAsync(Entry(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.StartsWith("[Lab.Docker]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HealAsync_InvalidJournalRef_MakesNoDockerCall()
+    {
+        var docker = new FakeDocker(_ => Ok(ContainerId));
+        var entry = new FaultJournalEntry("f1", "kill", "c:gateway", Args(), Json(new KillHealData("--help", "KILL", 0, "2026-10-01T10:00:00Z")),
+            FaultState.Active, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddMinutes(5), null);
+        var fault = Fault(docker, Registry(), Inspector(), new FakeJournal());
+
+        var result = await fault.HealAsync(entry, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.BlastRadius]", result.Error, StringComparison.Ordinal);
+        Assert.Empty(docker.Calls);
+    }
+
+    [Fact]
+    public async Task HealAsync_UnlabelledContainer_IsRefusedBeforeStart()
+    {
+        var docker = new FakeDocker(args => args[0] == "inspect" ? Ok("<no value>") : Ok(ContainerId));
+        var fault = Fault(docker, Registry(), Inspector(), new FakeJournal());
+
+        var result = await fault.HealAsync(Entry(), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("not labelled", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(docker.Calls, c => c[0] == "start");
+    }
+
+    [Fact]
+    public async Task HealAsync_ContainerGone_IsSuccess()
+    {
+        var docker = new FakeDocker(args => args[0] == "inspect"
+            ? new DockerOutput(1, "", "Error: No such object: x")
+            : new DockerOutput(1, "", "Error: No such container: x"));
+        var fault = Fault(docker, Registry(), Inspector(), new FakeJournal());
+
+        var result = await fault.HealAsync(Entry(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
     }
 
     [Fact]
@@ -211,6 +253,10 @@ public sealed class KillFaultTests
         JsonSerializer.Deserialize<KillHealData>(element.GetRawText(), LabJson.Options)!;
 
     internal static DockerOutput Ok(string stdout) => new(0, stdout, "");
+
+    /// <summary>A fake whose label inspect (security N4) answers "1"; every other call goes to <paramref name="respond"/>.</summary>
+    internal static FakeDocker HealDocker(Func<IReadOnlyList<string>, DockerOutput> respond) =>
+        new(args => args[0] == "inspect" && args.Count == 4 && args[2].Contains(".Config.Labels", StringComparison.Ordinal) ? Ok("1") : respond(args));
 
     internal sealed class FakeDocker(Func<IReadOnlyList<string>, DockerOutput> respond) : IDockerCli
     {

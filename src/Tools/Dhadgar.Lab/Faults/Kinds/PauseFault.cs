@@ -61,6 +61,12 @@ public sealed class PauseFault(
             return Result.Success();
         }
 
+        Result owned = await ContainerSupport.CheckHealRefAsync(_docker, heal.Value.ContainerId, ct).ConfigureAwait(false);
+        if (owned.IsFailure)
+        {
+            return owned;
+        }
+
         return await UnpauseAsync(heal.Value.ContainerId, ct).ConfigureAwait(false);
     }
 

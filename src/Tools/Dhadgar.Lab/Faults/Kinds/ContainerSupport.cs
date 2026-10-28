@@ -36,4 +36,36 @@ internal static class ContainerSupport
     /// </summary>
     public static bool SaysAlreadyDone(DockerOutput output, params string[] phrases) =>
         phrases.Any(p => output.StdErr.Contains(p, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The label inspect format (the lab label must read "1").</summary>
+    internal const string LabelFormat = "{{index .Config.Labels \"meridian-lab\"}}";
+
+    /// <summary>
+    /// Security N4: before a heal mutates a container named by the journal, the reference must be valid and the container must
+    /// carry the lab label. A container that no longer exists is healed (nothing to undo).
+    /// </summary>
+    public static async Task<Result> CheckHealRefAsync(IDockerCli docker, string containerId, CancellationToken ct)
+    {
+        if (!DockerInspector.IsValidContainerRef(containerId))
+        {
+            return Result.Failure("[Lab.BlastRadius] journal container reference is not valid");
+        }
+
+        Result<DockerOutput> run = await RunAsync(docker, ct, "inspect", "--format", LabelFormat, containerId).ConfigureAwait(false);
+        if (run.IsFailure)
+        {
+            return Result.Failure(run.Error);
+        }
+
+        if (run.Value.ExitCode != 0)
+        {
+            return SaysAlreadyDone(run.Value, "No such")
+                ? Result.Success()
+                : Result.Failure("[Lab.Docker] container could not be inspected");
+        }
+
+        return string.Equals(run.Value.StdOut.Trim(), "1", StringComparison.Ordinal)
+            ? Result.Success()
+            : Result.Failure("[Lab.BlastRadius] journal container is not labelled as lab-owned");
+    }
 }
