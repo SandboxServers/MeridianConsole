@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Contracts.Agents;
@@ -454,7 +455,7 @@ public sealed class AgentHubTests : IDisposable
         // ack proves the limit was raised.
         var ack = await connection.InvokeAsync<AgentHubAck>(
             nameof(IAgentHub.Telemetry),
-            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), Metrics(500, i => i.ToString("D3") + new string('\u00E9', 125))));
+            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), Metrics(500, i => i.ToString("D3", CultureInfo.InvariantCulture) + new string('\u00E9', 125))));
 
         Assert.True(ack.Accepted);
         Assert.Equal(HubConnectionState.Connected, connection.State);
@@ -477,7 +478,7 @@ public sealed class AgentHubTests : IDisposable
         // so an ack would fail the assertion below.
         var invoke = connection.InvokeAsync<AgentHubAck>(
             nameof(IAgentHub.Telemetry),
-            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), Metrics(700, i => i.ToString("D3") + new string('\u0001', 125))));
+            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), Metrics(700, i => i.ToString("D3", CultureInfo.InvariantCulture) + new string('\u0001', 125))));
 
         // Long polling reports the refused frame as a failed invoke; the server-side close is not surfaced to Closed.
         await Task.WhenAny(invoke, closed.Task).WaitAsync(TimeSpan.FromSeconds(5));
