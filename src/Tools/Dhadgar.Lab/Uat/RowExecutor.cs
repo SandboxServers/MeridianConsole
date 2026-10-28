@@ -11,16 +11,23 @@ using Dhadgar.Shared.Results;
 namespace Dhadgar.Lab.Uat;
 
 /// <summary>
-/// Executes one row of a spec: the row gates (pool, capability, dependencies), the steps through <see cref="LabToolDispatcher"/>,
-/// the clauses and the row grade (C8, R-CONTRACT). Extracted from <see cref="UatRunner"/> with no change in behaviour.
+/// Executes one row of a spec: the row gates (pool, capability, dependencies), the faults (C7), the steps, the clauses and the
+/// row grade (C8, R-CONTRACT). Faults are injected and healed by dispatching the C4 fault tools through <see cref="LabToolDispatcher"/>.
 /// </summary>
 internal sealed class RowExecutor
 {
+    /// <summary>The settle time after a row with faults, before its clauses run (Lab:Uat:SettleMs default).</summary>
+    internal static readonly TimeSpan DefaultSettle = TimeSpan.FromMilliseconds(5000);
+
     private const string LeaseLostCode = "Lab.LeaseLost";
     private const string DefaultErrorCode = "Lab.Unavailable";
-    private const string FaultsDeferred = "[Lab.Unavailable] faults arrive in L22";
+    private const string LabNotCleanReason = "[Lab.Unavailable] lab not clean";
     private const string PoolDeferred = "pool unavailable";
     private const string RunnerActor = "runner";
+    private const string BeforeSteps = "before_steps";
+    private const string AfterSteps = "after_steps";
+    private const string AfterStepPrefix = "after_step:";
+    private const string FaultIdField = "fault_id";
 
     private static readonly JsonElement EmptyObject = JsonSerializer.SerializeToElement(new JsonObject());
 
@@ -29,17 +36,20 @@ internal sealed class RowExecutor
     private readonly ClauseEvaluator _evaluator;
     private readonly TimeProvider _time;
     private readonly ILabObservationSink? _observations;
+    private readonly TimeSpan _settle;
 
     /// <summary>
     /// Creates the executor. With <paramref name="observations"/> every step is recorded in the run's <c>events.jsonl</c> (C18).
+    /// <paramref name="settle"/> is the wait after a row with faults; zero skips it.
     /// </summary>
-    public RowExecutor(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, TimeProvider time, ILabObservationSink? observations)
+    public RowExecutor(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, TimeProvider time, ILabObservationSink? observations, TimeSpan settle)
     {
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _observations = observations;
+        _settle = settle;
     }
 
     /// <summary>
@@ -50,6 +60,11 @@ internal sealed class RowExecutor
         if (run.LeaseLost)
         {
             return Blocked(row, "[Lab.LeaseLost] the lease ended before this row");
+        }
+
+        if (run.LabNotClean)
+        {
+            return Blocked(row, LabNotCleanReason);
         }
 
         if (spec.Section.RequiresPool is not null)
@@ -70,11 +85,6 @@ internal sealed class RowExecutor
             }
         }
 
-        if (row.Faults.Count > 0)
-        {
-            return Blocked(row, FaultsDeferred);
-        }
-
         return await ExecuteRowAsync(spec.Section.Id, row, run, ct).ConfigureAwait(false);
     }
 
@@ -83,7 +93,9 @@ internal sealed class RowExecutor
         var vars = new UatVars(run.RunId, row.Id, sectionId, run.Seed, null);
         var stepStarts = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
         var steps = new Dictionary<string, StepOutcome>(StringComparer.Ordinal);
-        var window = new ClauseWindow(run.RunStart, _time.GetUtcNow(), stepStarts, new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal), steps);
+        var heals = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+        var faults = new FaultState(heals);
+        var window = new ClauseWindow(run.RunStart, _time.GetUtcNow(), stepStarts, heals, steps);
 
         var baselines = new List<Result<JsonElement>>();
         foreach (UatClause clause in row.Expect)
@@ -91,14 +103,36 @@ internal sealed class RowExecutor
             baselines.Add(await _evaluator.CaptureBaselineAsync(clause, vars, window, ct).ConfigureAwait(false));
         }
 
+        // Faults that start before the first step. An inject error stops the row; the faults already in place are healed below.
+        string? faultError = null;
+        foreach (UatFault fault in row.Faults.Where(f => f.Start == BeforeSteps))
+        {
+            faultError = await InjectAsync(fault, vars, run, faults, ct).ConfigureAwait(false);
+            if (faultError is not null)
+            {
+                break;
+            }
+        }
+
         string? stepError = null;
         bool expectFailed = false;
         string? expectFailure = null;
+        string? previousStep = null;
         var stepResults = new List<UatStepResult>();
-        for (int i = 0; i < row.Steps.Count; i++)
+        for (int i = 0; i < row.Steps.Count && faultError is null; i++)
         {
             UatStep step = row.Steps[i];
+            if (previousStep is not null)
+            {
+                faultError = await AfterStepAsync(previousStep, row, vars, run, faults, ct).ConfigureAwait(false);
+                if (faultError is not null)
+                {
+                    break;
+                }
+            }
+
             string stepId = step.Id ?? "step" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            previousStep = stepId;
             stepStarts[stepId] = _time.GetUtcNow();
 
             if (step.Tool is null)
@@ -156,6 +190,27 @@ internal sealed class RowExecutor
             }
         }
 
+        // The last step completed without stopping the row: its after_step faults still start and heal.
+        if (faultError is null && stepError is null && previousStep is not null)
+        {
+            faultError = await AfterStepAsync(previousStep, row, vars, run, faults, ct).ConfigureAwait(false);
+        }
+
+        // Heal after_steps faults, then anything still in place at row end (C7 heal = never, or a heal step that did not run).
+        string? healError = await HealDueAsync(heal => heal == AfterSteps, vars, run, faults, ct).ConfigureAwait(false);
+        healError ??= await HealDueAsync(_ => true, vars, run, faults, ct).ConfigureAwait(false);
+        faultError ??= healError;
+        if (faultError is not null)
+        {
+            return Blocked(row, faultError);
+        }
+
+        // A row with faults waits for the system to settle before its clauses read the state (Lab:Uat:SettleMs).
+        if (row.Faults.Count > 0 && stepError is null && _settle > TimeSpan.Zero)
+        {
+            await Task.Delay(_settle, _time, ct).ConfigureAwait(false);
+        }
+
         var clauseResults = new List<UatClauseResult>();
         var inputs = new List<(bool Required, ClauseState State)>();
         if (stepError is null)
@@ -181,6 +236,84 @@ internal sealed class RowExecutor
         }
 
         return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults);
+    }
+
+    /// <summary>
+    /// Injects the faults that start after <paramref name="stepId"/>, then heals the ones that heal there.
+    /// </summary>
+    private async Task<string?> AfterStepAsync(string stepId, UatRow row, UatVars vars, RunContext run, FaultState faults, CancellationToken ct)
+    {
+        string start = AfterStepPrefix + stepId;
+        foreach (UatFault fault in row.Faults.Where(f => f.Start == start))
+        {
+            string? error = await InjectAsync(fault, vars, run, faults, ct).ConfigureAwait(false);
+            if (error is not null)
+            {
+                return error;
+            }
+        }
+
+        return await HealDueAsync(heal => heal == start, vars, run, faults, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Injects one fault through the fault tool named in its spec. Returns the error, or null when the fault is in place.
+    /// </summary>
+    private async Task<string?> InjectAsync(UatFault fault, UatVars vars, RunContext run, FaultState faults, CancellationToken ct)
+    {
+        var step = Synthetic(fault.Tool, fault.Args);
+        StepOutcome outcome = await ExecuteStepAsync(step, "inject:" + fault.Id, vars, run, ct).ConfigureAwait(false);
+        if (!outcome.Ok)
+        {
+            return "fault " + fault.Id + ": " + outcome.Error;
+        }
+
+        if (outcome.Result is not { } payload || !TryFaultId(payload, out string faultId))
+        {
+            return "fault " + fault.Id + ": [" + DefaultErrorCode + "] the inject returned no fault id";
+        }
+
+        faults.Active.Add(new InjectedFault(fault, faultId));
+        return null;
+    }
+
+    /// <summary>
+    /// Heals every fault in place whose spec heal matches, in injection order. The first heal error resets the lab and returns.
+    /// </summary>
+    private async Task<string?> HealDueAsync(Func<string, bool> isDue, UatVars vars, RunContext run, FaultState faults, CancellationToken ct)
+    {
+        foreach (InjectedFault injected in faults.Active.Where(f => isDue(f.Fault.Heal)).ToList())
+        {
+            var args = new JsonObject { [FaultIdField] = injected.FaultId };
+            StepOutcome outcome = await ExecuteStepAsync(Synthetic("fault_heal", JsonSerializer.SerializeToElement(args)), "heal:" + injected.Fault.Id, vars, run, ct).ConfigureAwait(false);
+            if (!outcome.Ok)
+            {
+                await ResetAsync(faults, vars, run, ct).ConfigureAwait(false);
+                return "heal " + injected.Fault.Id + ": " + outcome.Error;
+            }
+
+            faults.Active.Remove(injected);
+            faults.Heals[injected.Fault.Id] = _time.GetUtcNow();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// After a failed heal: <c>fault_reset</c>, then <c>faults_active</c>. Faults still in place make the lab not clean (R-REG), and
+    /// every remaining row is BLOCKED.
+    /// </summary>
+    private async Task ResetAsync(FaultState faults, UatVars vars, RunContext run, CancellationToken ct)
+    {
+        _ = await ExecuteStepAsync(Synthetic("fault_reset", null), "reset", vars, run, ct).ConfigureAwait(false);
+        StepOutcome active = await ExecuteStepAsync(Synthetic("faults_active", null), "faults_active", vars, run, ct).ConfigureAwait(false);
+        if (active.Ok && active.Result is { } payload && NoFaultsActive(payload))
+        {
+            faults.Active.Clear();
+            return;
+        }
+
+        run.LabNotClean = true;
     }
 
     private async Task<StepOutcome> ExecuteStepAsync(UatStep step, string stepId, UatVars vars, RunContext run, CancellationToken ct)
@@ -322,6 +455,33 @@ internal sealed class RowExecutor
             ? text
             : DefaultErrorCode;
 
+    private static bool TryFaultId(JsonElement payload, out string faultId)
+    {
+        faultId = string.Empty;
+        if (payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty(FaultIdField, out JsonElement id)
+            && id.ValueKind == JsonValueKind.String
+            && id.GetString() is { Length: > 0 } text)
+        {
+            faultId = text;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool NoFaultsActive(JsonElement payload) =>
+        payload.ValueKind == JsonValueKind.Object
+        && payload.TryGetProperty("faults", out JsonElement faults)
+        && faults.ValueKind == JsonValueKind.Array
+        && faults.GetArrayLength() == 0;
+
+    /// <summary>
+    /// A step the runner builds itself (fault inject, heal, reset, active check). It has no capture and no expected error.
+    /// </summary>
+    private static UatStep Synthetic(string tool, JsonElement? args) =>
+        new(null, tool, args, new Dictionary<string, string>(StringComparer.Ordinal), null, null);
+
     private static StepOutcome Failed(string stepId, string code) =>
         new(false, "[" + code + "] step " + stepId + " failed", code, 0, null);
 
@@ -335,6 +495,23 @@ internal sealed class RowExecutor
     {
         (RowGrade grade, string text) = RowGrader.Grade(true, null, error, Array.Empty<(bool, ClauseState)>());
         return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>());
+    }
+
+    /// <summary>
+    /// A fault that is in place (injected, not yet healed), with the id the fault tool returned.
+    /// </summary>
+    private sealed record InjectedFault(UatFault Fault, string FaultId);
+
+    /// <summary>
+    /// The faults of one row: the ones in place, and the heal times the clauses read.
+    /// </summary>
+    private sealed class FaultState
+    {
+        public FaultState(Dictionary<string, DateTimeOffset> heals) => Heals = heals;
+
+        public List<InjectedFault> Active { get; } = [];
+
+        public Dictionary<string, DateTimeOffset> Heals { get; }
     }
 
     /// <summary>
@@ -362,5 +539,8 @@ internal sealed class RowExecutor
         public DateTimeOffset RunStart { get; }
 
         public bool LeaseLost { get; set; }
+
+        /// <summary>Set when a heal failed and faults were still in place after reset (R-REG). Every remaining row is BLOCKED.</summary>
+        public bool LabNotClean { get; set; }
     }
 }

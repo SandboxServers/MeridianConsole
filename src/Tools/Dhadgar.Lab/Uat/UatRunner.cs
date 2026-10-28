@@ -66,15 +66,16 @@ public sealed class UatRunner
 
     /// <summary>
     /// Creates the runner. With <paramref name="observations"/> and <paramref name="paths"/> every run and step is recorded in the run's <c>events.jsonl</c> (C18).
+    /// <paramref name="settle"/> is the wait after a row with faults before its clauses run; null uses <see cref="RowExecutor.DefaultSettle"/>.
     /// </summary>
-    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null, InvariantMonitor? invariants = null, InvariantLedger? ledger = null, DaemonIdentity? daemon = null)
+    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null, InvariantMonitor? invariants = null, InvariantLedger? ledger = null, DaemonIdentity? daemon = null, TimeSpan? settle = null)
     {
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(evaluator);
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
         _time = time ?? throw new ArgumentNullException(nameof(time));
-        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations);
+        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations, settle ?? RowExecutor.DefaultSettle);
         _observations = observations;
         _uatRuns = paths?.UatRuns;
         _invariants = invariants;

@@ -54,6 +54,82 @@ public sealed class UatRunnerTests
           heal = "after_steps"
         """;
 
+    private const string BlockingStepSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-faults"
+        title = "Runner faults"
+
+        [[row]]
+        id = "faulted"
+        title = "Faulted row"
+        expected = "pass"
+        depends_on = []
+
+          [[row.fault]]
+          id = "kill-it"
+          inject = { tool = "fault_kill", args = { target = "x" } }
+          start = "before_steps"
+          heal = "after_steps"
+
+          [[row.step]]
+          id = "boom"
+          tool = "unregistered_tool"
+        """;
+
+    private const string SecondInjectFailsSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-faults"
+        title = "Runner faults"
+
+        [[row]]
+        id = "faulted"
+        title = "Faulted row"
+        expected = "blocked"
+        depends_on = []
+
+          [[row.fault]]
+          id = "first"
+          inject = { tool = "fault_kill", args = { target = "x" } }
+          start = "before_steps"
+          heal = "after_steps"
+
+          [[row.fault]]
+          id = "second"
+          inject = { tool = "fault_toxic_add", args = { target = "y" } }
+          start = "before_steps"
+          heal = "never"
+        """;
+
+    private const string HealFailsSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-faults"
+        title = "Runner faults"
+
+        [[row]]
+        id = "faulted"
+        title = "Faulted row"
+        expected = "pass"
+        depends_on = []
+
+          [[row.fault]]
+          id = "kill-it"
+          inject = { tool = "fault_kill", args = { target = "x" } }
+          start = "before_steps"
+          heal = "after_steps"
+
+        [[row]]
+        id = "after"
+        title = "Row after a failed heal"
+        expected = "pass"
+        depends_on = []
+        """;
+
     [Fact]
     public async Task PlanOnly_TakesNoLease_AndReportsTheRequestedSeed()
     {
@@ -122,7 +198,63 @@ public sealed class UatRunnerTests
         Assert.True(run.IsSuccess);
         UatRowResult row = Assert.Single(run.Value!.Rows);
         Assert.Equal(RowGrade.Blocked, row.Grade);
-        Assert.Contains("L22", row.Reason, StringComparison.Ordinal);
+        // D-ML73: superseded placeholder assertion. The fault tool is unregistered here, so the inject fails and names the fault.
+        Assert.Contains("fault kill-it", row.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FaultRow_StepBlocks_FaultStillHealed()
+    {
+        var kill = new ScriptedTool("fault_kill", () => Result<object>.Success(new { fault_id = "f-kill-1" }));
+        var heal = new ScriptedTool("fault_heal", () => Result<object>.Success(new { healed = true }));
+        using var harness = new Harness(new FakeProbe(true), null, kill, heal);
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(BlockingStepSpec), null, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        UatRowResult row = Assert.Single(run.Value!.Rows);
+        Assert.Equal(RowGrade.Blocked, row.Grade);
+        Assert.Single(kill.Calls);
+        Assert.Equal("f-kill-1", Assert.Single(heal.Calls).FaultId);
+    }
+
+    [Fact]
+    public async Task FaultRow_InjectFails_IsBlockedAndOthersHealed()
+    {
+        var kill = new ScriptedTool("fault_kill", () => Result<object>.Success(new { fault_id = "f-kill-1" }));
+        var heal = new ScriptedTool("fault_heal", () => Result<object>.Success(new { healed = true }));
+        using var harness = new Harness(new FakeProbe(true), null, kill, heal);
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(SecondInjectFailsSpec), null, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        UatRowResult row = Assert.Single(run.Value!.Rows);
+        Assert.Equal(RowGrade.Blocked, row.Grade);
+        Assert.Contains("fault second", row.Reason, StringComparison.Ordinal);
+        Assert.Single(kill.Calls);
+        Assert.Equal("f-kill-1", Assert.Single(heal.Calls).FaultId);
+    }
+
+    [Fact]
+    public async Task HealFails_LabNotClean_RemainingRowsBlocked()
+    {
+        var kill = new ScriptedTool("fault_kill", () => Result<object>.Success(new { fault_id = "f-kill-1" }));
+        var heal = new ScriptedTool("fault_heal", () => Result<object>.Failure("[Lab.FaultHeal] heal refused"));
+        var active = new ScriptedTool("faults_active", () => Result<object>.Success(new { faults = new[] { new { fault_id = "f-kill-1" } } }));
+        using var harness = new Harness(new FakeProbe(true), null, kill, heal, active);
+
+        Result<UatRunResult> run = await harness.Runner.RunAsync(
+            new UatRunRequest(Load(HealFailsSpec), null, 1UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        Assert.Equal(2, run.Value!.Rows.Count);
+        Assert.Equal(RowGrade.Blocked, run.Value.Rows[0].Grade);
+        Assert.Contains("heal kill-it", run.Value.Rows[0].Reason, StringComparison.Ordinal);
+        Assert.Equal(RowGrade.Blocked, run.Value.Rows[1].Grade);
+        Assert.Contains("lab not clean", run.Value.Rows[1].Reason, StringComparison.Ordinal);
+        Assert.Single(kill.Calls);
     }
 
     [Fact]
@@ -273,6 +405,36 @@ public sealed class UatRunnerTests
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "ScriptedArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]
+    private sealed record ScriptedArgs(string? Target = null, string? FaultId = null);
+
+    /// <summary>
+    /// A tool under a given name (a fault or check tool) that answers with the scripted result and keeps every call's arguments.
+    /// </summary>
+    private sealed class ScriptedTool : LabTool<ScriptedArgs>
+    {
+        private readonly string _name;
+        private readonly Func<Result<object>> _answer;
+
+        public ScriptedTool(string name, Func<Result<object>> answer)
+        {
+            _name = name;
+            _answer = answer;
+        }
+
+        public override string Name => _name;
+
+        public override string Description => "test " + _name;
+
+        public List<ScriptedArgs> Calls { get; } = [];
+
+        protected override Task<Result<object>> ExecuteAsync(ScriptedArgs args, LabCallContext context, CancellationToken ct)
+        {
+            Calls.Add(args);
+            return Task.FromResult(_answer());
+        }
+    }
+
     /// <summary>
     /// Keeps every observation draft the runner appends, so a test can read what was recorded.
     /// </summary>
@@ -314,7 +476,7 @@ public sealed class UatRunnerTests
             _audit = new AuditLog(LabPaths.FromRoot(_root), new PathValidator(NullLogger<PathValidator>.Instance), redactor, time);
             Leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
             var dispatcher = new LabToolDispatcher(new LabToolRegistry(tools), Leases, _audit, redactor, time);
-            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), probe, time, observations);
+            Runner = new UatRunner(dispatcher, Leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), probe, time, observations, settle: TimeSpan.Zero);
         }
 
         public LeaseBook Leases { get; }
