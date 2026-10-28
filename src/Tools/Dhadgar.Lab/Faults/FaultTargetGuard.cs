@@ -73,6 +73,12 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
             return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] fault kind is not allowed on this target");
         }
 
+        if (target.Kind == LabTargetKind.Database)
+        {
+            // A database has no container. The registry entry is the whole target; DbFault checks its name before any SQL.
+            return Result<ResolvedTarget>.Success(new ResolvedTarget(target.TargetId, "database", target.Name, null, null));
+        }
+
         var containerId = target.ContainerId;
         if (target.Kind == LabTargetKind.Proxy)
         {
