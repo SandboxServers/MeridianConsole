@@ -2,20 +2,19 @@
 
 Ledger: [README.md](README.md). Packets and contract (C1-C20): [work-packets.md](work-packets.md).
 
-## State (2026-10-28, wave 3 review pass 3 ruled)
+## State (2026-10-28, wave 3 closed)
 
-- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only, not pushed). Campaign tip **`7cf1c5c`** (before this ruling's commit). Lab tests: 595 pass, 0 fail, 4 skip (non-Docker).
-- **Waves 1 and 2 are Integrated. Wave 3 and its fixes (W3-fix-A/B/C, pass-2 fixes) are merged locally.** Pass 3 returned `fix` with two doc-only notes; ruled in [worknotes/W3-ruling-2.md](worknotes/W3-ruling-2.md) as packet W3-fix-3. No code defect open.
+- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only, not pushed). Campaign tip **`c4719bb`** (plus this file's commit). Lab tests: 595 pass, 0 fail, 4 skip (non-Docker).
+- **Waves 1, 2 and 3 are Integrated.** Wave 3 = L12a, L13-L16, L48, L05f (lease_id envelope, D-ML66), L17, L18, W3-fix-A/B/C, pass-2 fixes, W3-fix-3. Ruling check `ship` (wave3-ruling-check.md); security pass 2 fixes merged. No defect open.
 - **D-ML39 ruled (owner, 2026-10-28): one PR at the end.** D-ML16 stands, so ops pushes once after L47.
 - **L00 is parked** (Windows containers off). Parked with it: L31-L33 and the container parts of wave 8.
 - Reviews happen at wave boundaries and at campaign end only (owner, 2026-10-27).
 
 ## Next actions (orchestrator)
 
-1. Dispatch one Sonnet `packet-coder` for W3-fix-3 (worktree `ml-w3f3`, branch `ml/w3-fix3-docs`), merge locally, then one fresh `packet-reviewer` ruling check (V1-V4 in the ruling). `ship` closes wave 3.
-2. Wave 4 starts with L16f (D-ML68 plus the W3-ruling-2 carry-overs). Ask the architect for its packet text.
-3. Before L36 or L49: ask the architect to rule on the doctor `ports` check, which flags the lab's own listeners (wave2-review-2 D4).
-4. Before L40: ask the architect for `worknotes/W8-sprint2-deltas.md`.
+1. Wave 4 starts with L16f (D-ML68 plus the W3-ruling-2 carry-overs). Ask the architect for its packet text.
+2. Before L36 or L49: ask the architect to rule on the doctor `ports` check, which flags the lab's own listeners (wave2-review-2 D4).
+3. Before L40: ask the architect for `worknotes/W8-sprint2-deltas.md`.
 
 ## Carry-overs
 
