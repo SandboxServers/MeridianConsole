@@ -105,7 +105,7 @@ public sealed class HistoryScenarioLoaderTests
     [Fact]
     public void Load_DuplicateId_Refused()
     {
-        string text = Valid + "\n" + Valid.Split("schema = 1\n\n")[1];
+        string text = Valid + "\n" + Valid[Valid.IndexOf("[[scenario]]", StringComparison.Ordinal)..];
 
         var outcome = HistoryScenarioLoader.LoadText("t.toml", text);
 
