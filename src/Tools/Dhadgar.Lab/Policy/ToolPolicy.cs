@@ -114,7 +114,6 @@ public static class ToolPolicy
         "fault_corrupt_file",
         "fault_db",
         // L21
-        "invariants_check",
         // L25
         "results_query",
         // L26
