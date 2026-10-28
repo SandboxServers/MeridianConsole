@@ -127,6 +127,7 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
             }
 
             entry.Spec = spec;
+            entry.LogPath = logPath.Value;
             entry.StopRequested = false;
             if (entry.Writer is null)
             {
@@ -485,15 +486,30 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
                 }
                 else
                 {
-                    entry.Restarts++;
+                    if (entry.Spec.Relaunch)
+                    {
+                        entry.Restarts++;
+                    }
+
                     bool relaunch = entry.Spec.Relaunch && _leases.Current is not null && TakeRelaunchBudget(entry, now);
                     if (!relaunch)
                     {
                         entry.State = entry.Spec.Relaunch ? StateCrashed : StateExited;
                     }
-                    else if (Launch(entry).IsFailure)
+                    else
                     {
-                        entry.State = StateCrashed;
+                        Result<StreamWriter> reopened = entry.LogPath is null
+                            ? Result<StreamWriter>.Failure("[Lab.Unavailable] no log path")
+                            : OpenWriter(entry.LogPath);
+                        if (reopened.IsSuccess)
+                        {
+                            entry.Writer = reopened.Value;
+                        }
+
+                        if (Launch(entry).IsFailure)
+                        {
+                            entry.State = StateCrashed;
+                        }
                     }
                 }
 
@@ -535,7 +551,14 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
     {
         _observer.Observe(entry.Name, rawLine.AsSpan());
         string redacted = _redactor.Redact(rawLine);
-        LogLine line = JsonLogLineParser.Parse(redacted, _time.GetUtcNow());
+        LogLine parsed = JsonLogLineParser.Parse(redacted, _time.GetUtcNow());
+        // The parser decodes JSON escapes, so a vault value written escaped in the child's output is only visible now.
+        LogLine line = parsed with
+        {
+            Level = _redactor.Redact(parsed.Level),
+            Category = _redactor.Redact(parsed.Category),
+            Message = _redactor.Redact(parsed.Message),
+        };
         entry.Ring.Add(line);
 
         lock (_gate)
@@ -588,6 +611,8 @@ public sealed class LabProcessSupervisor : ILabStatusSource, IDisposable
         public List<DateTimeOffset> Relaunches { get; } = [];
 
         public StreamWriter? Writer { get; set; }
+
+        public string? LogPath { get; set; }
 
         public TaskCompletionSource<bool>? ExitSignal { get; set; }
     }

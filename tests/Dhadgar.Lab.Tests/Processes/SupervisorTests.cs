@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Processes;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Tests.Processes;
@@ -99,5 +102,87 @@ public sealed class SupervisorTests
         Assert.Equal(0, status.Restarts);
         Assert.Equal("stopped", status.State);
         Assert.Null(status.Pid);
+    }
+
+    [SkippableFact]
+    public async Task Supervisor_Relaunch_KeepsWritingLogFile()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        using var harness = new SupervisorHarness();
+        _ = harness.Leases.Acquire("s1", "uat", null, false, null);
+        const string marker = "relaunch-marker";
+        LabProcessSpec spec = SupervisorHarness.ChildSpec("tc-keeplog", relaunch: true, "--lines", "1", "--message", marker, "--sleep-ms", "60000");
+        string file = Path.Combine(harness.Paths.Logs, "tc-keeplog.jsonl");
+
+        _ = await harness.Supervisor.StartAsync(spec, CancellationToken.None);
+        bool firstLogged = await SupervisorHarness.WaitUntilAsync(() => CountMarker(file, marker) >= 1, Patience);
+        Assert.True(firstLogged);
+
+        int pid = harness.Supervisor.Snapshot().Single().Pid!.Value;
+        using (Process child = Process.GetProcessById(pid))
+        {
+            child.Kill(entireProcessTree: true);
+        }
+
+        bool relaunched = await SupervisorHarness.WaitUntilAsync(
+            () => harness.Supervisor.Snapshot().Single() is { Restarts: >= 1, State: "running" }, Patience);
+        Assert.True(relaunched);
+
+        // The relaunched child prints the marker again on start; the first launch also printed it, so two lines are expected.
+        bool relogged = await SupervisorHarness.WaitUntilAsync(() => CountMarker(file, marker) >= 2, Patience);
+        Assert.True(relogged);
+    }
+
+    [SkippableFact]
+    public async Task Supervisor_EscapedVaultValue_IsRedactedAfterDecode()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        using var harness = new SupervisorHarness();
+        const string secret = "Tk+9/abcDEF123456";
+        _ = harness.Vault.Add(SecretKind.Password, secret.AsSpan());
+        // System.Text.Json writes '+' as +, so the raw line does not contain the plain value.
+        LabProcessSpec spec = SupervisorHarness.ChildSpec("tc-escaped", relaunch: true, "--lines", "1", "--json", "--message", "token " + secret, "--sleep-ms", "60000");
+
+        _ = await harness.Supervisor.StartAsync(spec, CancellationToken.None);
+        bool captured = await SupervisorHarness.WaitUntilAsync(() => (harness.Supervisor.ReadLines("tc-escaped").Value?.Count ?? 0) >= 1, Patience);
+        Assert.True(captured);
+        _ = await harness.Supervisor.StopAsync("tc-escaped");
+
+        string ring = string.Join("\n", harness.Supervisor.ReadLines("tc-escaped").Value!.Select(line => line.Message));
+        Assert.DoesNotContain(secret, ring, StringComparison.Ordinal);
+
+        string file = Path.Combine(harness.Paths.Logs, "tc-escaped.jsonl");
+        List<string> records = ReadSharedLines(file);
+        Assert.NotEmpty(records);
+        foreach (string record in records)
+        {
+            using JsonDocument document = JsonDocument.Parse(record);
+            string message = document.RootElement.GetProperty("Message").GetString() ?? string.Empty;
+            Assert.DoesNotContain(secret, message, StringComparison.Ordinal);
+        }
+    }
+
+    private static int CountMarker(string path, string marker) =>
+        ReadSharedLines(path).Count(line => line.Contains(marker, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Reads a log file the supervisor still holds open for writing. Returns no lines when the file does not exist yet.
+    /// </summary>
+    private static List<string> ReadSharedLines(string path)
+    {
+        var lines = new List<string>();
+        if (!File.Exists(path))
+        {
+            return lines;
+        }
+
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        while (reader.ReadLine() is { } line)
+        {
+            lines.Add(line);
+        }
+
+        return lines;
     }
 }

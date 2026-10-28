@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Dhadgar.Lab.Tests.Processes;
 
+[Collection("LabProcesses")]
 public sealed class ContainerLogFollowerTests
 {
     private static readonly DateTimeOffset Since = new(2026, 10, 27, 9, 55, 0, TimeSpan.Zero);
@@ -59,6 +60,20 @@ public sealed class ContainerLogFollowerTests
         Result<LabProcessSpec> built = follower.BuildSpec("api", "meridian-lab-api-1", Since);
 
         Assert.True(built.IsFailure);
+    }
+
+    [SkippableFact]
+    public async Task Follower_ExitingOnItsOwn_IsNotCountedAsRestart()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        using var harness = new SupervisorHarness();
+        LabProcessSpec spec = SupervisorHarness.ChildSpec("tc-follower", relaunch: false, "--exit", "3");
+
+        _ = await harness.Supervisor.StartAsync(spec, CancellationToken.None);
+
+        bool exited = await SupervisorHarness.WaitUntilAsync(() => harness.Supervisor.Snapshot().Single().State == "exited", TimeSpan.FromSeconds(30));
+        Assert.True(exited);
+        Assert.Equal(0, harness.Supervisor.Snapshot().Single().Restarts);
     }
 
     private static ContainerLogFollower CreateFollower(SupervisorHarness harness, Dictionary<string, string?> settings)
