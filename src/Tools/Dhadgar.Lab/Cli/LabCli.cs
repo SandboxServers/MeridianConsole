@@ -8,6 +8,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Shared.Results;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 
 namespace Dhadgar.Lab.Cli;
 
@@ -49,6 +51,39 @@ public static class LabCli
         status.Options.Add(statusPort);
         status.SetAction((parse, ct) => StatusAsync(parse.GetValue(statusPort), parse.GetValue(statusJson), Console.Out, Console.Error, ct));
         root.Subcommands.Add(status);
+
+        var uat = new Command("uat", "UAT spec runs, through the daemon's MCP endpoint (the uat_run tool).");
+        var uatRun = new Command("run", "Runs one UAT spec, or plans it with --plan-only. The token comes from MERIDIAN_LAB_TOKEN.");
+        var specs = new Option<string[]>("--specs") { Description = "Spec file (one per run).", AllowMultipleArgumentsPerToken = true };
+        var section = new Option<string?>("--section") { Description = "Section id to run." };
+        var rows = new Option<string?>("--rows") { Description = "Comma-separated row ids." };
+        var planOnly = new Option<bool>("--plan-only") { Description = "Validates and plans the spec without a lease." };
+        var label = new Option<string?>("--label") { Description = "Free text label stored with the run." };
+        var seed = new Option<ulong?>("--seed") { Description = "Run seed; a fresh one is drawn when omitted." };
+        var replay = new Option<string?>("--replay") { Description = "Bundle-relative <run_id>\\repro\\repro.toml. Excludes --specs, --section, --rows and --seed." };
+        var runJson = new Option<bool>("--json") { Description = "Prints the raw JSON result." };
+        var runPort = new Option<int>("--port") { Description = "Daemon port on 127.0.0.1.", DefaultValueFactory = _ => LabDefaults.DaemonPort };
+        foreach (var option in new Option[] { specs, section, rows, planOnly, label, seed, replay, runJson, runPort })
+        {
+            uatRun.Options.Add(option);
+        }
+
+        uatRun.SetAction((parse, ct) => UatRunAsync(
+            new UatRunCliOptions(
+                parse.GetValue(specs) ?? [],
+                parse.GetValue(section),
+                parse.GetValue(rows),
+                parse.GetValue(planOnly),
+                parse.GetValue(label),
+                parse.GetValue(seed),
+                parse.GetValue(replay),
+                parse.GetValue(runJson),
+                parse.GetValue(runPort)),
+            Console.Out,
+            Console.Error,
+            ct));
+        uat.Subcommands.Add(uatRun);
+        root.Subcommands.Add(uat);
 
         return root;
     }
@@ -134,6 +169,168 @@ public static class LabCli
         catch (HttpRequestException)
         {
             return Result<string>.Failure("[Lab.Unavailable] the daemon is not reachable on 127.0.0.1");
+        }
+    }
+
+    /// <summary>
+    /// The options of <c>uat run</c> after parsing.
+    /// </summary>
+    internal sealed record UatRunCliOptions(
+        string[] Specs,
+        string? Section,
+        string? Rows,
+        bool PlanOnly,
+        string? Label,
+        ulong? Seed,
+        string? Replay,
+        bool Json,
+        int Port);
+
+    /// <summary>
+    /// Runs one spec through the <c>uat_run</c> MCP tool and prints the seed, the summary table and the bundle path.
+    /// Exit codes follow C8 through <see cref="ExitCodeForOverall"/>; 2 for config or plan errors.
+    /// </summary>
+    internal static async Task<int> UatRunAsync(UatRunCliOptions options, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        var token = Environment.GetEnvironmentVariable(LabDefaults.TokenEnvVar);
+        if (string.IsNullOrWhiteSpace(token) || options.Port is < 1 or > 65535)
+        {
+            await error.WriteLineAsync("[Lab.InvalidArgument] " + LabDefaults.TokenEnvVar + " must be set and --port must be 1-65535").ConfigureAwait(false);
+            return 2;
+        }
+
+        var replayGiven = options.Replay is not null;
+        var specGiven = options.Specs.Length > 0 || options.Section is not null || options.Rows is not null || options.Seed is not null;
+        if ((replayGiven && specGiven) || (!replayGiven && options.Specs.Length != 1))
+        {
+            await error.WriteLineAsync("[Lab.InvalidArgument] give exactly one --specs file, or --replay alone (it excludes --specs, --section, --rows and --seed)").ConfigureAwait(false);
+            return 2;
+        }
+
+        var arguments = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (replayGiven)
+        {
+            arguments["replay"] = options.Replay;
+        }
+        else
+        {
+            var specPath = Path.GetFullPath(options.Specs[0]);
+            arguments["spec"] = Path.GetFileName(specPath);
+            arguments["specs_dir"] = Path.GetDirectoryName(specPath);
+            if (options.Section is not null)
+            {
+                arguments["sections"] = new[] { options.Section };
+            }
+
+            if (options.Rows is not null)
+            {
+                arguments["rows"] = options.Rows.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
+
+            if (options.Seed is { } seed)
+            {
+                arguments["seed"] = seed;
+            }
+        }
+
+        if (options.PlanOnly)
+        {
+            arguments["plan_only"] = true;
+        }
+
+        if (options.Label is not null)
+        {
+            arguments["label"] = options.Label;
+        }
+
+        var call = await CallLabToolAsync(options.Port, token, "uat_run", arguments, ct).ConfigureAwait(false);
+        if (call.IsFailure)
+        {
+            await error.WriteLineAsync(call.Error).ConfigureAwait(false);
+            return call.Error.StartsWith("[Lab.InvalidArgument]", StringComparison.Ordinal) || call.Error.StartsWith("[Lab.NotFound]", StringComparison.Ordinal) ? 2 : 1;
+        }
+
+        using var result = call.Value!;
+        var root = result.RootElement;
+        var overall = root.TryGetProperty("overall", out var overallNode) ? overallNode.GetString() : null;
+        if (options.Json)
+        {
+            await output.WriteLineAsync(root.GetRawText()).ConfigureAwait(false);
+            return options.PlanOnly ? 0 : ExitCodeForOverall(overall);
+        }
+
+        var runId = root.TryGetProperty("run_id", out var runIdNode) ? runIdNode.GetString() ?? "-" : "-";
+        await output.WriteLineAsync($"run {runId} seed {(root.TryGetProperty("seed", out var seedNode) ? seedNode.GetRawText() : "-")} overall {overall ?? "-"}").ConfigureAwait(false);
+        if (root.TryGetProperty("rows", out var rowsNode) && rowsNode.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var row in rowsNode.EnumerateArray())
+            {
+                var grade = row.TryGetProperty("grade", out var gradeNode) ? gradeNode.GetRawText() : "-";
+                var reason = row.TryGetProperty("reason", out var reasonNode) ? reasonNode.GetString() : null;
+                await output.WriteLineAsync($"{(row.TryGetProperty("row_id", out var rowId) ? rowId.GetString() : "-")} {grade} {reason}").ConfigureAwait(false);
+            }
+        }
+
+        if (!options.PlanOnly)
+        {
+            var bundle = Path.Combine(LabPaths.Create(LabDaemon.LoadSettings()).UatRuns, Path.GetFileName(runId));
+            await output.WriteLineAsync("bundle " + bundle).ConfigureAwait(false);
+        }
+
+        return options.PlanOnly ? 0 : ExitCodeForOverall(overall);
+    }
+
+    /// <summary>
+    /// Maps <c>overall</c> (C8) to the CLI exit code: 0 pass, 1 fail, 4 incomplete, 5 pass_with_known, 2 anything else.
+    /// </summary>
+    internal static int ExitCodeForOverall(string? overall) => overall switch
+    {
+        "pass" => 0,
+        "fail" => 1,
+        "incomplete" => 4,
+        "pass_with_known" => 5,
+        _ => 2,
+    };
+
+    /// <summary>
+    /// Calls one MCP tool on the loopback daemon's <c>/mcp</c> endpoint and returns the JSON text of its result.
+    /// The endpoint must pass <see cref="LabHosts.IsLabEndpoint"/>; redirects are not followed and no proxy is used.
+    /// </summary>
+    internal static async Task<Result<JsonDocument>> CallLabToolAsync(int port, string token, string toolName, IReadOnlyDictionary<string, object?> arguments, CancellationToken ct)
+    {
+        var uri = LoopbackUri(port, LabDefaults.McpPath);
+        if (!LabHosts.IsLabEndpoint(uri))
+        {
+            return Result<JsonDocument>.Failure("[Lab.Refused] the target is not a lab endpoint");
+        }
+
+        try
+        {
+            using var handler = new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false };
+            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(20) };
+            var transportOptions = new HttpClientTransportOptions
+            {
+                Endpoint = uri,
+                AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = "Bearer " + token },
+            };
+            await using var transport = new HttpClientTransport(transportOptions, http);
+            await using var client = await McpClient.CreateAsync(transport, cancellationToken: ct).ConfigureAwait(false);
+            var result = await client.CallToolAsync(toolName, arguments, cancellationToken: ct).ConfigureAwait(false);
+            var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+            if (result.IsError == true)
+            {
+                return Result<JsonDocument>.Failure(string.IsNullOrWhiteSpace(text) ? "[Lab.Tool] " + toolName + " failed" : text);
+            }
+
+            return Result<JsonDocument>.Success(JsonDocument.Parse(text));
+        }
+        catch (HttpRequestException)
+        {
+            return Result<JsonDocument>.Failure("[Lab.Unavailable] the daemon is not reachable on 127.0.0.1");
+        }
+        catch (JsonException)
+        {
+            return Result<JsonDocument>.Failure("[Lab.Tool] " + toolName + " returned a result that is not JSON");
         }
     }
 
