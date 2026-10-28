@@ -21,6 +21,7 @@ public sealed class BundleWriter : IUatRunSink
 {
     private const string SecretScanFailed = "secret scan failed";
     private const int MaxEvidenceChars = 16384;
+    private static readonly string[] SensitiveEvidenceWords = ["token", "secret", "password", "passwd", "key", "cookie", "authorization", "credential"];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -361,13 +362,93 @@ public sealed class BundleWriter : IUatRunSink
             return null;
         }
 
-        _redactor.Redact(value.GetRawText(), out int count);
+        // Values under a sensitive name (and the value of a sensitive header) are blanked first: the stack can mint
+        // tokens and cookies at run time that the vault never held.
+        string blanked = BlankSensitive(value);
+        _redactor.Redact(blanked, out int count);
         _passRedactions += count;
-        JsonElement redacted = _redactor.Redact(value);
+        JsonElement redacted;
+        using (JsonDocument parsed = JsonDocument.Parse(blanked))
+        {
+            redacted = _redactor.Redact(parsed.RootElement);
+        }
+
         string text = redacted.GetRawText();
         return text.Length > MaxEvidenceChars
             ? JsonSerializer.SerializeToElement(new { truncated = true, text = text[..MaxEvidenceChars] })
             : redacted;
+    }
+
+    /// <summary>
+    /// Writes the element as JSON with every scalar under a sensitive key replaced by <c>"[redacted]"</c>. A header
+    /// object (one with a sensitive <c>name</c>) has its <c>value</c> replaced too.
+    /// </summary>
+    private static string BlankSensitive(JsonElement element)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            WriteBlanked(writer, element, inSensitive: false);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteBlanked(Utf8JsonWriter writer, JsonElement element, bool inSensitive)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                bool sensitiveHeader = element.TryGetProperty("name", out JsonElement name)
+                    && name.ValueKind == JsonValueKind.String
+                    && IsSensitiveEvidenceName(name.GetString() ?? string.Empty);
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    bool child = inSensitive || IsSensitiveEvidenceName(property.Name)
+                        || (sensitiveHeader && property.Name == "value");
+                    WriteBlanked(writer, property.Value, child);
+                }
+
+                writer.WriteEndObject();
+                break;
+
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    WriteBlanked(writer, item, inSensitive);
+                }
+
+                writer.WriteEndArray();
+                break;
+
+            default:
+                if (inSensitive)
+                {
+                    writer.WriteStringValue("[redacted]");
+                }
+                else
+                {
+                    element.WriteTo(writer);
+                }
+
+                break;
+        }
+    }
+
+    private static bool IsSensitiveEvidenceName(string name)
+    {
+        foreach (string word in SensitiveEvidenceWords)
+        {
+            if (name.Contains(word, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void Write(string relative, string text)

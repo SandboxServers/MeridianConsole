@@ -198,6 +198,49 @@ public sealed class BundleSecretTests : IDisposable
         Assert.Equal("failed", run.RootElement.GetProperty("secret_scan").GetString());
     }
 
+    [Fact]
+    public void RuntimeMintedTokenAndCookie_InStepEvidence_AreBlankedInEveryFile()
+    {
+        // Not in the vault: the stack minted them at run time. The lease id and the CLI token never enter the evidence.
+        const string token = "eyJhbGciOiJIUzI1NiJ9.runtime-minted-w3fb";
+        const string cookie = "session=runtime-cookie-w3fb";
+        const string leaseId = "lease-w3fb-n5-0123456789";
+        const string cliToken = "cli-token-w3fb-n5-abcdef";
+        UatSpec spec = Load(LeakSpec);
+        JsonElement response = JsonSerializer.SerializeToElement(new
+        {
+            status = 200,
+            access_token = token,
+            headers = new Dictionary<string, string> { ["Set-Cookie"] = cookie },
+            header_list = new[] { new { name = "Set-Cookie", value = cookie } },
+        });
+        var step = new UatStepResult("probe", "http_request", true, null, null, null, 5L, response);
+        BundleWriter writer = CreateWriter();
+
+        writer.RunStarted("run-w3fb-n5", 7UL, spec);
+        writer.RowFinished(new UatRowResult(
+            "leaky",
+            RowGrade.Fail,
+            "leaked",
+            [new UatClauseResult("leak-clause", ClauseState.Unverified, "boom")],
+            [step]));
+        writer.RunFinished(new UatRunResult("run-w3fb-n5", 7UL, false, RunOverall.Incomplete, []));
+
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        string rowText = File.ReadAllText(Path.Combine(bundle, "rows", "bundle-secret", "leaky.json"));
+        Assert.Contains("[redacted]", rowText, StringComparison.Ordinal);
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            string text = File.ReadAllText(file);
+            Assert.DoesNotContain(token, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(cookie, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(leaseId, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(cliToken, text, StringComparison.Ordinal);
+        }
+    }
+
     public void Dispose()
     {
         _vault.Dispose();
