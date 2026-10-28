@@ -1,0 +1,21 @@
+schema = 1
+# C19's example (L53). The base world enrolls once on a clean stack; the variant adds 1500 ms of latency on the Nodes database
+# proxy. The enrollment must keep its outcome and its step status: latency is the experiment, not a reason to excuse a difference.
+id = "enroll-latency-invariance"
+relation = "equal_outcome"
+seed = 42
+
+[base]
+spec = "catalog/twin-enroll.toml"
+rows = ["enroll-once"]
+
+[variant]
+spec = "catalog/twin-enroll.toml"
+rows = ["enroll-once"]
+faults = [{ tool = "fault_toxic_add", args = { proxy = "p:nodes-postgres", toxic = "latency", stream = "downstream", attributes = { latency = 1500 } } }]
+
+[[compare]]
+pointer = "/rows/enroll-once/steps/enroll/status"
+
+[[compare]]
+pointer = "/rows/enroll-once/grade"
