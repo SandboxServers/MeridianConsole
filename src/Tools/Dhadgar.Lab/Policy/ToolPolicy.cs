@@ -111,15 +111,7 @@ public static class ToolPolicy
         // L21
         // L25
         // L26
-        // L27
-        "job_status",
-        "job_cancel",
-        "results_flake_check",
-        "hunt_model_run",
-        "triage_show",
-        "results_known_issue_set",
-        "triage_draft_issue",
-        "triage_mark",
+        // L27 (registered)
         // L28
         "fuzz_run",
         // L29
