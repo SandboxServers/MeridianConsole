@@ -58,6 +58,17 @@ public sealed class DriverToolListTests
     }
 
     [Fact]
+    public void Tools_HaveTheReadOnlyResultsTools()
+    {
+        string[] tools = ReadTools();
+
+        Assert.Contains(McpPrefix + "results_query", tools);
+        Assert.Contains(McpPrefix + "triage_show", tools);
+        Assert.Equal(LabGate.Open, ToolPolicy.GateFor("results_query"));
+        Assert.Equal(LabGate.Open, ToolPolicy.GateFor("triage_show"));
+    }
+
+    [Fact]
     public void Tools_HaveNoMachineGate()
     {
         foreach (string tool in ReadTools())

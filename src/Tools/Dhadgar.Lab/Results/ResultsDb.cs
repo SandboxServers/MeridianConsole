@@ -806,6 +806,26 @@ public sealed class ResultsDb : IDisposable
         }
     }
 
+    /// <summary>The stored text of one signature, or a not-found failure.</summary>
+    public Result<string> SignatureTextOf(string signatureId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        try
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "select text from signatures where signature_id = $id;";
+            command.Parameters.AddWithValue("$id", signatureId);
+            object? value = command.ExecuteScalar();
+            return value is string text
+                ? Result<string>.Success(text)
+                : Result<string>.Failure("[Lab.NotFound] no bucket with that id is in the results database");
+        }
+        catch (SqliteException ex)
+        {
+            return Result<string>.Failure("[Lab.IoError] results database read failed: SQLite " + ex.SqliteErrorCode);
+        }
+    }
+
     private Result<IReadOnlyList<BucketRecord>> ReadBuckets(string? signatureId)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

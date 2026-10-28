@@ -111,10 +111,6 @@ public static class ToolPolicy
         // L21
         // L25
         // L26
-        "triage_show",
-        "results_known_issue_set",
-        "triage_draft_issue",
-        "triage_mark",
         // L27
         "job_status",
         "job_cancel",

@@ -59,6 +59,18 @@ Faults belong in specs. A spec row names the fault it injects, and the driver ru
 - `fault_reset` is never in the driver's list (D-ML18). Only the orchestrating session may call it, and only after the driver has finished.
 - Read `invariants.json` from the bundle with `bundle_read` before you rely on an invariant result. `invariants_check` reruns the checks; it does not replace reading the file.
 
+## 5b. Triage
+
+Read `overall` from `uat_report`. Each entry of `new_failures` is a bucket the lab has not seen before (or has not matched to a known issue).
+
+1. Call `triage_show` for the bucket and give the user the signature, hit count, first and last run and the repro path.
+2. `triage_draft_issue` writes a draft under the lab's `triage/drafts` folder. Tell the user the draft path and the replay command it contains (`meridian-lab uat run --replay <repro>`).
+3. Never file anything. Drafts are text for the owner; no tool here calls GitHub.
+4. `triage_mark` and `results_known_issue_set` change a bucket's state or known-issue link. Use them only when the user says so, and only with an issue URL the user gave you.
+5. `known_failures` in the report are failures a known issue already explains. Report them, but they are not new work.
+
+The driver agent has only the read-only `results_query` and `triage_show`.
+
 ## 6. Troubleshooting
 
 | Symptom | First check | Next step |
