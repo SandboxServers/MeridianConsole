@@ -383,7 +383,6 @@ public sealed class HistoryRunJob
 
         // Faults are healed and the run is ended on every path once injection has begun (N7, S-N4): a failed or cancelled
         // step must not leave a fault active or the run open. The cleanup uses its own short deadline, not the caller's token.
-        using var cleanup = new CancellationTokenSource(CleanupCap);
         Result healed = Result.Success();
         Result<long> ended = Result<long>.Success(0);
         try
@@ -434,6 +433,7 @@ public sealed class HistoryRunJob
                 client.Dispose();
             }
 
+            using var cleanup = new CancellationTokenSource(CleanupCap);
             healed = await _environment.HealFaultsAsync(cleanup.Token).ConfigureAwait(false);
             ended = await _sink.EndRunAsync(request.RunId, cleanup.Token).ConfigureAwait(false);
         }

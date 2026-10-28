@@ -139,6 +139,23 @@ public sealed class HistoryRunJobTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_ClientPhaseLongerThanCleanupCap_StillHealsOnceAndEndsRun()
+    {
+        // The cleanup deadline is a wall-clock CancellationTokenSource, not the TimeProvider, so this test waits in real time
+        // for longer than the 30 s cleanup cap. The delay is placed before the client phase, which runs inside the same try.
+        var env = new RecordingEnvironment { InjectDelay = TimeSpan.FromSeconds(31) };
+        var sink = new OpenSink();
+        var job = new HistoryRunJob(env, sink, new Redactor(_vault), _vault, _handler, TimeProvider.System);
+
+        _ = await job.RunAsync(NewRequest(clients: 2), CancellationToken.None);
+
+        Assert.Equal(1, env.HealCalls);
+        Assert.False(env.HealCancelled);
+        Assert.Equal(1, sink.EndCalls);
+        Assert.False(sink.EndCancelled);
+    }
+
+    [Fact]
     public void RerunClientCounts_HalvesToTheFloor_AndStopsAtTheCap()
     {
         Assert.Equal(new[] { 4, 2 }, HistoryRunJob.RerunClientCounts(8, 20).ToArray());
@@ -250,6 +267,12 @@ public sealed class HistoryRunJobTests : IDisposable
 
         public int HealCalls { get; private set; }
 
+        /// <summary>Whether the heal was handed an already-cancelled token (a real heal cannot run on one).</summary>
+        public bool HealCancelled { get; private set; }
+
+        /// <summary>A delay inside <see cref="InjectFaultsAsync"/>, to make the run's client phase outlast the cleanup cap.</summary>
+        public TimeSpan? InjectDelay { get; init; }
+
         public Task<Result> ResetDataAsync(CancellationToken ct)
         {
             Calls++;
@@ -270,6 +293,11 @@ public sealed class HistoryRunJobTests : IDisposable
                 await CancelOnInject.CancelAsync().ConfigureAwait(false);
             }
 
+            if (InjectDelay is { } delay)
+            {
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+
             return Result.Success();
         }
 
@@ -277,7 +305,10 @@ public sealed class HistoryRunJobTests : IDisposable
         {
             Calls++;
             HealCalls++;
-            return Task.FromResult(Result.Success());
+            HealCancelled = ct.IsCancellationRequested;
+            return Task.FromResult(ct.IsCancellationRequested
+                ? Result.Failure("[Lab.Unavailable] the heal was cancelled")
+                : Result.Success());
         }
 
         public Task<Result<JsonElement>> SnapshotAsync(string tokenId, string run6, CancellationToken ct)
@@ -292,9 +323,19 @@ public sealed class HistoryRunJobTests : IDisposable
     {
         private long _seq;
 
+        public int EndCalls { get; private set; }
+
+        /// <summary>Whether the run was ended with an already-cancelled token.</summary>
+        public bool EndCancelled { get; private set; }
+
         public Result BeginRun(string runId, string runFolder) => Result.Success();
 
-        public Task<Result<long>> EndRunAsync(string runId, CancellationToken ct) => Task.FromResult(Result<long>.Success(0));
+        public Task<Result<long>> EndRunAsync(string runId, CancellationToken ct)
+        {
+            EndCalls++;
+            EndCancelled = ct.IsCancellationRequested;
+            return Task.FromResult(Result<long>.Success(0));
+        }
 
         public OpId NextOp(string runId, string actor) => new(runId, actor, Interlocked.Increment(ref _seq));
 
