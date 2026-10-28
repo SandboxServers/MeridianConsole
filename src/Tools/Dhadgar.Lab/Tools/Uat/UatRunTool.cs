@@ -1,5 +1,8 @@
+using System.Runtime.InteropServices;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.DependencyInjection;
@@ -115,33 +118,28 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             args.PlanOnly);
 
         UatRunner runner = _services.GetRequiredService<UatRunner>();
-        Result<UatRunResult> run = await runner.RunAsync(request, new NullRunSink(), ct).ConfigureAwait(false);
+        var sink = new BundleWriter(
+            _paths.UatRuns,
+            _validator,
+            _services.GetRequiredService<Redactor>(),
+            new SecretScanner(_services.GetRequiredService<SecretVault>()),
+            _services.GetRequiredService<TimeProvider>(),
+            buildId: "nobuild",
+            system: RuntimeInformation.OSDescription,
+            build: string.Empty,
+            label: args.Label);
+
+        Result<UatRunResult> run = await runner.RunAsync(request, sink, ct).ConfigureAwait(false);
         if (run.IsFailure)
         {
             return Result<object>.Failure(run.Error);
         }
 
+        if (sink.WriteError is not null)
+        {
+            return Result<object>.Failure(sink.WriteError);
+        }
+
         return Result<object>.Success(run.Value!);
-    }
-
-    /// <summary>
-    /// The sink for a tool call that returns its whole result in one reply; nothing is written anywhere.
-    /// </summary>
-    private sealed class NullRunSink : IUatRunSink
-    {
-        /// <inheritdoc />
-        public void RunStarted(string runId, ulong seed, UatSpec spec)
-        {
-        }
-
-        /// <inheritdoc />
-        public void RowFinished(UatRowResult row)
-        {
-        }
-
-        /// <inheritdoc />
-        public void RunFinished(UatRunResult result)
-        {
-        }
     }
 }
