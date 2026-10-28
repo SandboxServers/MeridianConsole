@@ -134,6 +134,7 @@ builder.Services.AddMassTransit(x =>
 // Configure authorization
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantScopedHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, ReservationCallerHandler>();
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("TenantScoped", policy =>
@@ -148,7 +149,8 @@ builder.Services.AddAuthorizationBuilder()
     {
         // Require authenticated user (via mTLS certificate in production)
         policy.RequireAuthenticatedUser();
-    });
+    })
+    .AddPolicy(ReservationCallerPolicy.Name, ReservationCallerPolicy.Configure);
 
 var app = builder.Build();
 
