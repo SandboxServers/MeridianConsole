@@ -14,3 +14,30 @@ state = "open"
 
 [issue.scope]
 sections = ["history"]
+
+[[issue]]
+id = "KI-F67"
+title = "Enroll returns 500 while nodes-postgres is cut (F67, D-ML87)"
+link = "docs/PROJECT-STATE.md"
+signatures = []
+patterns = [
+  '^http:5\d\d\|[^|]*\|POST\|/api/v1/agents/enroll\|',
+  '^inv:I1\|nodes\|',
+]
+state = "open"
+
+[issue.scope]
+services = ["nodes"]
+
+[[issue]]
+id = "KI-F69"
+title = "Nodes 400 without an application/problem+json body (F69, D-ML87)"
+link = "docs/PROJECT-STATE.md"
+signatures = []
+patterns = [
+  '^http:4\d\d\|[^|]*\|POST\|/api/v1/agents/enroll\|',
+]
+state = "open"
+
+[issue.scope]
+services = ["nodes"]
