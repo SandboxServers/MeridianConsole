@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Encodings.Web;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Nodes;
 using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Auth;
@@ -7,6 +9,7 @@ using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
+using Dhadgar.Nodes.Services.CommandSigning;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -95,6 +98,10 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ICaStorageProvider>();
             services.RemoveAll<ICertificateAuthorityService>();
             services.AddSingleton<ICertificateAuthorityService>(CaService);
+
+            // Replace the command signer with an in-memory key so tests never write a key file
+            services.RemoveAll<ICommandSigner>();
+            services.AddSingleton<ICommandSigner>(new TestCommandSigner());
 
             // Disable mTLS for testing (tests use TestNodesAuthHandler instead)
             services.Configure<MtlsOptions>(options =>
@@ -274,6 +281,39 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 /// <summary>
 /// Injects failures into SaveChanges for tests that need a database-side conflict the InMemory provider never raises.
 /// </summary>
+/// <summary>
+/// Command signer for tests: holds a fresh in-memory P-256 key, so no key file is written.
+/// </summary>
+public sealed class TestCommandSigner : ICommandSigner, IDisposable
+{
+    private readonly ECDsa _key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+    private readonly string _publicKeySpkiBase64;
+    private readonly string _keyId;
+
+    public TestCommandSigner()
+    {
+        var spki = _key.ExportSubjectPublicKeyInfo();
+        _publicKeySpkiBase64 = Convert.ToBase64String(spki);
+        _keyId = AgentCommandSigning.ComputeKeyId(spki);
+    }
+
+    public string PublicKeySpkiBase64 => _publicKeySpkiBase64;
+
+    public string KeyId => _keyId;
+
+    public Task InitializeAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    public AgentCommandEnvelope Sign(AgentCommandEnvelope unsigned)
+    {
+        ArgumentNullException.ThrowIfNull(unsigned);
+        var input = AgentCommandSigning.BuildSigningInput(unsigned);
+        var signature = _key.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        return unsigned with { Signature = Convert.ToBase64String(signature), SigningKeyId = _keyId };
+    }
+
+    public void Dispose() => _key.Dispose();
+}
+
 public sealed class SaveChangesFaultInjector : SaveChangesInterceptor
 {
     private volatile bool _throwConcurrency;

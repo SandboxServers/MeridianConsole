@@ -56,6 +56,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
 
         using var sut = h.Create();
@@ -93,6 +95,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
 
         using var sut = h.Create();
@@ -146,6 +150,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
 
         using var sut = h.Create();
@@ -354,6 +360,8 @@ public sealed class AgentBootstrapServiceTests
                 NodeId = NodeId,
                 OrganizationId = OrganizationId,
                 CertificateExpiry = DateTime.UtcNow.AddDays(90),
+                CommandSigningPublicKey = "test-signing-key",
+                CommandSigningKeyId = "test-signing-key-id",
             })));
         h.Store.SaveAsync(Arg.Any<AgentIdentity>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(Result.Failure("[AgentState.Io] disk full")));

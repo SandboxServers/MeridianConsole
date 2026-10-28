@@ -9,6 +9,7 @@ using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Hubs;
 using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
+using Dhadgar.Nodes.Services.CommandSigning;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Swagger;
@@ -66,6 +67,14 @@ builder.Services.AddScoped<ICapacityReservationService, CapacityReservationServi
 // Register Certificate Authority services
 builder.Services.AddSingleton<ICaStorageProvider, LocalFileCaStorageProvider>();
 builder.Services.AddSingleton<ICertificateAuthorityService, CertificateAuthorityService>();
+
+// Register command signing (ECDSA P-256 key that signs agent commands, D-09)
+builder.Services.AddOptions<CommandSigningOptions>()
+    .Bind(builder.Configuration.GetSection(CommandSigningOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<CommandSigningOptions>, CommandSigningOptions>();
+builder.Services.AddSingleton<ICommandSigner, CommandSigner>();
 
 // Register mTLS authentication services
 builder.Services.AddMtlsAuthentication(builder.Configuration);
@@ -176,6 +185,18 @@ try
 catch (Exception ex)
 {
     app.Logger.LogError(ex, "Failed to initialize Certificate Authority. Certificate operations will fail.");
+}
+
+// Load or create the command signing key on startup
+try
+{
+    var commandSigner = app.Services.GetRequiredService<ICommandSigner>();
+    await commandSigner.InitializeAsync();
+    app.Logger.LogInformation("Command signer initialized successfully");
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Failed to initialize command signer. Agent enrollment will fail.");
 }
 
 // Map endpoints

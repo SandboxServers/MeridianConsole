@@ -9,6 +9,39 @@ namespace Dhadgar.Contracts.Tests.Agents;
 
 public class AgentMessageLimitsTests
 {
+    [Theory]
+    [InlineData("Java.NoRuntimeForPlatform")]
+    [InlineData("AgentBusy")]
+    public void ErrorCodePattern_AcceptsCategoryCodes(string code)
+    {
+        Assert.Matches(AgentMessageLimits.ErrorCodePattern, code);
+    }
+
+    [Theory]
+    [InlineData("a b")]
+    [InlineData("x\ny")]
+    [InlineData("")]
+    [InlineData("AgentBusy\n")]
+    public void ErrorCodePattern_RejectsUnsafeCodes(string code)
+    {
+        Assert.DoesNotMatch(AgentMessageLimits.ErrorCodePattern, code);
+    }
+
+    [Fact]
+    public void ErrorCodePattern_BoundsLengthAtMaxErrorCodeLength()
+    {
+        Assert.Equal(64, AgentMessageLimits.MaxErrorCodeLength);
+        Assert.Matches(AgentMessageLimits.ErrorCodePattern, new string('a', AgentMessageLimits.MaxErrorCodeLength));
+        Assert.DoesNotMatch(AgentMessageLimits.ErrorCodePattern, new string('a', AgentMessageLimits.MaxErrorCodeLength + 1));
+    }
+
+    [Fact]
+    public void SigningConstants_MatchTheirEncodings()
+    {
+        Assert.Equal(AgentCommandSigning.SignatureBase64Length, Convert.ToBase64String(new byte[AgentCommandSigning.SignatureBytes]).Length);
+        Assert.Equal(AgentCommandSigning.KeyIdLength, AgentCommandSigning.ComputeKeyId(new byte[] { 1, 2, 3 }).Length);
+    }
+
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-10-26T12:00:00Z", CultureInfo.InvariantCulture);
     private static readonly Guid Id = Guid.Parse("44444444-4444-4444-4444-444444444444");
 

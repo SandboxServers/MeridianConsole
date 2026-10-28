@@ -82,8 +82,21 @@ public sealed class FileAgentStateStore : IAgentStateStore
                 return Result<StoredAgentState>.Failure("[AgentState.Corrupt] State file does not hold a valid identity");
             }
 
+            // The signing key is stored as a pair; one field without the other is a damaged file.
+            if ((state.CommandSigningPublicKey is null) != (state.CommandSigningKeyId is null))
+            {
+                _logger.LogWarning("Agent state file holds only one of the command signing key fields");
+                return Result<StoredAgentState>.Failure(
+                    "[AgentState.Corrupt] State file holds a partial command signing key");
+            }
+
             return Result<StoredAgentState>.Success(
-                new StoredAgentState(new AgentIdentity(state.NodeId, state.OrganizationId, state.EnrolledAt)));
+                new StoredAgentState(new AgentIdentity(
+                    state.NodeId,
+                    state.OrganizationId,
+                    state.EnrolledAt,
+                    state.CommandSigningPublicKey,
+                    state.CommandSigningKeyId)));
         }
         catch (FileNotFoundException)
         {
@@ -146,7 +159,12 @@ public sealed class FileAgentStateStore : IAgentStateStore
             TryDeleteTemp(tempPath);
 
             var json = JsonSerializer.SerializeToUtf8Bytes(
-                new AgentStateFile(identity.NodeId, identity.OrganizationId, identity.EnrolledAt), JsonOptions);
+                new AgentStateFile(
+                    identity.NodeId,
+                    identity.OrganizationId,
+                    identity.EnrolledAt,
+                    identity.CommandSigningPublicKey,
+                    identity.CommandSigningKeyId), JsonOptions);
 
             var created = _fileSecurity.CreateNew(tempPath);
             if (created.IsFailure)
@@ -225,5 +243,10 @@ public sealed class FileAgentStateStore : IAgentStateStore
     /// <summary>
     /// On-disk shape of the state file. Field names follow the web defaults (camelCase).
     /// </summary>
-    private sealed record AgentStateFile(Guid NodeId, Guid OrganizationId, DateTimeOffset EnrolledAt);
+    private sealed record AgentStateFile(
+        Guid NodeId,
+        Guid OrganizationId,
+        DateTimeOffset EnrolledAt,
+        string? CommandSigningPublicKey = null,
+        string? CommandSigningKeyId = null);
 }

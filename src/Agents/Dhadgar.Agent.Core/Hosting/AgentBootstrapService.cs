@@ -263,7 +263,9 @@ public sealed class AgentBootstrapService : BackgroundService
                 var identity = new AgentIdentity(
                     enrolled.Value!.NodeId,
                     enrolled.Value.OrganizationId,
-                    _time.GetUtcNow());
+                    _time.GetUtcNow(),
+                    enrolled.Value.CommandSigningPublicKey,
+                    enrolled.Value.CommandSigningKeyId);
                 _logger.LogInformation("Enrolled as node {NodeId}", identity.NodeId);
                 await SaveIdentityAsync(identity, stoppingToken);
                 return identity;
