@@ -216,7 +216,7 @@ internal sealed class RowExecutor
         if (faultError is not null)
         {
             InvariantReport blockedReport = await CheckRowAsync(spec, row, run, ct).ConfigureAwait(false);
-            return Blocked(row, faultError, AttributeViolations(blockedReport, spec, row), blockedReport.Errors, faults.Log);
+            return Blocked(row, faultError, AttributeViolations(blockedReport, spec, row), blockedReport.Errors, faults.Log, blockedReport.Skipped);
         }
 
         // A row with faults waits for the system to settle before its clauses read the state (Lab:Uat:SettleMs).
@@ -252,7 +252,7 @@ internal sealed class RowExecutor
             reason = expectFailure!;
         }
 
-        return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults, Violations: violations, CheckErrors: invariants.Errors, Faults: faults.Log);
+        return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults, Violations: violations, CheckErrors: invariants.Errors, Faults: faults.Log, Skipped: invariants.Skipped);
     }
 
     /// <summary>
@@ -557,10 +557,10 @@ internal sealed class RowExecutor
         return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>());
     }
 
-    private static UatRowResult Blocked(UatRow row, string error, IReadOnlyList<UatRowViolation>? violations = null, IReadOnlyList<InvariantCheckError>? checkErrors = null, IReadOnlyList<UatRowFault>? faultLog = null)
+    private static UatRowResult Blocked(UatRow row, string error, IReadOnlyList<UatRowViolation>? violations = null, IReadOnlyList<InvariantCheckError>? checkErrors = null, IReadOnlyList<UatRowFault>? faultLog = null, IReadOnlyList<InvariantSkip>? skipped = null)
     {
         (RowGrade grade, string text) = RowGrader.Grade(true, null, error, Array.Empty<(bool, ClauseState)>());
-        return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>(), Violations: violations, CheckErrors: checkErrors, Faults: faultLog);
+        return new UatRowResult(row.Id, grade, text, Array.Empty<UatClauseResult>(), Violations: violations, CheckErrors: checkErrors, Faults: faultLog, Skipped: skipped);
     }
 
     /// <summary>

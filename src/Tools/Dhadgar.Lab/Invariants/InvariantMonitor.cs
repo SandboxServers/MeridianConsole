@@ -30,11 +30,13 @@ public sealed class InvariantMonitor
 
         var violations = new List<InvariantViolation>();
         var errors = new List<InvariantCheckError>();
+        var skipped = new List<InvariantSkip>();
         foreach (CheckOutcome outcome in outcomes)
         {
             if (outcome.Error is null)
             {
                 violations.AddRange(outcome.Violations);
+                skipped.AddRange(outcome.Skipped);
             }
             else
             {
@@ -42,7 +44,7 @@ public sealed class InvariantMonitor
             }
         }
 
-        return new InvariantReport(violations, errors);
+        return new InvariantReport(violations, errors, skipped);
     }
 
     private static async Task<CheckOutcome> RunOneAsync(IInvariant invariant, InvariantWindow window, CancellationToken ct)
@@ -51,22 +53,30 @@ public sealed class InvariantMonitor
         timeout.CancelAfter(CheckTimeout);
         try
         {
+            if (invariant is ISkippableInvariant skippable)
+            {
+                Result<InvariantOutcome> withSkips = await skippable.CheckWithSkipsAsync(window, timeout.Token).ConfigureAwait(false);
+                return withSkips.IsSuccess
+                    ? new CheckOutcome(invariant.Id, withSkips.Value.Violations, withSkips.Value.Skipped.Select(s => s with { Row = window.Row }).ToArray(), null)
+                    : new CheckOutcome(invariant.Id, Array.Empty<InvariantViolation>(), Array.Empty<InvariantSkip>(), withSkips.Error);
+            }
+
             Result<IReadOnlyList<InvariantViolation>> result =
                 await invariant.CheckAsync(window, timeout.Token).ConfigureAwait(false);
             return result.IsSuccess
-                ? new CheckOutcome(invariant.Id, result.Value, null)
-                : new CheckOutcome(invariant.Id, Array.Empty<InvariantViolation>(), result.Error);
+                ? new CheckOutcome(invariant.Id, result.Value, Array.Empty<InvariantSkip>(), null)
+                : new CheckOutcome(invariant.Id, Array.Empty<InvariantViolation>(), Array.Empty<InvariantSkip>(), result.Error);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return new CheckOutcome(invariant.Id, Array.Empty<InvariantViolation>(), "timed out after 30 s");
+            return new CheckOutcome(invariant.Id, Array.Empty<InvariantViolation>(), Array.Empty<InvariantSkip>(), "timed out after 30 s");
         }
         catch (Exception ex)
         {
             // The exception message is not copied: it may carry a secret.
-            return new CheckOutcome(invariant.Id, Array.Empty<InvariantViolation>(), "check threw " + ex.GetType().Name);
+            return new CheckOutcome(invariant.Id, Array.Empty<InvariantViolation>(), Array.Empty<InvariantSkip>(), "check threw " + ex.GetType().Name);
         }
     }
 
-    private sealed record CheckOutcome(string InvariantId, IReadOnlyList<InvariantViolation> Violations, string? Error);
+    private sealed record CheckOutcome(string InvariantId, IReadOnlyList<InvariantViolation> Violations, IReadOnlyList<InvariantSkip> Skipped, string? Error);
 }

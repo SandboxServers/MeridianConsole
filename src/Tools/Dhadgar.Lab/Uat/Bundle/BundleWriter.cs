@@ -480,7 +480,7 @@ public sealed class BundleWriter : IUatRunSink
         {
             // Violations and check errors are already redacted by their invariants.
             InvariantReport invariants = result.Invariants ?? new InvariantReport([], []);
-            Write("invariants.json", JsonSerializer.Serialize(new { schema = 1, violations = invariants.Violations, errors = invariants.Errors }, JsonOptions));
+            Write("invariants.json", JsonSerializer.Serialize(new { schema = 1, violations = invariants.Violations, errors = invariants.Errors, skipped = invariants.Skipped ?? [] }, JsonOptions));
         }
 
         Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));

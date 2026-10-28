@@ -63,6 +63,7 @@ public sealed class InvariantsCheckTool : LabTool<InvariantsCheckArgs>
             count = report.Violations.Count,
             violations = report.Violations,
             errors = report.Errors,
+            skipped = report.Skipped ?? [],
         });
     }
 }

@@ -165,6 +165,36 @@ public static class InvariantWiring
     public static InvariantSqlQuery SqlQuery(LabDb db) =>
         (database, sql, ct) => db.QueryAsync(database, sql, NoParameters, QueryMaxRows, ct);
 
+    /// <summary>The schema probe: true once EF has created its history table in the service's database.</summary>
+    internal const string MigratedProbeSql = "select to_regclass('public.\"__EFMigrationsHistory\"') is not null as migrated";
+
+    /// <summary>
+    /// The I2/I3 applicability gate (C11, D-ML80): StackNotUp with no lab_reader credential, SchemaNotReady before the service
+    /// migrates, otherwise Applicable. A probe failure is returned as a failure (a check error), never as a skip.
+    /// </summary>
+    public static InvariantDbGate DbGate(LabDb db, LabCredentialRefs refs) =>
+        async (database, ct) =>
+        {
+            if (refs.Get(LabCredentialRefs.LabReader) is null)
+            {
+                return Result<DbApplicability>.Success(DbApplicability.StackNotUp);
+            }
+
+            Result<DbQueryResult> probe = await db.QueryAsync(database, MigratedProbeSql, NoParameters, 1, ct).ConfigureAwait(false);
+            if (probe.IsFailure)
+            {
+                return Result<DbApplicability>.Failure(probe.Error);
+            }
+
+            bool migrated = probe.Value.Rows.Count == 1
+                && probe.Value.Rows[0].TryGetValue("migrated", out JsonElement value)
+                && value.ValueKind == JsonValueKind.True;
+            return Result<DbApplicability>.Success(migrated ? DbApplicability.Applicable : DbApplicability.SchemaNotReady);
+        };
+
+    /// <summary>True once stack_up has created the lab credentials (I5's queues and proxies exist only then).</summary>
+    public static Func<bool> StackCreated(LabCredentialRefs refs) => () => refs.Get(LabCredentialRefs.LabReader) is not null;
+
     /// <summary>
     /// The daemon-token predicate for I4: true when the line carries the token's bytes. The token is never copied into a string.
     /// </summary>

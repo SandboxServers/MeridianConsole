@@ -26,7 +26,7 @@ public sealed record OutboxTarget(
 /// I2: the outbox drains (C11). A message row older than 60 s, or a state row not delivered after 60 s, is a violation.
 /// The Nodes target is the only one here; L34 and L36 add the others.
 /// </summary>
-public sealed class I2OutboxInvariant : IInvariant
+public sealed class I2OutboxInvariant : ISkippableInvariant
 {
     private const int EvidenceRows = 5;
     private const int MaxDetailLength = 512;
@@ -40,28 +40,70 @@ public sealed class I2OutboxInvariant : IInvariant
     private readonly IReadOnlyList<OutboxTarget> _targets;
     private readonly InvariantSqlQuery _query;
     private readonly Redactor _redactor;
+    private readonly InvariantDbGate? _gate;
 
     /// <summary>
     /// Creates the check over the given outbox targets. The query delegate is the lab's reader-role <see cref="LabDb"/>.
+    /// The optional gate answers whether a database can be checked yet (D-ML80); without it every database is checked.
     /// </summary>
-    public I2OutboxInvariant(IEnumerable<OutboxTarget> targets, InvariantSqlQuery query, Redactor redactor)
+    public I2OutboxInvariant(IEnumerable<OutboxTarget> targets, InvariantSqlQuery query, Redactor redactor, InvariantDbGate? gate = null)
     {
         _targets = targets.ToArray();
         _query = query;
         _redactor = redactor;
+        _gate = gate;
     }
 
     /// <inheritdoc />
     public string Id => "I2";
 
+    /// <summary>The skip reason written for a database that is not applicable yet (shared with I3).</summary>
+    internal static string SkipReason(DbApplicability state) =>
+        state == DbApplicability.StackNotUp ? "stack not up (no lab credentials)" : "schema not created by its service yet";
+
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct)
     {
+        Result<InvariantOutcome> outcome = await CheckWithSkipsAsync(window, ct).ConfigureAwait(false);
+        return outcome.IsSuccess
+            ? Result<IReadOnlyList<InvariantViolation>>.Success(outcome.Value.Violations)
+            : Result<IReadOnlyList<InvariantViolation>>.Failure(outcome.Error);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<InvariantOutcome>> CheckWithSkipsAsync(InvariantWindow window, CancellationToken ct)
+    {
         var violations = new List<InvariantViolation>();
+        var skipped = new List<InvariantSkip>();
+        var gated = new Dictionary<string, DbApplicability>(StringComparer.Ordinal);
 
         foreach (OutboxTarget target in _targets)
         {
             ct.ThrowIfCancellationRequested();
+            if (_gate is not null)
+            {
+                if (!gated.TryGetValue(target.Database, out DbApplicability state))
+                {
+                    Result<DbApplicability> answer = await _gate(target.Database, ct).ConfigureAwait(false);
+                    if (answer.IsFailure)
+                    {
+                        return Result<InvariantOutcome>.Failure($"{target.Service} applicability: {answer.Error}");
+                    }
+
+                    state = answer.Value;
+                    gated[target.Database] = state;
+                    if (state != DbApplicability.Applicable)
+                    {
+                        skipped.Add(new InvariantSkip(Id, "db:" + target.Database, SkipReason(state)));
+                    }
+                }
+
+                if (state != DbApplicability.Applicable)
+                {
+                    continue;
+                }
+            }
+
             var probes = new[]
             {
                 (CheckId: "outbox-message-stuck",
@@ -77,7 +119,7 @@ public sealed class I2OutboxInvariant : IInvariant
                 Result<DbQueryResult> query = await _query(target.Database, probe.Sql, ct).ConfigureAwait(false);
                 if (query.IsFailure)
                 {
-                    return Result<IReadOnlyList<InvariantViolation>>.Failure($"{target.Service} {probe.CheckId}: {query.Error}");
+                    return Result<InvariantOutcome>.Failure($"{target.Service} {probe.CheckId}: {query.Error}");
                 }
 
                 if (query.Value.RowCount == 0)
@@ -102,6 +144,6 @@ public sealed class I2OutboxInvariant : IInvariant
             }
         }
 
-        return Result<IReadOnlyList<InvariantViolation>>.Success(violations);
+        return Result<InvariantOutcome>.Success(new InvariantOutcome(violations, skipped));
     }
 }

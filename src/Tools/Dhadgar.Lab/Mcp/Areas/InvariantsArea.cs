@@ -44,11 +44,13 @@ public static partial class LabMcpServer
         services.AddSingleton<IInvariant>(sp => new I2OutboxInvariant(
             I2OutboxInvariant.NodesTargets,
             InvariantWiring.SqlQuery(sp.GetRequiredService<LabDb>()),
-            sp.GetRequiredService<Redactor>()));
+            sp.GetRequiredService<Redactor>(),
+            InvariantWiring.DbGate(sp.GetRequiredService<LabDb>(), sp.GetRequiredService<LabCredentialRefs>())));
         services.AddSingleton<IInvariant>(sp => new I3DbChecksInvariant(
             Path.Combine(sp.GetRequiredService<LabPaths>().RepoRoot, "docs", "guides", "uat-specs", "invariants"),
             InvariantWiring.SqlQuery(sp.GetRequiredService<LabDb>()),
-            sp.GetRequiredService<Redactor>()));
+            sp.GetRequiredService<Redactor>(),
+            InvariantWiring.DbGate(sp.GetRequiredService<LabDb>(), sp.GetRequiredService<LabCredentialRefs>())));
         services.AddSingleton(sp => new I4SecretLeakInvariant(
             sp.GetRequiredService<SecretVault>(),
             sp.GetRequiredService<Redactor>(),
@@ -67,7 +69,8 @@ public static partial class LabMcpServer
                 rabbit.ListQueuesAsync,
                 toxiproxy.ListProxiesAsync,
                 book.ListActive,
-                InvariantWiring.BackupFolders(sp.GetRequiredService<LabPaths>()));
+                InvariantWiring.BackupFolders(sp.GetRequiredService<LabPaths>()),
+                InvariantWiring.StackCreated(sp.GetRequiredService<LabCredentialRefs>()));
         });
         services.AddSingleton<IInvariant>(sp =>
         {

@@ -15,7 +15,7 @@ public sealed record BrokerQueueInfo(string Name, long Messages);
 /// proxies with no active proxy fault in <c>FaultBook</c>, and fault backup folders with no active fault.
 /// Each source is a delegate so the check runs on fakes; the real wiring is in <c>InvariantsArea</c> (L21 step 4).
 /// </summary>
-public sealed class I5OrphanInvariant : IInvariant
+public sealed class I5OrphanInvariant : ISkippableInvariant
 {
     /// <summary>The docker label every lab container carries.</summary>
     public const string LabelFilter = "label=meridian-lab=1";
@@ -28,9 +28,11 @@ public sealed class I5OrphanInvariant : IInvariant
     private readonly Func<CancellationToken, Task<Result<IReadOnlyList<ProxySpec>>>> _proxies;
     private readonly Func<IReadOnlyList<ActiveFault>> _activeFaults;
     private readonly Func<IReadOnlyList<string>> _backupFolders;
+    private readonly Func<bool>? _stackCreated;
 
     /// <summary>
-    /// Creates the check over the five sources.
+    /// Creates the check over the five sources. <paramref name="stackCreated"/> says whether stack_up has created the lab
+    /// credentials; while it is false the queues and proxies do not exist yet and are skipped (D-ML80). Null means always created.
     /// </summary>
     public I5OrphanInvariant(
         Func<CancellationToken, Task<Result<IReadOnlyList<string>>>> containers,
@@ -38,7 +40,8 @@ public sealed class I5OrphanInvariant : IInvariant
         Func<CancellationToken, Task<Result<IReadOnlyList<BrokerQueueInfo>>>> queues,
         Func<CancellationToken, Task<Result<IReadOnlyList<ProxySpec>>>> proxies,
         Func<IReadOnlyList<ActiveFault>> activeFaults,
-        Func<IReadOnlyList<string>> backupFolders)
+        Func<IReadOnlyList<string>> backupFolders,
+        Func<bool>? stackCreated = null)
     {
         _containers = containers ?? throw new ArgumentNullException(nameof(containers));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -46,6 +49,7 @@ public sealed class I5OrphanInvariant : IInvariant
         _proxies = proxies ?? throw new ArgumentNullException(nameof(proxies));
         _activeFaults = activeFaults ?? throw new ArgumentNullException(nameof(activeFaults));
         _backupFolders = backupFolders ?? throw new ArgumentNullException(nameof(backupFolders));
+        _stackCreated = stackCreated;
     }
 
     /// <inheritdoc />
@@ -81,7 +85,17 @@ public sealed class I5OrphanInvariant : IInvariant
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct)
     {
+        Result<InvariantOutcome> outcome = await CheckWithSkipsAsync(window, ct).ConfigureAwait(false);
+        return outcome.IsSuccess
+            ? Result<IReadOnlyList<InvariantViolation>>.Success(outcome.Value.Violations)
+            : Result<IReadOnlyList<InvariantViolation>>.Failure(outcome.Error);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<InvariantOutcome>> CheckWithSkipsAsync(InvariantWindow window, CancellationToken ct)
+    {
         var violations = new List<InvariantViolation>();
+        var skipped = new List<InvariantSkip>();
 
         Result<IReadOnlyList<string>> containers = await _containers(ct).ConfigureAwait(false);
         if (containers.IsFailure)
@@ -98,34 +112,44 @@ public sealed class I5OrphanInvariant : IInvariant
             }
         }
 
-        Result<IReadOnlyList<BrokerQueueInfo>> queues = await _queues(ct).ConfigureAwait(false);
-        if (queues.IsFailure)
-        {
-            return Failed("queues", queues.Error);
-        }
-
-        foreach (BrokerQueueInfo queue in queues.Value)
-        {
-            bool failureQueue = queue.Name.EndsWith("_error", StringComparison.Ordinal) || queue.Name.EndsWith("_skipped", StringComparison.Ordinal);
-            if (failureQueue && queue.Messages > 0)
-            {
-                violations.Add(Violation(queue.Name, "queue-backlog", $"queue {queue.Name} holds {queue.Messages} message(s)", window));
-            }
-        }
-
         IReadOnlyList<ActiveFault> active = _activeFaults();
-        Result<IReadOnlyList<ProxySpec>> proxies = await _proxies(ct).ConfigureAwait(false);
-        if (proxies.IsFailure)
+        bool stack = _stackCreated?.Invoke() ?? true;
+        if (!stack)
         {
-            return Failed("proxies", proxies.Error);
+            // D-ML80: the queues and proxies belong to the stack that stack_up creates; before that they are not applicable.
+            skipped.Add(new InvariantSkip(Id, "queues", I2OutboxInvariant.SkipReason(DbApplicability.StackNotUp)));
+            skipped.Add(new InvariantSkip(Id, "proxies", I2OutboxInvariant.SkipReason(DbApplicability.StackNotUp)));
         }
-
-        bool proxyFaultActive = active.Any(fault => fault.Kind == ProxyDisableKind);
-        foreach (ProxySpec proxy in proxies.Value)
+        else
         {
-            if (!proxy.Enabled && !proxyFaultActive)
+            Result<IReadOnlyList<BrokerQueueInfo>> queues = await _queues(ct).ConfigureAwait(false);
+            if (queues.IsFailure)
             {
-                violations.Add(Violation(proxy.Name, "disabled-proxy-unexplained", $"proxy {proxy.Name} is disabled with no active proxy fault", window));
+                return Failed("queues", queues.Error);
+            }
+
+            foreach (BrokerQueueInfo queue in queues.Value)
+            {
+                bool failureQueue = queue.Name.EndsWith("_error", StringComparison.Ordinal) || queue.Name.EndsWith("_skipped", StringComparison.Ordinal);
+                if (failureQueue && queue.Messages > 0)
+                {
+                    violations.Add(Violation(queue.Name, "queue-backlog", $"queue {queue.Name} holds {queue.Messages} message(s)", window));
+                }
+            }
+
+            Result<IReadOnlyList<ProxySpec>> proxies = await _proxies(ct).ConfigureAwait(false);
+            if (proxies.IsFailure)
+            {
+                return Failed("proxies", proxies.Error);
+            }
+
+            bool proxyFaultActive = active.Any(fault => fault.Kind == ProxyDisableKind);
+            foreach (ProxySpec proxy in proxies.Value)
+            {
+                if (!proxy.Enabled && !proxyFaultActive)
+                {
+                    violations.Add(Violation(proxy.Name, "disabled-proxy-unexplained", $"proxy {proxy.Name} is disabled with no active proxy fault", window));
+                }
             }
         }
 
@@ -138,12 +162,12 @@ public sealed class I5OrphanInvariant : IInvariant
             }
         }
 
-        return Result<IReadOnlyList<InvariantViolation>>.Success(violations);
+        return Result<InvariantOutcome>.Success(new InvariantOutcome(violations, skipped));
     }
 
     private InvariantViolation Violation(string service, string checkId, string detail, InvariantWindow window) =>
         new(Id, service, checkId, detail.Length > 512 ? detail[..512] : detail, window.To, null);
 
-    private static Result<IReadOnlyList<InvariantViolation>> Failed(string source, string error) =>
-        Result<IReadOnlyList<InvariantViolation>>.Failure($"{source}: {error}");
+    private static Result<InvariantOutcome> Failed(string source, string error) =>
+        Result<InvariantOutcome>.Failure($"{source}: {error}");
 }

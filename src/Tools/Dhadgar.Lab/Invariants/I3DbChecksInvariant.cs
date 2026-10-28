@@ -17,7 +17,7 @@ public sealed record DbCheck(string Service, string CheckId, string Database, st
 /// Each check runs with <see cref="MaxRows"/> as its row cap; the first <see cref="EvidenceRows"/> rows are the evidence.
 /// A check whose query fails makes the whole invariant a check error; the other checks still run.
 /// </summary>
-public sealed class I3DbChecksInvariant : IInvariant
+public sealed class I3DbChecksInvariant : ISkippableInvariant
 {
     /// <summary>The row cap for each check.</summary>
     public const int MaxRows = 50;
@@ -31,15 +31,18 @@ public sealed class I3DbChecksInvariant : IInvariant
     private readonly string _directory;
     private readonly InvariantSqlQuery _query;
     private readonly Redactor _redactor;
+    private readonly InvariantDbGate? _gate;
 
     /// <summary>
     /// Creates the check over the TOML files in <paramref name="checksDirectory"/>. <c>soak.toml</c> belongs to I7 and is skipped.
+    /// The optional gate answers whether a database can be checked yet (D-ML80); without it every database is checked.
     /// </summary>
-    public I3DbChecksInvariant(string checksDirectory, InvariantSqlQuery query, Redactor redactor)
+    public I3DbChecksInvariant(string checksDirectory, InvariantSqlQuery query, Redactor redactor, InvariantDbGate? gate = null)
     {
         _directory = checksDirectory;
         _query = query;
         _redactor = redactor;
+        _gate = gate;
     }
 
     /// <inheritdoc />
@@ -48,18 +51,54 @@ public sealed class I3DbChecksInvariant : IInvariant
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct)
     {
+        Result<InvariantOutcome> outcome = await CheckWithSkipsAsync(window, ct).ConfigureAwait(false);
+        return outcome.IsSuccess
+            ? Result<IReadOnlyList<InvariantViolation>>.Success(outcome.Value.Violations)
+            : Result<IReadOnlyList<InvariantViolation>>.Failure(outcome.Error);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<InvariantOutcome>> CheckWithSkipsAsync(InvariantWindow window, CancellationToken ct)
+    {
         Result<IReadOnlyList<DbCheck>> checks = LoadChecks(_directory);
         if (checks.IsFailure)
         {
-            return Result<IReadOnlyList<InvariantViolation>>.Failure(checks.Error);
+            return Result<InvariantOutcome>.Failure(checks.Error);
         }
 
         var violations = new List<InvariantViolation>();
+        var skipped = new List<InvariantSkip>();
+        var gated = new Dictionary<string, DbApplicability>(StringComparer.Ordinal);
         string? firstError = null;
 
         foreach (DbCheck check in checks.Value)
         {
             ct.ThrowIfCancellationRequested();
+            if (_gate is not null)
+            {
+                if (!gated.TryGetValue(check.Database, out DbApplicability state))
+                {
+                    Result<DbApplicability> answer = await _gate(check.Database, ct).ConfigureAwait(false);
+                    if (answer.IsFailure)
+                    {
+                        firstError ??= $"{check.Service}/{check.CheckId}: {answer.Error}";
+                        continue;
+                    }
+
+                    state = answer.Value;
+                    gated[check.Database] = state;
+                    if (state != DbApplicability.Applicable)
+                    {
+                        skipped.Add(new InvariantSkip(Id, "db:" + check.Database, I2OutboxInvariant.SkipReason(state)));
+                    }
+                }
+
+                if (state != DbApplicability.Applicable)
+                {
+                    continue;
+                }
+            }
+
             Result<DbQueryResult> result = await _query(check.Database, check.Sql, ct).ConfigureAwait(false);
             if (result.IsFailure)
             {
@@ -88,8 +127,8 @@ public sealed class I3DbChecksInvariant : IInvariant
         }
 
         return firstError is null
-            ? Result<IReadOnlyList<InvariantViolation>>.Success(violations)
-            : Result<IReadOnlyList<InvariantViolation>>.Failure(firstError);
+            ? Result<InvariantOutcome>.Success(new InvariantOutcome(violations, skipped))
+            : Result<InvariantOutcome>.Failure(firstError);
     }
 
     /// <summary>

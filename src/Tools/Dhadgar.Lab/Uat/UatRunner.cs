@@ -34,7 +34,7 @@ public sealed record UatStepResult(string Id, string? Tool, bool Ok, string? Err
 /// One recorded row: its grade, the reason, and its clauses (empty when the row stopped before its clauses ran). The steps
 /// go only to the bundle.
 /// </summary>
-public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null, [property: JsonIgnore] DateTimeOffset? StartedAt = null, [property: JsonIgnore] DateTimeOffset? EndedAt = null, [property: JsonIgnore] string? Member = null, [property: JsonIgnore] IReadOnlyList<UatRowViolation>? Violations = null, [property: JsonIgnore] IReadOnlyList<InvariantCheckError>? CheckErrors = null, [property: JsonIgnore] IReadOnlyList<UatRowFault>? Faults = null);
+public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null, [property: JsonIgnore] DateTimeOffset? StartedAt = null, [property: JsonIgnore] DateTimeOffset? EndedAt = null, [property: JsonIgnore] string? Member = null, [property: JsonIgnore] IReadOnlyList<UatRowViolation>? Violations = null, [property: JsonIgnore] IReadOnlyList<InvariantCheckError>? CheckErrors = null, [property: JsonIgnore] IReadOnlyList<UatRowFault>? Faults = null, [property: JsonIgnore] IReadOnlyList<InvariantSkip>? Skipped = null);
 
 /// <summary>
 /// One fault a row injected: the spec id and tool, the fault id the tool returned, when it went in and came out, and the heal error if any.
@@ -192,7 +192,11 @@ public sealed class UatRunner
 
             var invariantReport = new InvariantReport(
                 startReport.Violations.Concat(rows.SelectMany(r => r.Violations ?? []).Select(v => v.Violation)).Concat(endReport.Violations).ToArray(),
-                startReport.Errors.Concat(rows.SelectMany(r => r.CheckErrors ?? [])).Concat(endReport.Errors).ToArray());
+                startReport.Errors.Concat(rows.SelectMany(r => r.CheckErrors ?? [])).Concat(endReport.Errors).ToArray(),
+                (startReport.Skipped ?? []).Select(s => s with { Row = "(run-start)" })
+                    .Concat(rows.SelectMany(r => r.Skipped ?? []))
+                    .Concat((endReport.Skipped ?? []).Select(s => s with { Row = "(run-end)" }))
+                    .ToArray());
 
             // Violations and check errors outside every row window (the run start and end checkpoints) become synthetic rows (C8, D-ML24).
             foreach (UatRowResult synthetic in SyntheticRows(startReport.Violations.Concat(endReport.Violations).ToArray(), startReport.Errors.Concat(endReport.Errors).ToArray()))
