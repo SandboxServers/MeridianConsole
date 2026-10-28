@@ -124,6 +124,123 @@ public sealed class BundleSecretTests : IDisposable
         }
     }
 
+    [Fact]
+    public void VaultValueWithPipe_InClauseError_IsRedactedBeforeTheLedgerRenders()
+    {
+        // A pipe is the character the ledger renderer rewrites, so the value is redacted before rendering.
+        const string planted = "a|b-secret-w3fb";
+        _ = _vault.Add(SecretKind.Password, planted);
+        UatSpec spec = Load(LeakSpec);
+        JsonElement observed = JsonSerializer.SerializeToElement(new { echo = planted });
+        BundleWriter writer = CreateWriter();
+
+        writer.RunStarted("run-w3fb-pipe", 5UL, spec);
+        writer.RowFinished(new UatRowResult(
+            "leaky",
+            RowGrade.Fail,
+            "leaked",
+            [new UatClauseResult("leak-clause", ClauseState.Unverified, "boom " + planted, observed)]));
+        writer.RunFinished(new UatRunResult("run-w3fb-pipe", 5UL, false, RunOverall.Incomplete, []));
+
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        string escapedPipe = "a\\|b-secret-w3fb";
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            string text = File.ReadAllText(file);
+            Assert.DoesNotContain(planted, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(escapedPipe, text, StringComparison.Ordinal);
+        }
+
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
+        string scan = run.RootElement.GetProperty("secret_scan").GetString()!;
+        Assert.True(scan is "passed" or "failed");
+    }
+
+    [Fact]
+    public void DisposedEvidence_SetsWriteError_RunsTheScan_AndMarksTheRunFailed()
+    {
+        const string planted = "planted-secret-w3fb-n4";
+        _ = _vault.Add(SecretKind.Password, planted);
+        UatSpec spec = Load(LeakSpec);
+        BundleWriter writer = CreateWriter();
+
+        writer.RunStarted("run-w3fb-disposed", 6UL, spec);
+        string folder = Path.Combine(_uatRuns, _time.GetUtcNow().UtcDateTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "-abcd1234-run-w3fb-disposed");
+        _ = Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "ledger.md"), "planted " + planted);
+
+        // An element whose document is disposed: reading it throws, so the evidence write fails part way through.
+        JsonElement disposed;
+        using (JsonDocument document = JsonDocument.Parse("{\"echo\":1}"))
+        {
+            disposed = document.RootElement;
+        }
+
+        writer.RowFinished(new UatRowResult(
+            "leaky",
+            RowGrade.Fail,
+            "leaked",
+            [new UatClauseResult("leak-clause", ClauseState.Unverified, "boom", disposed)]));
+        writer.RunFinished(new UatRunResult("run-w3fb-disposed", 6UL, false, RunOverall.Incomplete, []));
+
+        Assert.NotNull(writer.WriteError);
+        Assert.Contains("[Lab.Unavailable]", writer.WriteError, StringComparison.Ordinal);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(planted, File.ReadAllText(file), StringComparison.Ordinal);
+        }
+
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
+        Assert.Equal("failed", run.RootElement.GetProperty("secret_scan").GetString());
+    }
+
+    [Fact]
+    public void RuntimeMintedTokenAndCookie_InStepEvidence_AreBlankedInEveryFile()
+    {
+        // Not in the vault: the stack minted them at run time. The lease id and the CLI token never enter the evidence.
+        const string token = "eyJhbGciOiJIUzI1NiJ9.runtime-minted-w3fb";
+        const string cookie = "session=runtime-cookie-w3fb";
+        const string leaseId = "lease-w3fb-n5-0123456789";
+        const string cliToken = "cli-token-w3fb-n5-abcdef";
+        UatSpec spec = Load(LeakSpec);
+        JsonElement response = JsonSerializer.SerializeToElement(new
+        {
+            status = 200,
+            access_token = token,
+            headers = new Dictionary<string, string> { ["Set-Cookie"] = cookie },
+            header_list = new[] { new { name = "Set-Cookie", value = cookie } },
+        });
+        var step = new UatStepResult("probe", "http_request", true, null, null, null, 5L, response);
+        BundleWriter writer = CreateWriter();
+
+        writer.RunStarted("run-w3fb-n5", 7UL, spec);
+        writer.RowFinished(new UatRowResult(
+            "leaky",
+            RowGrade.Fail,
+            "leaked",
+            [new UatClauseResult("leak-clause", ClauseState.Unverified, "boom")],
+            [step]));
+        writer.RunFinished(new UatRunResult("run-w3fb-n5", 7UL, false, RunOverall.Incomplete, []));
+
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        string rowText = File.ReadAllText(Path.Combine(bundle, "rows", "bundle-secret", "leaky.json"));
+        Assert.Contains("[redacted]", rowText, StringComparison.Ordinal);
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            string text = File.ReadAllText(file);
+            Assert.DoesNotContain(token, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(cookie, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(leaseId, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(cliToken, text, StringComparison.Ordinal);
+        }
+    }
+
     public void Dispose()
     {
         _vault.Dispose();

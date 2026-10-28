@@ -21,6 +21,7 @@ public sealed class BundleWriter : IUatRunSink
 {
     private const string SecretScanFailed = "secret scan failed";
     private const int MaxEvidenceChars = 16384;
+    private static readonly string[] SensitiveEvidenceWords = ["token", "secret", "password", "passwd", "key", "cookie", "authorization", "credential"];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -48,6 +49,7 @@ public sealed class BundleWriter : IUatRunSink
     private readonly List<string> _warnings = [];
     private LiveFingerprintParts? _live;
     private int _passRedactions;
+    private int _rowRedactions;
 
     /// <summary>
     /// Creates the writer for one run.
@@ -153,12 +155,22 @@ public sealed class BundleWriter : IUatRunSink
         _results.Add(row);
         UatRow? spec = _spec?.Rows.FirstOrDefault(candidate => candidate.Id == row.RowId);
         string section = _spec?.Section.Id ?? string.Empty;
+        // Free text is redacted before the renderer rewrites it, so a vault value the renderer would reshape is still matched.
+        // The count is kept so that run.json still reports these redactions in the next write pass.
+        string Scrub(string text)
+        {
+            string redacted = _redactor.Redact(text, out int count);
+            _rowRedactions += count;
+            return redacted;
+        }
+
         var clauses = (spec?.Expect ?? Array.Empty<UatClause>()).Select(clause =>
         {
             UatClauseResult? result = row.Clauses.FirstOrDefault(candidate => candidate.Id == clause.Id);
-            return new LedgerClause(clause.Id, clause.Pointer ?? clause.Source, result?.State ?? ClauseState.Unverified, result?.Error, clause.Source, clause.Required);
+            string? error = result?.Error is null ? null : Scrub(result.Error);
+            return new LedgerClause(clause.Id, Scrub(clause.Pointer ?? clause.Source), result?.State ?? ClauseState.Unverified, error, clause.Source, clause.Required);
         }).ToList();
-        _rows.Add(new LedgerRow(section, row.RowId, spec?.Title ?? row.RowId, spec?.Expected ?? string.Empty, row.Grade, _time.GetUtcNow(), clauses));
+        _rows.Add(new LedgerRow(section, row.RowId, Scrub(spec?.Title ?? row.RowId), Scrub(spec?.Expected ?? string.Empty), row.Grade, _time.GetUtcNow(), clauses));
     }
 
     /// <inheritdoc />
@@ -195,6 +207,24 @@ public sealed class BundleWriter : IUatRunSink
                 }
             }
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)
+        {
+            WriteError = "[Lab.Unavailable] the bundle could not be written";
+            MarkFailedAfterWriteError(checkedFolder.Value);
+        }
+    }
+
+    /// <summary>
+    /// Runs the scan after a failed write, so a half-written bundle is not left unscanned, then records
+    /// <c>secret_scan = failed</c> with text that carries no evidence.
+    /// </summary>
+    private void MarkFailedAfterWriteError(string folder)
+    {
+        try
+        {
+            _ = _scanner.ScanFolder(folder);
+            Write("run.json", "{\n  \"secret_scan\": \"failed\"\n}\n");
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             WriteError = "[Lab.Unavailable] the bundle could not be written";
@@ -203,7 +233,7 @@ public sealed class BundleWriter : IUatRunSink
 
     private void WriteAll(UatRunResult result, bool secretFailed, IReadOnlyList<string> removed)
     {
-        _passRedactions = 0;
+        _passRedactions = _rowRedactions;
         UatSpec spec = _spec!;
         IReadOnlyList<LedgerRow> rows = secretFailed
             ? _rows.Select(row => row with { Grade = RowGrade.Blocked, Title = row.Row, Expected = string.Empty, Clauses = Array.Empty<LedgerClause>() }).ToList()
@@ -332,13 +362,93 @@ public sealed class BundleWriter : IUatRunSink
             return null;
         }
 
-        _redactor.Redact(value.GetRawText(), out int count);
+        // Values under a sensitive name (and the value of a sensitive header) are blanked first: the stack can mint
+        // tokens and cookies at run time that the vault never held.
+        string blanked = BlankSensitive(value);
+        _redactor.Redact(blanked, out int count);
         _passRedactions += count;
-        JsonElement redacted = _redactor.Redact(value);
+        JsonElement redacted;
+        using (JsonDocument parsed = JsonDocument.Parse(blanked))
+        {
+            redacted = _redactor.Redact(parsed.RootElement);
+        }
+
         string text = redacted.GetRawText();
         return text.Length > MaxEvidenceChars
             ? JsonSerializer.SerializeToElement(new { truncated = true, text = text[..MaxEvidenceChars] })
             : redacted;
+    }
+
+    /// <summary>
+    /// Writes the element as JSON with every scalar under a sensitive key replaced by <c>"[redacted]"</c>. A header
+    /// object (one with a sensitive <c>name</c>) has its <c>value</c> replaced too.
+    /// </summary>
+    private static string BlankSensitive(JsonElement element)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            WriteBlanked(writer, element, inSensitive: false);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteBlanked(Utf8JsonWriter writer, JsonElement element, bool inSensitive)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                bool sensitiveHeader = element.TryGetProperty("name", out JsonElement name)
+                    && name.ValueKind == JsonValueKind.String
+                    && IsSensitiveEvidenceName(name.GetString() ?? string.Empty);
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    bool child = inSensitive || IsSensitiveEvidenceName(property.Name)
+                        || (sensitiveHeader && property.Name == "value");
+                    WriteBlanked(writer, property.Value, child);
+                }
+
+                writer.WriteEndObject();
+                break;
+
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    WriteBlanked(writer, item, inSensitive);
+                }
+
+                writer.WriteEndArray();
+                break;
+
+            default:
+                if (inSensitive)
+                {
+                    writer.WriteStringValue("[redacted]");
+                }
+                else
+                {
+                    element.WriteTo(writer);
+                }
+
+                break;
+        }
+    }
+
+    private static bool IsSensitiveEvidenceName(string name)
+    {
+        foreach (string word in SensitiveEvidenceWords)
+        {
+            if (name.Contains(word, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void Write(string relative, string text)

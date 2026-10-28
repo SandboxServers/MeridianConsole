@@ -280,4 +280,31 @@ public sealed class UatAttestTests : IDisposable
         Assert.Contains("[Lab.InvalidArgument]", result.Error);
         Assert.Equal(before, File.ReadAllText(rowPath));
     }
+
+    [Fact]
+    public void Attest_NoteWithFormatSeparatorOrTagCharacter_IsRefused()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
+        string before = File.ReadAllText(rowPath);
+        string[] notes =
+        [
+            "ok" + char.ConvertFromUtf32(0xE0041) + "dleh",
+            "ok" + "\u202E" + " dleh",
+            "a" + "\u2028" + "b",
+            "a" + "\u2029" + "b",
+        ];
+
+        foreach (string note in notes)
+        {
+            Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+                note, At, Attester, redactor, _validator);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("[Lab.InvalidArgument]", result.Error);
+        }
+
+        Assert.Equal(before, File.ReadAllText(rowPath));
+    }
 }

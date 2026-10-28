@@ -124,19 +124,42 @@ public static class LedgerRenderer
     }
 
     /// <summary>
-    /// Makes free text safe for one ledger line: CR, LF and every other control character become a space.
+    /// Makes free text safe for one ledger line: CR, LF and every other control, format, separator, private-use or
+    /// unassigned code point become a space.
     /// </summary>
     /// <param name="text">The free text.</param>
     internal static string Line(string text)
     {
         var builder = new StringBuilder(text.Length);
-        foreach (char c in text.Replace("\r\n", " ", StringComparison.Ordinal))
+        foreach (Rune rune in text.Replace("\r\n", " ", StringComparison.Ordinal).EnumerateRunes())
         {
-            builder.Append(char.IsControl(c) ? ' ' : c);
+            builder.Append(IsUnsafeRune(rune) ? " " : rune.ToString());
         }
 
         return builder.ToString();
     }
+
+    /// <summary>
+    /// True when the text holds a code point that can hide, reorder or split content on a ledger line: a control,
+    /// format (bidi overrides and tag characters), line or paragraph separator, private-use or unassigned code point.
+    /// </summary>
+    /// <param name="text">The free text.</param>
+    internal static bool IsUnsafeText(string text)
+    {
+        foreach (Rune rune in text.EnumerateRunes())
+        {
+            if (IsUnsafeRune(rune))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsUnsafeRune(Rune rune) => Rune.GetUnicodeCategory(rune) is UnicodeCategory.Control
+        or UnicodeCategory.Format or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator
+        or UnicodeCategory.PrivateUse or UnicodeCategory.OtherNotAssigned;
 
     /// <summary>
     /// Makes free text safe for one markdown table cell: a line (see <see cref="Line"/>) with each pipe escaped.
