@@ -107,13 +107,6 @@ public static class ToolPolicy
         // L15
         // L16
         // L19
-        "fault_list_targets",
-        "faults_active",
-        "fault_toxic_add",
-        "fault_proxy_disable",
-        "fault_partition",
-        "fault_heal",
-        "fault_reset",
         // L20
         "fault_kill",
         "fault_pause",

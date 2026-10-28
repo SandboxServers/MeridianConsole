@@ -131,6 +131,13 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
             null));
     }
 
+    /// <summary>
+    /// The fault kinds a target of this kind accepts. Shown by <c>fault_list_targets</c>; the guard checks the same table.
+    /// </summary>
+    /// <param name="kind">The target kind.</param>
+    public static IReadOnlySet<string> AllowedFor(LabTargetKind kind) =>
+        AllowedKinds.TryGetValue(kind, out IReadOnlySet<string>? allowed) ? allowed : new HashSet<string>(StringComparer.Ordinal);
+
     private static bool IdMatches(string stored, string live) =>
         string.Equals(stored, live, StringComparison.Ordinal)
         || (stored.Length >= 12 && live.StartsWith(stored, StringComparison.Ordinal));

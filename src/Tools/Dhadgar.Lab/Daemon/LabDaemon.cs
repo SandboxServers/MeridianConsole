@@ -285,9 +285,8 @@ public sealed class LabDaemon : IAsyncDisposable
         builder.Services.AddHostedService<LeaseEndRelay>();
         builder.Services.AddSingleton<ILabStatusSource, LeaseStatusSource>();
 
-        // Processes and logs (L07): one supervisor, one job object, the raw-line observer and the fault targets (L19 replaces NoFaults).
+        // Processes and logs (L07): one supervisor, one job object and the raw-line observer. The fault targets come from FaultBook (L19, FaultsArea).
         builder.Services.AddSingleton<IRawLineObserver, NullRawLineObserver>();
-        builder.Services.AddSingleton<IFaultTargets, NoFaults>();
         builder.Services.AddSingleton<LogPathGuard>();
         builder.Services.AddSingleton<LabProcessSupervisor>();
         builder.Services.AddSingleton<ILabStatusSource>(sp => sp.GetRequiredService<LabProcessSupervisor>());
