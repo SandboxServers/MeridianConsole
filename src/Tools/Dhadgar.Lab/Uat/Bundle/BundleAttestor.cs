@@ -140,7 +140,7 @@ public static class BundleAttestor
                 return Result<string>.Failure(written.Error);
             }
 
-            List<LedgerRow> rows = ReadRows(folder);
+            List<LedgerRow> rows = ReadRows(folder, redactor);
             string system = runObj["os"]?.GetValue<string>() ?? string.Empty;
             written = WriteRedacted(folder, "ledger.md", LedgerRenderer.Render(runId, system, string.Empty, rows), redactor, validator);
             if (written.IsFailure)
@@ -176,7 +176,7 @@ public static class BundleAttestor
         _ => RowGrade.Unverified,
     };
 
-    private static List<LedgerRow> ReadRows(string folder)
+    private static List<LedgerRow> ReadRows(string folder, Redactor redactor)
     {
         var rows = new List<LedgerRow>();
         string rowsRoot = Path.Combine(folder, "rows");
@@ -184,6 +184,10 @@ public static class BundleAttestor
         {
             return rows;
         }
+
+        // Free text is redacted before the renderer rewrites it (see BundleWriter.RowFinished).
+        string Scrub(string text) => redactor.Redact(text);
+        string? ScrubOrNull(string? text) => text is null ? null : redactor.Redact(text);
 
         foreach (string file in Directory.EnumerateFiles(rowsRoot, "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
         {
@@ -194,23 +198,23 @@ public static class BundleAttestor
 
             var clauses = (obj["clauses"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(clause => new LedgerClause(
                 clause["id"]?.GetValue<string>() ?? string.Empty,
-                clause["pointer"]?.GetValue<string>() ?? string.Empty,
+                Scrub(clause["pointer"]?.GetValue<string>() ?? string.Empty),
                 ParseState(clause["state"]?.GetValue<string>()),
-                clause["error"]?.GetValue<string>(),
+                ScrubOrNull(clause["error"]?.GetValue<string>()),
                 clause["source"]?.GetValue<string>() ?? string.Empty,
                 clause["required"]?.GetValue<bool>() ?? true)).ToList();
             var attestations = (obj["attestations"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(attestation => new LedgerAttestation(
                 attestation["clause_id"]?.GetValue<string>() ?? string.Empty,
                 attestation["verdict"]?.GetValue<string>() ?? string.Empty,
-                attestation["note"]?.GetValue<string>() ?? string.Empty,
+                Scrub(attestation["note"]?.GetValue<string>() ?? string.Empty),
                 attestation["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
                 attestation["lease_owner"]?.GetValue<string>() ?? string.Empty,
                 attestation["caller"]?.GetValue<string>() ?? string.Empty)).ToList();
             rows.Add(new LedgerRow(
                 obj["section"]?.GetValue<string>() ?? string.Empty,
                 obj["id"]?.GetValue<string>() ?? string.Empty,
-                obj["title"]?.GetValue<string>() ?? string.Empty,
-                obj["expected"]?.GetValue<string>() ?? string.Empty,
+                Scrub(obj["title"]?.GetValue<string>() ?? string.Empty),
+                Scrub(obj["expected"]?.GetValue<string>() ?? string.Empty),
                 ParseGrade(obj["grade"]?.GetValue<string>()),
                 obj["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UnixEpoch,
                 clauses,

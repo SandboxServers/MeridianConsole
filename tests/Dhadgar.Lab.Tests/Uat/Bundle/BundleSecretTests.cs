@@ -124,6 +124,40 @@ public sealed class BundleSecretTests : IDisposable
         }
     }
 
+    [Fact]
+    public void VaultValueWithPipe_InClauseError_IsRedactedBeforeTheLedgerRenders()
+    {
+        // A pipe is the character the ledger renderer rewrites, so the value is redacted before rendering.
+        const string planted = "a|b-secret-w3fb";
+        _ = _vault.Add(SecretKind.Password, planted);
+        UatSpec spec = Load(LeakSpec);
+        JsonElement observed = JsonSerializer.SerializeToElement(new { echo = planted });
+        BundleWriter writer = CreateWriter();
+
+        writer.RunStarted("run-w3fb-pipe", 5UL, spec);
+        writer.RowFinished(new UatRowResult(
+            "leaky",
+            RowGrade.Fail,
+            "leaked",
+            [new UatClauseResult("leak-clause", ClauseState.Unverified, "boom " + planted, observed)]));
+        writer.RunFinished(new UatRunResult("run-w3fb-pipe", 5UL, false, RunOverall.Incomplete, []));
+
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        string escapedPipe = "a\\|b-secret-w3fb";
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            string text = File.ReadAllText(file);
+            Assert.DoesNotContain(planted, text, StringComparison.Ordinal);
+            Assert.DoesNotContain(escapedPipe, text, StringComparison.Ordinal);
+        }
+
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
+        string scan = run.RootElement.GetProperty("secret_scan").GetString()!;
+        Assert.True(scan is "passed" or "failed");
+    }
+
     public void Dispose()
     {
         _vault.Dispose();

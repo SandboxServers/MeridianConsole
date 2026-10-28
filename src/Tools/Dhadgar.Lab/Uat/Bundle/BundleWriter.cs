@@ -48,6 +48,7 @@ public sealed class BundleWriter : IUatRunSink
     private readonly List<string> _warnings = [];
     private LiveFingerprintParts? _live;
     private int _passRedactions;
+    private int _rowRedactions;
 
     /// <summary>
     /// Creates the writer for one run.
@@ -153,12 +154,22 @@ public sealed class BundleWriter : IUatRunSink
         _results.Add(row);
         UatRow? spec = _spec?.Rows.FirstOrDefault(candidate => candidate.Id == row.RowId);
         string section = _spec?.Section.Id ?? string.Empty;
+        // Free text is redacted before the renderer rewrites it, so a vault value the renderer would reshape is still matched.
+        // The count is kept so that run.json still reports these redactions in the next write pass.
+        string Scrub(string text)
+        {
+            string redacted = _redactor.Redact(text, out int count);
+            _rowRedactions += count;
+            return redacted;
+        }
+
         var clauses = (spec?.Expect ?? Array.Empty<UatClause>()).Select(clause =>
         {
             UatClauseResult? result = row.Clauses.FirstOrDefault(candidate => candidate.Id == clause.Id);
-            return new LedgerClause(clause.Id, clause.Pointer ?? clause.Source, result?.State ?? ClauseState.Unverified, result?.Error, clause.Source, clause.Required);
+            string? error = result?.Error is null ? null : Scrub(result.Error);
+            return new LedgerClause(clause.Id, Scrub(clause.Pointer ?? clause.Source), result?.State ?? ClauseState.Unverified, error, clause.Source, clause.Required);
         }).ToList();
-        _rows.Add(new LedgerRow(section, row.RowId, spec?.Title ?? row.RowId, spec?.Expected ?? string.Empty, row.Grade, _time.GetUtcNow(), clauses));
+        _rows.Add(new LedgerRow(section, row.RowId, Scrub(spec?.Title ?? row.RowId), Scrub(spec?.Expected ?? string.Empty), row.Grade, _time.GetUtcNow(), clauses));
     }
 
     /// <inheritdoc />
@@ -203,7 +214,7 @@ public sealed class BundleWriter : IUatRunSink
 
     private void WriteAll(UatRunResult result, bool secretFailed, IReadOnlyList<string> removed)
     {
-        _passRedactions = 0;
+        _passRedactions = _rowRedactions;
         UatSpec spec = _spec!;
         IReadOnlyList<LedgerRow> rows = secretFailed
             ? _rows.Select(row => row with { Grade = RowGrade.Blocked, Title = row.Row, Expected = string.Empty, Clauses = Array.Empty<LedgerClause>() }).ToList()
