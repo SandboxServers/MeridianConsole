@@ -876,6 +876,14 @@
         "resolved": "10.0.13",
         "contentHash": "ZlcywyQ7FJmgOV2nctdfOEPGS0kRK8T2CdOoPr6F4HPYpmjSo6GQfj3yTyOzNO6B+2U84/JKSPkJJMWqLmVsMw=="
       },
+      "System.ServiceProcess.ServiceController": {
+        "type": "Transitive",
+        "resolved": "10.0.14",
+        "contentHash": "riMCsgbGKGonluQzaRRrx5ney0QNkEmepNTrHD3QpqU/ICZpCJsyAWNi6JESTxqYkc+9kNQ55aZaH/n3xOjSlg==",
+        "dependencies": {
+          "System.Diagnostics.EventLog": "10.0.14"
+        }
+      },
       "System.Threading.RateLimiting": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -945,6 +953,17 @@
           "OpenTelemetry.Instrumentation.Process": "[1.14.0-beta.2, )",
           "OpenTelemetry.Instrumentation.Runtime": "[1.20.1, )",
           "SIPSorcery": "[10.0.17, )",
+          "SecurityCodeScan.VS2019": "[5.6.7, )"
+        }
+      },
+      "dhadgar.agent.windows": {
+        "type": "Project",
+        "dependencies": {
+          "Dhadgar.Agent.Core": "[1.0.0, )",
+          "Dhadgar.Contracts": "[1.0.0, )",
+          "Dhadgar.Shared": "[1.0.0, )",
+          "Microsoft.Extensions.Hosting.WindowsServices": "[10.0.14, )",
+          "Microsoft.Extensions.Logging.EventLog": "[10.0.14, )",
           "SecurityCodeScan.VS2019": "[5.6.7, )"
         }
       },
@@ -1027,6 +1046,12 @@
           "ModelContextProtocol.AspNetCore": "[2.3.0, )",
           "System.CommandLine": "[2.0.14, )",
           "Tomlyn": "[2.10.1, )"
+        }
+      },
+      "meridian-lab-probe": {
+        "type": "Project",
+        "dependencies": {
+          "Dhadgar.Contracts": "[1.0.0, )"
         }
       },
       "AspNetCore.HealthChecks.NpgSql": {
@@ -1223,6 +1248,17 @@
           "Microsoft.Extensions.Logging.EventLog": "10.0.14",
           "Microsoft.Extensions.Logging.EventSource": "10.0.14",
           "Microsoft.Extensions.Options": "10.0.14"
+        }
+      },
+      "Microsoft.Extensions.Hosting.WindowsServices": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "IQSOKNkh06e2eskQ6ltSBZmtQqdu7/0A634/XSmXrtrlDwPbMFbTNEJs1bySQFOxH3xlCAnYNbf+Hh4Fp3nQ5Q==",
+        "dependencies": {
+          "Microsoft.Extensions.Hosting": "10.0.14",
+          "Microsoft.Extensions.Logging.EventLog": "10.0.14",
+          "System.ServiceProcess.ServiceController": "10.0.14"
         }
       },
       "Microsoft.Extensions.Http.Resilience": {
