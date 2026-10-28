@@ -518,8 +518,15 @@ internal sealed class RowExecutor
     }
 
     private static bool MatchesExpected(string expected, StepOutcome outcome) =>
-        outcome.ErrorCode == expected
-        || (outcome.Result is { } payload && StatusOf(payload) is { } status && "http:" + status.ToString(System.Globalization.CultureInfo.InvariantCulture) == expected);
+        ExpectedErrorMet(expected, outcome.ErrorCode, outcome.Result);
+
+    /// <summary>
+    /// Whether a step's answer meets its expected error (L26 B3): the error code equals <paramref name="expected"/>, or the
+    /// result is an HTTP status and <paramref name="expected"/> is <c>http:&lt;status&gt;</c>. Used by the row and the bundle writer.
+    /// </summary>
+    internal static bool ExpectedErrorMet(string expected, string? errorCode, JsonElement? result) =>
+        errorCode == expected
+        || (result is { } payload && StatusOf(payload) is { } status && "http:" + status.ToString(System.Globalization.CultureInfo.InvariantCulture) == expected);
 
     private static int? StatusOf(JsonElement payload) =>
         payload.ValueKind == JsonValueKind.Object

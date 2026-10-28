@@ -482,6 +482,43 @@ public sealed class UatAttestTests : IDisposable
     }
 
     [Fact]
+    public async Task Writer_KnownIssueMatched_RunJsonAndRowRecordTheKnownFailure()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l26-writer-known-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Result<KnownIssues> issues = KnownIssues.LoadText("known-issues.toml", """
+                schema = 1
+
+                [[issue]]
+                id = "KI-L26-1"
+                signatures = ["clause:attest-fail/key-held/step:probe|NotHeld"]
+                state = "open"
+                """);
+            Assert.True(issues.IsSuccess, issues.Error);
+            (string folder, _) = await WriteRunBundleAsync(root, HiddenExpectSpec, "writer-known.toml",
+                KnownIssueCheck.Of(issues.Value!, new string('0', 64)));
+
+            JsonNode? runJson = await ReadRunJsonAsync(folder);
+            Assert.Equal("pass_with_known", runJson?["overall"]?.GetValue<string>());
+            Assert.Empty(runJson!["new_failures"]!.AsArray());
+            Assert.Equal("attest-fail/key-held", runJson?["known_failures"]?[0]?.GetValue<string>());
+            Assert.True(runJson?["known_issues"]?["checked"]?.GetValue<bool>());
+
+            JsonNode? row = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(folder, "rows", "attest-fail", "key-held.json"), CancellationToken.None));
+            Assert.Equal("KI-L26-1", row?["known_match"]?["issue_id"]?.GetValue<string>());
+            Assert.Equal("known", row?["known_match"]?["state"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Attest_KnownIssuesUnchecked_KnownFailuresNull()
     {
         string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l25-attest-unchecked-" + Guid.NewGuid().ToString("N"));
@@ -564,7 +601,8 @@ public sealed class UatAttestTests : IDisposable
     }
 
     /// <summary>Runs one spec through the runner into a bundle under <paramref name="root"/> and returns the folder and run id.</summary>
-    private async Task<(string Folder, string RunId)> WriteRunBundleAsync(string root, string specText, string specName)
+    private async Task<(string Folder, string RunId)> WriteRunBundleAsync(string root, string specText, string specName,
+        KnownIssueCheck? known = null)
     {
         using var vault = new SecretVault();
         var redactor = new Redactor(vault);
@@ -576,6 +614,11 @@ public sealed class UatAttestTests : IDisposable
         UatSpec spec = SpecLoader.LoadText(specName, specText).Spec!;
         var writer = new BundleWriter(Path.Combine(root, "uat-runs"), _validator, redactor, new SecretScanner(vault), time,
             "nobuild", "test-system", "test-build", null);
+
+        if (known is not null)
+        {
+            writer.UseKnownIssues(known);
+        }
 
         Result<UatRunResult> run = await runner.RunAsync(
             new UatRunRequest(spec, null, 1UL, null, null, PlanOnly: false), writer, CancellationToken.None);

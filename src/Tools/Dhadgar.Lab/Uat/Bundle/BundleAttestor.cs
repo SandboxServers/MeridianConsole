@@ -42,8 +42,10 @@ public static class BundleAttestor
     /// <param name="redactor">Redacts every written text.</param>
     /// <param name="validator">Validates every path.</param>
     /// <param name="scanner">Scans every text before the first write; a hit writes nothing. Null skips the scan.</param>
+    /// <param name="known">The known-issue load outcome the rows are matched against (L26 B2). Null is unchecked (D-ML92).</param>
     public static Result<string> Attest(string folder, string runId, string section, string row, string clauseId, string verdict,
-        string? note, DateTimeOffset at, AttestedBy by, Redactor redactor, IPathValidator validator, SecretScanner? scanner = null)
+        string? note, DateTimeOffset at, AttestedBy by, Redactor redactor, IPathValidator validator, SecretScanner? scanner = null,
+        KnownIssueCheck? known = null)
     {
         if (verdict is not ("held" or "not_held"))
         {
@@ -147,7 +149,8 @@ public static class BundleAttestor
             List<LedgerRow> rows = ReadRows(folder, redactor, (rowFile.Value!, rowObj));
             string system = runObj["os"]?.GetValue<string>() ?? string.Empty;
             string ledgerText = LedgerRenderer.Render(runId, system, BuildStamp.FromRunJson(runObj).LedgerLine, rows);
-            RecomputeRun(runObj, rows);
+            KnownIssueCheck check = known ?? KnownIssueCheck.Unchecked(KnownIssueCheck.BundleUncheckedReason);
+            RecomputeRun(runObj, rows, ReadRowObjects(folder, (rowFile.Value!, rowObj)), check, redactor);
             var texts = new List<(string Relative, string Text)>
             {
                 (rowRelative, redactor.Redact(rowObj.ToJsonString(JsonOptions))),
@@ -199,27 +202,13 @@ public static class BundleAttestor
     private static List<LedgerRow> ReadRows(string folder, Redactor redactor, (string Path, JsonObject Row)? replacement = null)
     {
         var rows = new List<LedgerRow>();
-        string rowsRoot = Path.Combine(folder, "rows");
-        if (!Directory.Exists(rowsRoot))
-        {
-            return rows;
-        }
 
         // Free text is redacted before the renderer rewrites it (see BundleWriter.RowFinished).
         string Scrub(string text) => redactor.Redact(text);
         string? ScrubOrNull(string? text) => text is null ? null : redactor.Redact(text);
 
-        foreach (string file in Directory.EnumerateFiles(rowsRoot, "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+        foreach (JsonObject obj in ReadRowObjects(folder, replacement))
         {
-            // The replacement is re-parsed so its values read back exactly as the written file would (in-memory strings do not convert to dates).
-            JsonNode? node = replacement is { } pending && Path.GetFullPath(pending.Path) == Path.GetFullPath(file)
-                ? JsonNode.Parse(pending.Row.ToJsonString())
-                : JsonNode.Parse(File.ReadAllText(file));
-            if (node is not JsonObject obj)
-            {
-                continue;
-            }
-
             var clauses = (obj["clauses"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(clause => new LedgerClause(
                 clause["id"]?.GetValue<string>() ?? string.Empty,
                 Scrub(clause["pointer"]?.GetValue<string>() ?? string.Empty),
@@ -251,7 +240,35 @@ public static class BundleAttestor
             .ToList();
     }
 
-    private static void RecomputeRun(JsonObject runObj, IReadOnlyList<LedgerRow> rows)
+    /// <summary>
+    /// Reads every bundle row file as a JSON object, in path order. <paramref name="replacement"/> stands in for the file at its path.
+    /// </summary>
+    private static List<JsonObject> ReadRowObjects(string folder, (string Path, JsonObject Row)? replacement)
+    {
+        var objects = new List<JsonObject>();
+        string rowsRoot = Path.Combine(folder, "rows");
+        if (!Directory.Exists(rowsRoot))
+        {
+            return objects;
+        }
+
+        foreach (string file in Directory.EnumerateFiles(rowsRoot, "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+        {
+            // The replacement is re-parsed so its values read back exactly as the written file would (in-memory strings do not convert to dates).
+            JsonNode? node = replacement is { } pending && Path.GetFullPath(pending.Path) == Path.GetFullPath(file)
+                ? JsonNode.Parse(pending.Row.ToJsonString())
+                : JsonNode.Parse(File.ReadAllText(file));
+            if (node is JsonObject obj)
+            {
+                objects.Add(obj);
+            }
+        }
+
+        return objects;
+    }
+
+    private static void RecomputeRun(JsonObject runObj, IReadOnlyList<LedgerRow> rows, IReadOnlyList<JsonObject> rowObjects,
+        KnownIssueCheck known, Redactor redactor)
     {
         var summary = new JsonObject();
         foreach (string key in new[] { "PASS", "FAIL", "BLOCKED", "SKIPPED", "NEEDS_HUMAN", "UNVERIFIED" })
@@ -259,19 +276,41 @@ public static class BundleAttestor
             summary[key] = rows.Count(row => LedgerRenderer.ResultText(row.Grade) == key);
         }
 
-        // A1: the one rule (RunSummary). Unmatched until L26 (D-ML92): known_failures is null and known_issues says so.
-        // The attested overall agrees with run.json.
-        RunSummary run = RunSummary.Compute(rows.Select(row => new GradedRow(row.Section, row.Row, row.Grade)).ToList(),
-            new Dictionary<string, KnownMatch>(StringComparer.Ordinal));
+        // A1: the one rule (RunSummary). A checked run matches every row file as the ingest does (L26 B2); an unchecked run
+        // matches none, so known_failures is null and known_issues says why. The attested overall agrees with run.json.
+        var matches = new Dictionary<string, KnownMatch>(StringComparer.Ordinal);
+        if (known.Checked)
+        {
+            foreach (JsonObject rowObj in rowObjects)
+            {
+                Result<ParsedRow> parsed = RowVerdicts.Parse(rowObj);
+                if (parsed.IsFailure)
+                {
+                    continue;
+                }
+
+                RowVerdict verdict = RowVerdicts.Of(parsed.Value!, known.Issues, text => redactor.Redact(text));
+                if (verdict.Match is { } match)
+                {
+                    matches[parsed.Value!.Section + "/" + parsed.Value.RowId] = match;
+                }
+            }
+        }
+
+        RunSummary run = RunSummary.Compute(rows.Select(row => new GradedRow(row.Section, row.Row, row.Grade)).ToList(), matches);
 
         runObj["summary"] = summary;
         runObj["new_failures"] = new JsonArray(run.NewFailures.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray());
-        runObj["known_failures"] = null;
-        runObj["known_issues"] = new JsonObject
-        {
-            ["checked"] = false,
-            ["reason"] = KnownIssueCheck.BundleUncheckedReason,
-        };
+        runObj["known_failures"] = known.Checked
+            ? new JsonArray(run.KnownFailures.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray())
+            : null;
+        runObj["known_issues"] = known.Checked
+            ? known.ToJson()
+            : new JsonObject
+            {
+                ["checked"] = false,
+                ["reason"] = KnownIssueCheck.BundleUncheckedReason,
+            };
         runObj["overall"] = run.OverallText;
         runObj["fidelity"] = "evidence_only";
     }

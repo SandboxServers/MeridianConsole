@@ -192,7 +192,7 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
 
         Result<string> grade = BundleAttestor.Attest(folder.Value!, args.RunId!, args.Section!, args.Row!, args.ClauseId!,
             args.Verdict!, args.Note, _time.GetUtcNow(), new AttestedBy(touched.Value!.Owner, context.Caller), _redactor, _validator,
-            new SecretScanner(_vault));
+            new SecretScanner(_vault), _results.LoadKnownIssues());
         if (grade.IsFailure)
         {
             return Result<object>.Failure(grade.Error);

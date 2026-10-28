@@ -57,6 +57,7 @@ public sealed class BundleWriter : IUatRunSink
     private int _rowRedactions;
     private IRunLogSource? _logs;
     private string? _finalOverall;
+    private KnownIssueCheck _known = KnownIssueCheck.Unchecked(KnownIssueCheck.BundleUncheckedReason);
 
     /// <summary>
     /// Creates the writer for one run.
@@ -106,6 +107,17 @@ public sealed class BundleWriter : IUatRunSink
         _stamp = stamp;
         _buildId = stamp.Id;
         _build = stamp.LedgerLine;
+    }
+
+    /// <summary>
+    /// Sets the known-issue file the bundle is matched against (L26 B2). Without this call the bundle is unchecked (D-ML92):
+    /// no row is matched and <c>run.json</c> says so.
+    /// </summary>
+    /// <param name="check">The load outcome, from <c>ResultsService.LoadKnownIssues</c>.</param>
+    public void UseKnownIssues(KnownIssueCheck check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        _known = check;
     }
 
     /// <summary>
@@ -383,19 +395,15 @@ public sealed class BundleWriter : IUatRunSink
             summary[LedgerRenderer.ResultText(row.Grade)]++;
         }
 
-        // A1: the one rule (RunSummary). Unmatched until L26 (D-ML92): the overall is conservative, any failure gives "fail".
-        // A secret-failed pass is "fail" whatever the rows say, as before.
-        RunSummary runSummary = RunSummary.Compute(
-            rows.Select(row => new GradedRow(spec.Section.Id, row.Row, row.Grade)).ToList(),
-            new Dictionary<string, KnownMatch>(StringComparer.Ordinal));
-        string overall = secretFailed ? "fail" : runSummary.OverallText;
-        _finalOverall = overall;
-
         if (_fingerprint is not null && !secretFailed)
         {
             Write("fingerprint.json", JsonSerializer.Serialize(_fingerprint, JsonOptions));
         }
 
+        // L26 B2: every row is matched against the known issues as the ingest matches it (RowVerdicts), and the verdicts feed
+        // run.json below. A secret-failed pass matches nothing: its rows are all BLOCKED and its overall is "fail".
+        var graded = new List<GradedRow>();
+        var matches = new Dictionary<string, KnownMatch>(StringComparer.Ordinal);
         foreach (LedgerRow row in rows)
         {
             UatRowResult? source = _results.FirstOrDefault(candidate => candidate.RowId == row.Row);
@@ -433,7 +441,7 @@ public sealed class BundleWriter : IUatRunSink
             {
                 foreach (UatStepResult step in recorded)
                 {
-                    stepJson.Add(new
+                    JsonNode stepNode = JsonSerializer.SerializeToNode(new
                     {
                         id = step.Id,
                         tool = step.Tool,
@@ -443,7 +451,14 @@ public sealed class BundleWriter : IUatRunSink
                         expected_error = step.ExpectedError,
                         duration_ms = step.DurationMs,
                         result = Evidence(step.Result),
-                    });
+                    }, JsonOptions)!;
+                    // L26 B3: expect_met is written only when the step declared an expected error.
+                    if (step.ExpectedError is { } expectedError)
+                    {
+                        stepNode["expect_met"] = RowExecutor.ExpectedErrorMet(expectedError, step.ErrorCode, step.Result);
+                    }
+
+                    stepJson.Add(stepNode);
                 }
             }
             var faultJson = new List<object>();
@@ -495,8 +510,29 @@ public sealed class BundleWriter : IUatRunSink
                 violations = violationJson,
                 attestations = Array.Empty<object>(),
             };
-            Write(Path.Combine("rows", row.Section, row.Row + ".json"), JsonSerializer.Serialize(rowJson, JsonOptions));
+            // The row file is parsed back by the ingest's reader, so the verdict here is the verdict the DB records.
+            JsonObject node = JsonSerializer.SerializeToNode(rowJson, JsonOptions)!.AsObject();
+            node["known_issue"] = spec.Rows.FirstOrDefault(candidate => candidate.Id == row.Row)?.KnownIssue;
+            Result<ParsedRow> parsed = RowVerdicts.Parse(node);
+            RowVerdict verdict = secretFailed || parsed.IsFailure
+                ? new RowVerdict([], [], null, null, null)
+                : RowVerdicts.Of(parsed.Value!, _known.Issues, text => _redactor.Redact(text, out _));
+            node["known_match"] = _known.Checked && verdict.Match is { } match
+                ? new JsonObject { ["issue_id"] = match.IssueId, ["state"] = match.State, ["reason"] = match.Reason }
+                : null;
+            graded.Add(new GradedRow(row.Section, row.Row, row.Grade));
+            if (verdict.Match is { } found)
+            {
+                matches[row.Section + "/" + row.Row] = found;
+            }
+
+            Write(Path.Combine("rows", row.Section, row.Row + ".json"), node.ToJsonString(JsonOptions));
         }
+
+        // A1: the one rule (RunSummary). A secret-failed pass is "fail" whatever the rows say, as before.
+        RunSummary runSummary = RunSummary.Compute(graded, matches);
+        string overall = secretFailed ? "fail" : runSummary.OverallText;
+        _finalOverall = overall;
 
         if (!secretFailed)
         {
@@ -550,8 +586,8 @@ public sealed class BundleWriter : IUatRunSink
             overall,
             incomplete_reasons = Array.Empty<string>(),
             new_failures = runSummary.NewFailures,
-            known_failures = (IReadOnlyList<string>?)null,
-            known_issues = new { @checked = false, reason = KnownIssueCheck.BundleUncheckedReason },
+            known_failures = _known.Checked ? runSummary.KnownFailures : null,
+            known_issues = _known.Checked ? (object)_known.ToJson() : new { @checked = false, reason = KnownIssueCheck.BundleUncheckedReason },
             violations = secretFailed ? 0 : result.Invariants?.Violations.Count ?? 0,
             row_violations = secretFailed
                 ? []

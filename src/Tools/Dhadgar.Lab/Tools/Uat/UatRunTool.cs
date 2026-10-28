@@ -200,6 +200,7 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             build: string.Empty,
             label: label);
         sink.UseBuild(LastBuildReader.Read(_paths, _validator));
+        sink.UseKnownIssues(_services.GetRequiredService<ResultsService>().LoadKnownIssues());
         IRunLogSource? logs = _services.GetService<IRunLogSource>();
         if (logs is not null)
         {
