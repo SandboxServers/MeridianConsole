@@ -192,7 +192,7 @@ public sealed class UatRunnerTests
         await Task.Delay(50);
         Assert.False(run.IsCompleted);
 
-        harness.Time.Advance(TimeSpan.FromSeconds(5));
+        harness.Time.Advance(TimeSpan.FromSeconds(60));
         Result<UatRunResult> result = await run;
 
         Assert.True(result.IsSuccess);
@@ -212,7 +212,7 @@ public sealed class UatRunnerTests
         depends_on = []
 
           [[row.step]]
-          wait_ms = 5000
+          wait_ms = 60000
         """;
 
     private static UatSpec Load(string text)
