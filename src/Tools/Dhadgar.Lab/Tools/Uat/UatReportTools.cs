@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
@@ -17,7 +18,8 @@ public sealed record UatReportArgs(string RunId);
 public sealed record BundleReadArgs(string RunId, string Path);
 
 /// <summary>
-/// Arguments of <c>uat_attest</c>: the run, the row (section and row id), the human clause, and <c>pass</c> or <c>fail</c>.
+/// Arguments of <c>uat_attest</c>: the run, the row (section and row id), the human clause, and the verdict.
+/// <c>Verdict</c> is <c>held</c> or <c>not_held</c>; <c>pass</c> and <c>fail</c> are refused.
 /// </summary>
 public sealed record UatAttestArgs(string? RunId, string? Section, string? Row, string? ClauseId, string? Verdict, string? Note = null);
 
@@ -132,23 +134,25 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
     private readonly IPathValidator _validator;
     private readonly Redactor _redactor;
     private readonly TimeProvider _time;
+    private readonly LeaseBook _leases;
 
     /// <summary>
     /// Creates the tool.
     /// </summary>
-    public UatAttestTool(LabPaths paths, IPathValidator validator, Redactor redactor, TimeProvider time)
+    public UatAttestTool(LabPaths paths, IPathValidator validator, Redactor redactor, TimeProvider time, LeaseBook leases)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
         _time = time ?? throw new ArgumentNullException(nameof(time));
+        _leases = leases ?? throw new ArgumentNullException(nameof(leases));
     }
 
     /// <inheritdoc />
     public override string Name => "uat_attest";
 
     /// <inheritdoc />
-    public override string Description => "Records a pass or fail verdict on one pending human clause, then regrades the row and rewrites the ledger and overall. Human clauses only.";
+    public override string Description => "Records the user's held or not_held verdict on one pending human clause of a NEEDS_HUMAN or UNVERIFIED row, then regrades the row and rewrites the ledger and overall. The user approves each call.";
 
     /// <inheritdoc />
     protected override Task<Result<object>> ExecuteAsync(UatAttestArgs args, LabCallContext context, CancellationToken ct)
@@ -159,8 +163,15 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
             return Task.FromResult(Result<object>.Failure(folder.Error));
         }
 
+        // The dispatcher has already checked the lease; a failure here is returned unchanged.
+        Result<LeaseInfo> touched = _leases.Touch(context.LeaseId!);
+        if (touched.IsFailure)
+        {
+            return Task.FromResult(Result<object>.Failure(touched.Error));
+        }
+
         Result<string> grade = BundleAttestor.Attest(folder.Value!, args.RunId!, args.Section!, args.Row!, args.ClauseId!,
-            args.Verdict!, args.Note, _time.GetUtcNow(), _redactor, _validator);
+            args.Verdict!, args.Note, _time.GetUtcNow(), new AttestedBy(touched.Value!.Owner, context.Caller), _redactor, _validator);
         if (grade.IsFailure)
         {
             return Task.FromResult(Result<object>.Failure(grade.Error));

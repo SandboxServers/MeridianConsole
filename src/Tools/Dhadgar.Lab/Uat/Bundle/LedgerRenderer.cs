@@ -22,7 +22,19 @@ public sealed record LedgerClause(string Id, string Locator, ClauseState State, 
 /// <param name="Grade">The row grade.</param>
 /// <param name="At">When the row was recorded.</param>
 /// <param name="Clauses">The clauses that ran, in spec order.</param>
-public sealed record LedgerRow(string Section, string Row, string Title, string Expected, RowGrade Grade, DateTimeOffset At, IReadOnlyList<LedgerClause> Clauses);
+/// <param name="Attestations">The human attestations recorded on the row, in order, or null when there are none.</param>
+public sealed record LedgerRow(string Section, string Row, string Title, string Expected, RowGrade Grade, DateTimeOffset At, IReadOnlyList<LedgerClause> Clauses, IReadOnlyList<LedgerAttestation>? Attestations = null);
+
+/// <summary>
+/// One human verdict recorded on a row, as the ledger shows it.
+/// </summary>
+/// <param name="ClauseId">The clause the verdict answers.</param>
+/// <param name="Verdict">The verdict word: <c>held</c> or <c>not_held</c>.</param>
+/// <param name="Note">The note, or an empty string.</param>
+/// <param name="At">When the verdict was recorded.</param>
+/// <param name="LeaseOwner">The owner of the lease the attest call carried.</param>
+/// <param name="Caller">The caller that made the attest call.</param>
+public sealed record LedgerAttestation(string ClauseId, string Verdict, string Note, DateTimeOffset At, string LeaseOwner, string Caller);
 
 /// <summary>
 /// Renders <c>ledger.md</c> in the C9 shape: a summary table, then one section per row. Pipes in the table have spaces around them.
@@ -47,23 +59,35 @@ public static class LedgerRenderer
         text.Append("| --- | --- | --- | --- | --- |\n");
         foreach (LedgerRow row in rows)
         {
-            text.Append("| ").Append(row.Section).Append(" | ").Append(row.Row).Append(" | ")
-                .Append(ResultText(row.Grade)).Append(" | ").Append(Time(row.At)).Append(" | ").Append(build.Split(' ')[0]).Append(" |\n");
+            text.Append("| ").Append(Cell(row.Section)).Append(" | ").Append(Cell(row.Row)).Append(" | ")
+                .Append(ResultText(row.Grade)).Append(" | ").Append(Time(row.At)).Append(" | ").Append(Cell(build.Split(' ')[0])).Append(" |\n");
         }
 
         text.Append('\n').Append("## Recording results\n");
         foreach (LedgerRow row in rows)
         {
             text.Append('\n');
-            text.Append("### ").Append(row.Section).Append('/').Append(row.Row).Append(": ").Append(row.Title).Append('\n');
+            text.Append("### ").Append(Line(row.Section)).Append('/').Append(Line(row.Row)).Append(": ").Append(Line(row.Title)).Append('\n');
             text.Append('\n');
-            text.Append("- System: ").Append(system).Append('\n');
-            text.Append("- Step id: ").Append(row.Section).Append('/').Append(row.Row).Append('\n');
+            text.Append("- System: ").Append(Line(system)).Append('\n');
+            text.Append("- Step id: ").Append(Line(row.Section)).Append('/').Append(Line(row.Row)).Append('\n');
             text.Append("- Result: ").Append(ResultText(row.Grade)).Append('\n');
             text.Append("- Time: ").Append(Time(row.At)).Append('\n');
-            text.Append("- Build: ").Append(build).Append('\n');
+            text.Append("- Build: ").Append(Line(build)).Append('\n');
             text.Append("- Saw: ").Append(Saw(row.Clauses)).Append('\n');
-            text.Append("- Expected: ").Append(row.Expected).Append('\n');
+            text.Append("- Expected: ").Append(Line(row.Expected)).Append('\n');
+            foreach (LedgerAttestation attestation in row.Attestations ?? [])
+            {
+                text.Append("- Attested: ").Append(Line(attestation.ClauseId)).Append(' ').Append(Line(attestation.Verdict))
+                    .Append(" by ").Append(Line(attestation.LeaseOwner)).Append(" via ").Append(Line(attestation.Caller))
+                    .Append(" at ").Append(Time(attestation.At));
+                if (attestation.Note.Length > 0)
+                {
+                    text.Append("; note: ").Append(Line(attestation.Note));
+                }
+
+                text.Append('\n');
+            }
         }
 
         return text.ToString();
@@ -95,9 +119,30 @@ public static class LedgerRenderer
         }
 
         return string.Join("; ", clauses.Select(clause =>
-            clause.Id + ": " + clause.Locator + " ("+ StateText(clause.State) + ")" +
-            (clause.Error is { Length: > 0 } error ? " error: " + error : string.Empty)));
+            Line(clause.Id) + ": " + Line(clause.Locator) + " ("+ StateText(clause.State) + ")" +
+            (clause.Error is { Length: > 0 } error ? " error: " + Line(error) : string.Empty)));
     }
+
+    /// <summary>
+    /// Makes free text safe for one ledger line: CR, LF and every other control character become a space.
+    /// </summary>
+    /// <param name="text">The free text.</param>
+    internal static string Line(string text)
+    {
+        var builder = new StringBuilder(text.Length);
+        foreach (char c in text.Replace("\r\n", " ", StringComparison.Ordinal))
+        {
+            builder.Append(char.IsControl(c) ? ' ' : c);
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Makes free text safe for one markdown table cell: a line (see <see cref="Line"/>) with each pipe escaped.
+    /// </summary>
+    /// <param name="text">The free text.</param>
+    internal static string Cell(string text) => Line(text).Replace("|", "\\|", StringComparison.Ordinal);
 
     private static string StateText(ClauseState state) => state switch
     {
