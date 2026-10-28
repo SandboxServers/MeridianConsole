@@ -181,6 +181,40 @@ public sealed class UatRunnerTests
           args = { wipe = true }
         """;
 
+    [Fact(Timeout = 10000)]
+    public async Task WaitStep_RowIsNotDoneUntilTheWaitHasElapsed()
+    {
+        using var harness = new Harness(new FakeProbe(true));
+        Task<Result<UatRunResult>> run = harness.Runner.RunAsync(
+            new UatRunRequest(Load(WaitSpec), null, 5UL, null, null, PlanOnly: false), new NullSink(), CancellationToken.None);
+
+        // Real time lets the runner reach the wait; the fake clock has not moved, so the row cannot be done yet.
+        await Task.Delay(50);
+        Assert.False(run.IsCompleted);
+
+        harness.Time.Advance(TimeSpan.FromSeconds(5));
+        Result<UatRunResult> result = await run;
+
+        Assert.True(result.IsSuccess);
+    }
+
+    private const string WaitSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-wait"
+        title = "Runner wait"
+
+        [[row]]
+        id = "waits"
+        title = "Waits"
+        expected = "pass"
+        depends_on = []
+
+          [[row.step]]
+          wait_ms = 5000
+        """;
+
     private static UatSpec Load(string text)
     {
         SpecLoadOutcome loaded = SpecLoader.LoadText("runner-selftest.toml", text);
@@ -274,6 +308,7 @@ public sealed class UatRunnerTests
             _root = Path.Combine(Path.GetTempPath(), "lab-l15-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
             var time = new FakeTimeProvider(Start);
+            Time = time;
             _vault = new SecretVault();
             var redactor = new Redactor(_vault);
             _audit = new AuditLog(LabPaths.FromRoot(_root), new PathValidator(NullLogger<PathValidator>.Instance), redactor, time);
@@ -285,6 +320,8 @@ public sealed class UatRunnerTests
         public LeaseBook Leases { get; }
 
         public UatRunner Runner { get; }
+
+        public FakeTimeProvider Time { get; }
 
         public void Dispose()
         {

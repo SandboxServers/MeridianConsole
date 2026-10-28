@@ -20,6 +20,7 @@ namespace Dhadgar.Lab.Uat.Bundle;
 public sealed class BundleWriter : IUatRunSink
 {
     private const string SecretScanFailed = "secret scan failed";
+    private const int MaxEvidenceChars = 16384;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -46,6 +47,7 @@ public sealed class BundleWriter : IUatRunSink
     private string _fingerprintSha = string.Empty;
     private readonly List<string> _warnings = [];
     private LiveFingerprintParts? _live;
+    private int _passRedactions;
 
     /// <summary>
     /// Creates the writer for one run.
@@ -180,11 +182,17 @@ public sealed class BundleWriter : IUatRunSink
         Folder = checkedFolder.Value;
         try
         {
-            WriteAll(result, secretFailed: false);
+            WriteAll(result, secretFailed: false, []);
             SecretScanResult scan = _scanner.ScanFolder(Folder);
             if (!scan.Passed)
             {
-                WriteAll(result, secretFailed: true);
+                // Paths are bundle-relative with forward slashes, whatever the platform separator.
+                IReadOnlyList<string> removed = scan.RemovedFiles.Select(file => file.Replace('\\', '/')).ToList();
+                WriteAll(result, secretFailed: true, removed);
+                if (!_scanner.ScanFolder(Folder).Passed)
+                {
+                    WriteError = "[Lab.Unavailable] the bundle still held a secret after the rewrite";
+                }
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -193,8 +201,9 @@ public sealed class BundleWriter : IUatRunSink
         }
     }
 
-    private void WriteAll(UatRunResult result, bool secretFailed)
+    private void WriteAll(UatRunResult result, bool secretFailed, IReadOnlyList<string> removed)
     {
+        _passRedactions = 0;
         UatSpec spec = _spec!;
         IReadOnlyList<LedgerRow> rows = secretFailed
             ? _rows.Select(row => row with { Grade = RowGrade.Blocked, Title = row.Row, Expected = string.Empty, Clauses = Array.Empty<LedgerClause>() }).ToList()
@@ -214,6 +223,69 @@ public sealed class BundleWriter : IUatRunSink
         string[] failedRows = rows.Where(row => row.Grade is RowGrade.Fail or RowGrade.Blocked or RowGrade.Unverified)
             .Select(row => row.Section + "/" + row.Row).ToArray();
 
+        if (_fingerprint is not null && !secretFailed)
+        {
+            Write("fingerprint.json", JsonSerializer.Serialize(_fingerprint, JsonOptions));
+        }
+
+        foreach (LedgerRow row in rows)
+        {
+            UatRowResult? source = _results.FirstOrDefault(candidate => candidate.RowId == row.Row);
+            var clauseJson = row.Clauses.Select(clause =>
+            {
+                UatClauseResult? evidence = source?.Clauses.FirstOrDefault(candidate => candidate.Id == clause.Id);
+                return new
+                {
+                    id = clause.Id,
+                    pointer = clause.Locator,
+                    source = clause.Source,
+                    required = clause.Required,
+                    state = clause.State.ToString(),
+                    error = clause.Error,
+                    observed = Evidence(evidence?.Observed),
+                    attempts = evidence?.Attempts ?? 0,
+                    checked_at = evidence?.CheckedAt,
+                };
+            }).ToList();
+            var stepJson = new List<object>();
+            if (!secretFailed && source?.Steps is { } recorded)
+            {
+                foreach (UatStepResult step in recorded)
+                {
+                    stepJson.Add(new
+                    {
+                        id = step.Id,
+                        tool = step.Tool,
+                        ok = step.Ok,
+                        error = step.Error,
+                        error_code = step.ErrorCode,
+                        expected_error = step.ExpectedError,
+                        duration_ms = step.DurationMs,
+                        result = Evidence(step.Result),
+                    });
+                }
+            }
+            string reason = secretFailed ? SecretScanFailed : source?.Reason ?? string.Empty;
+            var rowJson = new
+            {
+                section = row.Section,
+                id = row.Row,
+                title = row.Title,
+                expected = row.Expected,
+                grade = LedgerRenderer.ResultText(row.Grade),
+                reason,
+                at = row.At,
+                clauses = secretFailed ? Array.Empty<object>() : clauseJson.Cast<object>(),
+                steps = stepJson,
+                attestations = Array.Empty<object>(),
+            };
+            Write(Path.Combine("rows", row.Section, row.Row + ".json"), JsonSerializer.Serialize(rowJson, JsonOptions));
+        }
+
+        Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));
+        Write("ledger.md", LedgerRenderer.Render(_runId, _system, _build, rows));
+
+        // Last, so that redactions counts every other file written in this pass.
         var run = new
         {
             schema = 1,
@@ -235,8 +307,9 @@ public sealed class BundleWriter : IUatRunSink
             new_failures = failedRows,
             known_failures = Array.Empty<string>(),
             violations = 0,
-            redactions = 0,
+            redactions = _passRedactions,
             secret_scan = secretScan,
+            secret_scan_removed = removed,
             fingerprint_sha256 = _fingerprintSha,
             fidelity = FidelityText(CurrentFidelity(result.Truncated)),
             pair = (object?)null,
@@ -245,22 +318,27 @@ public sealed class BundleWriter : IUatRunSink
             warnings = _warnings.ToArray(),
         };
 
-        if (_fingerprint is not null)
-        {
-            Write("fingerprint.json", JsonSerializer.Serialize(_fingerprint, JsonOptions));
-        }
-
         Write("run.json", JsonSerializer.Serialize(run, JsonOptions));
-        foreach (LedgerRow row in rows)
+    }
+
+    /// <summary>
+    /// Returns the evidence value redacted, or a truncated stand-in when its text is longer than
+    /// <see cref="MaxEvidenceChars"/>. The redactions it makes are added to the pass counter.
+    /// </summary>
+    private JsonElement? Evidence(JsonElement? element)
+    {
+        if (element is not { } value)
         {
-            var clauseJson = row.Clauses.Select(clause => new { id = clause.Id, pointer = clause.Locator, source = clause.Source, required = clause.Required, state = clause.State.ToString(), error = clause.Error });
-            string reason = secretFailed ? SecretScanFailed : _results.FirstOrDefault(candidate => candidate.RowId == row.Row)?.Reason ?? string.Empty;
-            var rowJson = new { section = row.Section, id = row.Row, title = row.Title, expected = row.Expected, grade = LedgerRenderer.ResultText(row.Grade), reason, at = row.At, clauses = clauseJson };
-            Write(Path.Combine("rows", row.Section, row.Row + ".json"), JsonSerializer.Serialize(rowJson, JsonOptions));
+            return null;
         }
 
-        Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));
-        Write("ledger.md", LedgerRenderer.Render(_runId, _system, _build, rows));
+        _redactor.Redact(value.GetRawText(), out int count);
+        _passRedactions += count;
+        JsonElement redacted = _redactor.Redact(value);
+        string text = redacted.GetRawText();
+        return text.Length > MaxEvidenceChars
+            ? JsonSerializer.SerializeToElement(new { truncated = true, text = text[..MaxEvidenceChars] })
+            : redacted;
     }
 
     private void Write(string relative, string text)
@@ -278,7 +356,9 @@ public sealed class BundleWriter : IUatRunSink
             Directory.CreateDirectory(dir);
         }
 
-        File.WriteAllText(checkedPath.Value!, _redactor.Redact(text), new UTF8Encoding(false));
+        string redacted = _redactor.Redact(text, out int count);
+        _passRedactions += count;
+        File.WriteAllText(checkedPath.Value!, redacted, new UTF8Encoding(false));
     }
 
     private string ReproToml(UatSpec spec, ulong seed, ReplayFidelity fidelity)

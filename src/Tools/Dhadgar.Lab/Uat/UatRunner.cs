@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Policy;
@@ -18,14 +19,21 @@ namespace Dhadgar.Lab.Uat;
 public sealed record UatRunRequest(UatSpec Spec, IReadOnlyCollection<string>? RowFilter, ulong? Seed, string? LeaseId, string? Label, bool PlanOnly);
 
 /// <summary>
-/// One clause after evaluation.
+/// One clause after evaluation. The evidence fields (observed value, attempts, check time) go only to the bundle, so they
+/// are not part of the <c>uat_run</c> result.
 /// </summary>
-public sealed record UatClauseResult(string Id, ClauseState State, string? Error);
+public sealed record UatClauseResult(string Id, ClauseState State, string? Error, [property: JsonIgnore] JsonElement? Observed = null, [property: JsonIgnore] int Attempts = 0, [property: JsonIgnore] DateTimeOffset? CheckedAt = null);
 
 /// <summary>
-/// One recorded row: its grade, the reason, and its clauses (empty when the row stopped before its clauses ran).
+/// One step as received: the tool's own outcome, before a step that expected an error is rewritten. Bundle evidence only.
 /// </summary>
-public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses);
+public sealed record UatStepResult(string Id, string? Tool, bool Ok, string? Error, string? ErrorCode, string? ExpectedError, long DurationMs, JsonElement? Result);
+
+/// <summary>
+/// One recorded row: its grade, the reason, and its clauses (empty when the row stopped before its clauses ran). The steps
+/// go only to the bundle.
+/// </summary>
+public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, IReadOnlyList<UatClauseResult> Clauses, [property: JsonIgnore] IReadOnlyList<UatStepResult>? Steps = null);
 
 /// <summary>
 /// The result of one run. <see cref="Seed"/> is the seed the rows ran with (the section seed when the section sets one).
@@ -244,6 +252,7 @@ public sealed class UatRunner
         string? stepError = null;
         bool expectFailed = false;
         string? expectFailure = null;
+        var stepResults = new List<UatStepResult>();
         for (int i = 0; i < row.Steps.Count; i++)
         {
             UatStep step = row.Steps[i];
@@ -255,14 +264,18 @@ public sealed class UatRunner
                 int wait = step.WaitMs ?? 0;
                 if (wait > 0)
                 {
-                    await Task.Delay(wait, ct).ConfigureAwait(false);
+                    await Task.Delay(TimeSpan.FromMilliseconds(wait), _time, ct).ConfigureAwait(false);
                 }
 
                 steps[stepId] = new StepOutcome(true, null, null, wait, null);
+                stepResults.Add(new UatStepResult(stepId, null, true, null, null, null, wait, null));
                 continue;
             }
 
             StepOutcome outcome = await ExecuteStepAsync(step, stepId, vars, run, ct).ConfigureAwait(false);
+
+            // Recorded as the tool returned it, before an expected error rewrites Ok and Error below.
+            stepResults.Add(new UatStepResult(stepId, step.Tool, outcome.Ok, outcome.Error, outcome.ErrorCode, step.ExpectError, outcome.DurationMs, outcome.Result));
             if (step.ExpectError is { } expected)
             {
                 if (MatchesExpected(expected, outcome))
@@ -309,7 +322,7 @@ public sealed class UatRunner
             {
                 UatClause clause = row.Expect[i];
                 ClauseEvaluation evaluation = await _evaluator.EvaluateAsync(clause, vars, window, baselines[i], ct).ConfigureAwait(false);
-                clauseResults.Add(new UatClauseResult(clause.Id, evaluation.State, evaluation.Error));
+                clauseResults.Add(new UatClauseResult(clause.Id, evaluation.State, evaluation.Error, evaluation.Observed, evaluation.Attempts, evaluation.CheckedAt));
                 inputs.Add((clause.Required, evaluation.State));
             }
         }
@@ -325,7 +338,7 @@ public sealed class UatRunner
             reason = expectFailure!;
         }
 
-        return new UatRowResult(row.Id, grade, reason, clauseResults);
+        return new UatRowResult(row.Id, grade, reason, clauseResults, stepResults);
     }
 
     private async Task<StepOutcome> ExecuteStepAsync(UatStep step, string stepId, UatVars vars, RunContext run, CancellationToken ct)
