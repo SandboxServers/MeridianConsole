@@ -3,10 +3,12 @@ using System.Security.Cryptography;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
+using ModelContextProtocol.Server;
 
 namespace Dhadgar.Lab.Tests.Daemon;
 
@@ -44,7 +46,14 @@ public sealed class LabDaemonServiceLifetimeTests
             Assert.NotNull(services.GetRequiredService<SecretVault>());
             Assert.NotNull(services.GetRequiredService<Redactor>());
             Assert.NotNull(services.GetRequiredService<LabToolRegistry>());
-            Assert.Equal(24, services.GetServices<ILabTool>().Count());
+            string[] registered = services.GetServices<ILabTool>().Select(t => t.Name).ToArray();
+            Assert.Equal(registered.Length, registered.Distinct(StringComparer.Ordinal).Count());
+            string[] expected = ToolPolicy.Gates.Keys
+                .Where(name => !ToolPolicy.PlannedTools.Contains(name))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            Assert.Equal(expected, registered.Order(StringComparer.Ordinal).ToArray());
+            Assert.Equal(registered.Length, services.GetServices<McpServerTool>().Count());
 
             using IServiceScope scope = services.CreateScope();
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<LabToolDispatcher>());

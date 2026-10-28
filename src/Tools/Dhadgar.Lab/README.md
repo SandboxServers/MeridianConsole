@@ -216,6 +216,7 @@ Part of L10. Both tools are lab-only and never touch the dev stack.
 
 ## Adding a tool
 
-1. Implement `LabTool<TArgs>` in `Tools\Lab\`, with a name, a description and the argument type. Register it in DI with the other `ILabTool` instances.
-2. Add the tool's name and gate to the `ToolPolicy` gate table. A tool missing from the table is refused with `[Lab.Unclassified]`.
-3. Add a `ToolPolicyTests` row and a dispatcher test in `LabToolDispatcherTests` that covers its gate.
+1. Write the tool: implement `LabTool<TArgs>` in `Tools\<Area>\`, with a name, a description and the argument type. Add its name and gate to the `ToolPolicy` gate table (a tool missing from the table is refused with `[Lab.Unclassified]`), plus a `ToolPolicyTests` row and a dispatcher test in `LabToolDispatcherTests` that covers its gate.
+2. Register it with `AddLabTool<T>` in your area file `Mcp\Areas\<Area>Area.cs`. A new area needs an architect ruling.
+3. Remove its name from your `// Lnn` group in `ToolPolicy.PlannedTools`, and keep the comment line.
+4. Never edit the hook list in `LabMcpServer.cs`, the tool-set test in `LabDaemonServiceLifetimeTests` or `LabDaemon.BuildApplication`.
