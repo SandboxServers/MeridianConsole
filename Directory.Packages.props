@@ -103,6 +103,11 @@
 
     <!-- CLI -->
     <PackageVersion Include="System.CommandLine" Version="2.0.14" />
+    <!-- Meridian Lab (dev and lab only): MCP server projection, TOML specs, Npgsql for db_query -->
+    <PackageVersion Include="ModelContextProtocol" Version="2.3.0" />
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.3.0" />
+    <PackageVersion Include="Tomlyn" Version="2.10.1" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.0" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.57.2" />
