@@ -107,12 +107,7 @@ public static class ToolPolicy
         // L15
         // L16
         // L19
-        // L20
-        "fault_kill",
-        "fault_pause",
-        "fault_disk_fill",
-        "fault_corrupt_file",
-        "fault_db",
+        // L20 (registered)
         // L21
         "invariants_check",
         // L25
