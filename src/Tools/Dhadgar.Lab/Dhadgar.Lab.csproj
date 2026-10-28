@@ -31,4 +31,9 @@
     <Content Update="labsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="lab-coverage.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- L52: the behavioural coverage universe (read at run time from the output folder). -->
+  <ItemGroup>
+    <None Update="coverage-universe.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
