@@ -36,7 +36,9 @@ public sealed class LabSelfTestE2ETests
         Skip.IfNot(versionExit == 0, "docker is not reachable on context " + context);
 
         // The guard runs before any daemon starts. Labelled containers are never removed here: stack_up wipe does that, and only with the opt-in.
-        (int _, string labelled) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1"]);
+        // Label AND name prefix, as the product's orphan wipe does (D-ML6). Docker name filters are regexes.
+        (int psExit, string labelled) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--filter", "name=^meridian-lab-", "--format", "{{.ID}}"]);
+        Assert.True(psExit == 0, "docker ps failed");
         if (labelled.Trim().Length > 0 && Environment.GetEnvironmentVariable(WipeEnvVar) != "1")
         {
             Assert.Fail("labelled lab containers exist; set MERIDIAN_LAB_S6_WIPE=1 to let the self-test's stack_up wipe remove them");
@@ -114,7 +116,7 @@ public sealed class LabSelfTestE2ETests
     /// </summary>
     private static void RemoveLabContainers(string context)
     {
-        (int _, string ids) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1"]);
+        (int _, string ids) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--filter", "name=^meridian-lab-", "--format", "{{.ID}}"]);
         foreach (string id in ids.Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             _ = RunDocker(context, ["rm", "-f", "-v", id]);
