@@ -57,6 +57,12 @@ internal static class SecretForms
                     {
                         return false;
                     }
+
+                    // A writer may emit the same escape in lower case; the same form is checked again with that spelling.
+                    if (LowercaseUnicodeEscapes(form) && !form.SequenceEqual(secret) && !use(form))
+                    {
+                        return false;
+                    }
                 }
                 finally
                 {
@@ -72,6 +78,46 @@ internal static class SecretForms
         {
             buffer.Clear();
         }
+    }
+
+    /// <summary>
+    /// Lowercases the hex digits of every <c>\uXXXX</c> escape in <paramref name="text"/>, in place. An escaped backslash
+    /// (<c>\\</c>) is skipped as a pair. Returns true when a digit changed.
+    /// </summary>
+    private static bool LowercaseUnicodeEscapes(Span<char> text)
+    {
+        bool changed = false;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '\\' || i + 1 >= text.Length)
+            {
+                continue;
+            }
+
+            if (text[i + 1] == '\\')
+            {
+                i++;
+                continue;
+            }
+
+            if (text[i + 1] != 'u' || i + 5 >= text.Length)
+            {
+                continue;
+            }
+
+            for (int digit = i + 2; digit <= i + 5; digit++)
+            {
+                if (text[digit] is >= 'A' and <= 'F')
+                {
+                    text[digit] = char.ToLowerInvariant(text[digit]);
+                    changed = true;
+                }
+            }
+
+            i += 5;
+        }
+
+        return changed;
     }
 
     /// <summary>

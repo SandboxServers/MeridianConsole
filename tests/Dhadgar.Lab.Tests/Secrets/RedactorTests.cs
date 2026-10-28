@@ -201,6 +201,22 @@ public sealed class RedactorTests
     }
 
     [Fact]
+    public void LowercaseHexEscape_OfAVaultValue_IsRedactedAndScanned()
+    {
+        using var vault = new SecretVault();
+        vault.Add(SecretKind.Password, "sécret-v4lue");
+        var redactor = new Redactor(vault);
+        var scanner = new SecretScanner(vault);
+        string text = "{\"v\":\"s\\u00e9cret-v4lue\"}";
+
+        Assert.True(scanner.HasSecret(text));
+        string redacted = redactor.Redact(text);
+
+        Assert.DoesNotContain("\\u00e9cret", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.False(scanner.HasSecret(redacted));
+    }
+
+    [Fact]
     public void Redact_WithCount_CountsEachVaultMatchOnce()
     {
         using var vault = new SecretVault();

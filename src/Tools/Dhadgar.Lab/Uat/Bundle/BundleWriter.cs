@@ -2,8 +2,10 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
@@ -50,6 +52,7 @@ public sealed class BundleWriter : IUatRunSink
     private LiveFingerprintParts? _live;
     private int _passRedactions;
     private int _rowRedactions;
+    private IRunLogSource? _logs;
 
     /// <summary>
     /// Creates the writer for one run.
@@ -96,6 +99,15 @@ public sealed class BundleWriter : IUatRunSink
         _stamp = stamp;
         _buildId = stamp.Id;
         _build = stamp.LedgerLine;
+    }
+
+    /// <summary>
+    /// Supplies the log slices written under <c>logs\</c> for the run window. Without it no log files are written.
+    /// </summary>
+    /// <param name="source">The log source.</param>
+    public void UseLogs(IRunLogSource source)
+    {
+        _logs = source ?? throw new ArgumentNullException(nameof(source));
     }
 
     /// <summary>
@@ -348,6 +360,10 @@ public sealed class BundleWriter : IUatRunSink
 
         Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));
         Write("ledger.md", LedgerRenderer.Render(_runId, _system, _build, rows));
+        if (!secretFailed)
+        {
+            WriteLogs();
+        }
 
         // The distinct tools of the recorded steps; none in the secret-failed pass, which writes no steps.
         string[] tools = secretFailed
@@ -502,6 +518,46 @@ public sealed class BundleWriter : IUatRunSink
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Writes <c>logs\&lt;process&gt;.jsonl</c> for each slice whose process name is a safe id: one compact JSON object per line
+    /// with the timestamp, level, category, event id and the message (<see cref="SensitiveText"/> redacted).
+    /// </summary>
+    private void WriteLogs()
+    {
+        if (_logs is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<RunLogSlice> slices = _logs.Slices(_started, _time.GetUtcNow());
+        foreach (RunLogSlice slice in slices)
+        {
+            if (!SafeIds.IsSafe(slice.Process))
+            {
+                continue;
+            }
+
+            var text = new StringBuilder();
+            foreach (LogLine line in slice.Lines)
+            {
+                string message = SensitiveText.Redact(line.Message, out int found);
+                _passRedactions += found;
+                JsonNode? eventId = line.EventId is int id ? JsonValue.Create(id) : null;
+                var entry = new JsonObject
+                {
+                    ["ts"] = line.Timestamp.ToString("O", CultureInfo.InvariantCulture),
+                    ["level"] = line.Level,
+                    ["category"] = line.Category,
+                    ["event_id"] = eventId,
+                    ["message"] = message,
+                };
+                text.Append(entry.ToJsonString()).Append('\n');
+            }
+
+            Write(Path.Combine("logs", slice.Process + ".jsonl"), text.ToString());
+        }
     }
 
     private void Write(string relative, string text)

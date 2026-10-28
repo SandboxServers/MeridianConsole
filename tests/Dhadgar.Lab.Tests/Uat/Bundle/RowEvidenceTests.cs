@@ -4,6 +4,7 @@ using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
@@ -353,6 +354,31 @@ public sealed class RowEvidenceTests : IDisposable
         Assert.Equal("owner-l16f", runJson.RootElement.GetProperty("lease_owner").GetString());
     }
 
+    [Fact]
+    public async Task LogSlice_VaultValueInRingLine_IsAbsent()
+    {
+        var line = new LogLine(Start, "Information", "Dhadgar.Test", null, "service said " + Secret);
+        _writer.UseLogs(new FakeLogSource(new RunLogSlice("tc-log", [line])));
+
+        await RunSpecAsync();
+
+        string logFile = Path.Combine(_writer.Folder!, "logs", "tc-log.jsonl");
+        Assert.True(File.Exists(logFile));
+        Assert.DoesNotContain(Secret, await File.ReadAllTextAsync(logFile));
+    }
+
+    [Fact]
+    public void LogSlice_LineOutsideTheRunWindow_IsAbsent()
+    {
+        var before = new LogLine(Start.AddSeconds(-1), "Information", "c", null, "before");
+        var inside = new LogLine(Start.AddSeconds(1), "Information", "c", null, "inside");
+        var after = new LogLine(Start.AddSeconds(60), "Information", "c", null, "after");
+
+        IReadOnlyList<LogLine> kept = SupervisorRunLogSource.LinesInWindow([before, inside, after], Start, Start.AddSeconds(30));
+
+        Assert.Equal(new[] { "inside" }, kept.Select(line => line.Message));
+    }
+
     private string RowPath(string rowId) => Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
 
     private async Task<UatRunResult> RunSpecAsync(BundleWriter? sink = null)
@@ -372,6 +398,11 @@ public sealed class RowEvidenceTests : IDisposable
     private sealed class FakeProbe : ICapabilityProbe
     {
         public Task<bool> IsAvailableAsync(string capability, CancellationToken ct) => Task.FromResult(true);
+    }
+
+    private sealed class FakeLogSource(params RunLogSlice[] slices) : IRunLogSource
+    {
+        public IReadOnlyList<RunLogSlice> Slices(DateTimeOffset from, DateTimeOffset to) => slices;
     }
 
     /// <summary>

@@ -11,6 +11,7 @@ using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tests.Processes;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
 using Microsoft.Extensions.DependencyInjection;
@@ -239,6 +240,40 @@ public sealed class LabDaemonServiceLifetimeTests
 
             Assert.True(read.IsSuccess, read.Error);
             Assert.Equal(1, read.Value.GetProperty("count").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [SkippableFact]
+    public async Task RunLogSource_FromTheContainer_IsTheSupervisorSource()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        string root = Path.Combine(Path.GetTempPath(), "lab-di-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            byte[] bytes = RandomNumberGenerator.GetBytes(LabDefaults.MinTokenBytes);
+            string token = Base64Url.EncodeToString(bytes);
+            Array.Clear(bytes);
+
+            var started = await LabDaemon.StartAsync(new LabDaemonOptions(
+                Port: 0,
+                Token: token,
+                DataRoot: root,
+                EnforceSingleInstance: false,
+                RefuseElevated: false,
+                Time: new FakeTimeProvider(DateTimeOffset.UnixEpoch)), CancellationToken.None);
+            Assert.True(started.IsSuccess, started.Error);
+
+            await using LabDaemon daemon = started.Value;
+            IRunLogSource logs = daemon.Services.GetRequiredService<IRunLogSource>();
+            Assert.IsType<SupervisorRunLogSource>(logs);
         }
         finally
         {

@@ -199,6 +199,11 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             build: string.Empty,
             label: label);
         sink.UseBuild(LastBuildReader.Read(_paths, _validator));
+        IRunLogSource? logs = _services.GetService<IRunLogSource>();
+        if (logs is not null)
+        {
+            sink.UseLogs(logs);
+        }
 
         using HttpMessageHandler probeHandler = LabHttp.CreateHandler();
         sink.UseLiveParts(await LiveFingerprint.CollectAsync(
