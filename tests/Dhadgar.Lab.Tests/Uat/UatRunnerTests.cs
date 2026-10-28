@@ -79,6 +79,30 @@ public sealed class UatRunnerTests
           tool = "unregistered_tool"
         """;
 
+    private const string CancelledStepSpec = """
+        schema = 1
+
+        [section]
+        id = "runner-faults"
+        title = "Runner faults"
+
+        [[row]]
+        id = "faulted"
+        title = "Faulted row"
+        expected = "pass"
+        depends_on = []
+
+          [[row.fault]]
+          id = "kill-it"
+          inject = { tool = "fault_kill", args = { target = "x" } }
+          start = "before_steps"
+          heal = "after_steps"
+
+          [[row.step]]
+          id = "cancel"
+          tool = "faults_active"
+        """;
+
     private const string SecondInjectFailsSpec = """
         schema = 1
 
@@ -244,6 +268,26 @@ public sealed class UatRunnerTests
         Assert.True(run.IsSuccess);
         UatRowResult row = Assert.Single(run.Value!.Rows);
         Assert.Equal(RowGrade.Blocked, row.Grade);
+        Assert.Single(kill.Calls);
+        Assert.Equal("f-kill-1", Assert.Single(heal.Calls).FaultId);
+    }
+
+    [Fact(Timeout = 10000)]
+    public async Task FaultRow_Cancelled_FaultStillHealed()
+    {
+        using var cts = new CancellationTokenSource();
+        var kill = new ScriptedTool("fault_kill", () => Result<object>.Success(new { fault_id = "f-kill-1" }));
+        var heal = new ScriptedTool("fault_heal", () => Result<object>.Success(new { healed = true }));
+        var cancel = new ScriptedTool("faults_active", () =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+        using var harness = new Harness(new FakeProbe(true), null, kill, heal, cancel);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => harness.Runner.RunAsync(
+            new UatRunRequest(Load(CancelledStepSpec), null, 1UL, null, null, PlanOnly: false), new NullSink(), cts.Token));
+
         Assert.Single(kill.Calls);
         Assert.Equal("f-kill-1", Assert.Single(heal.Calls).FaultId);
     }

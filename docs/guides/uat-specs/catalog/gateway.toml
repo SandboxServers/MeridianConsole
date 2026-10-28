@@ -50,6 +50,10 @@ allow_invariants = []
   wait_ms = 60000
 
   [[row.step]]
+  id = "settle-more"
+  wait_ms = 15000
+
+  [[row.step]]
   id = "readyz-down"
   tool = "http_request"
   args = { via = "gateway", method = "GET", path = "/readyz" }

@@ -106,103 +106,113 @@ internal sealed class RowExecutor
             baselines.Add(await _evaluator.CaptureBaselineAsync(clause, vars, window, ct).ConfigureAwait(false));
         }
 
-        // Faults that start before the first step. An inject error stops the row; the faults already in place are healed below.
         string? faultError = null;
-        foreach (UatFault fault in row.Faults.Where(f => f.Start == BeforeSteps))
-        {
-            faultError = await InjectAsync(fault, vars, run, faults, ct).ConfigureAwait(false);
-            if (faultError is not null)
-            {
-                break;
-            }
-        }
-
         string? stepError = null;
         bool expectFailed = false;
         string? expectFailure = null;
-        string? previousStep = null;
         var stepResults = new List<UatStepResult>();
-        for (int i = 0; i < row.Steps.Count && faultError is null; i++)
+        try
         {
-            UatStep step = row.Steps[i];
-            if (previousStep is not null)
+            // Faults that start before the first step. An inject error stops the row; the faults already in place are healed below.
+            foreach (UatFault fault in row.Faults.Where(f => f.Start == BeforeSteps))
             {
-                faultError = await AfterStepAsync(previousStep, row, vars, run, faults, ct).ConfigureAwait(false);
+                faultError = await InjectAsync(fault, vars, run, faults, ct).ConfigureAwait(false);
                 if (faultError is not null)
                 {
                     break;
                 }
             }
 
-            string stepId = step.Id ?? "step" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            previousStep = stepId;
-            stepStarts[stepId] = _time.GetUtcNow();
-
-            if (step.Tool is null)
+            string? previousStep = null;
+            for (int i = 0; i < row.Steps.Count && faultError is null; i++)
             {
-                int wait = step.WaitMs ?? 0;
-                if (wait > 0)
+                UatStep step = row.Steps[i];
+                if (previousStep is not null)
                 {
-                    await Task.Delay(TimeSpan.FromMilliseconds(wait), _time, ct).ConfigureAwait(false);
+                    faultError = await AfterStepAsync(previousStep, row, vars, run, faults, ct).ConfigureAwait(false);
+                    if (faultError is not null)
+                    {
+                        break;
+                    }
                 }
 
-                steps[stepId] = new StepOutcome(true, null, null, wait, null);
-                stepResults.Add(new UatStepResult(stepId, null, true, null, null, null, wait, null));
-                continue;
-            }
+                string stepId = step.Id ?? "step" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                previousStep = stepId;
+                stepStarts[stepId] = _time.GetUtcNow();
 
-            StepOutcome outcome = await ExecuteStepAsync(step, stepId, vars, run, ct).ConfigureAwait(false);
-
-            // Recorded as the tool returned it, before an expected error rewrites Ok and Error below.
-            stepResults.Add(new UatStepResult(stepId, step.Tool, outcome.Ok, outcome.Error, outcome.ErrorCode, step.ExpectError, outcome.DurationMs, outcome.Result));
-            if (step.ExpectError is { } expected)
-            {
-                if (MatchesExpected(expected, outcome))
+                if (step.Tool is null)
                 {
-                    steps[stepId] = outcome with { Ok = true, Error = null };
+                    int wait = step.WaitMs ?? 0;
+                    if (wait > 0)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(wait), _time, ct).ConfigureAwait(false);
+                    }
+
+                    steps[stepId] = new StepOutcome(true, null, null, wait, null);
+                    stepResults.Add(new UatStepResult(stepId, null, true, null, null, null, wait, null));
                     continue;
+                }
+
+                StepOutcome outcome = await ExecuteStepAsync(step, stepId, vars, run, ct).ConfigureAwait(false);
+
+                // Recorded as the tool returned it, before an expected error rewrites Ok and Error below.
+                stepResults.Add(new UatStepResult(stepId, step.Tool, outcome.Ok, outcome.Error, outcome.ErrorCode, step.ExpectError, outcome.DurationMs, outcome.Result));
+                if (step.ExpectError is { } expected)
+                {
+                    if (MatchesExpected(expected, outcome))
+                    {
+                        steps[stepId] = outcome with { Ok = true, Error = null };
+                        continue;
+                    }
+
+                    steps[stepId] = outcome;
+                    if (outcome.Ok)
+                    {
+                        expectFailed = true;
+                        expectFailure = "expected error " + expected + ", got success";
+                        continue;
+                    }
+
+                    stepError = outcome.Error;
+                    break;
                 }
 
                 steps[stepId] = outcome;
-                if (outcome.Ok)
+                if (!outcome.Ok)
                 {
-                    expectFailed = true;
-                    expectFailure = "expected error " + expected + ", got success";
-                    continue;
-                }
-
-                stepError = outcome.Error;
-                break;
-            }
-
-            steps[stepId] = outcome;
-            if (!outcome.Ok)
-            {
-                stepError = outcome.Error;
-                break;
-            }
-
-            if (outcome.Result is { } payload && step.Capture.Count > 0)
-            {
-                string? captureError = CaptureAll(step, payload, vars);
-                if (captureError is not null)
-                {
-                    stepError = captureError;
+                    stepError = outcome.Error;
                     break;
                 }
+
+                if (outcome.Result is { } payload && step.Capture.Count > 0)
+                {
+                    string? captureError = CaptureAll(step, payload, vars);
+                    if (captureError is not null)
+                    {
+                        stepError = captureError;
+                        break;
+                    }
+                }
             }
-        }
 
-        // The last step completed without stopping the row: its after_step faults still start and heal.
-        if (faultError is null && stepError is null && previousStep is not null)
+            // The last step completed without stopping the row: its after_step faults still start and heal.
+            if (faultError is null && stepError is null && previousStep is not null)
+            {
+                faultError = await AfterStepAsync(previousStep, row, vars, run, faults, ct).ConfigureAwait(false);
+            }
+
+            // Heal after_steps faults, then anything still in place at row end (C7 heal = never, or a heal step that did not run).
+            string? healError = await HealDueAsync(heal => heal == AfterSteps, vars, run, faults, ct).ConfigureAwait(false);
+            healError ??= await HealDueAsync(_ => true, vars, run, faults, ct).ConfigureAwait(false);
+            faultError ??= healError;
+        }
+        catch (OperationCanceledException)
         {
-            faultError = await AfterStepAsync(previousStep, row, vars, run, faults, ct).ConfigureAwait(false);
+            // A cancelled run (MCP cancel, daemon shutdown) still heals what it injected. FaultBook's deadline and lease-end heal are the backstop.
+            await HealAbandonedAsync(vars, run, faults).ConfigureAwait(false);
+            throw;
         }
 
-        // Heal after_steps faults, then anything still in place at row end (C7 heal = never, or a heal step that did not run).
-        string? healError = await HealDueAsync(heal => heal == AfterSteps, vars, run, faults, ct).ConfigureAwait(false);
-        healError ??= await HealDueAsync(_ => true, vars, run, faults, ct).ConfigureAwait(false);
-        faultError ??= healError;
         if (faultError is not null)
         {
             InvariantReport blockedReport = await CheckRowAsync(spec, row, run, ct).ConfigureAwait(false);
@@ -331,8 +341,32 @@ internal sealed class RowExecutor
         return null;
     }
 
+    private static readonly TimeSpan AbandonedHealBudget = TimeSpan.FromSeconds(30);
+
     /// <summary>
-    /// After a failed heal: <c>fault_reset</c>, then <c>faults_active</c>. Faults still in place make the lab not clean (R-REG), and
+    /// Heals every fault still in place after the row was cancelled, under its own budget, because the run's token is already cancelled.
+    /// A failed heal falls to fault_reset inside HealDueAsync. When the budget runs out, the FaultBook backstops heal what is left.
+    /// </summary>
+    private async Task HealAbandonedAsync(UatVars vars, RunContext run, FaultState faults)
+    {
+        if (faults.Active.Count == 0)
+        {
+            return;
+        }
+
+        using var budget = new CancellationTokenSource(AbandonedHealBudget, _time);
+        try
+        {
+            _ = await HealDueAsync(_ => true, vars, run, faults, budget.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested)
+        {
+            // Budget spent; FaultBook's deadline and lease-end heal remain.
+        }
+    }
+
+    /// <summary>
+    /// After a failed heal:<c>fault_reset</c>, then <c>faults_active</c>. Faults still in place make the lab not clean (R-REG), and
     /// every remaining row is BLOCKED.
     /// </summary>
     private async Task ResetAsync(FaultState faults, UatVars vars, RunContext run, CancellationToken ct)
