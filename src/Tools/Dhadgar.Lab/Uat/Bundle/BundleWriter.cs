@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
@@ -41,6 +42,9 @@ public sealed class BundleWriter : IUatRunSink
     private string _runId = string.Empty;
     private ulong _seed;
     private DateTimeOffset _started;
+    private LabFingerprint? _fingerprint;
+    private string _fingerprintSha = string.Empty;
+    private readonly List<string> _warnings = [];
 
     /// <summary>
     /// Creates the writer for one run.
@@ -85,7 +89,51 @@ public sealed class BundleWriter : IUatRunSink
         _seed = seed;
         _spec = spec;
         _started = _time.GetUtcNow();
+        CaptureFingerprint(seed, spec);
     }
+
+    /// <summary>
+    /// Captures the fingerprint at run start. Parts this writer cannot collect become <c>unknown</c> and a warning in run.json.
+    /// </summary>
+    private void CaptureFingerprint(ulong seed, UatSpec spec)
+    {
+        var input = new FingerprintInput(
+            Commit: FingerprintBuilder.UnknownPart,
+            Dirty: false,
+            BuildId: _buildId == "nobuild" ? null : _buildId,
+            ImageDigests: new Dictionary<string, string>(),
+            LockFilesSha256: null,
+            ServiceEnvironments: new Dictionary<string, IReadOnlyDictionary<string, string>>(),
+            SecretKeys: new HashSet<string>(),
+            Specs: [new SpecHash(spec.File, spec.Sha256)],
+            DaemonVersion: FingerprintBuilder.DaemonVersionText(),
+            ToxiproxyVersion: null,
+            Seed: seed,
+            Os: RuntimeInformation.OSDescription,
+            EngineVersions: new Dictionary<string, string>());
+
+        _fingerprint = FingerprintBuilder.Build(input);
+        _fingerprintSha = FingerprintHasher.Sha256(_fingerprint);
+        _warnings.Clear();
+        _warnings.Add("commit not collected: unknown");
+        _warnings.Add("lock files not collected: unknown");
+        _warnings.Add("toxiproxy version not collected: unknown");
+        _warnings.Add("image digests and engine versions not collected: unknown");
+    }
+
+    private ReplayFidelity CurrentFidelity(bool truncated) => FidelityRules.For(new FidelityInput(
+        ConcurrentActors: false,
+        TimingFaults: false,
+        Truncated: truncated,
+        Attested: false,
+        BuildPresent: _buildId != "nobuild"));
+
+    private static string FidelityText(ReplayFidelity fidelity) => fidelity switch
+    {
+        ReplayFidelity.Exact => "exact",
+        ReplayFidelity.ScheduleApproximate => "schedule_approximate",
+        _ => "evidence_only",
+    };
 
     /// <inheritdoc />
     public void RowFinished(UatRowResult row)
@@ -180,12 +228,18 @@ public sealed class BundleWriter : IUatRunSink
             violations = 0,
             redactions = 0,
             secret_scan = secretScan,
-            fingerprint_sha256 = string.Empty,
-            fidelity = "evidence_only",
+            fingerprint_sha256 = _fingerprintSha,
+            fidelity = FidelityText(CurrentFidelity(result.Truncated)),
             pair = (object?)null,
             replay = (object?)null,
-            events = 0,
+            events = result.Events,
+            warnings = _warnings.ToArray(),
         };
+
+        if (_fingerprint is not null)
+        {
+            Write("fingerprint.json", JsonSerializer.Serialize(_fingerprint, JsonOptions));
+        }
 
         Write("run.json", JsonSerializer.Serialize(run, JsonOptions));
         foreach (LedgerRow row in rows)
@@ -196,7 +250,7 @@ public sealed class BundleWriter : IUatRunSink
             Write(Path.Combine("rows", row.Section, row.Row + ".json"), JsonSerializer.Serialize(rowJson, JsonOptions));
         }
 
-        Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed));
+        Write(Path.Combine("repro", "repro.toml"), ReproToml(spec, result.Seed, CurrentFidelity(result.Truncated)));
         Write("ledger.md", LedgerRenderer.Render(_runId, _system, _build, rows));
     }
 
@@ -218,7 +272,7 @@ public sealed class BundleWriter : IUatRunSink
         File.WriteAllText(checkedPath.Value!, _redactor.Redact(text), new UTF8Encoding(false));
     }
 
-    private string ReproToml(UatSpec spec, ulong seed)
+    private string ReproToml(UatSpec spec, ulong seed, ReplayFidelity fidelity)
     {
         var text = new StringBuilder();
         text.Append("seed = ").Append(seed.ToString(CultureInfo.InvariantCulture)).Append('\n');
@@ -226,6 +280,8 @@ public sealed class BundleWriter : IUatRunSink
         text.Append("section = ").Append(Quote(spec.Section.Id)).Append('\n');
         text.Append("rows = [").Append(string.Join(", ", _results.Select(row => Quote(row.RowId)))).Append("]\n");
         text.Append("label = ").Append(Quote(_label ?? string.Empty)).Append('\n');
+        text.Append("fidelity = ").Append(Quote(FidelityText(fidelity))).Append('\n');
+        text.Append("fingerprint_sha256 = ").Append(Quote(_fingerprintSha)).Append('\n');
         text.Append("\n[[specs]]\n");
         text.Append("file = ").Append(Quote(spec.File)).Append('\n');
         text.Append("sha256 = ").Append(Quote(spec.Sha256)).Append('\n');

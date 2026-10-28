@@ -30,7 +30,7 @@ public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, I
 /// <summary>
 /// The result of one run. <see cref="Seed"/> is the seed the rows ran with (the section seed when the section sets one).
 /// </summary>
-public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows);
+public sealed record UatRunResult(string RunId, ulong Seed, bool PlanOnly, RunOverall Overall, IReadOnlyList<UatRowResult> Rows, long Events = 0, bool Truncated = false);
 
 /// <summary>
 /// Runs a loaded spec through <see cref="LabToolDispatcher"/> (C8, R-CONTRACT). Rows run in file order; a row whose dependency did not
@@ -155,13 +155,17 @@ public sealed class UatRunner
                 sink.RowFinished(result);
             }
 
-            var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows);
+            long events = 0;
             if (observing)
             {
                 observing = false;
-                _ = await _observations!.EndRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
+                Result<long> ended = await _observations!.EndRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
+                events = ended.IsSuccess ? ended.Value : 0;
             }
 
+            // The sink stops counting at MaxObservationsPerRun and writes one extra "truncated" note, so a larger count means truncation.
+            bool truncated = events > LabObservationSink.MaxObservationsPerRun;
+            var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows, events, truncated);
             sink.RunFinished(outcome);
             return Result<UatRunResult>.Success(outcome);
         }
