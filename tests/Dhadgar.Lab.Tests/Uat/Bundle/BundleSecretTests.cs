@@ -158,6 +158,46 @@ public sealed class BundleSecretTests : IDisposable
         Assert.True(scan is "passed" or "failed");
     }
 
+    [Fact]
+    public void DisposedEvidence_SetsWriteError_RunsTheScan_AndMarksTheRunFailed()
+    {
+        const string planted = "planted-secret-w3fb-n4";
+        _ = _vault.Add(SecretKind.Password, planted);
+        UatSpec spec = Load(LeakSpec);
+        BundleWriter writer = CreateWriter();
+
+        writer.RunStarted("run-w3fb-disposed", 6UL, spec);
+        string folder = Path.Combine(_uatRuns, _time.GetUtcNow().UtcDateTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "-abcd1234-run-w3fb-disposed");
+        _ = Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "ledger.md"), "planted " + planted);
+
+        // An element whose document is disposed: reading it throws, so the evidence write fails part way through.
+        JsonElement disposed;
+        using (JsonDocument document = JsonDocument.Parse("{\"echo\":1}"))
+        {
+            disposed = document.RootElement;
+        }
+
+        writer.RowFinished(new UatRowResult(
+            "leaky",
+            RowGrade.Fail,
+            "leaked",
+            [new UatClauseResult("leak-clause", ClauseState.Unverified, "boom", disposed)]));
+        writer.RunFinished(new UatRunResult("run-w3fb-disposed", 6UL, false, RunOverall.Incomplete, []));
+
+        Assert.NotNull(writer.WriteError);
+        Assert.Contains("[Lab.Unavailable]", writer.WriteError, StringComparison.Ordinal);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(planted, File.ReadAllText(file), StringComparison.Ordinal);
+        }
+
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
+        Assert.Equal("failed", run.RootElement.GetProperty("secret_scan").GetString());
+    }
+
     public void Dispose()
     {
         _vault.Dispose();

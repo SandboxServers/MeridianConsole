@@ -206,6 +206,24 @@ public sealed class BundleWriter : IUatRunSink
                 }
             }
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)
+        {
+            WriteError = "[Lab.Unavailable] the bundle could not be written";
+            MarkFailedAfterWriteError(checkedFolder.Value);
+        }
+    }
+
+    /// <summary>
+    /// Runs the scan after a failed write, so a half-written bundle is not left unscanned, then records
+    /// <c>secret_scan = failed</c> with text that carries no evidence.
+    /// </summary>
+    private void MarkFailedAfterWriteError(string folder)
+    {
+        try
+        {
+            _ = _scanner.ScanFolder(folder);
+            Write("run.json", "{\n  \"secret_scan\": \"failed\"\n}\n");
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             WriteError = "[Lab.Unavailable] the bundle could not be written";
