@@ -79,6 +79,12 @@ public sealed class DriverToolListTests
     }
 
     [Fact]
+    public void Driver_HasNoFaultReset()
+    {
+        Assert.DoesNotContain(McpPrefix + "fault_reset", ReadTools());
+    }
+
+    [Fact]
     public void Body_ForbidsForceOnALease()
     {
         (_, string body) = ReadAgent();

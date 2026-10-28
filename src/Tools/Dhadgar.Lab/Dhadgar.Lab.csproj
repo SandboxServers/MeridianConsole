@@ -27,5 +27,6 @@
 
   <ItemGroup>
     <Content Update="labsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="lab-coverage.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "entries": [
+    { "project": "src/Dhadgar.Gateway", "status": "real", "adapter": "gateway", "catalog": "docs/guides/uat-specs/catalog/gateway.toml" },
+    { "project": "src/Dhadgar.Nodes", "status": "real", "adapter": "nodes", "catalog": "docs/guides/uat-specs/catalog/nodes.toml" },
+    { "project": "src/Dhadgar.Identity", "status": "real-pending", "until": "L38" },
+    { "project": "src/Dhadgar.BetterAuth", "status": "real-pending", "until": "L38" },
+    { "project": "src/Dhadgar.Panel", "status": "real-pending", "until": "L38" },
+    { "project": "src/Dhadgar.Notifications", "status": "real-pending", "until": "L38" },
+    { "project": "src/Dhadgar.Discord", "status": "real-pending", "until": "L38" },
+    { "project": "src/Dhadgar.Cli", "status": "real-pending", "until": "L38" },
+    { "project": "src/Dhadgar.SharedAuth", "status": "real-pending", "until": "L38", "adapter": "panel" },
+    { "project": "src/Agents/Dhadgar.Agent.Windows", "status": "real-pending", "until": "L43" },
+    { "project": "src/Agents/Dhadgar.Agent.GameServerWrapper", "status": "real-pending", "until": "L43" },
+    { "project": "src/Dhadgar.Servers", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
+    { "project": "src/Dhadgar.Tasks", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
+    { "project": "src/Dhadgar.Files", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
+    { "project": "src/Dhadgar.Console", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
+    { "project": "src/Dhadgar.Mods", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
+    { "project": "src/Dhadgar.Billing", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
+    { "project": "src/Agents/Dhadgar.Agent.Linux", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" },
+    { "project": "src/Dhadgar.Secrets", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" },
+    { "project": "src/Dhadgar.Scope", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" },
+    { "project": "src/Dhadgar.ShoppingCart", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" }
+  ]
+}

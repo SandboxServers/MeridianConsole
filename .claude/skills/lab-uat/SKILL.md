@@ -49,6 +49,16 @@ Human clauses (anything that needs someone to look at the screen) are closed onl
 
 When the ledger is evidence for a status change, copy `ledger.md` into the campaign `worknotes/` folder under the packet's name.
 
+## 5a. Faults
+
+Faults belong in specs. A spec row names the fault it injects, and the driver runs it as a step. The catalog rule (C15): a real service's faults come from the rows of its catalog file in `docs/guides/uat-specs/catalog/`. A fault that no catalog row names is ad hoc.
+
+- Ad-hoc faults only when the brief lists them. The driver never invents one.
+- Every ad-hoc fault is followed by `fault_heal` for that fault id.
+- `faults_active` must be empty before the driver stops. A non-empty list is a finding, reported raw.
+- `fault_reset` is never in the driver's list (D-ML18). Only the orchestrating session may call it, and only after the driver has finished.
+- Read `invariants.json` from the bundle with `bundle_read` before you rely on an invariant result. `invariants_check` reruns the checks; it does not replace reading the file.
+
 ## 6. Troubleshooting
 
 | Symptom | First check | Next step |
