@@ -295,6 +295,25 @@ public sealed class UatAttestTests : IDisposable
     }
 
     [Fact]
+    public void Attest_ReadRowsScrub_RedactsTitleBeforeRender()
+    {
+        // The renderer turns a tab into a space, so only a scrub before the render removes the vault value.
+        using var vault = new SecretVault();
+        _ = vault.Add(SecretKind.Password, "tab\tsecret-l16f");
+        var redactor = new Redactor(vault);
+        string rowPath = Path.Combine(_folder, "rows", Section, Row + ".json");
+        File.WriteAllText(rowPath, File.ReadAllText(rowPath).Replace("\"Operator confirms the key\"", "\"tab\\tsecret-l16f\"", StringComparison.Ordinal));
+
+        Result<string> result = BundleAttestor.Attest(_folder, RunId, Section, Row, "human-look", "held",
+            null, At, Attester, redactor, _validator);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string ledger = File.ReadAllText(Path.Combine(_folder, "ledger.md"));
+        Assert.DoesNotContain("tab\tsecret-l16f", ledger, StringComparison.Ordinal);
+        Assert.DoesNotContain("tab secret-l16f", ledger, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Attest_RecordsLeaseOwnerAndCaller()
     {
         using var vault = new SecretVault();

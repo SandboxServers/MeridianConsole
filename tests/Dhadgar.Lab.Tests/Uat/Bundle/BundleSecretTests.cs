@@ -156,7 +156,7 @@ public sealed class BundleSecretTests : IDisposable
 
         using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
         string scan = run.RootElement.GetProperty("secret_scan").GetString()!;
-        Assert.True(scan is "passed" or "failed");
+        Assert.Equal("passed", scan);
     }
 
     [Fact]
@@ -202,11 +202,9 @@ public sealed class BundleSecretTests : IDisposable
     [Fact]
     public void RuntimeMintedTokenAndCookie_InStepEvidence_AreBlankedInEveryFile()
     {
-        // Not in the vault: the stack minted them at run time. The lease id and the CLI token never enter the evidence.
+        // Not in the vault: the stack minted them at run time.
         const string token = "eyJhbGciOiJIUzI1NiJ9.runtime-minted-w3fb";
         const string cookie = "session=runtime-cookie-w3fb";
-        const string leaseId = "lease-w3fb-n5-0123456789";
-        const string cliToken = "cli-token-w3fb-n5-abcdef";
         UatSpec spec = Load(LeakSpec);
         JsonElement response = JsonSerializer.SerializeToElement(new
         {
@@ -237,9 +235,40 @@ public sealed class BundleSecretTests : IDisposable
             string text = File.ReadAllText(file);
             Assert.DoesNotContain(token, text, StringComparison.Ordinal);
             Assert.DoesNotContain(cookie, text, StringComparison.Ordinal);
-            Assert.DoesNotContain(leaseId, text, StringComparison.Ordinal);
-            Assert.DoesNotContain(cliToken, text, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void TextPlainBody_WithAccessToken_IsRedacted()
+    {
+        // Not a vault value: a plain HTTP body carries a credential pair that only the text redaction catches.
+        const string accessToken = "abcdefghij0123456789";
+        UatSpec spec = Load(LeakSpec);
+        JsonElement response = JsonSerializer.SerializeToElement(new { status = 200, body = "access_token=" + accessToken + "&x=1" });
+        var step = new UatStepResult("probe", "http_request", true, null, null, null, 5L, response);
+        BundleWriter writer = CreateWriter();
+
+        writer.RunStarted("run-l16f-body", 8UL, spec);
+        writer.RowFinished(new UatRowResult(
+            "leaky",
+            RowGrade.Fail,
+            "leaked",
+            [new UatClauseResult("leak-clause", ClauseState.Unverified, "boom")],
+            [step]));
+        writer.RunFinished(new UatRunResult("run-l16f-body", 8UL, false, RunOverall.Incomplete, []));
+
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(accessToken, File.ReadAllText(file), StringComparison.Ordinal);
+        }
+
+        // The row file escapes '&' as &, so the body is read back decoded.
+        using JsonDocument row = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "rows", "bundle-secret", "leaky.json")));
+        string body = row.RootElement.GetProperty("steps")[0].GetProperty("result").GetProperty("body").GetString()!;
+        Assert.Equal("access_token=[redacted]&x=1", body);
     }
 
     [Fact]

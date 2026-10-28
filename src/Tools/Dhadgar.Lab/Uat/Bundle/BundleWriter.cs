@@ -21,7 +21,6 @@ public sealed class BundleWriter : IUatRunSink
 {
     private const string SecretScanFailed = "secret scan failed";
     private const int MaxEvidenceChars = 16384;
-    private static readonly string[] SensitiveEvidenceWords = ["token", "secret", "password", "passwd", "key", "cookie", "authorization", "credential"];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -290,7 +289,8 @@ public sealed class BundleWriter : IUatRunSink
                 if (specClause is not null)
                 {
                     clauseText = _redactor.Redact(specClause.Text, out int textRedactions);
-                    _passRedactions += textRedactions;
+                    clauseText = SensitiveText.Redact(clauseText, out int pairRedactions);
+                    _passRedactions += textRedactions + pairRedactions;
                 }
 
                 return new
@@ -408,7 +408,8 @@ public sealed class BundleWriter : IUatRunSink
 
         // Values under a sensitive name (and the value of a sensitive header) are blanked first: the stack can mint
         // tokens and cookies at run time that the vault never held.
-        string blanked = BlankSensitive(value);
+        string blanked = BlankSensitive(value, out int pairs);
+        _passRedactions += pairs;
         _redactor.Redact(blanked, out int count);
         _passRedactions += count;
         JsonElement redacted;
@@ -425,20 +426,23 @@ public sealed class BundleWriter : IUatRunSink
 
     /// <summary>
     /// Writes the element as JSON with every scalar under a sensitive key replaced by <c>"[redacted]"</c>. A header
-    /// object (one with a sensitive <c>name</c>) has its <c>value</c> replaced too.
+    /// object (one with a sensitive <c>name</c>) has its <c>value</c> replaced too. A string outside a sensitive member has
+    /// its <c>name=value</c> credential pairs redacted (<see cref="SensitiveText"/>); <paramref name="pairs"/> counts them.
     /// </summary>
-    private static string BlankSensitive(JsonElement element)
+    private static string BlankSensitive(JsonElement element, out int pairs)
     {
+        int count = 0;
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
-            WriteBlanked(writer, element, inSensitive: false);
+            WriteBlanked(writer, element, inSensitive: false, ref count);
         }
 
+        pairs = count;
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static void WriteBlanked(Utf8JsonWriter writer, JsonElement element, bool inSensitive)
+    private static void WriteBlanked(Utf8JsonWriter writer, JsonElement element, bool inSensitive, ref int pairs)
     {
         switch (element.ValueKind)
         {
@@ -452,7 +456,7 @@ public sealed class BundleWriter : IUatRunSink
                     writer.WritePropertyName(property.Name);
                     bool child = inSensitive || IsSensitiveEvidenceName(property.Name)
                         || (sensitiveHeader && property.Name == "value");
-                    WriteBlanked(writer, property.Value, child);
+                    WriteBlanked(writer, property.Value, child, ref pairs);
                 }
 
                 writer.WriteEndObject();
@@ -462,10 +466,15 @@ public sealed class BundleWriter : IUatRunSink
                 writer.WriteStartArray();
                 foreach (JsonElement item in element.EnumerateArray())
                 {
-                    WriteBlanked(writer, item, inSensitive);
+                    WriteBlanked(writer, item, inSensitive, ref pairs);
                 }
 
                 writer.WriteEndArray();
+                break;
+
+            case JsonValueKind.String when !inSensitive:
+                writer.WriteStringValue(SensitiveText.Redact(element.GetString() ?? string.Empty, out int found));
+                pairs += found;
                 break;
 
             default:
@@ -484,7 +493,7 @@ public sealed class BundleWriter : IUatRunSink
 
     private static bool IsSensitiveEvidenceName(string name)
     {
-        foreach (string word in SensitiveEvidenceWords)
+        foreach (string word in SensitiveText.Words)
         {
             if (name.Contains(word, StringComparison.OrdinalIgnoreCase))
             {
