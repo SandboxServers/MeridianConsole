@@ -75,16 +75,24 @@ internal static class DoctorPorts
 
     /// <summary>
     /// The pure verdict for the ports check. A null <paramref name="labOwned"/> means docker was unreachable.
+    /// A port in <paramref name="daemonHeld"/> is held by the lab's own daemon listeners (D-ML69): it is never
+    /// reported as in use by something else, and never as owner unknown.
     /// </summary>
-    internal static DoctorCheck EvaluatePorts(IReadOnlyList<int> ports, Func<int, PortState> probe, IReadOnlySet<int>? labOwned)
+    internal static DoctorCheck EvaluatePorts(
+        IReadOnlyList<int> ports,
+        Func<int, PortState> probe,
+        IReadOnlySet<int>? labOwned,
+        IReadOnlySet<int>? daemonHeld = null)
     {
         ArgumentNullException.ThrowIfNull(ports);
         ArgumentNullException.ThrowIfNull(probe);
 
         var states = ports.Select(port => (Port: port, State: probe(port))).ToList();
+        bool IsDaemonHeld(int port) => daemonHeld is not null && daemonHeld.Contains(port);
 
         var foreign = states
-            .Where(s => s.State == PortState.Reserved || (s.State == PortState.InUse && labOwned is not null && !labOwned.Contains(s.Port)))
+            .Where(s => s.State == PortState.Reserved
+                || (s.State == PortState.InUse && labOwned is not null && !labOwned.Contains(s.Port) && !IsDaemonHeld(s.Port)))
             .Select(s => s.State == PortState.Reserved
                 ? $"{s.Port} (reserved by the OS)"
                 : s.Port.ToString(CultureInfo.InvariantCulture))
@@ -96,7 +104,7 @@ internal static class DoctorPorts
 
         // Without docker, an in-use port can only be reported as owner unknown.
         var unknown = labOwned is null
-            ? states.Where(s => s.State == PortState.InUse).Select(s => s.Port.ToString(CultureInfo.InvariantCulture)).ToList()
+            ? states.Where(s => s.State == PortState.InUse && !IsDaemonHeld(s.Port)).Select(s => s.Port.ToString(CultureInfo.InvariantCulture)).ToList()
             : [];
         if (unknown.Count > 0)
         {
@@ -105,6 +113,6 @@ internal static class DoctorPorts
 
         int free = states.Count(s => s.State == PortState.Free);
         int held = states.Count(s => s.State == PortState.InUse);
-        return new DoctorCheck("ports", DoctorStatus.Ok, $"{free} free, {held} held by lab containers");
+        return new DoctorCheck("ports", DoctorStatus.Ok, $"{free} free, {held} held by the lab");
     }
 }

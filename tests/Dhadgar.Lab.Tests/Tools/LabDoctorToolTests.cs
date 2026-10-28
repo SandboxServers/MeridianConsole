@@ -110,6 +110,25 @@ public sealed class LabDoctorToolTests
     }
 
     [Fact]
+    public void EvaluatePorts_DaemonHeldPort_IsOk_WhenDockerUnreachable()
+    {
+        DoctorCheck check = DoctorPorts.EvaluatePorts([25080], _ => PortState.InUse, labOwned: null, daemonHeld: new HashSet<int> { 25080 });
+
+        Assert.Equal(DoctorStatus.Ok, check.Status);
+        Assert.DoesNotContain("owner unknown", check.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("something else", check.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluatePorts_InUseNotHeld_StillFails()
+    {
+        DoctorCheck check = DoctorPorts.EvaluatePorts([25080], _ => PortState.InUse, new HashSet<int>(), daemonHeld: new HashSet<int> { 25081 });
+
+        Assert.Equal(DoctorStatus.Fail, check.Status);
+        Assert.Contains("in use by something else", check.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Token_ReportsLengthNeverValue()
     {
         DoctorCheck ok = LabDoctorTool.TokenCheck(new DaemonTokenInfo(32));
@@ -176,7 +195,7 @@ public sealed class LabDoctorToolTests
     }
 
     private static LabDoctorTool CreateTool(SecretVault vault, IDockerCli docker, LabPaths paths, DaemonTokenInfo token) =>
-        new(new Redactor(vault), docker, paths, token);
+        new(new Redactor(vault), docker, paths, token, new LabListenerPorts());
 
     private sealed class RecordingDocker : IDockerCli
     {

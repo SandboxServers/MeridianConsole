@@ -26,16 +26,19 @@ public sealed class LabDoctorTool : LabTool<LabDoctorArgs>
     private readonly IDockerCli _docker;
     private readonly LabPaths _paths;
     private readonly DaemonTokenInfo _token;
+    private readonly LabListenerPorts _listeners;
 
     /// <summary>
-    /// Creates the tool over the redactor used for command output, the docker client, the lab paths and the token length.
+    /// Creates the tool over the redactor used for command output, the docker client, the lab paths, the token length
+    /// and the daemon's own listener ports.
     /// </summary>
-    public LabDoctorTool(Redactor redactor, IDockerCli docker, LabPaths paths, DaemonTokenInfo token)
+    public LabDoctorTool(Redactor redactor, IDockerCli docker, LabPaths paths, DaemonTokenInfo token, LabListenerPorts listeners)
     {
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
         _docker = docker ?? throw new ArgumentNullException(nameof(docker));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _token = token ?? throw new ArgumentNullException(nameof(token));
+        _listeners = listeners ?? throw new ArgumentNullException(nameof(listeners));
     }
 
     /// <inheritdoc />
@@ -142,12 +145,13 @@ public sealed class LabDoctorTool : LabTool<LabDoctorArgs>
         IReadOnlyList<int> ports = DoctorPorts.Checked;
         Dictionary<int, PortState> states = ports.ToDictionary(port => port, DoctorPorts.Probe);
 
-        // Docker is asked only when a port is in use; a null answer means docker was unreachable.
-        IReadOnlySet<int>? labOwned = states.Values.Any(state => state == PortState.InUse)
+        // The daemon's own listeners count as held by the lab (D-ML69), so docker is asked only when some in-use port is not one of them.
+        IReadOnlySet<int> daemonHeld = _listeners.Held;
+        IReadOnlySet<int>? labOwned = states.Any(state => state.Value == PortState.InUse && !daemonHeld.Contains(state.Key))
             ? await LabOwnedPortsAsync(ct).ConfigureAwait(false)
             : new HashSet<int>();
 
-        return DoctorPorts.EvaluatePorts(ports, port => states[port], labOwned);
+        return DoctorPorts.EvaluatePorts(ports, port => states[port], labOwned, daemonHeld);
     }
 
     private async Task<IReadOnlySet<int>?> LabOwnedPortsAsync(CancellationToken ct)

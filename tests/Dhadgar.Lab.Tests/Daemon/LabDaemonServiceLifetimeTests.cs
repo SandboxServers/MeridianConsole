@@ -177,6 +177,39 @@ public sealed class LabDaemonServiceLifetimeTests
     }
 
     [SkippableFact]
+    public async Task LabListenerPorts_FromTheContainer_IsOneSingleton()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        string root = Path.Combine(Path.GetTempPath(), "lab-di-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            byte[] bytes = RandomNumberGenerator.GetBytes(LabDefaults.MinTokenBytes);
+            string token = Base64Url.EncodeToString(bytes);
+            Array.Clear(bytes);
+
+            var started = await LabDaemon.StartAsync(new LabDaemonOptions(
+                Port: 0,
+                Token: token,
+                DataRoot: root,
+                EnforceSingleInstance: false,
+                RefuseElevated: false,
+                Time: new FakeTimeProvider(DateTimeOffset.UnixEpoch)), CancellationToken.None);
+            Assert.True(started.IsSuccess, started.Error);
+
+            await using LabDaemon daemon = started.Value;
+            IServiceProvider services = daemon.Services;
+            LabListenerPorts listeners = services.GetRequiredService<LabListenerPorts>();
+            Assert.Same(listeners, services.GetRequiredService<LabListenerPorts>());
+            Assert.NotNull(services.GetRequiredService<LabDoctorTool>());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [SkippableFact]
     public async Task LogClauseSource_FromTheContainer_ReadsTheSupervisorRing()
     {
         Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
