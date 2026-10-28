@@ -143,8 +143,7 @@ public static class ToolPolicy
         "agent_msi_uninstall",
         // L48
         // L51 (registered)
-        // L52
-        "coverage_report",
+        // L52 (registered)
         // L53
         "twin_run",
         // L54

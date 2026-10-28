@@ -151,6 +151,24 @@ public sealed class ResultsService : IDisposable
     }
 
     /// <summary>
+    /// Runs one write under the same gate as ingest (L52: the coverage observer writes C12 <c>coverage</c> rows through it).
+    /// Used by observers that run after ingest; a failure is returned, never thrown.
+    /// </summary>
+    internal async Task<Result> WriteAsync(Func<ResultsDb, Result> write, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            Result<ResultsDb> db = EnsureOpen();
+            return db.IsFailure ? Result.Failure(db.Error) : write(db.Value);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
     /// One <c>results_query</c> view (read-only, under the gate). The <c>runs</c> view returns <c>known_issues</c> and
     /// <c>evidence</c> parsed from the two migration 2 columns; <c>known_issues</c> adds the shipped file's issues the index has
     /// not linked yet. Errors are redacted.
