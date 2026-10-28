@@ -35,6 +35,16 @@ public sealed class LabPaths
     public string RepoRoot { get; }                              // Lab:RepoRoot, set by install.ps1; empty when unset
 
     /// <summary>
+    /// Builds the layout under an explicit root, for example <c>LabDaemonOptions.DataRoot</c>. Throws
+    /// <see cref="ArgumentException"/> for an empty or malformed root; callers validate first.
+    /// </summary>
+    public static LabPaths FromRoot(string root, string? repoRoot = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+        return new LabPaths(Path.GetFullPath(root), repoRoot ?? string.Empty);
+    }
+
+    /// <summary>
     /// Resolves the lab root from <see cref="LabDefaults.HomeEnvVar"/> or the platform default.
     /// </summary>
     public static LabPaths Create(IConfiguration config)
