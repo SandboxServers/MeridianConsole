@@ -107,7 +107,7 @@ public sealed class EnrollmentServiceSigningKeyTests : IDisposable
         Assert.Equal(sentKeyId, result.Value.CommandSigningKeyId);
     }
 
-    private EnrollmentService CreateSut(ScriptedHttpHandler handler, RecordingCertificateStore store) =>
+    private static EnrollmentService CreateSut(ScriptedHttpHandler handler, RecordingCertificateStore store) =>
         new(
             store,
             new ScriptedHttpClientFactory(handler),

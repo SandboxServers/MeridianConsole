@@ -9,9 +9,11 @@ using Xunit;
 
 namespace Dhadgar.Nodes.Tests.CommandSigning;
 
+#pragma warning disable CA2000, CA1849 // Signers are tracked in _signers and disposed in Dispose(); CA1849 is the sync factory used before an await-free Assert.ThrowsAsync.
 public sealed class CommandSignerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "nodes-signing-" + Guid.NewGuid().ToString("N"));
+    private readonly List<CommandSigner> _signers = new();
 
     public CommandSignerTests()
     {
@@ -20,6 +22,11 @@ public sealed class CommandSignerTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var signer in _signers)
+        {
+            signer.Dispose();
+        }
+
         try
         {
             Directory.Delete(_root, recursive: true);
@@ -200,11 +207,15 @@ public sealed class CommandSignerTests : IDisposable
         return signer;
     }
 
-    private CommandSigner CreateSigner(string keyPath) =>
-        new(
+    private CommandSigner CreateSigner(string keyPath)
+    {
+        var signer = new CommandSigner(
             Options.Create(new CommandSigningOptions { KeyPath = keyPath }),
             Options.Create(new NodesOptions { CaStoragePath = _root }),
             NullLogger<CommandSigner>.Instance);
+        _signers.Add(signer);
+        return signer;
+    }
 
     private static AgentCommandEnvelope SampleEnvelope() => new(
         CommandId: Guid.Parse("55555555-5555-5555-5555-555555555555"),

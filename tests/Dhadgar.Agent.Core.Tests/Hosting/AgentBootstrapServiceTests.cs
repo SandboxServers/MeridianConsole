@@ -209,6 +209,7 @@ public sealed class AgentBootstrapServiceTests
         // Key ids only: the public key material never reaches the log.
         Assert.DoesNotContain(h.Logger.Messages, m => m.Contains("key-a-public", StringComparison.Ordinal) || m.Contains("key-b-public", StringComparison.Ordinal));
     }
+
     [Fact]
     public async Task ConnectFailure_BacksOffAndRetries()
     {
