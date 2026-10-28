@@ -5,6 +5,7 @@ using System.Threading;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Mcp;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
@@ -267,6 +268,14 @@ public sealed class LabDaemon : IAsyncDisposable
         builder.Services.AddHostedService<LeaseSweeper>();
         builder.Services.AddHostedService<LeaseEndRelay>();
         builder.Services.AddSingleton<ILabStatusSource, LeaseStatusSource>();
+
+        // Processes and logs (L07): one supervisor, one job object, the raw-line observer and the fault targets (L19 replaces NoFaults).
+        builder.Services.AddSingleton<IRawLineObserver, NullRawLineObserver>();
+        builder.Services.AddSingleton<IFaultTargets, NoFaults>();
+        builder.Services.AddSingleton<LogPathGuard>();
+        builder.Services.AddSingleton<LabProcessSupervisor>();
+        builder.Services.AddSingleton<ILabStatusSource>(sp => sp.GetRequiredService<LabProcessSupervisor>());
+        builder.Services.AddSingleton<ContainerLogFollower>();
 
         LabMcpServer.AddLabMcp(builder.Services);
 

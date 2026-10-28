@@ -951,6 +951,9 @@
       "dhadgar.contracts": {
         "type": "Project"
       },
+      "dhadgar.lab.testchild": {
+        "type": "Project"
+      },
       "dhadgar.messaging": {
         "type": "Project",
         "dependencies": {
