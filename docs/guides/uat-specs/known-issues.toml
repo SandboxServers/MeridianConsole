@@ -70,3 +70,97 @@ state = "open"
 
 [issue.scope]
 services = ["nodes"]
+
+[[issue]]
+id = "KI-DV13"
+title = "Stub services and the Console hub have no auth (DV-13)"
+link = "docs/PROJECT-STATE.md"
+signatures = []
+patterns = ['^http:2\d\d\|.*\|/api/v1/(servers|tasks|files|mods|billing)/']
+state = "open"
+
+[issue.scope]
+services = ["gateway"]
+
+[[issue]]
+id = "KI-DV12"
+title = "Localhost dev login: the BetterAuth cookie domain is not configurable (DV-12)"
+link = "docs/PROJECT-STATE.md"
+# Unverified against live signatures: the pattern follows the identity auth routes; the owner confirms it on the first run.
+signatures = []
+patterns = ['^http:[45]\d\d\|[^|]*\|[A-Z]+\|/api/v1/auth/']
+state = "open"
+
+[issue.scope]
+services = ["identity"]
+
+[[issue]]
+id = "KI-DV3"
+title = "POST /refresh is code-complete but untested end to end (DV-3); removed when S-L9 passes"
+link = "docs/PROJECT-STATE.md"
+# Unverified against live signatures: the pattern follows the identity refresh route.
+signatures = []
+patterns = ['^http:[45]\d\d\|[^|]*\|POST\|/api/v1/auth/refresh']
+state = "open"
+
+[issue.scope]
+services = ["identity"]
+
+[[issue]]
+id = "KI-NOTIF-OUTBOX"
+title = "Notifications outbox tables are missing, so I2 cannot check the outbox"
+link = "docs/PROJECT-STATE.md"
+signatures = []
+patterns = ['^inv:I2\|notifications\|']
+state = "open"
+
+[issue.scope]
+services = ["notifications"]
+invariants = ["I2"]
+
+[[issue]]
+id = "KI-RABBIT-HOST"
+title = "Compose ConnectionStrings__RabbitMqHost is ignored by Notifications"
+link = "docs/PROJECT-STATE.md"
+# Unverified against live signatures: the pattern is the broker connection failure from Notifications.
+signatures = []
+patterns = ['^exc:notifications\|[^|]*(RabbitMq|BrokerUnreachable)']
+state = "open"
+
+[issue.scope]
+services = ["notifications"]
+
+[[issue]]
+id = "KI-DISCORD-SECRETS-PORT"
+title = "Discord falls back to SecretsService port :5080 when SecretsService__Url is unset"
+link = "docs/PROJECT-STATE.md"
+# Unverified against live signatures: the pattern is the secrets call failure from Discord.
+signatures = []
+patterns = ['^exc:discord\|[^|]*HttpRequestException']
+state = "open"
+
+[issue.scope]
+services = ["discord"]
+
+[[issue]]
+id = "KI-DELAYED-PLUGIN"
+title = "AppHost and compose lack the delayed-message plugin"
+link = "docs/PROJECT-STATE.md"
+# Unverified against live signatures: the pattern is the unknown-exchange refusal from the broker.
+signatures = []
+patterns = ['^exc:[^|]*\|[^|]*(x-delayed-message|NOT_FOUND - no exchange)']
+state = "open"
+
+[issue.scope]
+services = ["notifications"]
+
+[[issue]]
+id = "KI-94"
+title = "CommandValidator does not check command signatures (#94)"
+link = "https://github.com/SandboxServers/MeridianConsole/issues/94"
+signatures = []
+patterns = ['^exc:[^|]*\|[^|]*CommandValidator']
+state = "open"
+
+[issue.scope]
+services = ["agent"]
