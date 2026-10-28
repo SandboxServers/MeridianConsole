@@ -139,6 +139,12 @@ public sealed class AgentHub(
     /// Validates the telemetry against the C-2 limits and acknowledges it. Nothing is written to the database;
     /// only the node id and metric count are logged.
     /// </summary>
+    /// <remarks>
+    /// Only the connect-time check ran for this connection. A node decommissioned, or a certificate revoked, after
+    /// connect is still counted by <see cref="IAgentConnectionRegistry.IsConnected"/> and still gets
+    /// <c>Accepted</c> here until its next <see cref="Heartbeat"/>. Any method that persists data must re-check the
+    /// certificate and node status before it writes (VS-33).
+    /// </remarks>
     public Task<AgentHubAck> Telemetry(AgentTelemetry telemetry)
     {
         if (!AgentTelemetryValidator.IsValid(telemetry))
@@ -148,7 +154,8 @@ public sealed class AgentHub(
 
         if (!TryGetNodeId(out var nodeId))
         {
-            return Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.HeartbeatFailed));
+            // Unreachable through the authorized hub, which always sets node_id. No node matches a missing identity.
+            return Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NodeNotFound));
         }
 
         logger.LogDebug("Telemetry from node {NodeId}: {MetricCount} metrics", nodeId, telemetry.Metrics.Count);

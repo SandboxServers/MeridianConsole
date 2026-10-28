@@ -449,11 +449,12 @@ public sealed class AgentHubTests : IDisposable
         await using var connection = CreateHubConnection(factory, cert);
         await connection.StartAsync();
 
-        // 80,000 control chars in an unknown member: each escapes to \u0001 (6 bytes), about 469 KiB on the wire.
-        // That is over main's 64 KiB limit and under the 512 KiB limit, so the ack proves the limit was raised.
+        // 500 metric names of 128 chars (a 3-digit index plus 125 '\u00E9'), the largest valid telemetry. About
+        // 125 KiB as UTF-8 (2 bytes per '\u00E9'): over main's 64 KiB limit and under the 512 KiB limit, so the
+        // ack proves the limit was raised.
         var ack = await connection.InvokeAsync<AgentHubAck>(
             nameof(IAgentHub.Telemetry),
-            new { timestamp = _baseFactory.TimeProvider.GetUtcNow(), metrics = new Dictionary<string, double> { ["cpu"] = 1 }, extra = new string('\u0001', 80_000) });
+            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), Metrics(500, i => i.ToString("D3") + new string('\u00E9', 125))));
 
         Assert.True(ack.Accepted);
         Assert.Equal(HubConnectionState.Connected, connection.State);
@@ -470,11 +471,13 @@ public sealed class AgentHubTests : IDisposable
         var closed = WatchForClose(connection);
         await connection.StartAsync();
 
-        // 100,000 control chars in an unknown member: about 586 KiB on the wire, over the 512 KiB frame limit.
-        // No ack may arrive; an invalid_telemetry ack would mean the frame reached the validator.
+        // 700 metric names of 128 chars (a 3-digit index plus 125 control characters). Each '\u0001' is escaped to
+        // \u0001 (6 bytes), so the frame is about 525 KiB, over the 512 KiB limit. 'é' would not do: it stays 2 bytes
+        // on the wire. With the limit missing, the frame would reach the validator and answer invalid_telemetry,
+        // so an ack would fail the assertion below.
         var invoke = connection.InvokeAsync<AgentHubAck>(
             nameof(IAgentHub.Telemetry),
-            new { timestamp = _baseFactory.TimeProvider.GetUtcNow(), metrics = new Dictionary<string, double> { ["cpu"] = 1 }, extra = new string('\u0001', 100_000) });
+            new AgentTelemetry(_baseFactory.TimeProvider.GetUtcNow(), Metrics(700, i => i.ToString("D3") + new string('\u0001', 125))));
 
         // Long polling reports the refused frame as a failed invoke; the server-side close is not surfaced to Closed.
         await Task.WhenAny(invoke, closed.Task).WaitAsync(TimeSpan.FromSeconds(5));

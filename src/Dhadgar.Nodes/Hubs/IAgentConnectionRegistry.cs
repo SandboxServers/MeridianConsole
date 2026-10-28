@@ -12,7 +12,11 @@ public interface IAgentConnectionRegistry
     /// <summary>Removes a connection for a node. A no-op when the connection is not recorded.</summary>
     void Remove(Guid nodeId, string connectionId);
 
-    /// <summary>True when the node has at least one recorded connection.</summary>
+    /// <summary>
+    /// True when the node has at least one recorded connection. A connection stays recorded until it closes, even if
+    /// the node is decommissioned or its certificate is revoked meanwhile. Callers that act on this value must check
+    /// the node status and certificate themselves.
+    /// </summary>
     bool IsConnected(Guid nodeId);
 
     /// <summary>The number of distinct nodes with at least one recorded connection.</summary>

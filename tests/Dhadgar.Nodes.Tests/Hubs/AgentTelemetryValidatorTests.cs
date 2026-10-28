@@ -42,6 +42,24 @@ public sealed class AgentTelemetryValidatorTests
     }
 
     [Theory]
+    [InlineData(0x202E)] // right-to-left override (Cf)
+    [InlineData(0x2028)] // line separator (Zl)
+    [InlineData(0x2029)] // paragraph separator (Zp)
+    [InlineData(0x200B)] // zero-width space (Cf)
+    [InlineData(0xD800)] // unpaired high surrogate
+    [InlineData(0xDC00)] // unpaired low surrogate
+    public void MetricName_RejectsFormatSeparatorAndUnpairedSurrogate(int codePoint)
+    {
+        Assert.False(AgentTelemetryValidator.IsValid(WithMetrics(1, _ => "a" + (char)codePoint + "b")));
+    }
+
+    [Fact]
+    public void MetricName_AcceptsValidSurrogatePair()
+    {
+        Assert.True(AgentTelemetryValidator.IsValid(WithMetrics(1, _ => "cpu\U0001F600")));
+    }
+
+    [Theory]
     [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
     public void MetricValue_MustBeFinite(double value)

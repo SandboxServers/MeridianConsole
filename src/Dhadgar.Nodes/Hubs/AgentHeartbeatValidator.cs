@@ -57,18 +57,9 @@ public static class AgentHeartbeatValidator
     private static bool IsPercentage(double value) =>
         double.IsFinite(value) && value >= 0 && value <= 100;
 
-    // Control characters (NUL, CR, LF, ...) are rejected: NUL cannot be stored in PostgreSQL text,
-    // and CR/LF would forge extra lines in the operator log entries that echo these values.
-    private static bool HasControlCharacter(string value)
-    {
-        foreach (var c in value)
-        {
-            if (char.IsControl(c))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    // Control, format and separator characters, and unpaired surrogates, are rejected: NUL cannot be stored in
+    // PostgreSQL text, CR/LF would forge extra lines in the operator log entries that echo these values, and bidi
+    // or zero-width characters would disguise them. The rule is shared with the telemetry validator.
+    private static bool HasControlCharacter(string value) =>
+        AgentTelemetryValidator.HasDisallowedCharacter(value);
 }

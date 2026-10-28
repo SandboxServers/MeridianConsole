@@ -39,14 +39,40 @@ public static class AgentTelemetryValidator
             return false;
         }
 
-        foreach (var c in name)
+        return !HasDisallowedCharacter(name);
+    }
+
+    /// <summary>
+    /// True when the text holds a control, format, line or paragraph separator, or an unpaired surrogate. These
+    /// are rejected because they can forge log lines, hide or reorder text in a UI, or break UTF-8 on re-encoding.
+    /// A valid surrogate pair (a supplementary character such as an emoji) is allowed.
+    /// </summary>
+    internal static bool HasDisallowedCharacter(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
         {
-            if (char.IsControl(c))
+            var c = value[i];
+            if (char.IsHighSurrogate(c) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
             {
-                return false;
+                i++;
+                continue;
+            }
+
+            if (char.IsSurrogate(c))
+            {
+                return true;
+            }
+
+            switch (char.GetUnicodeCategory(c))
+            {
+                case System.Globalization.UnicodeCategory.Control:
+                case System.Globalization.UnicodeCategory.Format:
+                case System.Globalization.UnicodeCategory.LineSeparator:
+                case System.Globalization.UnicodeCategory.ParagraphSeparator:
+                    return true;
             }
         }
 
-        return true;
+        return false;
     }
 }
