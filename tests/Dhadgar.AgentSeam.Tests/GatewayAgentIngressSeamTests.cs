@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using static Dhadgar.Nodes.Tests.Integration.AgentSeam.AgentSeamHarness;
 
 namespace Dhadgar.AgentSeam.Tests;
 
@@ -61,6 +62,25 @@ public sealed class GatewayAgentIngressSeamTests : IDisposable
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.DoesNotContain(harness.ForwardedRequests, r => r.Path.EndsWith("/certificates/renew", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RenewEndpoint_WithCertificate_IsForwardedByGateway()
+    {
+        using var harness = new GatewayNodesHarness(_caDirectory);
+        var (enrolled, store) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
+        using var handler = new HttpClientHandler();
+        handler.ClientCertificates.Add(store.StoredClientCertificate!);
+        using var http = new HttpClient(CertificateInjectingHandlerFactory(harness.GatewayServer)(handler));
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://localhost/api/v1/agents/{enrolled.NodeId:D}/certificates/renew")
+        {
+            Content = new ByteArrayContent([])
+        };
+
+        using var response = await http.SendAsync(request);
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(harness.ForwardedRequests, r => r.ClusterId == "nodes" && r.Method == "POST" && r.Path == $"/agents/{enrolled.NodeId:D}/certificates/renew");
     }
 
     [Fact]

@@ -55,7 +55,7 @@ The Gateway service is a **stateless** component that provides:
 
 - **Reverse Proxy**: Routes requests to 13+ backend microservices using YARP (Yet Another Reverse Proxy)
 - **Authentication**: JWT Bearer token validation with configurable issuer/audience
-- **Authorization**: Policy-based authorization (TenantScoped, Agent, DenyAll)
+- **Authorization**: Policy-based authorization (TenantScoped, AgentCertificate, DenyAll)
 - **Rate Limiting**: Multiple policies (Global, Auth, PerTenant, PerAgent) with IPv6-aware throttling
 - **Circuit Breaker**: Prevents cascading failures to unhealthy backend services
 - **Security Headers**: Comprehensive protection against XSS, clickjacking, MIME sniffing, etc.
@@ -640,10 +640,9 @@ private static readonly string[] SecurityHeaders = new[]
 After stripping, the middleware re-injects these headers from validated JWT claims:
 - `X-Tenant-Id` <- `org_id` claim
 - `X-User-Id` <- `sub` claim
-- `X-Client-Type` <- `client_type` claim
-- `X-Agent-Id` <- `agent_id` claim
 - `X-Roles` <- `role` claims (comma-separated)
 - `X-Real-IP` <- `RemoteIpAddress` (validated by ForwardedHeaders middleware)
+- `X-Client-Type` and `X-Agent-Id` are stripped and never set: agents authenticate by certificate (D-31)
 
 ### Cloudflare Trusted Proxy
 
@@ -669,7 +668,6 @@ The Gateway trusts `X-Forwarded-For` headers only from Cloudflare IP ranges:
 | Policy | Requirements |
 |--------|--------------|
 | `TenantScoped` | Authenticated user required |
-| `Agent` | Authenticated user + `client_type=agent` claim |
 | `AgentCertificate` | TLS client certificate whose issuer CN is `AgentCertificateProfile.CaCommonName` (Nodes validates the rest) |
 | `DenyAll` | Always fails (blocks internal endpoints) |
 

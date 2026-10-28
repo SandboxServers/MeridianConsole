@@ -31,7 +31,8 @@ Routes are matched by `Order` value (lower = higher priority):
 
 | Order | Purpose | Example |
 |-------|---------|---------|
-| 1 | Security blocks | Internal endpoint blocking |
+| -1 | Console REST API (must precede `servers-org-route`) | `console-org-route` |
+| 1 | Security blocks | Internal endpoint blocking, `nodes-reservations-block` |
 | 10 | Authentication routes | Identity, BetterAuth |
 | 20 | Standard API routes | Most services |
 | 30 | Catch-all routes | Agent endpoints |
@@ -65,7 +66,7 @@ Routes are matched by `Order` value (lower = higher priority):
 | Policy | Description | Required Claims |
 |--------|-------------|-----------------|
 | `Anonymous` | No authentication required | None |
-| `TenantScoped` | Requires valid JWT with tenant context | `org_id` claim |
+| `TenantScoped` | Any authenticated user. The Gateway does not compare the route's `organizationId` with the token's `org_id`; the backend service must (404 for another org's resource) | Not checked at the Gateway |
 | `DenyAll` | Always returns 403 Forbidden | - |
 
 ### Special Routes
@@ -90,7 +91,7 @@ The `/api/v1/agents/*` route points to the `nodes` cluster intentionally. Agents
 **SignalR Routes**
 
 The Console service has two routes:
-- `/api/v1/console/*` - REST API endpoints
+- `/api/v1/organizations/{organizationId}/servers/{serverId}/console/*` - REST API endpoints (`console-org-route`, `Order: -1`, so it wins over `servers-org-route`, whose catch-all also matches console paths)
 - `/hubs/console/*` - SignalR WebSocket connections (no path transform)
 
 ---
