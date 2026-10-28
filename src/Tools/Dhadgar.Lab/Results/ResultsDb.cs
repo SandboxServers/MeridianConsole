@@ -683,6 +683,162 @@ public sealed class ResultsDb : IDisposable
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// The signature ids of one run that are still new (no known issue) and have no finding yet (L26 triage). Read from the
+    /// run's rows, so a signature of an earlier run is not offered again once it has a finding.
+    /// </summary>
+    /// <param name="runId">The run whose rows are searched.</param>
+    public Result<IReadOnlyList<string>> UnfoundedNewSignaturesOfRun(string runId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        try
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText =
+                """
+                select distinct signatures.signature_id from signatures
+                join rows on rows.run_id = $run_id and rows.signatures_json like '%"' || signatures.signature_id || '"%'
+                where signatures.state = 'new'
+                  and not exists (select 1 from findings where findings.signature_id = signatures.signature_id)
+                order by signatures.signature_id;
+                """;
+            command.Parameters.AddWithValue("$run_id", runId);
+            var ids = new List<string>();
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                ids.Add(reader.GetString(0));
+            }
+
+            return Result<IReadOnlyList<string>>.Success(ids);
+        }
+        catch (SqliteException ex)
+        {
+            return Result<IReadOnlyList<string>>.Failure("[Lab.IoError] results database read failed: SQLite " + ex.SqliteErrorCode);
+        }
+    }
+
+    /// <summary>
+    /// Opens a finding (one per signature; the bucket id is the signature id) in state <c>new</c>. An existing finding is kept.
+    /// </summary>
+    public Result InsertFinding(string signatureId, string firstRunId, string? reproPath, string createdAt) =>
+        Execute(
+            """
+            insert or ignore into findings (finding_id, signature_id, first_run_id, repro_path, draft_path, state, created_at)
+            values ($id, $id, $run_id, $repro_path, null, 'new', $created_at);
+            """,
+            ("$id", signatureId), ("$run_id", firstRunId), ("$repro_path", reproPath), ("$created_at", createdAt));
+
+    /// <summary>Sets a signature's known issue id (the triage link to the shipped known-issue file).</summary>
+    public Result SetSignatureKnownIssue(string signatureId, string knownIssueId) =>
+        Execute(
+            "update signatures set known_issue_id = $known_issue_id, state = 'known' where signature_id = $id;",
+            ("$id", signatureId), ("$known_issue_id", knownIssueId));
+
+    /// <summary>Sets a signature's triage state and the issue URL it was filed as (null when none).</summary>
+    public Result SetSignatureTriage(string signatureId, string state, string? issueLink) =>
+        Execute(
+            "update signatures set state = $state, issue_url = $issue_url where signature_id = $id;",
+            ("$id", signatureId), ("$state", state), ("$issue_url", issueLink));
+
+    /// <summary>Records the draft path of a finding and moves it to state <c>drafted</c>.</summary>
+    public Result SetFindingDraft(string signatureId, string draftPath) =>
+        Execute(
+            "update findings set draft_path = $draft_path, state = 'drafted' where finding_id = $id;",
+            ("$id", signatureId), ("$draft_path", draftPath));
+
+    /// <summary>One bucket of the triage ledger: a signature with its finding (when one is open).</summary>
+    /// <param name="SignatureId">The signature id (the bucket id).</param>
+    /// <param name="Kind">The signature kind.</param>
+    /// <param name="FirstSeen">The first time the signature was seen.</param>
+    /// <param name="LastSeen">The last time the signature was seen.</param>
+    /// <param name="Hits">The number of graded rows whose signatures include it.</param>
+    /// <param name="State">The signature state (<c>new</c>, <c>known</c>, <c>regressed</c>, or a triage state).</param>
+    /// <param name="KnownIssueId">The shipped known-issue id, or null.</param>
+    /// <param name="IssueLink">The filed issue link, or null.</param>
+    /// <param name="FindingState">The finding state, or null when no finding is open.</param>
+    /// <param name="ReproPath">The repro file path of the finding, or null.</param>
+    /// <param name="DraftPath">The draft path of the finding, or null.</param>
+    public sealed record BucketRecord(string SignatureId, string Kind, string FirstSeen, string LastSeen, long Hits, string State,
+        string? KnownIssueId, string? IssueLink, string? FindingState, string? ReproPath, string? DraftPath);
+
+    /// <summary>Every bucket of the index, ordered by signature id.</summary>
+    public Result<IReadOnlyList<BucketRecord>> LedgerRows() => ReadBuckets(null);
+
+    /// <summary>One bucket by signature id, or a not-found failure.</summary>
+    public Result<BucketRecord> BucketOf(string signatureId)
+    {
+        Result<IReadOnlyList<BucketRecord>> read = ReadBuckets(signatureId);
+        if (read.IsFailure)
+        {
+            return Result<BucketRecord>.Failure(read.Error);
+        }
+
+        return read.Value.Count == 0
+            ? Result<BucketRecord>.Failure("[Lab.NotFound] no bucket with that id is in the results database")
+            : Result<BucketRecord>.Success(read.Value[0]);
+    }
+
+    /// <summary>The run ids whose rows carry one signature, ordered by run id.</summary>
+    public Result<IReadOnlyList<string>> RunIdsOfSignature(string signatureId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        try
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText =
+                """
+                select distinct run_id from rows where signatures_json like '%"' || $id || '"%' order by run_id;
+                """;
+            command.Parameters.AddWithValue("$id", signatureId);
+            var ids = new List<string>();
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                ids.Add(reader.GetString(0));
+            }
+
+            return Result<IReadOnlyList<string>>.Success(ids);
+        }
+        catch (SqliteException ex)
+        {
+            return Result<IReadOnlyList<string>>.Failure("[Lab.IoError] results database read failed: SQLite " + ex.SqliteErrorCode);
+        }
+    }
+
+    private Result<IReadOnlyList<BucketRecord>> ReadBuckets(string? signatureId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        try
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText =
+                """
+                select s.signature_id, s.kind, s.first_seen, s.last_seen, s.hits, s.state, s.known_issue_id, s.issue_url,
+                  f.state, f.repro_path, f.draft_path
+                from signatures s left join findings f on f.signature_id = s.signature_id
+                where $id is null or s.signature_id = $id
+                order by s.signature_id;
+                """;
+            command.Parameters.AddWithValue("$id", (object?)signatureId ?? DBNull.Value);
+            var buckets = new List<BucketRecord>();
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                buckets.Add(new BucketRecord(
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetInt64(4),
+                    reader.GetString(5), TextOrNull(reader, 6), TextOrNull(reader, 7), TextOrNull(reader, 8),
+                    TextOrNull(reader, 9), TextOrNull(reader, 10)));
+            }
+
+            return Result<IReadOnlyList<BucketRecord>>.Success(buckets);
+        }
+        catch (SqliteException ex)
+        {
+            return Result<IReadOnlyList<BucketRecord>>.Failure("[Lab.IoError] results database read failed: SQLite " + ex.SqliteErrorCode);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
