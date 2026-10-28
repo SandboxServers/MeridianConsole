@@ -104,7 +104,6 @@ public static class ToolPolicy
     public static IReadOnlySet<string> PlannedTools { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         "lab_doctor",
-        "logs_tail",
         "stack_status",
         "db_query",
         "certstore_list",

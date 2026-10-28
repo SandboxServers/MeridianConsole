@@ -3,6 +3,7 @@ using System.Text.Json;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Tools;
+using Dhadgar.Lab.Tools.Logs;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.AspNetCore;
@@ -37,6 +38,7 @@ public static class LabMcpServer
         AddLabTool<LeaseRenewTool>(services);
         AddLabTool<LeaseReleaseTool>(services);
         AddLabTool<LeaseStatusTool>(services);
+        AddLabTool<LogsTailTool>(services);
     }
 
     /// <summary>

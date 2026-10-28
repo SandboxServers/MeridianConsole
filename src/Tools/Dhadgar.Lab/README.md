@@ -90,6 +90,15 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 - `ILabEvents.Emit` returns void, so a failed audit write is kept in `AuditLog.LastFailure`. `RecordCall` and `TryEmit` return the failure as a `Result`. The dispatcher refuses a call whose `lab.call.begin` cannot be written, deciding on the `TryEmit` result and never on `LastFailure`.
 - Every refused attempt is audited as one `lab.call` with the refusal code as its outcome, including unknown names (recorded as `<unknown>`), unclassified or machine-gated tools, and a missing `lease_id`. A tool that throws is audited once with outcome `Lab.Internal`; its exception text is never returned or logged.
 
+## Processes and logs
+
+- `LabProcessSupervisor` starts child processes with `ProcessStartInfo.ArgumentList` and `UseShellExecute=false`, redirects stdout and stderr, and removes `MERIDIAN_LAB_TOKEN` from every child environment. Each child is assigned to a Windows Job Object with kill-on-close, so a daemon exit takes its children with it. Stop uses `Kill(entireProcessTree: true)`.
+- Process names match `[A-Za-z0-9_-]` (max 64). Every output line goes through the raw-line observer, then `Redactor`, then `JsonLogLineParser`. Only redacted text reaches the 20 000-line ring and `logs/<name>.jsonl`. Non-JSON lines are kept with level `Raw`.
+- `LogPathGuard` validates each log path with `PathValidator` against the logs folder and refuses any reparse point (symlink or junction) on the folder or the file.
+- Watchdog (D-ML19): a child that exits unexpectedly is relaunched only when a lease is held, its target is not faulted (`c:<name>` or `proc:<name>`), and fewer than 3 relaunches happened in the last 5 minutes. Otherwise it stays `crashed` (or `exited` when `Relaunch=false`). Faulted and stopped exits are not counted as restarts.
+- `ContainerLogFollower` follows a lab container with `docker --context <Lab:Docker:LinuxContext|desktop-linux> logs -f --since <ISO> <container>`, only for names starting `meridian-lab-`, and never relaunches.
+- `logs_tail` reads the ring: `process` (required), `since` (ISO or `-<n>m` / `-<n>s`), `contains`, `level`, `category`, `max_lines` (default 200, cap 2000). `daemon` returns an empty list; unknown names return `[Lab.NotFound]`.
+
 ## Tool tiers
 
 Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate before it runs anything.

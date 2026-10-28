@@ -8,6 +8,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <StartupObject>Dhadgar.Lab.LabProgram</StartupObject>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- LibraryImport (source-generated P/Invoke) for the L07 Job Object wrapper needs unsafe code enabled. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
