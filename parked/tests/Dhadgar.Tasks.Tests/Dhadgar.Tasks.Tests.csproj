@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dhadgar.Tasks\Dhadgar.Tasks.csproj" />
-    <ProjectReference Include="..\Dhadgar.ServiceDefaults.Tests\Dhadgar.ServiceDefaults.Tests.csproj" />
+    <ProjectReference Include="..\..\..\tests\Dhadgar.ServiceDefaults.Tests\Dhadgar.ServiceDefaults.Tests.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -47,23 +47,6 @@ updates:
           - '*'
 
   - package-ecosystem: npm
-    directory: /src/Dhadgar.ShoppingCart
-    schedule:
-      interval: weekly
-    groups:
-      shoppingcart-minor-patch:
-        applies-to: version-updates
-        patterns:
-          - '*'
-        update-types:
-          - minor
-          - patch
-      shoppingcart-security:
-        applies-to: security-updates
-        patterns:
-          - '*'
-
-  - package-ecosystem: npm
     directory: /src/Dhadgar.BetterAuth
     schedule:
       interval: weekly

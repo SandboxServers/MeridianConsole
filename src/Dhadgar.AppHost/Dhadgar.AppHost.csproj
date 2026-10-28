@@ -39,11 +39,8 @@
     <ProjectReference Include="..\Dhadgar.Discord\Dhadgar.Discord.csproj" />
 
     <!-- Stub Service Projects -->
-    <ProjectReference Include="..\Dhadgar.Billing\Dhadgar.Billing.csproj" />
     <ProjectReference Include="..\Dhadgar.Servers\Dhadgar.Servers.csproj" />
-    <ProjectReference Include="..\Dhadgar.Tasks\Dhadgar.Tasks.csproj" />
     <ProjectReference Include="..\Dhadgar.Console\Dhadgar.Console.csproj" />
-    <ProjectReference Include="..\Dhadgar.Mods\Dhadgar.Mods.csproj" />
   </ItemGroup>
 
 </Project>
