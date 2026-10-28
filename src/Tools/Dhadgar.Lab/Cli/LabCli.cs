@@ -1,9 +1,13 @@
 using System.Buffers.Text;
 using System.CommandLine;
 using System.Globalization;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Dhadgar.Lab.Daemon;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Cli;
 
@@ -38,7 +42,99 @@ public static class LabCli
         token.Subcommands.Add(tokenNew);
         root.Subcommands.Add(token);
 
+        var status = new Command("status", "Prints the daemon status from GET /status on 127.0.0.1. The token comes from MERIDIAN_LAB_TOKEN.");
+        var statusJson = new Option<bool>("--json") { Description = "Prints the raw JSON body." };
+        var statusPort = new Option<int>("--port") { Description = "Daemon port on 127.0.0.1.", DefaultValueFactory = _ => LabDefaults.DaemonPort };
+        status.Options.Add(statusJson);
+        status.Options.Add(statusPort);
+        status.SetAction((parse, ct) => StatusAsync(parse.GetValue(statusPort), parse.GetValue(statusJson), Console.Out, Console.Error, ct));
+        root.Subcommands.Add(status);
+
         return root;
+    }
+
+    /// <summary>
+    /// Calls <c>GET /status</c> on the loopback daemon with the token from the environment and prints the result.
+    /// Exit codes: 0 printed, 1 daemon unreachable or refused, 2 bad port or missing token.
+    /// </summary>
+    internal static async Task<int> StatusAsync(int port, bool json, TextWriter output, TextWriter error, CancellationToken ct)
+    {
+        var token = Environment.GetEnvironmentVariable(LabDefaults.TokenEnvVar);
+        if (string.IsNullOrWhiteSpace(token) || port is < 1 or > 65535)
+        {
+            await error.WriteLineAsync("[Lab.InvalidArgument] " + LabDefaults.TokenEnvVar + " must be set and --port must be 1-65535").ConfigureAwait(false);
+            return 2;
+        }
+
+        var uri = LoopbackUri(port, LabDefaults.StatusPath);
+        var body = await GetLoopbackAsync(uri, token, ct).ConfigureAwait(false);
+        if (body.IsFailure)
+        {
+            await error.WriteLineAsync(body.Error).ConfigureAwait(false);
+            return 1;
+        }
+
+        if (json)
+        {
+            await output.WriteLineAsync(body.Value).ConfigureAwait(false);
+            return 0;
+        }
+
+        var status = JsonSerializer.Deserialize<StatusDto>(body.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if (status is null)
+        {
+            await error.WriteLineAsync("[Lab.Status] the daemon returned an unreadable status body").ConfigureAwait(false);
+            return 1;
+        }
+
+        await output.WriteLineAsync($"daemon {status.Version} pid {status.Pid} started {status.StartedAt:O}").ConfigureAwait(false);
+        await output.WriteLineAsync("stack " + status.StackState).ConfigureAwait(false);
+        await output.WriteLineAsync(status.Lease.Held ? $"lease held by {status.Lease.Owner} ({status.Lease.Purpose})" : "lease free").ConfigureAwait(false);
+        foreach (var process in status.Processes)
+        {
+            await output.WriteLineAsync($"process {process.Name} {process.State} pid {process.Pid} restarts {process.Restarts}").ConfigureAwait(false);
+        }
+
+        await output.WriteLineAsync($"active faults {status.ActiveFaults} running job {status.RunningJob ?? "-"}").ConfigureAwait(false);
+        return 0;
+    }
+
+    /// <summary>
+    /// Builds an <c>http://127.0.0.1:&lt;port&gt;</c> URI for one path. The CLI talks only to loopback (R-HOST).
+    /// </summary>
+    internal static Uri LoopbackUri(int port, string path) =>
+        new("http://127.0.0.1:" + port.ToString(CultureInfo.InvariantCulture) + path, UriKind.Absolute);
+
+    /// <summary>
+    /// Sends one authenticated GET to a lab endpoint and returns the body. The endpoint must pass
+    /// <see cref="LabHosts.IsLabEndpoint"/>; redirects are not followed and the system proxy is not used.
+    /// </summary>
+    internal static async Task<Result<string>> GetLoopbackAsync(Uri uri, string token, CancellationToken ct)
+    {
+        if (!LabHosts.IsLabEndpoint(uri))
+        {
+            return Result<string>.Failure("[Lab.Refused] the target is not a lab endpoint");
+        }
+
+        try
+        {
+            using var handler = new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false };
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+            var text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return Result<string>.Failure("[Lab.Status] HTTP " + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture));
+            }
+
+            return Result<string>.Success(text);
+        }
+        catch (HttpRequestException)
+        {
+            return Result<string>.Failure("[Lab.Unavailable] the daemon is not reachable on 127.0.0.1");
+        }
     }
 
     /// <summary>
