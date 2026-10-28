@@ -4,10 +4,13 @@ using System.Security.Cryptography;
 using System.Threading;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
+using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Mcp;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Stack;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Microsoft.AspNetCore.Builder;
@@ -276,6 +279,15 @@ public sealed class LabDaemon : IAsyncDisposable
         builder.Services.AddSingleton<LabProcessSupervisor>();
         builder.Services.AddSingleton<ILabStatusSource>(sp => sp.GetRequiredService<LabProcessSupervisor>());
         builder.Services.AddSingleton<ContainerLogFollower>();
+        // Docker layer and the lab stack (L08): every docker call uses the contexts from labsettings.json.
+        builder.Services.AddSingleton(DockerOptions.FromConfiguration(settings));
+        builder.Services.AddSingleton<IDockerCli, DockerCli>();
+        builder.Services.AddSingleton<ILabTargetRegistry, LabTargetRegistry>();
+        builder.Services.AddSingleton<LabCredentialRefs>();
+        builder.Services.AddSingleton<LabConnectionStrings>();
+        builder.Services.AddSingleton<ToxiproxyClient>();
+        builder.Services.AddSingleton<LabStack>();
+        builder.Services.AddSingleton<ILabStatusSource>(sp => sp.GetRequiredService<LabStack>());
 
         LabMcpServer.AddLabMcp(builder.Services);
 

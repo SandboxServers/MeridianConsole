@@ -5,6 +5,7 @@ using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Tools.Logs;
 using Dhadgar.Lab.Windows;
+using Dhadgar.Lab.Tools.Stack;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.AspNetCore;
@@ -46,6 +47,9 @@ public static class LabMcpServer
         AddLabTool<CertStoreListTool>(services);
         AddLabTool<RegistryReadTool>(services);
         AddLabTool<StateFileReadTool>(services);
+        AddLabTool<StackUpTool>(services);
+        AddLabTool<StackDownTool>(services);
+        AddLabTool<StackStatusTool>(services);
     }
 
     /// <summary>
