@@ -291,6 +291,48 @@ public sealed class ResultsDb : IDisposable
     public long SignatureHits(string signatureId) =>
         ScalarLongOr("select hits from signatures where signature_id = $id;", -1, ("$id", signatureId));
 
+    /// <summary>The stored <c>signatures_json</c> of one row, or null when the row is absent.</summary>
+    public string? SignaturesJsonOf(string runId, string section, string rowId) =>
+        ScalarText(
+            "select signatures_json from rows where run_id = $run_id and section = $section and row_id = $row_id;",
+            ("$run_id", runId), ("$section", section), ("$row_id", rowId));
+
+    /// <summary>
+    /// The grades of one row and seed across every ingested run, with the build each run ran against (flake detection).
+    /// </summary>
+    /// <param name="section">The row's section.</param>
+    /// <param name="rowId">The row id.</param>
+    /// <param name="seed">The run seed.</param>
+    public Result<IReadOnlyList<RowGradeOf>> GradesOf(string section, string rowId, long seed)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        try
+        {
+            var grades = new List<RowGradeOf>();
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText =
+                """
+                select rows.run_id, rows.grade, runs.build_id from rows join runs on runs.run_id = rows.run_id
+                where rows.section = $section and rows.row_id = $row_id and rows.seed = $seed order by rows.run_id;
+                """;
+            command.Parameters.AddWithValue("$section", section);
+            command.Parameters.AddWithValue("$row_id", rowId);
+            command.Parameters.AddWithValue("$seed", seed);
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                grades.Add(new RowGradeOf(reader.GetString(0), reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2)));
+            }
+
+            return Result<IReadOnlyList<RowGradeOf>>.Success(grades);
+        }
+        catch (SqliteException ex)
+        {
+            return Result<IReadOnlyList<RowGradeOf>>.Failure("[Lab.IoError] results database read failed: SQLite " + ex.SqliteErrorCode);
+        }
+    }
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA2100",
         Justification = "The SQL is a literal in this class; every value is bound as a parameter.")]
     private Result Execute(string sql, params (string Name, object? Value)[] parameters)
@@ -443,3 +485,6 @@ public sealed record SignatureRecord(string SignatureId, string Kind, string Tex
 
 /// <summary>A flake record (C12 <c>flakes</c>).</summary>
 public sealed record FlakeRecord(string Section, string RowId, long Seed, string RunIdsJson, string GradesJson, string DetectedAt);
+
+/// <summary>One run's grade of a row and seed, with the build that run used (<see cref="ResultsDb.GradesOf"/>).</summary>
+public sealed record RowGradeOf(string RunId, string Grade, string? BuildId);
