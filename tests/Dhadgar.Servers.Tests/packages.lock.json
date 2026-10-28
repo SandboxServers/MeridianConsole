@@ -52,15 +52,6 @@
           "Microsoft.TestPlatform.TestHost": "18.11.0"
         }
       },
-      "System.Security.Cryptography.Xml": {
-        "type": "Direct",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "qpDILpfJvj65+Pvpf5drWq2+mRNSrPffJsRYVQjBmEky+V34W+w2LXDZShq0miitf5qAPKuMAQ3CUaifaS2rrw==",
-        "dependencies": {
-          "System.Security.Cryptography.Pkcs": "10.0.14"
-        }
-      },
       "xunit": {
         "type": "Direct",
         "requested": "[2.9.3, )",
@@ -763,7 +754,10 @@
           "Dhadgar.Messaging": "[1.0.0, )",
           "Dhadgar.ServiceDefaults": "[1.0.0, )",
           "Dhadgar.Shared": "[1.0.0, )",
+          "FluentValidation": "[12.2.0, )",
+          "FluentValidation.DependencyInjectionExtensions": "[12.2.0, )",
           "MassTransit": "[8.5.12, )",
+          "MassTransit.EntityFrameworkCore": "[8.5.12, )",
           "MassTransit.RabbitMQ": "[8.5.12, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.14, )",
           "Microsoft.EntityFrameworkCore": "[10.0.14, )",
@@ -775,8 +769,7 @@
           "OpenTelemetry.Instrumentation.Http": "[1.20.1, )",
           "OpenTelemetry.Instrumentation.Process": "[1.14.0-beta.2, )",
           "OpenTelemetry.Instrumentation.Runtime": "[1.20.1, )",
-          "Scalar.AspNetCore": "[2.18.3, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.14, )"
+          "Scalar.AspNetCore": "[2.18.3, )"
         }
       },
       "dhadgar.servicedefaults": {
@@ -857,6 +850,22 @@
           "StackExchange.Redis": "2.7.4"
         }
       },
+      "FluentValidation": {
+        "type": "CentralTransitive",
+        "requested": "[12.2.0, )",
+        "resolved": "12.2.0",
+        "contentHash": "DR3lFbdnKucaaj1/8zMNOACMz/64igzox1yVZSFVsLxYB5mxAB+wFP1WZ8fjwrZnbU1KA1DoMzHKYKxUfuZ4wQ=="
+      },
+      "FluentValidation.DependencyInjectionExtensions": {
+        "type": "CentralTransitive",
+        "requested": "[12.2.0, )",
+        "resolved": "12.2.0",
+        "contentHash": "QpKXgiO9E6wXCh19X2Musn8MZM0xt7KQt/QrD6GDBn3MCUfy8a+rkhCzrYJNCfoxTsTRQ7bpKP8T3geTnJNNeQ==",
+        "dependencies": {
+          "FluentValidation": "12.2.0",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "2.1.0"
+        }
+      },
       "MassTransit": {
         "type": "CentralTransitive",
         "requested": "[8.5.12, )",
@@ -869,6 +878,17 @@
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.0",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
           "Microsoft.Extensions.Options": "10.0.0"
+        }
+      },
+      "MassTransit.EntityFrameworkCore": {
+        "type": "CentralTransitive",
+        "requested": "[8.5.12, )",
+        "resolved": "8.5.12",
+        "contentHash": "1n2fzbQOpx0TGvuAmjUWJ38QXnnhHyCgGUbPmZO0/2TdK+2KzaqSHafPsetj/5D2CiTCjxDqJPcYFwdS5sFm7g==",
+        "dependencies": {
+          "MassTransit": "8.5.12",
+          "Microsoft.EntityFrameworkCore.Relational": "10.0.0",
+          "Microsoft.Extensions.Caching.Memory": "10.0.0"
         }
       },
       "MassTransit.RabbitMQ": {
@@ -1220,12 +1240,6 @@
           "Microsoft.IdentityModel.JsonWebTokens": "8.23.0",
           "Microsoft.IdentityModel.Tokens": "8.23.0"
         }
-      },
-      "System.Security.Cryptography.Pkcs": {
-        "type": "CentralTransitive",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "Wz+IgL2xpg8KJ4i2VWj6uz1PmZNu4Q0Ljlwd73P9Vze5NcOBtctLii3itV0PB2MpOqwqDEGfB6RCdv94A4E5yQ=="
       }
     }
   }
