@@ -125,11 +125,7 @@ builder.Services.AddMassTransit(x =>
     x.UsingRabbitMq((context, cfg) =>
     {
         var rabbitOptions = context.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
-        cfg.Host(rabbitOptions.Host, rabbitOptions.VirtualHost, h =>
-        {
-            h.Username(rabbitOptions.Username);
-            h.Password(rabbitOptions.Password);
-        });
+        RabbitMqHostConfiguration.Configure(cfg, rabbitOptions);
 
         cfg.ConfigureEndpoints(context);
     });

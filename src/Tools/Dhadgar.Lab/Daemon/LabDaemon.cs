@@ -11,6 +11,7 @@ using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Mcp;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Services;
 using Dhadgar.Lab.Stack;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
@@ -289,6 +290,10 @@ public sealed class LabDaemon : IAsyncDisposable
         builder.Services.AddSingleton<LabConnectionStrings>();
         builder.Services.AddSingleton<ToxiproxyClient>();
         builder.Services.AddSingleton<LabStack>();
+        builder.Services.AddSingleton<ILabServiceAdapter, GatewayAdapter>();
+        builder.Services.AddSingleton<ILabServiceAdapter, NodesAdapter>();
+        builder.Services.AddSingleton<ConfigOverlay>();
+        builder.Services.AddSingleton<LabServices>();
         builder.Services.AddSingleton<ILabStatusSource>(sp => sp.GetRequiredService<LabStack>());
 
         LabMcpServer.AddLabMcp(builder.Services);

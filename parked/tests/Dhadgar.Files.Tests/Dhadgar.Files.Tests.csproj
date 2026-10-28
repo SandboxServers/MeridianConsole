@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Dhadgar.Files.Tests</AssemblyName>
+    <RootNamespace>Dhadgar.Files.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <!-- Pins the transitive System.Security.Cryptography.Xml (via EF Design's MSBuild deps) past its advisories; see Directory.Packages.props -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Dhadgar.Files\Dhadgar.Files.csproj" />
+    <ProjectReference Include="..\..\..\tests\Dhadgar.ServiceDefaults.Tests\Dhadgar.ServiceDefaults.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

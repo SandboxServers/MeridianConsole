@@ -3,6 +3,6 @@
   "files.insertFinalNewline": true,
   "omnisharp.enableEditorConfigSupport": true,
   "files.associations": {
-    "deploy/kubernetes/helm/*pipeline*.yml": "azure-pipelines"
+    "parked/deploy/kubernetes/helm/*pipeline*.yml": "azure-pipelines"
   }
 }

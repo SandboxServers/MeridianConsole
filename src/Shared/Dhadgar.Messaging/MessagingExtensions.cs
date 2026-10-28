@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dhadgar.Messaging.Publishing;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -49,6 +50,7 @@ public static class MessagingExtensions
     /// Configuration keys:
     /// <list type="bullet">
     ///   <item><description><c>RabbitMq:Host</c> - RabbitMQ host (default: localhost)</description></item>
+    ///   <item><description><c>RabbitMq:Port</c> - Optional AMQP port 1-65535 (default: 5672). Cannot be combined with a URI in <c>RabbitMq:Host</c></description></item>
     ///   <item><description><c>RabbitMq:Username</c> - Username (required; no default)</description></item>
     ///   <item><description><c>RabbitMq:Password</c> - Password (required; no default)</description></item>
     /// </list>
@@ -93,7 +95,26 @@ public static class MessagingExtensions
                         "RabbitMq:Password is required and must not be empty or whitespace. Configure via environment variables, user-secrets, or appsettings.");
                 }
 
-                cfg.Host(host, h =>
+                // Optional broker port. Absent means the AMQP default (5672).
+                ushort? port = null;
+                var portValue = config["RabbitMq:Port"];
+                if (!string.IsNullOrWhiteSpace(portValue))
+                {
+                    if (!ushort.TryParse(portValue, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) || parsed == 0)
+                    {
+                        throw new InvalidOperationException("RabbitMq:Port must be an integer from 1 to 65535.");
+                    }
+
+                    if (Uri.IsWellFormedUriString(host, UriKind.Absolute))
+                    {
+                        throw new InvalidOperationException(
+                            "RabbitMq:Port cannot be combined with a URI in RabbitMq:Host; put the port in the URI.");
+                    }
+
+                    port = parsed;
+                }
+
+                void ConfigureHost(IRabbitMqHostConfigurator h)
                 {
                     h.Username(user);
                     h.Password(pass);
@@ -110,7 +131,16 @@ public static class MessagingExtensions
 
                     // Publisher confirms ensure messages are confirmed by broker
                     h.PublisherConfirmation = true;
-                });
+                }
+
+                if (port is { } p)
+                {
+                    cfg.Host(host, p, "/", ConfigureHost);
+                }
+                else
+                {
+                    cfg.Host(host, ConfigureHost);
+                }
 
                 // Consumer concurrency settings
                 // PrefetchCount controls how many messages are buffered per consumer

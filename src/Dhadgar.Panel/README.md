@@ -1195,7 +1195,7 @@ Enable verbose logging by checking browser DevTools:
 
 - [Dhadgar.SharedAuth](../Dhadgar.SharedAuth/) - Shared auth client library
 - [Dhadgar.Scope](../Dhadgar.Scope/) - Documentation site (same tech stack)
-- [Dhadgar.ShoppingCart](../Dhadgar.ShoppingCart/) - Marketing/checkout site
+- [Dhadgar.ShoppingCart](/parked/src/Dhadgar.ShoppingCart/) - Marketing/checkout site
 - [Dhadgar.Gateway](../Dhadgar.Gateway/) - API gateway
 - [Dhadgar.Identity](../Dhadgar.Identity/) - Identity service
 

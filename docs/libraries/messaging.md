@@ -321,6 +321,9 @@ Add RabbitMQ settings to your service's `appsettings.json`:
 | `ConnectionStrings:RabbitMqHost` | RabbitMQ server hostname | `localhost` |
 | `RabbitMq:Username`              | Authentication username  | `dhadgar`   |
 | `RabbitMq:Password`              | Authentication password  | `dhadgar`   |
+| `RabbitMq:Port`                  | AMQP port (1-65535), optional | `5672` |
+
+`RabbitMq:Port` is optional. It cannot be combined with a URI in `RabbitMq:Host` (for example `rabbitmq://host:5673/`); put the port in the URI instead. The virtual host is always `/`.
 
 ### Environment-Specific Configuration
 

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Dhadgar.Agent.Linux</AssemblyName>
+    <RootNamespace>Dhadgar.Agent.Linux</RootNamespace>
+    <OutputType>Exe</OutputType>
+
+    <!-- Agent code runs on customer hardware - enforce strict security -->
+    <AnalysisMode>All</AnalysisMode>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer Condition="'$(Configuration)' == 'Release'">true</EnableSingleFileAnalyzer>
+
+    <!-- CA1303: Agents don't need localization for console output -->
+    <NoWarn>$(NoWarn);CA1303</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Agents\Dhadgar.Agent.Core\Dhadgar.Agent.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Shared\Dhadgar.Shared\Dhadgar.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Security analyzers - critical for customer-hosted code -->
+    <PackageReference Include="SecurityCodeScan.VS2019" />
+  </ItemGroup>
+</Project>

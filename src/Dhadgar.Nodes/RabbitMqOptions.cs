@@ -19,4 +19,10 @@ public sealed class RabbitMqOptions
     public string Password { get; set; } = string.Empty;
 
     public string VirtualHost { get; set; } = "/";
+
+    /// <summary>
+    /// AMQP port of the RabbitMQ broker. Defaults to 5672.
+    /// </summary>
+    [Range(1, 65535)]
+    public int Port { get; set; } = 5672;
 }

@@ -9,6 +9,7 @@ using Dhadgar.Lab.Tools.Data;
 using Dhadgar.Lab.Tools.Http;
 using Dhadgar.Lab.Tools.Logs;
 using Dhadgar.Lab.Windows;
+using Dhadgar.Lab.Tools.Services;
 using Dhadgar.Lab.Tools.Stack;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,6 +64,11 @@ public static class LabMcpServer
             .ConfigureHttpClient(client => client.Timeout = LabHttp.RequestTimeout);
         AddLabTool<DbQueryTool>(services);
         AddLabTool<HttpRequestTool>(services);
+        AddLabTool<BuildTool>(services);
+        AddLabTool<ServiceStartTool>(services);
+        AddLabTool<ServiceStopTool>(services);
+        AddLabTool<ServiceRestartTool>(services);
+        AddLabTool<ServiceConfigSetTool>(services);
     }
 
     /// <summary>
