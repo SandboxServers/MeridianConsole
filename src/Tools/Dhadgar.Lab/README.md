@@ -207,6 +207,13 @@ The host reads are read-only and run on Windows only; elsewhere they return `[La
 
 Every read takes no `member` in L12; a `member` argument returns `[Lab.Unavailable] members arrive in L32`.
 
+## Reads and probes
+
+Part of L10. Both tools are lab-only and never touch the dev stack.
+
+- `db_query` runs one statement against `nodes`, `identity`, `notifications`, `discord` or `betterauth` on the direct host port `127.0.0.1:15432`, never through Toxiproxy (R-OBSERVE). The statement runs in a `READ ONLY` transaction with a 5 s `statement_timeout` and is rolled back. A write is refused as `[Lab.ReadOnly]` (SQLSTATE `25006` or `42501`). Only one statement is accepted; quoted literals and comments may contain `;`. Backslashes are refused, and dollar signs outside literals and comments. Values bind as `@name` parameters: strings are text, numbers `bigint` or `numeric`, booleans and null as given. Rows are capped by `max_rows` (default 100, at most 500).
+- `http_request` sends one probe to `gateway` (`127.0.0.1:15000`), `agent_ingress` (`127.0.0.1:25000`, through Toxiproxy so agent-path faults apply) or a lab service by name. The URL is composed on loopback and must pass `LabHosts.IsLabEndpoint`, else `[Lab.Untrusted]`. Redirects are never followed, a `Host` header override is refused, and the timeout is 30 s. A timeout is returned as `{status: 0, error: "timeout"}`, not a tool error. Request bodies are capped at 1 MiB and responses at 64 KiB. `${secret:<ref>}` placeholders in a JSON body are resolved from the vault just before sending; the request body is never logged or returned, and the reply is redacted.
+
 ## Adding a tool
 
 1. Implement `LabTool<TArgs>` in `Tools\Lab\`, with a name, a description and the argument type. Register it in DI with the other `ILabTool` instances.
