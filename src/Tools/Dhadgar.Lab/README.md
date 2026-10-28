@@ -175,7 +175,7 @@ Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate be
 | `agent_msi_uninstall` | Leased | yes, `lease_id` required |
 | `cli_run` | Leased | yes, `lease_id` required |
 | `ui_flow_run` | Leased | yes, `lease_id` required |
-| `uat_attest` | Leased | yes, `lease_id` required |
+| `uat_attest` | Leased | yes, `lease_id` required; user approval per call (O2) |
 | `identity_user_token` | Leased | yes, `lease_id` required |
 | `results_flake_check` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
 | `hunt_model_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
@@ -195,6 +195,16 @@ Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate be
 `Machine` is reserved. No tool may carry it; the dispatcher refuses any such tool with `[Lab.MachineReserved]`.
 
 A Leased call's lease is watched for the whole call. If the lease expires, is released or is taken over while the tool runs, the tool's token is cancelled and the call returns `[Lab.LeaseLost]`.
+
+## Attestation
+
+`uat_attest` records a human verdict on a clause that needs someone to look at the screen (D-ML67).
+
+- **Who may attest.** Only the main session attests, on the user's word. `uat-driver` never has the tool. Human presence is enforced in the harness: add `mcp__meridian-lab__uat_attest` to `permissions.ask` in `.claude/settings.json` (owner action O2), so Claude Code shows the user every attest call with its exact arguments before it runs. A session that skips permission checks also skips O2; this is a stated boundary, not a defect.
+- **Verdict.** `held` or `not_held`. `pass` and `fail` are refused.
+- **Rows.** Only a row graded `NEEDS_HUMAN` or `UNVERIFIED` is attested. FAIL, BLOCKED, SKIPPED and PASS rows are refused.
+- **Recorded.** Each attestation records the lease owner and the caller (`lease_owner`, `caller`) in the row JSON, and one `- Attested:` line in `ledger.md`. The run's `fidelity` becomes `evidence_only`.
+- **Limits.** The note is at most 1000 characters with no control characters. The clause id matches `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`. The ledger renders free text on one line and escapes pipes in table cells.
 
 ## Probe and Windows reads
 
