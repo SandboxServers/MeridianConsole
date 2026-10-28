@@ -79,7 +79,7 @@ public sealed class ShippedSpecsValidateTests
     /// The spec files under <paramref name="specsDir"/> as forward-slash relative paths: top-level files except
     /// <c>known-issues.toml</c>, plus <c>catalog/</c> files except <c>enroll-history.toml</c>.
     /// </summary>
-    private static IReadOnlyList<string> ShippedSpecFiles(string specsDir)
+    private static List<string> ShippedSpecFiles(string specsDir)
     {
         var result = new List<string>();
         foreach (string file in Directory.GetFiles(specsDir, "*.toml", SearchOption.TopDirectoryOnly))
