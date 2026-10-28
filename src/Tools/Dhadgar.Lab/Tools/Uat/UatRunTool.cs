@@ -1,5 +1,9 @@
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Http;
+using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
@@ -181,6 +185,10 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             system: RuntimeInformation.OSDescription,
             build: string.Empty,
             label: label);
+
+        using HttpMessageHandler probeHandler = LabHttp.CreateHandler();
+        sink.UseLiveParts(await LiveFingerprint.CollectAsync(
+            _services.GetRequiredService<IDockerCli>(), DockerEngine.Linux, Array.Empty<string>(), probeHandler, ct).ConfigureAwait(false));
 
         Result<UatRunResult> run = await runner.RunAsync(request, sink, ct).ConfigureAwait(false);
         if (run.IsFailure)

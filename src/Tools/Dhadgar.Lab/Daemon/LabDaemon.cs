@@ -10,6 +10,7 @@ using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Mcp;
+using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Services;
 using Dhadgar.Lab.Stack;
@@ -265,6 +266,14 @@ public sealed class LabDaemon : IAsyncDisposable
         builder.Services.AddSingleton<SecretVault>();
         builder.Services.AddSingleton<Redactor>();
         builder.Services.AddSingleton<AuditLog>();
+
+        // Observations (L48): one sink for the daemon's run; every run's events.jsonl goes through it.
+        builder.Services.AddSingleton(sp => new LabObservationSink(
+            sp.GetRequiredService<Redactor>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<IPathValidator>(),
+            [paths.UatRuns, paths.Jobs]));
+        builder.Services.AddSingleton<ILabObservationSink>(sp => sp.GetRequiredService<LabObservationSink>());
         builder.Services.AddSingleton<ILabEvents, DaemonEvents>();
 
         // The single lease, its sweep every 5 s, and the end-of-lease hook relay (no hook is registered in L05).

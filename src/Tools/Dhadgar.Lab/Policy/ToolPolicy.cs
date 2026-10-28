@@ -164,7 +164,6 @@ public static class ToolPolicy
         "agent_msi_install",
         "agent_msi_uninstall",
         // L48
-        "events_read",
         // L51
         "history_run",
         // L52
