@@ -1,7 +1,11 @@
+using System.Text.Json;
+using Dhadgar.Lab.Secrets;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Dhadgar.Lab.Daemon;
 
@@ -50,8 +54,15 @@ internal static class StatusEndpoint
         var pid = Environment.ProcessId;
         endpoints.MapGet(LabDefaults.StatusPath, (HttpContext context) =>
         {
-            var sources = context.RequestServices.GetServices<ILabStatusSource>();
-            return Results.Ok(Build(sources, pid, startedAt));
+            // The body carries caller-supplied text (lease owner and purpose), so it goes through the redactor
+            // the same way the lab_status tool result does. The serializer options match the HTTP defaults.
+            var services = context.RequestServices;
+            var sources = services.GetServices<ILabStatusSource>();
+            var options = services.GetService<IOptions<JsonOptions>>()?.Value.SerializerOptions
+                ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            var body = JsonSerializer.SerializeToElement(Build(sources, pid, startedAt), options);
+            var redacted = services.GetRequiredService<Redactor>().Redact(body);
+            return Results.Json(redacted, options);
         });
     }
 

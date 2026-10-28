@@ -47,7 +47,7 @@ public static class LabCli
     internal static async Task<int> RunDaemonAsync(CancellationToken ct)
     {
         var settings = LabDaemon.LoadSettings();
-        var token = Environment.GetEnvironmentVariable(LabDefaults.TokenEnvVar);
+        var token = TakeTokenFromEnvironment();
         if (string.IsNullOrWhiteSpace(token))
         {
             await Console.Error.WriteLineAsync("[Lab.InvalidArgument] " + LabDefaults.TokenEnvVar + " is not set").ConfigureAwait(false);
@@ -78,6 +78,17 @@ public static class LabCli
         await Console.Out.WriteLineAsync("meridian-lab daemon listening on " + daemon.BaseAddress.GetLeftPart(UriPartial.Authority)).ConfigureAwait(false);
         await WaitForStopAsync(ct).ConfigureAwait(false);
         return 0;
+    }
+
+    /// <summary>
+    /// Reads the daemon token from the environment and removes it from the process environment, so no child process
+    /// the daemon starts later inherits it. The string is returned as read; the caller owns it from here.
+    /// </summary>
+    internal static string? TakeTokenFromEnvironment()
+    {
+        var token = Environment.GetEnvironmentVariable(LabDefaults.TokenEnvVar);
+        Environment.SetEnvironmentVariable(LabDefaults.TokenEnvVar, null);
+        return token;
     }
 
     /// <summary>
