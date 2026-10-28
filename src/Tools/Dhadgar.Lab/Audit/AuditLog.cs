@@ -58,6 +58,16 @@ public sealed class AuditLog : ILabEvents, IDisposable
     }
 
     /// <summary>
+    /// Writes one event and returns this write's own result. A caller that must refuse work when its audit line cannot be
+    /// written decides on this result, never on <see cref="LastFailure"/>, which another thread may have changed.
+    /// </summary>
+    public Result TryEmit(LabEvent labEvent)
+    {
+        ArgumentNullException.ThrowIfNull(labEvent);
+        return Write(labEvent);
+    }
+
+    /// <summary>
     /// Writes a <c>lab.call</c> event for one finished tool call. The entry records the tool name, gate, caller,
     /// lease owner, outcome and duration. It never records the arguments.
     /// </summary>

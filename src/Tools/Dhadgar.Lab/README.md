@@ -7,8 +7,10 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 - `LabProgram.cs`: entry point (`meridian-lab`).
 - `LabDefaults.cs`, `LabPorts.cs`, `LabIds.cs`, `LabPaths.cs`, `LabHosts.cs`: constants, ports, identifiers, path rules and the loopback host guard.
 - `Daemon/`: the loopback daemon that exposes the lab over HTTP with a bearer token.
-- `Policy/`: `LabGate`, the policy check every tool call passes through.
-- `Tools/`: `LabCallContext`, the per-call context.
+- `Policy/`: `ToolPolicy` and `LabGate`, the policy check every tool call passes through.
+- `Tools/`: `LabTool`, `LabToolRegistry`, `LabToolDispatcher` (the only call path), `LabJson` and `LabCallContext`, the per-call context.
+- `Mcp/`: `LabMcpServer`, the MCP streamable-HTTP projection of the registry.
+- `Leasing/`: `LeaseBook`, `LeaseSweeper` and `ILeaseEndHook`.
 - `Audit/`: `LabEvent`, `ILabEvents` and `AuditLog`, the daily JSON-lines audit writer.
 - `Secrets/`: `SecretVault` (secrets held by reference only) and `Redactor`.
 - `Nodes/`: the adapter into the Nodes product (`INodesLabAdapter`, `NodesLabAdapter`, `EnrollProbe`).
@@ -60,7 +62,7 @@ Every request passes one guard before routing, in this order:
 
 Refusals are logged as `lab.edge.refused {reason}` with no values. The token and the `Authorization` header are never logged.
 
-Routes: `GET /status` returns the `StatusDto` (idle until later packets contribute); `/mcp` is reserved for L05; anything else is **404** once the guard passes.
+Routes: `GET /status` returns the `StatusDto` (idle until later packets contribute); `/mcp` serves the MCP streamable-HTTP endpoint (stateless, guarded by the same Host, Origin and bearer checks); anything else is **404** once the guard passes.
 
 Exit codes of `meridian-lab daemon run`:
 
@@ -85,4 +87,106 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 - `SecretVault` stores each secret as a `char[]` and returns a reference: `tok-N`, `key-N`, `pwd-N` or `brr-N` (a counter per kind). `Use` hands the caller a `ReadOnlySpan<char>` over the stored array and copies nothing out. `Remove` and `Dispose` zero the storage.
 - `Redactor` replaces every vault value of 8 or more characters (longest first) with `***<ref>`. It also masks PEM private key blocks (`***pem`), `Bearer <token>` (`Bearer ***`) and `Password=` / `Pwd=` segments (`$1=***`). Each pattern has a 1 second timeout; on timeout the text becomes `***redaction-timeout***`.
 - `AuditLog` writes one JSON line per event to `audit/audit-<yyyyMMdd>.jsonl` under the lab root, using the UTC day, and closes the previous day's file on roll-over. A `lab.call` entry records call id, tool, gate, caller, lease owner, outcome and duration. It never records tool arguments. Every value passes through `Redactor`.
-- `ILabEvents.Emit` returns void, so a failed audit write is kept in `AuditLog.LastFailure`. `RecordCall` returns the failure as a `Result`.
+- `ILabEvents.Emit` returns void, so a failed audit write is kept in `AuditLog.LastFailure`. `RecordCall` and `TryEmit` return the failure as a `Result`. The dispatcher refuses a call whose `lab.call.begin` cannot be written, deciding on the `TryEmit` result and never on `LastFailure`.
+- Every refused attempt is audited as one `lab.call` with the refusal code as its outcome, including unknown names (recorded as `<unknown>`), unclassified or machine-gated tools, and a missing `lease_id`. A tool that throws is audited once with outcome `Lab.Internal`; its exception text is never returned or logged.
+
+## Tool tiers
+
+Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate before it runs anything.
+
+| Tool | Gate | Lease needed |
+| --- | --- | --- |
+| `lab_status` | Open | no |
+| `lab_doctor` | Open | no |
+| `lab_lease_acquire` | Open | no |
+| `lab_lease_renew` | Open | no |
+| `lab_lease_release` | Open | no |
+| `lab_lease_status` | Open | no |
+| `logs_tail` | Open | no |
+| `stack_status` | Open | no |
+| `db_query` | Open | no |
+| `certstore_list` | Open | no |
+| `registry_read` | Open | no |
+| `state_file_read` | Open | no |
+| `uat_list_specs` | Open | no |
+| `uat_plan` | Open | no |
+| `uat_report` | Open | no |
+| `bundle_read` | Open | no |
+| `fault_list_targets` | Open | no |
+| `faults_active` | Open | no |
+| `invariants_check` | Open | no |
+| `results_query` | Open | no |
+| `triage_show` | Open | no |
+| `job_status` | Open | no |
+| `pool_list` | Open | no |
+| `ui_flow_list` | Open | no |
+| `events_read` | Open | no |
+| `coverage_report` | Open | no |
+| `lab_build` | Leased | yes, `lease_id` required |
+| `stack_up` | Leased | yes, `lease_id` required |
+| `stack_down` | Leased | yes, `lease_id` required |
+| `stack_reset_data` | Leased | yes, `lease_id` required |
+| `svc_start` | Leased | yes, `lease_id` required |
+| `svc_stop` | Leased | yes, `lease_id` required |
+| `svc_restart` | Leased | yes, `lease_id` required |
+| `svc_config_set` | Leased | yes, `lease_id` required |
+| `http_request` | Leased | yes, `lease_id` required |
+| `nodes_token_mint` | Leased | yes, `lease_id` required |
+| `nodes_enroll_probe` | Leased | yes, `lease_id` required |
+| `nodes_cert_time_shift` | Leased | yes, `lease_id` required |
+| `nodes_decommission` | Leased | yes, `lease_id` required |
+| `fault_toxic_add` | Leased | yes, `lease_id` required |
+| `fault_proxy_disable` | Leased | yes, `lease_id` required |
+| `fault_partition` | Leased | yes, `lease_id` required |
+| `fault_heal` | Leased | yes, `lease_id` required |
+| `fault_reset` | Leased | yes, `lease_id` required |
+| `fault_kill` | Leased | yes, `lease_id` required |
+| `fault_pause` | Leased | yes, `lease_id` required |
+| `fault_disk_fill` | Leased | yes, `lease_id` required |
+| `fault_corrupt_file` | Leased | yes, `lease_id` required |
+| `fault_corrupt_registry` | Leased | yes, `lease_id` required |
+| `fault_db` | Leased | yes, `lease_id` required |
+| `results_known_issue_set` | Leased | yes, `lease_id` required |
+| `triage_draft_issue` | Leased | yes, `lease_id` required |
+| `triage_mark` | Leased | yes, `lease_id` required |
+| `job_cancel` | Leased | yes, `lease_id` required |
+| `pool_acquire` | Leased | yes, `lease_id` required |
+| `pool_release` | Leased | yes, `lease_id` required |
+| `member_reset` | Leased | yes, `lease_id` required |
+| `agent_install` | Leased | yes, `lease_id` required |
+| `agent_uninstall` | Leased | yes, `lease_id` required |
+| `agent_start` | Leased | yes, `lease_id` required |
+| `agent_stop` | Leased | yes, `lease_id` required |
+| `agent_kill` | Leased | yes, `lease_id` required |
+| `agent_token_write` | Leased | yes, `lease_id` required |
+| `agent_config_set` | Leased | yes, `lease_id` required |
+| `agent_msi_install` | Leased | yes, `lease_id` required |
+| `agent_msi_uninstall` | Leased | yes, `lease_id` required |
+| `cli_run` | Leased | yes, `lease_id` required |
+| `ui_flow_run` | Leased | yes, `lease_id` required |
+| `uat_attest` | Leased | yes, `lease_id` required |
+| `identity_user_token` | Leased | yes, `lease_id` required |
+| `results_flake_check` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `hunt_model_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `fuzz_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `chaos_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `soak_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `fleet_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `uat_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `history_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `twin_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `mutation_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `envelope_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `peer_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `version_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+| `guided_ab_run` | OwnLease | only when `lease_id` is passed; the tool acquires its own lease otherwise |
+
+`Machine` is reserved. No tool may carry it; the dispatcher refuses any such tool with `[Lab.MachineReserved]`.
+
+A Leased call's lease is watched for the whole call. If the lease expires, is released or is taken over while the tool runs, the tool's token is cancelled and the call returns `[Lab.LeaseLost]`.
+
+## Adding a tool
+
+1. Implement `LabTool<TArgs>` in `Tools\Lab\`, with a name, a description and the argument type. Register it in DI with the other `ILabTool` instances.
+2. Add the tool's name and gate to the `ToolPolicy` gate table. A tool missing from the table is refused with `[Lab.Unclassified]`.
+3. Add a `ToolPolicyTests` row and a dispatcher test in `LabToolDispatcherTests` that covers its gate.
