@@ -89,6 +89,7 @@ This library enables both communication styles by providing the shared types.
 | **Identity Constants** | 1 class | Membership change type string constants |
 | **Identity Interfaces** | 1 | Service client interface for Identity service |
 | **Server Contracts** | 3 | Server provisioning message contracts and value types |
+| **Agent Footprint** | 2 | `AgentWindowsFootprint` (fixed Windows service, CA store, registry, state-file names) and `ProbeFootprint` (the lab probe's JSON, read by the lab) |
 | **Utility Types** | 1 | Hello world smoke-test constant |
 
 ---
