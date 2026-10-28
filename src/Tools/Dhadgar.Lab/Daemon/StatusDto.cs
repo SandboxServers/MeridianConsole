@@ -8,7 +8,7 @@ public sealed record StatusDto(
     LeaseStatusDto Lease,
     string StackState,                       // "down" | "starting" | "up" | "degraded"
     IReadOnlyList<ProcessStatusDto> Processes,
-    int ActiveFaults,                        // 0 until L19
+    int ActiveFaults,                        // FaultBook (L19) fills this through ILabStatusSource
     IReadOnlyList<string> LeasedMembers,     // empty until L30
     string? RunningJob);                     // job id, null until L27
 

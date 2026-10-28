@@ -15,6 +15,16 @@ namespace Dhadgar.Lab.Faults;
 public sealed record ProxySpec(string Name, string Listen, string Upstream, bool Enabled);
 
 /// <summary>
+/// One toxic to add to a proxy. Toxic names are <c>&lt;fault_id&gt;-&lt;stream&gt;</c>. <see cref="ToxicValidator"/> checks it before it is sent.
+/// </summary>
+/// <param name="Name">The toxic name.</param>
+/// <param name="Type">The toxic type (<c>latency</c>, <c>bandwidth</c>, and so on).</param>
+/// <param name="Stream">The direction: <c>upstream</c> or <c>downstream</c>.</param>
+/// <param name="Toxicity">The fraction of connections the toxic applies to, 0.0 to 1.0.</param>
+/// <param name="Attributes">The type-specific attributes, all integers.</param>
+public sealed record ToxicSpec(string Name, string Type, string Stream, double Toxicity, IReadOnlyDictionary<string, long> Attributes);
+
+/// <summary>
 /// Minimal Toxiproxy API client (L08). Only the loopback API port in <see cref="LabPorts.ToxiproxyApi"/> is reachable.
 /// </summary>
 public sealed class ToxiproxyClient : IDisposable
@@ -126,6 +136,94 @@ public sealed class ToxiproxyClient : IDisposable
             : Result.Failure("[Lab.Unavailable] Toxiproxy reset failed");
     }
 
+    /// <summary>
+    /// Enables or disables one proxy (<c>POST /proxies/{name}</c>). A missing proxy maps to <c>[Lab.NotFound]</c>.
+    /// </summary>
+    public async Task<Result> SetEnabledAsync(string proxy, bool enabled, CancellationToken ct)
+    {
+        if (!ProxyName.IsMatch(proxy))
+        {
+            return Result.Failure("[Lab.InvalidArgument] proxy name is not allowed");
+        }
+
+        var body = JsonSerializer.Serialize(new { enabled });
+        var response = await SendAsync(HttpMethod.Post, $"proxies/{proxy}", body, ct).ConfigureAwait(false);
+        if (response.IsFailure)
+        {
+            return Result.Failure(response.Error);
+        }
+
+        return response.Value.Status switch
+        {
+            HttpStatusCode.OK => Result.Success(),
+            HttpStatusCode.NotFound => Result.Failure("[Lab.NotFound] no such proxy"),
+            _ => Result.Failure("[Lab.Unavailable] Toxiproxy refused the proxy change"),
+        };
+    }
+
+    /// <summary>
+    /// Adds a toxic to one proxy (<c>POST /proxies/{name}/toxics</c>). The toxic is validated by <see cref="ToxicValidator"/> first.
+    /// </summary>
+    public async Task<Result> AddToxicAsync(string proxy, ToxicSpec spec, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        if (!ProxyName.IsMatch(proxy) || !ToxicName.IsMatch(spec.Name))
+        {
+            return Result.Failure("[Lab.InvalidArgument] proxy or toxic name is not allowed");
+        }
+
+        var valid = ToxicValidator.Validate(spec.Type, spec.Stream, spec.Toxicity, spec.Attributes);
+        if (valid.IsFailure)
+        {
+            return valid;
+        }
+
+        var body = JsonSerializer.Serialize(new
+        {
+            name = spec.Name,
+            type = spec.Type,
+            stream = spec.Stream,
+            toxicity = spec.Toxicity,
+            attributes = spec.Attributes,
+        });
+        var response = await SendAsync(HttpMethod.Post, $"proxies/{proxy}/toxics", body, ct).ConfigureAwait(false);
+        if (response.IsFailure)
+        {
+            return Result.Failure(response.Error);
+        }
+
+        return response.Value.Status switch
+        {
+            HttpStatusCode.OK => Result.Success(),
+            HttpStatusCode.NotFound => Result.Failure("[Lab.NotFound] no such proxy"),
+            _ => Result.Failure("[Lab.Unavailable] Toxiproxy refused the toxic"),
+        };
+    }
+
+    /// <summary>
+    /// Removes one toxic (<c>DELETE /proxies/{name}/toxics/{toxic}</c>). A missing toxic or proxy maps to <c>[Lab.NotFound]</c>.
+    /// </summary>
+    public async Task<Result> RemoveToxicAsync(string proxy, string toxicName, CancellationToken ct)
+    {
+        if (!ProxyName.IsMatch(proxy) || !ToxicName.IsMatch(toxicName))
+        {
+            return Result.Failure("[Lab.InvalidArgument] proxy or toxic name is not allowed");
+        }
+
+        var response = await SendAsync(HttpMethod.Delete, $"proxies/{proxy}/toxics/{toxicName}", null, ct).ConfigureAwait(false);
+        if (response.IsFailure)
+        {
+            return Result.Failure(response.Error);
+        }
+
+        return response.Value.Status switch
+        {
+            HttpStatusCode.OK or HttpStatusCode.NoContent => Result.Success(),
+            HttpStatusCode.NotFound => Result.Failure("[Lab.NotFound] no such toxic"),
+            _ => Result.Failure("[Lab.Unavailable] Toxiproxy refused the toxic removal"),
+        };
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -135,6 +233,10 @@ public sealed class ToxiproxyClient : IDisposable
 
     private static readonly System.Text.RegularExpressions.Regex ProxyName =
         new("^[a-z0-9][a-z0-9-]{0,62}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    // Toxic names are <fault_id>-<stream>; they go into a URL path, so only path-safe characters pass.
+    private static readonly System.Text.RegularExpressions.Regex ToxicName =
+        new("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private async Task<Result<(HttpStatusCode Status, string Body)>> SendAsync(HttpMethod method, string path, string? json, CancellationToken ct)
     {
