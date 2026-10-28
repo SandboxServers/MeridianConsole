@@ -11,8 +11,10 @@ using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
+using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -69,6 +71,20 @@ builder.Services.AddSingleton<ICertificateAuthorityService, CertificateAuthority
 
 // Register mTLS authentication services
 builder.Services.AddMtlsAuthentication(builder.Configuration);
+
+// User JWT beside agent mTLS. Nodes hosts no user hub, so no hub prefixes are passed.
+builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment);
+
+// Default policy scheme: agent paths use mTLS, every other path uses JWT (D-35). Registered after both
+// schemes above, because each one sets DefaultScheme and the last registration wins.
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = NodesAuthenticationSchemes.Default;
+    options.DefaultChallengeScheme = NodesAuthenticationSchemes.Default;
+    options.DefaultForbidScheme = NodesAuthenticationSchemes.Default;
+})
+.AddPolicyScheme(NodesAuthenticationSchemes.Default, "Agent mTLS or user JWT",
+    o => o.ForwardDefaultSelector = NodesAuthenticationSchemes.SelectScheme);
 
 // Register audit services
 builder.Services.AddScoped<IAuditContextAccessor, AuditContextAccessor>();
@@ -134,6 +150,7 @@ builder.Services.AddMassTransit(x =>
 // Configure authorization
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantScopedHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, AgentIdentityHandler>();
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("TenantScoped", policy =>
@@ -146,8 +163,9 @@ builder.Services.AddAuthorizationBuilder()
     })
     .AddPolicy("AgentPolicy", policy =>
     {
-        // Require authenticated user (via mTLS certificate in production)
+        // Require an agent identity: a node_id from the mTLS client certificate, never a user token
         policy.RequireAuthenticatedUser();
+        policy.AddRequirements(new AgentIdentityRequirement());
     });
 
 var app = builder.Build();

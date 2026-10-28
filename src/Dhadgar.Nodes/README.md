@@ -520,6 +520,16 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 
 ## Security
 
+### User Authentication
+
+Users call the tenant endpoints under `/organizations/{organizationId}/...` with a JWT bearer token, validated against `Auth:Issuer`, `Auth:Audience` and `Auth:ClockSkewSeconds`. The `TenantScoped` policy also requires the `org_id` claim.
+
+### Authentication Scheme Selection
+
+The default scheme is the `NodesAuth` policy scheme (`NodesAuthenticationSchemes`). Requests under `AgentEndpointPrefix` (`/agents`) or `HubPathPrefix` (`/hubs/agent`) use mTLS; every other path uses the JWT bearer. A bearer token is never evaluated on agent paths and a client certificate is never evaluated on user paths.
+
+`AgentPolicy` accepts only an identity whose `node_id` came from mTLS client certificate validation. The node is read from the certificate's SPIFFE ID; no header, body or user token claim decides which node is calling.
+
 ### Agent Authentication
 
 Agents authenticate using mutual TLS (mTLS):

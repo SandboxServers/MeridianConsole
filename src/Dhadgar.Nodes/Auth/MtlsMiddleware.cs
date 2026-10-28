@@ -42,6 +42,11 @@ public sealed class MtlsMiddleware
     /// </summary>
     public const string SpiffeIdItemKey = "SpiffeId";
 
+    /// <summary>
+    /// Authentication type of the identity this middleware creates. <see cref="AgentIdentityHandler"/> checks it.
+    /// </summary>
+    public const string AuthenticationType = "mTLS";
+
     public MtlsMiddleware(
         RequestDelegate next,
         IOptions<MtlsOptions> options,
@@ -149,7 +154,7 @@ public sealed class MtlsMiddleware
                 new DateTimeOffset(notAfter).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
         }
 
-        var identity = new ClaimsIdentity(claims, "mTLS");
+        var identity = new ClaimsIdentity(claims, AuthenticationType);
         var principal = new ClaimsPrincipal(identity);
 
         // Set the user on the context (this allows [Authorize] to work)
@@ -224,7 +229,7 @@ public sealed class MtlsMiddleware
     /// <summary>
     /// Normalizes the prefix to ensure it starts with '/' and does not end with '/'.
     /// </summary>
-    private static string NormalizePrefix(string prefix)
+    internal static string NormalizePrefix(string prefix)
     {
         var normalized = prefix.TrimEnd('/');
         if (!normalized.StartsWith('/'))

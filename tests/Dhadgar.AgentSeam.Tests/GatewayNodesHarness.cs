@@ -6,6 +6,8 @@ using System.Net.Http;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Nodes.Tests;
 using Dhadgar.Nodes.Tests.Integration.AgentSeam;
+using Dhadgar.Testing.Authentication;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -28,7 +30,7 @@ public sealed record ForwardedRequest(string ClusterId, string Method, string Pa
 /// Gateway factory whose YARP forwarder sends every <c>nodes</c> request into the Nodes <see cref="TestServer"/>.
 /// The connection to Nodes has no TLS certificate; the Gateway is the only trusted proxy and it is at 10.99.0.10.
 /// </summary>
-public sealed class GatewayTestFactory(TestServer nodesServer) : WebApplicationFactory<gateway::Program>
+public sealed class GatewayTestFactory(TestServer nodesServer, Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<gateway::Program>
 {
     /// <summary>The address Nodes sees as the Gateway's connection. It is inside the trusted-proxy range.</summary>
     public static readonly IPAddress GatewayAddress = IPAddress.Parse("10.99.0.10");
@@ -55,6 +57,7 @@ public sealed class GatewayTestFactory(TestServer nodesServer) : WebApplicationF
         {
             services.RemoveAll<IForwarderHttpClientFactory>();
             services.AddSingleton<IForwarderHttpClientFactory>(new NodesForwarderHttpClientFactory(nodesServer, _forwarded));
+            configureTestServices?.Invoke(services);
         });
     }
 
@@ -98,10 +101,12 @@ public sealed class GatewayNodesHarness : IDisposable
     private readonly GatewayTestFactory _gateway;
 
     /// <summary>Creates both hosts, writing the CA material to <paramref name="caDirectory"/>.</summary>
-    public GatewayNodesHarness(string caDirectory)
+    /// <param name="caDirectory">Directory for CA material. The caller owns cleanup.</param>
+    /// <param name="realUserAuth">When true, Nodes and the Gateway validate user JWTs from <see cref="SeamJwt"/> through their own default schemes instead of the test scheme.</param>
+    public GatewayNodesHarness(string caDirectory, bool realUserAuth = false)
     {
         NodesBase = new NodesWebApplicationFactory();
-        _nodes = AgentSeamHarness.CreateFactoryWithRealCa(
+        var nodes = AgentSeamHarness.CreateFactoryWithRealCa(
             NodesBase,
             caDirectory,
             enableMtls: true,
@@ -110,7 +115,23 @@ public sealed class GatewayNodesHarness : IDisposable
                 o.ForwardedCertificate.Enabled = true;
                 o.ForwardedCertificate.TrustedProxies = ["10.99.0.0/16"];
             });
-        _gateway = new GatewayTestFactory(_nodes.Server);
+
+        if (realUserAuth)
+        {
+            // Undo the test-scheme override so Program.cs's NodesAuth selector and the JWT scheme apply.
+            nodes = nodes.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            {
+                services.PostConfigure<AuthenticationOptions>(options =>
+                {
+                    options.DefaultAuthenticateScheme = null;
+                    options.DefaultChallengeScheme = null;
+                });
+                SeamJwt.Apply(services);
+            }));
+        }
+
+        _nodes = nodes;
+        _gateway = new GatewayTestFactory(_nodes.Server, realUserAuth ? SeamJwt.Apply : null);
     }
 
     /// <summary>The Nodes factory the harness was built from. Its <c>TimeProvider</c> is the fake clock.</summary>
