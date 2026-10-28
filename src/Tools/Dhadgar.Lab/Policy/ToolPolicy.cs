@@ -104,8 +104,6 @@ public static class ToolPolicy
     public static IReadOnlySet<string> PlannedTools { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         // L13
-        "uat_list_specs",
-        "uat_plan",
         // L15
         "uat_run",
         // L16
