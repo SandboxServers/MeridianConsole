@@ -1,8 +1,17 @@
+using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Audit;
+using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Tools;
+using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
+using Dhadgar.Lab.Uat.Eval;
+using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Dhadgar.Lab.Tests.Uat.Bundle;
@@ -58,6 +67,98 @@ public sealed class UatAttestTests : IDisposable
     }
 
     private static readonly AttestedBy Attester = new("owner-a", "mcp");
+
+    /// <summary>
+    /// A row whose only step is an <c>expect_error</c> step that succeeds, so the row grades FAIL, plus one human clause.
+    /// </summary>
+    private const string HiddenExpectSpec = """
+        schema = 1
+
+        [section]
+        id = "attest-fail"
+        title = "Attest fail fixture"
+
+        [[row]]
+        id = "key-held"
+        title = "Operator confirms the key"
+        expected = "present"
+        depends_on = []
+
+          [[row.step]]
+          id = "probe"
+          tool = "lab_status"
+          args = {}
+          expect_error = "Lab.Unavailable"
+
+          [[row.expect]]
+          id = "human-look"
+          text = "Operator confirms the key"
+          source = "human"
+          required = true
+        """;
+
+    [Fact]
+    public async Task Attest_FailRowWithHiddenExpectFailure_StaysFail()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "meridian-lab-l16-fail-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var vault = new SecretVault();
+            var redactor = new Redactor(vault);
+            var time = new FakeTimeProvider(At);
+            using var audit = new AuditLog(LabPaths.FromRoot(root), _validator, redactor, time);
+            var leases = new LeaseBook(time, new NullLabEvents(), new LeaseOptions());
+            var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new AcceptingStub() }), leases, audit, redactor, time);
+            var runner = new UatRunner(dispatcher, leases, new ClauseEvaluator(Array.Empty<IClauseSource>(), redactor, time), new ProbeYes(), time);
+            UatSpec spec = SpecLoader.LoadText("attest-fail.toml", HiddenExpectSpec).Spec!;
+            var writer = new BundleWriter(Path.Combine(root, "uat-runs"), _validator, redactor, new SecretScanner(vault), time,
+                "nobuild", "test-system", "test-build", null);
+
+            Result<UatRunResult> run = await runner.RunAsync(
+                new UatRunRequest(spec, null, 1UL, null, null, PlanOnly: false), writer, CancellationToken.None);
+
+            Assert.True(run.IsSuccess);
+            Assert.Equal(RowGrade.Fail, run.Value!.Rows[0].Grade);
+            Assert.NotNull(writer.Folder);
+
+            Result<string> result = BundleAttestor.Attest(writer.Folder!, run.Value.RunId, "attest-fail", "key-held", "human-look",
+                "held", null, At, Attester, redactor, _validator);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("NEEDS_HUMAN or UNVERIFIED", result.Error, StringComparison.Ordinal);
+            JsonNode? runJson = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json"), CancellationToken.None));
+            Assert.Equal("fail", runJson?["overall"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "NoArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]
+    private sealed record NoArgs(bool? Unused = null);
+
+    /// <summary>
+    /// A lab tool that always succeeds, so the step's <c>expect_error</c> is hidden. It takes the name of an
+    /// Open-gated entry in <c>ToolPolicy</c>, because the dispatcher refuses any name the table does not classify.
+    /// </summary>
+    private sealed class AcceptingStub : LabTool<NoArgs>
+    {
+        public override string Name => "lab_status";
+
+        public override string Description => "test lab_status";
+
+        protected override Task<Result<object>> ExecuteAsync(NoArgs args, LabCallContext context, CancellationToken ct) =>
+            Task.FromResult(Result<object>.Success(new { ok = true }));
+    }
+
+    private sealed class ProbeYes : ICapabilityProbe
+    {
+        public Task<bool> IsAvailableAsync(string capability, CancellationToken ct) => Task.FromResult(true);
+    }
 
     [Fact]
     public void Attest_HumanClauseHeld_GradesRowPass()
