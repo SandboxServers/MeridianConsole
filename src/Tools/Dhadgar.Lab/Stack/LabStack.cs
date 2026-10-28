@@ -84,6 +84,8 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // An env file left by a crash between its write and its delete is removed before anything new is written.
+            SweepStaleEnvFiles();
             var hasContainers = _targets.All.Any(target => target.Kind == LabTargetKind.Container);
             if (hasContainers && !wipe && _refs.Get(LabCredentialRefs.Postgres) is null)
             {
@@ -503,26 +505,35 @@ public sealed class LabStack : ILabStatusSource, IDisposable
                 options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
             }
 
-            using var stream = new FileStream(path, options);
-
-            foreach (var entry in entries)
+            Result<string>? failure = null;
+            using (var stream = new FileStream(path, options))
             {
-                if (entry.SecretRef is null)
+                foreach (var entry in entries)
                 {
-                    WriteEntry(stream, entry.Key, (entry.Literal ?? string.Empty).AsSpan());
-                    continue;
-                }
+                    if (entry.SecretRef is null)
+                    {
+                        WriteEntry(stream, entry.Key, (entry.Literal ?? string.Empty).AsSpan());
+                        continue;
+                    }
 
-                var written = _vault.Use(entry.SecretRef, value =>
-                {
-                    WriteEntry(stream, entry.Key, value);
-                    return true;
-                });
-                if (written.IsFailure)
-                {
-                    DeleteQuietly(path);
-                    return Result<string>.Failure(written.Error);
+                    var written = _vault.Use(entry.SecretRef, value =>
+                    {
+                        WriteEntry(stream, entry.Key, value);
+                        return true;
+                    });
+                    if (written.IsFailure)
+                    {
+                        failure = Result<string>.Failure(written.Error);
+                        break;
+                    }
                 }
+            }
+
+            // The stream is closed before the delete: on Windows an open handle makes the delete fail (FileShare.None).
+            if (failure is { } failed)
+            {
+                DeleteQuietly(path);
+                return failed;
             }
 
             return Result<string>.Success(path);
@@ -557,6 +568,33 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         finally
         {
             CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(line.AsSpan()));
+        }
+    }
+
+    /// <summary>
+    /// Deletes every <c>env-*</c> file left in <see cref="LabPaths.State"/>. Each candidate goes through the path validator first.
+    /// </summary>
+    private void SweepStaleEnvFiles()
+    {
+        if (!Directory.Exists(_paths.State))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(_paths.State, "env-*"))
+            {
+                Result<string> validated = _validator.ValidatePath(file, [_paths.State]);
+                if (validated.IsSuccess)
+                {
+                    DeleteQuietly(validated.Value!);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Best effort: a locked or unreadable state folder is reported by the stack operation that needs it.
         }
     }
 
