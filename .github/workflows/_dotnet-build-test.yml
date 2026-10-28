@@ -76,6 +76,11 @@ jobs:
             src/Dhadgar.Scope
             src/Dhadgar.Panel
 
+      - name: BetterAuth unit tests
+        if: inputs.run-tests
+        working-directory: src/Dhadgar.BetterAuth
+        run: npm test
+
       - name: Setup .NET and restore
         uses: $/.github/actions/setup-dotnet-env
 

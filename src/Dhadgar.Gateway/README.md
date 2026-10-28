@@ -202,8 +202,7 @@ dotnet user-secrets set "Auth:SigningKey" "your-development-signing-key"
       "https://panel.meridianconsole.com",
       "https://meridianconsole.com",
       "https://dev.meridianconsole.com",
-      "http://localhost:4321",
-      "http://localhost:4322"
+      "http://localhost:4321"
     ]
   }
 }
@@ -220,7 +219,6 @@ dotnet user-secrets set "Auth:SigningKey" "your-development-signing-key"
   "Cors": {
     "AllowedOrigins": [
       "http://localhost:4321",
-      "http://localhost:4322",
       "http://localhost:5173",
       "https://localhost:5173"
     ]
