@@ -1,12 +1,18 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Policy;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Tests.Processes;
 using Dhadgar.Lab.Tools;
+using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Eval;
+using Dhadgar.Lab.Uat.Spec;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol.Server;
@@ -160,6 +166,79 @@ public sealed class LabDaemonServiceLifetimeTests
 
             Assert.DoesNotContain(token, redacted, StringComparison.Ordinal);
             Assert.StartsWith("payload ***", redacted, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [SkippableFact]
+    public async Task LogClauseSource_FromTheContainer_ReadsTheSupervisorRing()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS());
+        string root = Path.Combine(Path.GetTempPath(), "lab-di-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            byte[] bytes = RandomNumberGenerator.GetBytes(LabDefaults.MinTokenBytes);
+            string token = Base64Url.EncodeToString(bytes);
+            Array.Clear(bytes);
+
+            var started = await LabDaemon.StartAsync(new LabDaemonOptions(
+                Port: 0,
+                Token: token,
+                DataRoot: root,
+                EnforceSingleInstance: false,
+                RefuseElevated: false,
+                Time: new FakeTimeProvider(DateTimeOffset.UnixEpoch)), CancellationToken.None);
+            Assert.True(started.IsSuccess, started.Error);
+
+            await using LabDaemon daemon = started.Value;
+            IServiceProvider services = daemon.Services;
+            LabProcessSupervisor supervisor = services.GetRequiredService<LabProcessSupervisor>();
+            const string marker = "ring-di-marker";
+            _ = await supervisor.StartAsync(
+                SupervisorHarness.ChildSpec("tc-log", relaunch: false, "--lines", "1", "--message", marker, "--sleep-ms", "60000"),
+                CancellationToken.None);
+            bool logged = await SupervisorHarness.WaitUntilAsync(
+                () => supervisor.RingFor("tc-log") is { } ring && ring.Snapshot().Any(line => line.Message.Contains(marker, StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(30));
+            Assert.True(logged);
+
+            // The registered "log" source must be wired to the daemon's supervisor ring, not an empty lookup.
+            IClauseSource source = services.GetServices<IClauseSource>().Single(s => s.Name == "log");
+            DateTimeOffset start = DateTimeOffset.UnixEpoch;
+            var window = new ClauseWindow(
+                start,
+                start,
+                new Dictionary<string, DateTimeOffset>(),
+                new Dictionary<string, DateTimeOffset>(),
+                new Dictionary<string, StepOutcome>());
+            var clause = new UatClause(
+                Id: "c1",
+                Text: "clause",
+                Source: "log",
+                Op: "eq",
+                Value: null,
+                Pointer: "/count",
+                Since: "row_start",
+                TimeoutMs: 0,
+                PollMs: 500,
+                Required: true,
+                SourceFields: new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                {
+                    ["process"] = JsonSerializer.Deserialize<JsonElement>("\"tc-log\""),
+                    ["contains"] = JsonSerializer.Deserialize<JsonElement>("\"" + marker + "\""),
+                });
+
+            var read = await source.ReadAsync(clause, new UatVars("run1", "row1", "section1", 42, null), window, CancellationToken.None);
+
+            Assert.True(read.IsSuccess, read.Error);
+            Assert.Equal(1, read.Value.GetProperty("count").GetInt32());
         }
         finally
         {

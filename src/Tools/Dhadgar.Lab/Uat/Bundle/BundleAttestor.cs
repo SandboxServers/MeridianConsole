@@ -25,7 +25,7 @@ public static class BundleAttestor
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private static readonly System.Text.RegularExpressions.Regex IdPattern =
-        new("^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        new("^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>
     /// Attests one human clause and returns the row's new grade text.

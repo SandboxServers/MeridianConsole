@@ -126,6 +126,32 @@ public sealed class RowEvidenceTests : IDisposable
     }
 
     [Fact]
+    public async Task RowFile_TruncatesAnObservedValueOverTheEvidenceCap()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
+        var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new EvidenceTool() }), leases, _audit, redactor, _time);
+        JsonElement big = JsonSerializer.SerializeToElement(new { rows = new[] { new { a = new string('x', 20000) } } });
+        var evaluator = new ClauseEvaluator(new IClauseSource[] { new StepSource(), new FakeDbSource(big) }, redactor, _time);
+        var runner = new UatRunner(dispatcher, leases, evaluator, new FakeProbe(), _time);
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+
+        Result<UatRunResult> run = await runner.RunAsync(
+            new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), _writer, CancellationToken.None);
+
+        Assert.True(run.IsSuccess);
+        Assert.NotNull(_writer.Folder);
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(RowPath("evidence")));
+        JsonElement clause = row.RootElement.GetProperty("clauses").EnumerateArray()
+            .Single(c => c.GetProperty("id").GetString() == "db-read");
+        JsonElement observed = clause.GetProperty("observed");
+        Assert.True(observed.GetProperty("truncated").GetBoolean());
+        Assert.Equal(16384, observed.GetProperty("text").GetString()!.Length);
+    }
+
+    [Fact]
     public async Task ExpectErrorStep_ThatSucceeded_ShowsExpectedErrorAndOkTrue()
     {
         await RunSpecAsync();
@@ -209,10 +235,19 @@ public sealed class RowEvidenceTests : IDisposable
     /// </summary>
     private sealed class FakeDbSource : IClauseSource
     {
+        private readonly JsonElement? _payload;
+
+        public FakeDbSource(JsonElement? payload = null)
+        {
+            _payload = payload;
+        }
+
         public string Name => "db";
 
         public Task<Result<JsonElement>> ReadAsync(UatClause clause, UatVars vars, ClauseWindow window, CancellationToken ct) =>
-            Task.FromResult(Result<JsonElement>.Failure("db refused " + Secret));
+            Task.FromResult(_payload is { } payload
+                ? Result<JsonElement>.Success(payload)
+                : Result<JsonElement>.Failure("db refused " + Secret));
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "EvidenceArgs is the LabTool<TArgs> argument type; the tool base binds it from JSON.")]

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
@@ -238,6 +239,41 @@ public sealed class BundleSecretTests : IDisposable
             Assert.DoesNotContain(cookie, text, StringComparison.Ordinal);
             Assert.DoesNotContain(leaseId, text, StringComparison.Ordinal);
             Assert.DoesNotContain(cliToken, text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void UnredactableSecret_InFingerprint_IsRemovedAndNotRewritten()
+    {
+        // The redactor rewrites "Password=<value>" to "Password=***", and the scanner still matches "Password=", so the
+        // first-pass scan removes fingerprint.json. The rewrite must not bring it back.
+        const string planted = "Password=fixture-only-w3fb";
+        UatSpec spec = Load(LeakSpec);
+        BundleWriter writer = CreateWriter();
+        writer.UseLiveParts(new LiveFingerprintParts(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            planted,
+            []));
+
+        writer.RunStarted("run-w3fb-fp", 5UL, spec);
+        writer.RowFinished(new UatRowResult("leaky", RowGrade.Pass, "fine", []));
+        writer.RunFinished(new UatRunResult("run-w3fb-fp", 5UL, false, RunOverall.Incomplete, []));
+
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+        string bundle = writer.Folder!;
+        Assert.False(File.Exists(Path.Combine(bundle, "fingerprint.json")));
+
+        using JsonDocument run = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "run.json")));
+        Assert.Equal("failed", run.RootElement.GetProperty("secret_scan").GetString());
+        string removed = run.RootElement.GetProperty("secret_scan_removed").GetRawText();
+        Assert.Contains("fingerprint.json", removed, StringComparison.Ordinal);
+
+        Assert.Contains("BLOCKED", File.ReadAllText(Path.Combine(bundle, "ledger.md")), StringComparison.Ordinal);
+        foreach (string file in Directory.GetFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            Assert.DoesNotContain(planted, File.ReadAllText(file), StringComparison.Ordinal);
         }
     }
 
