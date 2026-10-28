@@ -202,7 +202,7 @@ services:
       WIF_CLIENT_ID: betterauth-client
       WIF_CLIENT_SECRET: ${BETTERAUTH_WIF_CLIENT_SECRET:-betterauth-client-dev-secret-change-in-prod}
       BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
-      BETTER_AUTH_TRUSTED_ORIGINS: https://dev.meridianconsole.com,https://cart.meridianconsole.com,https://panel.meridianconsole.com,http://localhost:4321,http://localhost:4322
+      BETTER_AUTH_TRUSTED_ORIGINS: https://dev.meridianconsole.com,https://panel.meridianconsole.com,http://localhost:4321,http://localhost:4322
       BETTER_AUTH_CLIENT_APPS: panel,shop
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
