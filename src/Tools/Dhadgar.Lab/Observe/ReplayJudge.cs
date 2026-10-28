@@ -1,11 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
+using Dhadgar.Lab.Results;
 
 namespace Dhadgar.Lab.Observe;
 
 /// <summary>
 /// Compares a stored fingerprint with the current one and decides whether a replay reproduced its original (C18).
-/// Grades only; L25 adds the primary signatures to the comparison.
+/// Grades, and since L25 the primary signature of each failed row.
 /// </summary>
 public static class ReplayJudge
 {
@@ -68,6 +69,64 @@ public static class ReplayJudge
         }
     }
 
+    /// <summary>
+    /// The signature-aware verdict (C18, L25). <c>exact</c> reproduces only with the same grades and the same primary signature
+    /// per failed row; <c>schedule_approximate</c> reproduces when, on one of up to five attempts, the grades match and every
+    /// original primary signature appears. Only kinds in <see cref="EvidenceCoverage.BuiltKinds"/> are compared; when an
+    /// original signature has an unbuilt kind the reason says so.
+    /// </summary>
+    public static ReplayVerdict Judge(ReplayFidelity fidelity, IReadOnlyList<ReplayRow> original,
+        IReadOnlyList<IReadOnlyList<ReplayRow>> attempts)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(attempts);
+
+        if (fidelity is not (ReplayFidelity.Exact or ReplayFidelity.ScheduleApproximate))
+        {
+            return new ReplayVerdict(null, null);
+        }
+
+        string[] originalGrades = original.Select(r => r.Grade).ToArray();
+        bool skippedUnbuilt = original.Any(r => r.PrimarySignature is not null && !IsBuilt(r.PrimarySignature));
+        string? note = skippedUnbuilt ? UnbuiltNote : null;
+
+        bool Matches(IReadOnlyList<ReplayRow> attempt)
+        {
+            if (!SameGrades(originalGrades, attempt.Select(r => r.Grade).ToArray()))
+            {
+                return false;
+            }
+
+            if (fidelity == ReplayFidelity.Exact)
+            {
+                for (int i = 0; i < original.Count; i++)
+                {
+                    string? expected = original[i].PrimarySignature;
+                    if (expected is not null && IsBuilt(expected)
+                        && !string.Equals(expected, attempt[i].PrimarySignature, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            var present = attempt.Select(r => r.PrimarySignature).Where(sig => sig is not null).ToHashSet(StringComparer.Ordinal);
+            return original.All(r => r.PrimarySignature is null || !IsBuilt(r.PrimarySignature) || present.Contains(r.PrimarySignature));
+        }
+
+        bool reproduced = fidelity == ReplayFidelity.Exact
+            ? attempts.Count > 0 && Matches(attempts[0])
+            : attempts.Take(MaxApproximateAttempts).Any(Matches);
+        return new ReplayVerdict(reproduced, note);
+    }
+
+    private const string UnbuiltNote = "compared grades and built signature kinds only; some original primary signatures are of kinds not yet built";
+
+    private static bool IsBuilt(string signature) =>
+        EvidenceCoverage.BuiltKinds.Any(kind => signature.StartsWith(kind + ":", StringComparison.Ordinal));
+
     private static bool SameGrades(IReadOnlyList<string> expected, IReadOnlyList<string> actual) =>
         expected.SequenceEqual(actual, StringComparer.Ordinal);
 
@@ -109,3 +168,9 @@ public static class ReplayJudge
         return HashedMarker + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant()[..16];
     }
 }
+
+/// <summary>One row of a run for replay comparison: its grade and the primary failure signature text, if any.</summary>
+public sealed record ReplayRow(string Grade, string? PrimarySignature);
+
+/// <summary>The replay verdict: <c>null</c> for evidence-only, and a reason when the comparison was narrowed.</summary>
+public sealed record ReplayVerdict(bool? Reproduced, string? Reason);

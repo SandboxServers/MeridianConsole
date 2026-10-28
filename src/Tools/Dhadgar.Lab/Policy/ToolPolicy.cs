@@ -110,7 +110,6 @@ public static class ToolPolicy
         // L20 (registered)
         // L21
         // L25
-        "results_query",
         // L26
         "triage_show",
         "results_known_issue_set",

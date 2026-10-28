@@ -7,6 +7,7 @@ using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Processes;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tests.Processes;
 using Dhadgar.Lab.Tools;
@@ -49,6 +50,8 @@ public sealed class LabDaemonServiceLifetimeTests
             await using LabDaemon daemon = started.Value;
             IServiceProvider services = daemon.Services;
 
+            // D-ML91: the results database opens lazily, on first use, so nothing exists before ResultsService is used.
+            Assert.False(File.Exists(Path.Combine(services.GetRequiredService<LabPaths>().Results, "lab-results.db")));
             Assert.NotNull(services.GetRequiredService<LeaseBook>());
             Assert.NotNull(services.GetRequiredService<AuditLog>());
             Assert.NotNull(services.GetRequiredService<SecretVault>());
@@ -66,6 +69,8 @@ public sealed class LabDaemonServiceLifetimeTests
             using IServiceScope scope = services.CreateScope();
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<LabToolDispatcher>());
             Assert.Same(services.GetRequiredService<LeaseBook>(), scope.ServiceProvider.GetRequiredService<LeaseBook>());
+            Assert.Same(services.GetRequiredService<ResultsService>(), scope.ServiceProvider.GetRequiredService<ResultsService>());
+            Assert.NotNull(services.GetRequiredService<UatAttestTool>());
         }
         finally
         {

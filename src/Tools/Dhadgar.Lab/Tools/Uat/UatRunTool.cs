@@ -5,6 +5,7 @@ using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
@@ -56,7 +57,7 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
     public override string Name => "uat_run";
 
     /// <inheritdoc />
-    public override string Description => "Runs one UAT spec (or plans it with plan_only). Uses the given lease_id, or takes and releases its own. Returns run_id, seed, overall and the rows.";
+    public override string Description => "Runs one UAT spec (or plans it with plan_only). Uses the given lease_id, or takes and releases its own. Returns run_id, seed, overall, the rows, bundle, and ingest (the results index outcome; null for plan_only).";
 
     /// <summary>
     /// Reads <c>repro\repro.toml</c> of one run. The first path segment is the run id; the rest must be a <c>repro</c> file
@@ -220,10 +221,42 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             return Result<object>.Failure(sink.WriteError);
         }
 
+        // D-ML91: the written bundle is ingested into the results index at run end. An ingest failure does not fail the run.
+        System.Text.Json.Nodes.JsonObject? ingest = await IngestAfterRunAsync(
+            _services.GetRequiredService<ResultsService>(), sink.Folder, ct).ConfigureAwait(false);
+
         // C4: the result carries the bundle folder name, or null when no bundle was written (plan_only).
         var payload = System.Text.Json.JsonSerializer.SerializeToNode(run.Value!, LabJson.Options) as System.Text.Json.Nodes.JsonObject
             ?? new System.Text.Json.Nodes.JsonObject();
         payload["bundle"] = sink.Folder is { } folder ? Path.GetFileName(folder) : null;
+        payload["ingest"] = ingest;
+
+        // A4: the overall is the one the bundle wrote to run.json (D-ML89), whenever the sink wrote one.
+        // The payload's overall is the bundle's; ingest.overall is the results index's (D-ML92).
+        if (sink.FinalOverall is { } finalOverall)
+        {
+            payload["overall"] = finalOverall;
+        }
+
         return Result<object>.Success(payload);
+    }
+
+    /// <summary>
+    /// Ingests the bundle folder written by a run into the results index (D-ML91). Returns null when no bundle was written
+    /// (plan_only); otherwise the ingest payload, which is <c>{"ok":false,"error"}</c> on a failed ingest.
+    /// </summary>
+    /// <param name="results">The results service that owns the database.</param>
+    /// <param name="folder">The bundle folder, or null when no bundle was written.</param>
+    /// <param name="ct">The cancellation token.</param>
+    internal static async Task<System.Text.Json.Nodes.JsonObject?> IngestAfterRunAsync(ResultsService results, string? folder,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        if (folder is null)
+        {
+            return null;
+        }
+
+        return results.ToPayload(await results.IngestAsync(folder, ct).ConfigureAwait(false));
     }
 }

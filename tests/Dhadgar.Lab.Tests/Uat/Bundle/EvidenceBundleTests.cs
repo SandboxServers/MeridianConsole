@@ -3,6 +3,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
@@ -190,6 +191,7 @@ public sealed class ReproTests : IDisposable
             .AddSingleton(time)
             .AddSingleton(runner)
             .AddSingleton<IDockerCli>(new ReproDocker())
+            .AddSingleton(sp => new ResultsService(_paths, _validator, redactor, sp, NullLoggerFactory.Instance, time))
             .BuildServiceProvider();
     }
 

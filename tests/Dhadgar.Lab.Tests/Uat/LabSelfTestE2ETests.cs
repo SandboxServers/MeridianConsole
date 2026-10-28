@@ -173,6 +173,14 @@ public sealed class LabSelfTestE2ETests
         Assert.Equal("passed", runJson.RootElement.GetProperty("secret_scan").GetString());
         Assert.True(File.Exists(Path.Combine(bundle, "ledger.md")));
 
+        // L25 (S-L6 runs with a real repo root): the run was ingested and graded against the shipped known issues.
+        JsonElement ingest = root.GetProperty("ingest");
+        Assert.True(ingest.GetProperty("ok").GetBoolean(), "ingest failed: " + ingest.GetRawText());
+        Assert.Equal("pass", ingest.GetProperty("overall").GetString());
+        Assert.True(ingest.GetProperty("known_issues").GetProperty("checked").GetBoolean(), ingest.GetRawText());
+        string resultsDb = Path.Combine(LabPaths.FromRoot(home, repoRoot).Results, "lab-results.db");
+        Assert.True(File.Exists(resultsDb), "results database missing: " + resultsDb);
+
         // L21: the always-on invariants found nothing and no check errored.
         Assert.Equal(0, runJson.RootElement.GetProperty("violations").GetInt32());
         using var invariantsJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(bundle, "invariants.json")));

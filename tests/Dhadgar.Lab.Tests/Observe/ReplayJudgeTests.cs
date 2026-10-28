@@ -72,6 +72,52 @@ public sealed class ReplayJudgeTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public void Judge_Exact_SameGradesDifferentPrimarySignature_IsNotReproduced()
+    {
+        ReplayVerdict verdict = ReplayJudge.Judge(ReplayFidelity.Exact,
+            [new ReplayRow("fail", "clause:a|b")], [[new ReplayRow("fail", "clause:a|c")]]);
+
+        Assert.False(verdict.Reproduced);
+    }
+
+    [Fact]
+    public void Judge_Exact_SameGradesAndSignature_IsReproduced()
+    {
+        ReplayVerdict verdict = ReplayJudge.Judge(ReplayFidelity.Exact,
+            [new ReplayRow("fail", "clause:a|b"), new ReplayRow("pass", null)],
+            [[new ReplayRow("fail", "clause:a|b"), new ReplayRow("pass", null)]]);
+
+        Assert.True(verdict.Reproduced);
+        Assert.Null(verdict.Reason);
+    }
+
+    [Fact]
+    public void Judge_ScheduleApproximate_SignatureAppearsInLaterAttempt_IsReproduced()
+    {
+        ReplayVerdict verdict = ReplayJudge.Judge(ReplayFidelity.ScheduleApproximate,
+            [new ReplayRow("fail", "inv:I1|nodes|unhandled")],
+            [[new ReplayRow("fail", "clause:x|y")], [new ReplayRow("fail", "inv:I1|nodes|unhandled")]]);
+
+        Assert.True(verdict.Reproduced);
+    }
+
+    [Fact]
+    public void Judge_UnbuiltKindOriginal_ComparesBuiltKindsOnlyAndSaysSo()
+    {
+        ReplayVerdict verdict = ReplayJudge.Judge(ReplayFidelity.Exact,
+            [new ReplayRow("fail", "http:500|-|POST|/a|none")], [[new ReplayRow("fail", null)]]);
+
+        Assert.True(verdict.Reproduced);
+        Assert.Contains("built signature kinds only", verdict.Reason);
+    }
+
+    [Fact]
+    public void Judge_EvidenceOnly_IsNull()
+    {
+        Assert.Null(ReplayJudge.Judge(ReplayFidelity.EvidenceOnly, [], []).Reproduced);
+    }
+
     private static LabFingerprint Fingerprint(IReadOnlyDictionary<string, string> digests) => new(
         Schema: 1,
         Commit: "abc123",

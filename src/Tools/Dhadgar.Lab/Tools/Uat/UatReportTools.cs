@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
@@ -150,11 +151,13 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
     private readonly TimeProvider _time;
     private readonly LeaseBook _leases;
     private readonly SecretVault _vault;
+    private readonly ResultsService _results;
 
     /// <summary>
     /// Creates the tool.
     /// </summary>
-    public UatAttestTool(LabPaths paths, IPathValidator validator, Redactor redactor, TimeProvider time, LeaseBook leases, SecretVault vault)
+    public UatAttestTool(LabPaths paths, IPathValidator validator, Redactor redactor, TimeProvider time, LeaseBook leases, SecretVault vault,
+        ResultsService results)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
@@ -162,28 +165,29 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _vault = vault ?? throw new ArgumentNullException(nameof(vault));
+        _results = results ?? throw new ArgumentNullException(nameof(results));
     }
 
     /// <inheritdoc />
     public override string Name => "uat_attest";
 
     /// <inheritdoc />
-    public override string Description => "Records the user's held or not_held verdict on one pending human clause of a NEEDS_HUMAN or UNVERIFIED row, then regrades the row and rewrites the ledger and overall. Ask the user before each call; the harness prompts only once owner action O2 is applied.";
+    public override string Description => "Records the user's held or not_held verdict on one pending human clause of a NEEDS_HUMAN or UNVERIFIED row, then regrades the row and rewrites the ledger and overall, and re-ingests the bundle into the results index (the ingest field; a failed ingest does not undo the attest). Ask the user before each call; the harness prompts only once owner action O2 is applied.";
 
     /// <inheritdoc />
-    protected override Task<Result<object>> ExecuteAsync(UatAttestArgs args, LabCallContext context, CancellationToken ct)
+    protected override async Task<Result<object>> ExecuteAsync(UatAttestArgs args, LabCallContext context, CancellationToken ct)
     {
         Result<string> folder = BundleFolders.Find(_paths.UatRuns, args.RunId, _validator);
         if (folder.IsFailure)
         {
-            return Task.FromResult(Result<object>.Failure(folder.Error));
+            return Result<object>.Failure(folder.Error);
         }
 
         // The dispatcher has already checked the lease; a failure here is returned unchanged.
         Result<LeaseInfo> touched = _leases.Touch(context.LeaseId!);
         if (touched.IsFailure)
         {
-            return Task.FromResult(Result<object>.Failure(touched.Error));
+            return Result<object>.Failure(touched.Error);
         }
 
         Result<string> grade = BundleAttestor.Attest(folder.Value!, args.RunId!, args.Section!, args.Row!, args.ClauseId!,
@@ -191,9 +195,19 @@ public sealed class UatAttestTool : LabTool<UatAttestArgs>
             new SecretScanner(_vault));
         if (grade.IsFailure)
         {
-            return Task.FromResult(Result<object>.Failure(grade.Error));
+            return Result<object>.Failure(grade.Error);
         }
 
-        return Task.FromResult(Result<object>.Success(new { run_id = args.RunId, section = args.Section, row = args.Row, clause_id = args.ClauseId, grade = grade.Value }));
+        // D-ML91: the attest has committed through BundleStaging, so a failed re-ingest is reported in ingest and never rolls it back.
+        Result<IngestResult> ingested = await _results.IngestAsync(folder.Value!, ct).ConfigureAwait(false);
+        return Result<object>.Success(new
+        {
+            run_id = args.RunId,
+            section = args.Section,
+            row = args.Row,
+            clause_id = args.ClauseId,
+            grade = grade.Value,
+            ingest = _results.ToPayload(ingested),
+        });
     }
 }

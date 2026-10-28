@@ -31,4 +31,9 @@ public interface IUatRunSink
     /// The bundle folder name (<c>yyyyMMdd-buildId-runId</c>), known after <c>RunStarted</c>; null before that or for a sink with no bundle.
     /// </summary>
     string? FolderName => null;
+
+    /// <summary>
+    /// The <c>overall</c> the sink wrote to <c>run.json</c> (A4, D-ML89), or null for a sink with no bundle. <c>uat_run</c> returns it.
+    /// </summary>
+    string? FinalOverall => null;
 }

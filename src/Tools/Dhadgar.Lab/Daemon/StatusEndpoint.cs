@@ -63,7 +63,7 @@ internal static class StatusEndpoint
                 ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
             var body = JsonSerializer.SerializeToElement(Build(sources, pid, startedAt), options);
             var redacted = services.GetRequiredService<Redactor>().Redact(body);
-            return Results.Json(redacted, options);
+            return global::Microsoft.AspNetCore.Http.Results.Json(redacted, options);
         });
     }
 
