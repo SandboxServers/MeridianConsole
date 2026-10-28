@@ -212,6 +212,50 @@ public sealed class HistoryRunJobTests : IDisposable
     }
 
     [Fact]
+    public void FailureText_KeepsTheNestedMessage()
+    {
+        using JsonDocument doc = JsonDocument.Parse("{\"error\":{\"code\":\"Lab.Failed\",\"message\":\"nodes token mint failed: PostgresException\"}}");
+
+        string text = Dhadgar.Lab.Tools.DispatchedHistoryEnvironment.FailureText("nodes_token_mint", doc.RootElement);
+
+        Assert.Equal("[Lab.Failed] nodes_token_mint failed: nodes token mint failed: PostgresException", text);
+    }
+
+    [Fact]
+    public void FailureText_NoMessage_KeepsCodeOnly()
+    {
+        using JsonDocument doc = JsonDocument.Parse("{\"error\":{\"code\":\"Lab.Failed\"}}");
+
+        string text = Dhadgar.Lab.Tools.DispatchedHistoryEnvironment.FailureText("nodes_token_mint", doc.RootElement);
+
+        Assert.Equal("[Lab.Failed] nodes_token_mint failed", text);
+    }
+
+    [Fact]
+    public void FailureText_NotAnEnvelope_IsUnavailable()
+    {
+        using JsonDocument doc = JsonDocument.Parse("[]");
+
+        string text = Dhadgar.Lab.Tools.DispatchedHistoryEnvironment.FailureText("nodes_token_mint", doc.RootElement);
+
+        Assert.Equal("[Lab.Unavailable] nodes_token_mint failed", text);
+    }
+
+    [Fact]
+    public void FailureText_LongMessage_IsCapped()
+    {
+        string longMessage = new('x', 2000);
+        using JsonDocument doc = JsonDocument.Parse("{\"error\":{\"code\":\"Lab.Failed\",\"message\":\"" + longMessage + "\"}}");
+
+        string text = Dhadgar.Lab.Tools.DispatchedHistoryEnvironment.FailureText("nodes_token_mint", doc.RootElement);
+
+        const string Prefix = "[Lab.Failed] nodes_token_mint failed: ";
+        Assert.Equal(Prefix.Length + 512, text.Length);
+        Assert.StartsWith(Prefix, text, StringComparison.Ordinal);
+        Assert.EndsWith(new string('x', 512), text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Evaluate_TwoOkOneToken_IsViolationAndGradesFail()
     {
         Dhadgar.Lab.History.History history = EnrollmentFixtures.Build(

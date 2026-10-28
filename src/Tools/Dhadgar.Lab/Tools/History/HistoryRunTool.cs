@@ -210,6 +210,35 @@ public sealed class DispatchedHistoryEnvironment : IHistoryEnvironment
             ? value.GetString()
             : null;
 
+    private const int MaxNestedMessageLength = 512;
+
+    /// <summary>
+    /// The failure text for a nested tool error: <c>[code] tool failed: message</c>. The payload is the dispatcher's redacted error
+    /// envelope (<c>{"error":{"code","message"}}</c>); a missing code is <c>Lab.Unavailable</c>, a missing message is left out, and a
+    /// long message is cut to 512 characters.
+    /// </summary>
+    internal static string FailureText(string tool, JsonElement payload)
+    {
+        string code = "Lab.Unavailable";
+        string? message = null;
+        if (payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("error", out JsonElement error)
+            && error.ValueKind == JsonValueKind.Object)
+        {
+            if (error.TryGetProperty("code", out JsonElement c) && c.ValueKind == JsonValueKind.String && c.GetString() is { Length: > 0 } codeText)
+            {
+                code = codeText;
+            }
+
+            if (error.TryGetProperty("message", out JsonElement m) && m.ValueKind == JsonValueKind.String && m.GetString() is { Length: > 0 } text)
+            {
+                message = text.Length <= MaxNestedMessageLength ? text : text[..MaxNestedMessageLength];
+            }
+        }
+
+        return message is null ? "[" + code + "] " + tool + " failed" : "[" + code + "] " + tool + " failed: " + message;
+    }
+
     private async Task<Result<JsonElement>> CallAsync(string tool, JsonObject args, CancellationToken ct)
     {
         if (ToolPolicy.GateFor(tool) is LabGate.Leased or LabGate.OwnLease && _leaseId is not null)
@@ -224,15 +253,7 @@ public sealed class DispatchedHistoryEnvironment : IHistoryEnvironment
             return Result<JsonElement>.Success(result.Payload);
         }
 
-        string code = result.Payload.ValueKind == JsonValueKind.Object
-            && result.Payload.TryGetProperty("error", out JsonElement error)
-            && error.ValueKind == JsonValueKind.Object
-            && error.TryGetProperty("code", out JsonElement c)
-            && c.ValueKind == JsonValueKind.String
-            && c.GetString() is { Length: > 0 } text
-                ? text
-                : "Lab.Unavailable";
-        return Result<JsonElement>.Failure("[" + code + "] " + tool + " failed");
+        return Result<JsonElement>.Failure(FailureText(tool, result.Payload));
     }
 }
 
