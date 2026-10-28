@@ -1,7 +1,7 @@
 schema = 1
 
 # Lab self-test (S-L6). Proves the runner reaches the stack through the daemon, the Gateway and the agent ingress.
-# Enroll-route calls per section: 4 gateway or ingress enrolls, 2 direct probes, 1 probe reuse: under 25 per 60 s.
+# Enroll-route calls per run: 4 token enrolls (1 direct, 3 through the Gateway or ingress), 1 reuse, 2 empty-body posts: under 25 per 60 s.
 # No row calls the CA route through the Gateway (D-ML63).
 
 [section]
@@ -277,7 +277,7 @@ depends_on = ["enroll-direct"]
   source = "log"
   process = "nodes"
   contains = "nroll"
-  since = "row_start"
+  since = "run_start"
   op = "min_rows"
   pointer = "/count"
   value = 1
