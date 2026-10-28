@@ -45,7 +45,7 @@ public sealed class UatRunnerTests
         [[row]]
         id = "faulted"
         title = "Faulted row"
-        expected = "blocked until L22"
+        expected = "blocked: the fault tool is unregistered"
         depends_on = []
 
           [[row.fault]]
@@ -241,7 +241,7 @@ public sealed class UatRunnerTests
     }
 
     [Fact]
-    public async Task FaultRow_IsBlockedUntilL22()
+    public async Task FaultRow_UnregisteredFaultTool_IsBlocked()
     {
         using var harness = new Harness(new FakeProbe(true));
 
@@ -251,7 +251,6 @@ public sealed class UatRunnerTests
         Assert.True(run.IsSuccess);
         UatRowResult row = Assert.Single(run.Value!.Rows);
         Assert.Equal(RowGrade.Blocked, row.Grade);
-        // D-ML73: superseded placeholder assertion. The fault tool is unregistered here, so the inject fails and names the fault.
         Assert.Contains("fault kill-it", row.Reason, StringComparison.Ordinal);
     }
 

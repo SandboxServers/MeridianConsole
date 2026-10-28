@@ -48,6 +48,14 @@ public sealed class LabCoverageTests
         var covered = entries.Select(e => e.Project).ToHashSet(StringComparer.Ordinal);
         var missing = discovered.Where(p => !covered.Contains(p)).OrderBy(p => p, StringComparer.Ordinal).ToList();
         Assert.True(missing.Count == 0, "Projects with no coverage entry: " + string.Join(", ", missing));
+
+        // An entry must still name a project: a folder left behind with only bin/obj (a moved or parked project) does not count (F71).
+        var stale = entries
+            .Where(e => !discovered.Contains(e.Project) && !HasProjectFile(ResolveUnderRoot(root, e.Project)))
+            .Select(e => e.Project)
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+        Assert.True(stale.Count == 0, "Manifest entries with no project: " + string.Join(", ", stale));
     }
 
     [Fact]
@@ -60,6 +68,9 @@ public sealed class LabCoverageTests
         {
             Assert.False(string.IsNullOrWhiteSpace(entry.Adapter), $"{entry.Project} is real but names no adapter.");
             Assert.True(adapters.Contains(entry.Adapter!), $"{entry.Project} names adapter '{entry.Adapter}', which is not registered.");
+            Assert.True(
+                string.Equals(Path.GetFileNameWithoutExtension(entry.Catalog), entry.Adapter, StringComparison.Ordinal),
+                $"{entry.Project} names adapter '{entry.Adapter}' but catalog '{entry.Catalog}'; the catalog file is named for its adapter.");
 
             Assert.False(string.IsNullOrWhiteSpace(entry.Catalog), $"{entry.Project} is real but names no catalog.");
             string catalog = ResolveUnderRoot(root, entry.Catalog!);
@@ -154,6 +165,11 @@ public sealed class LabCoverageTests
 
         return found;
     }
+
+    private static bool HasProjectFile(string directory) =>
+        Directory.Exists(directory)
+        && (Directory.EnumerateFiles(directory, "*.csproj", SearchOption.TopDirectoryOnly).Any()
+            || File.Exists(Path.Combine(directory, "package.json")));
 
     private static bool IsServiceProject(string csproj)
     {

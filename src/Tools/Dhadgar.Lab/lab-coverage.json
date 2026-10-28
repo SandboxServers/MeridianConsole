@@ -13,14 +13,8 @@
     { "project": "src/Agents/Dhadgar.Agent.Windows", "status": "real-pending", "until": "L43" },
     { "project": "src/Agents/Dhadgar.Agent.GameServerWrapper", "status": "real-pending", "until": "L43" },
     { "project": "src/Dhadgar.Servers", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
-    { "project": "src/Dhadgar.Tasks", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
-    { "project": "src/Dhadgar.Files", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
     { "project": "src/Dhadgar.Console", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
-    { "project": "src/Dhadgar.Mods", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
-    { "project": "src/Dhadgar.Billing", "status": "stub", "note": "DV-13: stub without auth; promote by shipping adapter and catalog rows" },
-    { "project": "src/Agents/Dhadgar.Agent.Linux", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" },
     { "project": "src/Dhadgar.Secrets", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" },
-    { "project": "src/Dhadgar.Scope", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" },
-    { "project": "src/Dhadgar.ShoppingCart", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" }
+    { "project": "src/Dhadgar.Scope", "status": "stub", "note": "out of scope until promoted (owner, 2026-10-27)" }
   ]
 }

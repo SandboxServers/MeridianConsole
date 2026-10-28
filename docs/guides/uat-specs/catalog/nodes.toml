@@ -183,7 +183,7 @@ allow_invariants = []
 [[row]]
 id = "nodes-rabbit-down-outbox"
 title = "With the broker cut the outbox decouples the enroll; Nodes stays 200 and the outbox drains after the heal"
-expected = "The enroll returns 201 and /healthz returns 200 (Degraded) while RabbitMQ is cut; undelivered outbox rows reach zero within 60 s of the heal"
+expected = "The enroll returns 201 and /healthz returns 200 while RabbitMQ is cut; undelivered outbox rows reach zero within 60 s of the heal"
 allow_invariants = []
 
   [[row.fault]]
@@ -234,7 +234,7 @@ allow_invariants = []
 
   [[row.expect]]
   id = "health-200-degraded"
-  text = "Nodes /healthz is 200 (masstransit Degraded, F68) while the broker is cut"
+  text = "Nodes /healthz stays 200 while the broker is cut (F68: a broker outage is not a 503)"
   source = "step"
   step = "health-down"
   pointer = "/result/status"
