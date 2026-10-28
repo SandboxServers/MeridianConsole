@@ -99,6 +99,20 @@ public sealed class ToxiproxyTimeoutToxicDockerTests
             await stream.WriteAsync(Request, ct);
             string first = await ReadSomeAsync(stream, TimeSpan.FromSeconds(10));
             Assert.StartsWith("HTTP/1.1 200", first, StringComparison.Ordinal);
+            // The chunked terminator can arrive in a later TCP read, so drain the rest of response 1 before the toxic is added.
+            string rest = first;
+            while (!rest.EndsWith("0\r\n\r\n", StringComparison.Ordinal))
+            {
+                string more = await ReadSomeAsync(stream, TimeSpan.FromSeconds(5));
+                if (more.Length == 0)
+                {
+                    break;
+                }
+
+                rest += more;
+            }
+
+            Assert.EndsWith("0\r\n\r\n", rest, StringComparison.Ordinal);
 
             var spec = new ToxicSpec(ToxicName, "timeout", "downstream", 1.0, new Dictionary<string, long> { ["timeout"] = 0 });
             Result added = await toxi.AddToxicAsync(Proxy, spec, CancellationToken.None);

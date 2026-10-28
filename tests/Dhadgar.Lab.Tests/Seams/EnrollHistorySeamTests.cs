@@ -82,7 +82,7 @@ public sealed class EnrollHistorySeamTests
                         new Dictionary<string, object?>(StringComparer.Ordinal) { ["service"] = service, ["lease_id"] = leaseId });
                 }
 
-                using JsonDocument race =await CallToolAsync(daemon.BaseAddress, token, "history_run", new Dictionary<string, object?>(StringComparer.Ordinal)
+                using JsonDocument race = await CallToolAsync(daemon.BaseAddress, token, "history_run", new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["scenario"] = "enroll-race",
                     ["clients"] = 4,
