@@ -79,6 +79,11 @@ public sealed class AgentBootstrapServiceTests
             h.Client.ConnectAsync(Arg.Any<CancellationToken>());
         });
 
+        // The saved identity carries the signing key pinned at enrollment, so it survives a restart.
+        await h.Store.Received(1).SaveAsync(
+            Arg.Is<AgentIdentity>(i => i.CommandSigningPublicKey == "test-signing-key"
+                && i.CommandSigningKeyId == "test-signing-key-id"),
+            Arg.Any<CancellationToken>());
         // The token must never reach the log. Non-empty first, so the check cannot pass against a logger that records nothing.
         Assert.NotEmpty(h.Logger.Entries);
         Assert.DoesNotContain(h.Logger.Messages, m => m.Contains(Token, StringComparison.Ordinal));

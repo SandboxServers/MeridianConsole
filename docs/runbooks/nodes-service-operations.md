@@ -199,6 +199,15 @@ kubectl rollout restart deployment/nodes
 
 1. **Re-enroll all agents** - existing certificates will be invalid
 
+### Command Signing Key
+
+The control plane signs every agent command with a P-256 ECDSA key (C-3). Enrollment hands the public key and its key id to each agent (D-09), and the agent keeps them in `agent-state.json`.
+
+- **File:** `command-signing-key.pem` in the CA storage directory, unless `CommandSigning:KeyPath` names another file. If the file is missing, the service creates it on first start as a PKCS#8 PEM. On Unix the file is owner-only (0600).
+- **Configuration:** `CommandSigning:KeyPath` must be an absolute path with no `..` segments; a relative or traversing path fails startup. `CommandSigning:CommandTtlSeconds` must be between 10 and 60 (default 60). A longer TTL makes every conforming agent reject every command.
+- **Backup:** back up the key file together with the CA. A lost key is replaced by a new one on the next start, and agents that enrolled earlier reject its commands until they re-enroll.
+- **Rotation:** not supported in the MVP. Replacing the key means re-enrolling all agents.
+
 ## Health Monitoring
 
 ### Heartbeat Configuration

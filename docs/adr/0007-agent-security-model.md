@@ -18,6 +18,8 @@ Accepted (partially implemented — see notes)
 >   (`docs/PROJECT-STATE.md` DV-1/DV-2).
 > - The referenced `.claude/agents/agent-service-guardian` review agent does not exist
 >   in this repository.
+>
+> - **2026-10-28, command signing implemented (D-09):** Nodes signs each `AgentCommandEnvelope` with a P-256 key (C-3) and returns the public key and its key id at enrollment. The agent validates the key before it stores the certificate and keeps both in `agent-state.json`. Verifying commands on the agent is tracked in VS-14.
 
 ## Context
 
