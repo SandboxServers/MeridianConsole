@@ -90,6 +90,10 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | F58 | Attest regrades from stored clause states only. The runner's unstored `expect_error` failure and the SKIPPED grade can both be laundered into PASS by one attest call. A hidden failing input always stores FAIL. | `Uat/Bundle/BundleAttestor.cs:113-118`; `Uat/UatRunner.cs:317-320` | D-ML67; W3-fix-A |
 | F59 | Redaction and the secret scan run on serialised JSON text, so a vault value that JSON escaping changes (`"`, `\`, control, non-ASCII) passes both. Latent while vault values are base64url or hex. | `Uat/Bundle/BundleWriter.cs:281`; `Uat/Bundle/SecretScanner.cs:63` | W3-fix-B |
 | F60 | A fresh daemon's `stack_up wipe` cannot see `meridian-lab-*` containers left by an earlier daemon; S-L6 worked around it with a host-wide label sweep that would also remove a live lab. | `Stack/LabStack.cs:765-829`; `tests/…/LabSelfTestE2ETests.cs:101-108` | W3-fix-C |
+| F63 | `lab_doctor`'s `ports` check asks docker who holds an in-use lab port. A listener inside the daemon (the barrier on 25080 from L49, the webhook sink on 18090 from L36) is no container, so the check reports it as "in use by something else" (fail), or "owner unknown" (warn) when docker is down. | `Tools/Doctor/DoctorPorts.cs:79-117`; `Tools/Doctor/LabDoctorTool.cs` `PortsCheckAsync`; `LabPorts.cs` (`Barrier`, `Sink`); wave2-review-2 D4 | D-ML69; L49, L36 |
+| F64 | The runner names the bundle folder itself with a hard-coded `nobuild` while `BundleWriter` uses its build id, so `events.jsonl` and the bundle land in different folders once a build id is used. Both also read the clock separately, so a run that starts at midnight UTC can split. | `Uat/UatRunner.cs:135`; `Uat/Bundle/BundleWriter.cs:185` | L16f step 1 |
+| F65 | `ShippedSpecsValidateTests` reads only `docs/guides/uat-specs/*.toml` (`TopDirectoryOnly`), so L23's claim that it covers `catalog/` is false. `known-issues.toml` (L51) would land in that folder and fail as a spec, and `catalog/enroll-history.toml` is not a spec either. | `tests/Dhadgar.Lab.Tests/Uat/ShippedSpecsValidateTests.cs:14-15` | L23 item 4 |
+| F66 | CsCheck is not pinned in `Directory.Packages.props`, though L50's rules said it was "already pinned for L27". | `Directory.Packages.props` (no `CsCheck` entry) | L50 R-CPM |
 
 ## Decisions
 
@@ -163,6 +167,7 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | D-ML66 | `lease_id` is a reserved envelope argument for Leased tools. The dispatcher checks it, passes it as `LabCallContext.LeaseId` and strips it before binding. Leased argument records never declare it. The MCP projection advertises it as a required string. OwnLease records declare `lease_id?` and get it unchanged. The lease id never enters an observation. Fix packet L05f; R-LEASE test. | Accepted | F56; one rule in the gate instead of a field in ~43 records. |
 | D-ML67 | Attestation. User approval is the harness's job: owner action O2 (pending) puts `mcp__meridian-lab__uat_attest` in `permissions.ask`, so once it is applied the user approves each MCP call. O2 does not cover a direct POST to the loopback `/mcp`, so attestation is attribution under the same-user boundary, not proof of a human (W3-ruling-2). The main session relays the user's verdict (L18) and `uat-driver` never has the tool (D-ML18). No second credential. Each attestation records `lease_owner` and `caller`, and the ledger shows them. Verdicts are `held`/`not_held`. Only `NEEDS_HUMAN` or `UNVERIFIED` rows are attested. `note` is at most 1000 chars with no control, format, line or paragraph separator, private-use or unassigned code points, `clause_id` matches the id pattern (anchored with `\z`), and the ledger sanitises free text. `fidelity` becomes `evidence_only`. Fix packet W3-fix-A. | Accepted (architect; owner may override) | F57, F58; [ruling W3-1](worknotes/W3-ruling-1.md), [ruling W3-2](worknotes/W3-ruling-2.md). |
 | D-ML68 | C9 in wave 3: row `observed`, `attempts`, `checked_at`, `steps[]` and `run.json` `redactions` land now (W3-fix-B). `logs/` slices, `build.commit`/`dirty`/`checkout`, `tools[]`, `lease_owner`, row `started_at`/`ended_at`/`member` and clause `text`/`op`/`value` move to L16f (wave 4). | Accepted | Review N8; [ruling W3-1](worknotes/W3-ruling-1.md). |
+| D-ML69 | The daemon's own listeners are lab-owned in `lab_doctor`. A `LabListenerPorts` singleton (registered in `CoreArea.cs`, an R-REG exception) holds the ports the daemon binds; `BarrierProxy` holds its port while running; `EvaluatePorts` takes `daemonHeld` and counts those ports as the lab's even when docker is unreachable; docker is asked only about in-use ports the daemon does not hold. L49 builds it; L36 holds `LabPorts.Sink` the same way. | Accepted (architect) | F63, wave2-review-2 D4. A port allowlist would also pass a stranger squatting on 25080; holding only what is bound does not. |
 
 ## Seam tests
 
@@ -203,30 +208,30 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L10 | 2 | `db_query` (per-service DB, read-only) and `http_request` (lab hosts only) | L08 | yes | Integrated |
 | L11 | 2 | Nodes adapter: token mint, enroll probe, cert time shift, `stack_reset_data`; S-L2 green | L09, L10 | yes | Integrated |
 | L12 | 2 | `Dhadgar.Lab.Probe`, `AgentWindowsFootprint`, host reads, `lab_doctor`; S-L3 green | L05 | yes | Integrated |
-| L12a | 3 | Tool registration areas; tool set asserted from `ToolPolicy` (D-ML65) | L12 and the wave 2 fix passes | yes | Ready (after the wave 2 fix passes merge) |
-| L13 | 3 | Spec model (faults included), TOML loader, validator, `uat_list_specs`, `uat_plan` | L05, L12a | yes | BlockedDependency |
-| L14 | 3 | Clause evaluator: sources (incl. `step`), ops, `${var}`, capture | L13, L10, L12 | yes | BlockedDependency |
-| L15 | 3 | Runner and grader, seeds, `uat_run` (OwnLease); fault rows BLOCKED until L22 | L14 | yes | BlockedDependency |
-| L16 | 3 | Evidence bundle, `ledger.md`, secret scan, report, attest, `bundle_read` | L15 | yes | BlockedDependency |
-| L05f | 3 | Lease id as a dispatcher envelope field; observation leak (D-ML66) | - | yes | Ready |
-| L17 | 3 | CLI `status`/`uat`, `lab-selftest.toml`, S-L6 | L16, L11, L05f | yes | BlockedDependency |
-| L18 | 3 | `uat-driver` agent, `lab-uat` skill, S-L5 | L16 | yes | BlockedDependency |
-| L48 | 3 | Observation stream, actor and op ids, fingerprint, pairing, replay fidelity (C18) | L16 | yes | BlockedDependency |
-| W3-fix-A | 3 | Attestation: attribution, vocabulary, open-row allow-list, note bounds, ledger sanitiser (D-ML67) | wave 3 | yes | Merged locally ([ruling W3-1](worknotes/W3-ruling-1.md); pass-2 fixes in `ml/w3-fix2-*`) |
-| W3-fix-B | 3 | Row evidence, escaped-secret redaction and scan, strict secret-failed pass, `Task.Delay` on `TimeProvider` | wave 3 | yes | Merged locally |
-| W3-fix-C | 3 | Stack orphans on wipe, CLI tool errors, replay args, bundle path, log ring, safe S-L6 | wave 3 | yes | Merged locally |
-| W3-fix-3 | 3 | Docs and tool text state O2 as pending and the attest note limits as coded (pass-3 N1, N2) | `7cf1c5c` | yes | Ready ([ruling W3-2](worknotes/W3-ruling-2.md)) |
-| L16f | 4 | C9 completeness: `logs/`, build fields, `tools`, `lease_owner`, row times and member, clause text (D-ML68); plus the W3-ruling-2 carry-overs (non-JSON body redaction, test hygiene) | W3-fix-B | yes | BlockedDependency (spec written with wave 4) |
-| L19 | 4 | Blast-radius guard, write-ahead `FaultBook`, Toxiproxy faults and partitions; S-L7, BR | L08, L09, L48 | yes | BlockedDependency |
+| L12a | 3 | Tool registration areas; tool set asserted from `ToolPolicy` (D-ML65) | L12 and the wave 2 fix passes | yes | Integrated |
+| L13 | 3 | Spec model (faults included), TOML loader, validator, `uat_list_specs`, `uat_plan` | L05, L12a | yes | Integrated |
+| L14 | 3 | Clause evaluator: sources (incl. `step`), ops, `${var}`, capture | L13, L10, L12 | yes | Integrated |
+| L15 | 3 | Runner and grader, seeds, `uat_run` (OwnLease); fault rows BLOCKED until L22 | L14 | yes | Integrated |
+| L16 | 3 | Evidence bundle, `ledger.md`, secret scan, report, attest, `bundle_read` | L15 | yes | Integrated |
+| L05f | 3 | Lease id as a dispatcher envelope field; observation leak (D-ML66) | - | yes | Integrated |
+| L17 | 3 | CLI `status`/`uat`, `lab-selftest.toml`, S-L6 | L16, L11, L05f | yes | Integrated |
+| L18 | 3 | `uat-driver` agent, `lab-uat` skill, S-L5 | L16 | yes | Integrated |
+| L48 | 3 | Observation stream, actor and op ids, fingerprint, pairing, replay fidelity (C18) | L16 | yes | Integrated |
+| W3-fix-A | 3 | Attestation: attribution, vocabulary, open-row allow-list, note bounds, ledger sanitiser (D-ML67) | wave 3 | yes | Integrated ([ruling W3-1](worknotes/W3-ruling-1.md)) |
+| W3-fix-B | 3 | Row evidence, escaped-secret redaction and scan, strict secret-failed pass, `Task.Delay` on `TimeProvider` | wave 3 | yes | Integrated |
+| W3-fix-C | 3 | Stack orphans on wipe, CLI tool errors, replay args, bundle path, log ring, safe S-L6 | wave 3 | yes | Integrated |
+| W3-fix-3 | 3 | Docs and tool text state O2 as pending and the attest note limits as coded (pass-3 N1, N2) | `7cf1c5c` | yes | Integrated ([ruling W3-2](worknotes/W3-ruling-2.md)) |
+| L16f | 4 | C9 completeness: `logs/`, build fields, `tools`, `lease_owner`, row times and member, clause text (D-ML68); plus the W3-ruling-2 carry-overs (non-JSON body redaction, test hygiene, attest scan, log slices); F64 | wave 3 | yes | Ready (wave 4 step A) |
+| L19 | 4 | Blast-radius guard, write-ahead `FaultBook`, Toxiproxy faults and partitions; S-L7, BR | L08, L09, L48 | yes | Ready (wave 4 step A) |
 | L20 | 4 | Container, disk, file and DB faults | L19 | yes | BlockedDependency |
-| L21 | 4 | Invariant monitors I1-I6, `invariants_check` | L16, L19 | yes | BlockedDependency |
+| L21 | 4 | Invariant monitors I1-I6, `invariants_check` | L16f, L19 | yes | BlockedDependency |
 | L22 | 4 | Runner executes faults, `allow_invariants`, invariant grading, `repro.toml` | L20, L21 | yes | BlockedDependency |
 | L23 | 4 | Catalogs `gateway.toml`, `nodes.toml`, Nodes invariant checks | L22 | yes | BlockedDependency |
 | L24 | 4 | `lab-coverage.json`, `LabCoverageTests`, driver and skill for faults | L23, L18 | yes | BlockedDependency |
-| L49 | 4H | Barrier proxy; red S-L11 | L48, L09, L10 | yes | BlockedDependency |
-| L50 | 4H | Linearizability checker, enrollment model and rules E1-E6, minimiser | L48 | yes | BlockedDependency |
+| L49 | 4H | Barrier proxy; red S-L11; `lab_doctor` daemon-held ports (D-ML69) | L48, L09, L10 | yes | Ready (wave 4 step A) |
+| L50 | 4H | Linearizability checker, enrollment model and rules E1-E6, minimiser; CsCheck pin (F66) | L48 | yes | Ready (wave 4 step A) |
 | L51 | 4H | `history_run`, enrollment scenarios, Toxiproxy open-connection check; S-L11 green | L49, L50, L22, L11 | yes | BlockedDependency |
-| L25 | 5 | Results DB, bundle ingest, signatures, known-issue matching, `overall`, `results_query` | L22 | yes | BlockedDependency |
+| L25 | 5 | Results DB, bundle ingest, signatures, known-issue matching, `overall`, `results_query` | L22, L51 (both edit `BundleWriter`) | yes | BlockedDependency |
 | L26 | 5 | Triage: buckets, known issues, trends, drafts, ledger | L25 | yes | BlockedDependency |
 | L27 | 5 | Async jobs, `results_flake_check`, the CsCheck model-based hunter (enrollment lifecycle) | L25 | yes | BlockedDependency |
 | L28 | 5 | Contract fuzzer through the Gateway | L27 | yes | BlockedDependency |
@@ -269,8 +274,8 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | 1 | L01-L06 | Claude can reach a leased, audited daemon | L01 → L02 → L03 → L04 → L05 → L06 | L02, L03, L04 after L01 |
 | 2 | L07-L12, L09f | Real Gateway and Nodes on a wipeable stack, probed and read | L07 → L08 → L12 → L09f (own PR to `main`, #237) → L09 → L10 → L11 | L07, L08, L12; L09, L10 after L08 |
 | 3 | L12a, L13-L18, L48, L05f | Graded, evidenced UAT runs by a driver agent; the observation stream | L12a → L13 → L14 → L15 → L16 → L48 → L05f → L17 → L18 | L48, L17, L18 after L16; L17 resumes after L05f |
-| 4 | L19-L24 | Faults, invariants and the first expected-failure catalogs | L19 → L20 → L21 → L22 → L23 → L24 | L21 beside L20 |
-| 4H | L49-L51 | Enrollment histories checked for linearizability | L49 → L50 → L51 | L49, L50 together (L49 after L48; L51 after wave 4) |
+| 4 | L16f, L19-L24 | C9 complete; faults, invariants and the first expected-failure catalogs | L16f → L19 → (L50 → L49) → L20 → L21 → L22 → L23 → (L51) → L24 | A: L16f ‖ L19 (‖ L49 ‖ L50); B: L20 ‖ L21 (L21 after L16f and L19); C: L22; D: L23 ‖ L51; E: L24 (work-packets "Wave 4 plan") |
+| 4H | L49-L51 | Enrollment histories checked for linearizability | interleaved with wave 4: L50 and L49 after L19, L51 after L23 | L49 ‖ L50 in step A; L51 after L22, beside L23 |
 | 5 | L25-L29, L52 | Results DB, triage, model-based hunting, fuzzing, chaos, soak, behavioural coverage | L25 → L26 → L27 → L52 → L28 → L29 | L26, L27, L52 after L25; L28, L29 after L27 |
 | 5E | L53-L55 | Twins, product mutants, the lab self-check | L53 → L54 → L55 | L53, L54 together (L54 after wave 4H) |
 | 6 | L30-L33 | Windows agent in container members | L30 → L31 → L32 → L33 | serial; L31 needs the L00 ruling |
@@ -279,7 +284,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | 9 | L57-L62 | Adversarial peer, recovery envelopes, continuity, mixed versions and time, guided mode | L57 → L58 → L59 → L60 → L61 → L62 | L57, L58, L59, L60, L62 together once their dependencies are merged; L61 after L58 and L60 |
 | 10 | L45-L47 | Docs, live evidence, close-out | L45 → L46 (no merge) → L47 | serial |
 
-Waves 4H, 5, 5E, 6 and 7 may run in parallel after wave 4 as their dependencies allow; they share `ToolPolicy.cs`, the C4 table and `LabServices.cs`, so their packets merge one at a time and each rebases on the tip first. From L12a, tool registrations live in per-area files and `PlannedTools` groups (R-REG, D-ML65), so those rebases do not conflict on registrations.
+Wave 4H runs inside wave 4 (work-packets "Wave 4 plan", 2026-10-28), and wave 5 starts after the wave 4 boundary review ships and L51 merges. Waves 5, 5E, 6 and 7 may run in parallel after that as their dependencies allow; they share `ToolPolicy.cs`, the C4 table and `LabServices.cs`, so their packets merge one at a time and each rebases on the tip first. From L12a, tool registrations live in per-area files and `PlannedTools` groups (R-REG, D-ML65), so those rebases do not conflict on registrations.
 
 Ship: D-ML16, confirmed by D-ML39 (owner, 2026-10-28): ops pushes `campaign/meridian-lab` once, after L47, and opens one PR with `security-review`, merged on the user's yes. No per-milestone PRs.
 
