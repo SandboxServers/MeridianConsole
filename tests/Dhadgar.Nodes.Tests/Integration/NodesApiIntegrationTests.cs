@@ -100,7 +100,7 @@ public sealed class NodesApiIntegrationTests
         var response = await client.GetAsync($"/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>>();
         Assert.NotNull(result);
         Assert.Empty(result.Items);
         Assert.Equal(0, result.Total);
@@ -116,7 +116,7 @@ public sealed class NodesApiIntegrationTests
         var response = await client.GetAsync($"/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>>();
         Assert.NotNull(result);
         Assert.Equal(3, result.Items.Count);
         Assert.Equal(3, result.Total);
@@ -132,7 +132,7 @@ public sealed class NodesApiIntegrationTests
         var response = await client.GetAsync($"/organizations/{orgId}/nodes?page=1&pageSize=3");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<FilteredPagedResponse<NodeListItem>>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>>();
         Assert.NotNull(result);
         Assert.Equal(3, result.Items.Count);
         Assert.Equal(10, result.Total);

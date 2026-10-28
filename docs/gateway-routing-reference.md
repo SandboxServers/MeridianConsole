@@ -31,7 +31,8 @@ Routes are matched by `Order` value (lower = higher priority):
 
 | Order | Purpose | Example |
 |-------|---------|---------|
-| 1 | Security blocks | Internal endpoint blocking |
+| -1 | Console REST API (must precede `servers-org-route`) | `console-org-route` |
+| 1 | Security blocks | Internal endpoint blocking, `nodes-reservations-block` |
 | 10 | Authentication routes | Identity, BetterAuth |
 | 20 | Standard API routes | Most services |
 | 30 | Catch-all routes | Agent endpoints |
@@ -41,20 +42,22 @@ Routes are matched by `Order` value (lower = higher priority):
 | Route ID | Path Pattern | Cluster | Auth Policy | Rate Limiter | Transform |
 |----------|--------------|---------|-------------|--------------|-----------|
 | `identity-internal-block` | `/api/v1/identity/internal/{**catch-all}` | identity | `DenyAll` | - | - |
+| `nodes-reservations-block` | `/api/v1/organizations/{organizationId}/nodes/{nodeId}/reservations/{**catch-all}` | nodes | `DenyAll` | - | - |
 | `betterauth-route` | `/api/v1/betterauth/{**catch-all}` | betterauth | `Anonymous` | `Auth` | - |
 | `identity-route` | `/api/v1/identity/{**catch-all}` | identity | `Anonymous` | `Auth` | Remove `/api/v1/identity` |
 | `billing-route` | `/api/v1/billing/{**catch-all}` | billing | `TenantScoped` | `PerTenant` | Remove `/api/v1/billing` |
-| `servers-route` | `/api/v1/servers/{**catch-all}` | servers | `TenantScoped` | `PerTenant` | Remove `/api/v1/servers` |
+| `servers-org-route` | `/api/v1/organizations/{organizationId}/servers/{**catch-all}` | servers | `TenantScoped` | `PerTenant` | Remove `/api/v1` |
 | `nodes-route` | `/api/v1/nodes/{**catch-all}` | nodes | `TenantScoped` | `PerTenant` | Remove `/api/v1/nodes` |
 | `tasks-route` | `/api/v1/tasks/{**catch-all}` | tasks | `TenantScoped` | `PerTenant` | Remove `/api/v1/tasks` |
 | `files-route` | `/api/v1/files/{**catch-all}` | files | `TenantScoped` | `PerTenant` | Remove `/api/v1/files` |
-| `console-api-route` | `/api/v1/console/{**catch-all}` | console | `TenantScoped` | `PerTenant` | Remove `/api/v1/console` |
+| `console-org-route` | `/api/v1/organizations/{organizationId}/servers/{serverId}/console/{**catch-all}` | console | `TenantScoped` | `PerTenant` | Remove `/api/v1` |
 | `console-hub-route` | `/hubs/console/{**catch-all}` | console | `TenantScoped` | `PerTenant` | - |
 | `mods-route` | `/api/v1/mods/{**catch-all}` | mods | `TenantScoped` | `PerTenant` | Remove `/api/v1/mods` |
 | `notifications-route` | `/api/v1/notifications/{**catch-all}` | notifications | `TenantScoped` | `PerTenant` | Remove `/api/v1/notifications` |
 | `secrets-route` | `/api/v1/secrets/{**catch-all}` | secrets | `TenantScoped` | `PerTenant` | Remove `/api/v1/secrets` |
 | `discord-route` | `/api/v1/discord/{**catch-all}` | discord | `TenantScoped` | `PerTenant` | Remove `/api/v1/discord` |
 | `agents-route` | `/api/v1/agents/{**catch-all}` | nodes | `AgentCertificate` | `PerAgent` | Remove `/api/v1` |
+| `agents-ca-route` | `/api/v1/agents/ca-certificate` | nodes | `Anonymous` | `Auth` | Remove `/api/v1` |
 | `agents-enroll-route` | `/api/v1/agents/enroll` | nodes | `Anonymous` | `Auth` | Remove `/api/v1` |
 | `agent-hub-route` | `/hubs/agent/{**catch-all}` | nodes | `AgentCertificate` | `PerAgent` | - |
 
@@ -63,8 +66,7 @@ Routes are matched by `Order` value (lower = higher priority):
 | Policy | Description | Required Claims |
 |--------|-------------|-----------------|
 | `Anonymous` | No authentication required | None |
-| `TenantScoped` | Requires valid JWT with tenant context | `org_id` claim |
-| `Agent` | Requires valid JWT with agent client type | `client_type: agent` |
+| `TenantScoped` | Any authenticated user. The Gateway does not compare the route's `organizationId` with the token's `org_id`; the backend service must (404 for another org's resource) | Not checked at the Gateway |
 | `DenyAll` | Always returns 403 Forbidden | - |
 
 ### Special Routes
@@ -89,7 +91,7 @@ The `/api/v1/agents/*` route points to the `nodes` cluster intentionally. Agents
 **SignalR Routes**
 
 The Console service has two routes:
-- `/api/v1/console/*` - REST API endpoints
+- `/api/v1/organizations/{organizationId}/servers/{serverId}/console/*` - REST API endpoints (`console-org-route`, `Order: -1`, so it wins over `servers-org-route`, whose catch-all also matches console paths)
 - `/hubs/console/*` - SignalR WebSocket connections (no path transform)
 
 ---
@@ -317,7 +319,6 @@ CORS is configured in `src/Dhadgar.Gateway/appsettings.json` under `Cors`.
 "Cors": {
   "AllowedOrigins": [
     "https://panel.meridianconsole.com",
-    "https://cart.meridianconsole.com",
     "https://meridianconsole.com",
     "https://dev.meridianconsole.com",
     "http://localhost:4321",
@@ -392,6 +393,8 @@ The following headers are stripped from incoming requests to prevent spoofing:
 - `X-Roles`
 - `X-Real-IP`
 
+`X-Client-Type` and `X-Agent-Id` are stripped and never set: agents authenticate by certificate (D-31).
+
 Backend services should only trust these headers when set by the Gateway after JWT validation.
 
 ---
@@ -450,7 +453,7 @@ Add a new cluster under `ReverseProxy.Clusters`:
 |----------|--------|
 | Public endpoints (health, docs) | `Anonymous` |
 | Tenant-scoped API endpoints | `TenantScoped` |
-| Agent-specific endpoints | `Agent` |
+| Agent-specific endpoints | `AgentCertificate` |
 | Internal-only endpoints | Create blocking route with `DenyAll` |
 
 ### Step 4: Choose Rate Limiter Policy
