@@ -106,6 +106,11 @@ public sealed class LabDaemon : IAsyncDisposable
 
             await app.StartAsync(ct).ConfigureAwait(false);
 
+            if (!AllAddressesLoopback(app))
+            {
+                return Result<LabDaemon>.Failure("[Lab.InvalidArgument] the daemon binds loopback only; remove the Kestrel endpoint configuration");
+            }
+
             var port = BoundLoopbackPort(app);
             if (port is null)
             {
@@ -186,8 +191,9 @@ public sealed class LabDaemon : IAsyncDisposable
         });
 
         // Only labsettings.json and the environment feed the daemon; the default appsettings files are dropped.
+        // The Kestrel section is dropped too: an endpoint configured there would open a listener this code does not choose.
         builder.Configuration.Sources.Clear();
-        builder.Configuration.AddConfiguration(settings);
+        builder.Configuration.AddInMemoryCollection(settings.AsEnumerable().Where(entry => !IsKestrelKey(entry.Key)));
 
         // ASPNETCORE_URLS and hosting URL settings are ignored: the listeners below are the only ones.
         builder.WebHost.UseUrls();
@@ -219,6 +225,32 @@ public sealed class LabDaemon : IAsyncDisposable
         builder.Services.AddSingleton<ILabEvents, NullLabEvents>();
 
         return builder.Build();
+    }
+
+    private static bool IsKestrelKey(string key) =>
+        string.Equals(key, "Kestrel", StringComparison.OrdinalIgnoreCase)
+        || key.StartsWith("Kestrel:", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True when every address the server bound is a loopback host. An unparseable address counts as not loopback.
+    /// </summary>
+    private static bool AllAddressesLoopback(WebApplication app)
+    {
+        var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses;
+        if (addresses is null)
+        {
+            return true;
+        }
+
+        foreach (var address in addresses)
+        {
+            if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) || !IsLoopbackBind(uri.Host))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

@@ -115,6 +115,35 @@ public sealed class SingleInstanceGuardTests
         }
     }
 
+    [Fact]
+    public void Acquire_OnLinux_RootIsUserPrivateAndPidFileIsUserOnly()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        // The root is nested so that Acquire creates it; an existing directory keeps its own mode.
+        var outer = Path.Combine(Path.GetTempPath(), "lab-l02-mode-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(outer, "root");
+        try
+        {
+            var paths = LabPaths.FromRoot(root);
+            var guard = SingleInstanceGuard.Acquire(paths);
+            Assert.True(guard.IsSuccess, guard.Error);
+
+            using (guard.Value)
+            {
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(root));
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(paths.PidFile));
+            }
+        }
+        finally
+        {
+            DeleteRoot(outer);
+        }
+    }
+
     private static string NewRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "lab-l02-guard-" + Guid.NewGuid().ToString("N"));

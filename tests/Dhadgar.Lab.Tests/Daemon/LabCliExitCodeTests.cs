@@ -1,10 +1,15 @@
+using System.Net;
 using Dhadgar.Lab.Cli;
+using Dhadgar.Lab.Daemon;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Dhadgar.Lab.Tests.Daemon;
 
 /// <summary>
-/// Exit codes of <c>meridian-lab daemon run</c>: 2 for config refusals, 3 for a second instance. Every case here is a refusal,
-/// so no daemon is ever started and no port is bound.
+/// Exit codes of <c>meridian-lab daemon run</c>: 2 for config refusals, 3 for a second instance. The refusal cases here never
+/// start a daemon; the Kestrel case starts one on an ephemeral port and checks that it listens on loopback only.
 /// </summary>
 /// <remarks>
 /// These tests set process environment variables, so they run one at a time within this class.
@@ -60,6 +65,38 @@ public sealed class LabCliExitCodeTests
     }
 
     [Fact]
+    public async Task DaemonStart_KestrelEndpointOnAnyAddress_BindsLoopbackOnly()
+    {
+        var dataRoot = Path.Combine(Path.GetTempPath(), "lab-l02-kestrel-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dataRoot);
+        try
+        {
+            var options = new LabDaemonOptions(0, ValidToken(), dataRoot, EnforceSingleInstance: false, RefuseElevated: false);
+            var started = await WithEnvironmentAsync(
+                new Dictionary<string, string?> { ["Kestrel__Endpoints__Lan__Url"] = "http://0.0.0.0:0" },
+                () => LabDaemon.StartAsync(options, CancellationToken.None));
+
+            Assert.True(started.IsSuccess, started.Error);
+            await using var daemon = started.Value;
+            var feature = daemon.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>();
+            Assert.NotNull(feature);
+            Assert.NotEmpty(feature.Addresses);
+            foreach (var address in feature.Addresses)
+            {
+                var host = new Uri(address).Host.Trim('[', ']');
+                Assert.True(IPAddress.IsLoopback(IPAddress.Parse(host)), address);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(dataRoot))
+            {
+                Directory.Delete(dataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task TokenNew_PrintsOneLineAndExitsWithZero()
     {
         var original = Console.Out;
@@ -85,7 +122,10 @@ public sealed class LabCliExitCodeTests
     private static string ValidToken() => System.Buffers.Text.Base64Url.EncodeToString(
         System.Security.Cryptography.RandomNumberGenerator.GetBytes(LabDefaults.MinTokenBytes));
 
-    private static async Task<int> RunWithEnvironmentAsync(IReadOnlyDictionary<string, string?> values, string[] args)
+    private static Task<int> RunWithEnvironmentAsync(IReadOnlyDictionary<string, string?> values, string[] args) =>
+        WithEnvironmentAsync(values, () => LabCli.RunAsync(args));
+
+    private static async Task<T> WithEnvironmentAsync<T>(IReadOnlyDictionary<string, string?> values, Func<Task<T>> action)
     {
         var saved = new Dictionary<string, string?>();
         foreach (var key in values.Keys)
@@ -96,7 +136,7 @@ public sealed class LabCliExitCodeTests
 
         try
         {
-            return await LabCli.RunAsync(args);
+            return await action();
         }
         finally
         {

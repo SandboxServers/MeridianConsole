@@ -42,8 +42,8 @@ public sealed class SingleInstanceGuard : IDisposable
         FileStream? pidFile = null;
         try
         {
-            Directory.CreateDirectory(paths.Root);
-            pidFile = new FileStream(paths.PidFile, FileMode.Create, FileAccess.Write, FileShare.Read);
+            CreateRoot(paths.Root);
+            pidFile = new FileStream(paths.PidFile, PidFileOptions());
             var pid = Encoding.ASCII.GetBytes(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
             pidFile.Write(pid);
             pidFile.Flush();
@@ -99,6 +99,41 @@ public sealed class SingleInstanceGuard : IDisposable
         {
             // Not the owning thread.
         }
+    }
+
+    /// <summary>
+    /// Creates the lab root. On Unix it is user-private (0700): it is the first directory the lab creates and every later
+    /// child lives under it. On Windows the root keeps the inherited ACL; <c>MERIDIAN_LAB_HOME</c> must be a user-private directory.
+    /// </summary>
+    private static void CreateRoot(string root)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(root);
+            return;
+        }
+
+        Directory.CreateDirectory(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
+    /// <summary>
+    /// The pidfile options. <see cref="FileStreamOptions.UnixCreateMode"/> is set only on Unix: on Windows it throws.
+    /// </summary>
+    private static FileStreamOptions PidFileOptions()
+    {
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.Create,
+            Access = FileAccess.Write,
+            Share = FileShare.Read,
+        };
+
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        return options;
     }
 
     private static string MutexName() => "Local\\MeridianLab-" + CurrentUserId();
