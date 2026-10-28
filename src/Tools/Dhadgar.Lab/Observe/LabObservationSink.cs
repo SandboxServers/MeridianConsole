@@ -101,7 +101,9 @@ public sealed class LabObservationSink : ILabObservationSink, IDisposable
                 Directory.CreateDirectory(folder.Value);
                 string path = Path.Combine(folder.Value, FileName);
                 var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+#pragma warning disable CA2000 // The stream and writer are owned by the RunState and disposed in EndRunAsync or Dispose.
                 var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = false };
+#pragma warning restore CA2000
                 _runs[runId] = new RunState(runId, path, stream, writer);
                 return Result.Success();
             }
@@ -113,20 +115,23 @@ public sealed class LabObservationSink : ILabObservationSink, IDisposable
     }
 
     /// <inheritdoc />
-    public Task<Result<long>> EndRunAsync(string runId, CancellationToken ct)
+    public async Task<Result<long>> EndRunAsync(string runId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         RunState? state = Find(runId);
         if (state is null)
         {
-            return Task.FromResult(Result<long>.Failure("[Lab.NotFound] no open observation run with that id"));
+            return Result<long>.Failure("[Lab.NotFound] no open observation run with that id");
         }
 
+        long count;
+        StreamWriter writer;
+        FileStream stream;
         lock (state.Gate)
         {
             if (state.Closed)
             {
-                return Task.FromResult(Result<long>.Failure("[Lab.NotFound] no open observation run with that id"));
+                return Result<long>.Failure("[Lab.NotFound] no open observation run with that id");
             }
 
             try
@@ -139,19 +144,32 @@ public sealed class LabObservationSink : ILabObservationSink, IDisposable
                         pending.Value.Op, EmptyObject(), OpOutcome.Unknown, ParseObject("{\"reason\":\"run ended\"}"),
                         pending.Value.CausedBy));
                 }
-
-                state.Open.Clear();
-                state.Writer.Flush();
-                state.Writer.Dispose();
-                state.Stream.Dispose();
-                state.Closed = true;
-                return Task.FromResult(Result<long>.Success(state.Counter));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                return Task.FromResult(Result<long>.Failure("[Lab.Unavailable] the observation file could not be written"));
+                return Result<long>.Failure("[Lab.Unavailable] the observation file could not be written");
             }
+
+            state.Open.Clear();
+            state.Closed = true;
+            count = state.Counter;
+            writer = state.Writer;
+            stream = state.Stream;
         }
+
+        // Closed before the file is released so no append can follow; the file is closed outside the lock.
+        try
+        {
+            await writer.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+            await writer.DisposeAsync().ConfigureAwait(false);
+            await stream.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Result<long>.Failure("[Lab.Unavailable] the observation file could not be written");
+        }
+
+        return Result<long>.Success(count);
     }
 
     /// <inheritdoc />

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Random;
 using Dhadgar.Lab.Tools;
@@ -47,6 +48,7 @@ public sealed class UatRunner
     private const string OwnLeasePrefix = "uat-run/";
     private const string DefaultPurpose = "uat";
     private const string LeaseIdField = "lease_id";
+    private const string RunnerActor = "runner";
 
     private static readonly JsonElement EmptyObject = JsonSerializer.SerializeToElement(new JsonObject());
 
@@ -55,17 +57,21 @@ public sealed class UatRunner
     private readonly ClauseEvaluator _evaluator;
     private readonly ICapabilityProbe _probe;
     private readonly TimeProvider _time;
+    private readonly ILabObservationSink? _observations;
+    private readonly string? _uatRuns;
 
     /// <summary>
-    /// Creates the runner.
+    /// Creates the runner. With <paramref name="observations"/> and <paramref name="paths"/> every run and step is recorded in the run's <c>events.jsonl</c> (C18).
     /// </summary>
-    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time)
+    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null)
     {
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
         _time = time ?? throw new ArgumentNullException(nameof(time));
+        _observations = observations;
+        _uatRuns = paths?.UatRuns;
     }
 
     /// <summary>
@@ -111,10 +117,18 @@ public sealed class UatRunner
             }
         }
 
+        bool observing = false;
         try
         {
             var run = new RunContext(runId, seed, leaseId, ownLease, _time.GetUtcNow());
             sink.RunStarted(runId, seed, request.Spec);
+            if (_observations is not null && _uatRuns is not null)
+            {
+                // The bundle folder name (BundleWriter) is yyyyMMdd-<build id>-<run id>; UAT runs are not built at start, so the build id is "nobuild".
+                string folder = Path.Combine(_uatRuns, $"{_time.GetUtcNow().UtcDateTime:yyyyMMdd}-nobuild-{runId}");
+                observing = _observations.BeginRun(runId, folder).IsSuccess;
+            }
+
             string? missing = await MissingCapabilityAsync(request.Spec.Section, ct).ConfigureAwait(false);
 
             var grades = new List<RowGrade>();
@@ -142,11 +156,22 @@ public sealed class UatRunner
             }
 
             var outcome = new UatRunResult(runId, seed, false, RunOutcome.Compute(grades, failures), rows);
+            if (observing)
+            {
+                observing = false;
+                _ = await _observations!.EndRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
+            }
+
             sink.RunFinished(outcome);
             return Result<UatRunResult>.Success(outcome);
         }
         finally
         {
+            if (observing)
+            {
+                _ = await _observations!.EndRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
+            }
+
             if (ownLease && leaseId is not null)
             {
                 _ = _leases.Release(leaseId);
@@ -327,7 +352,9 @@ public sealed class UatRunner
         }
 
         var context = new LabCallContext(Guid.NewGuid().ToString("N"), run.LeaseId, "uat:" + run.RunId);
+        OpId? op = BeginStepObservation(run.RunId, tool, args);
         LabToolResult call = await _dispatcher.InvokeAsync(tool, args, context, ct).ConfigureAwait(false);
+        CompleteStepObservation(op, run.RunId, tool, call);
         long elapsed = (long)(_time.GetUtcNow() - started).TotalMilliseconds;
         if (!call.IsError)
         {
@@ -341,6 +368,52 @@ public sealed class UatRunner
         }
 
         return new StepOutcome(false, "[" + code + "] step " + stepId + " failed", code, elapsed, call.Payload);
+    }
+
+    /// <summary>
+    /// Records the invocation of a step (C18). Returns null when the runner has no sink.
+    /// </summary>
+    private OpId? BeginStepObservation(string runId, string tool, JsonElement args)
+    {
+        if (_observations is null)
+        {
+            return null;
+        }
+
+        OpId op = _observations.NextOp(runId, RunnerActor);
+        _ = _observations.Append(new LabObservation(0, runId, _time.GetUtcNow(), RunnerActor, op.ToString(), ObservationKind.Invoke, tool, args, null, EmptyObject, null));
+        return op;
+    }
+
+    /// <summary>
+    /// Records the completion of a step (C18). <c>http_request</c> and <c>nodes_enroll_probe</c> report their own outcome.
+    /// </summary>
+    private void CompleteStepObservation(OpId? op, string runId, string tool, LabToolResult call)
+    {
+        if (_observations is null || op is not { } id)
+        {
+            return;
+        }
+
+        _ = _observations.Append(new LabObservation(0, runId, _time.GetUtcNow(), RunnerActor, id.ToString(), ObservationKind.Complete, tool, EmptyObject, OutcomeOf(tool, call), call.Payload, null));
+    }
+
+    private static Dhadgar.Lab.Observe.OpOutcome OutcomeOf(string tool, LabToolResult call)
+    {
+        if (tool is "http_request" or "nodes_enroll_probe"
+            && call.Payload.ValueKind == JsonValueKind.Object
+            && call.Payload.TryGetProperty("outcome", out JsonElement outcome)
+            && outcome.ValueKind == JsonValueKind.String)
+        {
+            return outcome.GetString() switch
+            {
+                "ok" => Dhadgar.Lab.Observe.OpOutcome.Ok,
+                "unknown" => Dhadgar.Lab.Observe.OpOutcome.Unknown,
+                _ => Dhadgar.Lab.Observe.OpOutcome.Fail,
+            };
+        }
+
+        return call.IsError ? Dhadgar.Lab.Observe.OpOutcome.Fail : Dhadgar.Lab.Observe.OpOutcome.Ok;
     }
 
     private static string? CaptureAll(UatStep step, JsonElement payload, UatVars vars)

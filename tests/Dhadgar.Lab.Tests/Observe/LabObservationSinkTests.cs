@@ -53,7 +53,7 @@ public sealed class LabObservationSinkTests : IDisposable
         Assert.Equal(Enumerable.Range(1, 8000).Select(n => (long)n), seqs.Order());
         Assert.True((await _sink.EndRunAsync(runId, CancellationToken.None)).IsSuccess);
 
-        long[] fileSeqs = File.ReadLines(Path.Combine(folder, LabObservationSink.FileName))
+        long[] fileSeqs = (await File.ReadAllLinesAsync(Path.Combine(folder, LabObservationSink.FileName)))
             .Select(line => JsonSerializer.Deserialize<LabObservation>(line, ObserveJson.Options)!.Seq)
             .ToArray();
         Assert.Equal(Enumerable.Range(1, 8000).Select(n => (long)n), fileSeqs);
@@ -98,7 +98,7 @@ public sealed class LabObservationSinkTests : IDisposable
         Assert.True(_sink.Append(Draft(runId, ActorIds.Lab, ObservationKind.Observe, "tick", seq: 0)).IsFailure);
         Assert.True((await _sink.EndRunAsync(runId, CancellationToken.None)).IsSuccess);
 
-        string[] lines = File.ReadAllLines(Path.Combine(folder, LabObservationSink.FileName));
+        string[] lines = await File.ReadAllLinesAsync(Path.Combine(folder, LabObservationSink.FileName));
         Assert.Equal(LabObservationSink.MaxObservationsPerRun + 1, lines.Length);
         Assert.Single(lines, line => line.Contains("\"op\":\"truncated\""));
     }
@@ -115,7 +115,8 @@ public sealed class LabObservationSinkTests : IDisposable
         Result<long> count = await _sink.EndRunAsync(runId, CancellationToken.None);
 
         Assert.Equal(2, count.Value);
-        LabObservation last = _sink.Read(runId, 0, 10).Last();
+        IReadOnlyList<LabObservation> readBack = _sink.Read(runId, 0, 10);
+        LabObservation last = readBack[readBack.Count - 1];
         Assert.Equal(ObservationKind.Complete, last.Kind);
         Assert.Equal(OpOutcome.Unknown, last.Outcome);
         Assert.Equal(op.ToString(), last.OpId);
