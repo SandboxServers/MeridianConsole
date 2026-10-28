@@ -54,9 +54,9 @@ public static class BundleAttestor
             return Result<string>.Failure("[Lab.InvalidArgument] section, row or clause id is not valid");
         }
 
-        if (note is not null && (note.Length > 1000 || note.Any(c => char.IsControl(c))))
+        if (note is not null && (note.Length > 1000 || LedgerRenderer.IsUnsafeText(note)))
         {
-            return Result<string>.Failure("[Lab.InvalidArgument] note must be at most 1000 characters without control characters");
+            return Result<string>.Failure("[Lab.InvalidArgument] note must be at most 1000 characters without control, format or separator characters");
         }
 
         try

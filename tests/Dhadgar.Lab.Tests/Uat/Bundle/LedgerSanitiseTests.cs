@@ -43,4 +43,17 @@ public sealed class LedgerSanitiseTests
         Assert.DoesNotContain("\n| x | PASS |", ledger, StringComparison.Ordinal);
         Assert.Contains("- Attested: c1 held by owner-a via mcp at 2026-01-01T00:00:00Z; note: fine | x | PASS |", ledger, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Render_LineAndParagraphSeparatorsAndBidiOverride_BecomeSpaces()
+    {
+        var rows = new[] { new LedgerRow("plan-check", "key", "a\u2028b\u202Ec\u2029d", "expected", RowGrade.Pass, At, Array.Empty<LedgerClause>()) };
+
+        string ledger = LedgerRenderer.Render("abc123", "linux", "a1b2c3d4 (commit 0123456789ab, clean)", rows);
+
+        Assert.DoesNotContain("\u2028", ledger, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u2029", ledger, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u202E", ledger, StringComparison.Ordinal);
+        Assert.Contains("### plan-check/key: a b c d", ledger, StringComparison.Ordinal);
+    }
 }
