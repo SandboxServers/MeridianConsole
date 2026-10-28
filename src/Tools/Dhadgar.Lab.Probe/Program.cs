@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Dhadgar.Contracts.Agents;
+
 namespace Dhadgar.Lab.Probe;
 
 /// <summary>
@@ -24,14 +27,45 @@ public static class ProbeCli
         switch (args[0])
         {
             case "footprint":
-                stderr.WriteLine("footprint is not implemented in this build");
-                return 2;
+                return Footprint(args, stdout, stderr);
 
             default:
                 stderr.WriteLine("unknown mode");
                 return 2;
         }
     }
+
+    private static int Footprint(string[] args, TextWriter stdout, TextWriter stderr)
+    {
+        if (args.Length != 2 || args[1] != "--json")
+        {
+            stderr.WriteLine("usage: meridian-lab-probe footprint --json");
+            return 2;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            stderr.WriteLine("footprint is Windows-only");
+            return 2;
+        }
+
+        if (!ReadWindowsFootprint(out ProbeFootprint? footprint, out string? error))
+        {
+            stderr.WriteLine(error ?? "footprint read failed");
+            return 2;
+        }
+
+        stdout.WriteLine(JsonSerializer.Serialize(footprint, FootprintJson));
+        return 0;
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static bool ReadWindowsFootprint(out ProbeFootprint? footprint, out string? error)
+    {
+        return FootprintReader.TryRead(out footprint, out error);
+    }
+
+    private static readonly JsonSerializerOptions FootprintJson = new() { WriteIndented = false };
 }
 
 /// <summary>
