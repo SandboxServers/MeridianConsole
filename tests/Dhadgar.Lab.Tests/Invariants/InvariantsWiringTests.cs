@@ -38,7 +38,7 @@ public sealed class InvariantsWiringTests
 
             await using LabDaemon daemon = started.Value;
             string[] ids = daemon.Services.GetServices<IInvariant>().Select(i => i.Id).Order(StringComparer.Ordinal).ToArray();
-            Assert.Equal(["I1", "I2", "I3", "I4", "I5", "I6"], ids);
+            Assert.Equal(["I1", "I2", "I3", "I4", "I5", "I6", "I7"], ids);
             Assert.IsType<I4SecretLeakInvariant>(daemon.Services.GetRequiredService<IRawLineObserver>());
             Assert.Contains(daemon.Services.GetServices<ILabTool>(), t => t.Name == "invariants_check");
             Assert.Equal(LabGate.Open, ToolPolicy.GateFor("invariants_check"));

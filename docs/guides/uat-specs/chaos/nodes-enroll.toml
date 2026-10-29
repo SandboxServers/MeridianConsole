@@ -1,0 +1,23 @@
+schema = 1
+
+# Seeded chaos plan for the Nodes enrollment workload (L29, D-ML71, D-ML88).
+# Only latency toxics go on nodes-postgres: a Postgres cut or disable gives F67's 500s, which I1 never excuses.
+# Timeout toxics are not used here; the Gateway-to-Nodes edge gets latency only.
+
+[plan]
+id = "nodes-enroll"
+workload = { spec = "docs/guides/uat-specs/lab-selftest.toml", rows = ["enroll-gateway"] }   # looped, paced by GatewayPacer
+max_concurrent = 2
+quiet_s = [5, 30]                 # gap between fault injections, seeded uniform
+
+[[fault]]
+tool = "fault_toxic_add"
+args = { proxy = "nodes-postgres", toxic = "latency", stream = "downstream", attributes = { latency = 1500 } }
+weight = 3
+duration_s = [5, 45]
+
+[[fault]]
+tool = "fault_toxic_add"
+args = { proxy = "gateway-nodes", toxic = "latency", stream = "upstream", attributes = { latency = 800 } }
+weight = 1
+duration_s = [5, 30]

@@ -1,0 +1,8 @@
+schema = 1
+# Soak limits for I7 (C11, L29). I7 takes the least-squares slope of each container's memory (MiB) and process count over a soak.
+# A slope above a limit is a violation. Change these values only with a README decision.
+# This file is read by I7, not by I3; I3 skips it.
+
+[limits]
+memory_mib_per_hour = 50
+pids_per_hour = 10

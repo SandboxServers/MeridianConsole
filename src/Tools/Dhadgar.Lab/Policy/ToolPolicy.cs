@@ -114,8 +114,6 @@ public static class ToolPolicy
         // L27 (registered)
         // L28
         // L29
-        "chaos_run",
-        "soak_run",
         // L30
         "pool_list",
         "pool_acquire",
