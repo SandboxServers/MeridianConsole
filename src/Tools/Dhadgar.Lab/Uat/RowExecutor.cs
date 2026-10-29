@@ -317,9 +317,19 @@ internal sealed class RowExecutor
         }
 
         faults.Active.Add(new InjectedFault(fault, faultId));
-        faults.Log.Add(new UatRowFault(fault.Id, fault.Tool, args, faultId, injectedAt, null, null));
+        faults.Log.Add(new UatRowFault(fault.Id, fault.Tool, args, faultId, injectedAt, null, null,
+            StringField(payload, "kind"), StringField(payload, "target_id")));
         return null;
     }
+
+    /// <summary>A non-empty string field of an inject payload, or null (L25f: the fault's kind and target for the bundle).</summary>
+    private static string? StringField(JsonElement payload, string name) =>
+        payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty(name, out JsonElement value)
+            && value.ValueKind == JsonValueKind.String
+            && value.GetString() is { Length: > 0 } text
+                ? text
+                : null;
 
     /// <summary>R-SEED (D-ML81): a seeded fault tool gets a seed derived from the run seed unless the spec sets one.</summary>
     private static JsonElement EffectiveArgs(UatFault fault, UatVars vars, RunContext run)

@@ -41,7 +41,10 @@ public sealed record UatRowResult(string RowId, RowGrade Grade, string Reason, I
 /// One fault a row injected: the spec id and tool, the fault id the tool returned, when it went in and came out, and the heal error if any.
 /// Bundle evidence only (C9 row <c>faults</c>, <c>repro.toml</c> <c>[[fault]]</c>).
 /// </summary>
-public sealed record UatRowFault(string Id, string Tool, JsonElement Args, string FaultId, DateTimeOffset InjectedAt, DateTimeOffset? HealedAt, string? HealError);
+/// <param name="Kind">The fault kind the inject returned (L25f); null when the inject did not return one.</param>
+/// <param name="TargetId">The target the inject returned (L25f, the <c>faults.target_id</c> column); null when absent.</param>
+public sealed record UatRowFault(string Id, string Tool, JsonElement Args, string FaultId, DateTimeOffset InjectedAt, DateTimeOffset? HealedAt, string? HealError,
+    string? Kind = null, string? TargetId = null);
 
 /// <summary>
 /// One invariant violation found in a row's window, or in a synthetic <c>invariants/&lt;id&gt;</c> row. <see cref="Allowed"/> is true when the row's

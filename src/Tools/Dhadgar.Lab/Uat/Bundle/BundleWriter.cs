@@ -484,6 +484,8 @@ public sealed class BundleWriter : IUatRunSink
                         id = fault.Id,
                         tool = fault.Tool,
                         fault_id = fault.FaultId,
+                        kind = fault.Kind,
+                        target_id = fault.TargetId,
                         injected_at = fault.InjectedAt,
                         healed_at = fault.HealedAt,
                         heal_error = fault.HealError is null ? null : _redactor.Redact(fault.HealError, out int healRedactions),
