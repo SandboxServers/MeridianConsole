@@ -3,9 +3,12 @@ using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Mutants;
+using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Tests.Results;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -250,6 +253,124 @@ public sealed class MutationRunJobTests : IDisposable
         Assert.Matches(Pattern, found.Value![0]);
     }
 
+    [Fact]
+    public async Task Detected_when_invariants_check_reports_the_expected_inv_signature()
+    {
+        var fake = new FakeInvoker
+        {
+            HistoryPayload = """{"run_id":"r12","violations":[]}""",
+            InvariantsPayload = """{"count":1,"violations":[{"invariant_id":"I1","service":"nodes","check_id":"unhandled"}],"errors":[],"skipped":[]}""",
+        };
+
+        JobOutcome outcome = await RunAsync([SpecWith("M12", "^inv:I1\\|nodes\\|")], fake);
+
+        Assert.Equal("detected", Verdict(outcome, "M12"));
+        Assert.Equal(1, fake.Count("invariants_check"));
+        Assert.Contains("inv:I1|nodes|unhandled", Mutant(outcome, "M12")["signatures"]!.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Invariants_check_error_is_unreachable()
+    {
+        var fake = new FakeInvoker
+        {
+            HistoryPayload = """{"run_id":"r13","violations":[{"rule":"E1"}]}""",
+            InvariantsError = true,
+        };
+
+        JobOutcome outcome = await RunAsync([Spec("M13")], fake);
+
+        Assert.Equal("unreachable", Verdict(outcome, "M13"));
+        Assert.StartsWith("invariants_check failed: ", Mutant(outcome, "M13")["reason"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal(1, Starts(fake, PlainBuild));
+    }
+
+    [Fact]
+    public async Task Detector_error_text_reaches_the_reason()
+    {
+        const string secret = "d2-refused-token-4417";
+        _vault.Add(SecretKind.EnrollmentToken, secret);
+        var fake = new FakeInvoker
+        {
+            HistoryError = true,
+            HistoryPayload = "\"history refused for " + secret + " | pipe\"",
+        };
+
+        JobOutcome outcome = await RunAsync([Spec("M14")], fake);
+
+        string reason = Mutant(outcome, "M14")["reason"]!.GetValue<string>();
+        Assert.Equal("unreachable", Verdict(outcome, "M14"));
+        Assert.StartsWith("history_run failed: ", reason, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, reason, StringComparison.Ordinal);
+        string markdown = await File.ReadAllTextAsync(Path.Combine(_folder, MutationRunJob.MarkdownFileName));
+        Assert.DoesNotContain(secret, markdown, StringComparison.Ordinal);
+        Assert.Contains("\\| pipe", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Signatures_reads_ingest_signature_texts()
+    {
+        var detector = new MutantDetector("uat_run", null, null, "^inv:I4");
+
+        Result<IReadOnlyList<string>> found = MutationRunJob.Signatures(
+            detector,
+            Payload("""{"ingest":{"ok":true,"signatures":1,"signature_texts":["inv:I4|nodes|x"]}}"""));
+
+        Assert.True(found.IsSuccess, found.Error);
+        Assert.Single(found.Value!);
+        Assert.Equal("inv:I4|nodes|x", found.Value![0]);
+    }
+
+    [Fact]
+    public async Task Signatures_reads_a_real_ResultsService_payload()
+    {
+        // The seam with wave5-fix-A: the ingest payload of the real service carries the I4 text that M5's pattern matches.
+        string root = Path.Combine(_folder, "lab-root");
+        string uatRuns = Path.Combine(root, "uat-runs");
+        Directory.CreateDirectory(uatRuns);
+        string bundle = BundleFixtures.Write(uatRuns, "run-d2", "b1", 42,
+            new RowSpec("invariants", "I4", "FAIL", Violation: "I4", CheckId: "unhandled"));
+        using var vault = new SecretVault();
+        using var results = new ResultsService(
+            LabPaths.FromRoot(root, repoRoot: ""),
+            new PathValidator(NullLogger<PathValidator>.Instance),
+            new Redactor(vault),
+            new ServiceCollection().BuildServiceProvider(),
+            NullLoggerFactory.Instance,
+            _time);
+
+        Result<IngestResult> ingested = await results.IngestAsync(bundle, CancellationToken.None);
+
+        Assert.True(ingested.IsSuccess, ingested.Error);
+        var payload = new JsonObject { ["ingest"] = results.ToPayload(ingested) };
+        var detector = new MutantDetector("uat_run", null, null, "^inv:I4\\|nodes\\|");
+
+        Result<IReadOnlyList<string>> found = MutationRunJob.Signatures(detector, JsonSerializer.SerializeToElement(payload));
+
+        Assert.True(found.IsSuccess, found.Error);
+        string text = found.Value!.Single(t => t.StartsWith("inv:I4|nodes|", StringComparison.Ordinal));
+        Assert.Matches("^inv:I4\\|nodes\\|", text);
+    }
+
+    [Fact]
+    public async Task Reports_redact_a_vault_value_in_the_title_and_escape_pipes()
+    {
+        // The title is not written to the reports, so the vault value rides in a signature (JSON and the Markdown cell) and the
+        // pipes are checked in that cell.
+        const string secret = "d2-report-secret-9023";
+        _vault.Add(SecretKind.Password, secret);
+        var fake = new FakeInvoker { HistoryPayload = $$"""{"run_id":"r15","signatures":["inv:I4|nodes|{{secret}}"]}""" };
+
+        JobOutcome outcome = await RunAsync([SpecWith("M15", "^inv:I4\\|nodes\\|")], fake);
+
+        Assert.Equal("detected", Verdict(outcome, "M15"));
+        string json = await File.ReadAllTextAsync(Path.Combine(_folder, MutationRunJob.JsonFileName));
+        string markdown = await File.ReadAllTextAsync(Path.Combine(_folder, MutationRunJob.MarkdownFileName));
+        Assert.DoesNotContain(secret, json, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, markdown, StringComparison.Ordinal);
+        Assert.Contains("inv:I4\\|nodes\\|", markdown, StringComparison.Ordinal);
+    }
+
     private async Task<JobOutcome> RunAsync(
         IReadOnlyList<MutantSpec> mutants,
         FakeInvoker fake,
@@ -281,6 +402,9 @@ public sealed class MutationRunJobTests : IDisposable
 
     private static MutantSpec Spec(string id) =>
         new(id, MutantKind.Product, new string('a', 40), "Test mutant " + id, ["src/Nodes/Enrollment.cs"], ["nodes"], HistoryDetector(Pattern), id);
+
+    private static MutantSpec SpecWith(string id, string pattern) =>
+        new(id, MutantKind.Product, new string('a', 40), "Test mutant " + id, ["src/Nodes/Enrollment.cs"], ["nodes"], HistoryDetector(pattern), id);
 
     private static MutantDetector HistoryDetector(string? pattern) =>
         new("history_run", JsonNode.Parse("""{"scenario":"enroll-race"}""")!.AsObject(), null, pattern);
@@ -327,6 +451,8 @@ public sealed class MutationRunJobTests : IDisposable
 
         public string InvariantsPayload { get; init; } = """{"count":0,"violations":[],"errors":[],"skipped":[]}""";
 
+        public bool InvariantsError { get; init; }
+
         public int Count(string tool) => Calls.Count(call => call.Tool == tool);
 
         public Task<LabToolResult> InvokeAsync(string tool, JsonElement args, LabCallContext context, CancellationToken ct)
@@ -338,7 +464,7 @@ public sealed class MutationRunJobTests : IDisposable
             LabToolResult result = tool switch
             {
                 "history_run" => new LabToolResult(HistoryError, Payload(HistoryPayload)),
-                "invariants_check" => new LabToolResult(false, Payload(InvariantsPayload)),
+                "invariants_check" => new LabToolResult(InvariantsError, Payload(InvariantsPayload)),
                 "svc_start" => new LabToolResult(
                     Calls[^1].Args["build_id"]?.GetValue<string>() == FailStartBuild,
                     Payload("{}")),
