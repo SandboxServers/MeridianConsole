@@ -31,11 +31,12 @@ internal sealed record ParsedFault(string FaultId, string Kind, string TargetId,
 
 /// <summary>A graded row as read from a row file: the grade, the reason, its clauses, violations and steps.
 /// <paramref name="Exceptions"/> and <paramref name="Http"/> are the row's <c>evidence</c> (L25e), empty when absent.
-/// <paramref name="Faults"/> are the row's injected faults (L25f), empty when absent.</summary>
+/// <paramref name="Faults"/> are the row's injected faults (L25f), empty when absent. <paramref name="History"/> holds a history
+/// bundle's violations (L25f), empty for every other row.</summary>
 internal sealed record ParsedRow(string Section, string RowId, RowGrade Grade, string? Reason, string? StartedAt,
     string? EndedAt, string? KnownIssue, IReadOnlyList<ClauseEvidence> Clauses, IReadOnlyList<ParsedViolation> Violations,
     IReadOnlyList<ParsedStep> Steps, IReadOnlyList<ExceptionEvidence>? Exceptions = null, IReadOnlyList<HttpEvidence>? Http = null,
-    IReadOnlyList<ParsedFault>? Faults = null);
+    IReadOnlyList<ParsedFault>? Faults = null, IReadOnlyList<HistoryViolationEvidence>? History = null);
 
 /// <summary>
 /// The one row-verdict path (L26 B1, D-ML92). The ingest, the run writer and the attestor all call <see cref="Of"/>, and
@@ -57,7 +58,7 @@ internal static class RowVerdicts
 
         var evidence = new RowEvidence(row.Section, row.RowId, row.Exceptions ?? [], row.Http ?? [],
             row.Clauses.Concat(StepClauses(row)).ToList(),
-            row.Violations.Select(v => v.Evidence).ToList(), [], []);
+            row.Violations.Select(v => v.Evidence).ToList(), row.History ?? [], []);
         List<FailureSignature> scrubbed = SignatureBuilder.BuildAll(evidence)
             .Select(signature => signature with { Text = scrub(signature.Text) })
             .ToList();

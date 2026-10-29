@@ -24,6 +24,8 @@ public sealed class BundleIngestor
 {
     private const int MaxRunIdLength = 128;
     private const string DefaultKind = "uat";
+    private const string HistoryKind = "history";
+    private const string HistorySection = "history";
 
     private readonly ResultsDb _db;
     private readonly IPathValidator _validator;
@@ -104,11 +106,6 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure(run.Error);
         }
 
-        if (Text(run.Value, "kind") == "history")
-        {
-            return Result<IngestResult>.Failure("[Lab.InvalidArgument] history bundles are not ingested until L25f");
-        }
-
         return await IngestRunAsync(folder.Value, run.Value, ct).ConfigureAwait(false);
     }
 
@@ -123,7 +120,9 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure("[Lab.InvalidArgument] run.json has no valid run_id");
         }
 
-        Result<List<ParsedRow>> rows = await ReadRowsAsync(folder, ct).ConfigureAwait(false);
+        Result<List<ParsedRow>> rows = Text(run, "kind") == HistoryKind
+            ? await ReadHistoryRowAsync(folder, run, ct).ConfigureAwait(false)
+            : await ReadRowsAsync(folder, ct).ConfigureAwait(false);
         if (rows.IsFailure)
         {
             return Result<IngestResult>.Failure(rows.Error);
@@ -418,6 +417,47 @@ public sealed class BundleIngestor
             parsed.Add(row.Value);
         }
 
+        return Result<List<ParsedRow>>.Success(parsed);
+    }
+
+    /// <summary>
+    /// Reads a history bundle's synthetic row (L25f, C19): <c>row.json</c> at the bundle root, id <c>history/&lt;scenario&gt;</c>,
+    /// with <c>history.model</c> and <c>history.violations</c>. The row is section <c>history</c>, row id the scenario.
+    /// </summary>
+    private async Task<Result<List<ParsedRow>>> ReadHistoryRowAsync(string folder, JsonObject run, CancellationToken ct)
+    {
+        var parsed = new List<ParsedRow>();
+        string rowPath = Path.Combine(folder, "row.json");
+        if (!File.Exists(rowPath))
+        {
+            return Result<List<ParsedRow>>.Success(parsed);
+        }
+
+        Result<string> path = _validator.ValidatePath(rowPath, [folder]);
+        if (path.IsFailure)
+        {
+            return Result<List<ParsedRow>>.Failure("[Lab.InvalidArgument] a row file is outside the bundle folder");
+        }
+
+        Result<JsonObject> obj = await ReadObjectAsync(path.Value, ct).ConfigureAwait(false);
+        if (obj.IsFailure)
+        {
+            return Result<List<ParsedRow>>.Failure(obj.Error);
+        }
+
+        string scenario = Text(run, "scenario") ?? string.Empty;
+        string model = Text(obj.Value, "history", "model") ?? string.Empty;
+        if (scenario.Length == 0 || model.Length == 0)
+        {
+            return Result<List<ParsedRow>>.Failure("[Lab.InvalidArgument] the history bundle has no scenario or model");
+        }
+
+        JsonObject? history = obj.Value["history"] as JsonObject;
+        var violations = (history is null ? [] : Objects(history, "violations"))
+            .Select(v => new HistoryViolationEvidence(model, Text(v, "rule") ?? string.Empty, scenario, Bool(v, "required") ?? true))
+            .ToList();
+        parsed.Add(new ParsedRow(HistorySection, scenario, RowVerdicts.ParseGrade(Text(obj.Value, "grade")), Text(obj.Value, "reason"),
+            Text(run, "started_at"), Text(run, "ended_at"), null, [], [], [], null, null, null, violations));
         return Result<List<ParsedRow>>.Success(parsed);
     }
 

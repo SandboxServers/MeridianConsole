@@ -1,6 +1,8 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.History;
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
@@ -166,20 +168,27 @@ public sealed class BundleIngestorTests : IDisposable
     }
 
     [Fact]
-    public async Task Ingest_HistoryBundle_IsRefused()
+    public async Task Ingest_HistoryBundle_StoresHistSignatures()
     {
-        string folder = Path.Combine(_uatRuns, "20261028-hist-run-h");
-        Directory.CreateDirectory(folder);
-        var run = new JsonObject { ["schema"] = 1, ["run_id"] = "run-h", ["kind"] = "history", ["seed"] = 42 };
-        await File.WriteAllTextAsync(Path.Combine(folder, "run.json"), run.ToJsonString(), CancellationToken.None);
+        // L25f: a history bundle from the real writer ingests; its violation becomes one hist signature per rule.
+        const string Scenario = "enroll-race";
+        var check = new CheckResult("violation", [new HistoryViolation("linearizability", ["op-1", "op-2"], "two enrolls won")], null);
+        var history = new Dhadgar.Lab.History.History("run-hist", Scenario, [], JsonDocument.Parse("{}").RootElement.Clone());
+        var bundle = new HistoryBundle("run-hist", Start, Scenario, 42UL, 2, 0, history, check, RowGrade.Fail);
+        using var vault = new SecretVault();
+        var writer = new BundleWriter(_uatRuns, _validator, new Redactor(vault), new SecretScanner(vault), new FakeTimeProvider(Start),
+            "abcd1234", "linux", "build", null);
+        Result<string> written = writer.WriteHistoryRun(bundle);
+        Assert.True(written.IsSuccess, written.Error);
         using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
 
-        Result<IngestResult> result = await NewIngestor(db).IngestAsync(folder, [_uatRuns], CancellationToken.None);
+        Result<IngestResult> result = await NewIngestor(db).IngestAsync(written.Value, [_uatRuns], CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal("[Lab.InvalidArgument] history bundles are not ingested until L25f", result.Error);
-        Assert.True(db.RunOf("run-h").IsFailure);
-        Assert.Contains("[Lab.NotFound]", db.RunOf("run-h").Error, StringComparison.Ordinal);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.True(db.RunOf("run-hist").IsSuccess);
+        string text = SignatureBuilder.History("enrollment", "linearizability", Scenario).Text;
+        Assert.Equal("hist:enrollment|linearizability|enroll-race", text);
+        Assert.Equal(1, db.SignatureHits(SignatureBuilder.SignatureId(text)));
     }
 
     [Fact]
