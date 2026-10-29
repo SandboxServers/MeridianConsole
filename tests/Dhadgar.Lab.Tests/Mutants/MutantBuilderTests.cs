@@ -136,6 +136,46 @@ public sealed class MutantBuilderTests : IDisposable
     }
 
     [Fact]
+    public async Task Build_PatchTouchesUnlistedFile_IsRefusedBeforeGitApply()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_spec.Folder, MutantSpecLoader.PatchFileName),
+            "--- a/Directory.Build.targets\n+++ b/Directory.Build.targets\n", CancellationToken.None);
+        var runner = new FakeRunner();
+        var docker = new RecordingDocker();
+
+        Result<MutantBuildDto> result = await MutantBuilder.BuildAsync(
+            _spec, [LabBuilder.ResolveProject("nodes").Value!], _paths, docker, Validator(), new FakeTimeProvider(), runner.RunAsync, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+        Assert.Contains("touches a file that files does not list", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(runner.Calls, call => call.Args.Contains("apply"));
+        Assert.Empty(docker.Calls);
+    }
+
+    [Theory]
+    [InlineData("rename from src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
+    [InlineData("rename to src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
+    [InlineData("copy from src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
+    [InlineData("copy to src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
+    [InlineData("old mode 100644")]
+    [InlineData("new mode 100755")]
+    [InlineData("GIT binary patch")]
+    public void PatchTouchesOnly_RenameOrBinary_IsRefused(string line)
+    {
+        string[] patch =
+        [
+            "diff --git a/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs b/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs",
+            line,
+        ];
+
+        Result result = MutantBuilder.PatchTouchesOnly(patch, _spec.Files);
+
+        Assert.True(result.IsFailure, line);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExtractArchive_EntryWithDotDot_IsRefused_AndNothingEscapes()
     {
         string tar = Path.Combine(_root, "dotdot.tar");

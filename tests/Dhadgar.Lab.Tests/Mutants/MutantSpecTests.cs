@@ -120,6 +120,18 @@ public sealed class MutantSpecTests
         Assert.True(spec.IsFailure);
     }
 
+    [Theory]
+    [InlineData("fault_disk_fill")]
+    [InlineData("mutation_run")]
+    [InlineData("lab_lease_release")]
+    public void ProductDetector_DestructiveTool_IsRefused(string tool)
+    {
+        Result<MutantSpec> spec = Load(Spec(detector: "{ tool = \"" + tool + "\", expect_pattern = '^x$' }"));
+
+        Assert.True(spec.IsFailure, tool);
+        Assert.Contains("detector tool is not allowed", spec.Error);
+    }
+
     [Fact]
     public void FileMissingAtBase_IsRefused()
     {
