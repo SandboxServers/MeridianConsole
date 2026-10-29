@@ -1,4 +1,7 @@
+using Dhadgar.Agent.Core.Files;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Dhadgar.Lab.SelfCheck;
 
@@ -20,9 +23,38 @@ public static class SelfCheckProgram
             return 2;
         }
 
-        // The mutant loop and the recovery check arrive in later steps of L55.
-        Console.Error.WriteLine(
-            $"selfcheck: not implemented yet (only={parsed.Value!.Only ?? "all"}, keep={parsed.Value.Keep}, recovery={parsed.Value.Recovery})");
-        return 2;
+        SelfCheckOptions options = parsed.Value!;
+        if (options.Recovery)
+        {
+            // The crash-recovery check arrives in step 4 of L55.
+            Console.Error.WriteLine("selfcheck: --recovery is not implemented yet");
+            return 2;
+        }
+
+        LabPaths paths = LabPaths.Create(new ConfigurationBuilder().Build());
+        string? repoRoot = string.IsNullOrWhiteSpace(paths.RepoRoot)
+            ? SelfCheckRunner.FindRepoRoot(AppContext.BaseDirectory)
+            : paths.RepoRoot;
+        if (repoRoot is null)
+        {
+            Console.Error.WriteLine("[Lab.NotFound] the repository root is not configured and was not found");
+            return 2;
+        }
+
+        IPathValidator validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        Result<IReadOnlyList<SelfCheckRow>> result = SelfCheckRunner
+            .RunAsync(options, repoRoot, paths, validator, TimeProvider.System, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        if (result.IsFailure)
+        {
+            Console.Error.WriteLine(result.Error);
+            return 2;
+        }
+
+        IReadOnlyList<SelfCheckRow> rows = result.Value!;
+        int caught = rows.Count(r => r.Verdict == SelfCheckJudge.Caught);
+        Console.WriteLine($"selfcheck: caught {caught} of {rows.Count}");
+        return caught == rows.Count ? 0 : 1;
     }
 }
