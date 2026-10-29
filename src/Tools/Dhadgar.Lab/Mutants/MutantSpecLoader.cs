@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Policy;
 using Dhadgar.Shared.Results;
 using Tomlyn;
 using Tomlyn.Model;
@@ -25,6 +26,12 @@ public static class MutantSpecLoader
 
     private static readonly Regex IdPattern = new("^[A-Za-z0-9][A-Za-z0-9-]{0,63}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex ShaPattern = new("^[0-9a-f]{40}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    /// <summary>
+    /// The only tools a product mutant may name as its detector (S-N1, D-ML103 area): every shipped product mutant's
+    /// detector. A destructive or lease-holding tool is refused at load time.
+    /// </summary>
+    private static readonly HashSet<string> ProductDetectorTools = new(StringComparer.Ordinal) { "history_run", "uat_run" };
 
     /// <summary>
     /// Loads every mutant folder under <paramref name="mutantsRoot"/>, in name order. A folder without a spec is an error.
@@ -162,6 +169,12 @@ public static class MutantSpecLoader
             if (string.IsNullOrWhiteSpace(tool) || test is not null || expect is null)
             {
                 return Result<MutantDetector>.Failure($"[Lab.InvalidArgument] {id}: a product detector names tool and expect_pattern, not test");
+            }
+
+            LabGate? gate = ToolPolicy.GateFor(tool);
+            if (!ProductDetectorTools.Contains(tool) || gate is not (LabGate.Open or LabGate.OwnLease))
+            {
+                return Result<MutantDetector>.Failure($"[Lab.InvalidArgument] {id}: detector tool is not allowed");
             }
 
             JsonObject? args = null;

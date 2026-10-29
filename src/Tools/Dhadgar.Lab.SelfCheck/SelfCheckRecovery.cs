@@ -7,6 +7,7 @@ using System.Security.Principal;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab;
+using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Http;
 using Dhadgar.Shared.Results;
 using ModelContextProtocol.Client;
@@ -35,6 +36,10 @@ public static class SelfCheckRecovery
     public static readonly TimeSpan CleanupTimeout = TimeSpan.FromSeconds(30);
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>The bound on a diagnostic text: a tool's error text, or a child's first <c>[Lab.</c> line (D3).</summary>
+    private const int MaxDiagnosticText = 300;
+
     private const string Owner = "selfcheck";
     private const string Purpose = "selfcheck recovery";
     private const string BuildConfiguration = "Release";
@@ -120,6 +125,11 @@ public static class SelfCheckRecovery
             return Result<IReadOnlyList<string>>.Failure("[Lab.Unsupported] --recovery runs on Windows in this build");
         }
 
+        if (ElevationCheck.IsElevated())
+        {
+            return Result<IReadOnlyList<string>>.Failure("[Lab.Elevated] selfcheck --recovery needs a non-elevated session");
+        }
+
         if (IsDaemonRunning())
         {
             return Result<IReadOnlyList<string>>.Failure("[Lab.Busy] stop the running lab daemon first");
@@ -176,11 +186,13 @@ public static class SelfCheckRecovery
         Daemon? second = null;
         try
         {
-            first = await StartDaemonAsync(dll, home, time, ct).ConfigureAwait(false);
-            if (first is null)
+            Result<Daemon> started = await StartDaemonAsync(dll, home, time, "the lab daemon", ct).ConfigureAwait(false);
+            if (started.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure("[Lab.Timeout] the lab daemon did not answer /status in time");
+                return Result<IReadOnlyList<string>>.Failure(started.Error);
             }
+
+            first = started.Value!;
 
             Result<string> lease = await AcquireLeaseAsync(first.Token, ct).ConfigureAwait(false);
             if (lease.IsFailure)
@@ -208,11 +220,13 @@ public static class SelfCheckRecovery
             first.Dispose();
             first = null;
 
-            second = await StartDaemonAsync(dll, home, time, ct).ConfigureAwait(false);
-            if (second is null)
+            Result<Daemon> restarted = await StartDaemonAsync(dll, home, time, "the restarted lab daemon", ct).ConfigureAwait(false);
+            if (restarted.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure("[Lab.Timeout] the restarted lab daemon did not answer /status in time");
+                return Result<IReadOnlyList<string>>.Failure(restarted.Error);
             }
+
+            second = restarted.Value!;
 
             return await JudgeRestartAsync(second.Token, ct).ConfigureAwait(false);
         }
@@ -327,9 +341,24 @@ public static class SelfCheckRecovery
             : Result<string>.Failure("[Lab.Tool] lab_lease_acquire returned no lease");
     }
 
-    /// <summary>Starts one child daemon, polls <c>GET /status</c> until it answers, or returns null on timeout.</summary>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The daemon is returned to the caller, which owns and disposes it; a timed-out child is disposed in finally.")]
-    private static async Task<Daemon?> StartDaemonAsync(string dll, string home, TimeProvider time, CancellationToken ct)
+    /// <summary>The failure text of a child that exited before it answered <c>/status</c>: its exit code and its first <c>[Lab.</c> line.</summary>
+    /// <param name="code">The exit code of the child.</param>
+    /// <param name="line">The child's first <c>[Lab.</c> stderr line, or null when it wrote none.</param>
+    public static string ExitedEarly(int code, string? line) =>
+        "[Lab.ProcessFailed] the lab daemon exited with code " + code.ToString(CultureInfo.InvariantCulture) + " before answering /status: " + (line ?? "no [Lab.] line");
+
+    /// <summary>The failure text of a tool that reported an error: the tool name and its text, cut to 300 characters.</summary>
+    /// <param name="tool">The tool that failed.</param>
+    /// <param name="text">The text the tool returned.</param>
+    public static string ToolFailure(string tool, string text) =>
+        "[Lab.Tool] " + tool + " failed: " + (text.Length > MaxDiagnosticText ? text[..MaxDiagnosticText] : text);
+
+    /// <summary>
+    /// Starts one child daemon and polls <c>GET /status</c> until it answers. A child that exits first fails with its exit code and
+    /// first <c>[Lab.</c> line; a live child that never answers fails with <c>[Lab.Timeout]</c> and the last status failure.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The daemon is returned to the caller, which owns and disposes it; a failed child is disposed in finally.")]
+    private static async Task<Result<Daemon>> StartDaemonAsync(string dll, string home, TimeProvider time, string what, CancellationToken ct)
     {
         string token = NewToken();
         Daemon? daemon = Daemon.Start(dll, home, token);
@@ -338,10 +367,11 @@ public static class SelfCheckRecovery
         {
             if (daemon is null)
             {
-                return null;
+                return Result<Daemon>.Failure("[Lab.ProcessFailed] " + what + " could not be started");
             }
 
             DateTimeOffset deadline = time.GetUtcNow() + ReadyTimeout;
+            string? lastError = null;
             while (time.GetUtcNow() < deadline && !daemon.Process.HasExited)
             {
                 Result<JsonDocument> status = await GetStatusAsync(token, ct).ConfigureAwait(false);
@@ -349,13 +379,20 @@ public static class SelfCheckRecovery
                 {
                     status.Value!.Dispose();
                     ready = true;
-                    return daemon;
+                    return Result<Daemon>.Success(daemon);
                 }
 
+                lastError = status.Error;
                 await Task.Delay(PollInterval, time, ct).ConfigureAwait(false);
             }
 
-            return null;
+            if (daemon.Process.HasExited)
+            {
+                return Result<Daemon>.Failure(ExitedEarly(daemon.Process.ExitCode, daemon.FirstLabLine));
+            }
+
+            string timeout = "[Lab.Timeout] " + what + " did not answer /status in time";
+            return Result<Daemon>.Failure(lastError is null ? timeout : timeout + ": " + lastError);
         }
         finally
         {
@@ -423,7 +460,7 @@ public static class SelfCheckRecovery
             string text = string.Concat(result.Content.OfType<TextContentBlock>().Select(block => block.Text));
             if (result.IsError == true)
             {
-                return Result<JsonDocument>.Failure("[Lab.Tool] " + tool + " failed");
+                return Result<JsonDocument>.Failure(ToolFailure(tool, text));
             }
 
             return Result<JsonDocument>.Success(JsonDocument.Parse(text));
@@ -447,15 +484,42 @@ public static class SelfCheckRecovery
     /// </summary>
     private sealed class Daemon : IDisposable
     {
+        private readonly object _stderrGate = new();
+        private volatile string? _firstLabLine;
+
         private Daemon(Process process, string token)
         {
             Process = process;
             Token = token;
         }
 
+        /// <summary>Keeps the first <c>[Lab.</c> stderr line; later lines are dropped unread.</summary>
+        private void KeepFirstLabLine(string? line)
+        {
+            if (line is null || !line.StartsWith("[Lab.", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            lock (_stderrGate)
+            {
+                if (_firstLabLine is null)
+                {
+                    string clean = new(line.Where(c => !char.IsControl(c)).ToArray());
+                    _firstLabLine = clean.Length > MaxDiagnosticText ? clean[..MaxDiagnosticText] : clean;
+                }
+            }
+        }
+
         public Process Process { get; }
 
         public string Token { get; }
+
+        /// <summary>
+        /// The child's first stderr line that starts with <c>[Lab.</c>, control characters removed and cut to 300 characters;
+        /// null when none came. Written once.
+        /// </summary>
+        public string? FirstLabLine => _firstLabLine;
 
         public static Daemon? Start(string dll, string home, string token)
         {
@@ -477,16 +541,18 @@ public static class SelfCheckRecovery
             try
             {
                 process.OutputDataReceived += static (_, _) => { };
-                process.ErrorDataReceived += static (_, _) => { };
                 if (!process.Start())
                 {
                     process.Dispose();
                     return null;
                 }
 
+                // The stderr handler is attached before BeginErrorReadLine, so no line is missed.
+                var daemon = new Daemon(process, token);
+                process.ErrorDataReceived += (_, args) => daemon.KeepFirstLabLine(args.Data);
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
-                return new Daemon(process, token);
+                return daemon;
             }
             catch (System.ComponentModel.Win32Exception)
             {

@@ -172,6 +172,23 @@ public static class MutantBuilder
                 return Result<MutantBuildDto>.Failure(extracted.Error);
             }
 
+            // The patch may touch only the files its spec lists (S-N2). Refused before git sees it.
+            IReadOnlyList<string> patchLines;
+            try
+            {
+                patchLines = await File.ReadAllLinesAsync(patch.Value!, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Result<MutantBuildDto>.Failure("[Lab.Unavailable] change.patch could not be read");
+            }
+
+            Result scope = PatchTouchesOnly(patchLines, spec.Files);
+            if (scope.IsFailure)
+            {
+                return Result<MutantBuildDto>.Failure(scope.Error);
+            }
+
             // Outside any repo, git apply acts on plain files under the extracted tree.
             Result<string> check = await run("git", ApplyCheckArgs(patch.Value!), source.Value!, ct).ConfigureAwait(false);
             if (check.IsFailure)
@@ -266,6 +283,90 @@ public static class MutantBuilder
 
         return Result<string>.Success(tag);
     }
+
+    /// <summary>
+    /// Checks that a patch touches only the files its spec lists (S-N2). Every path in a <c>diff --git</c>, <c>---</c> or
+    /// <c>+++</c> header must equal an entry of <paramref name="files"/>; <c>/dev/null</c> is skipped. A rename, copy, mode
+    /// change or binary patch is refused, because its header names paths the header check could miss.
+    /// </summary>
+    internal static Result PatchTouchesOnly(IReadOnlyList<string> patchLines, IReadOnlyList<string> files)
+    {
+        ArgumentNullException.ThrowIfNull(patchLines);
+        ArgumentNullException.ThrowIfNull(files);
+
+        var allowed = new HashSet<string>(files.Select(f => f.Replace('\\', '/')), StringComparer.Ordinal);
+        foreach (string line in patchLines)
+        {
+            if (line.StartsWith("rename from", StringComparison.Ordinal)
+                || line.StartsWith("rename to", StringComparison.Ordinal)
+                || line.StartsWith("copy from", StringComparison.Ordinal)
+                || line.StartsWith("copy to", StringComparison.Ordinal)
+                || line.StartsWith("old mode", StringComparison.Ordinal)
+                || line.StartsWith("new mode", StringComparison.Ordinal)
+                || line.StartsWith("GIT binary patch", StringComparison.Ordinal))
+            {
+                return Result.Failure("[Lab.InvalidArgument] change.patch uses a rename, copy, mode change or binary patch");
+            }
+
+            foreach (string path in HeaderPaths(line))
+            {
+                if (!allowed.Contains(path))
+                {
+                    return Result.Failure("[Lab.InvalidArgument] change.patch touches a file that files does not list");
+                }
+            }
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>The repo-relative paths one patch header line names, with <c>a/</c> and <c>b/</c> stripped.</summary>
+    private static IEnumerable<string> HeaderPaths(string line)
+    {
+        if (line.StartsWith("diff --git a/", StringComparison.Ordinal))
+        {
+            string rest = line["diff --git a/".Length..];
+            int split = rest.IndexOf(" b/", StringComparison.Ordinal);
+            if (split < 0)
+            {
+                yield return "\u0000";
+                yield break;
+            }
+
+            yield return Normalise(rest[..split]);
+            yield return Normalise(rest[(split + 3)..]);
+            yield break;
+        }
+
+        string? header = null;
+        if (line.StartsWith("--- ", StringComparison.Ordinal))
+        {
+            header = line[4..];
+            if (header == "/dev/null")
+            {
+                yield break;
+            }
+
+            header = header.StartsWith("a/", StringComparison.Ordinal) ? header[2..] : header;
+        }
+        else if (line.StartsWith("+++ ", StringComparison.Ordinal))
+        {
+            header = line[4..];
+            if (header == "/dev/null")
+            {
+                yield break;
+            }
+
+            header = header.StartsWith("b/", StringComparison.Ordinal) ? header[2..] : header;
+        }
+
+        if (header is not null)
+        {
+            yield return Normalise(header);
+        }
+    }
+
+    private static string Normalise(string path) => path.Split('\t')[0].Trim().Replace('\\', '/');
 
     /// <summary>
     /// Extracts a tar into <paramref name="destination"/>. Every entry's full path is checked before anything is written, so an
