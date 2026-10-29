@@ -113,7 +113,6 @@ public static class ToolPolicy
         // L26
         // L27 (registered)
         // L28
-        "fuzz_run",
         // L29
         "chaos_run",
         "soak_run",
