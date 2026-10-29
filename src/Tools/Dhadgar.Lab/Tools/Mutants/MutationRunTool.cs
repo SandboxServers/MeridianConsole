@@ -4,6 +4,7 @@ using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Random;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,7 +94,8 @@ public sealed class MutationRunTool : LabTool<MutationRunArgs>
             (name, arguments, callContext, callToken) => _services.GetRequiredService<LabToolDispatcher>().InvokeAsync(name, arguments, callContext, callToken),
             _pacer,
             _validator,
-            _time);
+            _time,
+            _services.GetRequiredService<Redactor>());
 
         Result<JobHandle> started = _jobs.Start(MutationRunJob.Kind, LabRandom.NewSeed(), (jobContext, token) =>
             job.RunAsync(jobContext.JobId, jobContext.LeaseId, jobContext.Folder, token));

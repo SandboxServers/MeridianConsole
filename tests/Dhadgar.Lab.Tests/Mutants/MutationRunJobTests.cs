@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Mutants;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,6 +24,7 @@ public sealed class MutationRunJobTests : IDisposable
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "dhadgar-mutation-" + Guid.NewGuid().ToString("N"));
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 28, 12, 0, 0, TimeSpan.Zero));
+    private readonly SecretVault _vault = new();
 
     [Fact]
     public async Task Detected_when_the_expected_signature_appears()
@@ -264,7 +266,8 @@ public sealed class MutationRunJobTests : IDisposable
             fake.InvokeAsync,
             new GatewayPacer(_time),
             new PathValidator(NullLogger<PathValidator>.Instance),
-            _time);
+            _time,
+            new Redactor(_vault));
 
         Result<JobOutcome> result = await job.RunAsync("job-test", Lease, _folder, ct);
 
@@ -304,6 +307,8 @@ public sealed class MutationRunJobTests : IDisposable
         {
             Directory.Delete(_folder, recursive: true);
         }
+
+        _vault.Dispose();
     }
 
     private sealed record Call(string Tool, JsonObject Args);
@@ -320,6 +325,8 @@ public sealed class MutationRunJobTests : IDisposable
 
         public Action<string>? OnCall { get; init; }
 
+        public string InvariantsPayload { get; init; } = """{"count":0,"violations":[],"errors":[],"skipped":[]}""";
+
         public int Count(string tool) => Calls.Count(call => call.Tool == tool);
 
         public Task<LabToolResult> InvokeAsync(string tool, JsonElement args, LabCallContext context, CancellationToken ct)
@@ -331,6 +338,7 @@ public sealed class MutationRunJobTests : IDisposable
             LabToolResult result = tool switch
             {
                 "history_run" => new LabToolResult(HistoryError, Payload(HistoryPayload)),
+                "invariants_check" => new LabToolResult(false, Payload(InvariantsPayload)),
                 "svc_start" => new LabToolResult(
                     Calls[^1].Args["build_id"]?.GetValue<string>() == FailStartBuild,
                     Payload("{}")),

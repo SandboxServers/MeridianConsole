@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -6,6 +7,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.History.Models;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 
@@ -20,7 +22,8 @@ namespace Dhadgar.Lab.Mutants;
 /// <param name="DetectorRunIds">The run ids of the detector attempts that ran.</param>
 /// <param name="Signatures">The signature texts the detector attempts reported.</param>
 /// <param name="Reason">Why the verdict is not a plain detection; null otherwise.</param>
-public sealed record MutantVerdictDto(string Id, string Verdict, IReadOnlyList<string> DetectorRunIds, IReadOnlyList<string> Signatures, string? Reason);
+/// <param name="CheckErrors">The checks that could not run (the <c>errors</c> of each <c>invariants_check</c>), summed over the attempts.</param>
+public sealed record MutantVerdictDto(string Id, string Verdict, IReadOnlyList<string> DetectorRunIds, IReadOnlyList<string> Signatures, string? Reason, int CheckErrors = 0);
 
 /// <summary>
 /// The <c>mutation</c> job (L54, C19, A1). For each product mutant: build it from HEAD with its patch, start its services on the
@@ -48,6 +51,9 @@ public sealed class MutationRunJob
     /// <summary>The history detector tool, which runs schedule-approximate attempts.</summary>
     internal const string HistoryDetectorTool = "history_run";
 
+    /// <summary>The longest detector or check error text kept in a verdict reason.</summary>
+    internal const int MaxErrorText = 300;
+
     /// <summary>File name of the JSON result inside the job folder.</summary>
     public const string JsonFileName = "mutants.json";
 
@@ -63,6 +69,7 @@ public sealed class MutationRunJob
     private readonly GatewayPacer _pacer;
     private readonly IPathValidator _validator;
     private readonly TimeProvider _time;
+    private readonly Redactor _redactor;
 
     /// <summary>
     /// Creates the job. Production passes <c>MutantBuilder.BuildAsync</c>, the dispatcher's <c>InvokeAsync</c> and the latest plain build;
@@ -75,6 +82,7 @@ public sealed class MutationRunJob
     /// <param name="pacer">Paces the <c>uat_run</c> detector on the gateway.</param>
     /// <param name="validator">Validates the result files' paths.</param>
     /// <param name="time">The clock for the restore budget.</param>
+    /// <param name="redactor">Redacts every string the job writes to its result files.</param>
     public MutationRunJob(
         IReadOnlyList<MutantSpec> mutants,
         Func<MutantSpec, CancellationToken, Task<Result<MutantBuildDto>>> build,
@@ -82,8 +90,10 @@ public sealed class MutationRunJob
         Func<string, JsonElement, LabCallContext, CancellationToken, Task<LabToolResult>> invoke,
         GatewayPacer pacer,
         IPathValidator validator,
-        TimeProvider time)
+        TimeProvider time,
+        Redactor redactor)
     {
+        _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
         _mutants = mutants ?? throw new ArgumentNullException(nameof(mutants));
         _build = build ?? throw new ArgumentNullException(nameof(build));
         _plainBuildId = plainBuildId ?? throw new ArgumentNullException(nameof(plainBuildId));
@@ -147,7 +157,7 @@ public sealed class MutationRunJob
             {
                 ["ok"] = restore.IsSuccess,
                 ["build_id"] = plain,
-                ["reason"] = restore.IsFailure ? restore.Error : null,
+                ["reason"] = restore.IsFailure ? _redactor.Redact(restore.Error) : null,
             },
             ["mutants"] = ToJson(verdicts),
         };
@@ -208,6 +218,7 @@ public sealed class MutationRunJob
         int attempts = string.Equals(detector.Tool, HistoryDetectorTool, StringComparison.Ordinal) ? ScheduleApproximateAttempts : 1;
         var runIds = new List<string>();
         var signatures = new List<string>();
+        int checkErrors = 0;
         string verdict = "survived";
         for (int attempt = 0; attempt < attempts; attempt++)
         {
@@ -222,11 +233,12 @@ public sealed class MutationRunJob
 
             JsonObject args = detector.Args is null ? new JsonObject() : (JsonObject)detector.Args.DeepClone();
             args[LabToolDispatcher.LeaseIdArgument] = leaseId;
+            DateTimeOffset attemptStart = _time.GetUtcNow();
             LabToolResult call = await _invoke(detector.Tool, JsonSerializer.SerializeToElement(args), CallContext(leaseId), ct)
                 .ConfigureAwait(false);
             if (call.IsError)
             {
-                return Unreachable(spec.Id, detector.Tool + " failed", runIds);
+                return Unreachable(spec.Id, detector.Tool + " failed: " + ErrorText(call.Payload), runIds);
             }
 
             if (StringOf(call.Payload, "run_id") is { } runId)
@@ -240,8 +252,20 @@ public sealed class MutationRunJob
                 return Unreachable(spec.Id, found.Error, runIds);
             }
 
-            signatures.AddRange(found.Value!);
-            Result<string> classified = Classify(found.Value!, detector.ExpectPattern);
+            // The invariants that broke in this attempt's window join its signatures (R3-N2 reader half, D-ML100).
+            var attemptTexts = new List<string>(found.Value!);
+            var checkArgs = new JsonObject { ["since"] = attemptStart.ToString("O", CultureInfo.InvariantCulture) };
+            LabToolResult check = await _invoke("invariants_check", JsonSerializer.SerializeToElement(checkArgs), CallContext(leaseId), ct)
+                .ConfigureAwait(false);
+            if (check.IsError)
+            {
+                return Unreachable(spec.Id, "invariants_check failed: " + ErrorText(check.Payload), runIds);
+            }
+
+            attemptTexts.AddRange(InvariantTexts(check.Payload));
+            checkErrors += ArrayLength(check.Payload, "errors");
+            signatures.AddRange(attemptTexts);
+            Result<string> classified = Classify(attemptTexts, detector.ExpectPattern);
             if (classified.IsFailure)
             {
                 return Unreachable(spec.Id, classified.Error, runIds);
@@ -266,7 +290,15 @@ public sealed class MutationRunJob
             "detected_other" => "a signature other than the expected one appeared",
             _ => null,
         };
-        return new MutantVerdictDto(spec.Id, verdict, runIds, signatures.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList(), reason);
+        return new MutantVerdictDto(spec.Id, verdict, runIds, signatures.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList(), reason, checkErrors);
+    }
+
+    /// <summary>The error text of a failed call: a string payload as written, anything else as its JSON. Redacted, then cut to 300 characters.</summary>
+    private string ErrorText(JsonElement payload)
+    {
+        string text = payload.ValueKind == JsonValueKind.String ? payload.GetString() ?? string.Empty : payload.GetRawText();
+        string redacted = _redactor.Redact(text);
+        return redacted.Length > MaxErrorText ? redacted[..MaxErrorText] : redacted;
     }
 
     /// <summary>
@@ -316,59 +348,106 @@ public sealed class MutationRunJob
     }
 
     /// <summary>
-    /// The signature texts of one detector result. A history run's violations become <c>hist:</c> signatures; any other tool's
-    /// <c>signatures</c> array is taken as written. A detector that reports signatures without their texts is refused.
+    /// The signature texts of one detector result, in this order: the top-level <c>signatures</c> array as written; a history
+    /// run's violations as <c>hist:</c> signatures; the ingest's <c>signature_texts</c> (R3-N2). An ingest that was not stored
+    /// (<c>ok</c> false) is refused, and so is a count above 0 with no text. A detector that reports signatures without their texts
+    /// is refused.
     /// </summary>
     internal static Result<IReadOnlyList<string>> Signatures(MutantDetector detector, JsonElement payload)
     {
         var texts = new List<string>();
-        if (string.Equals(detector.Tool, HistoryDetectorTool, StringComparison.Ordinal))
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return Result<IReadOnlyList<string>>.Success(texts);
+        }
+
+        if (payload.TryGetProperty("signatures", out JsonElement listed) && listed.ValueKind == JsonValueKind.Array)
+        {
+            AddTexts(texts, listed);
+        }
+
+        if (string.Equals(detector.Tool, HistoryDetectorTool, StringComparison.Ordinal)
+            && payload.TryGetProperty("violations", out JsonElement violations)
+            && violations.ValueKind == JsonValueKind.Array)
         {
             string scenario = StringOf(detector.Args, "scenario") ?? string.Empty;
-            if (payload.ValueKind == JsonValueKind.Object
-                && payload.TryGetProperty("violations", out JsonElement violations)
-                && violations.ValueKind == JsonValueKind.Array)
+            foreach (JsonElement violation in violations.EnumerateArray())
             {
-                foreach (JsonElement violation in violations.EnumerateArray())
+                if (violation.ValueKind == JsonValueKind.Object
+                    && violation.TryGetProperty("rule", out JsonElement rule)
+                    && rule.ValueKind == JsonValueKind.String)
                 {
-                    if (violation.ValueKind == JsonValueKind.Object
-                        && violation.TryGetProperty("rule", out JsonElement rule)
-                        && rule.ValueKind == JsonValueKind.String)
-                    {
-                        texts.Add(SignatureBuilder.History(EnrollmentHistoryModel.ModelName, rule.GetString()!, scenario).Text);
-                    }
+                    texts.Add(SignatureBuilder.History(EnrollmentHistoryModel.ModelName, rule.GetString()!, scenario).Text);
                 }
             }
-
-            return Result<IReadOnlyList<string>>.Success(texts);
         }
 
-        if (payload.ValueKind == JsonValueKind.Object
-            && payload.TryGetProperty("signatures", out JsonElement listed)
-            && listed.ValueKind == JsonValueKind.Array)
+        if (!payload.TryGetProperty("ingest", out JsonElement ingest) || ingest.ValueKind != JsonValueKind.Object)
         {
-            foreach (JsonElement item in listed.EnumerateArray())
-            {
-                if (item.ValueKind == JsonValueKind.String && item.GetString() is { } text)
-                {
-                    texts.Add(text);
-                }
-            }
-
             return Result<IReadOnlyList<string>>.Success(texts);
         }
 
-        bool counted = payload.ValueKind == JsonValueKind.Object
-            && payload.TryGetProperty("ingest", out JsonElement ingest)
-            && ingest.ValueKind == JsonValueKind.Object
-            && ingest.TryGetProperty("signatures", out JsonElement count)
+        if (ingest.TryGetProperty("signature_texts", out JsonElement stored) && stored.ValueKind == JsonValueKind.Array)
+        {
+            AddTexts(texts, stored);
+        }
+
+        if (ingest.TryGetProperty("ok", out JsonElement ok) && ok.ValueKind == JsonValueKind.False)
+        {
+            return Result<IReadOnlyList<string>>.Failure("[Lab.Unavailable] the detector's run was not ingested");
+        }
+
+        bool counted = ingest.TryGetProperty("signatures", out JsonElement count)
             && count.ValueKind == JsonValueKind.Number
             && count.TryGetInt64(out long value)
             && value > 0;
-        return counted
+        return counted && texts.Count == 0
             ? Result<IReadOnlyList<string>>.Failure("[Lab.Unavailable] the detector reports signatures but not their text")
             : Result<IReadOnlyList<string>>.Success(texts);
     }
+
+    /// <summary>Adds each string item of a JSON array; other items are skipped.</summary>
+    private static void AddTexts(List<string> texts, JsonElement array)
+    {
+        foreach (JsonElement item in array.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String && item.GetString() is { } text)
+            {
+                texts.Add(text);
+            }
+        }
+    }
+
+    /// <summary>The <c>inv:</c> signature texts of one <c>invariants_check</c> payload, one per <c>violations[]</c> entry.</summary>
+    private static List<string> InvariantTexts(JsonElement payload)
+    {
+        var texts = new List<string>();
+        if (payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("violations", out JsonElement violations)
+            && violations.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement violation in violations.EnumerateArray())
+            {
+                string? invariantId = StringOf(violation, "invariant_id");
+                string? service = StringOf(violation, "service");
+                string? checkId = StringOf(violation, "check_id");
+                if (invariantId is not null && service is not null && checkId is not null)
+                {
+                    texts.Add(SignatureBuilder.Invariant(invariantId, service, checkId).Text);
+                }
+            }
+        }
+
+        return texts;
+    }
+
+    /// <summary>The number of entries of a JSON array property; 0 when the property is absent or not an array.</summary>
+    private static int ArrayLength(JsonElement payload, string name) =>
+        payload.ValueKind == JsonValueKind.Object
+        && payload.TryGetProperty(name, out JsonElement value)
+        && value.ValueKind == JsonValueKind.Array
+            ? value.GetArrayLength()
+            : 0;
 
     /// <summary>
     /// The verdict of one attempt: <c>detected</c> when a signature matches the expected pattern (any signature when no pattern is
@@ -418,7 +497,7 @@ public sealed class MutationRunJob
     private static MutantVerdictDto Unreachable(string id, string reason, List<string>? runIds = null) =>
         new(id, "unreachable", runIds ?? [], [], reason);
 
-    private static JsonArray ToJson(IEnumerable<MutantVerdictDto> verdicts)
+    private JsonArray ToJson(IEnumerable<MutantVerdictDto> verdicts)
     {
         var array = new JsonArray();
         foreach (MutantVerdictDto verdict in verdicts)
@@ -428,8 +507,9 @@ public sealed class MutationRunJob
                 ["id"] = verdict.Id,
                 ["verdict"] = verdict.Verdict,
                 ["detector_run_ids"] = new JsonArray(verdict.DetectorRunIds.Select(id => (JsonNode)JsonValue.Create(id)!).ToArray()),
-                ["signatures"] = new JsonArray(verdict.Signatures.Select(text => (JsonNode)JsonValue.Create(text)!).ToArray()),
-                ["reason"] = verdict.Reason,
+                ["signatures"] = new JsonArray(verdict.Signatures.Select(text => (JsonNode)JsonValue.Create(_redactor.Redact(text))!).ToArray()),
+                ["reason"] = verdict.Reason is null ? null : _redactor.Redact(verdict.Reason),
+                ["check_errors"] = verdict.CheckErrors,
             });
         }
 
@@ -458,7 +538,7 @@ public sealed class MutationRunJob
         }
     }
 
-    private static string Markdown(JsonObject result, IReadOnlyList<MutantVerdictDto> verdicts)
+    private string Markdown(JsonObject result, IReadOnlyList<MutantVerdictDto> verdicts)
     {
         var text = new StringBuilder();
         text.Append("# Mutation run\n\n");
@@ -467,16 +547,26 @@ public sealed class MutationRunJob
         text.Append("| --- | --- | --- | --- | --- |\n");
         foreach (MutantVerdictDto verdict in verdicts)
         {
-            text.Append("| ").Append(verdict.Id)
-                .Append(" | ").Append(verdict.Verdict)
+            text.Append("| ").Append(Cell(verdict.Id))
+                .Append(" | ").Append(Cell(verdict.Verdict))
                 .Append(" | ").Append(verdict.DetectorRunIds.Count)
-                .Append(" | ").Append(string.Join(", ", verdict.Signatures))
-                .Append(" | ").Append(verdict.Reason ?? string.Empty)
+                .Append(" | ").Append(Cell(string.Join(", ", verdict.Signatures)))
+                .Append(" | ").Append(Cell(verdict.Reason))
                 .Append(" |\n");
         }
 
         return text.ToString();
     }
+
+    /// <summary>A Markdown table cell: redacted, with <c>|</c> and a backtick escaped and line breaks turned into spaces.</summary>
+    private string Cell(string? text) =>
+        string.IsNullOrEmpty(text)
+            ? string.Empty
+            : _redactor.Redact(text)
+                .Replace("|", "\\|", StringComparison.Ordinal)
+                .Replace("`", "\\`", StringComparison.Ordinal)
+                .Replace("\r", " ", StringComparison.Ordinal)
+                .Replace("\n", " ", StringComparison.Ordinal);
 
     private static string? StringOf(JsonNode? node, string name) =>
         node is JsonObject obj && obj[name] is JsonValue value && value.TryGetValue(out string? text) ? text : null;
