@@ -162,6 +162,55 @@ public sealed class LabHttp
     }
 
     /// <summary>
+    /// Sends raw body bytes with an explicit <c>Content-Type</c>, for the L28 fuzz cases. The body is not a JSON value, so it may
+    /// be invalid JSON on purpose. The URI, method and size checks are those of <see cref="SendAsync"/>, and the Host header is
+    /// the same. Fuzz bodies are not secrets, so they are not zeroed.
+    /// </summary>
+    public async Task<Result<HttpProbeResult>> SendRawAsync(
+        string via,
+        string method,
+        string path,
+        ReadOnlyMemory<byte> body,
+        string? contentType,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(via);
+        ArgumentNullException.ThrowIfNull(method);
+        ArgumentNullException.ThrowIfNull(path);
+
+        Result<Uri> uri = Compose(via, path);
+        if (uri.IsFailure)
+        {
+            return Result<HttpProbeResult>.Failure(uri.Error);
+        }
+
+        Result<HttpMethod> verb = ParseMethod(method);
+        if (verb.IsFailure)
+        {
+            return Result<HttpProbeResult>.Failure(verb.Error);
+        }
+
+        if (body.Length > MaxRequestBytes)
+        {
+            return Result<HttpProbeResult>.Failure("[Lab.InvalidArgument] body is larger than 1 MiB");
+        }
+
+        using var request = new HttpRequestMessage(verb.Value, uri.Value);
+        if (string.Equals(via, "gateway", StringComparison.Ordinal) || string.Equals(via, "agent_ingress", StringComparison.Ordinal))
+        {
+            request.Headers.Host = Dhadgar.Lab.Services.LabServices.ProbeHostHeader;
+        }
+
+        request.Content = new ByteArrayContent(body.ToArray());
+        if (contentType is not null && MediaTypeHeaderValue.TryParse(contentType, out MediaTypeHeaderValue? mediaType))
+        {
+            request.Content.Headers.ContentType = mediaType;
+        }
+
+        return await SendPreparedAsync(request, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Composes the probe URI on the loopback host and refuses anything that is not a lab endpoint (<c>[Lab.Untrusted]</c>).
     /// </summary>
     internal static Result<Uri> Compose(string via, string path)
