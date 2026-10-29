@@ -115,7 +115,6 @@ public static class ToolPolicy
         // L28
         "fuzz_run",
         // L29
-        "soak_run",
         // L30
         "pool_list",
         "pool_acquire",
