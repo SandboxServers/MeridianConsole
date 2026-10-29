@@ -1,0 +1,7 @@
+schema = 1
+id = "LM7-skipped-counts-pass"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "A run whose rows are all skipped is no longer incomplete"
+files = ["src/Tools/Dhadgar.Lab/Uat/RowGrader.cs"]
+detector = { test = "Dhadgar.Lab.Tests.Uat.RunOutcomeTests.Overall_AllSkipped_IsIncomplete" }

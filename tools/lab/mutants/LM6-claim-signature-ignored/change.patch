@@ -1,0 +1,13 @@
+diff --git a/src/Tools/Dhadgar.Lab/Results/KnownIssues.cs b/src/Tools/Dhadgar.Lab/Results/KnownIssues.cs
+index e55654e1..bb6ecbf9 100644
+--- a/src/Tools/Dhadgar.Lab/Results/KnownIssues.cs
++++ b/src/Tools/Dhadgar.Lab/Results/KnownIssues.cs
+@@ -192,7 +192,7 @@ public sealed class KnownIssues
+         {
+             // A claim is never a pass: only the claimed issue can link the row, and only when it matches every signature.
+             KnownIssue? claimed = Issues.FirstOrDefault(i => i.Id == row.ClaimedKnownIssue);
+-            if (claimed is not null && MatchesAll(claimed, row))
++            if (claimed is not null)
+             {
+                 string? absent = MissingRequirement(claimed, row);
+                 return absent is null

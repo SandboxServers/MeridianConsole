@@ -1,0 +1,7 @@
+schema = 1
+id = "LM1-journal-after-inject"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "FaultBook writes the Prepared journal entry after inject (no write-ahead)"
+files = ["src/Tools/Dhadgar.Lab/Faults/FaultBook.cs"]
+detector = { test = "Dhadgar.Lab.Tests.Faults.FaultBookTests.FaultBook_JournalWrittenBeforeInject" }

@@ -1,0 +1,7 @@
+schema = 1
+id = "LM6-claim-signature-ignored"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "A claimed known issue links a row whose signature does not match"
+files = ["src/Tools/Dhadgar.Lab/Results/KnownIssues.cs"]
+detector = { test = "Dhadgar.Lab.Tests.Results.KnownIssuesTests.Match_ClaimedIssueSignatureDiffers_IsNew" }

@@ -1,0 +1,13 @@
+diff --git a/src/Tools/Dhadgar.Lab/Stack/LabConnectionStrings.cs b/src/Tools/Dhadgar.Lab/Stack/LabConnectionStrings.cs
+index dd1ed8f5..6f6b833e 100644
+--- a/src/Tools/Dhadgar.Lab/Stack/LabConnectionStrings.cs
++++ b/src/Tools/Dhadgar.Lab/Stack/LabConnectionStrings.cs
+@@ -106,7 +106,7 @@ public sealed class LabConnectionStrings
+     /// <summary>
+     /// A service's database read-only, direct to the host port (observation path).
+     /// </summary>
+-    public Result<string> Reader(string service) => DirectDb(service, LabCredentialRefs.LabReader);
++    public Result<string> Reader(string service) => ServiceDb(service);
+ 
+     /// <summary>
+     /// A service's database as its owner, direct to the host port (the daemon's own writes: L11 mint and reset).

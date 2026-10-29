@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>meridian-lab-selfcheck</AssemblyName>
+    <RootNamespace>Dhadgar.Lab.SelfCheck</RootNamespace>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- The entry point is SelfCheckProgram.Main; the test project references this assembly beside Dhadgar.Nodes (type Program). -->
+    <GenerateProgramFile>false</GenerateProgramFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reuses the lab's mutant loader and paths. No product project references this project (D-ML90). -->
+    <ProjectReference Include="..\Dhadgar.Lab\Dhadgar.Lab.csproj" />
+  </ItemGroup>
+</Project>

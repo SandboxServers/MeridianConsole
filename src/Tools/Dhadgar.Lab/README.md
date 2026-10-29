@@ -282,6 +282,13 @@ Exit codes for `uat run` follow `overall` (C8): 0 `pass`, 1 `fail`, 2 config or 
 `stack_up` with `wipe` also removes labelled `meridian-lab-*` containers that the daemon does not know about. Without `wipe`, `stack_up` refuses while such containers exist. Log clauses read the supervisor's own log ring for the process.
 
 The shipped spec `docs/guides/uat-specs/lab-selftest.toml` (section `lab-selftest`, requires Docker) exercises the stack, Nodes and Gateway enrolment and the Toxiproxy ingress path. Its Gateway checks never call the CA route through the Gateway (D-ML63). Enrol polling uses `poll_ms = 5000` (F54). The S-L6 test needs `MERIDIAN_LAB_S6_WIPE=1` when labelled lab containers exist, because its `stack_up` wipe removes them; it is skipped when Docker is not reachable.
+
+## Self-check
+
+Gate LS (L55) runs the lab against itself. `dotnet run --project src/Tools/Dhadgar.Lab.SelfCheck -c Release -- selfcheck [--only <id>] [--keep]` copies HEAD into `%TEMP%\meridian-lab-selfcheck\<guid>\`, runs a baseline over each lab mutant's named test (every one must pass there, else the whole run is `invalid`), then for each `kind = "lab"` mutant (LM1-LM8) applies its `change.patch`, builds, runs the named test and reverts the patch. A mutant is `caught` only when that test ran and failed in the TRX. A build failure, zero tests run, a skipped test or a patch that does not apply is `invalid`, never `caught`. The result is written to `Results\selfcheck\<timestamp>\selfcheck.json` and `selfcheck.md`. Exit code 0 only when every lab mutant is `caught`.
+
+`selfcheck --recovery` checks crash recovery (D-ML46). It refuses to run while the per-user daemon mutex is held (stop the lab daemon first), starts a child daemon from the copy with a fresh token and a temporary home, acquires a lease, brings the stack up with wipe, adds a latency toxic on `nodes-postgres`, kills the child's process tree, starts a second child on the same home, and passes only when `faults_active` is empty, no lease is held and `invariants_check` reports no I5 violation. The stack is torn down with wipe in `finally` under a 30 s cleanup bound. Exit code 0 means recovered.
+
 ## Reads and probes
 
 Part of L10. Both tools are lab-only and never touch the dev stack.

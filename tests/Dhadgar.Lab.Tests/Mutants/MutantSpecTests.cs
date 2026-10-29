@@ -8,6 +8,7 @@ namespace Dhadgar.Lab.Tests.Mutants;
 public sealed class MutantSpecTests
 {
     private const string BaseSha = "eda187205b54622a4450ea011faeab46941d1dc1";
+    private const string LabBaseSha = "a961539a4476cfe02b11da6cce2149e5e0be46af";
     private const string ProductFile = "src/Dhadgar.Nodes/Services/EnrollmentService.cs";
 
     [Fact]
@@ -23,8 +24,11 @@ public sealed class MutantSpecTests
         Assert.Contains("M1-token-no-concurrency", ids);
         Assert.Contains("M4-no-concurrency-catch", ids);
         Assert.Contains("M5-token-logged", ids);
-        Assert.All(specs.Value!, spec => Assert.Equal(MutantKind.Product, spec.Kind));
-        Assert.All(specs.Value!, spec => Assert.Equal(BaseSha, spec.Base));
+        Assert.All(specs.Value!, spec => Assert.Contains(spec.Kind, new[] { MutantKind.Product, MutantKind.Lab }));
+        Assert.Contains(specs.Value!, spec => spec.Id == "LM1-journal-after-inject" && spec.Kind == MutantKind.Lab);
+        Assert.All(specs.Value!.Where(spec => spec.Kind == MutantKind.Product), spec => Assert.Equal(BaseSha, spec.Base));
+        Assert.All(specs.Value!.Where(spec => spec.Kind == MutantKind.Lab), spec => Assert.Equal(LabBaseSha, spec.Base));
+        Assert.Contains(specs.Value!, spec => spec.Id == "LM1-journal-after-inject" && spec.Kind == MutantKind.Lab);
     }
 
     [Fact]

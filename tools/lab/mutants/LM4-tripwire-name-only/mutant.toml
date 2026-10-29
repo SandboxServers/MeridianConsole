@@ -1,0 +1,7 @@
+schema = 1
+id = "LM4-tripwire-name-only"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "Tripwire no longer refuses a dhadgar-named container on its name alone"
+files = ["src/Tools/Dhadgar.Lab/Faults/Tripwire.cs"]
+detector = { test = "Dhadgar.Lab.Tests.Faults.FaultTargetGuardTests.ResolveAsync_LabelledContainerNamedDhadgarGateway_IsRefusedByTripwireAlone" }

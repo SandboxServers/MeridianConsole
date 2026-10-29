@@ -1,0 +1,16 @@
+diff --git a/src/Tools/Dhadgar.Lab/Invariants/FaultImpactMap.cs b/src/Tools/Dhadgar.Lab/Invariants/FaultImpactMap.cs
+index 31112698..c20e2ce9 100644
+--- a/src/Tools/Dhadgar.Lab/Invariants/FaultImpactMap.cs
++++ b/src/Tools/Dhadgar.Lab/Invariants/FaultImpactMap.cs
+@@ -85,11 +85,6 @@ public static class FaultImpactMap
+     /// </summary>
+     public static bool Explains(string service, string? requestPath, FaultHistoryEntry fault, DateTimeOffset at)
+     {
+-        if (!ImpactSet(service, requestPath).Contains(fault.TargetId))
+-        {
+-            return false;
+-        }
+-
+         if (fault.StartedAt is DateTimeOffset started && started > at)
+         {
+             return false;

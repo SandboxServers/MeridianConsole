@@ -1,0 +1,7 @@
+schema = 1
+id = "LM3-lease-end-no-heal"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "Lease end does not heal the active faults"
+files = ["src/Tools/Dhadgar.Lab/Faults/FaultBook.cs"]
+detector = { test = "Dhadgar.Lab.Tests.Faults.FaultBookTests.LeaseEnd_HealsAllFaults" }

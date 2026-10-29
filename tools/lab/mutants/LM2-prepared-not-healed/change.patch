@@ -1,0 +1,16 @@
+diff --git a/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs b/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs
+index e464f0a2..d0230159 100644
+--- a/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs
++++ b/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs
+@@ -415,6 +415,11 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource,
+ 
+                 foreach (string id in ids)
+                 {
++                    if (_entries.TryGetValue(id, out FaultJournalEntry? skipped) && skipped.State == FaultState.Prepared)
++                    {
++                        continue;
++                    }
++
+                     if ((await HealLockedAsync(id, "recovery", ct).ConfigureAwait(false)).IsSuccess)
+                     {
+                         healed++;

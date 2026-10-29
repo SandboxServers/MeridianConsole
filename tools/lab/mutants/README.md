@@ -20,6 +20,17 @@ committed in patched form. The product tree on `main` stays unchanged.
 | M1-token-no-concurrency | product | drop `IsConcurrencyToken()` on `EnrollmentToken.UsedAt` | `history_run enroll-race`, E1 or E6 |
 | M4-no-concurrency-catch | product | remove the `DbUpdateConcurrencyException` catch in enrollment | `history_run enroll-race`, I1 500 |
 | M5-token-logged | product | log the plaintext enrollment token | `uat_run lab-selftest.toml`, I4 |
+| LM1-journal-after-inject | lab | write the `Prepared` journal entry after inject (no write-ahead, D-ML46) | `FaultBookTests.FaultBook_JournalWrittenBeforeInject` |
+| LM2-prepared-not-healed | lab | recovery skips a `Prepared` entry that was never injected | `FaultBookTests.FaultBook_PreparedNeverInjected_HealSucceeds` |
+| LM3-lease-end-no-heal | lab | lease end heals nothing | `FaultBookTests.LeaseEnd_HealsAllFaults` |
+| LM4-tripwire-name-only | lab | the tripwire no longer refuses a `dhadgar` name on its own | `FaultTargetGuardTests.ResolveAsync_LabelledContainerNamedDhadgarGateway_IsRefusedByTripwireAlone` |
+| LM5-impact-set-ignored | lab | a fault excuses a 503 whose service impact set lacks its target | `I1UnhandledInvariantTests.I1_503OnNodes_FaultOnDiscordWebhook_Counts` |
+| LM6-claim-signature-ignored | lab | a claimed known issue links a row whose signature differs | `KnownIssuesTests.Match_ClaimedIssueSignatureDiffers_IsNew` |
+| LM7-skipped-counts-pass | lab | an all-skipped run is not `incomplete` | `RunOutcomeTests.Overall_AllSkipped_IsIncomplete` |
+| LM8-db-query-through-proxy | lab | the read-only observation connection goes through Toxiproxy as the owner | `ObservationPathTests.Reader_ResolvesToDirectPostgresPort_AsLabReader` |
+
+Lab mutants (`kind = "lab"`) are applied only by `Dhadgar.Lab.SelfCheck` (L55) in a copy under `%TEMP%`, never in the
+checkout. A lab detector names a test, and that test must run and fail for the mutant to count as `caught`.
 
 ## Refreshing a stale patch
 

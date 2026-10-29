@@ -1,0 +1,7 @@
+schema = 1
+id = "LM5-impact-set-ignored"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "A fault excuses a 503 from a service whose impact set does not hold its target"
+files = ["src/Tools/Dhadgar.Lab/Invariants/FaultImpactMap.cs"]
+detector = { test = "Dhadgar.Lab.Tests.Invariants.I1UnhandledInvariantTests.I1_503OnNodes_FaultOnDiscordWebhook_Counts" }
