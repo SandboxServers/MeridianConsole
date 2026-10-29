@@ -6,6 +6,7 @@ using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Services;
+using Dhadgar.Lab.Soak;
 using Dhadgar.Lab.Stack;
 using Dhadgar.Lab.Tools.Invariants;
 using Dhadgar.Lab.Uat.Eval;
@@ -80,5 +81,9 @@ public static partial class LabMcpServer
                 InvariantWiring.Excuses(sp.GetRequiredService<IFaultHistory>()),
                 exits.Snapshot);
         });
+
+        // I7 (L29): the soak's resource trend. Skips outside a soak; the store is written by SoakJob.
+        services.AddSingleton<ResourceSampleStore>();
+        services.AddSingleton<IInvariant>(sp => new I7ResourceTrendInvariant(sp.GetRequiredService<ResourceSampleStore>(), () => SoakLimits.Load(Path.Combine(sp.GetRequiredService<LabPaths>().RepoRoot, "docs", "guides", "uat-specs", "invariants", "soak.toml"))));
     }
 }
