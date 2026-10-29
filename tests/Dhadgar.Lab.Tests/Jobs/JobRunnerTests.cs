@@ -114,6 +114,21 @@ public sealed class JobRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task Job_UnrequestedCancellation_EndsFailed_AndTheNextStartIsAccepted()
+    {
+        using var runner = CreateRunner();
+        JobHandle handle = Started(runner.Start("hunt", 4, (ctx, ct) => throw new OperationCanceledException()));
+
+        await handle.Completed;
+
+        Assert.Equal("failed", runner.Get(handle.JobId).Value!.State);
+
+        JobHandle next = Started(runner.Start("hunt", 5, (ctx, ct) => Task.FromResult(Result<JobOutcome>.Success(new JobOutcome("pass", null)))));
+        await next.Completed;
+        Assert.Equal("succeeded", runner.Get(next.JobId).Value!.State);
+    }
+
+    [Fact]
     public async Task Job_Cancel_EndsAsCancelled()
     {
         using var runner = CreateRunner();

@@ -161,6 +161,25 @@ public sealed class FlakeCheckJobTests : IDisposable
     }
 
     [Fact]
+    public async Task FlakeCheck_UnselectedFailingRow_IsNotAFlake()
+    {
+        // The source run has a PASS row and a FAIL row; only the PASS row is named. The FAIL row is never rerun, so it must not
+        // read as a flake ("missing" in the reruns).
+        WriteSource("src-unselected", new RowSpec("nodes", "enroll", "PASS"), new RowSpec("nodes", "heal", "FAIL"));
+
+        string jobId = await StartJobAsync("src-unselected", (name, args, callContext, ct) =>
+        {
+            string rerunId = "rerun-u-" + Guid.NewGuid().ToString("N")[..8];
+            BundleFixtures.Write(_paths.UatRuns, rerunId, "b1", 7, new RowSpec("nodes", "enroll", "PASS"));
+            return Task.FromResult(new LabToolResult(false, JsonSerializer.SerializeToElement(new { run_id = rerunId, overall = "pass" })));
+        }, new[] { "enroll" });
+
+        JobRecord record = _runner.Get(jobId).Value!;
+        Assert.Equal("stable", record.Result!["state"]!.GetValue<string>());
+        Assert.Empty(record.Result["flakes"]!.AsArray());
+    }
+
+    [Fact]
     public async Task Job_ConsistentFailure_IsStableAndFails()
     {
         WriteSource("src-7", new RowSpec("nodes", "enroll", "FAIL"));

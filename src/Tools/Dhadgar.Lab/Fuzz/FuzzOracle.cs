@@ -48,14 +48,18 @@ public static class FuzzOracle
 
     /// <summary>
     /// Judges one observed case. <paramref name="forbiddenMarkers"/> are secret values (vault values, the daemon token) that must
-    /// not appear in the response; an empty marker is ignored.
+    /// not appear in the response; an empty marker is ignored. <paramref name="leakCheck"/> is a predicate over the body for a
+    /// secret that is never copied into a string here (the vault scanner and the daemon token; R2-N9, S-N3); the finding never
+    /// carries the body or a marker.
     /// </summary>
+    /// <param name="leakCheck">True when the body carries a secret. Null means no predicate beyond <paramref name="forbiddenMarkers"/>.</param>
     public static FuzzVerdict Judge(
         FuzzTarget target,
         FuzzCase fuzzCase,
         FuzzObservation observation,
         KnownIssues known,
-        IReadOnlyList<string> forbiddenMarkers)
+        IReadOnlyList<string> forbiddenMarkers,
+        Func<string, bool>? leakCheck = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(fuzzCase);
@@ -95,7 +99,8 @@ public static class FuzzOracle
             reasons.Add("latency " + observation.DurationMs + " ms is at or over 10 s");
         }
 
-        bool leaked = forbiddenMarkers.Any(marker => marker.Length > 0 && observation.BodyText.Contains(marker, StringComparison.Ordinal));
+        bool leaked = forbiddenMarkers.Any(marker => marker.Length > 0 && observation.BodyText.Contains(marker, StringComparison.Ordinal))
+            || (leakCheck?.Invoke(observation.BodyText) ?? false);
         if (leaked)
         {
             reasons.Add("a secret value is in the response");

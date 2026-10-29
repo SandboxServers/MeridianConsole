@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Lab.Jobs;
@@ -61,8 +62,11 @@ public static class SoakJob
         int workloadErrors = 0;
         int samples = 0;
         int sampleErrors = 0;
-        DateTimeOffset end = time.GetUtcNow() + TimeSpan.FromSeconds(run.DurationS);
-        DateTimeOffset nextSample = time.GetUtcNow();
+        DateTimeOffset started = time.GetUtcNow();
+        DateTimeOffset end = started + TimeSpan.FromSeconds(run.DurationS);
+        DateTimeOffset nextSample = started;
+        string i7 = "checked";
+        bool i7Failed = false;
 
         store.Begin();
         try
@@ -107,6 +111,14 @@ public static class SoakJob
 
                 loops++;
             }
+
+            // R2-N3 and D-ML100: the soak ends with an I7 check over its own window, while the store is still open. A cancelled
+            // soak leaves the loop by throwing, so it never reaches this line.
+            LabToolResult check = await invoke("invariants_check",
+                JsonSerializer.SerializeToElement(new { since = started.ToString("O", CultureInfo.InvariantCulture) }),
+                CallContext(context), ct).ConfigureAwait(false);
+            i7Failed = check.IsError || HasI7(check.Payload, "violations") || HasI7(check.Payload, "errors");
+            i7 = check.IsError ? "error" : HasI7(check.Payload, "skipped") ? "skipped" : "checked";
         }
         finally
         {
@@ -114,13 +126,14 @@ public static class SoakJob
             store.End();
         }
 
-        string overall = sampleErrors == 0 && loops > 0 ? "pass" : "fail";
+        string overall = sampleErrors == 0 && loops > 0 && !i7Failed ? "pass" : "fail";
         JsonNode? result = JsonSerializer.SerializeToNode(new
         {
             loops,
             workload_errors = workloadErrors,
             samples,
             sample_errors = sampleErrors,
+            i7,
             duration_s = run.DurationS,
             seed = run.Seed,
         });
@@ -146,4 +159,28 @@ public static class SoakJob
 
     private static LabCallContext CallContext(JobContext context) =>
         new(Guid.NewGuid().ToString("N"), context.LeaseId, "job:" + context.JobId);
+
+    /// <summary>True when the named array of an <c>invariants_check</c> payload has an entry for I7.</summary>
+    private static bool HasI7(JsonElement payload, string arrayName)
+    {
+        if (payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty(arrayName, out JsonElement entries)
+            || entries.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (JsonElement entry in entries.EnumerateArray())
+        {
+            if (entry.ValueKind == JsonValueKind.Object
+                && entry.TryGetProperty("invariant_id", out JsonElement id)
+                && id.ValueKind == JsonValueKind.String
+                && string.Equals(id.GetString(), "I7", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

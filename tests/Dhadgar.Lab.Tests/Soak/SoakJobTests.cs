@@ -25,6 +25,10 @@ public sealed class SoakJobTests : IDisposable
     private readonly JobRunner _runner;
     private readonly ResourceSampleStore _store = new();
     private int _uatCalls;
+    private int _invariantCalls;
+
+    /// <summary>The <c>invariants_check</c> answer; clean by default, replaced by the I7 tests.</summary>
+    private object _invariantsAnswer = new { count = 0, violations = Array.Empty<object>(), errors = Array.Empty<object>(), skipped = Array.Empty<object>() };
 
     public SoakJobTests()
     {
@@ -104,6 +108,7 @@ public sealed class SoakJobTests : IDisposable
 
         Assert.False(_store.IsSoaking);
         Assert.NotEmpty(_store.Snapshot());
+        Assert.Equal(0, _invariantCalls);
     }
 
     [Fact]
@@ -128,6 +133,65 @@ public sealed class SoakJobTests : IDisposable
         Assert.Empty(_store.Snapshot());
     }
 
+    [Fact]
+    public async Task SoakJob_RisingTrend_FailsTheOutcome()
+    {
+        // The fake answers the I7 trend as a violation at the end of the soak (R2-N3).
+        _invariantsAnswer = new
+        {
+            count = 1,
+            violations = new[] { new { invariant_id = "I7", service = "soak", check_id = "trend", detail = "rising memory" } },
+            errors = Array.Empty<object>(),
+            skipped = Array.Empty<object>(),
+        };
+        var docker = new FakeDocker(exitCode: 0);
+        var sampler = Sampler(docker);
+        Result<JobOutcome> outcome = default;
+
+        var run = new SoakRun("lab-selftest.toml", null, 120, 9);
+        Result<JobHandle> started = _runner.Start(SoakJob.Kind, run.Seed, async (context, token) =>
+        {
+            Result<JobOutcome> result = await SoakJob.RunAsync(run, context, Invoke, new GatewayPacer(_time), sampler, _store, _time, token);
+            outcome = result;
+            return result;
+        });
+        Assert.True(started.IsSuccess, started.Error);
+        await started.Value!.Completed;
+
+        Assert.Equal(1, _invariantCalls);
+        Assert.Equal("fail", outcome.Value.Overall);
+        Assert.Equal("checked", outcome.Value.Result!["i7"]!.GetValue<string>());
+        Assert.False(_store.IsSoaking);
+    }
+
+    [Fact]
+    public async Task SoakJob_I7Skipped_IsReportedNotFailed()
+    {
+        _invariantsAnswer = new
+        {
+            count = 0,
+            violations = Array.Empty<object>(),
+            errors = Array.Empty<object>(),
+            skipped = new[] { new { invariant_id = "I7", source = "soak", reason = "fewer than 3 samples" } },
+        };
+        var docker = new FakeDocker(exitCode: 0);
+        var sampler = Sampler(docker);
+        Result<JobOutcome> outcome = default;
+
+        var run = new SoakRun("lab-selftest.toml", null, 120, 9);
+        Result<JobHandle> started = _runner.Start(SoakJob.Kind, run.Seed, async (context, token) =>
+        {
+            Result<JobOutcome> result = await SoakJob.RunAsync(run, context, Invoke, new GatewayPacer(_time), sampler, _store, _time, token);
+            outcome = result;
+            return result;
+        });
+        Assert.True(started.IsSuccess, started.Error);
+        await started.Value!.Completed;
+
+        Assert.Equal("pass", outcome.Value.Overall);
+        Assert.Equal("skipped", outcome.Value.Result!["i7"]!.GetValue<string>());
+    }
+
     private ResourceSampler Sampler(FakeDocker docker)
     {
         var registry = new FakeRegistry();
@@ -140,6 +204,12 @@ public sealed class SoakJobTests : IDisposable
 
     private Task<LabToolResult> Invoke(string name, JsonElement args, LabCallContext callContext, CancellationToken ct)
     {
+        if (name == "invariants_check")
+        {
+            _invariantCalls++;
+            return Task.FromResult(new LabToolResult(false, JsonSerializer.SerializeToElement(_invariantsAnswer)));
+        }
+
         if (name != "uat_run")
         {
             return Task.FromResult(new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = "unknown " + name })));

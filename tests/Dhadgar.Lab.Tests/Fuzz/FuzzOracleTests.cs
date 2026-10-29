@@ -101,6 +101,21 @@ public sealed class FuzzOracleTests
     }
 
     [Fact]
+    public void Judge_LeakCheckTrue_IsALeak_AndTheFindingOmitsTheBody()
+    {
+        string body = "{\"type\":\"t\",\"title\":\"x\",\"status\":400,\"detail\":\"opaque-token-9c1e\"}";
+        FuzzObservation observation = new(400, "application/problem+json", body, 40, null);
+
+        FuzzVerdict verdict = FuzzOracle.Judge(FuzzTargets.Enroll, SomeCase, observation, LoadShipped(), [],
+            text => text.Contains("opaque-token-9c1e", StringComparison.Ordinal));
+
+        Assert.Equal(FuzzVerdictKind.Failure, verdict.Kind);
+        Assert.Contains(verdict.Reasons, r => r.Contains("secret", StringComparison.Ordinal));
+        Assert.DoesNotContain(verdict.Reasons, r => r.Contains("opaque-token-9c1e", StringComparison.Ordinal));
+        Assert.DoesNotContain(verdict.Signatures, s => s.Text.Contains("opaque-token-9c1e", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Oracle_NoResponse_IsFailure()
     {
         FuzzObservation observation = new(0, null, string.Empty, 30_000, "timed out");
