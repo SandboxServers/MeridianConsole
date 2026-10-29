@@ -407,7 +407,7 @@ public static class SelfCheckRecovery
     private static async Task<Result<JsonDocument>> GetStatusAsync(string token, CancellationToken ct)
     {
         Uri uri = LabCliUri(LabDefaults.StatusPath);
-        if (!LabHosts.IsLabEndpoint(uri))
+        if (!LabHosts.IsDaemonEndpoint(uri))
         {
             return Result<JsonDocument>.Failure("[Lab.Refused] the target is not a lab endpoint");
         }

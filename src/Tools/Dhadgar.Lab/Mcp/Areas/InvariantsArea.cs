@@ -39,6 +39,9 @@ public static partial class LabMcpServer
             sp.GetRequiredService<LabCredentialRefs>()));
         services.AddSingleton<IFaultHistory>(sp => new FaultBookHistory(sp.GetRequiredService<FaultBook>()));
 
+        // The restarts the lab's own calls caused. The dispatcher records them; I6 reads them as excuses.
+        services.AddSingleton<LabRestartExcuses>();
+
         // I1 to I6. I4 is also the raw-line observer: this registration follows L07's NullRawLineObserver, so it is the one resolved.
         services.AddSingleton<IInvariant>(sp => new I1UnhandledInvariant(
             sp.GetRequiredService<LabServices>().ServiceNames,
@@ -85,7 +88,7 @@ public static partial class LabMcpServer
             ProcessExitFeed exits = sp.GetRequiredService<ProcessExitFeed>();
             return new I6RestartInvariant(
                 InvariantWiring.Observations(sp.GetRequiredService<ILabTargetRegistry>(), sp.GetRequiredService<IDockerInspector>()),
-                InvariantWiring.Excuses(sp.GetRequiredService<IFaultHistory>()),
+                InvariantWiring.Excuses(sp.GetRequiredService<IFaultHistory>(), sp.GetRequiredService<LabRestartExcuses>()),
                 exits.Snapshot);
         });
 

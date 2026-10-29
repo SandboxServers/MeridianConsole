@@ -47,6 +47,27 @@ public static class LabHosts
         return IsLoopback(uri) && LabPorts.InfraPorts.Contains(uri.Port);
     }
 
+    /// <summary>
+    /// True only for http, a loopback host, and <see cref="LabDefaults.DaemonPort"/>. The daemon's own <c>/status</c>
+    /// and the CLI's loopback calls use this; <see cref="IsLabEndpoint"/> is unchanged.
+    /// </summary>
+    public static bool IsDaemonEndpoint(Uri uri)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+
+        if (!uri.IsAbsoluteUri)
+        {
+            return false;
+        }
+
+        if (uri.Scheme != Uri.UriSchemeHttp)
+        {
+            return false;
+        }
+
+        return IsLoopback(uri) && uri.Port == LabDefaults.DaemonPort;
+    }
+
     private static bool IsLoopback(Uri uri) =>
         Array.IndexOf(LoopbackHosts, uri.Host) >= 0;
 }

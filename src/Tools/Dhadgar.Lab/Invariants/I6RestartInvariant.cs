@@ -125,7 +125,8 @@ public sealed class I6RestartInvariant : IInvariant
             bool matches = excuse.Action switch
             {
                 "fault_kill" or "fault_pause" => excuse.Target == "c:" + name || excuse.Target == name,
-                "svc_start" or "svc_restart" or "stack_up" => excuse.Target == service,
+                "svc_start" or "svc_restart" => excuse.Target == service,
+                "stack_up" => excuse.Target == service || excuse.Target == LabRestartExcuses.AllTargets,
                 "member_reset" => excuse.Target == name,
                 _ => false,
             };

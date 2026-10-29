@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Dhadgar.Lab.Audit;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Secrets;
@@ -39,12 +40,14 @@ public sealed class LabToolDispatcher
     private readonly Redactor _redactor;
     private readonly TimeProvider _time;
     private readonly Func<string, LabGate?> _gateFor;
+    private readonly LabRestartExcuses? _excuses;
 
     /// <summary>
-    /// Creates the dispatcher that gates tools with <see cref="ToolPolicy"/>.
+    /// Creates the dispatcher that gates tools with <see cref="ToolPolicy"/>. When <paramref name="excuses"/> is given, every
+    /// accepted restart call records the excuse it earns for the I6 invariant.
     /// </summary>
-    public LabToolDispatcher(LabToolRegistry registry, LeaseBook leases, AuditLog audit, Redactor redactor, TimeProvider time)
-        : this(registry, leases, audit, redactor, time, ToolPolicy.GateFor)
+    public LabToolDispatcher(LabToolRegistry registry, LeaseBook leases, AuditLog audit, Redactor redactor, TimeProvider time, LabRestartExcuses? excuses = null)
+        : this(registry, leases, audit, redactor, time, ToolPolicy.GateFor, excuses)
     {
     }
 
@@ -57,7 +60,8 @@ public sealed class LabToolDispatcher
         AuditLog audit,
         Redactor redactor,
         TimeProvider time,
-        Func<string, LabGate?> gateFor)
+        Func<string, LabGate?> gateFor,
+        LabRestartExcuses? excuses = null)
     {
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
@@ -65,6 +69,7 @@ public sealed class LabToolDispatcher
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _gateFor = gateFor ?? throw new ArgumentNullException(nameof(gateFor));
+        _excuses = excuses;
     }
 
     /// <summary>
@@ -142,6 +147,9 @@ public sealed class LabToolDispatcher
         {
             return Refusal(DefaultErrorCode, "the audit log is unavailable", holder: null);
         }
+
+        // An accepted restart call excuses the restart it causes (I6). A refused call never reaches this line.
+        _excuses?.RecordCall(toolName, toolArguments, started);
 
         // 5 to 6: invoke, then redact. 7: the audit end runs on every path that began, including a throw.
         string outcomeCode = InternalErrorCode;
