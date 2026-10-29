@@ -134,7 +134,19 @@ public sealed class BundleIngestor
         var rowRecords = new List<RowRecord>();
         var violationRecords = new List<ViolationRecord>();
         var signatureRecords = new Dictionary<string, SignatureRecord>(StringComparer.Ordinal);
+        var faultRecords = new Dictionary<string, FaultRecord>(StringComparer.Ordinal);
         string runEnd = Text(run, "ended_at") ?? string.Empty;
+        PairRecord? pair = null;
+        if (run["pair"] is JsonObject)
+        {
+            Result<PairRecord> parsedPair = PairOf(run, runId);
+            if (parsedPair.IsFailure)
+            {
+                return Result<IngestResult>.Failure(parsedPair.Error);
+            }
+
+            pair = parsedPair.Value;
+        }
 
         foreach (ParsedRow row in rows.Value)
         {
@@ -165,11 +177,24 @@ public sealed class BundleIngestor
                     violation.At ?? row.EndedAt ?? runEnd, violation.Evidence.Allowed, row.Section, row.RowId,
                     violation.Detail is null ? null : _scrub(violation.Detail)));
             }
+
+            // L25f: a fault needs its kind and target (NOT NULL columns); a row written before the writer carried them has none.
+            foreach (ParsedFault fault in row.Faults ?? [])
+            {
+                if (fault.FaultId.Length == 0 || fault.Kind.Length == 0 || fault.TargetId.Length == 0
+                    || faultRecords.ContainsKey(fault.FaultId))
+                {
+                    continue;
+                }
+
+                faultRecords[fault.FaultId] = new FaultRecord(runId, fault.FaultId, fault.Kind, fault.TargetId, null,
+                    fault.InjectedAt, fault.HealedAt, fault.HealError is null ? null : _scrub(fault.HealError));
+            }
         }
 
         RunSummary summary = RunSummary.Compute(graded, matches);
         string overall = summary.OverallText;
-        Result write = WriteRun(runId, run, folder, overall, rowRecords, violationRecords, signatureRecords);
+        Result write = WriteRun(runId, run, folder, overall, rowRecords, violationRecords, signatureRecords, faultRecords.Values.ToList(), pair);
         if (write.IsFailure)
         {
             return Result<IngestResult>.Failure(write.Error);
@@ -184,8 +209,24 @@ public sealed class BundleIngestor
         return Result<IngestResult>.Success(new IngestResult(runId, overall, rowRecords.Count, signatureRecords.Count, _known));
     }
 
+    /// <summary>Reads run.json's <c>pair</c> (C18, L53): the experiment, the role, the partner run and the relation. <c>held</c> stays unset.</summary>
+    private static Result<PairRecord> PairOf(JsonObject run, string runId)
+    {
+        string? experimentId = Text(run, "pair", "experiment_id");
+        string? role = Text(run, "pair", "role");
+        string? relation = Text(run, "pair", "relation");
+        if (string.IsNullOrEmpty(experimentId) || string.IsNullOrEmpty(role) || string.IsNullOrEmpty(relation))
+        {
+            return Result<PairRecord>.Failure("[Lab.InvalidArgument] run.json has a pair without experiment_id, role or relation");
+        }
+
+        return Result<PairRecord>.Success(new PairRecord(experimentId, runId, role, Text(run, "pair", "partner_run_id") ?? string.Empty,
+            relation, null));
+    }
+
     private Result WriteRun(string runId, JsonObject run, string folder, string overall, List<RowRecord> rowRecords,
-        List<ViolationRecord> violationRecords, Dictionary<string, SignatureRecord> signatureRecords)
+        List<ViolationRecord> violationRecords, Dictionary<string, SignatureRecord> signatureRecords,
+        List<FaultRecord> faultRecords, PairRecord? pair)
     {
         var record = new RunRecord(
             RunId: runId,
@@ -228,6 +269,24 @@ public sealed class BundleIngestor
         foreach (ViolationRecord violation in violationRecords)
         {
             result = _db.InsertViolation(violation);
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        foreach (FaultRecord fault in faultRecords)
+        {
+            result = _db.InsertFault(fault);
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        if (pair is not null)
+        {
+            result = _db.InsertPair(pair);
             if (result.IsFailure)
             {
                 return result;
