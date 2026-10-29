@@ -34,7 +34,8 @@ public sealed class MutantBuilderTests : IDisposable
         _paths = LabPaths.FromRoot(Path.Combine(_root, "lab"), _repo);
         string folder = Path.Combine(_root, "mutants", MutantId);
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, MutantSpecLoader.PatchFileName), "--- a/x\n+++ b/x\n");
+        File.WriteAllText(Path.Combine(folder, MutantSpecLoader.PatchFileName),
+            "--- a/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs\n+++ b/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs\n");
         _spec = new MutantSpec(
             MutantId,
             MutantKind.Product,
