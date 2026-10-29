@@ -120,6 +120,13 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | F93 | Shipped mutants M4 and M5 can never be `detected`: M4's `history_run` detector yields only `hist:` texts against an `inv:` pattern, and M5's `uat_run` payload carries a signature count without texts. `MutationDockerTests` has no repo root and hides the error body. | `tools/lab/mutants/M4-no-concurrency-catch/mutant.toml`; `Mutants/MutationRunJob.cs:322-371`; `Results/ResultsService.cs:249-270`; `MutationDockerTests.cs:38-44,62` | D-ML100; wave5-fix-A, wave5-fix-C, wave5-fix-D |
 | F94 | Docker test classes run in up to four parallel lanes on one engine with fixed container names: `"LabHome"` has no `CollectionDefinition`, and four Docker classes have no collection. The likeliest shared cause of wave 5 Docker failures 3, 5 and 6. | `tests/Dhadgar.Lab.Tests/LabDockerGate.cs:7`; `worknotes/wave5-docker-run.md` checks 1-2 | D-ML103; wave5-fix-C |
 | F95 | A lease-checked synchronous call that outlives its lease TTL is cancelled part-way, and a throwing teardown release replaces the original error. `EnrollHistorySeamTests` used the default 600 s lease and failed at 10 m 10 s with `Lab.LeaseRequired`. | `src/Tools/Dhadgar.Lab/Mcp/LabToolDispatcher.cs:102-123`; `tests/Dhadgar.Lab.Tests/Seams/EnrollHistorySeamTests.cs:53-57,110-117` | D-ML103, D-ML104; wave5-fix-C, L05b |
+| F96 | The twin variant's fault is refused before any step runs: the spec passes `proxy = "p:nodes-postgres"`, `FaultToxicAddTool` prefixes `p:` again, and `FaultTargetGuard` refuses `p:p:nodes-postgres` as not registered. The row is BLOCKED, so the enroll status is null. `enroll-history.toml` scenario `enroll-race-pg-latency` has the same latent defect. | `docs/guides/uat-specs/twins/enroll-latency-invariance.toml:15`; `catalog/enroll-history.toml:25`; `Tools/Faults/FaultTools.cs:116,225`; `Faults/FaultTargetGuard.cs:68`; `Uat/RowExecutor.cs:120-124,220-223` | D-ML111; wave5-fix-H ([ruling wave5-2](worknotes/wave5-ruling-2.md)) |
+| F97 | The recovery judge probably reports a false I5 orphan: `HasInvariantId` walks the whole `invariants_check` payload and so also matches I5 `skipped` and `errors` entries. After a restart the credential refs are gone, so I5 skips its queue and proxy checks. The problem text names no check. | `src/Tools/Dhadgar.Lab.SelfCheck/SelfCheckRecovery.cs:66-68,277,282-314`; `Invariants/I5OrphanInvariant.cs:162-167`; `Invariants/InvariantTypes.cs:37,40` | D-ML106, D-ML113; wave5-fix-H |
+| F98 | The recovery child daemon gets no `Lab:RepoRoot`: `Daemon.Start` sets only the token and the home, so `stack_up` refuses unless the parent shell exports it. | `Lab.SelfCheck/SelfCheckRecovery.cs:524-539`; `Daemon/LabDaemon.cs:88` | wave5-fix-H |
+| F99 | `MutationDockerTests` expects job state `"complete"`; job states are the lower-case `JobState` names (`succeeded`). | `tests/Dhadgar.Lab.Tests/Mutants/MutationDockerTests.cs:97`; `Jobs/JobRunner.cs:423,459` | wave5-fix-H |
+| F100 | The run-start checkpoint covers the time from daemon start, by design, so fuzz 500s on a shared daemon show in every later run's start checkpoint. | `Uat/UatRunner.cs:186-187`; `.claude/reports/meridian-lab/wave5-diag-nodes.md` | D-ML109; KG-W5-4 |
+| F101 | `coverage_report` lists `unhit` keys for the four kinds it does not collect (with `not_collected: true`), and its description does not mention the flag. | `Tools/Coverage/CoverageReportTool.cs:28-31,65,118-125`; `worknotes/wf-a.md:23` | D-ML110; wave5-fix-H |
+| F102 | The boundary soak ran one loop in 300 s, took one sample, skipped I7, and reported success. | `worknotes/wave5-docker-run.md:110` | D-ML112; L29b |
 
 ## Decisions
 
@@ -226,6 +233,15 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | D-ML102 | `selfcheck --recovery` refuses an elevated session up front (`[Lab.Elevated]`), reports a child that exits early as `[Lab.ProcessFailed]` with its exit code and first `[Lab.` stderr line, and keeps tool error text. `SelfCheckRecoveryTests` skips when elevated (reported UNVERIFIED, never a pass); wave-boundary Docker runs are non-elevated, and D-S239 (machine-changing UAT) does not apply. | Accepted (architect) | wave5-R3 N7; wave5 Docker failure 5; `LabDaemon.cs:79`. |
 | D-ML103 | Every test class that needs Docker, the lab stack, port 8789 or the user mutex carries `[Collection(LabDockerGate.Name)]`; `LabDockerGateTests` fails for a `RequiresDocker` class (class or method trait) or a listed class without it. Docker tests acquire leases with `ttl_s = 3600`, bring their own stack up and down, and release without throwing so the original failure is reported. Amends D-ML84's serial-run assumption. | Accepted (architect) | F94, F95; wave5 Docker failures 1, 3, 5, 6. |
 | D-ML104 | A lease-checked call keeps its caller's lease alive while it runs: `LeaseWatch` touches the lease every TTL/3 and stops when the call ends; another owner's release or takeover still cancels the call, and the call stays bounded by its own budget. Follow-up L05b. | Accepted (architect) | F95; `LabToolDispatcher.cs:98-123`. |
+| D-ML105 | The three wave 5 Docker failures (M1 state literal, recovery repo root and I5, twin variant) go into one packet, wave5-fix-H. The I5 and twin items start with a recorded diagnosis, and each item gets one attempt inside its allowed fix classes. Otherwise the item is parked as its known gap, its test stays red and unweakened, and no fix-I follows. | Accepted (architect) | F96-F99; [ruling wave5-2](worknotes/wave5-ruling-2.md). |
+| D-ML106 | The recovery judge reads the I5 entries per array. Every violation is a problem naming its `check_id`, service and detail, and so is every error. A skip is a problem except exactly `queues` and `proxies` with `I2OutboxInvariant.StackNotUpReason`. `HasInvariantId` is removed. | Accepted (architect) | F97; KG-W5-5. |
+| D-ML107 | Fuzz 500s on malformed bodies (`ProblemDetailsMiddleware` maps `BadHttpRequestException` to 500): fix in a separate product PR to `main` (400 problem+json, ServiceDefaults test), or add a known issue? Default: separate product PR outside the campaign, and no known issue (D-ML96). Fuzz is informational at the boundary and runs last. | BlockedDecision (owner) | wave5-diag-nodes cause 1; KG-W5-1. |
+| D-ML108 | Waves 5 and 5E close together at this boundary with the parked items listed under "Known gaps". The bar is: the build and non-Docker suite green; the must-pass Docker tests (Hunter, SelfCheckE2E LM1, S-L6, the Mutation test's state assertion); the hunt plus replay; gate MD for M1, M4 and M5 via live `mutation_run`; the coverage bar (no error, `invariant_check` hit > 0, the four kinds `not_collected`); S-L12 red; gate LS at 5E means LM1 caught plus recovery passing or KG-W5-7 (the full LS stays at wave 10); wave review `ship`. The twin latency test is not a gate. Amends the wave 5 and 5E gates. | Accepted (architect) | D-ML74, D-ML99; ruling wave5-2. |
+| D-ML109 | The boundary re-run is done by one `packet-coder` (boundary runner) at the merged tip after fix-H, non-elevated, with the user's daemon stopped, appending Continuation 7 to `wave5-docker-run.md`. Part A runs the Docker tests one at a time; a parked item's failure does not stop Part B. Part B runs on a fresh daemon in this order: hunt + replay, mutation M1/M4/M5, twin, chaos, soak, coverage, fuzz last. Then `packet-reviewer` gives the wave review. If a must-pass item fails, there is no fix-I: ruling 3 may only park it with an owner BlockedDecision, or spec one fix whose cause the run record already names. | Accepted (architect) | F100; ruling wave5-2. |
+| D-ML110 | The wave5-fix-A A7 deviation is accepted: not-collected kinds keep their `unhit` list with `not_collected: true`, and readers ignore that list. fix-H adds the flag to the tool description. Amends D-ML99's "never unhit". | Accepted (architect) | F101. |
+| D-ML111 | A shipped spec's `proxy` fault argument is a `ProxyCatalog.All` name, never a `p:` target id. `ShippedSpecProxyArgsTests` enforces it over `docs/guides/uat-specs/**/*.toml`. | Accepted (architect) | F96. |
+| D-ML112 | A soak with fewer than three loops, or fewer samples than I7 needs, ends `weak` (UNVERIFIED), never pass. Follow-up L29b. Soak is not a gate until then. | Accepted (architect) | F102; KG-W5-2. |
+| D-ML113 | Follow-up L55b, before the wave 10 gate LS: the restarted daemon rehydrates its credential refs or stack state, so I2 and I5 run after a restart, and the recovery judge reads Toxiproxy's toxics directly. | Accepted (architect) | F97; KG-W5-5, KG-W5-6. |
 
 ## Seam tests
 
@@ -305,10 +321,16 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L53 | 5E | Twin engine; red S-L12 | L25, L22 | yes | BlockedDependency |
 | L54 | 5E | Mutant infrastructure; M1, M4, M5 | L27, L51, L23 | yes | BlockedDependency |
 | L55 | 5E | `Dhadgar.Lab.SelfCheck`: lab mutants LM1-LM8, crash recovery | L54, L19, L21, L25, L03 | yes | BlockedDependency |
-| wave5-fix-A | 5 | Results, known issues (D-ML96, D-ML97), twin signatures, `signature_texts` | wave 5 | yes | Ready ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
-| wave5-fix-B | 5 | Job runner, flake keys, hunter (F92), fuzz leak oracle, fuzz and soak invariants check (D-ML100) | wave 5 | yes | Ready ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
-| wave5-fix-C | 5 | Chaos caps and heal, history barrier port, Docker gate and test setup (D-ML101, D-ML103) | wave 5 | yes | Ready ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
-| wave5-fix-D | 5E | Mutant detector allow-list and patch scope, mutation invariants check (D-ML100), self-check recovery diagnostics (D-ML102) | wave5-fix-A merged | yes | BlockedDependency ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
+| wave5-fix-A | 5 | Results, known issues (D-ML96, D-ML97), twin signatures, `signature_texts` | wave 5 | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
+| wave5-fix-B | 5 | Job runner, flake keys, hunter (F92), fuzz leak oracle, fuzz and soak invariants check (D-ML100) | wave 5 | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
+| wave5-fix-C | 5 | Chaos caps and heal, history barrier port, Docker gate and test setup (D-ML101, D-ML103) | wave 5 | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
+| wave5-fix-D | 5E | Mutant detector allow-list and patch scope, mutation invariants check (D-ML100), self-check recovery diagnostics (D-ML102) | wave5-fix-A merged | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
+| wave5-fix-E | 5 | Wave review fix pass 2: patch scope header reader, lab-mutant scope check, token kept out of the child env, cleanup filters, twin payload guard ([wf-e](worknotes/wf-e.md)) | wave5-fix-A..D | yes | Integrated |
+| wave5-fix-F | 5 | Wave 5 Docker-run fixes ([wf-f](worknotes/wf-f.md), `1b8506e3`) | wave5-fix-E | yes | Integrated |
+| wave5-fix-G | 5 | `lease_id` in `MutationDockerTests` arguments; the recovery daemon-endpoint guard (`LabHosts.IsDaemonEndpoint`) ([wf-g](worknotes/wf-g.md)) | wave5-fix-F | yes | Integrated |
+| wave5-fix-H | 5E | Boundary Docker fixes: M1 state literal, recovery child repo root, recovery I5 judge (diagnosis first), twin proxy args (diagnosis first), coverage description (D-ML105, D-ML106, D-ML110, D-ML111) | wave5-fix-G | yes | Ready ([ruling wave5-2](worknotes/wave5-ruling-2.md)) |
+| L29b | 5 (follow-up) | Soak strength: fewer than three loops or too few I7 samples ends `weak`, never pass (D-ML112) | wave 5 close | no | BlockedDependency (outline; architect specs steps before dispatch) |
+| L55b | 5E (follow-up) | Recovery after restart: rehydrate credential refs or stack state; the recovery judge reads Toxiproxy (D-ML113) | wave 5 close; before the wave 10 gate LS | yes | BlockedDependency (outline; architect specs steps before dispatch) |
 | L30 | 6 | Pool model, constraints, Linux and host providers, `pool_*` tools | L19 | yes | BlockedDependency |
 | L31 | 6 | Windows container provider, agent image, member reset; red S-L8 | L30, L00 worknote; D-ML37/D-ML38 if L00 says so | yes | BlockedDependency |
 | L32 | 6 | Agent-in-member tools: install, start, stop, token, config, footprint reads, agent log | L31, L12 | yes | BlockedDependency |
@@ -365,8 +387,8 @@ Ship: D-ML16, confirmed by D-ML39 (owner, 2026-10-28): ops pushes `campaign/meri
 - Wave 3: S-L5 and S-L6 green (S-L6 locally, Docker); a S-L6 run writes `events.jsonl` and a fingerprint (L48); wave review `ship`.
 - Wave 4: S-L7 and BR green; S-L6 green with invariants on; both catalogs plan clean; wave review `ship`.
 - Wave 4H: S-L11 green; the L51 report answers F49; wave review `ship`.
-- Wave 5: a seeded hunt and its `repro.toml` replay to the same failure, or the hunt finds none in its budget and says so; `coverage_report` lists unhit keys; wave review `ship`.
-- Wave 5E: S-L12 red as expected; M1, M4 and M5 pass gate MD; gate LS holds; wave review `ship`.
+- Wave 5: a seeded hunt and its `repro.toml` replay to the same failure, or the hunt finds none in its budget and says so; `coverage_report` lists unhit keys; wave review `ship`. Amended by D-ML108: the coverage bar is no error, `invariant_check` hit > 0, the four other kinds `not_collected` (D-ML99, D-ML110), plus the must-pass Docker tests; waves 5 and 5E close together with the gaps listed under "Known gaps".
+- Wave 5E: S-L12 red as expected; M1, M4 and M5 pass gate MD; gate LS holds; wave review `ship`. Amended by D-ML108: at 5E, gate LS means LM1 `caught` at the tip plus `--recovery` passing or KG-W5-7; the full gate LS stays at wave 10.
 - Wave 6: L00 outcome known and its decisions ruled; S-L8 green on Windows; wave review `ship`.
 - Wave 7: S-L9 and S-L12 green; M7 passes gate MD, and M2 and M3 pass it as `detected` or as `unreachable` with `KI-NODES-USER-AUTH` open; `LabCoverageTests` show no `real-pending` owned by waves 4 to 7; wave review `ship`.
 - Wave 8: the W8 ruling note exists before L40; S-L3 still green and S-L10 green; wave review `ship`.
@@ -374,6 +396,24 @@ Ship: D-ML16, confirmed by D-ML39 (owner, 2026-10-28): ops pushes `campaign/meri
 - Wave 10: gates MD and LS hold on the campaign tip; campaign review `ship`.
 - **Gate MD** (product mutants): every product mutant's `mutation_run` verdict is `detected` or `detected_other`, or `unreachable` with its named known issue open. `survived` or `stale` fails the gate; the fix is to the lab or the patch, never a weaker mutant.
 - **Gate LS** (lab self-check): `selfcheck` reports every lab mutant `caught` after a clean baseline pass, and `--recovery` passes.
+
+## Known gaps
+
+Wave 5 boundary, from [ruling wave5-2](worknotes/wave5-ruling-2.md). A conditional gap (KG-W5-7, 8, 9) is live only if the fix-H worknote or the boundary run record says it was hit. The campaign-end review reruns every Docker test (D-ML74) and re-reads this list.
+
+| ID | Gap | Until | Owner of the fix |
+| --- | --- | --- | --- |
+| KG-W5-1 | Fuzz cases with malformed bodies get 500 (`ProblemDetailsMiddleware`). Fuzz is informational and its failures stay new failures. | D-ML107 ruled and the product PR merged | Owner (product PR to `main`) |
+| KG-W5-2 | Soak can report success on one loop and one sample (I7 skipped). | L29b | L29b |
+| KG-W5-3 | `route_status`, `fault_target`, `error_code` and `transition` are not collected. Their `unhit` lists carry `not_collected: true` and are not coverage. | L52b (needs L25g) | L52b |
+| KG-W5-4 | The run-start checkpoint covers the time since daemon start, so an earlier job's violations show in later runs on the same daemon. By design. Boundary runs use a fresh daemon and put fuzz last. | permanent (by design) | none |
+| KG-W5-5 | After a daemon restart the credential refs are gone. Until the next `stack_up`, I2 and the I5 queue and proxy checks skip, and the recovery judge accepts exactly that skip pair (D-ML106). | L55b | L55b |
+| KG-W5-6 | The recovery judge checks "no toxic" through `faults_active` (FaultBook), not through Toxiproxy itself. | L55b | L55b |
+| KG-W5-7 | Conditional: fix-H H3 hit its hard stop and `SelfCheckRecoveryTests` stays red. Gate LS's recovery leg is UNVERIFIED. | L55b or the campaign-end review | next architect ruling |
+| KG-W5-8 | Conditional: fix-H H4 hit its hard stop and `TwinLatencyDockerTests` stays red. A class-C result is a product finding, not a lab gap. | campaign-end review | next architect ruling |
+| KG-W5-9 | Conditional: M1's `mutation_run` verdict is `detected_other`. Gate MD accepts that, but the `"detected"` assertion in `MutationDockerTests` stays red. | campaign-end review | next architect ruling |
+| KG-W5-10 | Only LM1 of the eight lab mutants has run end to end. The full `selfcheck` (LM1-LM8) has not. | wave 10 gate LS | wave 10 run |
+| KG-W5-11 | No test runs history scenario `enroll-race-pg-latency`. After fix-H only `ShippedSpecProxyArgsTests` covers its fault args. | L25f or the campaign-end review | L25f |
 
 ## Dependencies on Sprint 2
 
