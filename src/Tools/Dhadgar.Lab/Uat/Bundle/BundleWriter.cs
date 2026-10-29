@@ -325,7 +325,7 @@ public sealed class BundleWriter : IUatRunSink
             Write("row.json", JsonSerializer.Serialize(new
             {
                 id = "history/" + bundle.Scenario,
-                grade = bundle.Grade.ToString(),
+                grade = LedgerRenderer.ResultText(bundle.Grade),
                 history = new
                 {
                     // L25f: the model names the hist signature; every history run is checked against the enrollment model.
@@ -370,7 +370,7 @@ public sealed class BundleWriter : IUatRunSink
         clients = bundle.Clients,
         reruns = bundle.Reruns,
         verdict = bundle.Check.Verdict,
-        grade = bundle.Grade.ToString(),
+        grade = LedgerRenderer.ResultText(bundle.Grade),
         secret_scan = secretScan,
     }, JsonOptions) + "\n";
 
@@ -530,6 +530,16 @@ public sealed class BundleWriter : IUatRunSink
             // The row file is parsed back by the ingest's reader, so the verdict here is the verdict the DB records.
             JsonObject node = JsonSerializer.SerializeToNode(rowJson, JsonOptions)!.AsObject();
             node["known_issue"] = spec.Rows.FirstOrDefault(candidate => candidate.Id == row.Row)?.KnownIssue;
+            // R3-N1 (C12 twin): one twin signature per pointer that did not hold; RowVerdicts.Parse reads this object back.
+            if (!secretFailed && source?.TwinPointers is { Count: > 0 } twinPointers)
+            {
+                node["twin"] = new JsonObject
+                {
+                    ["experiment_id"] = row.Row.StartsWith("twin/", StringComparison.Ordinal) ? row.Row["twin/".Length..] : row.Row,
+                    ["pointers"] = new JsonArray(twinPointers.Select(locator => (JsonNode?)JsonValue.Create(locator)).ToArray()),
+                };
+            }
+
             Result<ParsedRow> parsed = RowVerdicts.Parse(node);
             RowVerdict verdict = secretFailed || parsed.IsFailure
                 ? new RowVerdict([], [], null, null, null)

@@ -189,6 +189,38 @@ public sealed class BundleIngestorTests : IDisposable
         string text = SignatureBuilder.History("enrollment", "linearizability", Scenario).Text;
         Assert.Equal("hist:enrollment|linearizability|enroll-race", text);
         Assert.Equal(1, db.SignatureHits(SignatureBuilder.SignatureId(text)));
+        // F90: the stored grade is the ledger word, not the enum name, so a failing history run is not stored as UNVERIFIED.
+        Result<IReadOnlyList<RowGradeOf>> grades = db.GradesOf("history", Scenario, 42);
+        Assert.True(grades.IsSuccess, grades.Error);
+        Assert.Equal("FAIL", Assert.Single(grades.Value).Grade);
+        Assert.Equal("fail", result.Value.Overall);
+        Assert.StartsWith("hist:", db.SignatureTextOf(SignatureBuilder.SignatureId(text)).Value, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Ingest_PassingHistoryBundle_IsPassWithNoSignatures()
+    {
+        // F90: a passing history run stores PASS and an overall pass, and raises no signature or new failure.
+        const string Scenario = "enroll-pass";
+        var check = new CheckResult("pass", [], null);
+        var history = new Dhadgar.Lab.History.History("run-hist-pass", Scenario, [], JsonDocument.Parse("{}").RootElement.Clone());
+        var bundle = new HistoryBundle("run-hist-pass", Start, Scenario, 42UL, 2, 0, history, check, RowGrade.Pass);
+        using var vault = new SecretVault();
+        var writer = new BundleWriter(_uatRuns, _validator, new Redactor(vault), new SecretScanner(vault), new FakeTimeProvider(Start),
+            "abcd1234", "linux", "build", null);
+        Result<string> written = writer.WriteHistoryRun(bundle);
+        Assert.True(written.IsSuccess, written.Error);
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+
+        Result<IngestResult> result = await NewIngestor(db).IngestAsync(written.Value, [_uatRuns], CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("pass", result.Value.Overall);
+        Assert.Equal(0, result.Value.Signatures);
+        Assert.Equal(0, db.CountSignatures());
+        Result<IReadOnlyList<RowGradeOf>> grades = db.GradesOf("history", Scenario, 42);
+        Assert.True(grades.IsSuccess, grades.Error);
+        Assert.Equal("PASS", Assert.Single(grades.Value).Grade);
     }
 
     [Fact]

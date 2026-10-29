@@ -36,7 +36,8 @@ internal sealed record ParsedFault(string FaultId, string Kind, string TargetId,
 internal sealed record ParsedRow(string Section, string RowId, RowGrade Grade, string? Reason, string? StartedAt,
     string? EndedAt, string? KnownIssue, IReadOnlyList<ClauseEvidence> Clauses, IReadOnlyList<ParsedViolation> Violations,
     IReadOnlyList<ParsedStep> Steps, IReadOnlyList<ExceptionEvidence>? Exceptions = null, IReadOnlyList<HttpEvidence>? Http = null,
-    IReadOnlyList<ParsedFault>? Faults = null, IReadOnlyList<HistoryViolationEvidence>? History = null);
+    IReadOnlyList<ParsedFault>? Faults = null, IReadOnlyList<HistoryViolationEvidence>? History = null,
+    IReadOnlyList<FailureSignature>? Extra = null);
 
 /// <summary>
 /// The one row-verdict path (L26 B1, D-ML92). The ingest, the run writer and the attestor all call <see cref="Of"/>, and
@@ -58,7 +59,7 @@ internal static class RowVerdicts
 
         var evidence = new RowEvidence(row.Section, row.RowId, row.Exceptions ?? [], row.Http ?? [],
             row.Clauses.Concat(StepClauses(row)).ToList(),
-            row.Violations.Select(v => v.Evidence).ToList(), row.History ?? [], []);
+            row.Violations.Select(v => v.Evidence).ToList(), row.History ?? [], row.Extra ?? []);
         List<FailureSignature> scrubbed = SignatureBuilder.BuildAll(evidence)
             .Select(signature => signature with { Text = scrub(signature.Text) })
             .ToList();
@@ -155,9 +156,16 @@ internal static class RowVerdicts
                 BundleIngestor.Text(f, "healed_at"), BundleIngestor.Text(f, "heal_error")))
             .ToList();
 
+        // R3-N1 (C12 twin): one twin signature per pointer that did not hold, from the row's twin object.
+        var extra = new List<FailureSignature>();
+        if (obj["twin"] is JsonObject twin && BundleIngestor.Text(twin, "experiment_id") is { Length: > 0 } experiment)
+        {
+            extra.AddRange(Texts(twin, "pointers").Select(pointer => SignatureBuilder.Twin(experiment, pointer)));
+        }
+
         return Result<ParsedRow>.Success(new ParsedRow(section, rowId, ParseGrade(BundleIngestor.Text(obj, "grade")),
             BundleIngestor.Text(obj, "reason"), BundleIngestor.Text(obj, "started_at"), BundleIngestor.Text(obj, "ended_at"),
-            BundleIngestor.Text(obj, "known_issue"), clauses, violations, steps, exceptions, http, faults));
+            BundleIngestor.Text(obj, "known_issue"), clauses, violations, steps, exceptions, http, faults, null, extra));
     }
 
     /// <summary>The string items of an array field; a non-string item is skipped.</summary>

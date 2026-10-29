@@ -1,4 +1,5 @@
 using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Results;
 
 namespace Dhadgar.Lab.Tests.Observe;
 
@@ -106,7 +107,7 @@ public sealed class ReplayJudgeTests
     public void Judge_UnbuiltKindOriginal_ComparesBuiltKindsOnlyAndSaysSo()
     {
         ReplayVerdict verdict = ReplayJudge.Judge(ReplayFidelity.Exact,
-            [new ReplayRow("fail", "twin:500|-|POST|/a|none")], [[new ReplayRow("fail", null)]]);
+            [new ReplayRow("fail", EvidenceCoverage.NotBuiltKinds[0] + ":500|-|POST|/a|none")], [[new ReplayRow("fail", null)]]);
 
         Assert.True(verdict.Reproduced);
         Assert.Contains("built signature kinds only", verdict.Reason);

@@ -11,7 +11,8 @@ public sealed class KnownIssuesShippedFileTests
 {
     private static readonly string[] Seeds =
     [
-        "KI-DV13", "KI-DV12", "KI-DV3", "KI-NOTIF-OUTBOX", "KI-RABBIT-HOST", "KI-DISCORD-SECRETS-PORT", "KI-DELAYED-PLUGIN", "KI-94",
+        // D-ML96: KI-DV13, KI-DV12, KI-DV3, KI-DELAYED-PLUGIN and KI-94 are documentation only and no longer ship.
+        "KI-NOTIF-OUTBOX", "KI-RABBIT-HOST", "KI-DISCORD-SECRETS-PORT",
     ];
 
     [Fact]

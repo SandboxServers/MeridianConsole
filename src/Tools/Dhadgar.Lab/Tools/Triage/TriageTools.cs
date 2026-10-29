@@ -167,7 +167,7 @@ public sealed partial class TriageMarkTool : LabTool<TriageMarkArgs>
         return done;
     }
 
-    [GeneratedRegex(@"^https://github\.com/SandboxServers/MeridianConsole/issues/\d+\z", RegexOptions.CultureInvariant,
+    [GeneratedRegex(@"^https://github\.com/SandboxServers/MeridianConsole/issues/[0-9]+\z", RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 1000)]
     private static partial Regex IssueUrlPattern();
 }
