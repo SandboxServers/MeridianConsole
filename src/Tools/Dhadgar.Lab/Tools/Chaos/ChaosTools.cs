@@ -61,6 +61,11 @@ public sealed class ChaosRunTool : LabTool<ChaosRunArgs>
     protected override Task<Result<object>> ExecuteAsync(ChaosRunArgs args, LabCallContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(args);
+        if (string.IsNullOrWhiteSpace(_paths.RepoRoot))
+        {
+            return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] the repo root is not configured"));
+        }
+
         if (string.IsNullOrWhiteSpace(args.Plan) || !ChaosPlanLoader.IdPattern.IsMatch(args.Plan))
         {
             return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] plan must be a plan id of lowercase letters, digits and hyphens"));

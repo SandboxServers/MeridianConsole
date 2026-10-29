@@ -14,9 +14,11 @@ namespace Dhadgar.Lab.Tests.Twins;
 /// 1500 ms of latency on the Nodes database proxy, and the enrollment must keep its outcome and its step status. Needs the Linux Docker
 /// engine and the lab stack. Containers are removed by label only.
 /// </summary>
-[Collection("LabHome")]
+[Collection(LabDockerGate.Name)]
 public sealed class TwinLatencyDockerTests
 {
+    private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";
+
     [SkippableFact(Timeout = 1_800_000)]
     [Trait("RequiresDocker", "true")]
     [Trait("RequiresNetwork", "true")]
@@ -28,13 +30,20 @@ public sealed class TwinLatencyDockerTests
         (int versionExit, _) = RunDocker(context, ["version", "--format", "{{.Server.Version}}"]);
         Skip.IfNot(versionExit == 0, "docker is not reachable on context " + context);
 
+        (int psExit, string labelled) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--filter", "name=^meridian-lab-", "--format", "{{.ID}}"]);
+        Assert.True(psExit == 0, "docker ps failed");
+        if (labelled.Trim().Length > 0 && Environment.GetEnvironmentVariable(WipeEnvVar) != "1")
+        {
+            Assert.Fail("labelled lab containers exist; set MERIDIAN_LAB_S6_WIPE=1 to let the latency stack_up wipe remove them");
+        }
+
         string repoRoot = LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory);
         string home = Path.Combine(Path.GetTempPath(), "meridian-lab-twin-latency-" + Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(home);
         try
         {
             string token = NewToken();
-            var options = new LabDaemonOptions(Port: 0, Token: token, DataRoot: home, EnforceSingleInstance: false, RefuseElevated: false, RepoRoot: repoRoot);
+            var options = new LabDaemonOptions(Port: 0, Token: token, DataRoot: home, EnforceSingleInstance: false, RefuseElevated: false, RepoRoot: repoRoot, Time: TimeProvider.System);
             var started = await LabDaemon.StartAsync(options, CancellationToken.None);
             Assert.True(started.IsSuccess, started.Error);
             await using var daemon = started.Value;
@@ -43,12 +52,34 @@ public sealed class TwinLatencyDockerTests
                 daemon.BaseAddress,
                 token,
                 "lab_lease_acquire",
-                new Dictionary<string, object?>(StringComparer.Ordinal) { ["owner"] = "twin-latency", ["purpose"] = "L53 enrollment latency invariance" });
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["owner"] = "twin-latency", ["purpose"] = "L53 enrollment latency invariance", ["ttl_s"] = 3600 });
             string leaseId = lease.RootElement.GetProperty("lease_id").GetString() ?? string.Empty;
             Assert.NotEmpty(leaseId);
 
             try
             {
+                using JsonDocument build = await CallToolAsync(
+                    daemon.BaseAddress,
+                    token,
+                    "lab_build",
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["checkout"] = repoRoot, ["lease_id"] = leaseId });
+
+                using JsonDocument up = await CallToolAsync(
+                    daemon.BaseAddress,
+                    token,
+                    "stack_up",
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["wipe"] = true, ["lease_id"] = leaseId });
+
+                // Nodes creates its schema on start (F80); the Gateway's readiness needs Nodes.
+                foreach (string service in new[] { "nodes", "gateway" })
+                {
+                    using JsonDocument svc = await CallToolAsync(
+                        daemon.BaseAddress,
+                        token,
+                        "svc_start",
+                        new Dictionary<string, object?>(StringComparer.Ordinal) { ["service"] = service, ["lease_id"] = leaseId });
+                }
+
                 using JsonDocument twin = await CallToolAsync(
                     daemon.BaseAddress,
                     token,
@@ -63,11 +94,7 @@ public sealed class TwinLatencyDockerTests
             }
             finally
             {
-                using JsonDocument released = await CallToolAsync(
-                    daemon.BaseAddress,
-                    token,
-                    "lab_lease_release",
-                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["lease_id"] = leaseId });
+                await TryReleaseAsync(daemon.BaseAddress, token, leaseId);
             }
         }
         finally
@@ -77,6 +104,23 @@ public sealed class TwinLatencyDockerTests
             {
                 Directory.Delete(home, recursive: true);
             }
+        }
+    }
+
+    /// <summary>Releases the lease for cleanup. A failed release is written to the console and never thrown (R3-N5).</summary>
+    private static async Task TryReleaseAsync(Uri baseAddress, string token, string leaseId)
+    {
+        try
+        {
+            using JsonDocument released = await CallToolAsync(
+                baseAddress,
+                token,
+                "lab_lease_release",
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["lease_id"] = leaseId });
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            await Console.Error.WriteLineAsync("lab_lease_release failed during cleanup: " + ex.Message);
         }
     }
 

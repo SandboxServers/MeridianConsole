@@ -9,6 +9,7 @@ namespace Dhadgar.Lab.Tests.Faults;
 /// are both refused, and neither is touched. Cleanup removes the two containers by the ids this test created.
 /// </summary>
 [Trait("RequiresDocker", "true")]
+[Collection(LabDockerGate.Name)]
 public sealed class BlastRadiusDockerTests
 {
     private const string LinuxContext = "desktop-linux";

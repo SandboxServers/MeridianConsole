@@ -71,6 +71,11 @@ public sealed class SoakRunTool : LabTool<SoakRunArgs>
     protected override Task<Result<object>> ExecuteAsync(SoakRunArgs args, LabCallContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(args);
+        if (string.IsNullOrWhiteSpace(_paths.RepoRoot))
+        {
+            return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] the repo root is not configured"));
+        }
+
         if (string.IsNullOrWhiteSpace(args.Spec))
         {
             return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] spec must name a uat spec below docs/guides/uat-specs/"));

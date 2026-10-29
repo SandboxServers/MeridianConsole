@@ -9,6 +9,7 @@ namespace Dhadgar.Lab.Tests.SelfCheck;
 /// <summary>
 /// The end-to-end self-check of one lab mutant (L55). Needs network for the restore inside the temporary copy.
 /// </summary>
+[Collection(LabDockerGate.Name)]
 public sealed class SelfCheckE2ETests
 {
     [Fact]

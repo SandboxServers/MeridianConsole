@@ -63,6 +63,28 @@ public sealed class ChaosPlanTests
     }
 
     [Fact]
+    public void Plan_FaultDurationOver900_IsRejected()
+    {
+        string text = Valid.Replace("duration_s = [5, 45]", "duration_s = [5, 901]", StringComparison.Ordinal);
+
+        Result<ChaosPlan> plan = ChaosPlanLoader.Load(text);
+
+        Assert.True(plan.IsFailure);
+        Assert.Contains("1 <= min <= max <= 900", plan.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Plan_FaultDurationAt900_IsAccepted()
+    {
+        string text = Valid.Replace("duration_s = [5, 45]", "duration_s = [5, 900]", StringComparison.Ordinal);
+
+        Result<ChaosPlan> plan = ChaosPlanLoader.Load(text);
+
+        Assert.True(plan.IsSuccess, plan.Error);
+        Assert.Equal(900, plan.Value!.Faults[0].MaxDurationS);
+    }
+
+    [Fact]
     public void Load_UnknownProxy_Refused()
     {
         string text = Valid.Replace("proxy = \"nodes-postgres\"", "proxy = \"made-up-proxy\"", StringComparison.Ordinal);
