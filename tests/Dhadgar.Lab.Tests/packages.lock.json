@@ -1092,6 +1092,12 @@
           "Dhadgar.Contracts": "[1.0.0, )"
         }
       },
+      "meridian-lab-selfcheck": {
+        "type": "Project",
+        "dependencies": {
+          "meridian-lab": "[1.0.0, )"
+        }
+      },
       "AspNetCore.HealthChecks.NpgSql": {
         "type": "CentralTransitive",
         "requested": "[9.0.0, )",

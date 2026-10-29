@@ -145,6 +145,36 @@ public sealed class LabIsolationTests
         Assert.Empty(violations);
     }
 
+    /// <summary>
+    /// D-ML90, L55: the self-check harness is a lab project. No product project, props or targets file names it, and its
+    /// project lives under <c>src/Tools/</c> (the lab project set that <see cref="ScanForCsprojViolations"/> allows).
+    /// </summary>
+    [Fact]
+    public void SelfCheck_IsNotReferencedByAnyProductProject()
+    {
+        var root = FindRepoRoot(AppContext.BaseDirectory);
+        Assert.True(
+            File.Exists(Path.Combine(root, "src", "Tools", "Dhadgar.Lab.SelfCheck", "Dhadgar.Lab.SelfCheck.csproj")),
+            "the self-check project is missing");
+
+        var violations = new List<string>();
+        foreach (var file in EnumerateRepoFiles(root, "*.csproj").Concat(EnumerateRepoFiles(root, "*.props")).Concat(EnumerateRepoFiles(root, "*.targets")))
+        {
+            var rel = Path.GetRelativePath(root, file);
+            if (IsLabOwned(rel))
+            {
+                continue;
+            }
+
+            if (File.ReadAllText(file).Contains("Dhadgar.Lab.SelfCheck", StringComparison.Ordinal))
+            {
+                violations.Add(rel);
+            }
+        }
+
+        Assert.Empty(violations);
+    }
+
     private const string MutantsFolderMarker = "tools/lab/mutants";
 
     private static bool IsLabOwned(string rel) =>
