@@ -73,6 +73,20 @@ public sealed class MutantSpecTests
         Assert.True(spec.IsFailure, file);
     }
 
+    [Theory]
+    [InlineData("src/Dhadgar.Nodes/Directory.Build.targets")]
+    [InlineData("src/Dhadgar.Nodes/Dhadgar.Nodes.csproj")]
+    [InlineData("src/Dhadgar.Nodes/Common.props")]
+    [InlineData("src/Dhadgar.Nodes/Dockerfile")]
+    public void ProductFiles_BuildConfiguration_IsRefused(string file)
+    {
+        // S-N6 (pass 2): a build file runs code at restore or build, so no mutant may name one, even inside src/.
+        Result<MutantSpec> spec = Load(Spec(files: $"[\"{file}\"]"));
+
+        Assert.True(spec.IsFailure, file);
+        Assert.Contains("build file", spec.Error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void LabFile_OutsideSrcTools_IsRefused()
     {

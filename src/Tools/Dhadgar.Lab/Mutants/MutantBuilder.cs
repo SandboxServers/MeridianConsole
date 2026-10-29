@@ -289,7 +289,7 @@ public static class MutantBuilder
     /// <c>+++</c> header must equal an entry of <paramref name="files"/>; <c>/dev/null</c> is skipped. A rename, copy, mode
     /// change or binary patch is refused, because its header names paths the header check could miss.
     /// </summary>
-    internal static Result PatchTouchesOnly(IReadOnlyList<string> patchLines, IReadOnlyList<string> files)
+    public static Result PatchTouchesOnly(IReadOnlyList<string> patchLines, IReadOnlyList<string> files)
     {
         ArgumentNullException.ThrowIfNull(patchLines);
         ArgumentNullException.ThrowIfNull(files);
@@ -308,6 +308,29 @@ public static class MutantBuilder
                 return Result.Failure("[Lab.InvalidArgument] change.patch uses a rename, copy, mode change or binary patch");
             }
 
+            // Fails closed (S-N2 pass 2): a diff --git line must name one listed path on both sides, and a quoted (C-style)
+            // name is refused, because the reader below cannot see inside it.
+            if (line.StartsWith("diff --git ", StringComparison.Ordinal))
+            {
+                if (!TryReadDiffGitPath(line, out string? gitPath))
+                {
+                    return Result.Failure("[Lab.InvalidArgument] change.patch has a header the scope check cannot read");
+                }
+
+                if (!allowed.Contains(gitPath))
+                {
+                    return Result.Failure("[Lab.InvalidArgument] change.patch touches a file that files does not list");
+                }
+
+                continue;
+            }
+
+            if ((line.StartsWith("--- ", StringComparison.Ordinal) || line.StartsWith("+++ ", StringComparison.Ordinal))
+                && line.Contains('"', StringComparison.Ordinal))
+            {
+                return Result.Failure("[Lab.InvalidArgument] change.patch has a header the scope check cannot read");
+            }
+
             foreach (string path in HeaderPaths(line))
             {
                 if (!allowed.Contains(path))
@@ -320,24 +343,40 @@ public static class MutantBuilder
         return Result.Success();
     }
 
-    /// <summary>The repo-relative paths one patch header line names, with <c>a/</c> and <c>b/</c> stripped.</summary>
-    private static IEnumerable<string> HeaderPaths(string line)
+    /// <summary>
+    /// Reads the path of a <c>diff --git a/P b/P</c> line. False when the line has a quoted name, is not in that form, or names
+    /// different paths on the two sides; the caller refuses such a line.
+    /// </summary>
+    private static bool TryReadDiffGitPath(string line, out string path)
     {
-        if (line.StartsWith("diff --git a/", StringComparison.Ordinal))
+        const string prefix = "diff --git a/";
+        path = string.Empty;
+        if (line.Contains('"', StringComparison.Ordinal) || !line.StartsWith(prefix, StringComparison.Ordinal))
         {
-            string rest = line["diff --git a/".Length..];
-            int split = rest.IndexOf(" b/", StringComparison.Ordinal);
-            if (split < 0)
-            {
-                yield return "\u0000";
-                yield break;
-            }
-
-            yield return Normalise(rest[..split]);
-            yield return Normalise(rest[(split + 3)..]);
-            yield break;
+            return false;
         }
 
+        string rest = line[prefix.Length..];
+        int split = rest.IndexOf(" b/", StringComparison.Ordinal);
+        if (split < 0)
+        {
+            return false;
+        }
+
+        string first = rest[..split];
+        string second = rest[(split + 3)..];
+        if (!string.Equals(first, second, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        path = first;
+        return true;
+    }
+
+    /// <summary>The repo-relative paths one <c>---</c> or <c>+++</c> header line names, with <c>a/</c> and <c>b/</c> stripped.</summary>
+    private static IEnumerable<string> HeaderPaths(string line)
+    {
         string? header = null;
         if (line.StartsWith("--- ", StringComparison.Ordinal))
         {

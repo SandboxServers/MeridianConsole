@@ -1,5 +1,16 @@
 # wf-a worknote: wave 5 review fixes A (coder session 2)
 
+This is the wave5-fix-A worknote (the ruling names it `wave5-fix-A.md`; the file keeps the `wf-a` name).
+
+## Pass 2 additions (ruling docs owed, wave5-ruling-1.md line 332)
+
+- **OD-W5-1 (BundleStaging concurrency), default taken:** accept and document. `uat_attest` is Leased and has one writer. A reader's `Recover` during a `Commit` can make the attest report `[Lab.Unavailable]`. There is no data loss, and the failure is visible and retryable. No per-folder lock was added.
+- **R1 item 7, accepted for a local index:** ingest is not transactional; `signature_hits` can be stale after a re-ingest; signature `state` is last-writer-wins.
+- **Known-issue removals (D-ML96):** KI-DV13, KI-DV12, KI-DV3, KI-DELAYED-PLUGIN and KI-94 are removed from the seeds.
+- **Forced test changes:** `KnownIssuesShippedFileTests.Seeds` (trimmed to the rest of the set); `ReplayJudgeTests`; the `TwinRunnerTests` helper refactor to `Experiment(string toml)` and `RunnerWithReset`. `MutantBuilderTests` is a D change, not A.
+- **Ingested-bundle twin test (review N1):** `BundleIngestorTests.Ingest_TwinPair_StoresATwinSignatureWithThePointer` covers the A4 chain end to end. It was missing before pass 2.
+- **Heal catch (review N2):** `TwinRunner.HealAsync`'s catch is an unreachable backstop through `LabToolDispatcher`, which converts every tool throw into an error payload (`RunToolAsync`). `Twin_HealToolFails_ResultStillReturned` pins the visible behaviour only and does not exercise that catch.
+
 Packet: wave5-fix-A (`worknotes/wave5-ruling-1.md`). Branch `ml/wf-a-tools`. Commits: `16245388` (part 1), `6fc6aae1` (part 2).
 
 ## Done

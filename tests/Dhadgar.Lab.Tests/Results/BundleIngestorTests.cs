@@ -281,6 +281,31 @@ public sealed class BundleIngestorTests : IDisposable
         depends_on = []
         """;
 
+    [Fact]
+    public async Task Ingest_TwinPair_StoresATwinSignatureWithThePointer()
+    {
+        // R3-N1 (A4, pass 2): a twin row carries its experiment id and the pointers that did not hold; each pointer becomes one twin signature.
+        string folder = BundleFixtures.Write(_uatRuns, "run-twin", "b1", 42, new RowSpec("twin", "twin-selftest", "FAIL"));
+        string rowPath = Path.Combine(folder, "rows", "twin", "twin-selftest.json");
+        System.Text.Json.Nodes.JsonObject row = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(rowPath, CancellationToken.None))!.AsObject();
+        row["twin"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["experiment_id"] = "tenant-isolation",
+            ["pointers"] = new System.Text.Json.Nodes.JsonArray("/outcome/status"),
+        };
+        await File.WriteAllTextAsync(rowPath, row.ToJsonString(), CancellationToken.None);
+        string resultsRoot = Path.Combine(_root, "results");
+        using ResultsDb db = ResultsDb.Open(resultsRoot, _validator).Value;
+
+        Result<IngestResult> result = await NewIngestor(db).IngestAsync(folder, [_uatRuns], CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        string text = SignatureBuilder.Twin("tenant-isolation", "/outcome/status").Text;
+        Assert.Contains(text, result.Value!.SignatureTexts);
+        Assert.Equal(1, db.SignatureHits(SignatureBuilder.SignatureId(text)));
+        Assert.Contains("twin", SignatureKindsOf(Path.Combine(resultsRoot, "lab-results.db")));
+    }
+
     private static List<string> SignatureKindsOf(string databasePath)
     {
         using SqliteConnection connection = new($"Data Source={databasePath}");

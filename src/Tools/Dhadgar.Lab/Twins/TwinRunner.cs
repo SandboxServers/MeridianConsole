@@ -229,12 +229,31 @@ public sealed class TwinRunner
         }
 
         // R3-N5: name the cause. The dispatcher has already redacted the payload; the text is cut so a long error stays readable.
-        string detail = call.Payload.TryGetProperty("error", out JsonElement error)
-            && error.TryGetProperty("message", out JsonElement message)
-            && message.GetString() is { Length: > 0 } text
-                ? text
-                : call.Payload.GetRawText();
+        string detail = ErrorDetail(call.Payload);
         return Result.Failure("[Lab.Unavailable] stack_reset_data failed: " + (detail.Length > 300 ? detail[..300] : detail));
+    }
+
+    /// <summary>
+    /// The error text of a failed tool payload. A payload that is not a JSON object, or an <c>error</c> that is not an object, yields a
+    /// fixed text rather than an exception (N5, pass 2), so the twin run still returns its <see cref="Result"/>.
+    /// </summary>
+    internal static string ErrorDetail(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return "the tool returned no error object";
+        }
+
+        if (payload.TryGetProperty("error", out JsonElement error)
+            && error.ValueKind == JsonValueKind.Object
+            && error.TryGetProperty("message", out JsonElement message)
+            && message.ValueKind == JsonValueKind.String
+            && message.GetString() is { Length: > 0 } text)
+        {
+            return text;
+        }
+
+        return payload.GetRawText();
     }
 
     /// <summary>
