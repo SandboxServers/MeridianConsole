@@ -44,6 +44,20 @@ public static class SelfCheckRecovery
     private const string Purpose = "selfcheck recovery";
     private const string BuildConfiguration = "Release";
 
+    /// <summary>The configuration key the child daemon reads its repo root from (LabDaemon.cs:88), as an environment variable.</summary>
+    internal const string RepoRootEnvVar = "Lab__RepoRoot";
+
+    /// <summary>
+    /// Sets the child daemon's environment: the fresh token (A2), the temporary home and the recovery copy's root, so stack_up
+    /// finds its files without relying on the caller's shell.
+    /// </summary>
+    internal static void ApplyChildEnvironment(IDictionary<string, string?> environment, string home, string token, string repoRoot)
+    {
+        environment[LabDefaults.TokenEnvVar] = token;
+        environment[LabDefaults.HomeEnvVar] = home;
+        environment[RepoRootEnvVar] = repoRoot;
+    }
+
     /// <summary>
     /// Judges the state observed after the restart. An empty list means the daemon recovered.
     /// </summary>
@@ -186,7 +200,7 @@ public static class SelfCheckRecovery
         Daemon? second = null;
         try
         {
-            Result<Daemon> started = await StartDaemonAsync(dll, home, time, "the lab daemon", ct).ConfigureAwait(false);
+            Result<Daemon> started = await StartDaemonAsync(dll, home, copy, time, "the lab daemon", ct).ConfigureAwait(false);
             if (started.IsFailure)
             {
                 return Result<IReadOnlyList<string>>.Failure(started.Error);
@@ -220,7 +234,7 @@ public static class SelfCheckRecovery
             first.Dispose();
             first = null;
 
-            Result<Daemon> restarted = await StartDaemonAsync(dll, home, time, "the restarted lab daemon", ct).ConfigureAwait(false);
+            Result<Daemon> restarted = await StartDaemonAsync(dll, home, copy, time, "the restarted lab daemon", ct).ConfigureAwait(false);
             if (restarted.IsFailure)
             {
                 return Result<IReadOnlyList<string>>.Failure(restarted.Error);
@@ -358,10 +372,10 @@ public static class SelfCheckRecovery
     /// first <c>[Lab.</c> line; a live child that never answers fails with <c>[Lab.Timeout]</c> and the last status failure.
     /// </summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The daemon is returned to the caller, which owns and disposes it; a failed child is disposed in finally.")]
-    private static async Task<Result<Daemon>> StartDaemonAsync(string dll, string home, TimeProvider time, string what, CancellationToken ct)
+    private static async Task<Result<Daemon>> StartDaemonAsync(string dll, string home, string repoRoot, TimeProvider time, string what, CancellationToken ct)
     {
         string token = NewToken();
-        Daemon? daemon = Daemon.Start(dll, home, token);
+        Daemon? daemon = Daemon.Start(dll, home, token, repoRoot);
         bool ready = false;
         try
         {
@@ -521,7 +535,7 @@ public static class SelfCheckRecovery
         /// </summary>
         public string? FirstLabLine => _firstLabLine;
 
-        public static Daemon? Start(string dll, string home, string token)
+        public static Daemon? Start(string dll, string home, string token, string repoRoot)
         {
             var process = new Process();
             ProcessStartInfo info = process.StartInfo;
@@ -535,8 +549,7 @@ public static class SelfCheckRecovery
             info.RedirectStandardError = true;
 
             // A2: the fresh token replaces any inherited MERIDIAN_LAB_TOKEN; the home is the temporary folder.
-            info.Environment[LabDefaults.TokenEnvVar] = token;
-            info.Environment[LabDefaults.HomeEnvVar] = home;
+            ApplyChildEnvironment(info.Environment, home, token, repoRoot);
 
             try
             {

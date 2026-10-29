@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Dhadgar.Lab.SelfCheck;
 
 namespace Dhadgar.Lab.Tests.SelfCheck;
@@ -7,6 +8,20 @@ namespace Dhadgar.Lab.Tests.SelfCheck;
 /// </summary>
 public sealed class SelfCheckRecoveryJudgeTests
 {
+    [Fact]
+    public void ChildEnvironment_CarriesTokenHomeAndRepoRoot()
+    {
+        var info = new ProcessStartInfo();
+        info.Environment[Dhadgar.Lab.LabDefaults.TokenEnvVar] = "inherited-token";
+        info.Environment[SelfCheckRecovery.RepoRootEnvVar] = "inherited";
+
+        SelfCheckRecovery.ApplyChildEnvironment(info.Environment, "h", "t", "r");
+
+        Assert.Equal("t", info.Environment[Dhadgar.Lab.LabDefaults.TokenEnvVar]);
+        Assert.Equal("h", info.Environment[Dhadgar.Lab.LabDefaults.HomeEnvVar]);
+        Assert.Equal("r", info.Environment[SelfCheckRecovery.RepoRootEnvVar]);
+    }
+
     [Fact]
     public void Judge_CleanRestart_HasNoProblems()
     {
