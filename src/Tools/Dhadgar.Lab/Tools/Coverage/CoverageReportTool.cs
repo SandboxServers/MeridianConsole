@@ -21,6 +21,15 @@ public sealed class CoverageReportTool : LabTool<CoverageReportArgs>
 {
     private static readonly string[] UniverseStatusClasses = ["2xx", "4xx"];
 
+    /// <summary>
+    /// The kinds that no ingest records yet (D-ML99, L52b). Their dimensions carry <c>not_collected = true</c>, so a reader does not take
+    /// the stored hits for the run's coverage.
+    /// </summary>
+    private static readonly HashSet<string> NotCollectedKinds = new(StringComparer.Ordinal)
+    {
+        CoverageKeys.RouteStatus, CoverageKeys.FaultTarget, CoverageKeys.ErrorCode, CoverageKeys.Transition,
+    };
+
     private readonly ResultsService _results;
     private readonly IPathValidator _validator;
     private readonly string _labRoot;
@@ -106,13 +115,14 @@ public sealed class CoverageReportTool : LabTool<CoverageReportArgs>
         var kindHits = hits.Where(hit => hit.Key.Kind == kind && !IsOutsideUniverse(kind, hit.Key.Key))
             .Select(hit => hit.Key.Key).ToHashSet(StringComparer.Ordinal);
 
+        bool notCollected = NotCollectedKinds.Contains(kind);
         if (expected is null)
         {
-            return new { kind, total = (int?)null, hit = kindHits.Count, unhit = Array.Empty<string>() };
+            return new { kind, total = (int?)null, hit = kindHits.Count, unhit = Array.Empty<string>(), not_collected = notCollected };
         }
 
         List<string> unhit = expected.Where(key => !Covered(kind, key, kindHits)).OrderBy(key => key, StringComparer.Ordinal).ToList();
-        return new { kind, total = expected.Count, hit = expected.Count - unhit.Count, unhit };
+        return new { kind, total = expected.Count, hit = expected.Count - unhit.Count, unhit, not_collected = notCollected };
     }
 
     /// <summary>The universe keys of a kind, or null when the universe does not list the kind.</summary>

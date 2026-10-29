@@ -9,6 +9,8 @@ using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Dhadgar.Lab.Twins;
 
@@ -35,14 +37,16 @@ public sealed class TwinRunner
     private readonly LabToolDispatcher _dispatcher;
     private readonly LeaseBook _leases;
     private readonly TimeProvider _time;
+    private readonly ILogger _logger;
 
     /// <summary>Creates the runner over the UAT runner that runs both worlds.</summary>
-    public TwinRunner(UatRunner runner, LabToolDispatcher dispatcher, LeaseBook leases, TimeProvider time)
+    public TwinRunner(UatRunner runner, LabToolDispatcher dispatcher, LeaseBook leases, TimeProvider time, ILogger? logger = null)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _time = time ?? throw new ArgumentNullException(nameof(time));
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -137,11 +141,15 @@ public sealed class TwinRunner
                 return Result<TwinRunResult>.Failure(verdict.Error);
             }
 
+            // R3-N1 (C12): one twin signature per pointer that did not hold; nothing when the relation held.
             UatRowResult twinRow = new(
                 "twin/" + spec.Id,
                 verdict.Value!.Grade,
                 verdict.Value.Reason,
-                Array.Empty<UatClauseResult>());
+                Array.Empty<UatClauseResult>(),
+                TwinPointers: verdict.Value.Held == false
+                    ? verdict.Value.Diffs.Select(d => d.Locator).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()
+                    : null);
 
             UatRunResult baseFinal = Finish(deferredBase.Result!, baseSpec, twinRow, baseRun.Value!.Pair! with { PartnerRunId = variantRun.Value!.RunId });
             UatRunResult variantFinal = Finish(deferredVariant.Result!, variantSpec, twinRow, variantRun.Value!.Pair);
@@ -215,7 +223,18 @@ public sealed class TwinRunner
         var args = new JsonObject { [LabToolDispatcher.LeaseIdArgument] = leaseId };
         var context = new LabCallContext(Guid.NewGuid().ToString("N"), leaseId, "twin:" + spec.Id);
         LabToolResult call = await _dispatcher.InvokeAsync("stack_reset_data", JsonSerializer.SerializeToElement(args), context, ct).ConfigureAwait(false);
-        return call.IsError ? Result.Failure("[Lab.Unavailable] stack_reset_data failed") : Result.Success();
+        if (!call.IsError)
+        {
+            return Result.Success();
+        }
+
+        // R3-N5: name the cause. The dispatcher has already redacted the payload; the text is cut so a long error stays readable.
+        string detail = call.Payload.TryGetProperty("error", out JsonElement error)
+            && error.TryGetProperty("message", out JsonElement message)
+            && message.GetString() is { Length: > 0 } text
+                ? text
+                : call.Payload.GetRawText();
+        return Result.Failure("[Lab.Unavailable] stack_reset_data failed: " + (detail.Length > 300 ? detail[..300] : detail));
     }
 
     /// <summary>
@@ -234,6 +253,11 @@ public sealed class TwinRunner
         catch (OperationCanceledException) when (budget.IsCancellationRequested)
         {
             // Budget spent; the lease end and the fault book's deadline remain.
+        }
+        catch (Exception)
+        {
+            // R3-N5 (S-N5): a heal that throws must not hide the variant's result. Log the tool name only, never arguments.
+            _logger.LogWarning("twin heal did not finish: {Tool}", "fault_reset");
         }
     }
 

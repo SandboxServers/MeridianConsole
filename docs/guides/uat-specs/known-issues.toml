@@ -5,6 +5,8 @@ schema = 1
 id = "KI-ENROLL-RETRY"
 title = "A lost enroll response plus a retry leaves an orphan node and a 401 (D-ML49)"
 link = "docs/PROJECT-STATE.md"
+# The row's clause texts are Unverified while the row is BLOCKED by a step error (L26 B5). The requires keys make the issue
+# match only when the enroll-down step's expected error was not met and the I1 violation is present.
 signatures = [
   "hist:enrollment|E5|enroll-lost-response",
   "hist:enrollment|E5|enroll-lost-response-new-key",
@@ -38,9 +40,10 @@ requires = [
 ]
 state = "open"
 
+# D-ML97: the hunter classifies F67 in-process (ModelHunter.cs:314-317, :428), so the hunt scope needs no entry here.
 [issue.scope]
-sections = ["catalog-nodes", "hunt"]
-rows = ["nodes-pg-down-enroll", "enrollment"]
+sections = ["catalog-nodes"]
+rows = ["nodes-pg-down-enroll"]
 
 [[issue]]
 id = "KI-F69"
@@ -62,6 +65,7 @@ rows = ["nodes-enroll-malformed"]
 id = "KI-F69-HTTP"
 title = "Nodes 400 without problem+json, as an HTTP case (F69)"
 link = "docs/PROJECT-STATE.md"
+# Reachable through FuzzOracle (fuzz_run) only; row evidence emits http for 5xx only.
 signatures = []
 patterns = [
   '^http:4\d\d\|[^|]*\|POST\|/api/v1/agents/enroll\|',
@@ -72,39 +76,28 @@ state = "open"
 services = ["nodes"]
 
 [[issue]]
-id = "KI-DV13"
-title = "Stub services and the Console hub have no auth (DV-13)"
+id = "KI-RABBIT-HOST"
+title = "Compose ConnectionStrings__RabbitMqHost is ignored by Notifications"
 link = "docs/PROJECT-STATE.md"
+# Unverified against live signatures: the pattern is the broker connection failure from Notifications.
 signatures = []
-patterns = ['^http:2\d\d\|.*\|/api/v1/(servers|tasks|files|mods|billing)/']
+patterns = ['^exc:RabbitMQ\.Client\.Exceptions\.BrokerUnreachableException\|']
 state = "open"
 
 [issue.scope]
-services = ["gateway"]
+services = ["notifications"]
 
 [[issue]]
-id = "KI-DV12"
-title = "Localhost dev login: the BetterAuth cookie domain is not configurable (DV-12)"
+id = "KI-DISCORD-SECRETS-PORT"
+title = "Discord falls back to SecretsService port :5080 when SecretsService__Url is unset"
 link = "docs/PROJECT-STATE.md"
-# Unverified against live signatures: the pattern follows the identity auth routes; the owner confirms it on the first run.
+# Unverified against live signatures: the pattern is the secrets call failure from Discord.
 signatures = []
-patterns = ['^http:[45]\d\d\|[^|]*\|[A-Z]+\|/api/v1/auth/']
+patterns = ['^exc:System\.Net\.Http\.HttpRequestException\|']
 state = "open"
 
 [issue.scope]
-services = ["identity"]
-
-[[issue]]
-id = "KI-DV3"
-title = "POST /refresh is code-complete but untested end to end (DV-3); removed when S-L9 passes"
-link = "docs/PROJECT-STATE.md"
-# Unverified against live signatures: the pattern follows the identity refresh route.
-signatures = []
-patterns = ['^http:[45]\d\d\|[^|]*\|POST\|/api/v1/auth/refresh']
-state = "open"
-
-[issue.scope]
-services = ["identity"]
+services = ["discord"]
 
 [[issue]]
 id = "KI-NOTIF-OUTBOX"
@@ -118,49 +111,5 @@ state = "open"
 services = ["notifications"]
 invariants = ["I2"]
 
-[[issue]]
-id = "KI-RABBIT-HOST"
-title = "Compose ConnectionStrings__RabbitMqHost is ignored by Notifications"
-link = "docs/PROJECT-STATE.md"
-# Unverified against live signatures: the pattern is the broker connection failure from Notifications.
-signatures = []
-patterns = ['^exc:notifications\|[^|]*(RabbitMq|BrokerUnreachable)']
-state = "open"
-
-[issue.scope]
-services = ["notifications"]
-
-[[issue]]
-id = "KI-DISCORD-SECRETS-PORT"
-title = "Discord falls back to SecretsService port :5080 when SecretsService__Url is unset"
-link = "docs/PROJECT-STATE.md"
-# Unverified against live signatures: the pattern is the secrets call failure from Discord.
-signatures = []
-patterns = ['^exc:discord\|[^|]*HttpRequestException']
-state = "open"
-
-[issue.scope]
-services = ["discord"]
-
-[[issue]]
-id = "KI-DELAYED-PLUGIN"
-title = "AppHost and compose lack the delayed-message plugin"
-link = "docs/PROJECT-STATE.md"
-# Unverified against live signatures: the pattern is the unknown-exchange refusal from the broker.
-signatures = []
-patterns = ['^exc:[^|]*\|[^|]*(x-delayed-message|NOT_FOUND - no exchange)']
-state = "open"
-
-[issue.scope]
-services = ["notifications"]
-
-[[issue]]
-id = "KI-94"
-title = "CommandValidator does not check command signatures (#94)"
-link = "https://github.com/SandboxServers/MeridianConsole/issues/94"
-signatures = []
-patterns = ['^exc:[^|]*\|[^|]*CommandValidator']
-state = "open"
-
-[issue.scope]
-services = ["agent"]
+# Documentation only (D-ML96): DV-13, DV-12, DV-3, the delayed-message plugin and #94 have no lab signature that shows
+# their symptom without excusing other failures. They are tracked in docs/PROJECT-STATE.md and issue #94, not here.

@@ -25,6 +25,8 @@ public sealed class TriageMarkTests : IDisposable
     [InlineData("https://github.com/SandboxServers/MeridianConsole/issues/94/extra", false)]
     [InlineData("https://github.com/SandboxServers/MeridianConsole/issues/abc", false)]
     [InlineData("https://github.com/SandboxServers/MeridianConsole/issues/94\n", false)]
+    // R1-N3: \d matches any Unicode decimal digit; only ASCII digits make an issue number.
+    [InlineData("https://github.com/SandboxServers/MeridianConsole/issues/١٢٣", false)]
     public void IssueUrl_OnlyTheProjectIssuesPass(string candidate, bool expected) =>
         Assert.Equal(expected, TriageMarkTool.IsIssueUrl(candidate));
 

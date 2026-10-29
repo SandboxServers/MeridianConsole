@@ -114,6 +114,29 @@ public sealed class ResultsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ToPayload_CarriesTheStoredSignatureTexts()
+    {
+        // R3-N2 (A5, F93): the ingest payload carries the same scrubbed texts the index stores, so a reader does not need a second query.
+        string folder = BundleFixtures.Write(_uatRuns, "run-texts", "b1", 42,
+            new RowSpec("invariants", "I4", "FAIL", Violation: "I4", CheckId: "unhandled"));
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        using ResultsService results = NewService(LabPaths.FromRoot(_root, repoRoot: ""), redactor);
+
+        Result<IngestResult> ingested = await results.IngestAsync(folder, CancellationToken.None);
+
+        Assert.True(ingested.IsSuccess, ingested.Error);
+        JsonArray texts = results.ToPayload(ingested)["signature_texts"]!.AsArray();
+        Assert.Equal(ingested.Value!.Signatures, texts.Count);
+        string text = texts.Select(t => t!.GetValue<string>()).Single(t => t.StartsWith("inv:I4|nodes|", StringComparison.Ordinal));
+        Assert.Matches("^inv:I4\\|nodes\\|", text);
+
+        Result<string> stored = await OpenRead(results, db => db.SignatureTextOf(SignatureBuilder.SignatureId(text)));
+        Assert.True(stored.IsSuccess, stored.Error);
+        Assert.Equal(stored.Value, text);
+    }
+
+    [Fact]
     public async Task Ingest_ObserverCallsBack_NoDeadlock()
     {
         string folder = BundleFixtures.Write(_uatRuns, "run-observer", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
