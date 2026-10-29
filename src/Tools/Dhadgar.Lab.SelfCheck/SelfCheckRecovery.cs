@@ -9,6 +9,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab;
 using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Http;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Shared.Results;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -63,8 +64,8 @@ public static class SelfCheckRecovery
     /// </summary>
     /// <param name="faultsEmpty">True when <c>faults_active</c> lists nothing.</param>
     /// <param name="leaseHeld">True when <c>lab_lease_status</c> shows a current lease.</param>
-    /// <param name="i5Violated">True when <c>invariants_check</c> reports an I5 violation.</param>
-    public static IReadOnlyList<string> Judge(bool faultsEmpty, bool leaseHeld, bool i5Violated)
+    /// <param name="i5Problems">The problem texts from <see cref="I5Problems"/>; empty when I5 found nothing.</param>
+    public static IReadOnlyList<string> Judge(bool faultsEmpty, bool leaseHeld, IReadOnlyList<string> i5Problems)
     {
         var problems = new List<string>();
         if (!faultsEmpty)
@@ -77,13 +78,75 @@ public static class SelfCheckRecovery
             problems.Add("a lease survived the restart");
         }
 
-        if (i5Violated)
+        problems.AddRange(i5Problems);
+        return problems;
+    }
+
+    /// <summary>Every I5 entry of an invariants_check payload, as problem texts (D-ML106). Empty when I5 found nothing.</summary>
+    /// <param name="payload">The <c>invariants_check</c> payload.</param>
+    internal static IReadOnlyList<string> I5Problems(JsonElement payload)
+    {
+        var problems = new List<string>();
+        if (payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("violations", out JsonElement violations)
+            || violations.ValueKind != JsonValueKind.Array)
         {
-            problems.Add("I5 reports an orphan after the restart");
+            problems.Add("invariants_check returned no violations list");
+            return problems;
+        }
+
+        foreach (JsonElement entry in violations.EnumerateArray())
+        {
+            if (IsI5(entry))
+            {
+                problems.Add(Cut("I5 reports an orphan after the restart: " + Field(entry, "check_id") + " " + Field(entry, "service") + ": " + Field(entry, "detail")));
+            }
+        }
+
+        if (payload.TryGetProperty("errors", out JsonElement errors) && errors.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement entry in errors.EnumerateArray())
+            {
+                if (IsI5(entry))
+                {
+                    problems.Add(Cut("I5 could not be checked after the restart: " + Field(entry, "error")));
+                }
+            }
+        }
+
+        if (payload.TryGetProperty("skipped", out JsonElement skipped) && skipped.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement entry in skipped.EnumerateArray())
+            {
+                if (IsI5(entry) && !IsAcceptedSkip(entry))
+                {
+                    problems.Add(Cut("I5 skipped " + Field(entry, "source") + " after the restart: " + Field(entry, "reason")));
+                }
+            }
         }
 
         return problems;
     }
+
+    /// <summary>
+    /// D-ML106: the restarted daemon has no credential refs (KG-W5-5), so I2 and the I5 queue and proxy checks skip with the
+    /// stack-not-up reason. Only that pair is accepted; any other skip is a problem.
+    /// </summary>
+    private static bool IsAcceptedSkip(JsonElement entry)
+    {
+        string source = Field(entry, "source");
+        bool queueOrProxy = source is "queues" or "proxies";
+        return queueOrProxy && Field(entry, "reason") == I2OutboxInvariant.StackNotUpReason;
+    }
+
+    private static bool IsI5(JsonElement entry) =>
+        entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("invariant_id", out JsonElement id)
+        && id.ValueKind == JsonValueKind.String && id.GetString() == "I5";
+
+    private static string Field(JsonElement entry, string name) =>
+        entry.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString()! : string.Empty;
+
+    private static string Cut(string text) => text.Length > MaxDiagnosticText ? text[..MaxDiagnosticText] : text;
 
     /// <summary>
     /// A1: true when another lab daemon holds the per-user mutex <c>Local\MeridianLab-&lt;user&gt;</c>. The product guard
@@ -288,42 +351,8 @@ public static class SelfCheckRecovery
                 && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() == 0;
             bool leaseHeld = lease.Value!.RootElement.TryGetProperty("current", out JsonElement current)
                 && current.ValueKind != JsonValueKind.Null;
-            bool i5 = HasInvariantId(invariants.Value!.RootElement, "I5");
+            IReadOnlyList<string> i5 = I5Problems(invariants.Value!.RootElement);
             return Result<IReadOnlyList<string>>.Success(Judge(faultsEmpty, leaseHeld, i5));
-        }
-    }
-
-    private static bool HasInvariantId(JsonElement node, string id)
-    {
-        switch (node.ValueKind)
-        {
-            case JsonValueKind.Object:
-                foreach (JsonProperty property in node.EnumerateObject())
-                {
-                    if (property.NameEquals("invariant_id") && property.Value.ValueKind == JsonValueKind.String && property.Value.GetString() == id)
-                    {
-                        return true;
-                    }
-
-                    if (HasInvariantId(property.Value, id))
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
-            case JsonValueKind.Array:
-                foreach (JsonElement item in node.EnumerateArray())
-                {
-                    if (HasInvariantId(item, id))
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
-            default:
-                return false;
         }
     }
 
