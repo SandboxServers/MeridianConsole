@@ -1,15 +1,17 @@
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Tools.Services;
 
 /// <summary>
 /// Arguments of <c>lab_build</c>. <c>checkout</c> is the repo root or a worktree under it; <c>projects</c> defaults to every
-/// L09 project. <c>baseline</c> and <c>mutant</c> arrive in later packets.
+/// L09 project. <c>mutant</c> (L54) names a product mutant: the build comes from <c>git archive HEAD</c> of the repo root,
+/// <c>checkout</c> is ignored and <c>projects</c> defaults to the mutant's <c>services</c>. <c>baseline</c> arrives in L60.
 /// </summary>
-public sealed record LabBuildArgs(string? Checkout = null, IReadOnlyList<string>? Projects = null);
+public sealed record LabBuildArgs(string? Checkout = null, IReadOnlyList<string>? Projects = null, string? Mutant = null);
 
 /// <summary>
 /// <c>lab_build</c> (Leased): publishes the projects from a checkout, builds their lab images and records the build.
@@ -41,6 +43,11 @@ public sealed class BuildTool : LabTool<LabBuildArgs>
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(LabBuildArgs args, LabCallContext context, CancellationToken ct)
     {
+        if (!string.IsNullOrWhiteSpace(args.Mutant))
+        {
+            return await BuildMutantAsync(args.Mutant, args.Projects, ct).ConfigureAwait(false);
+        }
+
         if (string.IsNullOrWhiteSpace(args.Checkout))
         {
             return Result<object>.Failure("[Lab.InvalidArgument] checkout is required");
@@ -65,6 +72,53 @@ public sealed class BuildTool : LabTool<LabBuildArgs>
         }
 
         Result<LabBuildDto> built = await LabBuilder.BuildAsync(args.Checkout, selected, _docker, _paths, _validator, _time, ct)
+            .ConfigureAwait(false);
+        return built.IsFailure ? Result<object>.Failure(built.Error) : Result<object>.Success(built.Value!);
+    }
+
+    /// <summary>
+    /// Builds one product mutant (L54, A3) from <c>git archive HEAD</c>. The spec comes from <c>tools\lab\mutants</c> under the
+    /// repo root; an unknown id is <c>[Lab.InvalidArgument]</c>. A patch that no longer applies returns the stale verdict.
+    /// </summary>
+    private async Task<Result<object>> BuildMutantAsync(string mutantId, IReadOnlyList<string>? projects, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_paths.RepoRoot))
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] the repo root is not configured");
+        }
+
+        Result<string> mutantsRoot = _validator.ValidatePath(Path.Combine(_paths.RepoRoot, "tools", "lab", "mutants"), [_paths.RepoRoot]);
+        if (mutantsRoot.IsFailure)
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] mutants folder is not valid");
+        }
+
+        Result<IReadOnlyList<MutantSpec>> specs = MutantSpecLoader.LoadAll(mutantsRoot.Value!, _paths.RepoRoot, _validator);
+        if (specs.IsFailure)
+        {
+            return Result<object>.Failure(specs.Error);
+        }
+
+        MutantSpec? spec = specs.Value!.FirstOrDefault(candidate => string.Equals(candidate.Id, mutantId, StringComparison.Ordinal));
+        if (spec is null)
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] unknown mutant");
+        }
+
+        var selected = new List<BuildProject>();
+        IEnumerable<string> names = projects ?? spec.Services;
+        foreach (string name in names)
+        {
+            Result<BuildProject> project = LabBuilder.ResolveProject(name);
+            if (project.IsFailure)
+            {
+                return Result<object>.Failure(project.Error);
+            }
+
+            selected.Add(project.Value!);
+        }
+
+        Result<MutantBuildDto> built = await MutantBuilder.BuildAsync(spec, selected, _paths, _docker, _validator, _time, LabBuilder.RunAsync, ct)
             .ConfigureAwait(false);
         return built.IsFailure ? Result<object>.Failure(built.Error) : Result<object>.Success(built.Value!);
     }
