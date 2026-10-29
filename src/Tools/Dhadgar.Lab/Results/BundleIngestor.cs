@@ -24,6 +24,8 @@ public sealed class BundleIngestor
 {
     private const int MaxRunIdLength = 128;
     private const string DefaultKind = "uat";
+    private const string HistoryKind = "history";
+    private const string HistorySection = "history";
 
     private readonly ResultsDb _db;
     private readonly IPathValidator _validator;
@@ -104,11 +106,6 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure(run.Error);
         }
 
-        if (Text(run.Value, "kind") == "history")
-        {
-            return Result<IngestResult>.Failure("[Lab.InvalidArgument] history bundles are not ingested until L25f");
-        }
-
         return await IngestRunAsync(folder.Value, run.Value, ct).ConfigureAwait(false);
     }
 
@@ -123,7 +120,9 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure("[Lab.InvalidArgument] run.json has no valid run_id");
         }
 
-        Result<List<ParsedRow>> rows = await ReadRowsAsync(folder, ct).ConfigureAwait(false);
+        Result<List<ParsedRow>> rows = Text(run, "kind") == HistoryKind
+            ? await ReadHistoryRowAsync(folder, run, ct).ConfigureAwait(false)
+            : await ReadRowsAsync(folder, ct).ConfigureAwait(false);
         if (rows.IsFailure)
         {
             return Result<IngestResult>.Failure(rows.Error);
@@ -134,7 +133,19 @@ public sealed class BundleIngestor
         var rowRecords = new List<RowRecord>();
         var violationRecords = new List<ViolationRecord>();
         var signatureRecords = new Dictionary<string, SignatureRecord>(StringComparer.Ordinal);
+        var faultRecords = new Dictionary<string, FaultRecord>(StringComparer.Ordinal);
         string runEnd = Text(run, "ended_at") ?? string.Empty;
+        PairRecord? pair = null;
+        if (run["pair"] is JsonObject)
+        {
+            Result<PairRecord> parsedPair = PairOf(run, runId);
+            if (parsedPair.IsFailure)
+            {
+                return Result<IngestResult>.Failure(parsedPair.Error);
+            }
+
+            pair = parsedPair.Value;
+        }
 
         foreach (ParsedRow row in rows.Value)
         {
@@ -165,11 +176,24 @@ public sealed class BundleIngestor
                     violation.At ?? row.EndedAt ?? runEnd, violation.Evidence.Allowed, row.Section, row.RowId,
                     violation.Detail is null ? null : _scrub(violation.Detail)));
             }
+
+            // L25f: a fault needs its kind and target (NOT NULL columns); a row written before the writer carried them has none.
+            foreach (ParsedFault fault in row.Faults ?? [])
+            {
+                if (fault.FaultId.Length == 0 || fault.Kind.Length == 0 || fault.TargetId.Length == 0
+                    || faultRecords.ContainsKey(fault.FaultId))
+                {
+                    continue;
+                }
+
+                faultRecords[fault.FaultId] = new FaultRecord(runId, fault.FaultId, fault.Kind, fault.TargetId, null,
+                    fault.InjectedAt, fault.HealedAt, fault.HealError is null ? null : _scrub(fault.HealError));
+            }
         }
 
         RunSummary summary = RunSummary.Compute(graded, matches);
         string overall = summary.OverallText;
-        Result write = WriteRun(runId, run, folder, overall, rowRecords, violationRecords, signatureRecords);
+        Result write = WriteRun(runId, run, folder, overall, rowRecords, violationRecords, signatureRecords, faultRecords.Values.ToList(), pair);
         if (write.IsFailure)
         {
             return Result<IngestResult>.Failure(write.Error);
@@ -184,8 +208,24 @@ public sealed class BundleIngestor
         return Result<IngestResult>.Success(new IngestResult(runId, overall, rowRecords.Count, signatureRecords.Count, _known));
     }
 
+    /// <summary>Reads run.json's <c>pair</c> (C18, L53): the experiment, the role, the partner run and the relation. <c>held</c> stays unset.</summary>
+    private static Result<PairRecord> PairOf(JsonObject run, string runId)
+    {
+        string? experimentId = Text(run, "pair", "experiment_id");
+        string? role = Text(run, "pair", "role");
+        string? relation = Text(run, "pair", "relation");
+        if (string.IsNullOrEmpty(experimentId) || string.IsNullOrEmpty(role) || string.IsNullOrEmpty(relation))
+        {
+            return Result<PairRecord>.Failure("[Lab.InvalidArgument] run.json has a pair without experiment_id, role or relation");
+        }
+
+        return Result<PairRecord>.Success(new PairRecord(experimentId, runId, role, Text(run, "pair", "partner_run_id") ?? string.Empty,
+            relation, null));
+    }
+
     private Result WriteRun(string runId, JsonObject run, string folder, string overall, List<RowRecord> rowRecords,
-        List<ViolationRecord> violationRecords, Dictionary<string, SignatureRecord> signatureRecords)
+        List<ViolationRecord> violationRecords, Dictionary<string, SignatureRecord> signatureRecords,
+        List<FaultRecord> faultRecords, PairRecord? pair)
     {
         var record = new RunRecord(
             RunId: runId,
@@ -228,6 +268,24 @@ public sealed class BundleIngestor
         foreach (ViolationRecord violation in violationRecords)
         {
             result = _db.InsertViolation(violation);
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        foreach (FaultRecord fault in faultRecords)
+        {
+            result = _db.InsertFault(fault);
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        if (pair is not null)
+        {
+            result = _db.InsertPair(pair);
             if (result.IsFailure)
             {
                 return result;
@@ -359,6 +417,47 @@ public sealed class BundleIngestor
             parsed.Add(row.Value);
         }
 
+        return Result<List<ParsedRow>>.Success(parsed);
+    }
+
+    /// <summary>
+    /// Reads a history bundle's synthetic row (L25f, C19): <c>row.json</c> at the bundle root, id <c>history/&lt;scenario&gt;</c>,
+    /// with <c>history.model</c> and <c>history.violations</c>. The row is section <c>history</c>, row id the scenario.
+    /// </summary>
+    private async Task<Result<List<ParsedRow>>> ReadHistoryRowAsync(string folder, JsonObject run, CancellationToken ct)
+    {
+        var parsed = new List<ParsedRow>();
+        string rowPath = Path.Combine(folder, "row.json");
+        if (!File.Exists(rowPath))
+        {
+            return Result<List<ParsedRow>>.Success(parsed);
+        }
+
+        Result<string> path = _validator.ValidatePath(rowPath, [folder]);
+        if (path.IsFailure)
+        {
+            return Result<List<ParsedRow>>.Failure("[Lab.InvalidArgument] a row file is outside the bundle folder");
+        }
+
+        Result<JsonObject> obj = await ReadObjectAsync(path.Value, ct).ConfigureAwait(false);
+        if (obj.IsFailure)
+        {
+            return Result<List<ParsedRow>>.Failure(obj.Error);
+        }
+
+        string scenario = Text(run, "scenario") ?? string.Empty;
+        string model = Text(obj.Value, "history", "model") ?? string.Empty;
+        if (scenario.Length == 0 || model.Length == 0)
+        {
+            return Result<List<ParsedRow>>.Failure("[Lab.InvalidArgument] the history bundle has no scenario or model");
+        }
+
+        JsonObject? history = obj.Value["history"] as JsonObject;
+        var violations = (history is null ? [] : Objects(history, "violations"))
+            .Select(v => new HistoryViolationEvidence(model, Text(v, "rule") ?? string.Empty, scenario, Bool(v, "required") ?? true))
+            .ToList();
+        parsed.Add(new ParsedRow(HistorySection, scenario, RowVerdicts.ParseGrade(Text(obj.Value, "grade")), Text(obj.Value, "reason"),
+            Text(run, "started_at"), Text(run, "ended_at"), null, [], [], [], null, null, null, violations));
         return Result<List<ParsedRow>>.Success(parsed);
     }
 

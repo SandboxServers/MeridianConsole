@@ -26,11 +26,17 @@ internal sealed record ParsedViolation(ViolationEvidence Evidence, string? Detai
 /// </summary>
 internal sealed record ParsedStep(string Id, bool Ok, bool? ExpectMet);
 
+/// <summary>One fault the row injected, as the row file's <c>faults</c> entry (L25f, C12 <c>faults</c>).</summary>
+internal sealed record ParsedFault(string FaultId, string Kind, string TargetId, string? InjectedAt, string? HealedAt, string? HealError);
+
 /// <summary>A graded row as read from a row file: the grade, the reason, its clauses, violations and steps.
-/// <paramref name="Exceptions"/> and <paramref name="Http"/> are the row's <c>evidence</c> (L25e), empty when absent.</summary>
+/// <paramref name="Exceptions"/> and <paramref name="Http"/> are the row's <c>evidence</c> (L25e), empty when absent.
+/// <paramref name="Faults"/> are the row's injected faults (L25f), empty when absent. <paramref name="History"/> holds a history
+/// bundle's violations (L25f), empty for every other row.</summary>
 internal sealed record ParsedRow(string Section, string RowId, RowGrade Grade, string? Reason, string? StartedAt,
     string? EndedAt, string? KnownIssue, IReadOnlyList<ClauseEvidence> Clauses, IReadOnlyList<ParsedViolation> Violations,
-    IReadOnlyList<ParsedStep> Steps, IReadOnlyList<ExceptionEvidence>? Exceptions = null, IReadOnlyList<HttpEvidence>? Http = null);
+    IReadOnlyList<ParsedStep> Steps, IReadOnlyList<ExceptionEvidence>? Exceptions = null, IReadOnlyList<HttpEvidence>? Http = null,
+    IReadOnlyList<ParsedFault>? Faults = null, IReadOnlyList<HistoryViolationEvidence>? History = null);
 
 /// <summary>
 /// The one row-verdict path (L26 B1, D-ML92). The ingest, the run writer and the attestor all call <see cref="Of"/>, and
@@ -52,7 +58,7 @@ internal static class RowVerdicts
 
         var evidence = new RowEvidence(row.Section, row.RowId, row.Exceptions ?? [], row.Http ?? [],
             row.Clauses.Concat(StepClauses(row)).ToList(),
-            row.Violations.Select(v => v.Evidence).ToList(), [], []);
+            row.Violations.Select(v => v.Evidence).ToList(), row.History ?? [], []);
         List<FailureSignature> scrubbed = SignatureBuilder.BuildAll(evidence)
             .Select(signature => signature with { Text = scrub(signature.Text) })
             .ToList();
@@ -143,9 +149,15 @@ internal static class RowVerdicts
             })
             .ToList();
 
+        var faults = BundleIngestor.Objects(obj, "faults")
+            .Select(f => new ParsedFault(BundleIngestor.Text(f, "fault_id") ?? string.Empty, BundleIngestor.Text(f, "kind") ?? string.Empty,
+                BundleIngestor.Text(f, "target_id") ?? string.Empty, BundleIngestor.Text(f, "injected_at"),
+                BundleIngestor.Text(f, "healed_at"), BundleIngestor.Text(f, "heal_error")))
+            .ToList();
+
         return Result<ParsedRow>.Success(new ParsedRow(section, rowId, ParseGrade(BundleIngestor.Text(obj, "grade")),
             BundleIngestor.Text(obj, "reason"), BundleIngestor.Text(obj, "started_at"), BundleIngestor.Text(obj, "ended_at"),
-            BundleIngestor.Text(obj, "known_issue"), clauses, violations, steps, exceptions, http));
+            BundleIngestor.Text(obj, "known_issue"), clauses, violations, steps, exceptions, http, faults));
     }
 
     /// <summary>The string items of an array field; a non-string item is skipped.</summary>

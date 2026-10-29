@@ -87,6 +87,25 @@ public sealed class FaultEvidenceTests : IDisposable
     }
 
     [Fact]
+    public async Task FaultRow_WritesKindAndTargetId_FromTheInject()
+    {
+        JsonElement args = JsonDocument.Parse("{\"target\":\"c:gateway\"}").RootElement.Clone();
+        var fault = new UatRowFault("kill", "fault_kill", args, "f-3", Start, Start.AddSeconds(1), null, "kill", "c:gateway");
+        SpecLoadOutcome loaded = SpecLoader.LoadText("fault-evidence.toml", FaultSpec);
+        Assert.NotNull(loaded.Spec);
+
+        _writer.RunStarted("run-l25f-kind", 3UL, loaded.Spec!);
+        _writer.RowFinished(new UatRowResult("faulted", RowGrade.Pass, string.Empty, [], StartedAt: Start, EndedAt: Start.AddSeconds(2), Faults: [fault]));
+        _writer.RunFinished(new UatRunResult("run-l25f-kind", 3UL, false, RunOverall.Pass, []));
+
+        Assert.Null(_writer.WriteError);
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "rows", "fault-evidence", "faulted.json")));
+        JsonElement written = Assert.Single(row.RootElement.GetProperty("faults").EnumerateArray());
+        Assert.Equal("kill", written.GetProperty("kind").GetString());
+        Assert.Equal("c:gateway", written.GetProperty("target_id").GetString());
+    }
+
+    [Fact]
     public async Task NonTimingFault_KeepsFidelity()
     {
         JsonElement args = JsonDocument.Parse("{\"target\":\"c:x\"}").RootElement.Clone();

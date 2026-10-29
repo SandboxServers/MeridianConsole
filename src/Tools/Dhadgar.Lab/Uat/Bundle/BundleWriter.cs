@@ -328,6 +328,8 @@ public sealed class BundleWriter : IUatRunSink
                 grade = bundle.Grade.ToString(),
                 history = new
                 {
+                    // L25f: the model names the hist signature; every history run is checked against the enrollment model.
+                    model = Dhadgar.Lab.History.Models.EnrollmentHistoryModel.ModelName,
                     verdict = bundle.Check.Verdict,
                     violations = bundle.Check.Violations.Select(v => new { rule = v.Rule, ops = v.OpIds, required = v.Required }).ToList(),
                 },
@@ -484,6 +486,8 @@ public sealed class BundleWriter : IUatRunSink
                         id = fault.Id,
                         tool = fault.Tool,
                         fault_id = fault.FaultId,
+                        kind = fault.Kind,
+                        target_id = fault.TargetId,
                         injected_at = fault.InjectedAt,
                         healed_at = fault.HealedAt,
                         heal_error = fault.HealError is null ? null : _redactor.Redact(fault.HealError, out int healRedactions),
