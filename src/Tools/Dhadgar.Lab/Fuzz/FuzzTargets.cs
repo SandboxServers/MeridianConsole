@@ -13,7 +13,8 @@ namespace Dhadgar.Lab.Fuzz;
 /// <param name="PathTemplate">The concrete path; the route has no parameters.</param>
 /// <param name="BodyType">The name of the <c>Dhadgar.Contracts</c> body type.</param>
 /// <param name="Auth">The auth the route needs (none for enroll).</param>
-public sealed record FuzzTarget(string Name, string Via, string Method, string PathTemplate, string BodyType, string Auth);
+/// <param name="Service">The service that owns the route (<c>nodes</c>), the service of its <c>http</c> signatures.</param>
+public sealed record FuzzTarget(string Name, string Via, string Method, string PathTemplate, string BodyType, string Auth, string Service);
 
 /// <summary>
 /// The fuzz target table (C10). L28 ships <c>enroll</c> only; L38 and L44 add their own entries here.
@@ -24,7 +25,7 @@ public static class FuzzTargets
 
     /// <summary>The <c>enroll</c> target: <c>POST /api/v1/agents/enroll</c>, <c>EnrollNodeRequest</c>, through the Gateway.</summary>
     public static readonly FuzzTarget Enroll = new(
-        "enroll", "gateway", "POST", "/api/v1/agents/enroll", nameof(EnrollNodeRequest), "none");
+        "enroll", "gateway", "POST", "/api/v1/agents/enroll", nameof(EnrollNodeRequest), "none", "nodes");
 
     /// <summary>Every target, in table order.</summary>
     public static IReadOnlyList<FuzzTarget> All { get; } = [Enroll];
