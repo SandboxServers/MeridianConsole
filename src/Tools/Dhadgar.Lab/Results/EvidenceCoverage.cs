@@ -8,18 +8,18 @@ namespace Dhadgar.Lab.Results;
 /// </summary>
 public static class EvidenceCoverage
 {
-    /// <summary>Signature kinds the ingest stores: clause and inv from L25, exc and http from L25e.</summary>
-    public static readonly IReadOnlyList<string> BuiltKinds = ["clause", "inv", "exc", "http"];
+    /// <summary>Signature kinds the ingest stores: clause and inv from L25, exc and http from L25e, hist from L25f.</summary>
+    public static readonly IReadOnlyList<string> BuiltKinds = ["clause", "inv", "exc", "http", "hist"];
 
     /// <summary>C12 signature kinds the ingest does not store yet.</summary>
-    public static readonly IReadOnlyList<string> NotBuiltKinds = ["hist", "twin", "peer", "env", "ver"];
+    public static readonly IReadOnlyList<string> NotBuiltKinds = ["twin", "peer", "env", "ver"];
 
-    /// <summary>Index tables or evidence that L25 does not fill yet.</summary>
-    public static readonly IReadOnlyList<string> NotIngested = ["faults", "pairs", "history_runs"];
+    /// <summary>Index tables or evidence the ingest does not fill yet. L25f stored faults, pairs and history runs, so it is empty.</summary>
+    public static readonly IReadOnlyList<string> NotIngested = [];
 
     /// <summary>The note every payload carries about partial coverage.</summary>
     public const string Note =
-        "partial: known means every built signature matched one open issue; not_built_kinds and not_ingested are not in the index yet";
+        "partial: known means every built signature matched one open issue; not_built_kinds are not in the index yet";
 
     /// <summary>The coverage object: <c>{"built_kinds","not_built_kinds","not_ingested","note"}</c>.</summary>
     public static JsonObject ToJson() =>

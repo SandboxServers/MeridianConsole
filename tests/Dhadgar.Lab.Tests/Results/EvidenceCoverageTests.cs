@@ -17,6 +17,14 @@ public sealed class EvidenceCoverageTests
     }
 
     [Fact]
+    public void EvidenceCoverage_HistIsBuilt_AndNothingIsLeftNotIngested()
+    {
+        Assert.Contains("hist", EvidenceCoverage.BuiltKinds);
+        Assert.DoesNotContain("hist", EvidenceCoverage.NotBuiltKinds);
+        Assert.Empty(EvidenceCoverage.NotIngested);
+    }
+
+    [Fact]
     public void ToJson_NamesEveryListAndTheNote()
     {
         var json = EvidenceCoverage.ToJson();
