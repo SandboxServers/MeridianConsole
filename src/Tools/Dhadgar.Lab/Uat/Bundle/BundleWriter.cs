@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.History;
 using Dhadgar.Lab.Invariants;
@@ -56,6 +57,17 @@ public sealed class BundleWriter : IUatRunSink
     private int _passRedactions;
     private int _rowRedactions;
     private IRunLogSource? _logs;
+
+    // L25e: an exception line names its type (Name.Exception), and a request line is the Hosting.Diagnostics finish line.
+    private static readonly Regex ExceptionTypeName = new(@"\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*Exception\b",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex RequestFinished = new(
+        @"Request finished (?:HTTP/\S+ )?(?<method>[A-Z]+) (?<url>\S+) - (?<status>\d{3})",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex GuidSegment = new(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex NumericSegment = new(@"(?<=/)[0-9]+(?=/|$)", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private const int EvidenceTextLimit = 512;
     private string? _finalOverall;
     private KnownIssueCheck _known = KnownIssueCheck.Unchecked(KnownIssueCheck.BundleUncheckedReason);
 
@@ -508,6 +520,7 @@ public sealed class BundleWriter : IUatRunSink
                 steps = stepJson,
                 faults = faultJson,
                 violations = violationJson,
+                evidence = RowEvidenceJson(source, row.At, secretFailed),
                 attestations = Array.Empty<object>(),
             };
             // The row file is parsed back by the ingest's reader, so the verdict here is the verdict the DB records.
@@ -757,6 +770,158 @@ public sealed class BundleWriter : IUatRunSink
             Write(Path.Combine("logs", slice.Process + ".jsonl"), text.ToString());
         }
     }
+
+    /// <summary>
+    /// L25e: the row's <c>evidence</c>, read from the log window (<c>started_at</c> to <c>ended_at</c>). <c>exceptions</c> are the
+    /// Error or Critical exception lines whose message names a type: the type, the top in-repo frame and the first message
+    /// line. <c>http</c> are the 5xx Hosting.Diagnostics request lines: the service, status, method, route template and the
+    /// fault ids active at that line. Every text is redacted with <see cref="Redactor"/>. A secret-failed row carries none.
+    /// </summary>
+    private JsonObject RowEvidenceJson(UatRowResult? source, DateTimeOffset rowEnd, bool secretFailed)
+    {
+        var exceptions = new JsonArray();
+        var http = new JsonArray();
+        var evidence = new JsonObject { ["exceptions"] = exceptions, ["http"] = http };
+        if (secretFailed || _logs is null)
+        {
+            return evidence;
+        }
+
+        DateTimeOffset from = source?.StartedAt ?? rowEnd;
+        IReadOnlyList<UatRowFault> faults = source?.Faults ?? Array.Empty<UatRowFault>();
+        foreach (RunLogSlice slice in _logs.Slices(from, rowEnd))
+        {
+            if (!SafeIds.IsSafe(slice.Process))
+            {
+                continue;
+            }
+
+            foreach (LogLine line in slice.Lines)
+            {
+                if (line.Timestamp < from || line.Timestamp > rowEnd)
+                {
+                    continue;
+                }
+
+                if (IsExceptionLine(line))
+                {
+                    if (ExceptionEntry(slice.Process, line) is { } entry)
+                    {
+                        exceptions.Add(entry);
+                    }
+
+                    continue;
+                }
+
+                if (RequestEntry(slice.Process, line, faults) is { } request)
+                {
+                    http.Add(request);
+                }
+            }
+        }
+
+        return evidence;
+    }
+
+    /// <summary>An Error or Critical line of an exception category, or any line that says it was unhandled.</summary>
+    private static bool IsExceptionLine(LogLine line)
+    {
+        bool isError = string.Equals(line.Level, "Error", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(line.Level, "Critical", StringComparison.OrdinalIgnoreCase);
+        bool exceptionLog = isError
+            && (line.Category.StartsWith("Microsoft.AspNetCore.Diagnostics.", StringComparison.Ordinal)
+                || line.Category.Contains("GlobalExceptionHandler", StringComparison.Ordinal));
+        return exceptionLog || line.Message.Contains("Unhandled exception", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// One exception entry, or null when the message names no exception type. The top frame is the first in-repo
+    /// (<c>Dhadgar.</c>) frame, else the first frame. The stack text is taken from the message only: the log parser keeps no
+    /// separate exception field.
+    /// </summary>
+    private JsonObject? ExceptionEntry(string service, LogLine line)
+    {
+        Match type = ExceptionTypeName.Match(line.Message);
+        if (!type.Success)
+        {
+            return null;
+        }
+
+        string[] lines = line.Message.Split('\n').Select(text => text.Trim()).ToArray();
+        string[] frames = lines.Where(text => text.StartsWith("at ", StringComparison.Ordinal)).Select(text => text[3..].Trim()).ToArray();
+        string? top = frames.FirstOrDefault(frame => frame.StartsWith("Dhadgar.", StringComparison.Ordinal)) ?? frames.FirstOrDefault();
+        string message = Truncate(lines.Length > 0 ? lines[0] : string.Empty);
+        string redactedMessage = _redactor.Redact(message, out int messageRedactions);
+        _passRedactions += messageRedactions;
+        string[] topFrames = [];
+        if (top is not null)
+        {
+            topFrames = [_redactor.Redact(top, out int frameRedactions)];
+            _passRedactions += frameRedactions;
+        }
+
+        return new JsonObject
+        {
+            ["service"] = service,
+            ["type"] = type.Value,
+            ["frames"] = JsonSerializer.SerializeToNode(topFrames, JsonOptions),
+            ["message"] = redactedMessage,
+            ["at"] = line.Timestamp.ToString("O", CultureInfo.InvariantCulture),
+        };
+    }
+
+    /// <summary>One 5xx request entry from a Hosting.Diagnostics finish line, or null for any other line.</summary>
+    private JsonObject? RequestEntry(string service, LogLine line, IReadOnlyList<UatRowFault> faults)
+    {
+        if (!line.Category.StartsWith("Microsoft.AspNetCore.Hosting.Diagnostics", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        Match match = RequestFinished.Match(line.Message);
+        if (!match.Success || !int.TryParse(match.Groups["status"].ValueSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int status)
+            || status < 500 || status > 599)
+        {
+            return null;
+        }
+
+        string url = match.Groups["url"].Value;
+        string path = Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? uri.AbsolutePath : url;
+        string route = _redactor.Redact(RouteTemplateOf(path), out int routeRedactions);
+        _passRedactions += routeRedactions;
+        string[] active = faults
+            .Where(fault => fault.InjectedAt <= line.Timestamp && (fault.HealedAt is null || fault.HealedAt >= line.Timestamp))
+            .Select(fault => fault.FaultId)
+            .ToArray();
+        return new JsonObject
+        {
+            ["service"] = service,
+            ["status"] = status,
+            ["error_code"] = null,
+            ["method"] = match.Groups["method"].Value,
+            ["route"] = route,
+            ["faults"] = JsonSerializer.SerializeToNode(active, JsonOptions),
+            ["at"] = line.Timestamp.ToString("O", CultureInfo.InvariantCulture),
+        };
+    }
+
+    /// <summary>
+    /// The route template of a request path: the query is dropped, GUID segments become <c>{id}</c> and whole numeric segments
+    /// <c>{n}</c>. A version segment such as <c>v1</c> stays, so the shipped known-issue patterns match the signature.
+    /// </summary>
+    private static string RouteTemplateOf(string path)
+    {
+        string route = path;
+        int query = route.IndexOf('?', StringComparison.Ordinal);
+        if (query >= 0)
+        {
+            route = route[..query];
+        }
+
+        return NumericSegment.Replace(GuidSegment.Replace(route, "{id}"), "{n}");
+    }
+
+    private static string Truncate(string text) => text.Length <= EvidenceTextLimit ? text : text[..EvidenceTextLimit];
 
     private void Write(string relative, string text)
     {

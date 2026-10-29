@@ -417,7 +417,43 @@ public sealed class RowEvidenceTests : IDisposable
         Assert.Equal(label, (string?)model["label"]);
     }
 
-    private string RowPath(string rowId) => Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
+    [Fact]
+    public async Task RowEvidence_ExceptionAndFiveHundred_InRowWindow_AreWritten()
+    {
+        const string ExceptionText = "System.InvalidOperationException: boom\n"
+            + "   at Dhadgar.Nodes.Enroll.HandleAsync(Object o) in /src/Enroll.cs:line 42\n"
+            + "   at System.Threading.Tasks.Task.Run()";
+        _writer.UseLogs(new FakeLogSource(new RunLogSlice("nodes", [
+            new LogLine(Start, "Error", "Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", null, ExceptionText),
+            new LogLine(Start, "Error", "Dhadgar.ServiceDefaults.GlobalExceptionHandler", null, "Unhandled exception. TraceId: t1"),
+            new LogLine(Start, "Information", "Microsoft.AspNetCore.Hosting.Diagnostics", null,
+                "Request finished HTTP/1.1 POST http://nodes:5000/api/v1/agents/enroll?x=1 - 500 - text/plain 10.0ms"),
+            new LogLine(Start, "Information", "Microsoft.AspNetCore.Hosting.Diagnostics", null,
+                "Request finished HTTP/1.1 GET http://nodes:5000/api/v1/agents/ca-certificate - 200 - application/json 1.0ms"),
+            new LogLine(Start.AddSeconds(-5), "Information", "Microsoft.AspNetCore.Hosting.Diagnostics", null,
+                "Request finished HTTP/1.1 POST http://nodes:5000/api/v1/agents/enroll - 500 - text/plain 1.0ms"),
+        ])));
+
+        await RunSpecAsync();
+
+        using JsonDocument row = JsonDocument.Parse(await File.ReadAllTextAsync(RowPath("evidence")));
+        JsonElement evidence = row.RootElement.GetProperty("evidence");
+        JsonElement exceptions = evidence.GetProperty("exceptions");
+        Assert.Equal(1, exceptions.GetArrayLength());
+        Assert.Equal("nodes", exceptions[0].GetProperty("service").GetString());
+        Assert.Equal("System.InvalidOperationException", exceptions[0].GetProperty("type").GetString());
+        Assert.Equal(1, exceptions[0].GetProperty("frames").GetArrayLength());
+        Assert.Contains("Dhadgar.Nodes.Enroll.HandleAsync", exceptions[0].GetProperty("frames")[0].GetString(), StringComparison.Ordinal);
+
+        JsonElement http = evidence.GetProperty("http");
+        Assert.Equal(1, http.GetArrayLength());
+        Assert.Equal(500, http[0].GetProperty("status").GetInt32());
+        Assert.Equal("POST", http[0].GetProperty("method").GetString());
+        Assert.Equal("/api/v1/agents/enroll", http[0].GetProperty("route").GetString());
+        Assert.Equal(0, http[0].GetProperty("faults").GetArrayLength());
+    }
+
+    private string RowPath(string rowId) =>Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
 
     private async Task<UatRunResult> RunSpecAsync(BundleWriter? sink = null)
     {
