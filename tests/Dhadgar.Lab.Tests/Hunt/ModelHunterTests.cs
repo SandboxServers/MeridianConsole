@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Hunt;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
@@ -103,6 +104,75 @@ public sealed class ModelHunterTests : IDisposable
         Assert.Contains(lab.Calls.Skip(disable + 1), call => call.Tool == "fault_reset" && !call.Cancelled);
     }
 
+    [Fact]
+    public async Task Hunter_I1OutsidePgDown_FailsTheCase()
+    {
+        // The fake answers the real InvariantViolation shape, so the hunter must read invariant_id (F92).
+        var lab = new FakeLab { I1Violations = true };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+        Assert.Contains("I1 violated outside a PgDown window", outcome.Value.Result!["detail"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Hunter_429ThenOk_RetriesOnce()
+    {
+        var lab = new FakeLab { Throttles = 1 };
+        Result<JobOutcome> outcome = await RunAdvancingClockAsync(NewHunter(lab));
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("pass", outcome.Value!.Overall);
+        Assert.Equal(0, lab.Throttles);
+        Assert.Equal(0, outcome.Value.Result!["throttled"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task Hunter_429Twice_IsThrottled()
+    {
+        var lab = new FakeLab { Throttles = 2 };
+        Result<JobOutcome> outcome = await RunAdvancingClockAsync(NewHunter(lab));
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal(0, lab.Throttles);
+        Assert.True(outcome.Value!.Result!["throttled"]!.GetValue<int>() >= 1, "a case that is throttled twice must be counted as throttled");
+    }
+
+    [Fact]
+    public async Task Hunter_MintWithoutTokenRef_IsInfrastructure()
+    {
+        var lab = new FakeLab { MintWithoutTokenRef = true };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsFailure, "a mint with no token_ref is an infrastructure error, not a product verdict");
+        Assert.Contains("nodes_token_mint returned no token_ref", outcome.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Hunter_HealThrows_CaseStillEnds()
+    {
+        var lab = new FakeLab { HealThrows = true };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 150, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("pass", outcome.Value!.Overall);
+        Assert.Contains(lab.Calls, call => call.Tool == "fault_proxy_disable");
+    }
+
+    /// <summary>Runs the hunt while advancing the fake clock, so the hunter's wait after a 429 ends.</summary>
+    private async Task<Result<JobOutcome>> RunAdvancingClockAsync(ModelHunter hunter)
+    {
+        Task<Result<JobOutcome>> run = hunter.RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+        for (int i = 0; i < 5000 && !run.IsCompleted; i++)
+        {
+            _time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(1, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        return await run.ConfigureAwait(false);
+    }
+
     private ModelHunter NewHunter(FakeLab lab) =>
         new(lab.InvokeAsync, new GatewayPacer(_time), _time, _validator, "lease-hunt-test", "nodes", TimeSpan.Zero);
 
@@ -143,6 +213,13 @@ public sealed class ModelHunterTests : IDisposable
 
         public bool I1Violations { get; init; }
 
+        public bool HealThrows { get; init; }
+
+        public bool MintWithoutTokenRef { get; init; }
+
+        /// <summary>How many of the next enroll probes answer 429 before the product answers normally.</summary>
+        public int Throttles { get; set; }
+
         public Action? OnFirstPgDown { get; set; }
 
         public List<(string Tool, bool Cancelled)> Calls { get; } = [];
@@ -161,9 +238,19 @@ public sealed class ModelHunterTests : IDisposable
                     _pgDown = false;
                     return Ok(new { });
                 case "fault_reset":
+                    if (HealThrows && _pgDown)
+                    {
+                        throw new InvalidOperationException("heal failed");
+                    }
+
                     _pgDown = false;
                     return Ok(new { healed = Array.Empty<string>() });
                 case "nodes_token_mint":
+                    if (MintWithoutTokenRef)
+                    {
+                        return Ok(new { });
+                    }
+
                     if (_used.Count >= 8)
                     {
                         return Ok(new { });
@@ -186,15 +273,29 @@ public sealed class ModelHunterTests : IDisposable
                 case "svc_restart":
                     return Ok(new { });
                 case "nodes_enroll_probe":
+                    if (Throttles > 0)
+                    {
+                        Throttles--;
+                        return Ok(new { status = 429, retry_after_s = 2 });
+                    }
+
                     return Ok(new { status = Enroll(args) });
                 case "db_query":
                     string sql = args.GetProperty("sql").GetString()!;
                     int n = sql.Contains("enrollment_tokens", StringComparison.Ordinal) ? _used.Count(used => used) : _nodes;
                     return Ok(new { rows = new[] { new { n } } });
                 case "invariants_check":
-                    return Ok(I1Violations && !_pgDown
-                        ? new { violations = new[] { new { rule = "I1", detail = "unhandled" } } }
-                        : new { violations = Array.Empty<object>() });
+                    // The real InvariantViolation shape (F92): the id is invariant_id, never rule.
+                    InvariantViolation[] violations = I1Violations && !_pgDown
+                        ? [new InvariantViolation("I1", "nodes", "unhandled", "unhandled", DateTimeOffset.UnixEpoch, null)]
+                        : [];
+                    return new LabToolResult(false, JsonSerializer.SerializeToElement(new
+                    {
+                        count = violations.Length,
+                        violations,
+                        errors = Array.Empty<object>(),
+                        skipped = Array.Empty<object>(),
+                    }, LabJson.Options));
                 default:
                     return new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = tool }));
             }

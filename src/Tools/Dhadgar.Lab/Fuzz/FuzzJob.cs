@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Fuzz;
@@ -64,18 +66,25 @@ public sealed class FuzzJob
     private readonly TimeProvider _time;
     private readonly KnownIssues _known;
     private readonly IReadOnlyList<string> _forbiddenMarkers;
+    private readonly Func<string, JsonElement, LabCallContext, CancellationToken, Task<LabToolResult>> _invoke;
+    private readonly Func<string, bool>? _leakCheck;
 
     /// <summary>
     /// Creates the job. <paramref name="known"/> is the shipped known-issue list (or <see cref="KnownIssues.Empty"/>);
-    /// <paramref name="forbiddenMarkers"/> are secret values that must not appear in any response.
+    /// <paramref name="forbiddenMarkers"/> are secret values that must not appear in any response. <paramref name="invoke"/>
+    /// is the tool call (the dispatcher in the daemon, a fake in tests) for the end-of-job <c>invariants_check</c> (D-ML100).
+    /// <paramref name="leakCheck"/> is the secret predicate over a body (R2-N9).
     /// </summary>
-    public FuzzJob(IFuzzTransport transport, GatewayPacer pacer, TimeProvider time, KnownIssues known, IReadOnlyList<string> forbiddenMarkers)
+    public FuzzJob(IFuzzTransport transport, GatewayPacer pacer, TimeProvider time, KnownIssues known, IReadOnlyList<string> forbiddenMarkers,
+        Func<string, JsonElement, LabCallContext, CancellationToken, Task<LabToolResult>> invoke, Func<string, bool>? leakCheck = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _pacer = pacer ?? throw new ArgumentNullException(nameof(pacer));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _known = known ?? throw new ArgumentNullException(nameof(known));
         _forbiddenMarkers = forbiddenMarkers ?? throw new ArgumentNullException(nameof(forbiddenMarkers));
+        _invoke = invoke ?? throw new ArgumentNullException(nameof(invoke));
+        _leakCheck = leakCheck;
     }
 
     /// <summary>
@@ -90,6 +99,7 @@ public sealed class FuzzJob
             return Result<JobOutcome>.Failure("[Lab.InvalidArgument] cases must be 1 to 5000 and the index must not be negative");
         }
 
+        DateTimeOffset started = _time.GetUtcNow();
         var failures = new JsonArray();
         int sent = 0;
         int throttled = 0;
@@ -125,6 +135,15 @@ public sealed class FuzzJob
             }
         }
 
+        // D-ML100: every job ends with an invariants check over the job window. A violation, a check error or an errors entry
+        // fails the job (R2-N10).
+        LabToolResult check = await _invoke("invariants_check",
+            JsonSerializer.SerializeToElement(new { since = started.ToString("O", CultureInfo.InvariantCulture) }),
+            new LabCallContext(Guid.NewGuid().ToString("N"), null, "job:fuzz"), ct).ConfigureAwait(false);
+        int violations = check.IsError ? 0 : CountOf(check.Payload, "violations");
+        int checkErrors = check.IsError ? 0 : CountOf(check.Payload, "errors");
+        bool invariantsFailed = check.IsError || violations > 0 || checkErrors > 0;
+
         var payload = new JsonObject
         {
             ["target"] = target.Name,
@@ -135,9 +154,21 @@ public sealed class FuzzJob
             ["throttled"] = throttled,
             ["known"] = known,
             ["failures"] = failures,
+            ["invariants"] = new JsonObject
+            {
+                ["checked"] = !check.IsError,
+                ["violations"] = violations,
+                ["errors"] = checkErrors,
+            },
         };
-        return Result<JobOutcome>.Success(new JobOutcome(failures.Count == 0 ? "pass" : "fail", payload));
+        return Result<JobOutcome>.Success(new JobOutcome(failures.Count == 0 && !invariantsFailed ? "pass" : "fail", payload));
     }
+
+    /// <summary>The length of a named array in a tool payload, or 0.</summary>
+    private static int CountOf(JsonElement payload, string name) =>
+        payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Array
+            ? value.GetArrayLength()
+            : 0;
 
     /// <summary>Paces, sends, honours one <c>Retry-After</c> on a 429, and judges the observed response.</summary>
     private async Task<Result<FuzzVerdict>> JudgeAsync(FuzzTarget target, FuzzCase fuzzCase, CancellationToken ct)
@@ -184,7 +215,7 @@ public sealed class FuzzJob
         string? contentType = probe.Headers.TryGetValue("Content-Type", out string? value) ? value : null;
         string body = probe.Body is { } element ? element.GetRawText() : string.Empty;
         var observation = new FuzzObservation(probe.Status, contentType, body, probe.DurationMs, probe.Error);
-        return Result<FuzzVerdict>.Success(FuzzOracle.Judge(target, fuzzCase, observation, _known, _forbiddenMarkers));
+        return Result<FuzzVerdict>.Success(FuzzOracle.Judge(target, fuzzCase, observation, _known, _forbiddenMarkers, _leakCheck));
     }
 
     /// <summary>The <c>Retry-After</c> seconds, clamped to 1 to 60; the default when it is missing or not a number.</summary>

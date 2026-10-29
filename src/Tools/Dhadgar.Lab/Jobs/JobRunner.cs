@@ -300,7 +300,7 @@ public sealed class JobRunner : ILeaseEndHook, ILabStatusSource, IDisposable
         {
             state = JobState.Cancelled;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             // Only the type is logged: a message can carry lease or path detail.
             _logger.LogWarning("lab job {Kind} failed with {ExceptionType}", job.Kind, ex.GetType().Name);

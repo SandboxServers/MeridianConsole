@@ -7,6 +7,8 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Dhadgar.Lab.Hunt;
 
@@ -61,6 +63,7 @@ public sealed class ModelHunter
     private readonly string _leaseId;
     private readonly string _via;
     private readonly TimeSpan _settle;
+    private readonly ILogger<ModelHunter> _logger;
 
     /// <summary>
     /// Creates the hunter.
@@ -72,9 +75,12 @@ public sealed class ModelHunter
     /// <param name="leaseId">The job's own lease id. It goes only to the dispatcher and is never logged or written.</param>
     /// <param name="via">The enrollment route: <c>gateway</c> (default), <c>agent_ingress</c> or <c>nodes</c>.</param>
     /// <param name="settle">The wait after <c>PgDown</c>; the default is <see cref="DefaultSettle"/>.</param>
+    /// <param name="logger">The logger for a heal that did not finish; logs no ids or arguments. Null uses <see cref="NullLogger"/>.</param>
     public ModelHunter(Func<string, JsonElement, LabCallContext, CancellationToken, Task<LabToolResult>> invoke, GatewayPacer pacer,
-        TimeProvider time, IPathValidator validator, string leaseId, string via = GatewayVia, TimeSpan? settle = null)
+        TimeProvider time, IPathValidator validator, string leaseId, string via = GatewayVia, TimeSpan? settle = null,
+        ILogger<ModelHunter>? logger = null)
     {
+        _logger = logger ?? NullLogger<ModelHunter>.Instance;
         _invoke = invoke ?? throw new ArgumentNullException(nameof(invoke));
         _pacer = pacer ?? throw new ArgumentNullException(nameof(pacer));
         _time = time ?? throw new ArgumentNullException(nameof(time));
@@ -276,8 +282,13 @@ public sealed class ModelHunter
                             return Infrastructure(mint.Error);
                         }
 
-                        if (model.Tokens.Count < EnrollmentModel.MaxTokens && Text(mint.Value, "token_ref") is { } tokenRef)
+                        if (model.Tokens.Count < EnrollmentModel.MaxTokens)
                         {
+                            if (Text(mint.Value, "token_ref") is not { } tokenRef)
+                            {
+                                return Infrastructure("[Lab.Unavailable] nodes_token_mint returned no token_ref");
+                            }
+
                             tokenRefs.Add(tokenRef);
                         }
 
@@ -293,13 +304,18 @@ public sealed class ModelHunter
                             }
                         }
 
+                        if (op.Token < 0 || op.Token >= tokenRefs.Count)
+                        {
+                            return Infrastructure("[Lab.Unavailable] hunt op names a token that was not minted");
+                        }
+
                         var probe = new JsonObject
                         {
                             ["token_ref"] = tokenRefs[op.Token],
                             ["platform"] = Platform,
                             ["via"] = _via,
                         };
-                        Result<JsonElement> enrolled = await CallAsync("nodes_enroll_probe", probe, ct).ConfigureAwait(false);
+                        Result<JsonElement> enrolled = await ProbeEnrollAsync(probe, ct).ConfigureAwait(false);
                         if (enrolled.IsFailure)
                         {
                             return Infrastructure(enrolled.Error);
@@ -419,16 +435,17 @@ public sealed class ModelHunter
         {
             foreach (JsonElement violation in violations.EnumerateArray())
             {
-                string rule = Text(violation, "rule") ?? string.Empty;
-                if (rule.StartsWith("I3", StringComparison.Ordinal))
+                // The shape is invariants_check's InvariantViolation: the id is invariant_id (F92).
+                string invariantId = Text(violation, "invariant_id") ?? string.Empty;
+                if (invariantId.StartsWith("I3", StringComparison.Ordinal))
                 {
-                    return "invariant " + rule + " violated";
+                    return "invariant " + invariantId + " violated";
                 }
 
                 bool allowed = model.PgDown && op.Kind == HuntOpKind.Enroll;
-                if (rule.StartsWith("I1", StringComparison.Ordinal) && !allowed)
+                if (invariantId.StartsWith("I1", StringComparison.Ordinal) && !allowed)
                 {
-                    return "invariant " + rule + " violated outside a PgDown window";
+                    return "invariant " + invariantId + " violated outside a PgDown window";
                 }
             }
         }
@@ -439,9 +456,48 @@ public sealed class ModelHunter
     /// <summary>The heal in <c>finally</c>: <c>fault_reset</c> under its own budget, never the job's token (A3).</summary>
     private async Task HealAsync()
     {
-        using var budget = new CancellationTokenSource(HealBudget, _time);
-        await CallAsync("fault_reset", new JsonObject(), budget.Token).ConfigureAwait(false);
+        try
+        {
+            using var budget = new CancellationTokenSource(HealBudget, _time);
+            await CallAsync("fault_reset", new JsonObject(), budget.Token).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // A heal that throws must not replace the case's own result. Only the fact is logged: no ids, no arguments.
+            _logger.LogWarning("hunt heal did not finish");
+        }
     }
+
+    /// <summary>
+    /// One enroll probe. A 429 waits the probe's <c>retry_after_s</c> (clamped to 1 to 60 s, else 60 s), paces again, and
+    /// probes once more with the same arguments (R2-N6). A second 429 is the caller's throttled case.
+    /// </summary>
+    private async Task<Result<JsonElement>> ProbeEnrollAsync(JsonObject probe, CancellationToken ct)
+    {
+        Result<JsonElement> first = await CallAsync("nodes_enroll_probe", probe, ct).ConfigureAwait(false);
+        if (first.IsFailure || Number(first.Value, "status") != 429)
+        {
+            return first;
+        }
+
+        await Task.Delay(RetryWait(first.Value), _time, ct).ConfigureAwait(false);
+        if (_via is GatewayVia or AgentIngressVia)
+        {
+            Result paced = await _pacer.WaitAsync(ct).ConfigureAwait(false);
+            if (paced.IsFailure)
+            {
+                return Result<JsonElement>.Failure(paced.Error);
+            }
+        }
+
+        return await CallAsync("nodes_enroll_probe", probe, ct).ConfigureAwait(false);
+    }
+
+    private static TimeSpan RetryWait(JsonElement payload) =>
+        payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("retry_after_s", out JsonElement value)
+            && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int seconds)
+            ? TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 60))
+            : TimeSpan.FromSeconds(60);
 
     private async Task<Result<JsonElement>> CallAsync(string tool, JsonObject args, CancellationToken ct)
     {

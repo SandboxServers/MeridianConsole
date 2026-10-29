@@ -1,10 +1,15 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Fuzz;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Dhadgar.Lab.Tools.Fuzz;
 
@@ -39,9 +44,11 @@ public sealed class FuzzRunTool : LabTool<FuzzRunArgs>
     private readonly LabPaths _paths;
     private readonly IPathValidator _validator;
     private readonly TimeProvider _time;
+    private readonly IServiceProvider _services;
 
-    /// <summary>Creates the tool over the job runner, the shared pacer, the transport and the validated paths.</summary>
-    public FuzzRunTool(JobRunner jobs, GatewayPacer pacer, IFuzzTransport transport, LabPaths paths, IPathValidator validator, TimeProvider time)
+    /// <summary>Creates the tool over the job runner, the shared pacer, the transport, the validated paths and the services the leak check and the invariants call need.</summary>
+    public FuzzRunTool(JobRunner jobs, GatewayPacer pacer, IFuzzTransport transport, LabPaths paths, IPathValidator validator, TimeProvider time,
+        IServiceProvider services)
     {
         _jobs = jobs ?? throw new ArgumentNullException(nameof(jobs));
         _pacer = pacer ?? throw new ArgumentNullException(nameof(pacer));
@@ -49,6 +56,20 @@ public sealed class FuzzRunTool : LabTool<FuzzRunArgs>
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _time = time ?? throw new ArgumentNullException(nameof(time));
+        _services = services ?? throw new ArgumentNullException(nameof(services));
+    }
+
+    /// <summary>
+    /// The leak predicate for fuzz bodies (R2-N9, S-N3): the vault's values and the daemon token, each checked without copying
+    /// the secret into a string or an array. The body is the only string the check reads.
+    /// </summary>
+    /// <param name="vault">The secret vault.</param>
+    /// <param name="edge">The edge state that holds the daemon token.</param>
+    internal static Func<string, bool> LeakCheck(SecretVault vault, EdgeState edge)
+    {
+        var scanner = new SecretScanner(vault);
+        Func<string, bool> token = InvariantWiring.DaemonTokenPredicate(edge);
+        return body => scanner.HasSecret(body) || token(body);
     }
 
     /// <inheritdoc />
@@ -99,8 +120,12 @@ public sealed class FuzzRunTool : LabTool<FuzzRunArgs>
         FuzzTarget chosen = target.Value!;
         int firstIndex = first;
         int count = cases;
+        LabToolDispatcher dispatcher = _services.GetRequiredService<LabToolDispatcher>();
+        Func<string, bool> leakCheck = LeakCheck(_services.GetRequiredService<SecretVault>(), _services.GetRequiredService<EdgeState>());
         Result<JobHandle> started = _jobs.Start(FuzzJob.Kind, seed, (jobContext, token) =>
-            new FuzzJob(transport, pacer, time, issues, []).RunAsync(seed, chosen, firstIndex, count, token));
+            new FuzzJob(transport, pacer, time, issues, [],
+                (name, arguments, callContext, callToken) => dispatcher.InvokeAsync(name, arguments, callContext, callToken),
+                leakCheck).RunAsync(seed, chosen, firstIndex, count, token));
         return Task.FromResult(started.IsFailure
             ? Result<object>.Failure(started.Error)
             : Result<object>.Success(new FuzzRunStarted(started.Value!.JobId, seed)));

@@ -1,8 +1,10 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Lab.Fuzz;
 using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Time.Testing;
 
@@ -19,7 +21,7 @@ public sealed class FuzzJobTests
     {
         var transport = new FakeTransport(fuzzCase => fuzzCase.Index == 5 ? Probe(500) : Probe(200));
         var job = new FuzzJob(transport, new GatewayPacer(new FakeTimeProvider(Start)), new FakeTimeProvider(Start),
-            KnownIssues.Empty, []);
+            KnownIssues.Empty, [], CleanInvoke);
 
         Result<JobOutcome> outcome = await job.RunAsync(Seed, FuzzTargets.Enroll, 0, 10, CancellationToken.None);
 
@@ -36,7 +38,7 @@ public sealed class FuzzJobTests
     {
         var transport = new FakeTransport(fuzzCase => fuzzCase.Index == 5 ? Probe(500) : Probe(200));
         var job = new FuzzJob(transport, new GatewayPacer(new FakeTimeProvider(Start)), new FakeTimeProvider(Start),
-            KnownIssues.Empty, []);
+            KnownIssues.Empty, [], CleanInvoke);
 
         Result<JobOutcome> full = await job.RunAsync(Seed, FuzzTargets.Enroll, 0, 10, CancellationToken.None);
         Result<JobOutcome> replay = await job.RunAsync(Seed, FuzzTargets.Enroll, 5, 1, CancellationToken.None);
@@ -54,7 +56,7 @@ public sealed class FuzzJobTests
     {
         var transport = new FakeTransport(_ => Probe(200));
         var job = new FuzzJob(transport, new GatewayPacer(new FakeTimeProvider(Start)), new FakeTimeProvider(Start),
-            KnownIssues.Empty, []);
+            KnownIssues.Empty, [], CleanInvoke);
 
         Result<JobOutcome> outcome = await job.RunAsync(Seed, FuzzTargets.Enroll, 0, 8, CancellationToken.None);
 
@@ -67,7 +69,7 @@ public sealed class FuzzJobTests
     {
         int calls = 0;
         var transport = new FakeTransport(_ => calls++ == 0 ? Probe(429, retryAfter: "1") : Probe(200));
-        var job = new FuzzJob(transport, new GatewayPacer(TimeProvider.System), TimeProvider.System, KnownIssues.Empty, []);
+        var job = new FuzzJob(transport, new GatewayPacer(TimeProvider.System), TimeProvider.System, KnownIssues.Empty, [], CleanInvoke);
 
         Result<JobOutcome> outcome = await job.RunAsync(Seed, FuzzTargets.Enroll, 0, 1, CancellationToken.None);
 
@@ -80,7 +82,7 @@ public sealed class FuzzJobTests
     public async Task FuzzJob_Persistent429_IsThrottledNotFailure()
     {
         var transport = new FakeTransport(_ => Probe(429, retryAfter: "1"));
-        var job = new FuzzJob(transport, new GatewayPacer(TimeProvider.System), TimeProvider.System, KnownIssues.Empty, []);
+        var job = new FuzzJob(transport, new GatewayPacer(TimeProvider.System), TimeProvider.System, KnownIssues.Empty, [], CleanInvoke);
 
         Result<JobOutcome> outcome = await job.RunAsync(Seed, FuzzTargets.Enroll, 0, 1, CancellationToken.None);
 
@@ -93,7 +95,7 @@ public sealed class FuzzJobTests
     public async Task FuzzJob_CancelledBeforeStart_IsFailure()
     {
         var transport = new FakeTransport(_ => Probe(200));
-        var job = new FuzzJob(transport, new GatewayPacer(new FakeTimeProvider(Start)), new FakeTimeProvider(Start), KnownIssues.Empty, []);
+        var job = new FuzzJob(transport, new GatewayPacer(new FakeTimeProvider(Start)), new FakeTimeProvider(Start), KnownIssues.Empty, [], CleanInvoke);
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
 
@@ -103,6 +105,33 @@ public sealed class FuzzJobTests
         Assert.Contains("[Lab.Cancelled]", outcome.Error, StringComparison.Ordinal);
         Assert.Equal(0, transport.Sent);
     }
+
+    [Fact]
+    public async Task FuzzJob_InvariantViolationAfterCases_FailsTheJob()
+    {
+        var transport = new FakeTransport(_ => Probe(200));
+        var violation = new { count = 1, violations = new[] { new { invariant_id = "I1", source = "nodes", reason = "unhandled" } }, errors = Array.Empty<object>(), skipped = Array.Empty<object>() };
+        var job = new FuzzJob(transport, new GatewayPacer(new FakeTimeProvider(Start)), new FakeTimeProvider(Start),
+            KnownIssues.Empty, [], InvariantsAnswer(violation));
+
+        Result<JobOutcome> outcome = await job.RunAsync(Seed, FuzzTargets.Enroll, 0, 4, CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+        Assert.Empty((JsonArray)outcome.Value.Result!["failures"]!);
+        Assert.True(outcome.Value.Result["invariants"]!["checked"]!.GetValue<bool>());
+        Assert.Equal(1, outcome.Value.Result["invariants"]!["violations"]!.GetValue<int>());
+    }
+
+    /// <summary>The clean end-of-job answer: <c>invariants_check</c> has no violations and no errors; any other tool errors.</summary>
+    private static Task<LabToolResult> CleanInvoke(string tool, JsonElement args, LabCallContext context, CancellationToken ct) =>
+        InvariantsAnswer(new { count = 0, violations = Array.Empty<object>(), errors = Array.Empty<object>(), skipped = Array.Empty<object>() })(tool, args, context, ct);
+
+    /// <summary>Answers <c>invariants_check</c> with <paramref name="payload"/>; any other tool errors.</summary>
+    private static Func<string, JsonElement, LabCallContext, CancellationToken, Task<LabToolResult>> InvariantsAnswer(object payload) =>
+        (tool, _, _, _) => Task.FromResult(tool == "invariants_check"
+            ? new LabToolResult(false, JsonSerializer.SerializeToElement(payload))
+            : new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = "not answered" })));
 
     private static HttpProbeResult Probe(int status, string? retryAfter = null)
     {

@@ -185,7 +185,7 @@ public static class FlakeCheckJob
             runs.Add(new JsonObject { ["run_id"] = rerunId, ["overall"] = StringOf(call.Payload, "overall") });
         }
 
-        var keys = grades.SelectMany(g => g.Keys).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        var keys = plan.Keys.Order(StringComparer.Ordinal).ToList();
         var flakes = new JsonArray();
         foreach (string key in keys)
         {
