@@ -2,9 +2,9 @@
 
 Ledger: [README.md](README.md). Packets and contract (C1-C20): [work-packets.md](work-packets.md); wave 5 order, steps and Docker split in its "Wave 5 plan".
 
-## State (2026-10-28, wave 4 CLOSED, wave 5 step A)
+## State (2026-10-28, wave 5 ALL MERGED, boundary next)
 
-- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only). Waves 1-4 and 4H Integrated and reviewed. Wave 5: L16g merged (c84de26f). L25 done on `ml/l25-tools` (tip ed23e62d, 1028 pass, 5 skip), merge pending. No BlockedDecision.
+- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only). Waves 1-4 and 4H Integrated and reviewed. Wave 5: L16g, L25, L26, L27, L52, L53, L28, L29, L25e, L54, L25f, L55 all merged; tip 3b24617f (L55 merge; see `.claude/reports/meridian-lab/merge-L55.md`). `.gitattributes` LF rule for Twins tests (eda18720). Known flake for R3: `HistoryRunJobTests` heal-once tests fail under load. No BlockedDecision.
 - L25 rulings D-ML91-94 (`worknotes/L25-ruling-1.md`; new packets L25e, L25f) and D-ML95 (orchestrator, not yet in README: `UatRunTool` keeps `GetRequiredService<ResultsService>()`; test providers register `ResultsService`, additive setup only).
 - Wave 4 rulings: D-ML70/72 (S-L7), D-ML74 (Docker at the boundary), D-ML75/76 (R2; the orchestrator's L22 ruling, first numbered D-ML73, is D-ML75), D-ML80-82 (R1), D-ML83-85 (Docker). D-ML73 is still the open broker-readiness question (non-blocking). Rulings in `worknotes/wave4-*-ruling-1.md`.
 - Wave 5 plan rulings: F82-F86, D-ML86 (SQLite package, CsCheck reference), D-ML87 (KI-F67, KI-F69), D-ML88 (`GatewayPacer`, no rate-limit raise), D-ML89 (one `RunSummary`; OD-1 ruled at its default as new packet L16g), D-ML90 (self-check recovery mutex and token).
@@ -15,10 +15,8 @@ Ledger: [README.md](README.md). Packets and contract (C1-C20): [work-packets.md]
 
 ## Next actions (orchestrator; wave 5 plan)
 
-1. Step A: merge `ml/l25-tools` (Sonnet agent, `--no-ff`). Then L25e, L25f per the amended plan. Step B follows.
-2. Step B: L26 ‖ L27 ‖ L52 ‖ L53. Merge L26 → L27 → L52 → L53.
-3. Step C (after L27): L28 ‖ L29 ‖ L54. Merge L28 → L29 → L54. Step D: L55, then merge.
-4. Each packet runs its Steps; a `context: next step N` return gets a fresh coder in the same worktree. Step checks are non-Docker only (D-ML74).
+1. Steps A-D done (all merged). Next: boundary Docker/live run, then reviews.
+2. Each packet runs its Steps; step checks are non-Docker only (D-ML74).
 5. Boundary run (one coder in the campaign worktree): the plan's Docker table, the wave 4 Docker set, the live hunt, fuzz, chaos and `coverage_report` gates; report `worknotes/wave5-docker-run.md`.
 6. Boundary review in slices R1 (L16g, L25, L26), R2 (L27-L29, L52), R3 (L53-L55): reviewer plus security-advisor each; then the ruling check.
 7. Before L40: ask the architect for `worknotes/W8-sprint2-deltas.md`. Campaign end: campaign review, one PR with `security-review`, user yes before merge.
