@@ -148,6 +148,19 @@ public sealed class CoverageReportToolTests : IDisposable
         Assert.True(written.IsSuccess, written.Error);
     }
 
+    [Fact]
+    public async Task NotCollectedKinds_AreFlaggedNotCollected()
+    {
+        // A7 (R2-N13, D-ML99): only invariant_check is recorded at ingest; the other four kinds say so instead of passing as coverage gaps.
+        JsonElement result = await Report(new { });
+
+        foreach (JsonElement dimension in result.GetProperty("dimensions").EnumerateArray())
+        {
+            string kind = dimension.GetProperty("kind").GetString()!;
+            Assert.Equal(kind != "invariant_check", dimension.GetProperty("not_collected").GetBoolean());
+        }
+    }
+
     private async Task<JsonElement> DimensionOf(string kind)
     {
         JsonElement result = await Report(new { kind });

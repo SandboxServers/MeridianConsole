@@ -25,6 +25,13 @@ public sealed class EvidenceCoverageTests
     }
 
     [Fact]
+    public void EvidenceCoverage_TwinIsBuilt_AndNotListedAsNotBuilt()
+    {
+        Assert.Contains("twin", EvidenceCoverage.BuiltKinds);
+        Assert.DoesNotContain("twin", EvidenceCoverage.NotBuiltKinds);
+    }
+
+    [Fact]
     public void ToJson_NamesEveryListAndTheNote()
     {
         var json = EvidenceCoverage.ToJson();
