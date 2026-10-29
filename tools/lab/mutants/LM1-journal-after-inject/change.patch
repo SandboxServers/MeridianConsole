@@ -1,0 +1,19 @@
+diff --git a/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs b/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs
+index e464f0a2..081b50eb 100644
+--- a/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs
++++ b/src/Tools/Dhadgar.Lab/Faults/FaultBook.cs
+@@ -199,14 +199,6 @@ public sealed class FaultBook : IFaultTargets, ILeaseEndHook, ILabStatusSource,
+             var entry = new FaultJournalEntry(faultId, kind, targetId, args, prepared.Value, FaultState.Prepared, now, now.AddSeconds(healAfterS), null);
+             Replace(entry);
+ 
+-            // Write-ahead (D-ML46): the entry is durable before anything changes the target.
+-            Result journaled = await PersistAsync(ct).ConfigureAwait(false);
+-            if (journaled.IsFailure)
+-            {
+-                Remove(faultId);
+-                return Result<ActiveFault>.Failure(journaled.Error);
+-            }
+-
+             Observe(ObservationKind.FaultPrepare, entry, "prepared");
+ 
+             Result injected = await RunKindAsync(() => faultKind.InjectAsync(target.Value, args, prepared.Value, faultId, ct)).ConfigureAwait(false);

@@ -1,0 +1,13 @@
+diff --git a/src/Tools/Dhadgar.Lab/Faults/Tripwire.cs b/src/Tools/Dhadgar.Lab/Faults/Tripwire.cs
+index 0a3d1dba..8829a6bf 100644
+--- a/src/Tools/Dhadgar.Lab/Faults/Tripwire.cs
++++ b/src/Tools/Dhadgar.Lab/Faults/Tripwire.cs
+@@ -29,7 +29,7 @@ public sealed class Tripwire : ITripwire
+         ArgumentNullException.ThrowIfNull(mounts);
+ 
+         var bare = name.TrimStart('/');
+-        if (Array.IndexOf(ProtectedNames, bare) >= 0 || bare.StartsWith("dhadgar", StringComparison.OrdinalIgnoreCase))
++        if (Array.IndexOf(ProtectedNames, bare) >= 0)
+         {
+             return Result.Failure("[Lab.BlastRadius] container is a product or data container");
+         }

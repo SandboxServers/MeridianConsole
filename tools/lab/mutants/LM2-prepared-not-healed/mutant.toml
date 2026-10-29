@@ -1,0 +1,7 @@
+schema = 1
+id = "LM2-prepared-not-healed"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "Recovery skips a Prepared journal entry that was never injected"
+files = ["src/Tools/Dhadgar.Lab/Faults/FaultBook.cs"]
+detector = { test = "Dhadgar.Lab.Tests.Faults.FaultBookTests.FaultBook_PreparedNeverInjected_HealSucceeds" }

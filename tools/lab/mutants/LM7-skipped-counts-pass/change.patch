@@ -1,0 +1,13 @@
+diff --git a/src/Tools/Dhadgar.Lab/Uat/RowGrader.cs b/src/Tools/Dhadgar.Lab/Uat/RowGrader.cs
+index d26293e3..cb7df846 100644
+--- a/src/Tools/Dhadgar.Lab/Uat/RowGrader.cs
++++ b/src/Tools/Dhadgar.Lab/Uat/RowGrader.cs
+@@ -175,7 +175,7 @@ public static class RunOutcome
+             return RunOverall.Fail;
+         }
+ 
+-        if (grades.Count == 0 || grades.Any(g => g is RowGrade.NeedsHuman or RowGrade.Skipped))
++        if (grades.Count == 0 || grades.Any(g => g is RowGrade.NeedsHuman))
+         {
+             return RunOverall.Incomplete;
+         }

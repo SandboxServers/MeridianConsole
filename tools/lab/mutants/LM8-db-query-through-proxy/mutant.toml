@@ -1,0 +1,7 @@
+schema = 1
+id = "LM8-db-query-through-proxy"
+kind = "lab"
+base = "a961539a4476cfe02b11da6cce2149e5e0be46af"
+title = "The read-only observation connection goes through a Toxiproxy proxy as the owner"
+files = ["src/Tools/Dhadgar.Lab/Stack/LabConnectionStrings.cs"]
+detector = { test = "Dhadgar.Lab.Tests.ObservationPathTests.Reader_ResolvesToDirectPostgresPort_AsLabReader" }
