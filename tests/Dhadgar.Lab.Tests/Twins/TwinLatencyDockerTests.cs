@@ -1,5 +1,6 @@
 using System.Buffers.Text;
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Lab.Daemon;
@@ -18,6 +19,8 @@ namespace Dhadgar.Lab.Tests.Twins;
 public sealed class TwinLatencyDockerTests
 {
     private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";
+    private const string EnrollRowPath = "rows/catalog-twin-enroll/enroll-once.json";
+    private const int RowTextLimit = 4000;
 
     [SkippableFact(Timeout = 1_800_000)]
     [Trait("RequiresDocker", "true")]
@@ -90,7 +93,12 @@ public sealed class TwinLatencyDockerTests
                         ["lease_id"] = leaseId,
                     });
                 JsonElement held = twin.RootElement.GetProperty("held");
-                Assert.True(held.ValueKind == JsonValueKind.True, "twin relation did not hold: " + twin.RootElement.GetRawText());
+                string rows = held.ValueKind == JsonValueKind.True ? string.Empty : await DescribeRowsAsync(daemon.BaseAddress, token, twin.RootElement);
+                Assert.True(held.ValueKind == JsonValueKind.True, "twin relation did not hold: " + twin.RootElement.GetRawText() + rows);
+
+                // Anti-hollow (L53 H4): the toxic must be in place for the enroll, not reset by the row's own stack_up.
+                double enrollMs = await VariantEnrollDurationMsAsync(daemon.BaseAddress, token, twin.RootElement);
+                Assert.True(enrollMs >= 1500, "the latency did not reach the enroll: " + enrollMs.ToString(CultureInfo.InvariantCulture));
             }
             finally
             {
@@ -105,6 +113,59 @@ public sealed class TwinLatencyDockerTests
                 Directory.Delete(home, recursive: true);
             }
         }
+    }
+
+    /// <summary>
+    /// The two worlds' enroll rows, as text for a failure message (L53 diagnosis). A failed read is written as its text and never hides the twin failure.
+    /// </summary>
+    private static async Task<string> DescribeRowsAsync(Uri baseAddress, string token, JsonElement twin)
+    {
+        string text = string.Empty;
+        foreach (string world in new[] { "base", "variant" })
+        {
+            string row;
+            try
+            {
+                string runId = twin.GetProperty(world).GetProperty("run_id").GetString() ?? string.Empty;
+                string full = await ReadRowAsync(baseAddress, token, runId);
+                row = full.Length > RowTextLimit ? full[..RowTextLimit] : full;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                row = "read failed: " + ex.Message;
+            }
+
+            text += "\n" + world + " row: " + row;
+        }
+
+        return text;
+    }
+
+    /// <summary>Reads the enroll row of one run through <c>bundle_read</c> (Open, no lease). The whole text is returned.</summary>
+    private static async Task<string> ReadRowAsync(Uri baseAddress, string token, string runId)
+    {
+        using JsonDocument row = await CallToolAsync(
+            baseAddress,
+            token,
+            "bundle_read",
+            new Dictionary<string, object?>(StringComparer.Ordinal) { ["run_id"] = runId, ["path"] = EnrollRowPath });
+        return row.RootElement.GetProperty("text").GetString() ?? string.Empty;
+    }
+
+    /// <summary>The duration of the variant's <c>enroll</c> step in milliseconds, or -1 when the row has no such step.</summary>
+    private static async Task<double> VariantEnrollDurationMsAsync(Uri baseAddress, string token, JsonElement twin)
+    {
+        string runId = twin.GetProperty("variant").GetProperty("run_id").GetString() ?? string.Empty;
+        using JsonDocument row = JsonDocument.Parse(await ReadRowAsync(baseAddress, token, runId));
+        foreach (JsonElement step in row.RootElement.GetProperty("steps").EnumerateArray())
+        {
+            if (step.GetProperty("id").GetString() == "enroll")
+            {
+                return step.TryGetProperty("duration_ms", out JsonElement ms) && ms.ValueKind == JsonValueKind.Number ? ms.GetDouble() : -1;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>Releases the lease for cleanup. A failed release is written to the console and never thrown (R3-N5).</summary>

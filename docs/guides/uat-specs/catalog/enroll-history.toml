@@ -22,7 +22,7 @@ start = "before_steps"
 heal = "after_steps"
 [scenario.fault.inject]
 tool = "fault_toxic_add"
-args = { proxy = "p:nodes-postgres", toxic = "latency", stream = "downstream", attributes = { latency = 200 } }
+args = { proxy = "nodes-postgres", toxic = "latency", stream = "downstream", attributes = { latency = 200 } }
 
 [[scenario]]
 id = "enroll-lost-response"
