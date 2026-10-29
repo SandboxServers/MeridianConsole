@@ -197,6 +197,16 @@ public static class MutantSpecLoader
         return Result<MutantDetector>.Success(new MutantDetector(null, null, test, expect));
     }
 
+    /// <summary>True for a file name that MSBuild, NuGet or Docker reads as build configuration (S-N6, pass 2).</summary>
+    internal static bool IsBuildFile(string fileName) =>
+        fileName.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith(".props", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith(".wxs", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith("Dockerfile", StringComparison.OrdinalIgnoreCase)
+        || fileName.StartsWith("Directory.", StringComparison.OrdinalIgnoreCase);
+
     private static Result<IReadOnlyList<string>> ReadPaths(string id, TomlTable root, string key, MutantKind kind, string repoRoot, IPathValidator validator, Func<string, bool> exists)
     {
         Result<IReadOnlyList<string>> values = ReadStrings(id, root, key);
@@ -225,6 +235,12 @@ public static class MutantSpecLoader
             if (!allowed)
             {
                 return Result<IReadOnlyList<string>>.Failure($"[Lab.InvalidArgument] {id}: {rel} is outside what a {kind.ToString().ToLowerInvariant()} mutant may touch");
+            }
+
+            // Defence in depth (S-N6 pass 2): build-configuration files run code at restore or build, so no mutant may name one.
+            if (IsBuildFile(Path.GetFileName(normal)))
+            {
+                return Result<IReadOnlyList<string>>.Failure($"[Lab.InvalidArgument] {id}: {rel} is a build file and cannot be a mutant target");
             }
 
             Result<string> checkedPath = validator.ValidatePath(Path.Combine(repoRoot, rel), [repoRoot]);

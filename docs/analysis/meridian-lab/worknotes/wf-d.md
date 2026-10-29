@@ -1,5 +1,15 @@
 # wf-d worknote: wave5-fix-D (mutants and self-check)
 
+This is the wave5-fix-D worknote (ruling name `wave5-fix-D.md`).
+
+## Pass 2 additions (ruling line 575)
+
+- **D-ML102 elevation preflight text:** `SelfCheckRecovery.RunAsync` returns `[Lab.Elevated] selfcheck --recovery needs a non-elevated session` when the session is elevated. Nothing is copied or built first. The recovery test skip reason is `selfcheck --recovery needs a non-elevated session (D-ML102)`.
+- **D-ML102 `[Lab.` stderr first-line text:** an early child exit reports `[Lab.ProcessFailed] the lab daemon exited with code <n> before answering /status: <line>`, where `<line>` is the first child stderr line that starts with `[Lab.`, control-stripped and cut to 300 characters, or `no [Lab.] line`.
+- **Pass 2 (security N1, N2):** `MutantBuilder.PatchTouchesOnly` is public and fails closed on `diff --git` lines and quoted names; `SelfCheckRunner.PatchScopeRow` runs the same check before the lab-mutant `git apply`.
+- **Pass 2 (security N3):** `SelfCheckRunner.RunProcessAsync` removes `MERIDIAN_LAB_TOKEN` from every child environment.
+- **Pass 2 (security N6):** `MutantSpecLoader` refuses build files (`*.csproj`, `*.props`, `*.targets`, `*.sln`, `*.wxs`, `Directory.*`, `Dockerfile`) as mutant targets.
+
 Branch `ml/wf-d-tools`. Packet spec: `worknotes/wave5-ruling-1.md` section "wave5-fix-D".
 
 ## Done

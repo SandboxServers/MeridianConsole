@@ -13,11 +13,13 @@ namespace Dhadgar.Lab.Tests.Seams;
 /// S-L12: <c>twin_run tenant-isolation-enroll</c> must return <c>held = true</c>. Tenant A's observed sets are equal in the base and
 /// variant worlds, and tenant B never observes an id tenant A created. The experiment file arrives in L56; until then the call returns
 /// <c>[Lab.NotFound]</c>, which is the expected red failure recorded at the wave boundary. Needs the Linux Docker engine. Containers are
-/// removed by label only.
+/// removed by label and name prefix.
 /// </summary>
 [Collection(LabDockerGate.Name)]
 public sealed class TenantTwinSeamTests
 {
+    private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";
+
     [SkippableFact(Timeout = 1_800_000)]
     [Trait("Seam", "S-L12")]
     [Trait("RequiresDocker", "true")]
@@ -29,6 +31,14 @@ public sealed class TenantTwinSeamTests
             : ContainerLogFollower.DefaultLinuxContext;
         (int versionExit, _) = RunDocker(context, ["version", "--format", "{{.Server.Version}}"]);
         Skip.IfNot(versionExit == 0, "docker is not reachable on context " + context);
+
+        // The twin_run stack_up wipes lab containers, so a labelled lab container left by another run stops the test (N4 pass 2).
+        (int psExit, string labelled) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--filter", "name=^meridian-lab-", "--format", "{{.ID}}"]);
+        Assert.True(psExit == 0, "docker ps failed");
+        if (labelled.Trim().Length > 0 && Environment.GetEnvironmentVariable(WipeEnvVar) != "1")
+        {
+            Assert.Fail("labelled lab containers exist; set MERIDIAN_LAB_S6_WIPE=1 to let the twin_run stack_up wipe remove them");
+        }
 
         string repoRoot = LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory);
         string home = Path.Combine(Path.GetTempPath(), "meridian-lab-s12-" + Guid.NewGuid().ToString("N"));
@@ -98,7 +108,7 @@ public sealed class TenantTwinSeamTests
 
     private static void RemoveLabContainers(string context)
     {
-        (int _, string ids) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--format", "{{.ID}}"]);
+        (int _, string ids) = RunDocker(context, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--filter", "name=^meridian-lab-", "--format", "{{.ID}}"]);
         foreach (string id in ids.Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             _ = RunDocker(context, ["rm", "-f", "-v", id]);

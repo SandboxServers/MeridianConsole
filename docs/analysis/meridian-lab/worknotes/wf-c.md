@@ -1,5 +1,13 @@
 # wf-c worknote: wave5-fix-C (chaos, history, Docker test harness)
 
+This is the wave5-fix-C worknote (ruling name `wave5-fix-C.md`).
+
+## Pass 2 additions (ruling line 495)
+
+- **D-ML103 rule:** one serial gate for every Docker, stack, port-8789 or mutex test. Every listed class carries `[Collection(LabDockerGate.Name)]`, and `LabDockerGateTests` is a reflection guard that fails when a listed class loses it. Docker tests use `ttl_s = 3600`.
+- **Moved classes:** the Docker-gate collection list covers the LabHome lane (TwinLatency, Mutation, LabSelfTest, TenantTwin) and the other Docker classes that touch the stack, port 8789 or the mutex.
+- Pass 2 (review N4): the cleanup sweeps in `TwinLatencyDockerTests` and `TenantTwinSeamTests` match label AND name prefix `^meridian-lab-`. `TenantTwinSeamTests` also has the `MERIDIAN_LAB_S6_WIPE` pre-check.
+
 Packet: `wave5-fix-C` in `worknotes/wave5-ruling-1.md`. Rulings: D-ML101, D-ML102, D-ML103, D-ML104 (L05b is a follow-up, not this packet).
 Worktree state: all changes below are UNCOMMITTED in `.claude/worktrees/ml-wf-c` (branch `ml/wf-c-tools`). No check has run yet.
 

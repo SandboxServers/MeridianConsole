@@ -200,10 +200,11 @@ public sealed class TwinRunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task Twin_HealThrows_ResultStillReturned()
+    public async Task Twin_HealToolFails_ResultStillReturned()
     {
-        // R3-N5 (A6, S-N5): a fault_reset that fails during the heal must not hide the variant's result. The dispatcher turns the throw into
-        // an error payload, so the heal's own catch is a backstop; this test pins the visible behaviour: the run still returns its result.
+        // R3-N5 (A6, S-N5): a fault_reset that fails during the heal must not hide the variant's result. The dispatcher turns every tool
+        // throw into an error payload (LabToolDispatcher.RunToolAsync), so TwinRunner.HealAsync's catch is an unreachable backstop
+        // through the dispatcher; this test pins the visible behaviour only and does not exercise that catch (see the worknote wf-e.md).
         var touch = new TwinScriptedTool("stack_up", () => Record("step"));
         var inject = new TwinScriptedTool("fault_toxic_add", () => Record("inject"));
         var heal = new TwinScriptedTool("fault_reset", () => throw new InvalidOperationException("heal broke"));
@@ -215,6 +216,29 @@ public sealed class TwinRunnerTests : IDisposable
         Assert.Equal("twin/twin-selftest", run.Value!.TwinRow.RowId);
         Assert.NotEmpty(heal.Calls);
         Assert.NotEmpty(run.Value.Variant.Rows);
+    }
+
+    [Theory]
+    [InlineData("\"failed\"")]
+    [InlineData("[1,2]")]
+    public void ErrorDetail_PayloadThatIsNotAnObject_YieldsFixedTextAndDoesNotThrow(string json)
+    {
+        // N5 (pass 2): a payload that is not a JSON object must not raise InvalidOperationException from TryGetProperty.
+        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(json);
+
+        string detail = TwinRunner.ErrorDetail(doc.RootElement);
+
+        Assert.Equal("the tool returned no error object", detail);
+    }
+
+    [Fact]
+    public void ErrorDetail_ErrorHeldAsAString_DoesNotThrow()
+    {
+        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse("{\"error\":\"busy\"}");
+
+        string detail = TwinRunner.ErrorDetail(doc.RootElement);
+
+        Assert.Contains("busy", detail, StringComparison.Ordinal);
     }
 
     private static TwinSpec Experiment(string toml = TwinToml)

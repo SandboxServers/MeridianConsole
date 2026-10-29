@@ -1,5 +1,11 @@
 # wf-b worknote: wave5-fix-B (jobs, hunter, fuzz, soak)
 
+This is the wave5-fix-B worknote (ruling name `wave5-fix-B.md`).
+
+## Pass 2 additions (ruling line 406)
+
+- Failing fuzz cases live only in the job result until L28b. Writing fuzz rows through `BundleWriter` and ingesting them needs a row shape and coverage keys, which is too large for this pass (R2-N11).
+
 Packet: `wave5-fix-B` in `worknotes/wave5-ruling-1.md` (section B, D-ML100, D-ML101, R2-N3..N10, F92).
 
 ## Done (uncommitted at time of writing, session 2)

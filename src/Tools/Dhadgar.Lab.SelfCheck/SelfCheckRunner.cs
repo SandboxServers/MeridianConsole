@@ -6,6 +6,9 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Mutants;
 using Dhadgar.Shared.Results;
 
+// The child-process environment scrub and the patch scope check are tested from Dhadgar.Lab.Tests (pass 2, N2 and N3).
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Dhadgar.Lab.Tests")]
+
 namespace Dhadgar.Lab.SelfCheck;
 
 /// <summary>
@@ -168,6 +171,14 @@ public static class SelfCheckRunner
         string test = mutant.Detector.Test!;
         string patch = Path.Combine(mutant.Folder, MutantSpecLoader.PatchFileName);
 
+        // The same scope check the product path runs (S-N2 pass 2): a patch that names a file its spec does not list is refused
+        // before git apply, so a build file cannot reach dotnet build through a lab mutant.
+        SelfCheckRow? scope = PatchScopeRow(mutant);
+        if (scope is not null)
+        {
+            return scope;
+        }
+
         (int applyExit, _) = await RunProcessAsync("git", ["-C", copy, "apply", patch], null, ct).ConfigureAwait(false);
         if (applyExit != 0)
         {
@@ -188,6 +199,29 @@ public static class SelfCheckRunner
         }
 
         return reverted ? row : throw new InvalidOperationException("the patch could not be reverted");
+    }
+
+    /// <summary>
+    /// The Invalid row when the mutant's patch touches a file its spec does not list, or when the patch cannot be read; null when
+    /// the scope check passes. Runs before any <c>git apply</c>.
+    /// </summary>
+    internal static SelfCheckRow? PatchScopeRow(MutantSpec mutant)
+    {
+        string patch = Path.Combine(mutant.Folder, MutantSpecLoader.PatchFileName);
+        string[] lines;
+        try
+        {
+            lines = File.ReadAllLines(patch);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new SelfCheckRow(mutant.Id, mutant.Detector.Test!, SelfCheckJudge.Invalid, "the patch could not be read");
+        }
+
+        Result scope = MutantBuilder.PatchTouchesOnly(lines, mutant.Files);
+        return scope.IsFailure
+            ? new SelfCheckRow(mutant.Id, mutant.Detector.Test!, SelfCheckJudge.Invalid, scope.Error)
+            : null;
     }
 
     private static async Task<SelfCheckRow> BuildAndJudgeAsync(MutantSpec mutant, string csproj, string trxDir, CancellationToken ct)
@@ -243,6 +277,9 @@ public static class SelfCheckRunner
         info.RedirectStandardError = true;
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
+
+        // The daemon token never reaches a build, test or git child (N3 pass 2); a mutated test project could read it.
+        info.Environment.Remove(LabDefaults.TokenEnvVar);
 
         try
         {

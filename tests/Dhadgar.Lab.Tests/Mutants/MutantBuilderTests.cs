@@ -153,6 +153,40 @@ public sealed class MutantBuilderTests : IDisposable
         Assert.Empty(docker.Calls);
     }
 
+    [Fact]
+    public async Task Build_PatchWithQuotedHeaderAndNoMinusPlusLines_IsRefusedBeforeGitApply()
+    {
+        // A new-file hunk named by a C-quoted diff --git line has no ---/+++ lines, so the header reader alone would miss it.
+        await File.WriteAllTextAsync(Path.Combine(_spec.Folder, MutantSpecLoader.PatchFileName),
+            "diff --git \"a/Directory.Build.targets\" \"b/Directory.Build.targets\"\nnew file mode 100644\n@@ -0,0 +1,2 @@\n+<Project />\n+<Target Name=\"x\" />\n",
+            CancellationToken.None);
+        var runner = new FakeRunner();
+        var docker = new RecordingDocker();
+
+        Result<MutantBuildDto> result = await MutantBuilder.BuildAsync(
+            _spec, [LabBuilder.ResolveProject("nodes").Value!], _paths, docker, Validator(), new FakeTimeProvider(), runner.RunAsync, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+        Assert.Contains("cannot read", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(runner.Calls, call => call.Args.Contains("apply"));
+        Assert.Empty(docker.Calls);
+    }
+
+    [Theory]
+    [InlineData("diff --git \"a/Directory.Build.targets\" \"b/Directory.Build.targets\"")]
+    [InlineData("diff --git a/Directory.Build.targets b/src/Dhadgar.Nodes/Directory.Build.targets")]
+    [InlineData("--- \"a/Directory.Build.targets\"")]
+    public void PatchTouchesOnly_UnreadableOrMismatchedHeader_IsRefused(string line)
+    {
+        string[] patch = [line, "new file mode 100644", "@@ -0,0 +1 @@", "+x"];
+
+        Result result = MutantBuilder.PatchTouchesOnly(patch, _spec.Files);
+
+        Assert.True(result.IsFailure, line);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("rename from src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
     [InlineData("rename to src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
