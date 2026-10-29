@@ -109,7 +109,7 @@ public static class SignatureBuilder
     public static FailureSignature? Primary(RowEvidence row)
     {
         IReadOnlyList<FailureSignature> all = BuildAll(row);
-        string[] order = ["exc", "http", "clause", "inv", "hist"];
+        string[] order = ["exc", "http", "clause", "inv", "hist", "twin"];
         foreach (string kind in order)
         {
             FailureSignature? first = all.FirstOrDefault(s => s.Kind == kind);
@@ -176,6 +176,10 @@ public static class SignatureBuilder
     /// <summary>Builds a <c>hist</c> signature: <c>hist:&lt;model&gt;|&lt;rule id&gt;|&lt;scenario&gt;</c>.</summary>
     public static FailureSignature History(string model, string ruleId, string scenario) =>
         new("hist", "hist:" + model + "|" + ruleId + "|" + scenario, null, null);
+
+    /// <summary>Builds a <c>twin</c> signature (C12): <c>twin:&lt;experiment id&gt;|&lt;pointer&gt;</c>, one per pointer that did not hold.</summary>
+    public static FailureSignature Twin(string experimentId, string jsonPointer) =>
+        new("twin", "twin:" + experimentId + "|" + jsonPointer, null, null);
 
     /// <summary>
     /// Normalises one stack frame to <c>Namespace.Type.Method</c>: line numbers, offsets, parameters, generic arity and the

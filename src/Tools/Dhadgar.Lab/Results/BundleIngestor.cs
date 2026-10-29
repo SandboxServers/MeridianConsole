@@ -11,8 +11,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Dhadgar.Lab.Results;
 
-/// <summary>What one ingest wrote: the run id, its overall, and the number of rows and signatures of the run.</summary>
-public sealed record IngestResult(string RunId, string Overall, int Rows, int Signatures, KnownIssueCheck KnownIssues);
+/// <summary>
+/// What one ingest wrote: the run id, its overall, the number of rows and signatures of the run, and the scrubbed signature texts the index
+/// stores for it (R3-N2, F93), sorted ordinal, so that the payload carries the same texts the index holds.
+/// </summary>
+public sealed record IngestResult(string RunId, string Overall, int Rows, int Signatures, KnownIssueCheck KnownIssues, IReadOnlyList<string> SignatureTexts);
 
 /// <summary>
 /// Reads one evidence bundle (C9) and writes it to the results index (C12). Ingest is an upsert by <c>run_id</c> (A2): a second
@@ -205,7 +208,8 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure(flakes.Error);
         }
 
-        return Result<IngestResult>.Success(new IngestResult(runId, overall, rowRecords.Count, signatureRecords.Count, _known));
+        string[] signatureTexts = signatureRecords.Values.Select(r => r.Text).Order(StringComparer.Ordinal).ToArray();
+        return Result<IngestResult>.Success(new IngestResult(runId, overall, rowRecords.Count, signatureRecords.Count, _known, signatureTexts));
     }
 
     /// <summary>Reads run.json's <c>pair</c> (C18, L53): the experiment, the role, the partner run and the relation. <c>held</c> stays unset.</summary>

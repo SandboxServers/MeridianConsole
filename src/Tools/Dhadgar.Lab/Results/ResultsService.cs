@@ -243,8 +243,9 @@ public sealed class ResultsService : IDisposable
     }
 
     /// <summary>
-    /// The JSON an MCP tool returns for one ingest: <c>{"ok":true,"run_id","overall","rows","signatures","known_issues","evidence"}</c>
-    /// on success, or <c>{"ok":false,"error"}</c> with the error redacted (R-LOG).
+    /// The JSON an MCP tool returns for one ingest: <c>{"ok":true,"run_id","overall","rows","signatures","signature_texts","known_issues","evidence"}</c>
+    /// on success, or <c>{"ok":false,"error"}</c> with the error redacted (R-LOG). <c>signature_texts</c> are the stored, scrubbed texts (R3-N2).
+    ///
     /// </summary>
     public JsonObject ToPayload(Result<IngestResult> ingested)
     {
@@ -265,6 +266,7 @@ public sealed class ResultsService : IDisposable
             ["overall"] = result.Overall,
             ["rows"] = result.Rows,
             ["signatures"] = result.Signatures,
+            ["signature_texts"] = new JsonArray(result.SignatureTexts.Select(t => (JsonNode?)JsonValue.Create(t)).ToArray()),
             ["known_issues"] = result.KnownIssues.ToJson(),
             ["evidence"] = EvidenceCoverage.ToJson(),
         };

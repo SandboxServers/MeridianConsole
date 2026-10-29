@@ -10,8 +10,8 @@ namespace Dhadgar.Lab.Coverage;
 /// <summary>
 /// Records one run's behavioural coverage (L52, C12 <c>coverage</c>) after it is ingested. It implements
 /// <see cref="IIngestObserver"/>; <see cref="BundleIngestor"/> calls it after the run is in the index and never edits the
-/// ingestor. At ingest the bundle holds the <c>invariant_check</c> source (<c>invariants.json</c>); the route, fault, error
-/// code and transition sources are live and reach the store through <see cref="CoverageKeys"/>.
+/// ingestor. Only <c>invariant_check</c> is recorded at ingest (<c>invariants.json</c>). The route, fault, error code and transition
+/// kinds are not collected until L52b (D-ML99); <c>coverage_report</c> flags them as not collected, and no route coverage is claimed.
 /// </summary>
 public sealed class CoverageCollector : IIngestObserver
 {

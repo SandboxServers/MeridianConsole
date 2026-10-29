@@ -67,6 +67,22 @@ public sealed class TwinRunnerTests : IDisposable
         pointer = "/rows/main/grade"
         """;
 
+    private const string FaultedTwinToml = """
+        schema = 1
+        id = "twin-selftest"
+        relation = "equal_outcome"
+        seed = 7
+        [base]
+        spec = "twin-selftest.toml"
+        rows = ["main"]
+        [variant]
+        spec = "twin-selftest.toml"
+        rows = ["main"]
+        faults = [{ tool = "fault_toxic_add", args = { proxy = "p:nodes-postgres", toxic = "latency" } }]
+        [[compare]]
+        pointer = "/rows/main/grade"
+        """;
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "meridian-lab-l53-twins-" + Guid.NewGuid().ToString("N"));
     private readonly FakeTimeProvider _time = new(Start);
     private readonly SecretVault _vault = new();
@@ -131,6 +147,10 @@ public sealed class TwinRunnerTests : IDisposable
         Assert.False(run.Value!.Held);
         Assert.Equal(RowGrade.Fail, run.Value.TwinRow.Grade);
         Assert.Contains(run.Value.Diffs, d => d.Locator == "/rows/main/grade");
+        // A4 (R3-N1): the not-held pointer rides on the synthetic row of both worlds, so the bundles can carry the twin signature.
+        Assert.Equal(new[] { "/rows/main/grade" }, run.Value.TwinRow.TwinPointers!);
+        Assert.Equal(new[] { "/rows/main/grade" }, run.Value.Base.Rows[^1].TwinPointers!);
+        Assert.Equal(new[] { "/rows/main/grade" }, run.Value.Variant.Rows[^1].TwinPointers!);
         foreach (RecordingSink sink in new[] { baseSink, variantSink })
         {
             string[] tail = sink.Events.Where(e => e.StartsWith("row:twin", StringComparison.Ordinal) || e == "finish").ToArray();
@@ -157,11 +177,49 @@ public sealed class TwinRunnerTests : IDisposable
         Assert.Equal(RowGrade.Pass, run.Value.TwinRow.Grade);
         Assert.Empty(run.Value.Diffs);
         Assert.Equal(2, touch.Calls.Count);
+        // A4 (R3-N1): nothing to sign when the relation held.
+        Assert.Null(run.Value.TwinRow.TwinPointers);
+        Assert.Null(run.Value.Variant.Rows[^1].TwinPointers);
     }
 
-    private static TwinSpec Experiment()
+    [Fact]
+    public async Task Twin_ResetFails_ErrorNamesTheCause()
     {
-        Result<TwinSpec> loaded = TwinSpecLoader.Load(TwinToml);
+        // R3-N5 (A6): a failed stack_reset_data names the cause in the error, and the world never starts.
+        var reset = new TwinScriptedTool("stack_reset_data", () => Result<object>.Failure("[Lab.Unavailable] stack volume is busy"));
+        var touch = new TwinScriptedTool("stack_up", () => Record("step"));
+        TwinRunner runner = RunnerWithReset(reset, touch);
+
+        Result<TwinRunResult> run = await runner.RunAsync(Experiment(), Spec(), Spec(), new RecordingSink("base"), new RecordingSink("variant"), null, null, null, CancellationToken.None);
+
+        Assert.True(run.IsFailure);
+        Assert.StartsWith("[Lab.Unavailable] stack_reset_data failed: ", run.Error, StringComparison.Ordinal);
+        Assert.Contains("stack volume is busy", run.Error, StringComparison.Ordinal);
+        Assert.Single(reset.Calls);
+        Assert.Empty(touch.Calls);
+    }
+
+    [Fact]
+    public async Task Twin_HealThrows_ResultStillReturned()
+    {
+        // R3-N5 (A6, S-N5): a fault_reset that fails during the heal must not hide the variant's result. The dispatcher turns the throw into
+        // an error payload, so the heal's own catch is a backstop; this test pins the visible behaviour: the run still returns its result.
+        var touch = new TwinScriptedTool("stack_up", () => Record("step"));
+        var inject = new TwinScriptedTool("fault_toxic_add", () => Record("inject"));
+        var heal = new TwinScriptedTool("fault_reset", () => throw new InvalidOperationException("heal broke"));
+        TwinRunner runner = RunnerWithReset(new TwinScriptedTool("stack_reset_data", () => Record("reset")), touch, inject, heal);
+
+        Result<TwinRunResult> run = await runner.RunAsync(Experiment(FaultedTwinToml), Spec(), Spec(), new RecordingSink("base"), new RecordingSink("variant"), null, null, null, CancellationToken.None);
+
+        Assert.True(run.IsSuccess, run.Error);
+        Assert.Equal("twin/twin-selftest", run.Value!.TwinRow.RowId);
+        Assert.NotEmpty(heal.Calls);
+        Assert.NotEmpty(run.Value.Variant.Rows);
+    }
+
+    private static TwinSpec Experiment(string toml = TwinToml)
+    {
+        Result<TwinSpec> loaded = TwinSpecLoader.Load(toml);
         Assert.True(loaded.IsSuccess, loaded.Error);
         return loaded.Value!;
     }
@@ -173,9 +231,12 @@ public sealed class TwinRunnerTests : IDisposable
         return loaded.Spec!;
     }
 
-    private TwinRunner Runner(params ILabTool[] tools)
+    private TwinRunner Runner(params ILabTool[] tools) =>
+        RunnerWithReset(new TwinScriptedTool("stack_reset_data", () => Record("reset")), tools);
+
+    private TwinRunner RunnerWithReset(ILabTool reset, params ILabTool[] tools)
     {
-        var dispatcher = new LabToolDispatcher(new LabToolRegistry([.. tools, new TwinScriptedTool("stack_reset_data", () => Record("reset"))]), _leases, _audit, _redactor, _time);
+        var dispatcher = new LabToolDispatcher(new LabToolRegistry([.. tools, reset]), _leases, _audit, _redactor, _time);
         var uat = new UatRunner(dispatcher, _leases, new ClauseEvaluator([new TruthySource()], _redactor, _time), new FakeProbe(), _time, settle: TimeSpan.Zero);
         return new TwinRunner(uat, dispatcher, _leases, _time);
     }
