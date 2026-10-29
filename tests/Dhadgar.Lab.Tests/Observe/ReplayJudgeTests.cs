@@ -106,7 +106,7 @@ public sealed class ReplayJudgeTests
     public void Judge_UnbuiltKindOriginal_ComparesBuiltKindsOnlyAndSaysSo()
     {
         ReplayVerdict verdict = ReplayJudge.Judge(ReplayFidelity.Exact,
-            [new ReplayRow("fail", "http:500|-|POST|/a|none")], [[new ReplayRow("fail", null)]]);
+            [new ReplayRow("fail", "hist:500|-|POST|/a|none")], [[new ReplayRow("fail", null)]]);
 
         Assert.True(verdict.Reproduced);
         Assert.Contains("built signature kinds only", verdict.Reason);

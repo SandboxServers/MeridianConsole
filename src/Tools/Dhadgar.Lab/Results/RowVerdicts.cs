@@ -26,10 +26,11 @@ internal sealed record ParsedViolation(ViolationEvidence Evidence, string? Detai
 /// </summary>
 internal sealed record ParsedStep(string Id, bool Ok, bool? ExpectMet);
 
-/// <summary>A graded row as read from a row file: the grade, the reason, its clauses, violations and steps.</summary>
+/// <summary>A graded row as read from a row file: the grade, the reason, its clauses, violations and steps.
+/// <paramref name="Exceptions"/> and <paramref name="Http"/> are the row's <c>evidence</c> (L25e), empty when absent.</summary>
 internal sealed record ParsedRow(string Section, string RowId, RowGrade Grade, string? Reason, string? StartedAt,
     string? EndedAt, string? KnownIssue, IReadOnlyList<ClauseEvidence> Clauses, IReadOnlyList<ParsedViolation> Violations,
-    IReadOnlyList<ParsedStep> Steps);
+    IReadOnlyList<ParsedStep> Steps, IReadOnlyList<ExceptionEvidence>? Exceptions = null, IReadOnlyList<HttpEvidence>? Http = null);
 
 /// <summary>
 /// The one row-verdict path (L26 B1, D-ML92). The ingest, the run writer and the attestor all call <see cref="Of"/>, and
@@ -49,7 +50,8 @@ internal static class RowVerdicts
             return new RowVerdict([], [], null, null, null);
         }
 
-        var evidence = new RowEvidence(row.Section, row.RowId, [], [], row.Clauses.Concat(StepClauses(row)).ToList(),
+        var evidence = new RowEvidence(row.Section, row.RowId, row.Exceptions ?? [], row.Http ?? [],
+            row.Clauses.Concat(StepClauses(row)).ToList(),
             row.Violations.Select(v => v.Evidence).ToList(), [], []);
         List<FailureSignature> scrubbed = SignatureBuilder.BuildAll(evidence)
             .Select(signature => signature with { Text = scrub(signature.Text) })
@@ -126,10 +128,36 @@ internal static class RowVerdicts
                 BundleIngestor.Bool(s, "expect_met")))
             .ToList();
 
+        JsonObject? evidence = obj["evidence"] as JsonObject;
+        var exceptions = (evidence is null ? [] : BundleIngestor.Objects(evidence, "exceptions"))
+            .Select(e => new ExceptionEvidence(BundleIngestor.Text(e, "service") ?? string.Empty,
+                BundleIngestor.Text(e, "type") ?? string.Empty, Texts(e, "frames")))
+            .ToList();
+        var http = (evidence is null ? [] : BundleIngestor.Objects(evidence, "http"))
+            .Select(h =>
+            {
+                string route = BundleIngestor.Text(h, "route") ?? string.Empty;
+                return new HttpEvidence(BundleIngestor.Text(h, "service") ?? string.Empty, IntOf(h, "status") ?? 0,
+                    BundleIngestor.Text(h, "error_code"), BundleIngestor.Text(h, "method") ?? string.Empty, route, route,
+                    Texts(h, "faults"));
+            })
+            .ToList();
+
         return Result<ParsedRow>.Success(new ParsedRow(section, rowId, ParseGrade(BundleIngestor.Text(obj, "grade")),
             BundleIngestor.Text(obj, "reason"), BundleIngestor.Text(obj, "started_at"), BundleIngestor.Text(obj, "ended_at"),
-            BundleIngestor.Text(obj, "known_issue"), clauses, violations, steps));
+            BundleIngestor.Text(obj, "known_issue"), clauses, violations, steps, exceptions, http));
     }
+
+    /// <summary>The string items of an array field; a non-string item is skipped.</summary>
+    private static List<string> Texts(JsonObject obj, string key) =>
+        obj[key] is JsonArray items
+            ? items.Select(item => item is JsonValue value && value.TryGetValue(out string? text) ? text : null)
+                .OfType<string>().ToList()
+            : [];
+
+    /// <summary>An integer field, or null when absent or not an integer.</summary>
+    private static int? IntOf(JsonObject obj, string key) =>
+        obj[key] is JsonValue value && value.TryGetValue(out int number) ? number : null;
 
     /// <summary>Maps a row grade text (C11) to its grade. Any other text is unverified.</summary>
     public static RowGrade ParseGrade(string? text) => text switch
