@@ -143,7 +143,6 @@ public static class ToolPolicy
         // L52 (registered)
         // L53
         // L54
-        "mutation_run",
         // L56
         "identity_user_token",
         // L57

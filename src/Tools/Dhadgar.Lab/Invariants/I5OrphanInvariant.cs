@@ -20,6 +20,9 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
     /// <summary>The docker label every lab container carries.</summary>
     public const string LabelFilter = "label=meridian-lab=1";
 
+    /// <summary>The docker label every mutant image and container carries, with its id as the value (D-ML51, L54).</summary>
+    public const string MutantLabelFilter = "label=meridian-lab-mutant";
+
     private const string ProxyDisableKind = "proxy_disable";
 
     private readonly Func<CancellationToken, Task<Result<IReadOnlyList<string>>>> _containers;
@@ -29,10 +32,14 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
     private readonly Func<IReadOnlyList<ActiveFault>> _activeFaults;
     private readonly Func<IReadOnlyList<string>> _backupFolders;
     private readonly Func<bool>? _stackCreated;
+    private readonly Func<CancellationToken, Task<Result<IReadOnlyList<string>>>>? _mutantContainers;
+    private readonly Func<bool>? _mutationRunning;
 
     /// <summary>
     /// Creates the check over the five sources. <paramref name="stackCreated"/> says whether stack_up has created the lab
     /// credentials; while it is false the queues and proxies do not exist yet and are skipped (D-ML80). Null means always created.
+    /// <paramref name="mutantContainers"/> lists the containers with the mutant label; each one is a violation while
+    /// <paramref name="mutationRunning"/> says no <c>mutation</c> job runs (L54). Null for either leaves that source out.
     /// </summary>
     public I5OrphanInvariant(
         Func<CancellationToken, Task<Result<IReadOnlyList<string>>>> containers,
@@ -41,8 +48,12 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
         Func<CancellationToken, Task<Result<IReadOnlyList<ProxySpec>>>> proxies,
         Func<IReadOnlyList<ActiveFault>> activeFaults,
         Func<IReadOnlyList<string>> backupFolders,
-        Func<bool>? stackCreated = null)
+        Func<bool>? stackCreated = null,
+        Func<CancellationToken, Task<Result<IReadOnlyList<string>>>>? mutantContainers = null,
+        Func<bool>? mutationRunning = null)
     {
+        _mutantContainers = mutantContainers;
+        _mutationRunning = mutationRunning;
         _containers = containers ?? throw new ArgumentNullException(nameof(containers));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _queues = queues ?? throw new ArgumentNullException(nameof(queues));
@@ -58,14 +69,30 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
     /// <summary>
     /// Lists the names of every container that carries the lab label, through <c>docker ps -a</c> on the given engine.
     /// </summary>
-    public static async Task<Result<IReadOnlyList<string>>> ListLabelledContainersAsync(IDockerCli docker, DockerEngine engine, CancellationToken ct)
+    public static Task<Result<IReadOnlyList<string>>> ListLabelledContainersAsync(IDockerCli docker, DockerEngine engine, CancellationToken ct) =>
+        ListByLabelsAsync(docker, engine, [LabelFilter], ct);
+
+    /// <summary>
+    /// Lists the names of every container that carries both the lab label and the mutant label (L54, A2). Found by label only,
+    /// never by a name pattern.
+    /// </summary>
+    public static Task<Result<IReadOnlyList<string>>> ListMutantContainersAsync(IDockerCli docker, DockerEngine engine, CancellationToken ct) =>
+        ListByLabelsAsync(docker, engine, [LabelFilter, MutantLabelFilter], ct);
+
+    private static async Task<Result<IReadOnlyList<string>>> ListByLabelsAsync(IDockerCli docker, DockerEngine engine, string[] labelFilters, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(docker);
 
-        Result<DockerOutput> run = await docker.RunAsync(
-            engine,
-            ["ps", "-a", "--filter", LabelFilter, "--format", "{{.Names}}"],
-            ct).ConfigureAwait(false);
+        var args = new List<string> { "ps", "-a" };
+        foreach (string filter in labelFilters)
+        {
+            args.Add("--filter");
+            args.Add(filter);
+        }
+
+        args.Add("--format");
+        args.Add("{{.Names}}");
+        Result<DockerOutput> run = await docker.RunAsync(engine, args, ct).ConfigureAwait(false);
         if (run.IsFailure)
         {
             return Result<IReadOnlyList<string>>.Failure(run.Error);
@@ -109,6 +136,25 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
             if (!targets.Any(target => string.Equals(target.Name, name, StringComparison.Ordinal)))
             {
                 violations.Add(Violation(name, "orphan-container", $"labelled container {name} is not in the target registry", window));
+            }
+        }
+
+        if (_mutantContainers is not null)
+        {
+            // L54 (A2): a mutant container is found by its label; it may exist only while a mutation job runs.
+            Result<IReadOnlyList<string>> mutants = await _mutantContainers(ct).ConfigureAwait(false);
+            if (mutants.IsFailure)
+            {
+                return Failed("mutant containers", mutants.Error);
+            }
+
+            bool mutationJob = _mutationRunning?.Invoke() ?? false;
+            if (!mutationJob)
+            {
+                foreach (string name in mutants.Value)
+                {
+                    violations.Add(Violation(name, "mutant-outside-job", $"mutant container {name} is labelled meridian-lab-mutant while no mutation job runs", window));
+                }
             }
         }
 

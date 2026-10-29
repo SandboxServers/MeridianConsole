@@ -1,0 +1,14 @@
+diff --git a/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs b/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs
+index 9ea723b4..5ae1856e 100644
+--- a/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs
++++ b/src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs
+@@ -25,8 +25,7 @@ public sealed class EnrollmentTokenConfiguration : IEntityTypeConfiguration<Enro
+ 
+         // D-S246: the one-time claim. Enrollment's UPDATE carries WHERE "UsedAt" IS NULL (the value it read),
+         // so of two requests that validated the same token, only the first to save consumes it.
+-        builder.Property(t => t.UsedAt)
+-            .IsConcurrencyToken();
++        builder.Property(t => t.UsedAt);
+ 
+         // Unique index on token hash for fast lookup
+         builder.HasIndex(t => t.TokenHash)

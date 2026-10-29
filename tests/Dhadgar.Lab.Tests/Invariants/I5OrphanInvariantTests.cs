@@ -100,6 +100,35 @@ public sealed class I5OrphanInvariantTests
         Assert.Equal(new[] { "queues", "proxies" }, result.Value.Skipped.Select(s => s.Source).ToArray());
     }
 
+    [Fact]
+    public async Task I5_MutantImageOutsideJob_Violation()
+    {
+        var check = MutantCheck(mutationRunning: false);
+
+        InvariantViolation violation = Assert.Single((await check.CheckAsync(Window, CancellationToken.None)).Value!);
+        Assert.Equal("mutant-outside-job", violation.CheckId);
+        Assert.Equal("meridian-lab-nodes-mutant-M1", violation.Service);
+    }
+
+    [Fact]
+    public async Task I5_MutantImageDuringMutationJob_Clean()
+    {
+        var check = MutantCheck(mutationRunning: true);
+
+        Assert.Empty((await check.CheckAsync(Window, CancellationToken.None)).Value!);
+    }
+
+    private static I5OrphanInvariant MutantCheck(bool mutationRunning) =>
+        new(
+            _ => Task.FromResult(Result<IReadOnlyList<string>>.Success([])),
+            new FakeRegistry([]),
+            _ => Task.FromResult(Result<IReadOnlyList<BrokerQueueInfo>>.Success([])),
+            _ => Task.FromResult(Result<IReadOnlyList<ProxySpec>>.Success([])),
+            () => [],
+            () => [],
+            mutantContainers: _ => Task.FromResult(Result<IReadOnlyList<string>>.Success(["meridian-lab-nodes-mutant-M1"])),
+            mutationRunning: () => mutationRunning);
+
     private static I5OrphanInvariant Build(
         IReadOnlyList<string>? containers = null,
         IReadOnlyList<string>? registered = null,

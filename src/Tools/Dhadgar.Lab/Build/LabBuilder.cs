@@ -84,9 +84,22 @@ public static class LabBuilder
     public static IReadOnlyList<string> PublishArgs(string csprojPath, string outputDirectory) =>
         ["publish", csprojPath, "-c", "Release", "--no-restore", "-o", outputDirectory];
 
-    /// <summary>Docker build arguments for one project image, with the <c>meridian-lab</c> label.</summary>
-    public static IReadOnlyList<string> DockerBuildArgs(string imageTag, string dllName, string contextDirectory, string dockerfile) =>
-        ["build", "--build-arg", $"PROJECT_DLL={dllName}", "--label", "meridian-lab=1", "-f", dockerfile, "-t", imageTag, contextDirectory];
+    /// <summary>
+    /// Docker build arguments for one project image, with the <c>meridian-lab</c> label. A mutant build passes its
+    /// <c>meridian-lab-mutant=&lt;id&gt;</c> label as <paramref name="extraLabel"/> (L54, A2).
+    /// </summary>
+    public static IReadOnlyList<string> DockerBuildArgs(string imageTag, string dllName, string contextDirectory, string dockerfile, string? extraLabel = null)
+    {
+        var args = new List<string> { "build", "--build-arg", $"PROJECT_DLL={dllName}", "--label", "meridian-lab=1" };
+        if (extraLabel is not null)
+        {
+            args.Add("--label");
+            args.Add(extraLabel);
+        }
+
+        args.AddRange(["-f", dockerfile, "-t", imageTag, contextDirectory]);
+        return args;
+    }
 
     /// <summary>Image tag for a project at a build: <c>meridian-lab/&lt;project&gt;:&lt;build_id&gt;</c>.</summary>
     public static string ImageTag(string project, string buildId) => $"meridian-lab/{project}:{buildId}";
@@ -228,7 +241,7 @@ public static class LabBuilder
     /// Runs one child process through <c>ArgumentList</c> with redirected output. Returns stdout on exit code 0; otherwise a
     /// failure carrying stderr-derived lock-drift text only when present (never the environment or the full command line).
     /// </summary>
-    private static async Task<Result<string>> RunAsync(string fileName, IReadOnlyList<string> args, string workingDirectory, CancellationToken ct)
+    internal static async Task<Result<string>> RunAsync(string fileName, IReadOnlyList<string> args, string workingDirectory, CancellationToken ct)
     {
         using var process = new Process();
         ProcessStartInfo info = process.StartInfo;

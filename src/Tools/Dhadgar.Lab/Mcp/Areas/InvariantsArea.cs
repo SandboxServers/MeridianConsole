@@ -3,6 +3,8 @@ using Dhadgar.Lab.Data;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Invariants;
+using Dhadgar.Lab.Jobs;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Services;
@@ -64,14 +66,19 @@ public static partial class LabMcpServer
             FaultBook book = sp.GetRequiredService<FaultBook>();
             RabbitMqManagementClient rabbit = sp.GetRequiredService<RabbitMqManagementClient>();
             ToxiproxyClient toxiproxy = sp.GetRequiredService<ToxiproxyClient>();
+            IDockerCli docker = sp.GetRequiredService<IDockerCli>();
+            JobRunner jobs = sp.GetRequiredService<JobRunner>();
             return new I5OrphanInvariant(
-                InvariantWiring.LabelledContainers(sp.GetRequiredService<IDockerCli>()),
+                InvariantWiring.LabelledContainers(docker),
                 sp.GetRequiredService<ILabTargetRegistry>(),
                 rabbit.ListQueuesAsync,
                 toxiproxy.ListProxiesAsync,
                 book.ListActive,
                 InvariantWiring.BackupFolders(sp.GetRequiredService<LabPaths>()),
-                InvariantWiring.StackCreated(sp.GetRequiredService<LabCredentialRefs>()));
+                InvariantWiring.StackCreated(sp.GetRequiredService<LabCredentialRefs>()),
+                // L54 (A2): mutant containers are found by their label and may exist only while a mutation job runs.
+                mutantContainers: ct => I5OrphanInvariant.ListMutantContainersAsync(docker, DockerEngine.Linux, ct),
+                mutationRunning: () => jobs.List().Any(job => job.Kind == MutationRunJob.Kind && job.State == "running"));
         });
         services.AddSingleton<IInvariant>(sp =>
         {

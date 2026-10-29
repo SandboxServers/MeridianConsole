@@ -52,6 +52,106 @@ public sealed class LabIsolationTests
         Assert.Empty(violations);
     }
 
+    /// <summary>
+    /// D-ML51, L54: no product project, props or targets file, and no workflow, outside <c>src/Tools/</c> and the lab
+    /// test projects names <c>tools/lab/mutants</c>. A product file that reaches the mutant folder would ship a planted defect.
+    /// </summary>
+    [Fact]
+    public void NoProductProjectReferencesMutants()
+    {
+        var root = FindRepoRoot(AppContext.BaseDirectory);
+        var violations = new List<string>();
+        foreach (var pattern in new[] { "*.csproj", "*.props", "*.targets" })
+        {
+            foreach (var file in EnumerateRepoFiles(root, pattern))
+            {
+                var rel = Path.GetRelativePath(root, file);
+                if (IsLabOwned(rel))
+                {
+                    continue;
+                }
+
+                if (File.ReadAllText(file).Contains(MutantsFolderMarker, StringComparison.Ordinal))
+                {
+                    violations.Add(rel);
+                }
+            }
+        }
+
+        foreach (var file in EnumerateRepoFiles(root, "*.yml").Concat(EnumerateRepoFiles(root, "*.yaml")))
+        {
+            var rel = Path.GetRelativePath(root, file);
+            if (rel.StartsWith(Path.Combine(".github", "workflows"), StringComparison.Ordinal)
+                && File.ReadAllText(file).Contains(MutantsFolderMarker, StringComparison.Ordinal))
+            {
+                violations.Add(rel);
+            }
+        }
+
+        Assert.Empty(violations);
+    }
+
+    /// <summary>
+    /// D-ML51, L54: every <c>diff --git a/&lt;path&gt;</c> line in a mutant patch names a file in the mutant's <c>files</c>.
+    /// Product mutants touch only <c>src/</c> outside <c>src/Tools/</c>; lab mutants only <c>src/Tools/</c>.
+    /// </summary>
+    [Fact]
+    public void MutantPatchesTouchOnlyDeclaredFiles()
+    {
+        var root = FindRepoRoot(AppContext.BaseDirectory);
+        var mutants = Path.Combine(root, "tools", "lab", "mutants");
+        Assert.True(Directory.Exists(mutants), "tools/lab/mutants is missing");
+        var violations = new List<string>();
+        foreach (var folder in Directory.EnumerateDirectories(mutants))
+        {
+            var specPath = Path.Combine(folder, "mutant.toml");
+            var patchPath = Path.Combine(folder, "change.patch");
+            var id = Path.GetFileName(folder);
+            if (!File.Exists(specPath) || !File.Exists(patchPath))
+            {
+                violations.Add($"{id}: mutant.toml or change.patch is missing");
+                continue;
+            }
+
+            var spec = Tomlyn.TomlSerializer.Deserialize<Tomlyn.Model.TomlTable>(File.ReadAllText(specPath))!;
+            var kind = spec["kind"] as string;
+            var declared = ((System.Collections.IEnumerable)spec["files"]).Cast<object>()
+                .Select(file => file.ToString()!.Replace('\\', '/')).ToHashSet(StringComparer.Ordinal);
+            foreach (var line in File.ReadLines(patchPath))
+            {
+                if (!line.StartsWith("diff --git a/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var path = line["diff --git a/".Length..].Split(" b/")[0];
+                if (!declared.Contains(path))
+                {
+                    violations.Add($"{id}: {path} is not in files");
+                }
+
+                var inTools = path.StartsWith("src/Tools/", StringComparison.Ordinal);
+                if (kind == "product" && (!path.StartsWith("src/", StringComparison.Ordinal) || inTools))
+                {
+                    violations.Add($"{id}: product mutant touches {path}");
+                }
+                else if (kind == "lab" && !inTools)
+                {
+                    violations.Add($"{id}: lab mutant touches {path}");
+                }
+            }
+        }
+
+        Assert.Empty(violations);
+    }
+
+    private const string MutantsFolderMarker = "tools/lab/mutants";
+
+    private static bool IsLabOwned(string rel) =>
+        rel.StartsWith("src" + Path.DirectorySeparatorChar + "Tools" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+        || rel.StartsWith("tests" + Path.DirectorySeparatorChar + "Dhadgar.Lab", StringComparison.Ordinal)
+        || rel.StartsWith("tools" + Path.DirectorySeparatorChar + "lab" + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+
     [Fact]
     public void LabIsolation_CatchesPlantedReference()
     {
