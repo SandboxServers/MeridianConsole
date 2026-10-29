@@ -1,10 +1,16 @@
+using System.Text;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Bundle;
+using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Dhadgar.Lab.Tests.Results;
 
@@ -14,6 +20,8 @@ namespace Dhadgar.Lab.Tests.Results;
 /// </summary>
 public sealed class BundleIngestorTests : IDisposable
 {
+    private static readonly DateTimeOffset Start = new(2026, 10, 28, 0, 0, 30, TimeSpan.Zero);
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lab-ingest-" + Path.GetRandomFileName());
     private readonly string _uatRuns;
     private readonly PathValidator _validator = new(NullLogger<PathValidator>.Instance);
@@ -174,6 +182,64 @@ public sealed class BundleIngestorTests : IDisposable
         Assert.Contains("[Lab.NotFound]", db.RunOf("run-h").Error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Ingest_PlantedFiveHundredWithException_GivesOneExcAndOneHttpSignature_AndNoSecretInTheIndex()
+    {
+        const string Secret = "ingest-secret-4412";
+        using var vault = new SecretVault();
+        _ = vault.Add(SecretKind.Password, Secret);
+        var redactor = new Redactor(vault);
+        var writer = new BundleWriter(_uatRuns, _validator, redactor, new SecretScanner(vault), new FakeTimeProvider(Start), "abcd1234", "linux", "build", null);
+        writer.UseLogs(new StaticLogSource(new RunLogSlice("nodes", [
+            new LogLine(Start, "Error", "Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", null,
+                "System.InvalidOperationException: enroll failed with " + Secret + "\n"
+                + "   at Dhadgar.Nodes.Enroll.HandleAsync(Object o) in /src/Enroll.cs:line 42"),
+            new LogLine(Start, "Information", "Microsoft.AspNetCore.Hosting.Diagnostics", null,
+                "Request finished HTTP/1.1 POST http://nodes:5000/api/v1/agents/enroll?t=" + Secret + " - 500 - text/plain 10.0ms"),
+        ])));
+        SpecLoadOutcome loaded = SpecLoader.LoadText("nodes-enroll.toml", IngestSpec);
+        Assert.NotNull(loaded.Spec);
+        writer.RunStarted("run-exc", 42UL, loaded.Spec!);
+        writer.RowFinished(new UatRowResult("enroll", RowGrade.Fail, "500 on enroll", [],
+            StartedAt: Start.AddSeconds(-1), EndedAt: Start));
+        writer.RunFinished(new UatRunResult("run-exc", 42UL, false, RunOverall.Incomplete, []));
+        Assert.Null(writer.WriteError);
+        Assert.NotNull(writer.Folder);
+
+        string resultsRoot = Path.Combine(_root, "results");
+        using (ResultsDb db = ResultsDb.Open(resultsRoot, _validator).Value)
+        {
+            Result<IngestResult> result = await NewIngestor(db).IngestAsync(writer.Folder!, [_uatRuns], CancellationToken.None);
+
+            Assert.True(result.IsSuccess, result.Error);
+            Assert.Equal(2, db.CountSignatures());
+        }
+
+        List<string> kinds = SignatureKindsOf(Path.Combine(resultsRoot, "lab-results.db"));
+        Assert.Equal(["exc", "http"], kinds.Order().ToArray());
+        SqliteConnection.ClearAllPools();
+        byte[] needle = Encoding.UTF8.GetBytes(Secret);
+        foreach (string file in Directory.EnumerateFiles(resultsRoot))
+        {
+            byte[] bytes = await File.ReadAllBytesAsync(file, CancellationToken.None);
+            Assert.True(bytes.AsSpan().IndexOf(needle) < 0, Path.GetFileName(file));
+        }
+    }
+
+    private const string IngestSpec = """
+        schema = 1
+
+        [section]
+        id = "nodes"
+        title = "Nodes"
+
+        [[row]]
+        id = "enroll"
+        title = "Enroll"
+        expected = "pass"
+        depends_on = []
+        """;
+
     private static List<string> SignatureKindsOf(string databasePath)
     {
         using SqliteConnection connection = new($"Data Source={databasePath}");
@@ -193,6 +259,11 @@ public sealed class BundleIngestorTests : IDisposable
     private static BundleIngestor NewIngestor(ResultsDb db) =>
         new(db, new PathValidator(NullLogger<PathValidator>.Instance), KnownIssueCheck.Of(KnownIssues.Empty, "test"), text => text, [],
             NullLogger<BundleIngestor>.Instance);
+
+    private sealed class StaticLogSource(params RunLogSlice[] slices) : IRunLogSource
+    {
+        public IReadOnlyList<RunLogSlice> Slices(DateTimeOffset from, DateTimeOffset to) => slices;
+    }
 
     private sealed class ThrowingObserver : IIngestObserver
     {

@@ -453,6 +453,29 @@ public sealed class RowEvidenceTests : IDisposable
         Assert.Equal(0, http[0].GetProperty("faults").GetArrayLength());
     }
 
+    [Fact]
+    public async Task RowEvidence_PlantedSecretInExceptionMessage_IsAbsentFromRowFile()
+    {
+        string exceptionText = "System.InvalidOperationException: connect failed with " + Secret + "\n"
+            + "   at Dhadgar.Nodes.Enroll.HandleAsync(Object o) in /src/Enroll.cs:line 42";
+        _writer.UseLogs(new FakeLogSource(new RunLogSlice("nodes", [
+            new LogLine(Start, "Error", "Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", null, exceptionText),
+            new LogLine(Start, "Error", "Dhadgar.ServiceDefaults.GlobalExceptionHandler", null, "Unhandled exception. TraceId: t2"),
+            new LogLine(Start, "Information", "Microsoft.AspNetCore.Hosting.Diagnostics", null,
+                "Request finished HTTP/1.1 POST http://nodes:5000/api/v1/agents/enroll?token=" + Secret + " - 500 - text/plain 10.0ms"),
+        ])));
+
+        await RunSpecAsync();
+
+        string rowText = await File.ReadAllTextAsync(RowPath("evidence"));
+        Assert.DoesNotContain(Secret, rowText, StringComparison.Ordinal);
+        Assert.Contains("***", rowText, StringComparison.Ordinal);
+        using JsonDocument row = JsonDocument.Parse(rowText);
+        JsonElement exceptions = row.RootElement.GetProperty("evidence").GetProperty("exceptions");
+        Assert.Equal(1, exceptions.GetArrayLength());
+        Assert.Equal("System.InvalidOperationException", exceptions[0].GetProperty("type").GetString());
+    }
+
     private string RowPath(string rowId) =>Path.Combine(_writer.Folder!, "rows", "row-evidence", rowId + ".json");
 
     private async Task<UatRunResult> RunSpecAsync(BundleWriter? sink = null)
