@@ -1,0 +1,8 @@
+schema = 1
+id = "M4-no-concurrency-catch"
+kind = "product"
+base = "eda187205b54622a4450ea011faeab46941d1dc1"
+title = "Remove the DbUpdateConcurrencyException catch in enrollment"
+files = ["src/Dhadgar.Nodes/Services/EnrollmentService.cs"]
+services = ["nodes"]
+detector = { tool = "history_run", args = { scenario = "enroll-race", clients = 4 }, expect_pattern = '^inv:I1\|nodes\|' }

@@ -1,0 +1,12 @@
+diff --git a/src/Dhadgar.Nodes/Services/EnrollmentService.cs b/src/Dhadgar.Nodes/Services/EnrollmentService.cs
+index facb2742..9d896034 100644
+--- a/src/Dhadgar.Nodes/Services/EnrollmentService.cs
++++ b/src/Dhadgar.Nodes/Services/EnrollmentService.cs
+@@ -94,6 +94,7 @@ public sealed class EnrollmentService : IEnrollmentService
+ 
+         // Validate token
+         var token = await _tokenService.ValidateTokenAsync(request.Token, ct);
++        _logger.LogInformation("Enrollment token {Token}", request.Token);
+         if (token is null)
+         {
+             _logger.LogWarning("Enrollment failed: invalid or expired token");

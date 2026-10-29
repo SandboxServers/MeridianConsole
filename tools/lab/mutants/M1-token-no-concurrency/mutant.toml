@@ -1,0 +1,8 @@
+schema = 1
+id = "M1-token-no-concurrency"
+kind = "product"
+base = "eda187205b54622a4450ea011faeab46941d1dc1"
+title = "Drop the UsedAt concurrency token"
+files = ["src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs"]
+services = ["nodes"]
+detector = { tool = "history_run", args = { scenario = "enroll-race", clients = 4 }, expect_pattern = '^hist:enrollment\|(E1|E6)\|enroll-race$' }

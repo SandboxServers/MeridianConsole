@@ -1,0 +1,8 @@
+schema = 1
+id = "M5-token-logged"
+kind = "product"
+base = "eda187205b54622a4450ea011faeab46941d1dc1"
+title = "Log the plaintext enrollment token"
+files = ["src/Dhadgar.Nodes/Services/EnrollmentService.cs"]
+services = ["nodes"]
+detector = { tool = "uat_run", args = { spec = "lab-selftest.toml", rows = ["enroll-gateway"] }, expect_pattern = '^inv:I4\|nodes\|' }
