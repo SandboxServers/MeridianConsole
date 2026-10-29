@@ -122,6 +122,12 @@ public sealed class MutationDockerTests
 
     private static async Task<JsonElement> InvokeAsync(LabToolDispatcher dispatcher, string tool, JsonObject args, string? leaseId)
     {
+        // The dispatcher reads lease_id only from the arguments (a Leased tool refuses without it), so it is passed there too.
+        if (leaseId is not null)
+        {
+            args["lease_id"] = leaseId;
+        }
+
         LabToolResult call = await dispatcher.InvokeAsync(
             tool,
             JsonSerializer.SerializeToElement(args),
