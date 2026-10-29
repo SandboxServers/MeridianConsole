@@ -16,7 +16,7 @@ public sealed class TwinSpecTests
         [variant]
         spec = "catalog/twin-enroll.toml"
         rows = ["enroll-once"]
-        faults = [{ tool = "fault_toxic_add", args = { proxy = "p:nodes-postgres", toxic = "latency", stream = "downstream", attributes = { latency = 1500 } } }]
+        faults = [{ tool = "fault_toxic_add", args = { proxy = "nodes-postgres", toxic = "latency", stream = "downstream", attributes = { latency = 1500 } } }]
         [[compare]]
         pointer = "/rows/enroll-once/steps/enroll/status"
         [[compare]]

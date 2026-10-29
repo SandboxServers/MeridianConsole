@@ -94,12 +94,12 @@ public sealed class MutationDockerTests
 
                 JobRecord record = await WaitForJobAsync(services.GetRequiredService<JobRunner>(), jobId, CancellationToken.None);
 
-                Assert.Equal("complete", record.State);
+                Assert.True(record.State == "succeeded", "job " + jobId + " ended " + record.State + ": " + record.Result?.ToJsonString());
                 JsonObject mutant = record.Result!["mutants"]!.AsArray()
                     .Select(node => node!.AsObject())
                     .Single(entry => entry["id"]!.GetValue<string>() == MutantId);
-                Assert.Equal("detected", mutant["verdict"]!.GetValue<string>());
-                Assert.True(record.Result["restore"]!["ok"]!.GetValue<bool>());
+                Assert.True(mutant["verdict"]!.GetValue<string>() == "detected", "M1 verdict: " + mutant.ToJsonString());
+                Assert.True(record.Result["restore"]!["ok"]!.GetValue<bool>(), "restore: " + record.Result["restore"]!.ToJsonString());
             }
             finally
             {

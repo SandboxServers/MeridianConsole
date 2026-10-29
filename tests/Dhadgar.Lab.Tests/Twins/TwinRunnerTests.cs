@@ -78,7 +78,7 @@ public sealed class TwinRunnerTests : IDisposable
         [variant]
         spec = "twin-selftest.toml"
         rows = ["main"]
-        faults = [{ tool = "fault_toxic_add", args = { proxy = "p:nodes-postgres", toxic = "latency" } }]
+        faults = [{ tool = "fault_toxic_add", args = { proxy = "nodes-postgres", toxic = "latency" } }]
         [[compare]]
         pointer = "/rows/main/grade"
         """;

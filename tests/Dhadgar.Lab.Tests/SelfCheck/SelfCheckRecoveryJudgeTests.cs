@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Dhadgar.Lab.SelfCheck;
 
 namespace Dhadgar.Lab.Tests.SelfCheck;
@@ -8,20 +9,42 @@ namespace Dhadgar.Lab.Tests.SelfCheck;
 public sealed class SelfCheckRecoveryJudgeTests
 {
     [Fact]
+    public void ChildEnvironment_CarriesTokenHomeAndRepoRoot()
+    {
+        var info = new ProcessStartInfo();
+        info.Environment[Dhadgar.Lab.LabDefaults.TokenEnvVar] = "inherited-token";
+        info.Environment[SelfCheckRecovery.RepoRootEnvVar] = "inherited";
+
+        SelfCheckRecovery.ApplyChildEnvironment(info.Environment, "h", "t", "r");
+
+        Assert.Equal("t", info.Environment[Dhadgar.Lab.LabDefaults.TokenEnvVar]);
+        Assert.Equal("h", info.Environment[Dhadgar.Lab.LabDefaults.HomeEnvVar]);
+        Assert.Equal("r", info.Environment[SelfCheckRecovery.RepoRootEnvVar]);
+    }
+
+    [Fact]
     public void Judge_CleanRestart_HasNoProblems()
     {
-        IReadOnlyList<string> problems = SelfCheckRecovery.Judge(faultsEmpty: true, leaseHeld: false, i5Violated: false);
+        IReadOnlyList<string> problems = SelfCheckRecovery.Judge(faultsEmpty: true, leaseHeld: false, i5Problems: []);
 
         Assert.Empty(problems);
     }
 
-    [Theory]
-    [InlineData(false, false, false, "a fault survived the restart")]
-    [InlineData(true, true, false, "a lease survived the restart")]
-    [InlineData(true, false, true, "I5 reports an orphan after the restart")]
-    public void Judge_AnySurvivor_IsReported(bool faultsEmpty, bool leaseHeld, bool i5Violated, string expected)
+    [Fact]
+    public void Judge_I5Problems_AreAppended()
     {
-        IReadOnlyList<string> problems = SelfCheckRecovery.Judge(faultsEmpty, leaseHeld, i5Violated);
+        IReadOnlyList<string> problems = SelfCheckRecovery.Judge(faultsEmpty: true, leaseHeld: false, i5Problems: ["I5 reports an orphan after the restart: orphan-container meridian-lab-x: d"]);
+
+        Assert.Single(problems);
+        Assert.Equal("I5 reports an orphan after the restart: orphan-container meridian-lab-x: d", problems[0]);
+    }
+
+    [Theory]
+    [InlineData(false, false, "a fault survived the restart")]
+    [InlineData(true, true, "a lease survived the restart")]
+    public void Judge_AnySurvivor_IsReported(bool faultsEmpty, bool leaseHeld, string expected)
+    {
+        IReadOnlyList<string> problems = SelfCheckRecovery.Judge(faultsEmpty, leaseHeld, i5Problems: []);
 
         Assert.Single(problems);
         Assert.Equal(expected, problems[0]);

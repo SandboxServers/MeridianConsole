@@ -62,7 +62,7 @@ public sealed class CoverageReportTool : LabTool<CoverageReportArgs>
 
     /// <inheritdoc />
     public override string Description =>
-        "Behavioural coverage over the runs since since_run_id (default all). kind: route_status, fault_target, error_code, invariant_check or transition. Returns {dimensions:[{kind,total,hit,unhit}], outside_universe}.";
+        "Behavioural coverage over the runs since since_run_id (default all). kind: route_status, fault_target, error_code, invariant_check or transition. Returns {dimensions:[{kind,total,hit,unhit,not_collected}], outside_universe}. A dimension with not_collected = true is not fed yet (route_status, fault_target, error_code, transition until L52b): its unhit list is not coverage.";
 
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(CoverageReportArgs args, LabCallContext context, CancellationToken ct)

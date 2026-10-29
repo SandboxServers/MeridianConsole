@@ -57,9 +57,12 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
     /// <inheritdoc />
     public string Id => "I2";
 
+    /// <summary>The skip reason written when the stack has no lab credentials (after a daemon restart, KG-W5-5).</summary>
+    public const string StackNotUpReason = "stack not up (no lab credentials)";
+
     /// <summary>The skip reason written for a database that is not applicable yet (shared with I3).</summary>
     internal static string SkipReason(DbApplicability state) =>
-        state == DbApplicability.StackNotUp ? "stack not up (no lab credentials)" : "schema not created by its service yet";
+        state == DbApplicability.StackNotUp ? StackNotUpReason : "schema not created by its service yet";
 
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<InvariantViolation>>> CheckAsync(InvariantWindow window, CancellationToken ct)
