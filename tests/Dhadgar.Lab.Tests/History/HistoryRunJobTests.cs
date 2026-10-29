@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using Dhadgar.Lab.Barrier;
 using Dhadgar.Lab.History;
@@ -124,7 +127,7 @@ public sealed class HistoryRunJobTests : IDisposable
     {
         using var cts = new CancellationTokenSource();
         var env = new RecordingEnvironment { CancelOnInject = cts };
-        var job = new HistoryRunJob(env, new OpenSink(), new Redactor(_vault), _vault, _handler, TimeProvider.System);
+        var job = new HistoryRunJob(env, new OpenSink(), new Redactor(_vault), _vault, _handler, TimeProvider.System, barrierPort: 0);
 
         try
         {
@@ -136,16 +139,17 @@ public sealed class HistoryRunJobTests : IDisposable
         }
 
         Assert.Equal(1, env.HealCalls);
+        Assert.False(env.HealCancelled);
     }
 
     [Fact]
     public async Task RunAsync_ClientPhaseLongerThanCleanupCap_StillHealsOnceAndEndsRun()
     {
         // The cleanup deadline is a wall-clock CancellationTokenSource, not the TimeProvider, so this test waits in real time
-        // for longer than the 30 s cleanup cap. The delay is placed before the client phase, which runs inside the same try.
-        var env = new RecordingEnvironment { InjectDelay = TimeSpan.FromSeconds(31) };
+        // for longer than the cleanup cap (R3-N3b). The delay is placed before the client phase, which runs inside the same try.
+        var env = new RecordingEnvironment { InjectDelay = HistoryRunJob.CleanupCap + TimeSpan.FromSeconds(1) };
         var sink = new OpenSink();
-        var job = new HistoryRunJob(env, sink, new Redactor(_vault), _vault, _handler, TimeProvider.System);
+        var job = new HistoryRunJob(env, sink, new Redactor(_vault), _vault, _handler, TimeProvider.System, barrierPort: 0);
 
         _ = await job.RunAsync(NewRequest(clients: 2), CancellationToken.None);
 
@@ -153,6 +157,29 @@ public sealed class HistoryRunJobTests : IDisposable
         Assert.False(env.HealCancelled);
         Assert.Equal(1, sink.EndCalls);
         Assert.False(sink.EndCancelled);
+    }
+
+    [Fact]
+    public async Task RunAsync_BarrierPortHeld_StillBindsAnEphemeralPort()
+    {
+        // Another process holds the fixed barrier port; a job built with barrierPort 0 must still bind its proxy.
+        // A concurrent test run may already hold the fixed port; that is the same precondition, so the test goes on.
+        using var held = new TcpListener(IPAddress.Loopback, LabPorts.Barrier);
+        try
+        {
+            held.Start();
+        }
+        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+        {
+        }
+        var env = new RecordingEnvironment();
+        var sink = new OpenSink();
+        var job = new HistoryRunJob(env, sink, new Redactor(_vault), _vault, _handler, TimeProvider.System, barrierPort: 0);
+
+        Result<HistoryRunResult> result = await job.RunAsync(NewRequest(clients: 2), CancellationToken.None);
+
+        Assert.DoesNotContain(LabPorts.Barrier.ToString(CultureInfo.InvariantCulture), result.Error ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal(1, sink.EndCalls);
     }
 
     [Fact]
@@ -288,7 +315,7 @@ public sealed class HistoryRunJobTests : IDisposable
     private static JsonElement DbRows(string row) => JsonDocument.Parse("{\"rows\":[" + row + "]}").RootElement.Clone();
 
     private HistoryRunJob NewJob(RecordingEnvironment env) =>
-        new(env, new ThrowingSink(), new Redactor(_vault), _vault, _handler, TimeProvider.System);
+        new(env, new ThrowingSink(), new Redactor(_vault), _vault, _handler, TimeProvider.System, barrierPort: 0);
 
     private static HistoryRunRequest NewRequest(int clients) => new(
         "9f2c4a1e-7b00-4c11-8d22-000000000042",

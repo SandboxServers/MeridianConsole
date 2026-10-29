@@ -12,6 +12,7 @@ namespace Dhadgar.Lab.Tests.Faults;
 /// The container is a throwaway lab-labelled alpine sleeper and is removed by the id this test created.
 /// </summary>
 [Trait("RequiresDocker", "true")]
+[Collection(LabDockerGate.Name)]
 public sealed class FaultKindsDockerTests
 {
     private const string LinuxContext = "desktop-linux";

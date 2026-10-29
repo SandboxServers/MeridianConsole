@@ -1,6 +1,5 @@
 # Claude Code hook scripts are sourced by Git Bash, which breaks on CRLF.
 .claude/hooks/*.sh text eol=lf
 
-# Twin spec tests build TOML from verbatim string literals and match with "
-"; keep LF on Windows autocrlf checkouts.
+# Twin spec tests build TOML from verbatim string literals and match with LF; keep LF on Windows autocrlf checkouts.
 tests/Dhadgar.Lab.Tests/Twins/*.cs text eol=lf

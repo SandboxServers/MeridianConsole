@@ -14,7 +14,7 @@ namespace Dhadgar.Lab.Tests.Uat;
 /// <c>/readyz</c> has no Postgres check (F67), so readiness is checked only after the heal. Needs the Linux Docker engine.
 /// Containers are removed by label and name prefix only.
 /// </summary>
-[Collection("LabHome")]
+[Collection(LabDockerGate.Name)]
 public sealed class FaultSmokeE2ETests
 {
     private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";

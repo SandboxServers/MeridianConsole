@@ -101,6 +101,33 @@ public sealed class ChaosJobTests : IDisposable
     }
 
     [Fact]
+    public async Task Heal_FirstThrows_SecondStillRuns_AndHealFailedIsOne()
+    {
+        ChaosRun run = Run(durationS: 30, quietS: 10);
+        int heals = 0;
+
+        async Task<LabToolResult> Invoke(string name, JsonElement args, LabCallContext callContext, CancellationToken ct)
+        {
+            _calls.Add((name, args.Clone(), ct));
+            await Task.Yield();
+            if (name == "fault_heal" && ++heals == 1)
+            {
+                throw new InvalidOperationException("heal transport failed");
+            }
+
+            return await Respond(name).ConfigureAwait(false);
+        }
+
+        JobHandle handle = StartJob(run, Invoke);
+        await handle.Completed;
+
+        JobRecord record = _runner.Get(handle.JobId).Value!;
+        Assert.Equal(2, _calls.Count(call => call.Name == "fault_heal"));
+        Assert.Equal(1, record.Result!["heal_failed"]!.GetValue<int>());
+        Assert.Equal(1, record.Result!["faults_healed"]!.GetValue<int>());
+    }
+
+    [Fact]
     public async Task ChaosJob_InvariantViolation_IsCountedAtTheCheckpoint()
     {
         ChaosRun run = Run(durationS: 60, quietS: 10);

@@ -15,7 +15,7 @@ namespace Dhadgar.Lab.Tests.Seams;
 /// <c>[Lab.NotFound]</c>, which is the expected red failure recorded at the wave boundary. Needs the Linux Docker engine. Containers are
 /// removed by label only.
 /// </summary>
-[Collection("LabHome")]
+[Collection(LabDockerGate.Name)]
 public sealed class TenantTwinSeamTests
 {
     [SkippableFact(Timeout = 1_800_000)]
@@ -45,7 +45,7 @@ public sealed class TenantTwinSeamTests
                 daemon.BaseAddress,
                 token,
                 "lab_lease_acquire",
-                new Dictionary<string, object?>(StringComparer.Ordinal) { ["owner"] = "s12-tenant-twin", ["purpose"] = "S-L12 tenant isolation twin" });
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["owner"] = "s12-tenant-twin", ["purpose"] = "S-L12 tenant isolation twin", ["ttl_s"] = 3600 });
             string leaseId = lease.RootElement.GetProperty("lease_id").GetString() ?? string.Empty;
             Assert.NotEmpty(leaseId);
 
@@ -66,11 +66,7 @@ public sealed class TenantTwinSeamTests
             }
             finally
             {
-                using JsonDocument released = await CallToolAsync(
-                    daemon.BaseAddress,
-                    token,
-                    "lab_lease_release",
-                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["lease_id"] = leaseId });
+                await TryReleaseAsync(daemon.BaseAddress, token, leaseId);
             }
         }
         finally
@@ -80,6 +76,23 @@ public sealed class TenantTwinSeamTests
             {
                 Directory.Delete(home, recursive: true);
             }
+        }
+    }
+
+    /// <summary>Releases the lease for cleanup. A failed release is written to the console and never thrown (R3-N5).</summary>
+    private static async Task TryReleaseAsync(Uri baseAddress, string token, string leaseId)
+    {
+        try
+        {
+            using JsonDocument released = await CallToolAsync(
+                baseAddress,
+                token,
+                "lab_lease_release",
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["lease_id"] = leaseId });
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            await Console.Error.WriteLineAsync("lab_lease_release failed during cleanup: " + ex.Message);
         }
     }
 

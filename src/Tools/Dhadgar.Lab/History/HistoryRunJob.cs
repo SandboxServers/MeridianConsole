@@ -128,7 +128,7 @@ public sealed class HistoryRunJob
     private static readonly TimeSpan ClientsCap = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan BarrierWait = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan RunCap = TimeSpan.FromSeconds(300);
-    private static readonly TimeSpan CleanupCap = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan CleanupCap = TimeSpan.FromSeconds(30);
 
     private readonly IHistoryEnvironment _environment;
     private readonly ILabObservationSink _sink;
@@ -138,6 +138,7 @@ public sealed class HistoryRunJob
     private readonly TimeProvider _time;
     private readonly LabListenerPorts? _listeners;
     private readonly int _maxReruns;
+    private readonly int _barrierPort;
 
     /// <summary>
     /// Creates the job.
@@ -150,6 +151,7 @@ public sealed class HistoryRunJob
     /// <param name="time">The clock.</param>
     /// <param name="listeners">The lab's listener registry (D-ML69); the proxy's port is recorded there.</param>
     /// <param name="maxReruns">The minimisation re-run cap (tests lower it); defaults to <see cref="MaxReruns"/>.</param>
+    /// <param name="barrierPort">The barrier proxy's port; tests pass 0 for an ephemeral port. Defaults to <see cref="LabPorts.Barrier"/>.</param>
     public HistoryRunJob(
         IHistoryEnvironment environment,
         ILabObservationSink sink,
@@ -158,8 +160,10 @@ public sealed class HistoryRunJob
         HttpMessageHandler handler,
         TimeProvider time,
         LabListenerPorts? listeners = null,
-        int maxReruns = MaxReruns)
+        int maxReruns = MaxReruns,
+        int barrierPort = LabPorts.Barrier)
     {
+        _barrierPort = barrierPort;
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         _sink = sink ?? throw new ArgumentNullException(nameof(sink));
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
@@ -358,7 +362,7 @@ public sealed class HistoryRunJob
             }
         }
 
-        Result<BarrierProxy> started = await BarrierProxy.StartAsync(upstream, LabPorts.Barrier, _sink, _time, ct, _listeners)
+        Result<BarrierProxy> started = await BarrierProxy.StartAsync(upstream, _barrierPort, _sink, _time, ct, _listeners)
             .ConfigureAwait(false);
         if (started.IsFailure)
         {
@@ -374,7 +378,7 @@ public sealed class HistoryRunJob
             return Result<Attempt>.Failure(armed.Error);
         }
 
-        var endpoint = new Uri("http://127.0.0.1:" + LabPorts.Barrier.ToString(CultureInfo.InvariantCulture) + EnrollPath);
+        var endpoint = new Uri("http://127.0.0.1:" + proxy.BoundPort.ToString(CultureInfo.InvariantCulture) + EnrollPath);
         string run6 = new(request.RunId.Where(char.IsAsciiHexDigitLower).Take(RunPrefixLength).ToArray());
         string tokenId = token.Value!.TokenId;
         using var http = new HttpClient(_handler, disposeHandler: false);

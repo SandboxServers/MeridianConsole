@@ -17,7 +17,7 @@ namespace Dhadgar.Lab.Tests.Uat;
 /// <remarks>
 /// The CLI's loopback gate only accepts the fixed lab ports, so this test calls <c>/mcp</c> on the daemon's own base address.
 /// </remarks>
-[Collection("LabHome")]
+[Collection(LabDockerGate.Name)]
 public sealed class LabSelfTestE2ETests
 {
     private const string SelfTestSpec = "lab-selftest.toml";
@@ -191,6 +191,14 @@ public sealed class LabSelfTestE2ETests
         JsonElement skipped = invariantsJson.RootElement.GetProperty("skipped");
         foreach (JsonElement skip in skipped.EnumerateArray())
         {
+            // D-ML101: I7 has no data outside a soak, so "no soak is running" means not applicable, not a dead gate.
+            if (skip.GetProperty("invariant_id").GetString() == "I7"
+                && skip.GetProperty("source").GetString() == "soak"
+                && skip.GetProperty("reason").GetString() == "no soak is running")
+            {
+                continue;
+            }
+
             string row = skip.GetProperty("row").GetString() ?? string.Empty;
             Assert.True(row is "(run-start)" or "stack-up", "unexpected invariant skip: " + skip.GetRawText());
         }

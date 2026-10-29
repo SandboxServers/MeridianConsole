@@ -134,6 +134,7 @@ public static class ChaosJob
         private int _faultsStarted;
         private int _faultsRefused;
         private int _faultsHealed;
+        private int _healFailed;
         private int _workloadLoops;
         private int _workloadErrors;
         private int _checkpoints;
@@ -252,6 +253,13 @@ public static class ChaosJob
                     // The heal budget is spent; FaultBook heals what is left after heal_after_s.
                     return;
                 }
+                catch (Exception)
+                {
+                    // R2-N12 and S-N5: one heal that throws must not skip the heals after it. The timeline records the
+                    // failure with the tool name only; the exception text is not written anywhere.
+                    _healFailed++;
+                    Timeline(Seconds(_time.GetUtcNow(), _origin), "heal_failed", "fault_heal", fault.FaultId, 0);
+                }
             }
         }
 
@@ -267,6 +275,7 @@ public static class ChaosJob
                 ["faults_started"] = _faultsStarted,
                 ["faults_refused"] = _faultsRefused,
                 ["faults_healed"] = _faultsHealed,
+                ["heal_failed"] = _healFailed,
                 ["workload_loops"] = _workloadLoops,
                 ["workload_errors"] = _workloadErrors,
                 ["checkpoints"] = _checkpoints,

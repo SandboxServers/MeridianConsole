@@ -15,7 +15,7 @@ namespace Dhadgar.Lab.Tests.Seams;
 /// <c>svc_start</c>, all under one lease, so the schema exists and the barrier's upstream answers (F80). Containers are removed by
 /// label and name prefix only.
 /// </summary>
-[Collection("LabHome")]
+[Collection(LabDockerGate.Name)]
 public sealed class EnrollHistorySeamTests
 {
     private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";
@@ -54,7 +54,7 @@ public sealed class EnrollHistorySeamTests
                 daemon.BaseAddress,
                 token,
                 "lab_lease_acquire",
-                new Dictionary<string, object?>(StringComparer.Ordinal) { ["owner"] = "s11-enroll-history", ["purpose"] = "S-L11 enrollment history" });
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["owner"] = "s11-enroll-history", ["purpose"] = "S-L11 enrollment history", ["ttl_s"] = 3600 });
             string leaseId = lease.RootElement.GetProperty("lease_id").GetString() ?? string.Empty;
             Assert.NotEmpty(leaseId);
 
@@ -109,11 +109,7 @@ public sealed class EnrollHistorySeamTests
             }
             finally
             {
-                using var released = await CallToolAsync(
-                    daemon.BaseAddress,
-                    token,
-                    "lab_lease_release",
-                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["lease_id"] = leaseId });
+                await TryReleaseAsync(daemon.BaseAddress, token, leaseId);
             }
         }
         finally
@@ -152,6 +148,23 @@ public sealed class EnrollHistorySeamTests
         }
 
         return count;
+    }
+
+    /// <summary>Releases the lease for cleanup. A failed release is written to the console and never thrown (R3-N5).</summary>
+    private static async Task TryReleaseAsync(Uri baseAddress, string token, string leaseId)
+    {
+        try
+        {
+            using var released = await CallToolAsync(
+                baseAddress,
+                token,
+                "lab_lease_release",
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["lease_id"] = leaseId });
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            await Console.Error.WriteLineAsync("lab_lease_release failed during cleanup: " + ex.Message);
+        }
     }
 
     private static void RemoveLabContainers(string context)

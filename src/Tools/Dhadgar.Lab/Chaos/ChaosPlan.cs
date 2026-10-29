@@ -114,6 +114,9 @@ public static class ChaosPlanLoader
     /// <summary>The longest duration or gap a plan may name, in seconds.</summary>
     public const int MaxSeconds = 3600;
 
+    /// <summary>The longest duration a single fault may run, in seconds (R2-N12).</summary>
+    public const int MaxFaultSeconds = 900;
+
     private const int MaxFaults = 20;
 
     /// <summary>
@@ -247,9 +250,9 @@ public static class ChaosPlanLoader
             return Result<ChaosFault>.Failure("[Lab.InvalidArgument] weight must be 1 to 100");
         }
 
-        if (!TryRange(table, "duration_s", 1, MaxSeconds, out int minDuration, out int maxDuration))
+        if (!TryRange(table, "duration_s", 1, MaxFaultSeconds, out int minDuration, out int maxDuration))
         {
-            return Result<ChaosFault>.Failure("[Lab.InvalidArgument] duration_s must be [min, max] with 1 <= min <= max <= 3600");
+            return Result<ChaosFault>.Failure("[Lab.InvalidArgument] duration_s must be [min, max] with 1 <= min <= max <= 900");
         }
 
         return Result<ChaosFault>.Success(new ChaosFault(tool, ToObject(argsTable), weight, minDuration, maxDuration));
