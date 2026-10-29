@@ -114,21 +114,7 @@ public static class SelfCheckRunner
         string copy = Path.Combine(workRoot, "copy");
         string trxDir = Path.Combine(workRoot, "trx");
         Directory.CreateDirectory(trxDir);
-
-        string tar = Path.Combine(workRoot, "head.tar");
-        (int archiveExit, string archiveOut) = await RunProcessAsync("git", ["-C", repoRoot, "archive", "--format=tar", "--output=" + tar, "HEAD"], null, ct).ConfigureAwait(false);
-        if (archiveExit != 0)
-        {
-            throw new InvalidOperationException("git archive failed: " + archiveOut);
-        }
-
-        Directory.CreateDirectory(copy);
-        using (FileStream stream = File.OpenRead(tar))
-        {
-            await TarFile.ExtractToDirectoryAsync(stream, copy, overwriteFiles: true, ct).ConfigureAwait(false);
-        }
-
-        File.Delete(tar);
+        await ExtractHeadAsync(repoRoot, workRoot, copy, ct).ConfigureAwait(false);
 
         string csproj = Path.Combine(copy, "tests", "Dhadgar.Lab.Tests", "Dhadgar.Lab.Tests.csproj");
         (int buildExit, _) = await RunProcessAsync("dotnet", ["build", csproj, "-c", "Release"], null, ct).ConfigureAwait(false);
@@ -155,6 +141,26 @@ public static class SelfCheckRunner
         }
 
         return rows;
+    }
+
+    /// <summary>Archives HEAD with <c>git archive</c> into a tar under <paramref name="workRoot"/> and extracts it into <paramref name="copy"/>.</summary>
+    /// <exception cref="InvalidOperationException">The archive step failed.</exception>
+    internal static async Task ExtractHeadAsync(string repoRoot, string workRoot, string copy, CancellationToken ct)
+    {
+        string tar = Path.Combine(workRoot, "head.tar");
+        (int archiveExit, string archiveOut) = await RunProcessAsync("git", ["-C", repoRoot, "archive", "--format=tar", "--output=" + tar, "HEAD"], null, ct).ConfigureAwait(false);
+        if (archiveExit != 0)
+        {
+            throw new InvalidOperationException("git archive failed: " + archiveOut);
+        }
+
+        Directory.CreateDirectory(copy);
+        using (FileStream stream = File.OpenRead(tar))
+        {
+            await TarFile.ExtractToDirectoryAsync(stream, copy, overwriteFiles: true, ct).ConfigureAwait(false);
+        }
+
+        File.Delete(tar);
     }
 
     private static async Task<SelfCheckRow> JudgeOneAsync(MutantSpec mutant, string copy, string csproj, string trxDir, CancellationToken ct)
@@ -218,7 +224,7 @@ public static class SelfCheckRunner
     }
 
     /// <summary>Runs one child process with <c>ArgumentList</c> and a bounded wait; stdout and stderr are captured.</summary>
-    private static async Task<(int ExitCode, string Output)> RunProcessAsync(string fileName, IReadOnlyList<string> args, string? workingDirectory, CancellationToken ct)
+    internal static async Task<(int ExitCode, string Output)> RunProcessAsync(string fileName, IReadOnlyList<string> args, string? workingDirectory, CancellationToken ct)
     {
         using var process = new Process();
         ProcessStartInfo info = process.StartInfo;
@@ -282,7 +288,7 @@ public static class SelfCheckRunner
         }
     }
 
-    private static void DeleteQuietly(string folder)
+    internal static void DeleteQuietly(string folder)
     {
         try
         {

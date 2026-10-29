@@ -24,13 +24,6 @@ public static class SelfCheckProgram
         }
 
         SelfCheckOptions options = parsed.Value!;
-        if (options.Recovery)
-        {
-            // The crash-recovery check arrives in step 4 of L55.
-            Console.Error.WriteLine("selfcheck: --recovery is not implemented yet");
-            return 2;
-        }
-
         LabPaths paths = LabPaths.Create(new ConfigurationBuilder().Build());
         string? repoRoot = string.IsNullOrWhiteSpace(paths.RepoRoot)
             ? SelfCheckRunner.FindRepoRoot(AppContext.BaseDirectory)
@@ -42,6 +35,11 @@ public static class SelfCheckProgram
         }
 
         IPathValidator validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        if (options.Recovery)
+        {
+            return RunRecovery(repoRoot, validator);
+        }
+
         Result<IReadOnlyList<SelfCheckRow>> result = SelfCheckRunner
             .RunAsync(options, repoRoot, paths, validator, TimeProvider.System, CancellationToken.None)
             .GetAwaiter()
@@ -56,5 +54,32 @@ public static class SelfCheckProgram
         int caught = rows.Count(r => r.Verdict == SelfCheckJudge.Caught);
         Console.WriteLine($"selfcheck: caught {caught} of {rows.Count}");
         return caught == rows.Count ? 0 : 1;
+    }
+
+    /// <summary>Runs the crash-recovery check (A1-A4). Exit 0 only when the restarted daemon shows no toxic, lease or I5 orphan.</summary>
+    private static int RunRecovery(string repoRoot, IPathValidator validator)
+    {
+        Result<IReadOnlyList<string>> result = SelfCheckRecovery
+            .RunAsync(repoRoot, validator, TimeProvider.System, keep: false, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        if (result.IsFailure)
+        {
+            Console.Error.WriteLine(result.Error);
+            return 2;
+        }
+
+        if (result.Value!.Count == 0)
+        {
+            Console.WriteLine("selfcheck recovery: passed");
+            return 0;
+        }
+
+        foreach (string problem in result.Value)
+        {
+            Console.WriteLine("selfcheck recovery: " + problem);
+        }
+
+        return 1;
     }
 }
