@@ -93,6 +93,36 @@ public sealed class RowVerdictsTests
         Assert.Equal("KI-F69-HTTP", match.IssueId);
     }
 
+    [Fact]
+    public void Evidence_ExceptionAndFiveHundred_GiveExcAndHttpSignatures()
+    {
+        // L25e: the row's evidence carries one exception and one 500 request; both become signatures in C12 order.
+        ParsedRow row = Parse("""
+            {"section":"catalog-nodes","id":"enroll-500","grade":"FAIL","reason":"500",
+             "evidence":{
+               "exceptions":[{"service":"nodes","type":"System.InvalidOperationException","frames":["Dhadgar.Nodes.Enroll.HandleAsync"],"message":"boom"}],
+               "http":[{"service":"nodes","status":500,"method":"POST","route":"/api/v1/agents/enroll","faults":[]},
+                       {"service":"nodes","status":200,"method":"GET","route":"/api/v1/agents/ca-certificate","faults":[]}]}}
+            """);
+
+        RowVerdict verdict = RowVerdicts.Of(row, KnownIssues.Empty, static text => text);
+
+        Assert.Equal(["exc", "http"], verdict.Signatures.Select(s => s.Kind).ToArray());
+        Assert.Equal("exc:System.InvalidOperationException|Dhadgar.Nodes.Enroll.HandleAsync|-|-", verdict.Signatures[0].Text);
+        Assert.Equal("http:500|-|POST|/api/v1/agents/enroll|none", verdict.Signatures[1].Text);
+        Assert.Equal(2, verdict.SignatureIds.Count);
+    }
+
+    [Fact]
+    public void Evidence_Absent_GivesNoExcOrHttp()
+    {
+        ParsedRow row = Parse("""{"section":"s","id":"r","grade":"FAIL","reason":"none"}""");
+
+        RowVerdict verdict = RowVerdicts.Of(row, KnownIssues.Empty, static text => text);
+
+        Assert.Empty(verdict.Signatures);
+    }
+
     private static string PgRow(bool includeStep, bool includeViolation)
     {
         string steps = includeStep ? "[{\"id\":\"enroll-down\",\"ok\":false,\"expect_error\":\"http:503\",\"expect_met\":false}]" : "[]";

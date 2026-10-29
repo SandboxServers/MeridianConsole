@@ -8,11 +8,11 @@ namespace Dhadgar.Lab.Results;
 /// </summary>
 public static class EvidenceCoverage
 {
-    /// <summary>Signature kinds the ingest stores in L25.</summary>
-    public static readonly IReadOnlyList<string> BuiltKinds = ["clause", "inv"];
+    /// <summary>Signature kinds the ingest stores: clause and inv from L25, exc and http from L25e.</summary>
+    public static readonly IReadOnlyList<string> BuiltKinds = ["clause", "inv", "exc", "http"];
 
     /// <summary>C12 signature kinds the ingest does not store yet.</summary>
-    public static readonly IReadOnlyList<string> NotBuiltKinds = ["exc", "http", "hist", "twin", "peer", "env", "ver"];
+    public static readonly IReadOnlyList<string> NotBuiltKinds = ["hist", "twin", "peer", "env", "ver"];
 
     /// <summary>Index tables or evidence that L25 does not fill yet.</summary>
     public static readonly IReadOnlyList<string> NotIngested = ["faults", "pairs", "history_runs"];
