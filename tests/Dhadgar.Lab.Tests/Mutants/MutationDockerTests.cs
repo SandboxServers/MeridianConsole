@@ -80,11 +80,16 @@ public sealed class MutationDockerTests
                     _ = await InvokeAsync(dispatcher, "svc_start", new JsonObject { ["service"] = service }, leaseId);
                 }
 
+                // mutation_run is OwnLease (wave 5 M1): it takes its own lease, so this test releases its lease first and
+                // passes no lease_id. The finally block then has nothing to release.
+                _ = services.GetRequiredService<LeaseBook>().Release(leaseId);
+                leaseId = null;
+
                 JsonElement call = await InvokeAsync(
                     dispatcher,
                     "mutation_run",
                     new JsonObject { ["mutants"] = new JsonArray(MutantId) },
-                    leaseId);
+                    leaseId: null);
                 string jobId = call.GetProperty("job_id").GetString()!;
 
                 JobRecord record = await WaitForJobAsync(services.GetRequiredService<JobRunner>(), jobId, CancellationToken.None);

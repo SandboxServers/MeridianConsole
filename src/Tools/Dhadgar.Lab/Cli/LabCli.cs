@@ -144,11 +144,11 @@ public static class LabCli
 
     /// <summary>
     /// Sends one authenticated GET to a lab endpoint and returns the body. The endpoint must pass
-    /// <see cref="LabHosts.IsLabEndpoint"/>; redirects are not followed and the system proxy is not used.
+    /// <see cref="LabHosts.IsDaemonEndpoint"/>; redirects are not followed and the system proxy is not used.
     /// </summary>
     internal static async Task<Result<string>> GetLoopbackAsync(Uri uri, string token, CancellationToken ct)
     {
-        if (!LabHosts.IsLabEndpoint(uri))
+        if (!LabHosts.IsDaemonEndpoint(uri))
         {
             return Result<string>.Failure("[Lab.Refused] the target is not a lab endpoint");
         }
@@ -331,12 +331,12 @@ public static class LabCli
 
     /// <summary>
     /// Calls one MCP tool on the loopback daemon's <c>/mcp</c> endpoint and returns the JSON text of its result.
-    /// The endpoint must pass <see cref="LabHosts.IsLabEndpoint"/>; redirects are not followed and no proxy is used.
+    /// The endpoint must pass <see cref="LabHosts.IsDaemonEndpoint"/>; redirects are not followed and no proxy is used.
     /// </summary>
     internal static async Task<Result<JsonDocument>> CallLabToolAsync(int port, string token, string toolName, IReadOnlyDictionary<string, object?> arguments, CancellationToken ct)
     {
         var uri = LoopbackUri(port, LabDefaults.McpPath);
-        if (!LabHosts.IsLabEndpoint(uri))
+        if (!LabHosts.IsDaemonEndpoint(uri))
         {
             return Result<JsonDocument>.Failure("[Lab.Refused] the target is not a lab endpoint");
         }

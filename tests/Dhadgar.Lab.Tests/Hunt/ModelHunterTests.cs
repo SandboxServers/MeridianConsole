@@ -105,6 +105,26 @@ public sealed class ModelHunterTests : IDisposable
     }
 
     [Fact]
+    public async Task Hunter_OpenToolCalls_CarryNoLeaseId_LeasedToolCallsDo()
+    {
+        // wave 5 live gate: db_query and invariants_check are Open and reject lease_id (Lab.InvalidArgument).
+        var lab = new FakeLab();
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+        Assert.True(outcome.IsSuccess, outcome.Error);
+
+        var openCalls = lab.Arguments.Where(call => call.Tool is "db_query" or "invariants_check").ToList();
+        Assert.NotEmpty(openCalls);
+        foreach ((string tool, JsonElement args) in openCalls)
+        {
+            Assert.False(args.TryGetProperty("lease_id", out _), tool + " must not carry lease_id");
+        }
+
+        var leased = lab.Arguments.Where(call => call.Tool == "nodes_token_mint").ToList();
+        Assert.NotEmpty(leased);
+        Assert.All(leased, call => Assert.True(call.Args.TryGetProperty("lease_id", out _), "a Leased tool keeps lease_id"));
+    }
+
+    [Fact]
     public async Task Hunter_I1OutsidePgDown_FailsTheCase()
     {
         // The fake answers the real InvariantViolation shape, so the hunter must read invariant_id (F92).
@@ -224,9 +244,13 @@ public sealed class ModelHunterTests : IDisposable
 
         public List<(string Tool, bool Cancelled)> Calls { get; } = [];
 
+        /// <summary>The arguments each call carried, so a test can see whether lease_id was injected.</summary>
+        public List<(string Tool, JsonElement Args)> Arguments { get; } = [];
+
         public async Task<LabToolResult> InvokeAsync(string tool, JsonElement args, LabCallContext context, CancellationToken ct)
         {
             Calls.Add((tool, ct.IsCancellationRequested));
+            Arguments.Add((tool, args.Clone()));
             ct.ThrowIfCancellationRequested();
 
             await Task.Yield();

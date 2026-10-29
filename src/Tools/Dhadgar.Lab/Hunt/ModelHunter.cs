@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using CsCheck;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
+using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
@@ -501,7 +502,14 @@ public sealed class ModelHunter
 
     private async Task<Result<JsonElement>> CallAsync(string tool, JsonObject args, CancellationToken ct)
     {
-        args["lease_id"] = _leaseId;
+        // An Open tool's schema rejects lease_id (db_query, invariants_check answer Lab.InvalidArgument). Only a
+        // Leased or OwnLease tool takes the hunt's lease.
+        if (ToolPolicy.GateFor(tool) != LabGate.Open)
+        {
+            args["lease_id"] = _leaseId;
+        }
+
+
         JsonElement arguments = JsonSerializer.SerializeToElement(args);
         var context = new LabCallContext(Guid.NewGuid().ToString("N"), _leaseId, "job:hunt");
         LabToolResult call = await _invoke(tool, arguments, context, ct).ConfigureAwait(false);
