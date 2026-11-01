@@ -282,3 +282,35 @@ Part A totals: 12 tests, 10 passed, 2 failed (A7 expected red, A11 new red).
 
 Last check result line: Dhadgar.Lab.Tests Release build succeeded, 0 errors (53 IL2026 warnings outside the lab); Part A 12 tests, 10 passed, 2 failed.
 Next step: none recorded by this run (raw results only).
+
+## Continuation 9 (wave5-docker-run-9, reds-only run, D-ML125 option A)
+
+Setup: campaign tip 6899985d. Worktree `.claude/worktrees/meridian-lab`, non-elevated. Full report: `.claude/reports/meridian-lab/wave5-docker-run-9.md`. Build 6899985d-dirty. Continued from the first coder session (Part A and segment 1 done).
+
+Build: Dhadgar.Lab.Tests Release build succeeded, 0 errors (53 IL2026 warnings outside the lab); Dhadgar.Lab Release build 0 warnings, 0 errors (carried from the first session).
+
+Part A: A11 S-L7 Passed 1 (flipped green from run 8); A3 M1 Passed 1 (same).
+
+Part B, one fresh daemon per segment (scratchpad `r9-home-<n>`, port 8789, token never printed):
+
+| Seg | Gate | Job | Result | Run 8 |
+| --- | --- | --- | --- | --- |
+| 1 | Hunt seed 4242, 300 s | 6313df2e0ae3 | succeeded, `not_reproduced` | `Lab.Unavailable` |
+| 2 | M5 alone | 0b03e1f0ddb1 | detected, `inv:I4\|nodes\|vault-value:tok-1`; enroll-gateway row FAIL on I4 (not SKIPPED) | detected_other, row SKIPPED |
+| 3a | M4 alone | 13578de2fb41 | detected, `inv:I1\|nodes\|unhandled` | detected |
+| 3b | M1 alone (home label `r9-home-31`) | c972b7648029 | detected, `hist:enrollment\|E1\|enroll-race` and two more | detected |
+| 4 | Twin enroll-latency-invariance (clean daemon) | synchronous | pass, held true, diffs [] | held null |
+| 5 | Chaos nodes-enroll 600 s | ed2ee6337459 | succeeded, violations 0, workload_errors 0, 152 enroll loops | PASS, 251 loops, no enroll |
+| 6 | Fuzz enroll 50 cases | 9194a2848304 | succeeded, sent 50, known 8, 28 failures, all `status 500` | 28 of 50 |
+
+Daemon pids: 65008, 57764 (stopped by this session), 52920, 53612, 47372, 53368, 54844. All stopped; port 8789 free after each.
+
+Notes:
+- Mutation jobs take their own lease. A mutation submit with my lease still held returned `Lab.LeaseHeld` (no job created). Release the lease before the submit.
+- Segment 2 M5 row: the enroll-gateway row ran; the F110 SKIP did not recur because the detector spec here is `enroll-probe.toml`, not run 8's `lab-selftest.toml` filter.
+- Seg 5 fault counts differ from run 8 (22/12/2 vs 17/17/5); recorded as observed.
+
+Teardown: `stack_down` wipe on the segment 6 daemon (state down, network absent, containers none); lease released; daemon stopped; `docker ps -a` and `docker network ls` filtered for `meridian-lab` show nothing; port 8789 free.
+
+Last check result line: Dhadgar.Lab.Tests Release build succeeded, 0 errors. Part A: A11 Passed 1 Failed 0; A3 Passed 1 Failed 0. Part B: fuzz 28 of 50 HTTP 500 (KG-W5-1, known).
+Next step: none for this run (raw results recorded). Soak and coverage were not in this brief and were not run; A7 was not rerun.
