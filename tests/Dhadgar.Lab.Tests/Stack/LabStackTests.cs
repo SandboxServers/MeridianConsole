@@ -185,7 +185,7 @@ public sealed class LabStackTests : IDisposable
     {
         // D-ML124: role statements never carry stderr, because psql can echo the expanded password.
         _docker.Answer = args => args.Any(a => a.Contains("CREATE ROLE", StringComparison.Ordinal))
-            ? new DockerOutput(1, string.Empty, "ERROR:  syntax error\nLINE 1: CREATE ROLE lab_owner LOGIN PASSWORD 'pw-sentinel'")
+            ? new DockerOutput(1, string.Empty, "ERROR:  syntax error at or near \"pw-sentinel\"\nLINE 1: CREATE ROLE lab_owner LOGIN PASSWORD 'pw-sentinel'")
             : null;
         using LabStack stack = CreateStack(out _);
 
@@ -195,6 +195,7 @@ public sealed class LabStackTests : IDisposable
         Assert.Contains("could not create role lab_owner", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain("pw-sentinel", result.Error, StringComparison.Ordinal);
         Assert.DoesNotContain("LINE 1", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("syntax error", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
