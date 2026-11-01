@@ -193,7 +193,7 @@ public sealed class HuntModelTool : LabTool<HuntModelArgs>
         private static readonly Regex OpsLine = new(@"^ops\s*=\s*\[(?<items>[^\]]*)\]\s*$", RegexOptions.Multiline | RegexOptions.CultureInvariant);
         private static readonly Regex RunSeedLine = new(@"^run_seed\s*=\s*(?<seed>\d+)\s*$", RegexOptions.Multiline | RegexOptions.CultureInvariant);
         private static readonly Regex QuotedItem = new("\"(?<op>[^\"]*)\"", RegexOptions.CultureInvariant);
-        private static readonly Regex OpItem = new(@"^(?<kind>Mint|Enroll|EnrollAgain|PgDown|PgUp|RestartNodes)(\((?<arg>\d+)\))?$", RegexOptions.CultureInvariant);
+        private static readonly Regex OpItem = new(@"^(?<kind>Mint|Enroll|EnrollAgain|PgDown|PgUp|RestartNodes)(\((?<arg>\d*)\))?$", RegexOptions.CultureInvariant);
 
         /// <summary>Parses the repro text. An unknown op, a token index out of range or a bad count fails.</summary>
         public static Result<ReproRecord> Parse(string text)
@@ -214,8 +214,13 @@ public sealed class HuntModelTool : LabTool<HuntModelArgs>
                 }
 
                 string kind = op.Groups["kind"].Value;
-                int arg = op.Groups["arg"].Success ? int.Parse(op.Groups["arg"].Value, CultureInfo.InvariantCulture) : 0;
-                if ((kind == "Enroll" || kind == "EnrollAgain") && arg >= EnrollmentModel.MaxTokens)
+                bool enroll = kind is "Enroll" or "EnrollAgain";
+
+                // Only an enroll names a token; the number in Mint(60) is the validity, which the op does not carry (the writer's ToString).
+                // An empty or absent number is 0 (PgDown() and PgDown are the same op).
+                string digits = op.Groups["arg"].Value;
+                int arg = 0;
+                if (enroll && digits.Length > 0 && (!int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out arg) || arg >= EnrollmentModel.MaxTokens))
                 {
                     return Result<ReproRecord>.Failure("[Lab.InvalidArgument] repro has a token index out of range");
                 }

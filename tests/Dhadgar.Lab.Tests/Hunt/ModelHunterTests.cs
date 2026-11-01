@@ -6,6 +6,7 @@ using Dhadgar.Lab.Hunt;
 using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Tools;
+using Dhadgar.Lab.Tools.Hunt;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -234,6 +235,87 @@ public sealed class ModelHunterTests : IDisposable
         Assert.Equal(1, lab.Calls.Count(call => call.Tool == "svc_restart"));
     }
 
+    [Fact]
+    public async Task Hunter_WrittenRepro_ParsesWithReproParser()
+    {
+        var lab = new FakeLab { ReusedTokenReturns201 = true };
+        Result<JobOutcome> first = await NewHunter(lab).RunAsync(Seed, 200, 30, _root, "build-1", CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error);
+        Assert.Equal("fail", first.Value!.Overall);
+
+        string toml = await File.ReadAllTextAsync(Path.Combine(_root, "repro", "repro.toml"));
+        Result<HuntModelTool.ReproRecord> parsed = HuntModelTool.ReproParser.Parse(toml);
+        Assert.True(parsed.IsSuccess, parsed.Error);
+
+        List<string> written = first.Value.Result!["ops"]!.AsArray().Select(node => node!.GetValue<string>()).ToList();
+        Assert.Equal(written, parsed.Value!.Ops.Select(op => op.ToString()));
+    }
+
+    [Fact]
+    public async Task Hunter_StalePoolAfterCut_ReportsAReproducibleCase()
+    {
+        // Run 9: a healed cut leaves the pool stale, so an enroll after PgUp answers 500. The hunt must report it, not shrink it away.
+        var lab = new FakeLab { StalePoolAfterCut = true };
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<JobOutcome> outcome = await hunter.RunAsync(Seed, 200, 30, null, "build-1", CancellationToken.None);
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+
+        JsonObject node = outcome.Value.Result!.AsObject();
+        Assert.Equal("diverged", node["state"]!.GetValue<string>());
+        List<HuntOp> ops = ParseOps(node["ops"]!.AsArray());
+        int pgDown = ops.FindIndex(op => op.Kind == HuntOpKind.PgDown);
+        Assert.True(pgDown >= 0 && ops.FindIndex(pgDown, op => op.Kind is HuntOpKind.Enroll or HuntOpKind.EnrollAgain) > pgDown,
+            "the repro must cut Postgres before an enroll");
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync(ops, CancellationToken.None);
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.True(replay.Value!.Diverged);
+    }
+
+    [Fact]
+    public async Task Hunter_CarriedI1_IsCountedNotDiverged()
+    {
+        // An I1 queued before the run is carried into the first case's checkpoint: counted, and the case still passes.
+        var lab = new FakeLab { StaleI1AtStart = 1 };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("pass", outcome.Value!.Overall);
+        Assert.Equal(1, outcome.Value.Result!["carried"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task Hunter_CaseAfterCut_RestartsNodesFirst()
+    {
+        var lab = new FakeLab();
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> first = await hunter.ReplayAsync([new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgUp)], CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error);
+        Assert.Equal(0, lab.Calls.Count(call => call.Tool == "svc_restart"));
+
+        int before = lab.Calls.Count;
+        Result<ModelHunter.CaseResult> second = await hunter.ReplayAsync([new HuntOp(HuntOpKind.Mint)], CancellationToken.None);
+        Assert.True(second.IsSuccess, second.Error);
+        Assert.Equal("svc_restart", lab.Calls[before].Tool);
+    }
+
+    [Fact]
+    public async Task Hunter_ShrinkNotReproduced_ReportsOriginal()
+    {
+        // One I1 on the second invariants_check only: the original fails, and no shrink candidate sees that check again.
+        var lab = new FakeLab { FlakyI1OnCheck = 2 };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+        JsonObject node = outcome.Value.Result!.AsObject();
+        Assert.NotEmpty(node["original_ops"]!.AsArray());
+        Assert.NotNull(node["original_detail"]?.GetValue<string>());
+    }
+
     /// <summary>Runs the hunt while advancing the fake clock, so the hunter's wait after a 429 ends.</summary>
     private async Task<Result<JobOutcome>> RunAdvancingClockAsync(ModelHunter hunter)
     {
@@ -258,7 +340,8 @@ public sealed class ModelHunterTests : IDisposable
             string text = item!.GetValue<string>();
             int open = text.IndexOf('(', StringComparison.Ordinal);
             string name = open < 0 ? text : text[..open];
-            int token = open < 0 ? 0 : int.Parse(text[(open + 1)..^1], CultureInfo.InvariantCulture);
+            string number = open < 0 ? string.Empty : text[(open + 1)..^1];
+            int token = number.Length == 0 ? 0 : int.Parse(number, CultureInfo.InvariantCulture);
             HuntOpKind kind = name switch
             {
                 "Mint" => HuntOpKind.Mint,
@@ -280,6 +363,11 @@ public sealed class ModelHunterTests : IDisposable
         private readonly List<bool> _used = [];
         private bool _pgDown;
         private int _nodes;
+        private bool _stale;
+        private int _queuedI1;
+        private int _startI1;
+        private bool _started;
+        private int _checks;
 
         public bool ReusedTokenReturns201 { get; init; }
 
@@ -300,6 +388,18 @@ public sealed class ModelHunterTests : IDisposable
         /// </summary>
         public bool DisableClashes { get; init; }
 
+        /// <summary>
+        /// When true, a healed cut leaves the enroll pool stale until <c>svc_restart</c>. The first enroll on a stale pool while not
+        /// cut answers 500 and queues one I1 for the next <c>invariants_check</c> (run 9's product behaviour).
+        /// </summary>
+        public bool StalePoolAfterCut { get; init; }
+
+        /// <summary>The I1 violations queued before the first call; the first <c>invariants_check</c> returns them and clears them.</summary>
+        public int StaleI1AtStart { get; init; }
+
+        /// <summary>When n is set, the n-th <c>invariants_check</c> call returns one I1, and no other call does.</summary>
+        public int FlakyI1OnCheck { get; init; }
+
         /// <summary>How many of the next enroll probes answer 429 before the product answers normally.</summary>
         public int Throttles { get; set; }
 
@@ -315,6 +415,11 @@ public sealed class ModelHunterTests : IDisposable
             Calls.Add((tool, ct.IsCancellationRequested));
             Arguments.Add((tool, args.Clone()));
             ct.ThrowIfCancellationRequested();
+            if (!_started)
+            {
+                _started = true;
+                _startI1 = StaleI1AtStart;
+            }
 
             await Task.Yield();
             switch (tool)
@@ -323,6 +428,7 @@ public sealed class ModelHunterTests : IDisposable
                     _used.Clear();
                     _nodes = 0;
                     _pgDown = false;
+                    _queuedI1 = 0;
                     return Ok(new { });
                 case "fault_reset":
                     if (HealThrows && _pgDown)
@@ -330,7 +436,7 @@ public sealed class ModelHunterTests : IDisposable
                         throw new InvalidOperationException("heal failed");
                     }
 
-                    _pgDown = false;
+                    Heal();
                     return Ok(new { healed = Array.Empty<string>() });
                 case "nodes_token_mint":
                     if (MintWithoutTokenRef)
@@ -360,12 +466,16 @@ public sealed class ModelHunterTests : IDisposable
 
                     return Ok(new { fault_id = "f1" });
                 case "fault_heal":
-                    _pgDown = false;
+                    Heal();
                     return Ok(new { healed = true });
                 case "svc_restart":
-                    return RestartFails
-                        ? new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = tool }))
-                        : Ok(new { });
+                    if (RestartFails)
+                    {
+                        return new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = tool }));
+                    }
+
+                    _stale = false;
+                    return Ok(new { });
                 case "nodes_enroll_probe":
                     if (Throttles > 0)
                     {
@@ -379,10 +489,15 @@ public sealed class ModelHunterTests : IDisposable
                     int n = sql.Contains("enrollment_tokens", StringComparison.Ordinal) ? _used.Count(used => used) : _nodes;
                     return Ok(new { rows = new[] { new { n } } });
                 case "invariants_check":
+                    // Queued I1s are returned once and then cleared; the rule and FlakyI1OnCheck add their own.
+                    _checks++;
+                    int queued = _queuedI1 + _startI1;
+                    _queuedI1 = 0;
+                    _startI1 = 0;
+                    int count = queued + (I1Violations && !_pgDown ? 1 : 0) + (FlakyI1OnCheck == _checks ? 1 : 0);
                     // The real InvariantViolation shape (F92): the id is invariant_id, never rule.
-                    InvariantViolation[] violations = I1Violations && !_pgDown
-                        ? [new InvariantViolation("I1", "nodes", "unhandled", "unhandled", DateTimeOffset.UnixEpoch, null)]
-                        : [];
+                    InvariantViolation[] violations = new InvariantViolation[count];
+                    Array.Fill(violations, new InvariantViolation("I1", "nodes", "unhandled", "unhandled", DateTimeOffset.UnixEpoch, null));
                     return new LabToolResult(false, JsonSerializer.SerializeToElement(new
                     {
                         count = violations.Length,
@@ -395,11 +510,26 @@ public sealed class ModelHunterTests : IDisposable
             }
         }
 
+        /// <summary>A heal ends the cut; with StalePoolAfterCut it leaves the pool stale until svc_restart.</summary>
+        private void Heal()
+        {
+            _stale |= _pgDown && StalePoolAfterCut;
+            _pgDown = false;
+        }
+
         private int Enroll(JsonElement args)
         {
             if (_pgDown)
             {
                 return Pg500 ? 500 : 503;
+            }
+
+            if (_stale)
+            {
+                // The first enroll on the stale pool answers 500, clears the stale state and queues one I1 (StalePoolAfterCut).
+                _stale = false;
+                _queuedI1++;
+                return 500;
             }
 
             int index = int.Parse(args.GetProperty("token_ref").GetString()!["ref-".Length..], CultureInfo.InvariantCulture);
