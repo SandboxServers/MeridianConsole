@@ -31,7 +31,7 @@ public enum HuntOpKind
     /// <summary>Heals the cut (<c>fault_heal</c>).</summary>
     PgUp,
 
-    /// <summary>Restarts the nodes service (<c>svc_restart</c>).</summary>
+    /// <summary>Restarts the nodes service (<c>svc_restart</c>). Skipped while PgDown (D-ML119).</summary>
     RestartNodes,
 }
 
