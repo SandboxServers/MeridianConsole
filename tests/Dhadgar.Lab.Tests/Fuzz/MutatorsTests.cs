@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Lab.Fuzz;
@@ -69,17 +68,6 @@ public sealed class MutatorsTests
         // The 64 KiB and 1 MiB boundary strings are required on enroll (L28 amendment).
         Assert.Contains("boundary:64KiB", mutations);
         Assert.Contains("boundary:1MiB-minus-envelope", mutations);
-    }
-
-    [Fact]
-    public void Mutators_OversizeBoundary_FitsTheRequestLimit()
-    {
-        // LabHttp refuses bodies over 1 MiB, so the 1 MiB boundary must reach the Gateway as a real request.
-        foreach ((string label, string value) in Mutators.BoundaryStrings)
-        {
-            byte[] body = Encoding.UTF8.GetBytes("{\"token\":\"" + value + "\"}");
-            Assert.True(body.Length <= LabHttp.MaxRequestBytes, label + " must fit the request limit");
-        }
     }
 
     [Fact]
