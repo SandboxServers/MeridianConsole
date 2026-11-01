@@ -242,6 +242,9 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | D-ML111 | A shipped spec's `proxy` fault argument is a `ProxyCatalog.All` name, never a `p:` target id. `ShippedSpecProxyArgsTests` enforces it over `docs/guides/uat-specs/**/*.toml`. | Accepted (architect) | F96. |
 | D-ML112 | A soak with fewer than three loops, or fewer samples than I7 needs, ends `weak` (UNVERIFIED), never pass. Follow-up L29b. Soak is not a gate until then. | Accepted (architect) | F102; KG-W5-2. |
 | D-ML113 | Follow-up L55b, before the wave 10 gate LS: the restarted daemon rehydrates its credential refs or stack state, so I2 and I5 run after a restart, and the recovery judge reads Toxiproxy's toxics directly. | Accepted (architect) | F97; KG-W5-5, KG-W5-6. |
+| D-ML114 | The I6 excuse rule is amended (amends C11 I6). An excuse carries `At` and `Until` (the end of the call, or the fault's heal). It covers an event only within ±30 s of that span. Targets compare in canonical form (`c:` and `meridian-lab-` stripped), so `c:nodes`, `meridian-lab-nodes` and follower `nodes` all match. Only kill and pause faults excuse a `RestartCount` rise. A plain `stack_up` excuses its 4 infra containers. `stack_up wipe=true` and `stack_down` excuse `*` during the call only. `svc_stop` is added. The dispatcher records an excuse only after a non-error outcome. | Accepted (architect) | Review N1, D2; security N1, N2; ruling wave5-fixFGH-1; packet wave5-fix-FGH. |
+| D-ML115 | M1 `survived` at `87d63e80` fails gate MD. Before ruling 3, the boundary runner records read-only facts for M1, and for M4 if it also survives: barrier arrivals and their spread, upstream completions, per-client outcomes, the build id served and the nodes rows created. The runner classifies the cause as R1-R4. Ruling 3 may spec one lab or patch fix for a named class, never a weaker mutant. | Accepted (architect) | Review D1; ruling wave5-fixFGH-1. |
+| D-ML116 | Contingent, raised only if D-ML115 names no cause. Park M1 (and M4 if it shares the cause) as KG-W5-12, or hold the boundary? Proposed default: park. Gate MD at 5E holds on the rest. M1 reruns at the campaign-end review (D-ML74). Gate MD at wave 10 still needs it `detected`. | BlockedDecision (owner), contingent | Ruling wave5-fixFGH-1. |
 
 ## Seam tests
 
@@ -306,29 +309,29 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L49 | 4H | Barrier proxy; red S-L11; `lab_doctor` daemon-held ports (D-ML69) | L48, L09, L10 | yes | Integrated ([ruling wave4-docker-1](worknotes/wave4-docker-ruling-1.md)) |
 | L50 | 4H | Linearizability checker, enrollment model and rules E1-E6, minimiser; CsCheck pin (F66) | L48 | yes | Integrated |
 | L51 | 4H | `history_run`, enrollment scenarios, Toxiproxy open-connection check; S-L11 green | L49, L50, L22, L11 | yes | Integrated ([ruling wave4-docker-1](worknotes/wave4-docker-ruling-1.md)) |
-| L16g | 5 | Atomic attestation write: staging folder, commit marker, roll forward (OD-1, D-ML89) | wave 4 | yes | Ready (wave 5 step A) |
-| L25 | 5 | Results DB, bundle ingest, signatures, known-issue matching, `overall`, `results_query`; `RunSummary` (D-ML89); KI-F67, KI-F69 (D-ML87); SQLite pin (D-ML86) | L22, L51 (both edit `BundleWriter`); L16g before step 4 (both edit `BundleAttestor`) | yes | In progress: steps 1-3 and part of 4 done (ml-l25 `bbb59400`); steps 4-7 per worknotes/L25-ruling-1.md (`ResultsService`, honest unchecked fields, `EvidenceCoverage`, loader rule; D-ML91-D-ML94) |
-| L26 | 5 | Triage: buckets, known issues, trends, drafts, ledger; known-issue matching at run end and on attest, step pseudo-signatures, `requires`, KI-F69 split (B1-B5, D-ML92, D-ML94) | L25 | yes | BlockedDependency |
-| L25e | 5 | Row `exc` and `http` evidence (log windows, Hosting.Diagnostics, step method and route) (D-ML93) | L26, L53 | yes | BlockedDependency (outline; architect specs steps before dispatch) |
-| L25f | 5 | Faults, pairs and history runs in the results index; `hist` signatures (D-ML93) | L25e, L53, L51 | yes | BlockedDependency (outline; architect specs steps before dispatch) |
+| L16g | 5 | Atomic attestation write: staging folder, commit marker, roll forward (OD-1, D-ML89) | wave 4 | yes | Integrated |
+| L25 | 5 | Results DB, bundle ingest, signatures, known-issue matching, `overall`, `results_query`; `RunSummary` (D-ML89); KI-F67, KI-F69 (D-ML87); SQLite pin (D-ML86) | L22, L51 (both edit `BundleWriter`); L16g before step 4 (both edit `BundleAttestor`) | yes | Integrated (steps 4-7 per worknotes/L25-ruling-1.md, D-ML91-D-ML94) |
+| L26 | 5 | Triage: buckets, known issues, trends, drafts, ledger; known-issue matching at run end and on attest, step pseudo-signatures, `requires`, KI-F69 split (B1-B5, D-ML92, D-ML94) | L25 | yes | Integrated |
+| L25e | 5 | Row `exc` and `http` evidence (log windows, Hosting.Diagnostics, step method and route) (D-ML93) | L26, L53 | yes | Integrated (scope item 1 moved to L25g, D-ML98) |
+| L25f | 5 | Faults, pairs and history runs in the results index; `hist` signatures (D-ML93) | L25e, L53, L51 | yes | Integrated |
 | L25g | 5 | Row step method, route template and `error_code`; log `Exception` field into `ExceptionEvidence`; KI-F67 exact `exc:` text if the live pg row is `claimed_mismatch` (D-ML98) | wave5-fix-A | yes | BlockedDependency (outline; architect specs steps before dispatch) |
-| L27 | 5 | Async jobs, `results_flake_check`, the CsCheck model-based hunter (enrollment lifecycle); `GatewayPacer` (D-ML88); KI-F67 hunter-row scope (A5) | L25 | yes | BlockedDependency |
-| L28 | 5 | Contract fuzzer through the Gateway | L27 (`GatewayPacer`, jobs), L25, L26 (`KI-F69-HTTP`) | yes | BlockedDependency |
+| L27 | 5 | Async jobs, `results_flake_check`, the CsCheck model-based hunter (enrollment lifecycle); `GatewayPacer` (D-ML88); KI-F67 hunter-row scope (A5) | L25 | yes | Integrated (hunter scope amended by D-ML97) |
+| L28 | 5 | Contract fuzzer through the Gateway | L27 (`GatewayPacer`, jobs), L25, L26 (`KI-F69-HTTP`) | yes | Integrated |
 | L28b | 5 | Failing fuzz cases as bundle rows `fuzz/<target>/<n>`, ingested for `triage` and `coverage_report` (wave5-R2 N11) | wave5-fix-B | yes | BlockedDependency (outline; architect specs steps before dispatch) |
-| L29 | 5 | Chaos scheduler, soak runs, resource sampler, I7 | L27 | yes | BlockedDependency |
-| L52 | 5 | Behavioural coverage and `coverage_report` | L25, L23 | no | BlockedDependency |
+| L29 | 5 | Chaos scheduler, soak runs, resource sampler, I7 | L27 | yes | Integrated |
+| L52 | 5 | Behavioural coverage and `coverage_report` | L25, L23 | no | Integrated (narrowed to `invariant_check`, D-ML99) |
 | L52b | 5 | Coverage kinds `route_status`, `fault_target`, `error_code`, `transition` (`TransitionSnapshotter` at row end) (D-ML99) | L25g, wave5-fix-A | no | BlockedDependency (outline; architect specs steps before dispatch) |
-| L53 | 5E | Twin engine; red S-L12 | L25, L22 | yes | BlockedDependency |
-| L54 | 5E | Mutant infrastructure; M1, M4, M5 | L27, L51, L23 | yes | BlockedDependency |
-| L55 | 5E | `Dhadgar.Lab.SelfCheck`: lab mutants LM1-LM8, crash recovery | L54, L19, L21, L25, L03 | yes | BlockedDependency |
+| L53 | 5E | Twin engine; red S-L12 | L25, L22 | yes | Integrated |
+| L54 | 5E | Mutant infrastructure; M1, M4, M5 | L27, L51, L23 | yes | Integrated (M1 `survived` at fix-H H-run 1; gate MD open) |
+| L55 | 5E | `Dhadgar.Lab.SelfCheck`: lab mutants LM1-LM8, crash recovery | L54, L19, L21, L25, L03 | yes | Integrated |
 | wave5-fix-A | 5 | Results, known issues (D-ML96, D-ML97), twin signatures, `signature_texts` | wave 5 | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
 | wave5-fix-B | 5 | Job runner, flake keys, hunter (F92), fuzz leak oracle, fuzz and soak invariants check (D-ML100) | wave 5 | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
 | wave5-fix-C | 5 | Chaos caps and heal, history barrier port, Docker gate and test setup (D-ML101, D-ML103) | wave 5 | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
 | wave5-fix-D | 5E | Mutant detector allow-list and patch scope, mutation invariants check (D-ML100), self-check recovery diagnostics (D-ML102) | wave5-fix-A merged | yes | Integrated ([ruling wave5-1](worknotes/wave5-ruling-1.md)) |
 | wave5-fix-E | 5 | Wave review fix pass 2: patch scope header reader, lab-mutant scope check, token kept out of the child env, cleanup filters, twin payload guard ([wf-e](worknotes/wf-e.md)) | wave5-fix-A..D | yes | Integrated |
-| wave5-fix-F | 5 | Wave 5 Docker-run fixes ([wf-f](worknotes/wf-f.md), `1b8506e3`) | wave5-fix-E | yes | Integrated |
-| wave5-fix-G | 5 | `lease_id` in `MutationDockerTests` arguments; the recovery daemon-endpoint guard (`LabHosts.IsDaemonEndpoint`) ([wf-g](worknotes/wf-g.md)) | wave5-fix-F | yes | Integrated |
-| wave5-fix-H | 5E | Boundary Docker fixes: M1 state literal, recovery child repo root, recovery I5 judge (diagnosis first), twin proxy args (diagnosis first), coverage description (D-ML105, D-ML106, D-ML110, D-ML111) | wave5-fix-G | yes | Ready ([ruling wave5-2](worknotes/wave5-ruling-2.md)) |
+| wave5-fix-F | 5 | Wave 5 Docker-run fixes: hunter lease only on non-Open tools, `LabRestartExcuses` (I6 excuses for lab `svc_start`/`stack_up`), `LabHosts.IsDaemonEndpoint` ([wf-f](worknotes/wf-f.md), `1b8506e3`) | wave5-fix-E | yes | Review (merged `2c297653`; never reviewed, in the fix-H review range) |
+| wave5-fix-G | 5 | `lease_id` in `MutationDockerTests` arguments; the recovery daemon-endpoint guard (`LabHosts.IsDaemonEndpoint`) ([wf-g](worknotes/wf-g.md)) | wave5-fix-F | yes | Review (merged `fa57cd19`; never reviewed, in the fix-H review range) |
+| wave5-fix-H | 5E | Boundary Docker fixes: M1 state literal, recovery child repo root, recovery I5 judge (diagnosis first), twin proxy args (diagnosis first), coverage description (D-ML105, D-ML106, D-ML110, D-ML111) | wave5-fix-G | yes | Review (merged `87d63e80`; H2-H5 green live, KG-W5-7/8 not hit; M1 `survived`, [wf-h](worknotes/wf-h.md)) |
 | L29b | 5 (follow-up) | Soak strength: fewer than three loops or too few I7 samples ends `weak`, never pass (D-ML112) | wave 5 close | no | BlockedDependency (outline; architect specs steps before dispatch) |
 | L55b | 5E (follow-up) | Recovery after restart: rehydrate credential refs or stack state; the recovery judge reads Toxiproxy (D-ML113) | wave 5 close; before the wave 10 gate LS | yes | BlockedDependency (outline; architect specs steps before dispatch) |
 | L30 | 6 | Pool model, constraints, Linux and host providers, `pool_*` tools | L19 | yes | BlockedDependency |
@@ -414,6 +417,7 @@ Wave 5 boundary, from [ruling wave5-2](worknotes/wave5-ruling-2.md). A condition
 | KG-W5-9 | Conditional: M1's `mutation_run` verdict is `detected_other`. Gate MD accepts that, but the `"detected"` assertion in `MutationDockerTests` stays red. | campaign-end review | next architect ruling |
 | KG-W5-10 | Only LM1 of the eight lab mutants has run end to end. The full `selfcheck` (LM1-LM8) has not. | wave 10 gate LS | wave 10 run |
 | KG-W5-11 | No test runs history scenario `enroll-race-pg-latency`. After fix-H only `ShippedSpecProxyArgsTests` covers its fault args. | L25f or the campaign-end review | L25f |
+| KG-W5-12 | Conditional (D-ML116): M1, and M4 if listed, ends `survived` and the enroll race is not shown to be reached. Gate MD is unmet for that mutant. | campaign-end review (D-ML74) | owner ruling D-ML116 |
 
 ## Dependencies on Sprint 2
 

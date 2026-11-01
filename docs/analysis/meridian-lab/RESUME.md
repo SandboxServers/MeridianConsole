@@ -1,38 +1,33 @@
 # RESUME: meridian-lab
 
-Ledger: [README.md](README.md). Packets and contract (C1-C20): [work-packets.md](work-packets.md); wave 5 order, steps and Docker split in its "Wave 5 plan".
+Ledger: [README.md](README.md). Packets and contract (C1-C20): [work-packets.md](work-packets.md). Wave 5 rulings: [wave5-ruling-1](worknotes/wave5-ruling-1.md) (D-ML95-104, fixes A-D), [wave5-ruling-2](worknotes/wave5-ruling-2.md) (D-ML105-113, fix-H, close bar D-ML108, run order D-ML109).
 
-## State (2026-10-28, wave 5 ALL MERGED, boundary next)
+## State (re-verified 2026-11-01 after a PC crash; last work 2026-10-29 01:27)
 
-- Campaign branch `campaign/meridian-lab`, worktree `.claude/worktrees/meridian-lab` (local only). Waves 1-4 and 4H Integrated and reviewed. Wave 5: L16g, L25, L26, L27, L52, L53, L28, L29, L25e, L54, L25f, L55 all merged; tip 3b24617f (L55 merge; see `.claude/reports/meridian-lab/merge-L55.md`). `.gitattributes` LF rule for Twins tests (eda18720). Known flake for R3: `HistoryRunJobTests` heal-once tests fail under load. No BlockedDecision.
-- L25 rulings D-ML91-94 (`worknotes/L25-ruling-1.md`; new packets L25e, L25f) and D-ML95 (orchestrator, not yet in README: `UatRunTool` keeps `GetRequiredService<ResultsService>()`; test providers register `ResultsService`, additive setup only).
-- Wave 4 rulings: D-ML70/72 (S-L7), D-ML74 (Docker at the boundary), D-ML75/76 (R2; the orchestrator's L22 ruling, first numbered D-ML73, is D-ML75), D-ML80-82 (R1), D-ML83-85 (Docker). D-ML73 is still the open broker-readiness question (non-blocking). Rulings in `worknotes/wave4-*-ruling-1.md`.
-- Wave 5 plan rulings: F82-F86, D-ML86 (SQLite package, CsCheck reference), D-ML87 (KI-F67, KI-F69), D-ML88 (`GatewayPacer`, no rate-limit raise), D-ML89 (one `RunSummary`; OD-1 ruled at its default as new packet L16g), D-ML90 (self-check recovery mutex and token).
-- Not run yet: RequiresDocker tests in Data, Services, Stack (earlier waves); run them at the campaign-end review.
-- Non-blocking owner decisions touching wave 5 (defaults in the plan): D-ML42, D-ML49, D-ML71, D-ML73.
-- Stray scratch worktree `base-l22` (Temp scratchpad) needs manual removal ("Filename too long").
-- D-ML39 ruled: one PR at the end (D-ML16). Reviews at wave boundaries and campaign end only. L00 parked, with L31-L33 and the container parts of wave 8.
+- `campaign/meridian-lab` tip **87d63e80** (fix-H merge), worktree `.claude/worktrees/meridian-lab`. Local only: 387 commits ahead and 13 behind `origin/main`. Every `ml/*` branch is merged; `ml/l09f-rabbitmq-port` shows as unmerged, but it is patch-equal to #237 (`git cherry` `-`).
+- Wave 5 packets L16g-L55 Integrated. Wave review: pass 1 R1/R2/R3 `decision` + security-1 `fix` → ruling 1 → fix A, B, C, D (merged 47c8c529, a37d293c, f0f8313f, b9e693f0); pass 2 review `fix` + security-2 `fix` → fix-E (08571257); pass 3 `ship` (`wave5-review-3.md`, it also closed security-2's six notes; no separate security-advisor pass 3).
+- Boundary run (`worknotes/wave5-docker-run.md`): continuations 1-4 ran Docker part A and every live gate on the b9e693f0 daemon (hunt diverged at `Mint(60)` and replayed; chaos pass; soak weak; M1/M4/M5 `detected_other` on I6; twin failed; fuzz 500s). Continuation 6 at fa57cd19: 3 Docker tests red, part B skipped.
+- Fix-F (I6 `LabRestartExcuses`, hunter lease, `IsDaemonEndpoint`) and fix-G (MutationDockerTests `lease_id`, recovery endpoint guard) were dispatched from the diag reports and merged **without any review or security pass**.
+- Fix-H merged (87d63e80); its **packet review and security pass have not run**. H-runs: recovery pass (KG-W5-7 not hit), twin latency held (KG-W5-8 not hit), M1 state `succeeded` but verdict **`survived`** (not KG-W5-9; gate MD fails). Non-Docker suite 1415/0/5.
+- **Not run:** continuation 7 (D-ML109 part A + part B on a fresh daemon), so gates MD, hunt and coverage are not re-read after fixes F-H; the D-ML108 wave review; ruling 3.
+- Campaign worktree has 8 dirty `tests/*/packages.lock.json` (Sqlite CentralTransitive restore artefact) and untracked `tests/Dhadgar.Lab.Tests/TestResults/`. Not committed by anyone.
 
-## Next actions (orchestrator; wave 5 plan)
+## Next actions (orchestrator)
 
-1. Steps A-D done (all merged). Next: boundary Docker/live run, then reviews.
-2. Each packet runs its Steps; step checks are non-Docker only (D-ML74).
-5. Boundary run (one coder in the campaign worktree): the plan's Docker table, the wave 4 Docker set, the live hunt, fuzz, chaos and `coverage_report` gates; report `worknotes/wave5-docker-run.md`.
-6. Boundary review in slices R1 (L16g, L25, L26), R2 (L27-L29, L52), R3 (L53-L55): reviewer plus security-advisor each; then the ruling check.
-7. Before L40: ask the architect for `worknotes/W8-sprint2-deltas.md`. Campaign end: campaign review, one PR with `security-review`, user yes before merge.
+1. `packet-reviewer` + `security-advisor` in parallel, read-only in `.claude/worktrees/meridian-lab`, range **08571257..87d63e80** (fix F, G, H). Reports `.claude/reports/meridian-lab/wave5-fixFGH-review-1.md` and `-security-1.md`. Ask them to check judge rule 4 on `LabRestartExcuses` (`stack_up` excuses `*`) and whether F's I6 excuse explains M1 losing its only signature. Fix notes go to a fresh packet-coder in worktree `ml-wf-h2` (branch `ml/wf-h2-tools` from the tip); at most two fix passes, then a ruling (ruling 2).
+2. After `ship`: one packet-coder as boundary runner, continuation 7, per D-ML109 (non-elevated, user daemon stopped, no labelled containers, `Lab__RepoRoot` unset). Commits nothing.
+3. Architect **ruling 3** (D-ML109 hard stop): M1 `survived` plus anything else from continuation 7. Its options are only park with an owner BlockedDecision, or spec one fix with evidence.
+4. Then the wave 5/5E review (D-ML108 item 4). Then follow-ups L05b, L25g, L28b, L29b, L52b, L55b (architect specs each before dispatch) and wave 6/7 planning.
 
-## Carry-overs
+## Owner questions (orchestrator asks)
 
-- Wave 1 security "Not fixed" list binds every packet: `PathValidator` on every path, `http_request` only to `LabHosts.IsLabEndpoint`, redacted logs, no `MERIDIAN_LAB_TOKEN` in child environments.
-- Wave 4 rules for wave 5 (plan "Carry-overs"): DbGate three outcomes plus an anti-always-skip test; no `/readyz` Postgres claim (F67); Gateway calls via `LabHttp` with the probe Host; heal in `finally` with its own 30 s token; label-only Docker cleanup.
-- Lab tests never probe the Gateway CA route (D-ML63). Enroll polling uses `poll_ms = 5000` (F54). 28 IL2026 warnings come from Agent.Core (#186). L36 repeats D-ML69 for `LabPorts.Sink`.
-- Owner action **O1**: add the D-ML33 promotion-rule line to CLAUDE.md. **O2** (D-ML67): add `mcp__meridian-lab__uat_attest` to `permissions.ask`; then drop "pending" at lab `README.md:178,203` and `SKILL.md:48`.
+- Push a backup of `campaign/meridian-lab` (no PR; D-ML16 keeps the single PR after L47)? Merge `origin/main` (Sprint 2, vertical-slice) into the campaign now or at the end?
+- Docker is up (29.1.3) for a 1-2 h run, and the run must be non-elevated (D-ML102). Dev stack containers stay untouched.
+- The dirty lock files: commit, revert or leave? D-ML107 (fuzz 500 product PR; default: separate PR to `main`), OD-W5-1 (default: accept). O1, O2 are still pending.
 
-## Owner decisions open (non-blocking)
+## Carry-overs and watch-outs
 
-D-ML31, D-ML37/D-ML38 (parked), D-ML40-D-ML42, D-ML49, D-ML53, D-ML54, D-ML56, D-ML58, D-ML59, D-ML71, D-ML73. Recommendations are in the ledger README.
-
-## Watch-outs
-
-- Faults and the peer hit only lab targets. Never the dev stack. Never a bare `publish -r` (D-S241). S-L6 never removes containers without `MERIDIAN_LAB_S6_WIPE=1`. Lab jobs never raise Gateway limits (D-ML88).
-- Mutant patches are never committed patched. No tool calls GitHub (D-ML28). Never `git worktree prune`. `ml-*` worktrees stay until the campaign PR merges.
+- Wave 1 security list binds every packet: `PathValidator`, `http_request` only to lab endpoints, redacted logs, no `MERIDIAN_LAB_TOKEN` in child environments. Lab tests never probe the Gateway CA route (D-ML63). Gateway calls go through `GatewayPacer` and never raise limits (D-ML88).
+- Docker classes carry `[Collection(LabDockerGate.Name)]` (D-ML103). Never a bare `publish -r`. Teardown is label-only, with no prune. Never `git worktree prune`. `ml-*` worktrees stay until the campaign PR merges.
+- **Only on disk:** 100 of the 103 files in `.claude/reports/meridian-lab/` are gitignored. The `ml-*` worktrees also hold 20 untracked worknotes and the coder reports. Copy them to `worknotes/` before removing any worktree.
+- Non-blocking owner decisions: D-ML31, D-ML37/38 (parked), D-ML40-42, D-ML49, D-ML53, D-ML54, D-ML56, D-ML58, D-ML59, D-ML71, D-ML73.
