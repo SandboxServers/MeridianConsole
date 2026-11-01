@@ -85,7 +85,7 @@ public sealed class MutantBuilderTests : IDisposable
             runner.Find("archive").Args);
         Assert.Equal(source, runner.Find("--check").WorkingDirectory);
         Assert.Equal(
-            ["apply", "--check", Path.Combine(_spec.Folder, MutantSpecLoader.PatchFileName)],
+            ["-c", "core.longpaths=true", "apply", "--check", Path.Combine(_spec.Folder, MutantSpecLoader.PatchFileName)],
             runner.Find("--check").Args);
 
         CallRecord restore = runner.Find("restore");
@@ -269,6 +269,67 @@ public sealed class MutantBuilderTests : IDisposable
     public void BuildId_IsMutantIdAndBuild8()
     {
         Assert.Equal("mutant-M5-token-logged-01234567", MutantBuilder.BuildId("M5-token-logged", Commit));
+    }
+
+    [Fact]
+    public void ApplyArgs_EnableGitLongPaths()
+    {
+        Assert.Equal(["-c", "core.longpaths=true", "apply", "--check", "change.patch"], MutantBuilder.ApplyCheckArgs("change.patch"));
+        Assert.Equal(["-c", "core.longpaths=true", "apply", "change.patch"], MutantBuilder.ApplyArgs("change.patch"));
+    }
+
+    [SkippableFact]
+    public async Task ApplyCheck_UnderPathLongerThanMaxPath_Succeeds()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "MAX_PATH is a Windows limit");
+        string root = Path.Combine(Path.GetTempPath(), "meridian-lab-r7-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            // Nest 50-character folders until the target file's path is longer than 270 characters.
+            string folder = root;
+            string segment = new('d', 50);
+            while (folder.Length < 240)
+            {
+                folder = Path.Combine(folder, segment);
+            }
+
+            string target = Path.Combine(folder, "EnrollmentTokenConfiguration.cs");
+            try
+            {
+                Directory.CreateDirectory(folder);
+            }
+            catch (PathTooLongException)
+            {
+                Skip.If(true, "this host cannot create a folder path longer than MAX_PATH");
+            }
+
+            Assert.True(target.Length > 270, target);
+            await File.WriteAllTextAsync(target, "line one\nline two\nline three\n", CancellationToken.None);
+            string relative = Path.GetRelativePath(root, target).Replace('\\', '/');
+            string patch = Path.Combine(root, MutantSpecLoader.PatchFileName);
+            await File.WriteAllTextAsync(patch,
+                $"--- a/{relative}\n+++ b/{relative}\n@@ -1,3 +1,3 @@\n line one\n-line two\n+line TWO\n line three\n",
+                CancellationToken.None);
+
+            Result<string> check = await LabBuilder.RunAsync("git", MutantBuilder.ApplyCheckArgs(patch), root, CancellationToken.None);
+
+            Assert.True(check.IsSuccess, check.Error);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+                // A locked file in a temp folder is left for the OS to reap.
+            }
+        }
     }
 
     private static PathValidator Validator() => new(NullLogger<PathValidator>.Instance);
