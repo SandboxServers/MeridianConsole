@@ -200,6 +200,28 @@ public sealed class CommandSignerTests : IDisposable
         Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
     }
 
+    [Fact]
+    public async Task DefaultPath_UsesCaDirectory_AndSecondSignerLoadsSameKey()
+    {
+        var first = CreateDefaultPathSigner();
+        await first.InitializeAsync();
+        var second = CreateDefaultPathSigner();
+        await second.InitializeAsync();
+
+        Assert.True(File.Exists(Path.Combine(_root, "command-signing-key.pem")));
+        Assert.Equal(first.KeyId, second.KeyId);
+    }
+
+    private CommandSigner CreateDefaultPathSigner()
+    {
+        var signer = new CommandSigner(
+            Options.Create(new CommandSigningOptions()),
+            Options.Create(new NodesOptions { CaStoragePath = _root }),
+            NullLogger<CommandSigner>.Instance);
+        _signers.Add(signer);
+        return signer;
+    }
+
     private async Task<ICommandSigner> CreateSignerAsync(string keyPath)
     {
         var signer = CreateSigner(keyPath);

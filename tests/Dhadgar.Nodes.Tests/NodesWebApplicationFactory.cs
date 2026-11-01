@@ -313,6 +313,20 @@ public sealed class TestCommandSigner : ICommandSigner, IDisposable
     public AgentCommandEnvelope Sign(AgentCommandEnvelope envelope)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        // Same guards as CommandSigner.Sign, so tests that sign through the factory cannot pass an envelope the real signer rejects.
+        if (envelope.CommandId == Guid.Empty || envelope.NodeId == Guid.Empty || envelope.OrganizationId == Guid.Empty)
+        {
+            throw new ArgumentException("CommandId, NodeId and OrganizationId must be set.", nameof(envelope));
+        }
+
+        var lifetime = envelope.ExpiresAt - envelope.IssuedAt;
+        if (lifetime <= TimeSpan.Zero || lifetime > TimeSpan.FromSeconds(AgentMessageLimits.MaxCommandLifetimeSeconds))
+        {
+            throw new ArgumentException(
+                $"Command lifetime must be greater than zero and at most {AgentMessageLimits.MaxCommandLifetimeSeconds} seconds.",
+                nameof(envelope));
+        }
+
         var input = AgentCommandSigning.BuildSigningInput(envelope);
         var signature = _key.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
         return envelope with { Signature = Convert.ToBase64String(signature), SigningKeyId = _keyId };
