@@ -94,7 +94,12 @@ services:
 
   nodes:
     image: ${IMAGE_REGISTRY:-ghcr.io/sandboxservers}/dhadgar/nodes:${IMAGE_TAG:-latest}
-    environment: *service-env
+    environment:
+      <<: *service-env
+      Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity
+      Auth__Audience: meridian-api
+      Auth__MetadataAddress: http://identity:8080/.well-known/openid-configuration
+      Auth__InternalBaseUrl: http://identity:8080
     ports:
       - "5040:8080"
     depends_on: *service-depends

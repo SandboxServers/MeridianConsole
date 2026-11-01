@@ -2,6 +2,20 @@
 
 This runbook covers operational procedures for the Meridian Console Nodes service, which manages hardware inventory, agent enrollment, and health monitoring.
 
+## Authentication Configuration
+
+Users authenticate with JWT bearer tokens, so Nodes needs the same `Auth` keys as the Gateway. Startup fails if `Auth:Issuer` or `Auth:Audience` is missing.
+
+| Key | Purpose |
+| --- | --- |
+| `Auth:Issuer` | Expected token issuer |
+| `Auth:Audience` | Expected token audience |
+| `Auth:ClockSkewSeconds` | Allowed clock skew (default 60) |
+| `Auth:MetadataAddress` | Optional OIDC discovery address (https outside Development) |
+| `Auth:InternalBaseUrl` | Optional internal base URL for JWKS retrieval (https outside Development) |
+
+Agents authenticate with mTLS on `/agents` and `/hubs/agent`. mTLS cannot be disabled outside Development.
+
 ## Health Check Endpoints
 
 ### Available Endpoints
