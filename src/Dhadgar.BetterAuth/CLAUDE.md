@@ -27,6 +27,6 @@ Discord, Twitch, GitHub, Apple, plus Microsoft via genericOAuth with WIF client 
 ## Notes
 
 - Not orchestrated by the Aspire AppHost — run via `npm start` or `docker-compose.services.yml`
-- Cookie domain is hardcoded to `meridianconsole.com`; localhost login fails (beta roadmap Phase 1)
+- Cookies are host-only (HF-02, D-48): no `Domain` attribute, cookie prefix `meridian` (`__Secure-meridian.session_token`). Localhost login needs the Gateway and Panel on the same host.
 - Requires `DATABASE_URL`, `BETTER_AUTH_SECRET`, `EXCHANGE_TOKEN_PRIVATE_KEY` (PKCS8); Identity needs the matching public key
 - No test project exists for this service
