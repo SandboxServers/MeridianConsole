@@ -316,6 +316,23 @@ public sealed class ModelHunterTests : IDisposable
         Assert.NotNull(node["original_detail"]?.GetValue<string>());
     }
 
+    [Fact]
+    public async Task Hunter_ShrinkNotReproduced_OriginalReproduces_ReportsDivergedAndShrinkUnstable()
+    {
+        // The original case fails on its third checked op and arms one flake for the next case. The shrink lands on that next case,
+        // which replays clean; the original then replays dirty and is reported with shrink_unstable.
+        var lab = new FakeLab { I1FromThirdOp = true };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+        JsonObject node = outcome.Value.Result!.AsObject();
+        Assert.Equal("diverged", node["state"]!.GetValue<string>());
+        Assert.True(node["shrink_unstable"]!.GetValue<bool>());
+        Assert.Equal(node["original_ops"]!.ToJsonString(), node["ops"]!.ToJsonString());
+        Assert.True(ParseOps(node["ops"]!.AsArray()).Count > 1, "the reported ops are the original, not the one-op shrink");
+    }
+
     /// <summary>Runs the hunt while advancing the fake clock, so the hunter's wait after a 429 ends.</summary>
     private async Task<Result<JobOutcome>> RunAdvancingClockAsync(ModelHunter hunter)
     {
@@ -368,6 +385,8 @@ public sealed class ModelHunterTests : IDisposable
         private int _startI1;
         private bool _started;
         private int _checks;
+        private int _caseChecks;
+        private bool _flakeArmed;
 
         public bool ReusedTokenReturns201 { get; init; }
 
@@ -400,6 +419,14 @@ public sealed class ModelHunterTests : IDisposable
         /// <summary>When n is set, the n-th <c>invariants_check</c> call returns one I1, and no other call does.</summary>
         public int FlakyI1OnCheck { get; init; }
 
+        /// <summary>
+        /// When true, the third after-op <c>invariants_check</c> of a case returns one I1, so a case with three checked ops diverges.
+        /// That case arms one flake: the first after-op check of the case that runs next returns one I1, once. A shrink therefore
+        /// fails on that next case and replays clean, while the original replays dirty. Shrink length is bounded by time, so
+        /// the rule counts checks within a case, not cases.
+        /// </summary>
+        public bool I1FromThirdOp { get; init; }
+
         /// <summary>How many of the next enroll probes answer 429 before the product answers normally.</summary>
         public int Throttles { get; set; }
 
@@ -425,10 +452,10 @@ public sealed class ModelHunterTests : IDisposable
             switch (tool)
             {
                 case "stack_reset_data":
+                    _caseChecks = 0;
                     _used.Clear();
                     _nodes = 0;
                     _pgDown = false;
-                    _queuedI1 = 0;
                     return Ok(new { });
                 case "fault_reset":
                     if (HealThrows && _pgDown)
@@ -491,10 +518,24 @@ public sealed class ModelHunterTests : IDisposable
                 case "invariants_check":
                     // Queued I1s are returned once and then cleared; the rule and FlakyI1OnCheck add their own.
                     _checks++;
+                    _caseChecks++;
                     int queued = _queuedI1 + _startI1;
                     _queuedI1 = 0;
                     _startI1 = 0;
-                    int count = queued + (I1Violations && !_pgDown ? 1 : 0) + (FlakyI1OnCheck == _checks ? 1 : 0);
+                    // The first check of a case is its start checkpoint; only the after-op checks (2, 3, ...) can flake it.
+                    int flaky = 0;
+                    if (I1FromThirdOp && _caseChecks == 4)
+                    {
+                        flaky = 1;
+                        _flakeArmed = true;
+                    }
+                    else if (I1FromThirdOp && _caseChecks == 2 && _flakeArmed)
+                    {
+                        flaky = 1;
+                        _flakeArmed = false;
+                    }
+
+                    int count = queued + (I1Violations && !_pgDown ? 1 : 0) + (FlakyI1OnCheck == _checks ? 1 : 0) + flaky;
                     // The real InvariantViolation shape (F92): the id is invariant_id, never rule.
                     InvariantViolation[] violations = new InvariantViolation[count];
                     Array.Fill(violations, new InvariantViolation("I1", "nodes", "unhandled", "unhandled", DateTimeOffset.UnixEpoch, null));
