@@ -244,7 +244,6 @@ export const authConfig = {
   },
   advanced: {
     // Cross-origin cookies require SameSite=None and Secure
-    // This allows cart.meridianconsole.com to authenticate with dev.meridianconsole.com
     crossSubDomainCookies: {
       enabled: true,
       domain: "meridianconsole.com" // Share cookies across subdomains (no leading dot)

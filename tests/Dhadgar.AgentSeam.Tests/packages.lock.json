@@ -1130,6 +1130,17 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.14, )"
         }
       },
+      "dhadgar.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Dhadgar.Contracts": "[1.0.0, )",
+          "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.14, )",
+          "Microsoft.AspNetCore.Mvc.Testing": "[10.0.14, )",
+          "Microsoft.EntityFrameworkCore.InMemory": "[10.0.14, )",
+          "System.IdentityModel.Tokens.Jwt": "[8.23.0, )",
+          "xunit": "[2.9.3, )"
+        }
+      },
       "AspNetCore.HealthChecks.NpgSql": {
         "type": "CentralTransitive",
         "requested": "[9.0.0, )",

@@ -41,7 +41,7 @@ public sealed class NodeService : INodeService
         _logger = logger;
     }
 
-    public async Task<FilteredPagedResponse<NodeListItem>> GetNodesAsync(
+    public async Task<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>> GetNodesAsync(
         Guid organizationId,
         NodeListQuery query,
         CancellationToken ct = default)

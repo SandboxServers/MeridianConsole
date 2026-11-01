@@ -19,6 +19,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Shared\Dhadgar.Testing\Dhadgar.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Dhadgar.Testing.Authentication" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -17,6 +17,7 @@ public class RequestEnrichmentMiddleware
     {
         "X-Tenant-Id",
         "X-User-Id",
+        // stripped, never set: agents authenticate by certificate (D-31)
         "X-Client-Type",
         "X-Agent-Id",
         "X-Roles",
@@ -62,20 +63,6 @@ public class RequestEnrichmentMiddleware
         if (!string.IsNullOrEmpty(userId))
         {
             context.Request.Headers["X-User-Id"] = userId;
-        }
-
-        // Extract client type (user vs agent)
-        var clientType = context.User.FindFirst("client_type")?.Value;
-        if (!string.IsNullOrEmpty(clientType))
-        {
-            context.Request.Headers["X-Client-Type"] = clientType;
-        }
-
-        // Extract agent ID (for agent requests)
-        var agentId = context.User.FindFirst("agent_id")?.Value;
-        if (!string.IsNullOrEmpty(agentId))
-        {
-            context.Request.Headers["X-Agent-Id"] = agentId;
         }
 
         // Extract roles

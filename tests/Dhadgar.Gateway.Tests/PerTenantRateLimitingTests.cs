@@ -20,13 +20,13 @@ using Yarp.ReverseProxy.Forwarder;
 namespace Dhadgar.Gateway.Tests;
 
 /// <summary>
-/// PerTenant token-bucket behaviour on a tenant route (<c>servers-route</c>). Requests are authenticated by a
+/// PerTenant token-bucket behaviour on a tenant route (<c>servers-org-route</c>). Requests are authenticated by a
 /// test-only scheme that reads the org from the <c>X-Test-Org-Id</c> header, so the test can pick the org per request.
 /// </summary>
 [Collection("Gateway Integration")]
 public class PerTenantRateLimitingTests
 {
-    private const string TenantRoute = "/api/v1/servers/x";
+    private const string TenantRoute = "/api/v1/organizations/6f1d2c3b-0a9e-4b8d-9c7f-1e2d3c4b5a69/servers/x";
     private const string OrgHeader = "X-Test-Org-Id";
 
     private readonly GatewayWebApplicationFactory _factory;

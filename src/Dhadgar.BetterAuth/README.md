@@ -616,7 +616,6 @@ The `client_app` claim is resolved using this priority:
 
 1. **Origin header hostname matching:**
    - `panel.meridianconsole.com` → `"panel"`
-   - `cart.meridianconsole.com` → `"shop"`
    - `meridianconsole.com` or `www.meridianconsole.com` → `"shop"`
 
 2. **Request body `clientApp` field** (if in allowed list)

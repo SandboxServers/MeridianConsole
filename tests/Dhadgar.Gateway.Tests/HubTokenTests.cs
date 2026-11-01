@@ -1,31 +1,19 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Security.Claims;
-using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.IdentityModel.JsonWebTokens;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
-using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace Dhadgar.Gateway.Tests;
 
 /// <summary>
-/// Gateway factory that validates JWTs with a static test key instead of OIDC discovery.
-/// Issuer and audience match the Auth section in appsettings.json.
+/// Gateway factory that validates JWTs minted by <see cref="SeamJwt"/> instead of OIDC discovery.
 /// </summary>
 public sealed class HubTokenWebApplicationFactory : WebApplicationFactory<Program>
 {
-    internal const string Issuer = "https://meridianconsole.com/api/v1/identity";
-    internal const string Audience = "meridian-api";
-
-    private static readonly byte[] KeyBytes = Encoding.UTF8.GetBytes("gateway-hub-test-key-0123456789abcdef");
-
     private readonly CapturingLoggerProvider _logs = new();
 
     /// <summary>
@@ -39,22 +27,7 @@ public sealed class HubTokenWebApplicationFactory : WebApplicationFactory<Progra
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<ILoggerProvider>(_logs);
-            services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, o =>
-            {
-                o.Authority = null;
-                o.ConfigurationManager = null;
-                o.Configuration = new OpenIdConnectConfiguration();
-                o.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidIssuer = Issuer,
-                    ValidAudience = Audience,
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(KeyBytes)
-                };
-            });
+            SeamJwt.Apply(services);
         });
     }
 
@@ -66,20 +39,6 @@ public sealed class HubTokenWebApplicationFactory : WebApplicationFactory<Progra
         }
 
         base.Dispose(disposing);
-    }
-
-    internal static string CreateUserToken()
-    {
-        var descriptor = new SecurityTokenDescriptor
-        {
-            Issuer = Issuer,
-            Audience = Audience,
-            Expires = DateTime.UtcNow.AddMinutes(5),
-            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(KeyBytes), SecurityAlgorithms.HmacSha256),
-            Subject = new ClaimsIdentity([new Claim("sub", Guid.NewGuid().ToString())])
-        };
-
-        return new JsonWebTokenHandler().CreateToken(descriptor);
     }
 }
 
@@ -144,7 +103,7 @@ public sealed class HubTokenTests : IClassFixture<HubTokenWebApplicationFactory>
     [Fact]
     public async Task HubNegotiate_WithQueryToken_IsNotUnauthorized()
     {
-        var token = HubTokenWebApplicationFactory.CreateUserToken();
+        var token = SeamJwt.CreateUserToken(Guid.NewGuid(), Guid.NewGuid());
 
         // The console backend is not running in tests, so 502/503 is expected; 401 would mean the token was rejected.
         var response = await _client.GetAsync($"/hubs/console/negotiate?access_token={token}");
@@ -155,7 +114,7 @@ public sealed class HubTokenTests : IClassFixture<HubTokenWebApplicationFactory>
     [Fact]
     public async Task HubNegotiate_WithQueryToken_TokenNeverAppearsInLogs()
     {
-        var token = HubTokenWebApplicationFactory.CreateUserToken();
+        var token = SeamJwt.CreateUserToken(Guid.NewGuid(), Guid.NewGuid());
 
         _ = await _client.GetAsync($"/hubs/console/negotiate?access_token={token}");
 

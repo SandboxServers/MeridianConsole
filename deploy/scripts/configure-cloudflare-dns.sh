@@ -5,6 +5,13 @@
 # Env:   CLOUDFLARE_API_TOKEN  token with DNS:Edit on the zone
 #        CLOUDFLARE_ZONE_ID    zone ID of meridianconsole.com
 #
+# Records (all proxied):
+#   prod:          A meridianconsole.com, CNAME www, api and panel (each to the apex)
+#   dev, staging:  A <env>.meridianconsole.com, CNAME api.<env>
+#   staging only:  CNAME staging.panel.meridianconsole.com (to staging.meridianconsole.com)
+# D-48: no wildcard records. A new hostname gets its own configure_record line; the script
+# deletes any leftover wildcard after the explicit records succeed.
+#
 # Run by .github/workflows/infra.yml. Exits non-zero if any record fails.
 set -euo pipefail
 
@@ -54,18 +61,56 @@ configure_record() {
   fi
 }
 
+# delete_record <type> <name>  (deletes every record of that exact type and name; absent is fine)
+delete_record() {
+  local type="$1" name="$2" lookup ids id result
+  lookup=$(cf -G "$API" --data-urlencode "type=$type" --data-urlencode "name=$name")
+  if [ "$(jq -r '.success' <<< "$lookup")" != true ]; then
+    echo "::error::lookup $type $name: $(jq -r '.errors[0].message // "unknown error"' <<< "$lookup")"
+    failures=$((failures + 1))
+    return
+  fi
+  ids=$(jq -r '.result[].id' <<< "$lookup")
+  if [ -z "$ids" ]; then
+    echo "Absent $type $name"
+    return
+  fi
+  for id in $ids; do
+    result=$(cf -X DELETE "$API/$id")
+    if [ "$(jq -r '.success' <<< "$result")" = true ]; then
+      echo "Deleted $type $name"
+    else
+      echo "::error::delete $type $name: $(jq -r '.errors[0].message // "unknown error"' <<< "$result")"
+      failures=$((failures + 1))
+    fi
+  done
+}
+
+# remove_wildcard <name>  (only after every explicit record succeeded, so no served host loses DNS)
+remove_wildcard() {
+  if [ "$failures" -gt 0 ]; then
+    echo "::error::Skipping wildcard removal for $1: $failures explicit record(s) failed"
+    return
+  fi
+  delete_record CNAME "$1"
+}
+
 case "$ENVIRONMENT" in
   dev | staging)
     apex="$ENVIRONMENT.$DOMAIN"
     configure_record A "$apex" "$IP"
-    configure_record CNAME "*.$apex" "$apex"
     configure_record CNAME "api.$apex" "$apex"
+    if [ "$ENVIRONMENT" = staging ]; then
+      configure_record CNAME "staging.panel.$DOMAIN" "$apex"
+    fi
+    remove_wildcard "*.$apex"
     ;;
   prod)
     configure_record A "$DOMAIN" "$IP"
     configure_record CNAME "www.$DOMAIN" "$DOMAIN"
-    configure_record CNAME "*.$DOMAIN" "$DOMAIN"
     configure_record CNAME "api.$DOMAIN" "$DOMAIN"
+    configure_record CNAME "panel.$DOMAIN" "$DOMAIN"
+    remove_wildcard "*.$DOMAIN"
     ;;
   *)
     echo "::error::Unknown environment '$ENVIRONMENT' (expected dev, staging or prod)" >&2

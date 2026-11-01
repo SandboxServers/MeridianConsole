@@ -26,7 +26,6 @@ public class OpenApiAggregationService
         ["nodes"] = ("Nodes", "/api/v1/nodes"),
         ["console"] = ("Console", "/api/v1/console"),
         ["notifications"] = ("Notifications", "/api/v1/notifications"),
-        ["firewall"] = ("Firewall", "/api/v1/firewall"),
         ["secrets"] = ("Secrets", "/api/v1/secrets"),
         ["discord"] = ("Discord", "/api/v1/discord"),
     };
