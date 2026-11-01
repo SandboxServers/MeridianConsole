@@ -223,3 +223,62 @@ Gate 7, `fuzz_run` target enroll, cases 50 (no lease), job 591a076703f0, seed 14
 Lease re-acquired for teardown only and released. `stack_down wipe` (state down, network absent, containers []); no labelled containers and no `meridian-lab-net` remained, so `docker rm -f` was not needed. Daemon pid 29500 stopped (taskkill on that pid only); port 8789 free. No prune, dev stack untouched, no mutant/patch/lab code changed.
 
 Last check result line: none (live gates only; Part A last result: 12 tests, 10 passed, 2 failed).
+
+## Continuation 8 (boundary runner, D-ML109 / D-ML115, campaign tip 62ce8be2)
+
+Setup: campaign tip 62ce8be2 (includes the four wave5-fix-R7 packets). Worktree `.claude/worktrees/meridian-lab`, non-elevated. Full report: `.claude/reports/meridian-lab/wave5-docker-run-8.md`.
+
+Build: `dotnet build tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release -p:TreatWarningsAsErrors=true`: Build succeeded, 0 errors, 53 warnings (IL2026 in Dhadgar.Agent.Windows, outside the lab). `dotnet build src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true`: 0 warnings, 0 errors.
+
+### Part A (Docker, one at a time)
+
+| # | Test or filter | Result | Note (vs continuation 7) |
+| --- | --- | --- | --- |
+| A1 | HunterDockerTests | Pass | same |
+| A2 | TwinLatencyDockerTests (L53) | Pass | same |
+| A3 | MutationDockerTests (M1) | Pass | flipped green (was `survived`) |
+| A4 | SelfCheckRecoveryTests | Pass | same |
+| A5 | SelfCheckE2ETests (LM1) | Pass | same |
+| A6 | LabSelfTestE2ETests (S-L6) | Pass | same |
+| A7 | Seam=S-L12 (TenantTwinSeamTests) | Fail, expected red: `twin_run failed: {"error":{"code":"Lab.NotFound","message":"no such spec"}}` | same |
+| A8 | BlastRadiusDockerTests | Pass | same |
+| A9 | FaultSmokeE2ETests | Pass | same |
+| A10 | ToxiproxyTimeoutToxicDockerTests | Pass | same |
+| A11 | Seam=S-L7 (ToxiproxySeamTests) | Fail: `[Lab.Docker] could not create meridian_lab_nodes` at line 97; not retried | flipped red (was green) |
+| A12 | Seam=S-L11 (EnrollHistorySeamTests) | Pass | same |
+
+Part A totals: 12 tests, 10 passed, 2 failed (A7 expected red, A11 new red).
+
+### Part B setup (continuation 8, fresh daemon)
+- Fresh daemon, daemon pid 38092 (stopped at teardown), port 8789. Lab token saved to scratchpad `r8-B-token.txt` (never printed). Home `scratchpad\r8-home-B`.
+- `lab_build` build_id `62ce8be2-dirty-20261101200820`; `stack_up` wipe up; `svc_start nodes` and `svc_start gateway` up.
+
+### Gates (part B, fresh daemon, build 62ce8be2-dirty-20261101200820)
+
+| Gate | Job | Result | Vs continuation 7 |
+| --- | --- | --- | --- |
+| Hunt enrollment seed 4242, budget 300 s | 770e5546d09e | failed `[Lab.Unavailable]` after 300 s; no repro, no replay; both nodes restarts returned ok | still red; restart now ok |
+| M1 (M1-token-no-concurrency) | 0894368b089e | `detected` (run 5ce06e0c) | flipped green (was `stale`) |
+| M4 (M4-no-concurrency-catch) | 0894368b089e | `detected` (run bf7df5c6) | flipped green (was `survived`) |
+| M5 (M5-token-logged) | 0894368b089e | `detected_other`, signature `inv:I1\|nodes\|unhandled` | same |
+| Twin `enroll-latency-invariance` | base 16f315 | FAIL, held null, twin row precondition I1 Fail | same |
+| Chaos `nodes-enroll`, duration_s 600, seed 9959511619756607412 | 11c5fc1ade4a | PASS: faults_started 17, refused 17, healed 5, heal_failed 0, workload_loops 251, workload_errors 0, violations 0 | counts changed (was 23/17/8) |
+| Soak `catalog/nodes.toml`, duration_s 300 | a93bb35b5979 | PASS-WEAK: loops 1, samples 1, i7 skipped | same |
+| coverage_report (since daemon start) | n/a | ran: route_status 0/72, error_code 0/29, transition 0/22, invariant_check hit 1 | same |
+| Fuzz `enroll`, cases 50, seed 14372532009034476853 | db67a3da59c3 | succeeded: sent 50, known 8, 28 failure entries, all `status 500` on `POST /api/v1/agents/enroll` | flipped green (was `Lab.InvalidArgument`) |
+
+### Raw reds (recorded, not diagnosed)
+1. Hunt enrollment, job 770e5546d09e: `[Lab.Unavailable]` after the full 300 s budget. Look at: job record 770e5546d09e and the audit file under `r8-home-B`.
+2. A11 Seam S-L7: Docker could not create `meridian_lab_nodes`. Look at: the A11 log in scratchpad `r8-*.log`, line 97.
+3. M5, job 0894368b089e: `detected_other` (expected a specific detector). Look at: job 0894368b089e (M5 detector run) under `r8-home-B`.
+4. Twin `enroll-latency-invariance`, base 16f315: I1 precondition fails, held null. Look at: base run 16f315 under `r8-home-B`.
+5. Fuzz enroll, job db67a3da59c3: 28 of the enroll cases returned HTTP 500 from `POST /api/v1/agents/enroll`. Look at: the failure list in job db67a3da59c3.
+
+### Teardown (continuation 8)
+- `stack_down` wipe: state down, network absent, containers none.
+- Daemon pid 38092 stopped (taskkill on that pid only); port 8789 free.
+- No `meridian-lab=1` containers left. The empty labelled network `meridian-lab-net`, left by the failed A11 test, was removed label-only.
+- No prune, dev stack untouched, no lab, mutant or product code changed.
+
+Last check result line: Dhadgar.Lab.Tests Release build succeeded, 0 errors (53 IL2026 warnings outside the lab); Part A 12 tests, 10 passed, 2 failed.
+Next step: none recorded by this run (raw results only).
