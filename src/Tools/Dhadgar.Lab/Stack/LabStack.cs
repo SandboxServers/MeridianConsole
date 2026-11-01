@@ -223,6 +223,34 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     private static Result<DockerOutput> Require(Result<DockerOutput> call, string message) =>
         call.IsFailure ? call : call.Value.ExitCode == 0 ? call : Result<DockerOutput>.Failure($"[Lab.Docker] {message}");
 
+    /// <summary>
+    /// Like <see cref="Require"/>, but keeps psql's first <c>ERROR:</c> or <c>FATAL:</c> line in the error.
+    /// Only for database statements that carry no credential: psql can echo a role statement with its expanded password (D-ML124).
+    /// </summary>
+    private static Result<DockerOutput> RequirePsql(Result<DockerOutput> call, string message)
+    {
+        if (call.IsFailure || call.Value.ExitCode == 0)
+        {
+            return call;
+        }
+
+        string? line = call.Value.StdErr
+            .Split('\n')
+            .FirstOrDefault(l => l.Contains("ERROR:", StringComparison.Ordinal) || l.Contains("FATAL:", StringComparison.Ordinal));
+        if (line is null)
+        {
+            return Result<DockerOutput>.Failure($"[Lab.Docker] {message}");
+        }
+
+        string detail = new string(line.Where(c => !char.IsControl(c)).ToArray()).Trim();
+        if (detail.Length > 200)
+        {
+            detail = detail[..200];
+        }
+
+        return Result<DockerOutput>.Failure($"[Lab.Docker] {message}: {detail}");
+    }
+
     private async Task<Result> BringUpAsync(CancellationToken ct)
     {
         var network = await EnsureNetworkAsync(ct).ConfigureAwait(false);
@@ -660,7 +688,8 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     {
         var failing = new List<string>();
 
-        var postgres = await Docker(["exec", ContainerName("postgres"), "pg_isready", "-U", SuperUser], ct).ConfigureAwait(false);
+        // TCP, not the socket: the image's first-start init server listens on the socket only, and stops before the real start (F112).
+        var postgres = await Docker(["exec", ContainerName("postgres"), "pg_isready", "-h", "127.0.0.1", "-p", "5432", "-U", SuperUser], ct).ConfigureAwait(false);
         if (postgres.IsFailure || postgres.Value.ExitCode != 0)
         {
             failing.Add("postgres");
@@ -710,7 +739,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
         foreach (var service in LabDatabaseServices)
         {
             var database = DatabaseName(service);
-            var present = Require(
+            var present = RequirePsql(
                 await Docker(["exec", postgres, "psql", "-v", "ON_ERROR_STOP=1", "-U", SuperUser, "-tAc", $"SELECT 1 FROM pg_database WHERE datname = '{database}'"], ct).ConfigureAwait(false),
                 "could not query the lab databases");
             if (present.IsFailure)
@@ -720,7 +749,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
 
             if (present.Value.StdOut.Trim() != "1")
             {
-                var created = Require(
+                var created = RequirePsql(
                     await Docker(["exec", postgres, "psql", "-v", "ON_ERROR_STOP=1", "-U", SuperUser, "-c", $"CREATE DATABASE {database} OWNER {LabCredentialRefs.LabOwner}"], ct).ConfigureAwait(false),
                     $"could not create {database}");
                 if (created.IsFailure)
@@ -729,7 +758,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
                 }
             }
 
-            var granted = Require(
+            var granted = RequirePsql(
                 await Docker(["exec", postgres, "psql", "-v", "ON_ERROR_STOP=1", "-U", SuperUser, "-c", $"GRANT CONNECT ON DATABASE {database} TO {LabCredentialRefs.LabReader}"], ct).ConfigureAwait(false),
                 $"could not grant on {database}");
             if (granted.IsFailure)
@@ -737,7 +766,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
                 return Result.Failure(granted.Error);
             }
 
-            var schema = Require(
+            var schema = RequirePsql(
                 await Docker(["exec", postgres, "psql", "-v", "ON_ERROR_STOP=1", "-U", SuperUser, "-d", database, "-c",
                     $"GRANT USAGE ON SCHEMA public TO {LabCredentialRefs.LabReader}; ALTER DEFAULT PRIVILEGES FOR ROLE {LabCredentialRefs.LabOwner} IN SCHEMA public GRANT SELECT ON TABLES TO {LabCredentialRefs.LabReader};"], ct).ConfigureAwait(false),
                 $"could not set the schema grants on {database}");
@@ -758,6 +787,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
 
     private async Task<Result> EnsureRoleAsync(string postgres, string role, string passwordVariable, CancellationToken ct)
     {
+        // Role statements stay on Require: never RequirePsql here, because psql can echo the CREATE ROLE line with the expanded password.
         var present = Require(
             await Docker(["exec", postgres, "psql", "-v", "ON_ERROR_STOP=1", "-U", SuperUser, "-tAc", $"SELECT 1 FROM pg_roles WHERE rolname = '{role}'"], ct).ConfigureAwait(false),
             $"could not query role {role}");
