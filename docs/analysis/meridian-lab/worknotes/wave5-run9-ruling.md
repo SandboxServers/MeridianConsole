@@ -158,3 +158,13 @@ Docs owed: none. The tool description stays true.
 | 14 | Push and open one PR with the `security-review` label; merge on the owner's yes | ops; owner | yes |
 
 Under D-ML131 option B, steps 11 and 13 move after the PR. Steps 12 and 14 then cover waves 1 to 5E, together with step 10's L27b and L05b only.
+
+## 8. Update after the owner rulings (architect, 2026-11-01)
+
+- Step 1 is done. D-ML127 takes the proposed default: the gate is parked as KG-W5-13 and gated on L27b. D-ML128 takes option A. D-ML131 takes option A: one PR after the last wave and L47. D-ML118 and D-ML125 are ratified by action.
+- The option B paragraph above is void. Steps 2 to 14 keep their order.
+- Added by D-ML132 ([nodes-ef-retry-packet](nodes-ef-retry-packet.md)):
+  - **NR-1**, the Nodes EF-retry product PR. It is off `origin/main`, separate from the lab PR, and gets one `security-advisor` pass. It can start beside step 2.
+  - **L19n**, seam S-L15. It runs after step 5 and is recorded red. NR-1's scratch green check follows it, and then the owner merges NR-1.
+  - Step 8's merge of `origin/main` brings NR-1 in when it has landed. Step 12 reruns S-L15, and KG-W5-17 is live until it is green.
+- New open owner decision: D-ML133 (Nodes `UseBusOutbox`, F117). It blocks no step.
