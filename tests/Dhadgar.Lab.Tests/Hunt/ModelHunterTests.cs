@@ -180,6 +180,32 @@ public sealed class ModelHunterTests : IDisposable
         Assert.Contains(lab.Calls, call => call.Tool == "fault_proxy_disable");
     }
 
+    [Fact]
+    public async Task Replay_RestartInsideCut_IsNotSent()
+    {
+        // D-ML119: Nodes does not start while its database is cut (F104), so the hunt sends no svc_restart there.
+        var lab = new FakeLab { RestartFails = true };
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.RestartNodes), new HuntOp(HuntOpKind.PgUp), new HuntOp(HuntOpKind.Mint)], CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.False(replay.Value!.Diverged);
+        Assert.Equal(0, lab.Calls.Count(call => call.Tool == "svc_restart"));
+    }
+
+    [Fact]
+    public async Task Replay_RestartOutsideCut_IsSent()
+    {
+        var lab = new FakeLab();
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.Mint), new HuntOp(HuntOpKind.RestartNodes)], CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.Equal(1, lab.Calls.Count(call => call.Tool == "svc_restart"));
+    }
+
     /// <summary>Runs the hunt while advancing the fake clock, so the hunter's wait after a 429 ends.</summary>
     private async Task<Result<JobOutcome>> RunAdvancingClockAsync(ModelHunter hunter)
     {
@@ -236,6 +262,9 @@ public sealed class ModelHunterTests : IDisposable
         public bool HealThrows { get; init; }
 
         public bool MintWithoutTokenRef { get; init; }
+
+        /// <summary>When true, <c>svc_restart</c> answers an error result, so a call that is sent makes the case fail.</summary>
+        public bool RestartFails { get; init; }
 
         /// <summary>How many of the next enroll probes answer 429 before the product answers normally.</summary>
         public int Throttles { get; set; }
@@ -295,7 +324,9 @@ public sealed class ModelHunterTests : IDisposable
                     _pgDown = false;
                     return Ok(new { healed = true });
                 case "svc_restart":
-                    return Ok(new { });
+                    return RestartFails
+                        ? new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = tool }))
+                        : Ok(new { });
                 case "nodes_enroll_probe":
                     if (Throttles > 0)
                     {

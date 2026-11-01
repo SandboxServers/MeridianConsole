@@ -364,6 +364,12 @@ public sealed class ModelHunter
 
                         break;
                     case HuntOpKind.RestartNodes:
+                        if (model.PgDown)
+                        {
+                            // D-ML119: Nodes does not start while its database is cut (F104); the model asserts nothing there.
+                            break;
+                        }
+
                         Result<JsonElement> restarted = await CallAsync("svc_restart", new JsonObject { ["service"] = Service }, ct).ConfigureAwait(false);
                         if (restarted.IsFailure)
                         {
