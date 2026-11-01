@@ -7,11 +7,14 @@ import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import { getMigrations } from "better-auth/db/migration";
 import { loadSecrets } from "./secrets-client.js";
 import { createExchangeRateLimiter, parseTrustProxy } from "./rate-limit.js";
+import { loadTrustedOrigins, isCorsOriginAllowed } from "./config.js";
 
-// Read the proxy and rate-limit settings first, so a bad value stops startup
-// before secrets are fetched or migrations touch the database.
+// Read the proxy, rate-limit and trusted-origin settings first, so a bad value stops startup
+// before secrets are fetched or migrations touch the database. loadTrustedOrigins fails closed
+// outside NODE_ENV=development when BETTER_AUTH_TRUSTED_ORIGINS is empty, "*" or not exact origins.
 // TRUST_PROXY decides which hops are trusted when deriving req.ip (the limiter's
 // key). Off by default; behind the Gateway set TRUST_PROXY=1. See rate-limit.js.
+loadTrustedOrigins(process.env);
 const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
 const exchangeRateLimiter = createExchangeRateLimiter();
 
@@ -73,11 +76,7 @@ app.set("trust proxy", trustProxy);
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (trustedOrigins.length === 0 || trustedOrigins.includes(origin)) {
+      if (isCorsOriginAllowed(origin, trustedOrigins, process.env)) {
         return callback(null, true);
       }
 

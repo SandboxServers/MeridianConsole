@@ -104,6 +104,8 @@ public record NetworkInterfaceInfo(
 /// <param name="CaCertificate">PEM-encoded agent CA certificate, for the agent's trust store.</param>
 /// <param name="NotBefore">Certificate validity start.</param>
 /// <param name="NotAfter">Certificate validity end.</param>
+/// <param name="CommandSigningPublicKey">Base64 DER SubjectPublicKeyInfo of the control plane's P-256 command signing key (D-09). The agent pins it and verifies every command against it.</param>
+/// <param name="CommandSigningKeyId">Key id of <see cref="CommandSigningPublicKey"/>: lower-case hex SHA-256 of its SPKI (<c>AgentCommandSigning.ComputeKeyId</c>).</param>
 public record EnrollNodeResponse(
     Guid NodeId,
     Guid OrganizationId,
@@ -111,7 +113,9 @@ public record EnrollNodeResponse(
     string Certificate,
     string CaCertificate,
     DateTimeOffset NotBefore,
-    DateTimeOffset NotAfter);
+    DateTimeOffset NotAfter,
+    string CommandSigningPublicKey,
+    string CommandSigningKeyId);
 
 /// <summary>
 /// Request from an agent to renew its client certificate (<c>POST /agents/{nodeId}/certificates/renew</c>,

@@ -47,6 +47,17 @@ public sealed class AgentHeartbeatValidatorTests
     }
 
     [Theory]
+    [InlineData(0x202E)] // right-to-left override (Cf)
+    [InlineData(0x2028)] // line separator (Zl)
+    [InlineData(0xD800)] // unpaired high surrogate
+    public void IsValid_FormatSeparatorOrUnpairedSurrogateInVersion_ReturnsFalse(int codePoint)
+    {
+        var heartbeat = new AgentHeartbeat(10, 10, 10, 0, "1.0" + (char)codePoint, null);
+
+        Assert.False(AgentHeartbeatValidator.IsValid(heartbeat));
+    }
+
+    [Theory]
     [InlineData("1.0\0")]
     [InlineData("1.0\n")]
     [InlineData("1.0\r\nWARN forged")]

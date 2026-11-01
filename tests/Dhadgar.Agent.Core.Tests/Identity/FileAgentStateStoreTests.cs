@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Agent.Core.Identity;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -175,6 +176,105 @@ public sealed class FileAgentStateStoreTests : IDisposable
 
         Assert.True(load.IsFailure);
         Assert.Contains("[AgentState.Corrupt]", load.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveThenLoad_RoundTripsTheSigningKeyFields()
+    {
+        var sut = CreateStore(_directory);
+        var keyPair = NewSigningKeyPair();
+        var identity = new AgentIdentity(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EnrolledAt,
+            CommandSigningPublicKey: keyPair.PublicKey,
+            CommandSigningKeyId: keyPair.KeyId);
+
+        var save = await sut.SaveAsync(identity);
+        var load = await sut.LoadAsync();
+
+        Assert.True(save.IsSuccess, save.Error);
+        Assert.True(load.IsSuccess, load.Error);
+        Assert.Equal(identity, load.Value!.Identity);
+    }
+
+    [Fact]
+    public async Task Load_Sprint2FileWithoutSigningKey_LoadsWithNullKeyFields()
+    {
+        Directory.CreateDirectory(_directory);
+        var nodeId = Guid.NewGuid();
+        await File.WriteAllTextAsync(
+            StatePath(),
+            $"{{\"nodeId\":\"{nodeId}\",\"organizationId\":\"{Guid.NewGuid()}\",\"enrolledAt\":\"{EnrolledAt:O}\"}}");
+        var sut = CreateStore(_directory);
+
+        var load = await sut.LoadAsync();
+
+        Assert.True(load.IsSuccess, load.Error);
+        var identity = load.Value!.Identity!;
+        Assert.Equal(nodeId, identity.NodeId);
+        Assert.Null(identity.CommandSigningPublicKey);
+        Assert.Null(identity.CommandSigningKeyId);
+    }
+
+    [Fact]
+    public async Task Load_OnlyOneSigningKeyField_ReturnsCorruptFailure()
+    {
+        Directory.CreateDirectory(_directory);
+        await File.WriteAllTextAsync(
+            StatePath(),
+            $"{{\"nodeId\":\"{Guid.NewGuid()}\",\"organizationId\":\"{Guid.NewGuid()}\",\"enrolledAt\":\"{EnrolledAt:O}\",\"commandSigningPublicKey\":\"c2lnbmluZy1rZXk=\"}}");
+        var sut = CreateStore(_directory);
+
+        var load = await sut.LoadAsync();
+
+        Assert.True(load.IsFailure);
+        Assert.Contains("[AgentState.Corrupt]", load.Error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(",\"commandSigningKeyId\":\"x\"")]
+    [InlineData(",\"commandSigningPublicKey\":\"\",\"commandSigningKeyId\":\"x\"")]
+    [InlineData(",\"commandSigningPublicKey\":\"\",\"commandSigningKeyId\":\"\"")]
+    [InlineData(",\"commandSigningPublicKey\":\"!!not-base64!!\",\"commandSigningKeyId\":\"x\"")]
+    public async Task Load_MalformedSigningKeyFields_ReturnsCorruptFailure(string signingFields)
+    {
+        await WriteStateWithSigningFieldsAsync(signingFields);
+        var sut = CreateStore(_directory);
+
+        var load = await sut.LoadAsync();
+
+        Assert.True(load.IsFailure);
+        Assert.Contains("[AgentState.Corrupt]", load.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Load_KeyIdNotHashOfPublicKey_ReturnsCorruptFailure()
+    {
+        var keyPair = NewSigningKeyPair();
+        await WriteStateWithSigningFieldsAsync(
+            $",\"commandSigningPublicKey\":\"{keyPair.PublicKey}\",\"commandSigningKeyId\":\"{new string('a', AgentCommandSigning.KeyIdLength)}\"");
+        var sut = CreateStore(_directory);
+
+        var load = await sut.LoadAsync();
+
+        Assert.True(load.IsFailure);
+        Assert.Contains("[AgentState.Corrupt]", load.Error, StringComparison.Ordinal);
+    }
+
+    private async Task WriteStateWithSigningFieldsAsync(string signingFields)
+    {
+        Directory.CreateDirectory(_directory);
+        await File.WriteAllTextAsync(
+            StatePath(),
+            $"{{\"nodeId\":\"{Guid.NewGuid()}\",\"organizationId\":\"{Guid.NewGuid()}\",\"enrolledAt\":\"{EnrolledAt:O}\"{signingFields}}}");
+    }
+
+    private static (string PublicKey, string KeyId) NewSigningKeyPair()
+    {
+        using var key = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var spki = key.ExportSubjectPublicKeyInfo();
+        return (Convert.ToBase64String(spki), AgentCommandSigning.ComputeKeyId(spki));
     }
 
     [Fact]

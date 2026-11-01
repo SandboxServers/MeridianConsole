@@ -27,10 +27,7 @@ public sealed class LocalFileCaStorageProvider : ICaStorageProvider
         _options = options.Value;
         _logger = logger;
 
-        _caDirectory = _options.CaStoragePath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "MeridianConsole",
-            "CA");
+        _caDirectory = ResolveCaDirectory(_options);
 
         _certPath = Path.Combine(_caDirectory, "ca.crt");
         _keyPath = Path.Combine(_caDirectory, "ca.key");
@@ -171,6 +168,16 @@ public sealed class LocalFileCaStorageProvider : ICaStorageProvider
             _lock.Release();
         }
     }
+
+    /// <summary>
+    /// Resolves the CA storage directory: <c>CaStoragePath</c> when set, otherwise AppData/MeridianConsole/CA.
+    /// Also used by the command signer to keep its key next to the CA.
+    /// </summary>
+    internal static string ResolveCaDirectory(NodesOptions options) =>
+        options.CaStoragePath ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "MeridianConsole",
+            "CA");
 
     private static string GenerateSecurePassword()
     {

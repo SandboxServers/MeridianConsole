@@ -61,6 +61,13 @@ public interface ICapacityReservationService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Gets the organization that owns the node a reservation is on, or null when the token is unknown.
+    /// </summary>
+    Task<Guid?> GetOwningOrganizationIdAsync(
+        Guid reservationToken,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Gets available capacity on a node, accounting for active reservations.
     /// </summary>
     Task<ServiceResult<AvailableCapacityResponse>> GetAvailableCapacityAsync(

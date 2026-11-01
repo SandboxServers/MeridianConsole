@@ -14,6 +14,15 @@ public static class AgentCommandSigning
     /// <summary>Domain separator, the first line of every signing input.</summary>
     public const string Domain = "dhadgar-cmd-v1";
 
+    /// <summary>Length in bytes of a signature: ECDSA P-256 IEEE P1363 (r || s).</summary>
+    public const int SignatureBytes = 64;
+
+    /// <summary>Length in characters of a base64-encoded <see cref="SignatureBytes"/> value, with padding.</summary>
+    public const int SignatureBase64Length = 88;
+
+    /// <summary>Length in characters of a signing key id (lower-case hex SHA-256).</summary>
+    public const int KeyIdLength = 64;
+
     /// <summary>
     /// UTF-8 encoding that throws on lone surrogates instead of replacing them with U+FFFD, so that
     /// the signed bytes are a unique encoding of the string.

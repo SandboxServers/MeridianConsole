@@ -48,6 +48,15 @@ public class AgentCommandSigningTests
         var keyId = AgentCommandSigning.ComputeKeyId(spki);
 
         Assert.Equal("4678fe8a3cf5c74e029e7249e4313c06ab59cb2b07d6a7ab15c6d1850c2c8e25", keyId);
+        Assert.Equal(AgentCommandSigning.KeyIdLength, keyId.Length);
+    }
+
+    [Fact]
+    public void SignatureBase64Length_MatchesSignatureBytes()
+    {
+        Assert.Equal(
+            AgentCommandSigning.SignatureBase64Length,
+            Convert.ToBase64String(new byte[AgentCommandSigning.SignatureBytes]).Length);
     }
 
     [Fact]

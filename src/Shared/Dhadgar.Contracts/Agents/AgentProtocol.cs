@@ -94,6 +94,17 @@ public static class AgentMessageLimits
 
     /// <summary>Maximum <see cref="StopServerPayload.GracefulTimeoutSeconds"/>.</summary>
     public const int MaxGracefulTimeoutSeconds = 300;
+
+    /// <summary>
+    /// Maximum length of <see cref="AgentCommandResult.ErrorCode"/> and <see cref="AgentCommandCompleted.ErrorCode"/>.
+    /// </summary>
+    public const int MaxErrorCodeLength = 64;
+
+    /// <summary>
+    /// Pattern that <see cref="AgentCommandResult.ErrorCode"/> and <see cref="AgentCommandCompleted.ErrorCode"/> must match.
+    /// Anchored with <c>\z</c>, not <c>$</c>, so a trailing newline is rejected.
+    /// </summary>
+    public const string ErrorCodePattern = @"^[A-Za-z0-9._-]{1,64}\z";
 }
 
 /// <summary>

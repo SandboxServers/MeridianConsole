@@ -9,6 +9,7 @@ using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Hubs;
 using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
+using Dhadgar.Nodes.Services.CommandSigning;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Security;
@@ -53,9 +54,13 @@ builder.Services.AddDbContext<NodesDbContext>(options =>
 // Register SignalR for the agent hub (shared framework; no package needed)
 builder.Services.AddSignalR(o =>
 {
-    o.MaximumReceiveMessageSize = 64 * 1024;
+    o.MaximumReceiveMessageSize = AgentHubProtocol.MaxReceiveMessageBytes;
     o.EnableDetailedErrors = false;
 });
+
+// Connection registry for the agent hub. Singleton: it holds no scoped service. Single-instance for the MVP;
+// scale-out needs a Redis backplane (ADR-0008).
+builder.Services.AddSingleton<IAgentConnectionRegistry, AgentConnectionRegistry>();
 
 // Register services
 builder.Services.AddScoped<INodeService, NodeService>();
@@ -68,6 +73,14 @@ builder.Services.AddScoped<ICapacityReservationService, CapacityReservationServi
 // Register Certificate Authority services
 builder.Services.AddSingleton<ICaStorageProvider, LocalFileCaStorageProvider>();
 builder.Services.AddSingleton<ICertificateAuthorityService, CertificateAuthorityService>();
+
+// Register command signing (ECDSA P-256 key that signs agent commands, D-09)
+builder.Services.AddOptions<CommandSigningOptions>()
+    .Bind(builder.Configuration.GetSection(CommandSigningOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<CommandSigningOptions>, CommandSigningOptions>();
+builder.Services.AddSingleton<ICommandSigner, CommandSigner>();
 
 // Register mTLS authentication services
 builder.Services.AddMtlsAuthentication(builder.Configuration);
@@ -151,6 +164,7 @@ builder.Services.AddMassTransit(x =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantScopedHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, AgentIdentityHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, ReservationCallerHandler>();
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("TenantScoped", policy =>
@@ -166,7 +180,8 @@ builder.Services.AddAuthorizationBuilder()
         // Require an agent identity: a node_id from the mTLS client certificate, never a user token
         policy.RequireAuthenticatedUser();
         policy.AddRequirements(new AgentIdentityRequirement());
-    });
+    })
+    .AddPolicy(ReservationCallerPolicy.Name, ReservationCallerPolicy.Configure);
 
 var app = builder.Build();
 
@@ -194,6 +209,18 @@ try
 catch (Exception ex)
 {
     app.Logger.LogError(ex, "Failed to initialize Certificate Authority. Certificate operations will fail.");
+}
+
+// Load or create the command signing key on startup
+try
+{
+    var commandSigner = app.Services.GetRequiredService<ICommandSigner>();
+    await commandSigner.InitializeAsync();
+    app.Logger.LogInformation("Command signer initialized successfully");
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Failed to initialize command signer. Agent enrollment will fail.");
 }
 
 // Map endpoints

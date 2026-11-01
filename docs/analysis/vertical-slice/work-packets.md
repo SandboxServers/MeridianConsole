@@ -10,7 +10,8 @@ Ledger: [README.md](README.md). Resume card: [RESUME.md](RESUME.md).
 - Shipping: **one PR per packet**, squash-merged in the merge order given per wave, CI green, `security-review` label where the packet says "Security review: yes".
 - **Merge authority (D-41).** Only the owner's main session merges, and only after the owner says yes to that PR. This applies to every PR, not only security-review ones. A green CI run, a `ship` verdict, or a yes given for another PR or an earlier head does not count. Every other session, the orchestrator included, stops at "ready to merge" and reports.
 - Within a wave, dispatch every packet whose dependencies have merged, in one message. Packets whose dependencies are still open stay BlockedDependency until those merge.
-- Environment (Linux container, bash; `pwsh` is not assumed). Start every shell call with:
+- **Environment from 2026-10-28: Windows.** The campaign now runs on the owner's Windows machine. Worktrees are `E:\Code\MeridianConsole\.claude\worktrees\vertical-slice-<name>`, the shell is PowerShell, and `gh` is `C:\Program Files\GitHub CLI\gh.exe` (ops opens PRs with `gh pr create --body-file`, or `gh api` REST if GraphQL is refused). Packets written before this date show the Linux container paths and bash below; translate the paths, run the same `git`/`dotnet` commands, and skip the `sed` CRLF steps (a Windows checkout writes CRLF already; check `git diff --stat` shows only intended lines). Every worktree shows `scripts/bootstrap-dev.sh`, `scripts/test-scripts.sh`, `scripts/verify-environment.sh` and `deploy/scripts/configure-cloudflare-dns.sh` as modified (file-mode noise from the Windows checkout): never stage or commit them unless the packet edits them. Tests still use `WebApplicationFactory` with EF InMemory; no packet uses Testcontainers unless it says so.
+- Environment before 2026-10-28 (Linux container, bash; `pwsh` is not assumed). Start every shell call with:
 
 ```bash
 cd /home/claude/meridianconsole/.claude/worktrees/vertical-slice-vsNN && export DOTNET_ROOT=/home/claude/.dotnet PATH=/home/claude/.dotnet:$HOME/.dotnet/tools:$PATH CI=true DOTNET_NOLOGO=1
@@ -26,6 +27,7 @@ cd /home/claude/meridianconsole/.claude/worktrees/vertical-slice-vsNN && export 
   2. proves which server answered. If the backend rejected it, assert the backend received the call: the recording forwarder in `tests/Dhadgar.AgentSeam.Tests` `GatewayTestFactory` (VS-07R) recorded a request for that cluster and path, or a recording handler or middleware on the backend factory saw it. If the Gateway rejected it, assert the forwarder recorded **no** request for that path;
   3. has a positive twin in the same class that differs only in the variable under test (certificate present, right org, valid payload) and passes, so a 401 or 404 is about that variable and not a missing route or JWT.
 - **Client-certificate test shims stay in the test project that owns them.** A startup filter or middleware that turns a test header (`X-Seam-Client-Cert`, `X-Test-Client-Cert`) into `Connection.ClientCertificate` lives in that test project, is registered only in `ConfigureTestServices`, and is never placed in `src/`, in the shared `tests/Dhadgar.Testing` library (VS-32), or behind `InternalsVisibleTo`. A test that needs one copies or reuses the shim inside its own project.
+- **D-43 overrides the paths in the next rule and in every packet below:** `SeamJwt` is `src/Shared/Dhadgar.Testing/Authentication/SeamJwt.cs`, namespace `Dhadgar.Testing.Authentication`, referenced as `<ProjectReference Include="..\..\src\Shared\Dhadgar.Testing\Dhadgar.Testing.csproj" />` plus `<Using Include="Dhadgar.Testing.Authentication" />` (already in `Dhadgar.Gateway.Tests` and `Dhadgar.AgentSeam.Tests` on `main`). Read `tests/Dhadgar.Testing` as `src/Shared/Dhadgar.Testing` and `Dhadgar.Testing.Auth` as `Dhadgar.Testing.Authentication`.
 - **Test JWTs come from one helper (D-22).** Mint and accept test user tokens only with `SeamJwt` (`CreateUserToken(userId, organizationId)`, `Apply(services)`). VS-32R creates it at `tests/Dhadgar.Testing/Auth/SeamJwt.cs` from #231's copy on `main` (`git show 6895cd1:tests/Dhadgar.Seams.Tests/Infrastructure/SeamJwt.cs`; VS-34 deletes the working copy, the commit keeps it) (namespace `Dhadgar.Testing.Auth`, global `<Using>` in the consuming test projects). Never add another token minter or another `PostConfigure<JwtBearerOptions>` test-key block. Service test factories that use a test authentication scheme (the `NodesWebApplicationFactory` pattern) are not JWT helpers and stay as they are.
 - **Agent-originated data is bounded by C-2 "Limit enforcement" (D-23).** A packet that receives agent data (hub methods, events carrying agent text, agent HTTP bodies) enforces its rows with one test per bound. A packet that sends agent data truncates free text to the same constants.
 
@@ -49,7 +51,9 @@ Everything below is the single source of truth for both sides of each seam. Type
 | `/api/v1/organizations/{organizationId}/servers/{serverId}/console/{**}` | `console-org-route` (VS-07, replaces `console-api-route`), TenantScoped, strip `/api/v1`, `Order: -1` | Console `/organizations/{organizationId}/servers/{serverId}/console/...` | JWT | 200 | 404 |
 | `/hubs/console` | `console-hub-route`, TenantScoped (Gateway reads the JWT from the `access_token` query on `/hubs/console`, VS-04) | Console `/hubs/console` | JWT (also from `access_token` query) | connected | 401 |
 | not routed (Gateway must 404) | none | Nodes `POST /internal/organizations/{organizationId}/nodes/{nodeId}/commands` | JWT `TenantScoped`; Servers forwards the caller's token | **202** `DispatchAgentCommandResponse` | 400 `invalid_command_type`/`invalid_payload` (payload fails the typed `AgentJson` parse or a C-2 limit, or `ServerId` disagrees with the payload), 404 `node_not_found`, 409 `node_offline`, 409 `server_not_on_node` (server command without a Claimed reservation for that server on that node) |
-| not routed | none | Nodes `POST /organizations/{org}/nodes/{node}/reservations`, `POST /reservations/{token}/claim`, `DELETE /reservations/{token}` (existing) | JWT | 201/200/204 | existing |
+| `/api/v1/organizations/{organizationId}/nodes/{nodeId}/reservations/{**}` (Gateway must refuse) | `nodes-reservations-block` (VS-07R, D-45), `DenyAll`, `Order: 1` (before `nodes-org-route`) | none | - | never forwarded | 401/403 from the Gateway |
+| not routed (internal; Servers calls Nodes directly, D-45) | none | Nodes `POST /organizations/{org}/nodes/{node}/reservations`, `GET .../reservations`, `GET .../reservations/capacity` | JWT, `TenantScoped` | 201/200 | existing |
+| not routed (internal) | none | Nodes `GET /reservations/{token}`, `POST /reservations/{token}/claim`, `DELETE /reservations/{token}` | JWT, policy `ReservationCaller` (VS-36): a user principal with `org_id`; the reservation's node must belong to that org | 200/200/204 | 401 no identity, 403 agent identity or no `org_id`, 404 `reservation_not_found` (also for another org's reservation), 400 `reservation_expired`/`reservation_claimed`/`reservation_released`/`reservation_already_released` (existing) |
 
 Error shape everywhere: RFC 7807 from `Dhadgar.ServiceDefaults.Problems.ProblemDetailsHelper`, `{ "type", "title", "status", "detail", "errorCode", "traceId" }`. Clients branch on `errorCode`. Hubs never throw `HubException` for business results: agent → Nodes methods return `AgentHeartbeatAck` or `AgentHubAck` with an `AgentHubErrorCodes` value (D-28); protocol and identity failures abort the connection.
 
@@ -624,6 +628,8 @@ Only #232 still needs its resolution. #230 and #233 were merged on 2026-10-27 wi
 | Size | about 25k tokens |
 | PR | its own PR, `security-review` label, merged by the owner's main session on the owner's yes (D-41) |
 
+**Status:** merged as `05a69d2` (#239, 2026-10-28), packet and security review pass 1 `ship`.
+
 **Goal (D-42).** There is one seam project and one agent transport hook. Delete `tests/Dhadgar.Seams.Tests` and the `IHubConnectionConfigurator` hook that only it used. Keep its one live test's coverage as `GatewayAgentEnrollmentSeamTests` on Sprint 2's `GatewayNodesHarness`. `ControlPlaneHubTransport` stays the only way tests change the agent's hub transport.
 
 **Rules.**
@@ -1094,6 +1100,8 @@ The seams run must show 1 passed and 3 skipped.
 
 ## Wave 2: control-plane side of the agent seam, Servers import
 
+**Status (2026-10-28, reconstructed after the cloud session was lost).** Stage 1 was dispatched from `main` `c5ca3c4`. Merged: VS-34 #239 `05a69d2`, VS-11 #241 `cada473`, VS-32R #243 `a859315`, VS-07R #242 `300bc33`, and the FU-41a hotfixes HF-01 #238 `28c23a3` and HF-02D #240 `101c36d`. `main` is `101c36d`. In flight: VS-08R (pushed `b0e6509`, main merged in locally as `6d0a82f`, coder finishing) and VS-09 (fresh coder; the first run was never pushed). Ready: HF-02 (rebuilt spec below; the first run was never pushed), VS-06R, VS-35, VS-36. Remaining merge order: HF-02, VS-09, VS-08R, VS-36, VS-06R, VS-35. HF-02 touches no .NET service and can merge whenever it is ready. VS-09, VS-08R, VS-36 and VS-06R all edit `src/Dhadgar.Nodes/Program.cs` on different lines; each later one merges `main` in and resolves (D-38). VS-35 adds Gateway tests only (one helper extraction in `Dhadgar.Gateway.Tests`) and can merge in any position. Every branch created from now on starts at `origin/main` `101c36d` or later, once `main`'s CI run on that commit is green.
+
 Re-sliced on 2026-10-27 after Sprint 2 (ruling [worknotes/sprint2-reconcile-ruling.md](worknotes/sprint2-reconcile-ruling.md) § 3). The base is `main` after #234, #229, #232 and VS-34 have merged on top of `5eead35`, which already holds Sprint 2 `6df3338`, #233, #230, #231 and #236 (ruling § 9). Stage 1 is dispatched together once those have merged and FU-41a (the post-merge Gateway auth security pass) is closed: VS-11, VS-32R, VS-07R, VS-09 and VS-08R. Stage 2 is VS-06R, after VS-32R and VS-07R merge. VS-10 is superseded (D-36). Merge order: VS-11, VS-32R, VS-07R, VS-09, VS-08R, VS-06R. Each packet ships as its own PR, and all six need a security review. Between merges, ops merges the new `main` into the next branch (D-38) and that packet's checks run again.
 
 Stage 1 file ownership. Parallel packets stay disjoint; where two share a file, the second to merge resolves it when `main` is merged in:
@@ -1110,7 +1118,7 @@ Stage 1 file ownership. Parallel packets stay disjoint; where two share a file, 
 
 Contract: C-2a and C-2b (rewritten 2026-10-27; #229 carries them after VS-03R), the C-1 rows `agents-ca-route`, `servers-org-route` and `console-org-route`, and C-6. Every wave-2 packet reads C-2 "Limit enforcement" and the dispatch rules on rejection seams, certificate shims, test JWTs, merging main and lock files. Seams go in `tests/Dhadgar.AgentSeam.Tests` (D-33). `tests/Dhadgar.Seams.Tests` is gone after VS-34 (D-42), and `IHubConnectionConfigurator` with it.
 
-The common rule for every wave-2 packet (cited as "the wave-2 seam rule"): test user tokens are minted and accepted only with `SeamJwt` (`tests/Dhadgar.Testing/Auth/SeamJwt.cs`, from VS-32R). Never add another minter or another `PostConfigure<JwtBearerOptions>` block. Client-certificate shims stay inside the test project that owns them. A rejection seam proves which server answered and has a positive twin (dispatch rules).
+The common rule for every wave-2 packet (cited as "the wave-2 seam rule"): test user tokens are minted and accepted only with `SeamJwt` (`src/Shared/Dhadgar.Testing/Authentication/SeamJwt.cs`, from VS-32R; D-43). Never add another minter or another `PostConfigure<JwtBearerOptions>` block. Client-certificate shims stay inside the test project that owns them. A rejection seam proves which server answered and has a positive twin (dispatch rules).
 
 ### VS-11 Import Servers from PR #88
 
@@ -1120,6 +1128,8 @@ The common rule for every wave-2 packet (cited as "the wave-2 seam rule"): test 
 | Commit subject | `feat(servers): import Servers service implementation from PR #88 (0761b97) [VS-11]` |
 | Security review | Yes (service-level auth on a promoted service, DV-13) |
 | Size | about 35k tokens |
+
+**Status:** merged as `cada473` (#241, 2026-10-28). As merged it also qualifies `Dhadgar.Nodes.Models.FilteredPagedResponse<T>` in Nodes (D-47), restores `main`'s advisory pins for `System.Security.Cryptography.Pkcs`/`.Xml`, removes the `REPLACE_ME` RabbitMQ credential default (startup fails closed), and requires authentication on `GET /templates/public`.
 
 Unchanged from the wave-2 plan of 2026-10-26, except the guard checks. Sprint 2 touched only the two Servers lock files among the files this packet imports (`git diff --stat 2c4c19c 6df3338` on the import paths), so the import loop is still right.
 
@@ -1185,6 +1195,8 @@ Identity, Nodes and AgentSeam guard the shared `DhadgarDbContext`, `Pagination` 
 | Depends on | wave 1 merged, VS-34 included (VS-04's `HubTokenTests` is on `main` as `2440ada`). `SeamJwt` is read from commit `6895cd1`, which is in `main`'s history, so no branch has to be kept. |
 | Size | about 25k tokens |
 
+**Status:** merged as `a859315` (#243, 2026-10-28), with D-43: `SeamJwt` went into the existing `src/Shared/Dhadgar.Testing` (namespace `Dhadgar.Testing.Authentication`), not a new `tests/Dhadgar.Testing`. Redaction needed no production change (the instrumentation's default query redaction holds; the red run sets `DOTNET_SYSTEM_NET_HTTP_DISABLEURIREDACTION=true`). It also added `RepoFiles` and `TestingLibraryIsolationTests` (FU-41a N3).
+
 **Goal.** D-22: one test JWT helper. VS-04's private minter (`HubTokenWebApplicationFactory`, a fixed key plus its own `PostConfigure<JwtBearerOptions>`) is replaced by `SeamJwt`, which #231 wrote and which now lives in a shared test-support library. The packet also closes VS-04 review-1's open item: hub requests carry the user JWT in `?access_token=`, and nothing yet proves that the OpenTelemetry instrumentation keeps it out of traces. VS-32 had a user-JWT seam; it moved to VS-06R, which is the packet that gives Nodes real JWT auth.
 
 **Rules.**
@@ -1233,6 +1245,8 @@ dotnet build Dhadgar.sln -c Release
 | Security review | Yes (Gateway authorization policies and a new anonymous route) |
 | Depends on | wave 1 merged, VS-34 included (#233 left 14 routes, on `main` as `32779b5`); FU-41a closed |
 | Size | about 30k tokens |
+
+**Status:** merged as `300bc33` (#242, 2026-10-28). The lost ledger amended this spec with FU-41a N1(e), N2 and N4 before dispatch (reconstructed from the commits): the packet also added `nodes-reservations-block` (D-45), removed the `client_type`/`agent_id` to `X-Client-Type`/`X-Agent-Id` enrichment in `RequestEnrichmentMiddleware` (both headers stay stripped, D-31), added `RouteAuthorizationGuardTests` (every route names a registered policy; `AgentCertificate` only on the forwarding routes; the JWT `Agent` policy is not registered; `/internal/...commands` is not routed), and changed the routing docs to say the Gateway does not check `org_id`, the services do. The text below is the spec as written on 2026-10-27.
 
 **Goal.** Sprint 2 already shipped certificate ingress: the `AgentCertificate` policy, `AgentCertificateForwarding` and `agent-hub-route`. VS-07R does what is left of F-15:
 - The agent CA certificate becomes fetchable without a client certificate. Today `/api/v1/agents/ca-certificate` falls into `agents-route`, which requires `AgentCertificate`, even though Nodes serves it anonymously (`AgentEndpoints.cs` line 57, and `/ca-certificate` is in `MtlsOptions.ExemptPaths`).
@@ -1294,6 +1308,8 @@ dotnet build Dhadgar.sln -c Release
 | Security review | Yes (key material; agent `EnrollmentService` and state store) |
 | Depends on | wave 1 merged (#229 with VS-03R) |
 | Size | about 40k tokens |
+
+**Status (2026-10-28):** Writing, fresh coder in `vertical-slice-vs09` (base `c5ca3c4`). The first run's commits were never pushed and are lost. Two refinements the orchestrator gave that run, kept here because the lost ledger did not record them: test signing keys are written to temporary files (never a fixed path in the repo), and `ErrorCodePattern` must not accept a trailing newline (anchor with `\z`, or match with `RegexOptions` that make `$` mean end of input; add a `"code\n"` rejection row). Before review, ops merges `main` `101c36d` or later into the branch (D-38): `main` now has VS-11's Nodes edits (D-47) and VS-07R's `GatewayNodesHarness` changes; VS-08R also edits `src/Dhadgar.Nodes/Program.cs`, and the second of the two to merge resolves.
 
 Amended 2026-10-27 for Sprint 2. The agent now persists the key in Sprint 2's `agent-state.json` (D-37), the seam is in `Dhadgar.AgentSeam.Tests`, and the construction sites are on `main`.
 
@@ -1396,6 +1412,8 @@ dotnet build Dhadgar.sln -c Release
 | Depends on | wave 1 merged (#229 with VS-03R: `AgentHubAck`, `Telemetry`, `MaxReceiveMessageBytes`) |
 | Size | about 35k tokens |
 
+**Status (2026-10-28):** Writing. Pushed: `1c717d7` (part 1: registry, connect-time check, frame limit, `Telemetry`) and `b0e6509` (part 2: README, `GatewayAgentHubSeamTests`); local `6d0a82f` merges `main` `101c36d` in. The first coder ran out of context; a continuation is finishing. Reported so far: Nodes.Tests 518/518, AgentSeam 9/9, and one extra seam beyond this spec (a decommissioned node whose certificate stays active is still refused, which fails without the connect-time check; the spec's case passes on revocation alone). No review has passed yet; no PR exists.
+
 **Goal.** Sprint 2's hub accepts heartbeats. Wave 3 also needs:
 - Nodes knows which nodes are connected (VS-15 uses `IsConnected`).
 - A connection for an unknown or decommissioned node is refused when it connects, not at its first heartbeat.
@@ -1468,6 +1486,8 @@ dotnet build Dhadgar.sln -c Release
 | Security review | Yes (Nodes authentication and authorization) |
 | Depends on | VS-32R (`SeamJwt`, AgentSeam's reference to `Dhadgar.Testing`) and VS-07R (`ForwardedRequests`) merged; #230 (`AddDhadgarJwtBearer`) |
 | Size | about 40k tokens |
+
+**Status (2026-10-28):** Ready. VS-32R (#243) and VS-07R (#242) are on `main` `101c36d`. Branch from `origin/main`. The lost ledger folded some FU-41a notes into this packet; their text was not recovered. Assumption: everything FU-41a raised about Nodes' own auth is either already in this spec (scheme selector, strict `AgentPolicy`, both rejection directions) or moved to VS-36 (reservation tokens). The reviewer and `security-advisor` check the merged packet against F-35 and VS-35's Gateway cases; anything else they find becomes a follow-up, not scope creep here. Use `SeamJwt` from `Dhadgar.Testing.Authentication` (D-43); AgentSeam.Tests already references it. Note for the selector: `/reservations/{token}` selects `JwtBearer`, which VS-36 relies on.
 
 **Goal.**
 - F-01: Nodes registers user JWT auth itself, instead of relying on a test scheme.
@@ -1591,6 +1611,236 @@ dotnet build Dhadgar.sln -c Release
 - `docs/runbooks/nodes-service-operations.md`: the `Auth:*` keys.
 
 **Done when.** The checks pass, and the report quotes the two red runs.
+
+## Wave 2 hotfixes and FU-41a follow-ups (2026-10-28)
+
+FU-41a, the post-merge security pass on `main`'s Gateway auth block, ran on 2026-10-28. Its report was lost with the cloud session. What survives: N1(e), N2 and N4 went to VS-07R (merged), N3 to VS-32R (merged), N5 to HF-01 (merged). HF-01's own security pass then found the zone-wide cookie and the wildcard DNS (F-32), which became HF-02 and HF-02D after the owner's OD-3 and OD-4. The remaining Gateway separation checks became VS-35, and the reservation tokens became VS-36 (F-35). Each packet below states where its detail had to be assumed.
+
+### HF-01 Drop the parked cart origin (record)
+
+Merged as `28c23a3` (#238). It removes `https://cart.meridianconsole.com` from Gateway `Cors:AllowedOrigins`, BetterAuth trusted origins (compose) and `exchange.js`'s `client_app` mapping; it removes the dead `firewall` entry from `OpenApiAggregationService`, and the matching README lines. The owner said on 2026-10-28 that the ShoppingCart site is parked and the host is not served. Packet review 2 passes, security review 2 passes.
+
+### HF-02D DNS records without wildcards (record)
+
+Merged as `101c36d` (#240). `deploy/scripts/configure-cloudflare-dns.sh` creates explicit proxied records (D-48 b), never a wildcard, and deletes the environment's `*.` CNAME only after every explicit record succeeded. The repository change does not touch Cloudflare; the owner runs it. The coder's checklist was lost with the `vertical-slice-hf02d` worktree; HF-02's "Owner steps" carry a rebuilt one.
+
+### HF-02 Host-only login cookie; BetterAuth fails closed; drop `localhost:4322`
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/hf02-auth-surface` / `vertical-slice-hf02` |
+| Base | `origin/main` `101c36d` or later. The lost spec stacked it on `vs/hf01-parked-origins`; HF-01 merged as `28c23a3` and that branch is deleted, so `main` is the base and the PR targets `main`. |
+| Commit subject | `fix(security): host-only BetterAuth cookie, fail-closed trusted origins, drop localhost:4322 [HF-02]` |
+| Security review | **Yes** (session cookie scope, CORS, a CI workflow) |
+| Decisions | D-48 (a), D-49, D-50 (owner, OD-3) |
+| Size | about 25k tokens |
+
+**Why the cookie needs one host (F-33, traced 2026-10-28).** Every cookie-bearing request goes to the Gateway host that serves `/api/v1/betterauth`: SharedAuth's `signIn` (sets BetterAuth's OAuth state cookie), the provider callback at `BETTER_AUTH_URL/callback/<provider>` (sets the session cookie), `get-session`, `exchange` and `sign-out`, each with `credentials: 'include'` (`src/Dhadgar.SharedAuth/src/client.ts`). Identity's `/exchange` and `/refresh` take tokens in the body. The Panel keeps Identity tokens in `sessionStorage` and sends bearer tokens. Scope calls no auth endpoint. So the cookie needs no `Domain` attribute: a host-only cookie on the Gateway host is enough, and every other subdomain stops receiving it. `SameSite=None; Secure; HttpOnly; Partitioned` stay as they are (D-48 does not change them; `SameSite=None` keeps form-post OAuth callbacks such as Apple's working). This works only while `BETTER_AUTH_URL`'s host equals the Panel's `PUBLIC_GATEWAY_URL` host, which is true in compose (both `dev.meridianconsole.com`).
+
+**Rules.**
+- No new npm dependency and no `package-lock.json` change. Tests use Node's built-in `node:test` and `node:assert/strict` (Node 22, the Dockerfile's base).
+- Never log a cookie, a session token or the secret. Error messages name the variable and the offending origin only.
+- Do not change SharedAuth, the Panel, Identity or the Gateway's C# code. The Gateway change is `appsettings.json` only.
+- Keep each file's line endings. No `Version=` in any `.csproj`.
+
+**Changes.**
+1. New `src/Dhadgar.BetterAuth/src/config.js`, pure functions with no imports and no side effects:
+
+```javascript
+// HF-02 (D-48, D-49): trusted origins and cookie options, kept pure so node:test can load them.
+export function parseTrustedOrigins(raw) {
+  return (raw ?? "").split(",").map((o) => o.trim()).filter(Boolean);
+}
+
+export function isDevelopment(env) {
+  return env.NODE_ENV === "development"; // unset is NOT development: fail closed
+}
+
+// Throws outside development when the list is empty, holds "*", or holds an entry that is not an exact origin.
+export function assertTrustedOrigins(origins, env) {
+  if (isDevelopment(env)) return;
+  if (origins.length === 0) throw new Error("BETTER_AUTH_TRUSTED_ORIGINS must be set outside development (NODE_ENV=development)");
+  for (const o of origins) {
+    if (o === "*") throw new Error("BETTER_AUTH_TRUSTED_ORIGINS cannot contain '*' outside development");
+    let url;
+    try { url = new URL(o); } catch { throw new Error(`BETTER_AUTH_TRUSTED_ORIGINS entry is not a URL: ${o}`); }
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || url.origin !== o) {
+      throw new Error(`BETTER_AUTH_TRUSTED_ORIGINS entry must be an exact origin (scheme://host[:port], no path or trailing slash): ${o}`);
+    }
+  }
+}
+
+export function loadTrustedOrigins(env) {
+  const origins = parseTrustedOrigins(env.BETTER_AUTH_TRUSTED_ORIGINS);
+  assertTrustedOrigins(origins, env);
+  return origins;
+}
+
+export function isCorsOriginAllowed(origin, origins, env) {
+  if (!origin) return true;                               // non-browser callers, unchanged
+  if (origins.includes(origin)) return true;
+  return origins.length === 0 && isDevelopment(env);      // allow-all only in development
+}
+
+// D-48 (a): no crossSubDomainCookies and no Domain attribute, so cookies are host-only.
+export function buildAdvancedOptions() {
+  return {
+    defaultCookieAttributes: { sameSite: "none", secure: true, httpOnly: true, partitioned: true },
+  };
+}
+```
+
+2. `src/Dhadgar.BetterAuth/src/auth.js`: replace the `trustedOrigins` expression with `export const trustedOrigins = loadTrustedOrigins(process.env);` (import from `./config.js`), and replace the whole `advanced: { ... }` block, comments included, with `advanced: buildAdvancedOptions(),`.
+3. `src/Dhadgar.BetterAuth/src/server.js`:
+   - Next to `parseTrustProxy` (before `loadSecrets()`), call `loadTrustedOrigins(process.env);` so a bad value stops startup before secrets or migrations. Extend the comment above it to say so.
+   - In the CORS `origin` callback, replace `if (trustedOrigins.length === 0 || trustedOrigins.includes(origin))` and the `!origin` branch with `if (isCorsOriginAllowed(origin, trustedOrigins, process.env)) return callback(null, true);`.
+4. `src/Dhadgar.BetterAuth/package.json`: add `"test": "node --test"` to `scripts`. New `src/Dhadgar.BetterAuth/test/config.test.js` (below).
+5. `src/Dhadgar.BetterAuth/.env.example`: add `NODE_ENV=development` with a comment that any other value (or none) requires `BETTER_AUTH_TRUSTED_ORIGINS`.
+6. D-50: remove `http://localhost:4322` from `src/Dhadgar.Gateway/appsettings.json` `Cors:AllowedOrigins` and from `deploy/compose/docker-compose.services.yml` `BETTER_AUTH_TRUSTED_ORIGINS` (line 205). Keep `http://localhost:4321`.
+7. CI: in `.github/workflows/_dotnet-build-test.yml`, right after the `npm ci (parallel)` step, add:
+
+```yaml
+      - name: BetterAuth unit tests
+        if: inputs.run-tests
+        working-directory: src/Dhadgar.BetterAuth
+        run: npm test
+```
+
+8. New `tests/Dhadgar.Gateway.Tests/AllowedOriginsGuardTests.cs` (uses `RepoFiles.FindRepoRoot()` from VS-32R and `System.Text.Json`):
+   - `GatewayCorsOrigins_AreExactlyTheServedFrontends`: `Cors:AllowedOrigins` in `src/Dhadgar.Gateway/appsettings.json` equals, as a set, `https://panel.meridianconsole.com`, `https://meridianconsole.com`, `https://dev.meridianconsole.com`, `http://localhost:4321`.
+   - `ComposeTrustedOrigins_AreExactlyTheServedFrontends`: the `BETTER_AUTH_TRUSTED_ORIGINS:` value in `deploy/compose/docker-compose.services.yml`, split on commas, equals `https://dev.meridianconsole.com`, `https://panel.meridianconsole.com`, `http://localhost:4321`.
+   - Each failure message names the extra or missing origin, so a future change has to edit the test on purpose.
+
+**Tests (`test/config.test.js`, `node:test`).**
+- `parseTrustedOrigins`: trims, drops empties, `undefined` gives `[]`.
+- `assertTrustedOrigins`: throws for `[]` with `NODE_ENV` `production` and with `NODE_ENV` unset; throws for `["*"]`, for `["https://panel.meridianconsole.com/"]` (trailing slash) and for `["panel.meridianconsole.com"]`; passes for the compose list; passes for `[]` with `development`.
+- `isCorsOriginAllowed`: `production` with an empty list and origin `https://evil.example` is **false** (reverting the old `length === 0 ||` makes this true); a listed origin is true; no origin is true; `development` with an empty list is true; an unlisted origin with a non-empty list is false in both modes.
+- `buildAdvancedOptions`: has no `crossSubDomainCookies` key and no `domain` anywhere in its JSON; `defaultCookieAttributes` is exactly the four attributes above. Reverted (zone-wide domain) this fails.
+
+Why they fail when reverted: the old `auth.js` sets a zone domain, the old CORS callback allows everything with an empty list, the old startup accepts an empty list, and the guard tests find `localhost:4322`.
+
+**Checks (in order, PowerShell, in the worktree).**
+
+```powershell
+npm ci --prefix src/Dhadgar.BetterAuth --no-audit
+npm test --prefix src/Dhadgar.BetterAuth
+node --check src/Dhadgar.BetterAuth/src/server.js
+node --check src/Dhadgar.BetterAuth/src/auth.js
+dotnet build src/Dhadgar.Gateway/Dhadgar.Gateway.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release
+```
+
+Also run once, and quote in the report: `$env:NODE_ENV='production'; $env:BETTER_AUTH_TRUSTED_ORIGINS=''; node -e "import('./src/Dhadgar.BetterAuth/src/config.js').then(m => m.loadTrustedOrigins(process.env))"` exits non-zero with the "must be set outside development" message.
+
+**Docs owed.**
+- `src/Dhadgar.BetterAuth/README.md`: the env table (`BETTER_AUTH_TRUSTED_ORIGINS` is required outside development, no longer "empty = all"; `NODE_ENV` has no default in code, and anything but `development` fails closed); "Cookie Configuration" (host-only, why, the `BETTER_AUTH_URL` host = Panel `PUBLIC_GATEWAY_URL` host invariant); remove `crossSubDomainCookies` from the examples and the "Cross-subdomain cookie support" bullet; the troubleshooting "Domain mismatch" item.
+- `src/Dhadgar.Gateway/README.md` and `docs/gateway-routing-reference.md`: drop `http://localhost:4322` from the CORS examples.
+- `src/Dhadgar.Panel/README.md` "Port already in use": replace `PORT=4322` with `PORT=4331`, and say that a second local port must also be added to the local BetterAuth and Gateway origin lists, never committed.
+
+**Owner steps (outside the code; the PR body lists them).**
+1. HF-02D, if not done yet (rebuilt checklist, reconstructed 2026-10-28): (a) in Cloudflare, export or screenshot the zone's DNS records, and list the records the script will overwrite (apex, `www`, `api`, `panel`, `dev`, `api.dev`, `staging`, `api.staging`, `staging.panel`); (b) run the `infra` workflow's DNS job (`configure-cloudflare-dns.sh <env> <ipv4>`) for dev, check, then staging, then prod; (c) after each, `nslookup` every name above (each resolves, proxied) and a made-up name such as `nohost-<random>.meridianconsole.com` (must not resolve), then load each served host over HTTPS; (d) rollback: re-create the deleted `*.` CNAME as it was (proxied to the environment apex) and re-run the previous script version.
+2. Before deploying HF-02 anywhere outside development: confirm `BETTER_AUTH_TRUSTED_ORIGINS` is set there (BetterAuth now refuses to start without it), and that `BETTER_AUTH_URL`'s host equals the Panel's `PUBLIC_GATEWAY_URL` host.
+3. After deploying HF-02: browsers still hold the old zone-wide cookies for up to 7 days. Revoke them by deleting BetterAuth's sessions (`DELETE FROM "session";` in the BetterAuth database, `dhadgar_platform` in compose); every user signs in again, and the old cookies map to no session. The signed session cache cookie expires within 5 minutes; rotating `BETTER_AUTH_SECRET` instead also works and invalidates both at once.
+
+**Assumptions (the lost spec could not be recovered).** The first HF-02 run reached `cdd5dac` with both reviews `ship` and was summarised as "the cookie now covers only the exact host that set it, BetterAuth refuses to start without a trusted-origins list outside development, and localhost:4322 is removed". The split into `config.js`, the `node:test` file, the CI step and the Gateway guard tests are this rebuild's choices. Whether the first run also changed SameSite or the cookie prefix is unknown; this spec keeps both. A `__Host-` cookie prefix is a possible follow-up, not part of D-48.
+
+**Done when.** The checks pass, the fail-closed run is quoted, and the PR body carries the owner steps.
+
+### VS-35 Gateway auth-separation tests
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/35-gateway-auth-separation` / `vertical-slice-vs35` |
+| Base | `origin/main` `101c36d` or later |
+| Commit subject | `test(gateway): user JWTs and agent certificates cannot cross routes; no secrets in logs [VS-35]` |
+| Security review | Yes (Gateway authorization; it pins security behaviour) |
+| Depends on | VS-32R (`SeamJwt`, `RepoFiles`) and VS-07R (route set, `RouteAuthorizationGuardTests`), both merged |
+| Size | about 25k tokens |
+
+**Goal (FU-41a, reconstructed 2026-10-28).** FU-41a reviewed the Gateway file where agent certificates and user logins now meet, and asked for tests proving that neither credential opens the other's routes, that tokens and certificates do not reach logs, and that the dead `Agent` policy cannot come back (VS-07R pins the last one). VS-35 adds those runtime tests. It changes no production code. If a test shows the Gateway does the wrong thing, the packet stops with `blocked` reason `spec`, quoting the response, and the orchestrator opens a fix packet. Assumption: the exact FU-41a note list was lost; the cases below are the separation properties the transcript names, checked against `main`'s routes.
+
+**Rules.**
+- Tests only, in `tests/Dhadgar.Gateway.Tests`. Never log or print a token or a certificate; assert with `Assert.DoesNotContain`.
+- Tokens from `SeamJwt` only (D-22, D-43). Certificates from the existing helper in `AgentCertificateForwardingTests` (`CreateCertificate(AgentCertificateProfile.CaCommonName)`).
+- Every rejection asserts the Gateway's status **and** that the capture handler saw no request; every rejection has a positive twin that differs only in the credential.
+- Nullable is enabled and warnings are errors.
+
+**Changes.**
+1. Move `AgentCertificateForwardingTests`' private helpers (`CreateApp`, `SendAsync`, `CaptureHandler` with its `Requests` record, `CreateCertificate`) unchanged into a new `internal static class GatewayCaptureHost` in `tests/Dhadgar.Gateway.Tests/GatewayCaptureHost.cs`, and make `AgentCertificateForwardingTests` call it. Add an optional `Action<IServiceCollection>? configureServices` parameter to `CreateApp` (invoked in its `ConfigureTestServices`) and an optional bearer token parameter to `SendAsync`. Existing tests stay green and unchanged in behaviour.
+2. New `tests/Dhadgar.Gateway.Tests/GatewayAuthSeparationTests.cs`, same collection as `AgentCertificateForwardingTests`, with `SeamJwt.Apply` passed to `CreateApp` and a `CapturingLoggerProvider` (from `HubTokenTests`) registered:
+   - `UserJwt_OnAgentRoute_IsRejected` (`POST /api/v1/agents/{guid}/heartbeat`, bearer only): 401 or 403 (assert the value the run shows), nothing captured. Twin: the same request with the agent certificate is captured.
+   - `UserJwt_OnAgentHub_IsRejected` (`POST /hubs/agent/negotiate`, bearer only): same shape, twin with the certificate.
+   - `AgentCertificate_OnUserRoute_IsRejected` (`GET /api/v1/organizations/{O}/nodes`, certificate only): 401 or 403 (assert the value the run shows), nothing captured. Twin: bearer for `O` is captured.
+   - `BothCredentials_OnUserRoute_ForwardNoClientCertHeader`: bearer plus certificate on the org nodes route is captured, and the captured request has no `AgentCertificateProfile.ForwardedCertificateHeader`.
+   - `QueryToken_OnlyCountsOnConsoleHub`: `GET /api/v1/organizations/{O}/nodes?access_token=<token>` with no header is 401 and not captured; the twin `GET /hubs/console/negotiate?negotiateVersion=1&access_token=<token>` is not 401 (VS-04 behaviour).
+   - `QueryToken_DoesNotOpenAgentRoutes`: `POST /hubs/agent/negotiate?access_token=<token>` without a certificate is rejected and not captured.
+   - `NoSecretsInGatewayLogs`: after the cases above run in one app, no captured log line contains the token string, the certificate's base64 DER, or its PEM body.
+3. `docs/gateway-authentication.md`: one short "Credential separation" paragraph listing what the tests pin.
+
+**Why they fail when reverted** (proved by mutation, quoted in the report): temporarily set `agents-route`'s policy to `TenantScoped` in a local copy of `appsettings.json` and show `UserJwt_OnAgentRoute_IsRejected` fails; temporarily register the JWT handler's query-token hook for all paths (or point `console-hub-route`'s match at `/api/v1/organizations/{**}`) and show `QueryToken_OnlyCountsOnConsoleHub` fails. Revert both before committing.
+
+**Checks (in order).**
+
+```powershell
+dotnet build tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test tests/Dhadgar.Gateway.Tests/Dhadgar.Gateway.Tests.csproj -c Release
+```
+
+**Docs owed.** Change 3.
+
+**Done when.** The checks pass and the two mutation runs are quoted.
+
+### VS-36 Lock down Nodes reservation-token endpoints
+
+| Field | Value |
+| --- | --- |
+| Branch / worktree | `vs/36-reservation-tokens` / `vertical-slice-vs36` |
+| Base | `origin/main` `101c36d` or later |
+| Commit subject | `fix(nodes): reservation token endpoints accept only users of the owning organization [VS-36]` |
+| Security review | Yes (Nodes authorization) |
+| Depends on | none to start. VS-06R and VS-09/VS-08R also edit `src/Dhadgar.Nodes/Program.cs`; whichever merges later merges `main` in and resolves (D-38). |
+| Size | about 25k tokens |
+
+**Goal (F-35).** `GET /reservations/{token}`, `POST /reservations/{token}/claim` and `DELETE /reservations/{token}` stop trusting "any authenticated principal". Only a **user** principal with an `org_id` claim may call them, and only for a reservation whose node belongs to that organization. Another org's reservation looks exactly like a missing one (404 `reservation_not_found`), so the token endpoints are no longer an existence oracle. Paths stay the same, because VS-22's Servers client calls them (C-1, C-4).
+
+**Assumptions (FU-41a's note text was lost).** (1) The caller is Servers forwarding the user's JWT (D-07, D-45); there is no service identity in the MVP. (2) Agents never call these endpoints; agent principals (mTLS, `node_id`, no `org_id`) get 403. (3) Until VS-06R merges, Nodes has no JWT scheme outside tests (F-01), so this packet's tests run under `NodesWebApplicationFactory`'s test scheme; VS-06R's selector sends `/reservations` to `JwtBearer`.
+
+**Rules.**
+- `ServiceResult`/`Result` for every failure; no new exception types. ProblemDetails through the existing `ProblemDetailsHelper`.
+- Never log the reservation token at Information or above in new code; log the node id and organization id.
+- Do not change the org-scoped reservation endpoints, the service's existing method signatures (their unit tests stay as they are) or any path.
+- Nullable is enabled and warnings are errors.
+
+**Changes.**
+1. `src/Dhadgar.Nodes/Services/ICapacityReservationService.cs` and `CapacityReservationService.cs`: add `Task<Guid?> GetOwningOrganizationIdAsync(Guid reservationToken, CancellationToken ct = default)`, one `AsNoTracking` query: `CapacityReservations.Where(r => r.ReservationToken == reservationToken).Select(r => (Guid?)r.Node.OrganizationId).FirstOrDefaultAsync(ct)` (check `Node`'s property name).
+2. New `src/Dhadgar.Nodes/Auth/ReservationCallerPolicy.cs`: `public const string Name = "ReservationCaller";` and a static `Configure(AuthorizationPolicyBuilder p)` that requires an authenticated user, `RequireClaim("org_id")`, and a requirement whose handler fails any principal carrying a `node_id` claim. Register it in `src/Dhadgar.Nodes/Program.cs` next to `TenantScoped` (`.AddPolicy(ReservationCallerPolicy.Name, ReservationCallerPolicy.Configure)`), and register the handler as a singleton `IAuthorizationHandler`.
+3. `src/Dhadgar.Nodes/Endpoints/ReservationEndpoints.cs`:
+   - `tokenGroup.RequireAuthorization()` becomes `.RequireAuthorization(ReservationCallerPolicy.Name)`.
+   - Each token handler takes `ClaimsPrincipal user`, parses `org_id` (unparseable → 403 via `ProblemDetailsHelper`), calls `GetOwningOrganizationIdAsync`, and returns `ProblemDetailsHelper.NotFound("reservation_not_found")` when it is null **or** differs from the caller's org. Only then does it call the existing `GetByTokenAsync`/`ClaimAsync`/`ReleaseAsync`. Put the shared check in one private static helper.
+4. Contract: C-1 already has the row (`ReservationCaller`, VS-36). `src/Dhadgar.Nodes/README.md` reservations section: the policy and the 404 rule.
+
+**Tests.**
+- New `tests/Dhadgar.Nodes.Tests/Integration/ReservationOwnershipTests.cs`, using the factory and helpers of `ReservationApiIntegrationTests` (read how it sets the test identity and org claim):
+  - Org A creates a reservation on its node. A caller with `org_id` B: `GET`, `claim` and `DELETE` on that token each return 404 `reservation_not_found`, and the reservation is still `Pending` afterwards (read it back through the service). Twin: org A gets 200/200/204.
+  - A caller with no `org_id` claim gets 403 on `claim`. A caller with `org_id` A **and** a `node_id` claim (an agent-shaped principal) gets 403 on `claim`.
+  - An unknown token returns 404 for org A, the same body shape as the cross-org case.
+- `tests/Dhadgar.Nodes.Tests/CapacityReservationServiceTests.cs`: `GetOwningOrganizationIdAsync` returns the node's org for a known token and null for an unknown one.
+- Existing `ReservationApiIntegrationTests` token cases keep passing; if their test identity has no `org_id` matching the node's org, give it one (do not loosen the policy).
+
+Why they fail when reverted: with `RequireAuthorization()` and no ownership check, org B claims org A's reservation (200) and the agent-shaped principal is accepted.
+
+**Checks (in order).**
+
+```powershell
+dotnet build src/Dhadgar.Nodes/Dhadgar.Nodes.csproj -c Release -p:TreatWarningsAsErrors=true
+dotnet test tests/Dhadgar.Nodes.Tests/Dhadgar.Nodes.Tests.csproj -c Release
+dotnet test tests/Dhadgar.AgentSeam.Tests/Dhadgar.AgentSeam.Tests.csproj -c Release
+dotnet build Dhadgar.sln -c Release
+```
+
+**Docs owed.** Change 4.
+
+**Done when.** The checks pass and the report quotes one cross-org claim returning 200 before change 3.
 
 ### VS-10 Certificate renewal on the agent-held-key path (superseded)
 

@@ -264,6 +264,17 @@ public sealed class CapacityReservationService : ICapacityReservationService
         return ServiceResult.Ok(MapToResponse(reservation));
     }
 
+    public async Task<Guid?> GetOwningOrganizationIdAsync(
+        Guid reservationToken,
+        CancellationToken ct = default)
+    {
+        return await _dbContext.CapacityReservations
+            .AsNoTracking()
+            .Where(r => r.ReservationToken == reservationToken)
+            .Select(r => (Guid?)r.Node.OrganizationId)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task<ServiceResult<AvailableCapacityResponse>> GetAvailableCapacityAsync(
         Guid nodeId,
         CancellationToken ct = default)
