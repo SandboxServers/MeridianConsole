@@ -336,6 +336,12 @@ public sealed class ModelHunter
                         mismatch = Compare(expected, status);
                         break;
                     case HuntOpKind.PgDown:
+                        if (model.PgDown)
+                        {
+                            // D-ML122: the cut is already active; a second fault_proxy_disable clashes in FaultBook (F109).
+                            break;
+                        }
+
                         ranPgDown = true;
                         Result<JsonElement> cut = await CallAsync("fault_proxy_disable", new JsonObject { ["proxy"] = Proxy }, ct).ConfigureAwait(false);
                         if (cut.IsFailure)

@@ -25,7 +25,9 @@ public enum HuntOpKind
     /// <summary>Enrolls again with a new key (<c>nodes_enroll_probe</c> without <c>key_ref</c>).</summary>
     EnrollAgain,
 
-    /// <summary>Cuts nodes-postgres (<c>fault_proxy_disable</c>).</summary>
+    /// <summary>
+    /// Cuts nodes-postgres (<c>fault_proxy_disable</c>). A PgDown while PgDown sends nothing (D-ML122).
+    /// </summary>
     PgDown,
 
     /// <summary>Heals the cut (<c>fault_heal</c>).</summary>
