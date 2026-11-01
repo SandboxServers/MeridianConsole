@@ -1167,8 +1167,10 @@ npm install
 Change the port via environment variable or Astro config:
 
 ```bash
-PORT=4322 npm run dev
+PORT=4331 npm run dev
 ```
+
+A second local port must also be added to the local BetterAuth `BETTER_AUTH_TRUSTED_ORIGINS` and to the Gateway `Cors:AllowedOrigins` list. Never commit that change.
 
 ### Debugging
 

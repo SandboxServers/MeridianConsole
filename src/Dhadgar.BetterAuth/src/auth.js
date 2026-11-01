@@ -1,11 +1,9 @@
 import { betterAuth } from "better-auth";
 import { genericOAuth } from "better-auth/plugins";
 import { Pool } from "pg";
+import { loadTrustedOrigins, buildAdvancedOptions } from "./config.js";
 
-export const trustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+export const trustedOrigins = loadTrustedOrigins(process.env);
 
 const baseUrl =
   process.env.BETTER_AUTH_URL ?? "http://localhost:5130/api/v1/betterauth";
@@ -242,19 +240,7 @@ export const authConfig = {
       ]
     }
   },
-  advanced: {
-    // Cross-origin cookies require SameSite=None and Secure
-    crossSubDomainCookies: {
-      enabled: true,
-      domain: "meridianconsole.com" // Share cookies across subdomains (no leading dot)
-    },
-    defaultCookieAttributes: {
-      sameSite: "none",
-      secure: true,
-      httpOnly: true,
-      partitioned: true // Required for third-party cookie support in modern browsers
-    }
-  }
+  advanced: buildAdvancedOptions()
 };
 
 export const auth = betterAuth(authConfig);

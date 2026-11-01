@@ -192,7 +192,6 @@ export const authConfig = {
     }
   },
   advanced: {
-    crossSubDomainCookies: { enabled: true, domain: "meridianconsole.com" },
     defaultCookieAttributes: {
       sameSite: "none", secure: true, httpOnly: true, partitioned: true
     }
@@ -347,10 +346,6 @@ session: {
 
 ```javascript
 advanced: {
-  crossSubDomainCookies: {
-    enabled: true,
-    domain: "meridianconsole.com"  // Share across subdomains
-  },
   defaultCookieAttributes: {
     sameSite: "none",    // Required for cross-origin
     secure: true,        // HTTPS only
@@ -364,8 +359,8 @@ advanced: {
 
 | Cookie | Purpose |
 |--------|---------|
-| `better-auth.session_token` | Session identifier |
-| `better-auth.state` | OAuth state for CSRF protection |
+| `__Secure-meridian.session_token` | Session identifier |
+| `__Secure-meridian.state` | OAuth state for CSRF protection |
 
 ---
 
@@ -679,11 +674,11 @@ open "http://localhost:5000/api/v1/betterauth/sign-in/social?provider=discord&ca
 
 # 3. After OAuth callback, check session
 curl -v http://localhost:5000/api/v1/betterauth/session \
-  --cookie "better-auth.session_token=..."
+  --cookie "__Secure-meridian.session_token=..."
 
 # 4. Get exchange token
 curl -X POST http://localhost:5000/api/v1/betterauth/exchange \
-  --cookie "better-auth.session_token=..." \
+  --cookie "__Secure-meridian.session_token=..." \
   -H "Content-Type: application/json" \
   -d '{}'
 
@@ -727,4 +722,4 @@ npm test
 - Secrets service integration for credential management
 - Microsoft federated credentials support
 - Account linking across providers
-- Cross-subdomain cookie support
+- Host-only session cookies (no cross-subdomain sharing)
