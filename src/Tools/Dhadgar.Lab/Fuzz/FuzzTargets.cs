@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Dhadgar.Contracts.Nodes;
+using Dhadgar.Lab.Http;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Fuzz;
@@ -21,8 +22,6 @@ public sealed record FuzzTarget(string Name, string Via, string Method, string P
 /// </summary>
 public static class FuzzTargets
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     /// <summary>The <c>enroll</c> target: <c>POST /api/v1/agents/enroll</c>, <c>EnrollNodeRequest</c>, through the Gateway.</summary>
     public static readonly FuzzTarget Enroll = new(
         "enroll", "gateway", "POST", "/api/v1/agents/enroll", nameof(EnrollNodeRequest), "none", "nodes");
@@ -70,6 +69,6 @@ public static class FuzzTargets
             PublicKey: "ZnV6ei1wdWJsaWMta2V5",
             AgentVersion: "0.0.0-fuzz");
 
-        return JsonSerializer.SerializeToUtf8Bytes(body, JsonOptions);
+        return JsonSerializer.SerializeToUtf8Bytes(body, LabWireJson.Options);
     }
 }

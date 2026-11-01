@@ -101,9 +101,6 @@ public sealed class NodesEnrollProbeTool : LabTool<NodesEnrollProbeArgs>
     private const string GatewayPath = "/api/v1/agents/enroll";
     private const string NodesPath = "/agents/enroll";
 
-    // The product's enrollment response and request use the ASP.NET default (camelCase) JSON names.
-    private static readonly JsonSerializerOptions WireOptions = new(JsonSerializerDefaults.Web);
-
     private readonly LabHttp _http;
     private readonly SecretVault _vault;
 
@@ -151,7 +148,7 @@ public sealed class NodesEnrollProbeTool : LabTool<NodesEnrollProbeArgs>
             return Result<object>.Failure(request.Error);
         }
 
-        JsonElement body = JsonSerializer.SerializeToElement(request.Value, WireOptions);
+        JsonElement body = JsonSerializer.SerializeToElement(request.Value, LabWireJson.Options);
         Result<HttpProbeResult> sent = await _http
             .SendAsync(args.Via, "POST", path, null, body, ct)
             .ConfigureAwait(false);

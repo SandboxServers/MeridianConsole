@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Contracts.Nodes;
+using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools;
@@ -263,7 +264,7 @@ public sealed class HistoryClient : IDisposable
                 _platform,
                 new HardwareInventoryRequest(hostname, null, LabCpuCores, LabMemoryBytes, LabDiskBytes, null),
                 spki);
-            return Result<byte[]>.Success(JsonSerializer.SerializeToUtf8Bytes(request, LabJson.Options));
+            return Result<byte[]>.Success(JsonSerializer.SerializeToUtf8Bytes(request, LabWireJson.Options));
         }
         finally
         {
