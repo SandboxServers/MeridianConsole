@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Random;
 
 namespace Dhadgar.Lab.Fuzz;
@@ -38,15 +39,19 @@ public static class Mutators
         "empty-body",
     ];
 
+    /// <summary>The label of the boundary that fills the whole request limit (F107).</summary>
+    public const string OversizeLabel = "1MiB-minus-envelope";
+
     /// <summary>
     /// The boundary strings (label, value). The 64 KiB and 1 MiB cases are required on <c>enroll</c> (L28 amendment, D-ML76).
-    /// The 1 MiB value is sized so the whole JSON body stays under <c>LabHttp.MaxRequestBytes</c> (1 MiB).
+    /// The <see cref="OversizeLabel"/> value is a placeholder: <see cref="OversizeValue"/> sizes it per body, because the
+    /// envelope depends on which property is replaced (312 to 329 bytes on enroll, not 256).
     /// </summary>
     public static readonly IReadOnlyList<(string Label, string Value)> BoundaryStrings =
     [
         ("empty", string.Empty),
         ("64KiB", new string('a', 64 * 1024)),
-        ("1MiB-minus-envelope", new string('b', 1024 * 1024 - 256)),
+        (OversizeLabel, string.Empty),
         ("NUL", "\u0000"),
         ("control", "\u0001\u0002\u001F\u007F"),
         ("RTL", "‮evil‬"),
@@ -103,7 +108,7 @@ public static class Mutators
                 break;
             case "boundary":
                 (string label, string value) = BoundaryStrings[rng.Next(0, BoundaryStrings.Count)];
-                root[name] = value;
+                root[name] = label == OversizeLabel ? OversizeValue(root, name) : value;
                 mutation = "boundary:" + label;
                 break;
             case "numeric-extreme":
@@ -115,6 +120,18 @@ public static class Mutators
         }
 
         return new FuzzCase(index, mutation, Encoding.UTF8.GetBytes(root.ToJsonString()), JsonContentType);
+    }
+
+    /// <summary>
+    /// Sizes the <see cref="OversizeLabel"/> value for property <paramref name="name"/> of <paramref name="root"/>: the body
+    /// with that property empty is the envelope, and the value fills the rest, so the whole body is exactly
+    /// <see cref="LabHttp.MaxRequestBytes"/>. The value is ASCII, so its bytes equal its characters.
+    /// </summary>
+    private static string OversizeValue(JsonObject root, string name)
+    {
+        root[name] = string.Empty;
+        int envelope = Encoding.UTF8.GetByteCount(root.ToJsonString());
+        return new string('b', LabHttp.MaxRequestBytes - envelope);
     }
 
     private static JsonNode? SwapType(int which) => which switch
