@@ -3,7 +3,9 @@ using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Tools;
+using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
+using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Results;
@@ -120,6 +122,28 @@ public static class FlakeCheckJob
             sourceGrades,
             reruns);
         return Result<FlakeCheckPlan>.Success(plan);
+    }
+
+    /// <summary>
+    /// Closes the plan's rows over the spec's <c>depends_on</c> (F115), so each rerun's <c>uat_run</c> receives a filter that
+    /// passes the check <c>uat_run</c> applies. <see cref="FlakeCheckPlan.Keys"/> stays the selected rows, so only those rows
+    /// are judged for flakes. Refused when the closed filter still fails <see cref="RowFilterCheck.Check"/>.
+    /// </summary>
+    /// <param name="plan">The plan from <see cref="PlanAsync"/>.</param>
+    /// <param name="spec">The spec the plan names, loaded by the caller.</param>
+    public static Result<FlakeCheckPlan> WithSpec(FlakeCheckPlan plan, UatSpec spec)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(spec);
+
+        IReadOnlyList<string> closed = RowFilterCheck.Close(spec, plan.Rows);
+        Result check = RowFilterCheck.Check(spec, closed);
+        if (check.IsFailure)
+        {
+            return Result<FlakeCheckPlan>.Failure(check.Error);
+        }
+
+        return Result<FlakeCheckPlan>.Success(plan with { Rows = closed });
     }
 
     /// <summary>

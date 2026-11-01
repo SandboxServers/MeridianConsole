@@ -11,6 +11,43 @@ namespace Dhadgar.Lab.Uat;
 internal static class RowFilterCheck
 {
     /// <summary>
+    /// Closes a filter over <c>depends_on</c> (F115): returns the filter plus its transitive dependencies, in spec file
+    /// order. Ids the spec does not have pass through after the known rows, so <see cref="Check"/> still reports them as
+    /// <c>[Lab.NotFound]</c>.
+    /// </summary>
+    /// <param name="spec">The loaded spec.</param>
+    /// <param name="filter">The row ids the caller selected.</param>
+    internal static IReadOnlyList<string> Close(UatSpec spec, IReadOnlyCollection<string> filter)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var kept = new HashSet<string>(filter, StringComparer.Ordinal);
+        bool added = true;
+        while (added)
+        {
+            added = false;
+            foreach (UatRow row in spec.Rows)
+            {
+                if (!kept.Contains(row.Id))
+                {
+                    continue;
+                }
+
+                foreach (string dependency in row.DependsOn)
+                {
+                    added |= kept.Add(dependency);
+                }
+            }
+        }
+
+        var known = new HashSet<string>(spec.Rows.Select(row => row.Id), StringComparer.Ordinal);
+        var closed = spec.Rows.Where(row => kept.Contains(row.Id)).Select(row => row.Id).ToList();
+        closed.AddRange(kept.Where(id => !known.Contains(id)).Order(StringComparer.Ordinal));
+        return closed;
+    }
+
+    /// <summary>
     /// Checks a filter against a spec. Returns the first offender in file order, or success.
     /// </summary>
     /// <param name="spec">The loaded spec.</param>
