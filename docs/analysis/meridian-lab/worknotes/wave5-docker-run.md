@@ -148,3 +148,78 @@ Part B: skipped (A not all pass). Remaining: fix/decide on M1 state literal, Rec
 
 ### Teardown (continuation 6)
 No daemon started by me; no leases held. Removed label-only the leftover meridian-lab-postgres container (run 1) and the network where present; at the end no `meridian-lab=1` containers and no meridian-lab network remain. No prune, dev stack untouched. Nothing committed.
+
+## Continuation 7 (boundary runner, D-ML109, campaign tip f5f8cdc5)
+
+Setup: Docker 29.1.3 up; no `meridian-lab=1` containers; port 8789 free; `Lab__RepoRoot` unset. `dotnet build tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release -p:TreatWarningsAsErrors=true`: Build succeeded, 0 errors, exit 0 (53 IL2026 warnings in Dhadgar.Agent.Windows, outside the lab). Docker tests run one at a time with `--no-build`, logs in scratchpad as `w5r7-A<n>-*.log`, index `w5r7-partA-index.txt`.
+
+### Part A (Docker, one at a time)
+
+| # | Test or filter | Result | Time | Note |
+| --- | --- | --- | --- | --- |
+| A1 | HunterDockerTests | Passed 1, Failed 0 | 2m 06s | |
+| A2 | TwinLatencyDockerTests (L53) | Passed 1, Failed 0 | 2m 24s | was red at fa57cd19; green now |
+| A3 | MutationDockerTests (M1) | Passed 0, Failed 1 | 1m 22s | `M1 verdict: ... "verdict":"survived" ... "signatures":[] ... "reason":"no signature matched the expected pattern","check_errors":0` (test line 101). Same as D-ML115 case. |
+| A4 | SelfCheckRecoveryTests | Passed 1, Failed 0 | 48s | was red at fa57cd19 (I5 orphan) |
+| A5 | SelfCheckE2ETests (LM1) | Passed 1, Failed 0 | 40s | |
+| A6 | LabSelfTestE2ETests (S-L6) | Passed 1, Failed 0 | 1m 04s | |
+| A7 | Seam=S-L12 (TenantTwinSeamTests) | Passed 0, Failed 1 (expected red) | 6s | `twin_run failed: {"error":{"code":"Lab.NotFound","message":"no such spec"}}` (same as before) |
+| A8 | BlastRadiusDockerTests | Passed 1, Failed 0 | 3s | wave 4 set |
+| A9 | FaultSmokeE2ETests | Passed 1, Failed 0 | 1m 08s | wave 4 set |
+| A10 | ToxiproxyTimeoutToxicDockerTests | Passed 1, Failed 0 | 42s | wave 4 set |
+| A11 | Seam=S-L7 (ToxiproxySeamTests) | Passed 1, Failed 0 | 50s | wave 4 set |
+| A12 | Seam=S-L11 (EnrollHistorySeamTests) | Passed 1, Failed 0 | 51s | was red at Continuation 1 (LeaseRequired); green now |
+
+Part A totals: 12 tests, 10 passed, 2 failed (A3 M1 `survived`, a must-pass item; A7 S-L12, expected red). Gate MD for M1 is not met.
+
+The M1 test deletes its DataRoot in `finally`, so the read-only facts for D-ML115 (barrier arrivals, completions, client outcomes, build served, nodes rows) are gathered in Part B from a daemon whose home is kept, using `mutation_run` M1 again.
+
+### Part B setup (continuation 7, fresh daemon)
+- Part A not rerun (per brief). Removed the empty labelled network `meridian-lab-net` (label meridian-lab=1, no containers) label-only; no labelled containers existed.
+- Build: `dotnet build src\Tools\Dhadgar.Lab\Dhadgar.Lab.csproj -c Release -p:TreatWarningsAsErrors=true`: 0 Warning(s), 0 Error(s).
+- Daemon: fresh home `scratchpad\w5r7-home-B`; token from `meridian-lab.dll token new` saved to scratchpad `w5r7-B-token.txt` (never printed); `Lab__RepoRoot` set on the daemon process only (lab_build needs it; not on the Part A test host). Daemon pid 29500 (see `w5r7-B-daemon.pid`), port 8789.
+- Lease `8c6cda8e...` (ttl 3600). lab_build build_id `f5f8cdc5-dirty-20261101171643`; stack_up wipe up (postgres, rabbitmq, redis, toxiproxy running, restarts 0); svc_start nodes up; svc_start gateway up.
+- Next: release lease, hunt_model_run enrollment seed 4242 budget 300, then replay if a repro exists.
+
+Gate 1, hunt `hunt_model_run` model enrollment, seed 4242, budget_s 300 (lease released first, OwnLease): job 4824185799f6, state `failed`, result `[Lab.Unavailable]`, after 300 s (started 17:17:44, ended 17:22:44). No repro, so no replay (not run). Audit (`home-B\audit`): the job's `svc_restart` (nodes, job:hunt, 17:17:47) outcome `Lab.Timeout` after 95402 ms; every other hunt step returned ok (stack_reset_data, fault_reset, fault_proxy_disable, db_query x2, invariants_check). No retry (the brief says record raw failures). Cause not classified (the classes R1-R4 are for D-ML115 only).
+
+Gate 2, `mutation_run` M1-token-no-concurrency, M4-no-concurrency-catch, M5-token-logged (no lease held, OwnLease): job 7c5e7eabfd3f, state succeeded (60 s), overall `complete`, restore ok (build f5f8cdc5-dirty-20261101171643).
+- M1-token-no-concurrency: verdict `stale`, detector_run_ids [], signatures [], reason "change.patch does not apply at HEAD; refresh it as tools/lab/mutants/README.md says", check_errors 0. No detector run, so the D-ML115 facts (barrier, completions, client outcomes, nodes rows) do not exist for M1 in this run. Different from Part A's `survived`.
+- M4-no-concurrency-catch: verdict `survived`, 5 detector run ids (3b61aaa3..., 99197e02..., 975bf86c..., c5b09959..., 29af6b28...), signatures [], reason "no signature matched the expected pattern", check_errors 0. D-ML115 facts for M4 are gathered next (read-only).
+- M5-token-logged: verdict `detected_other`, detector run efd92c, signature `inv:I1|nodes|unhandled`, check_errors 0 (not in D-ML115 scope; recorded).
+
+### D-ML115 read-only facts (continuation 7, read-only, nothing changed)
+
+Source: `events_read` on run 3b61aaa3-4614-4d7b-aad6-67492a588ffc (M4, first detector run; saved as scratchpad `w5r7-B-08-m4-events.json`), its `history.json`, `check.json` and `run.json`, the job's `job.json`, the audit file and the nodes and gateway logs.
+
+- Scenario `enroll-race`, clients 4, verdict `linearizable`, grade PASS, `check.json` violations []. The checker passed this run.
+- Barrier: 4 `proxy_request_arrived` (one per client), all at 17:23:58.2421 to 17:23:58.2424, spread about 0.2 ms. Not an R1 shape.
+- Upstream: 4 `proxy_upstream_completed`, all at 17:23:58.5992 to 17:23:58.5993 (about 357 ms after arrival, spread under 1 ms). Gateway log: four `POST /api/v1/agents/enroll responded 400 in 324-325 ms`.
+- Client outcomes: all four `enroll` complete `fail`, `status: 400`. No 201 at all.
+- Nodes svc_start: audit `svc_start` (job:mutation) 17:23:52.09 to 17:23:56.01 `ok`. The image in use is `meridian-lab/nodes:mutant-M4-no-concurrency-catch-f5f8cdc5` (created 17:23:48 UTC). Nodes logs show migrations applied and "Now listening" at 17:23:55.58. The build id the svc_start returned is not stored in the job record, so the served build id is not verified; the job reports only the restore build id `f5f8cdc5-dirty-20261101171643`.
+- Nodes rows: `final_state` `token` 5b60848e... `used_at` null, `used_by_node_id` null, `revoked` false; `nodes` [] (zero nodes created).
+- Classification: none of R1-R4 fits. R1 needs fewer than 4 arrivals or spread over 1 s (not met). R2 needs one 201 and serial upstream (not met: zero 201, completions concurrent). R3 needs a build mismatch or a nodes start failure on the mutant (not evidenced: nodes started on the mutant image and listened; served build id not recorded). R4 needs more than one node or more than one 201 (not met: zero of each). Per D-ML116 this raises the contingent owner question. The record shows the four enrolls were rejected by Nodes with 400 before any token use, so the race was never reached in this run. The cause of the 400 is not diagnosed here.
+- The other M4 detector runs (99197e02, 975bf86c, c5b09959, 29af6b28) are recorded by id only; not read.
+
+### D-ML115 M1 (stale in this run, survived in Part A)
+
+- Verdict `stale` at build `f5f8cdc5-dirty-20261101171643` (commit f5f8cdc5, `dirty: true`, build.json). The reason is the job's own check: "change.patch does not apply at HEAD". No detector run, so no D-ML115 facts exist for M1 in this run.
+- Read-only comparison: `mutant.toml` `base` = eda18720... (the same base as M4 and M5). The file `src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs` has blob 9ea723b4 at base, at HEAD and in the worktree (`git hash-object --no-filters`), and the patch pre-image is 9ea723b4. `git apply --check` of `change.patch` at HEAD in this worktree returns exit 0. The worktree has uncommitted changes (10 entries in `git status`: the worknote and `packages.lock.json` files), but none touch that file.
+- So the patch content matches HEAD. Why the lab's check failed at 17:23 is not established by read-only checks: the dirty build snapshot (`builds/f5f8cdc5-dirty-20261101171643`) holds only the gateway, nodes and probe projects, not the token file. Part A's M1 applied and ran (`survived`) at 11:04 CST. The difference is inside the lab's check, not in the patch text. Not fixed, not retried.
+
+### Remaining gates (fallback session, same daemon pid 29500, still alive; six labelled containers up)
+
+Gate 3, `twin_run enroll-latency-invariance` (no lease held): overall `fail`, `held` null, twin row `skipped` "twin precondition: invariants/I1 Fail"; base run 1e5e60, signature `inv:I1|nodes|unhandled`, known_issues checked (7 issues). Raw failure, not diagnosed. Full result in scratchpad `w5r7-B-09-twin.json`.
+
+Gate 4, `chaos_run` plan `nodes-enroll`, duration_s 600 (no lease), job 699b75c2636d, seed 13540397282229585139: succeeded; faults_started 23, faults_refused 17, faults_healed 8, heal_failed 0, workload_loops 251, workload_errors 0, checkpoints 16, violations 0, check_errors 0. PASS (17 refused faults not examined). Result in scratchpad `w5r7-B-10-chaos.json`.
+
+Gate 5, `soak_run` `catalog/nodes.toml`, duration_s 300 (no lease), job 076d0606ce80, seed 1965194593165994648: succeeded; loops 1, workload_errors 0, samples 1, sample_errors 0, i7 `skipped`. PASS-WEAK (one sample, I7 not judged; same as continuation 4).
+
+Gate 6, `coverage_report` (since daemon start): ran, no error. route_status total 72 hit 0; error_code total 29 hit 0; transition total 22 hit 0; invariant_check hit 1; fault_target hit 0 (total not reported); outside_universe empty. The index does not show the route/error/transition hits from the runs above; not investigated. Result in scratchpad `w5r7-B-12-coverage.json`.
+
+Gate 7, `fuzz_run` target enroll, cases 50 (no lease), job 591a076703f0, seed 14372532009034476853: state `failed` after 60 s (17:49:44 to 17:50:45), result `{"error":"[Lab.InvalidArgument]"}` with no message; run.json overall `fail`. The tool's own argument checks (cases 1 to 5000, replay) would not reject these arguments, so the error came from inside the job; not diagnosed, not retried. (Continuation 3 on an older daemon build ran the same fuzz successfully, sent 50.)
+
+### Teardown (continuation 7)
+Lease re-acquired for teardown only and released. `stack_down wipe` (state down, network absent, containers []); no labelled containers and no `meridian-lab-net` remained, so `docker rm -f` was not needed. Daemon pid 29500 stopped (taskkill on that pid only); port 8789 free. No prune, dev stack untouched, no mutant/patch/lab code changed.
+
+Last check result line: none (live gates only; Part A last result: 12 tests, 10 passed, 2 failed).
