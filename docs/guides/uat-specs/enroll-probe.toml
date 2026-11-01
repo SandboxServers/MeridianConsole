@@ -1,0 +1,37 @@
+schema = 1
+
+# Enroll probe on a running stack (D-ML123). Starts nothing: it runs against the stack and services the caller started
+# (mutation_run for M5, the chaos nodes-enroll workload). Enroll-route calls per run: 1.
+# The row has no depends_on, so a rows filter keeps it alone; a stack_up or svc_* step would wipe the caller's stack.
+
+[section]
+id = "enroll-probe"
+title = "Enroll probe on a running stack"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+
+[[row]]
+id = "enroll-gateway"
+title = "An enroll through the Gateway succeeds with a fresh token"
+expected = "Enroll probe via the gateway returns 201"
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "probe-gw-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.expect]]
+  id = "probe-status"
+  text = "the gateway enroll returns 201"
+  source = "step"
+  step = "probe"
+  op = "eq"
+  pointer = "/result/status"
+  value = 201
