@@ -154,6 +154,50 @@ public sealed class LabStackTests : IDisposable
     }
 
     [Fact]
+    public async Task UpAsync_PostgresReadiness_ProbesOverTcp()
+    {
+        // F112: the readiness probe must reach Postgres over TCP, not the Unix socket the init-time server listens on.
+        using LabStack stack = CreateStack(out _);
+
+        _ = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.Contains(_docker.Calls, c => c.Contains("pg_isready") && c.Contains("-h") && c.Contains("127.0.0.1"));
+    }
+
+    [Fact]
+    public async Task UpAsync_CreateDatabaseFails_ErrorNamesThePsqlError()
+    {
+        // D-ML124: a failed database statement keeps psql's first ERROR or FATAL line in the error.
+        _docker.Answer = args => args.Any(a => a.Contains("CREATE DATABASE meridian_lab_nodes OWNER lab_owner", StringComparison.Ordinal))
+            ? new DockerOutput(1, string.Empty, "psql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  the database system is shutting down")
+            : null;
+        using LabStack stack = CreateStack(out _);
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("could not create meridian_lab_nodes", result.Error, StringComparison.Ordinal);
+        Assert.Contains("the database system is shutting down", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpAsync_CreateRoleFails_ErrorCarriesNoStderr()
+    {
+        // D-ML124: role statements never carry stderr, because psql can echo the expanded password.
+        _docker.Answer = args => args.Any(a => a.Contains("CREATE ROLE", StringComparison.Ordinal))
+            ? new DockerOutput(1, string.Empty, "ERROR:  syntax error\nLINE 1: CREATE ROLE lab_owner LOGIN PASSWORD 'pw-sentinel'")
+            : null;
+        using LabStack stack = CreateStack(out _);
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("could not create role lab_owner", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("pw-sentinel", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("LINE 1", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WriteEnvFile_SecondSecretMissing_DeletesThePartialFile()
     {
         // The first secret is written, the second ref is not in the vault: the failure must leave no env-* file in State (N1).
@@ -221,9 +265,18 @@ public sealed class LabStackTests : IDisposable
         /// <summary>The stdout of <c>ps</c>: one container name per line, as listed by the labelled-container query.</summary>
         public string PsOutput { get; set; } = string.Empty;
 
+        /// <summary>Optional override, consulted first: a non-null result answers the call, null falls through to the defaults.</summary>
+        public Func<IReadOnlyList<string>, DockerOutput?>? Answer { get; set; }
+
         public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct)
         {
             Calls.Add(args.ToArray());
+            DockerOutput? overridden = Answer?.Invoke(args);
+            if (overridden is not null)
+            {
+                return Task.FromResult(Result<DockerOutput>.Success(overridden));
+            }
+
             // redis-cli ping must answer PONG for the readiness probe to pass; every other probe exits 0.
             string stdout = args.Contains("ping")
                 ? "PONG"
