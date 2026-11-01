@@ -1,24 +1,39 @@
 using System.Globalization;
 using Dhadgar.Lab;
+using Dhadgar.Lab.SelfCheck;
+using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Tests.SelfCheck;
 
 /// <summary>
-/// The self-check recovery tool-call guard (wave 5 fix G): <c>CallToolAsync</c> reaches the child daemon's <c>/mcp</c> endpoint, so
-/// its URL must pass <see cref="LabHosts.IsDaemonEndpoint"/>, not <see cref="LabHosts.IsLabEndpoint"/> (the daemon port is not a
-/// service port). The guard is private and builds its URL from <see cref="LabDefaults.DaemonPort"/> and <see cref="LabDefaults.McpPath"/>,
-/// so these cases test the same predicate with the same URL shape. Pure, no sockets, no processes, no Docker.
+/// The self-check recovery daemon URIs (wave 5 fix G): <c>GetStatusAsync</c> and <c>CallToolAsync</c> reach the child daemon, so
+/// their URIs come from <see cref="SelfCheckRecovery.DaemonUri"/>, which accepts the daemon port through
+/// <see cref="LabHosts.IsDaemonEndpoint"/>, not <see cref="LabHosts.IsLabEndpoint"/> (the daemon port is not a service port).
+/// Pure, no sockets, no processes, no Docker.
 /// </summary>
 public sealed class SelfCheckRecoveryGuardTests
 {
     [Fact]
     public void ToolCallUrl_IsTheDaemonMcpEndpoint()
     {
-        string url = "http://127.0.0.1:" + LabDefaults.DaemonPort.ToString(CultureInfo.InvariantCulture) + LabDefaults.McpPath;
+        Result<Uri> target = SelfCheckRecovery.DaemonUri(LabDefaults.McpPath);
 
-        Assert.Equal("http://127.0.0.1:8789/mcp", url);
-        Assert.True(LabHosts.IsDaemonEndpoint(new Uri(url, UriKind.Absolute)));
-        Assert.False(LabHosts.IsLabEndpoint(new Uri(url, UriKind.Absolute)));
+        Assert.True(target.IsSuccess, target.Error);
+        Assert.Equal("http://127.0.0.1:8789/mcp", target.Value!.ToString());
+        Assert.True(LabHosts.IsDaemonEndpoint(target.Value!));
+        Assert.False(LabHosts.IsLabEndpoint(target.Value!));
+    }
+
+    [Fact]
+    public void StatusUrl_IsTheDaemonStatusEndpoint()
+    {
+        Result<Uri> target = SelfCheckRecovery.DaemonUri(LabDefaults.StatusPath);
+
+        Assert.True(target.IsSuccess, target.Error);
+        Assert.Equal(
+            "http://127.0.0.1:" + LabDefaults.DaemonPort.ToString(CultureInfo.InvariantCulture) + LabDefaults.StatusPath,
+            target.Value!.ToString());
+        Assert.True(LabHosts.IsDaemonEndpoint(target.Value!));
     }
 
     [Theory]

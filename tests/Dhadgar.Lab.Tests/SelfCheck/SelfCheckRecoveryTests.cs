@@ -23,7 +23,7 @@ public sealed class SelfCheckRecoveryTests
         Assert.NotNull(repoRoot);
 
         IPathValidator validator = new PathValidator(NullLogger<PathValidator>.Instance);
-        Result<IReadOnlyList<string>> result = await SelfCheckRecovery.RunAsync(
+        Result<RecoveryVerdict> result = await SelfCheckRecovery.RunAsync(
             repoRoot!,
             validator,
             TimeProvider.System,
@@ -31,6 +31,6 @@ public sealed class SelfCheckRecoveryTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        Assert.Empty(result.Value!);
+        Assert.Empty(result.Value!.Problems);
     }
 }

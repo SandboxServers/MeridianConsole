@@ -509,7 +509,6 @@ public sealed class ModelHunter
             args["lease_id"] = _leaseId;
         }
 
-
         JsonElement arguments = JsonSerializer.SerializeToElement(args);
         var context = new LabCallContext(Guid.NewGuid().ToString("N"), _leaseId, "job:hunt");
         LabToolResult call = await _invoke(tool, arguments, context, ct).ConfigureAwait(false);
