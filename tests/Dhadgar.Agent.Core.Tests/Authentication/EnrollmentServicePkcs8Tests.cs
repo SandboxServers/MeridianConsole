@@ -4,6 +4,7 @@ using System.Text.Json;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Identity;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Contracts.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -144,6 +145,8 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
         DateTimeOffset? notAfter = null)
     {
         using var leaf = _ca.Issue(ExpectedPublicKey(requestBody), spiffeId, notBefore, notAfter);
+        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var signingSpki = signingKey.ExportSubjectPublicKeyInfo();
         var response = new EnrollNodeResponse(
             NodeId: NodeId,
             OrganizationId: OrganizationId,
@@ -151,7 +154,9 @@ public sealed class EnrollmentServicePkcs8Tests : IDisposable
             Certificate: TestAgentCa.ToPem(leaf),
             CaCertificate: _ca.CertificatePem,
             NotBefore: leaf.NotBefore,
-            NotAfter: leaf.NotAfter);
+            NotAfter: leaf.NotAfter,
+            CommandSigningPublicKey: Convert.ToBase64String(signingSpki),
+            CommandSigningKeyId: AgentCommandSigning.ComputeKeyId(signingSpki));
 
         return AgentCertificateTestJson.Json(
             HttpStatusCode.OK,
