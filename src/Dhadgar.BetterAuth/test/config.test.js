@@ -36,6 +36,13 @@ test("assertTrustedOrigins rejects wildcard, trailing slash and bare host outsid
   assert.throws(() => assertTrustedOrigins(["panel.meridianconsole.com"], PROD), /not a URL|exact origin/);
 });
 
+test("assertTrustedOrigins rejects a wildcard host outside development (HF-02 N1)", () => {
+  assert.throws(() => assertTrustedOrigins(["https://*.meridianconsole.com"], PROD), /wildcard/);
+  assert.throws(() => assertTrustedOrigins(["https://*.com"], PROD), /wildcard/);
+  assert.throws(() => assertTrustedOrigins(["https://*"], PROD), /wildcard/);
+  assert.throws(() => assertTrustedOrigins(["http://*"], PROD), /wildcard/);
+});
+
 test("assertTrustedOrigins passes for the compose list and for an empty list in development", () => {
   assert.doesNotThrow(() => assertTrustedOrigins(COMPOSE_ORIGINS, PROD));
   assert.doesNotThrow(() => assertTrustedOrigins([], DEV));

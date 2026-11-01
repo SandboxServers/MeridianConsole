@@ -201,7 +201,7 @@ demoable end to end.
 2. Login UI: render only providers actually configured in BetterAuth (config-driven
    list, not the 18-entry constant).
 3. Localhost dev login: make BetterAuth cookie domain configurable
-   (`crossSubDomainCookies` off for localhost) and document the ES256 keypair setup;
+   (cookies are host-only since HF-02) and document the ES256 keypair setup;
    add a keygen script.
 4. ShoppingCart post-login redirect fix (its `/dashboard` doesn't exist).
 

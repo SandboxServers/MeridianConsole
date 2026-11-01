@@ -66,7 +66,7 @@ Returns the currently authenticated user.
 
 ```http
 GET /api/v1/betterauth/user
-Cookie: better-auth.session_token=...
+Cookie: __Secure-meridian.session_token=...
 ```
 
 **Response (200 OK):**
@@ -94,7 +94,7 @@ Updates the current user's profile.
 ```http
 POST /api/v1/betterauth/update-user
 Content-Type: application/json
-Cookie: better-auth.session_token=...
+Cookie: __Secure-meridian.session_token=...
 ```
 
 **Request Body:**
@@ -132,7 +132,7 @@ Returns the current session and user info.
 
 ```http
 GET /api/v1/betterauth/session
-Cookie: better-auth.session_token=...
+Cookie: __Secure-meridian.session_token=...
 ```
 
 **Response (200 OK):**
@@ -175,7 +175,7 @@ Terminates the current session.
 
 ```http
 POST /api/v1/betterauth/sign-out
-Cookie: better-auth.session_token=...
+Cookie: __Secure-meridian.session_token=...
 ```
 
 **Response (200 OK):**
@@ -186,7 +186,7 @@ Cookie: better-auth.session_token=...
 }
 ```
 
-**Effect:** Clears the `better-auth.session_token` cookie.
+**Effect:** Clears the `__Secure-meridian.session_token` cookie.
 
 ---
 
@@ -246,7 +246,7 @@ GET /api/v1/betterauth/callback/{provider}?code={code}&state={state}
 
 ```http
 Location: {callbackURL}
-Set-Cookie: better-auth.session_token=...; HttpOnly; Secure; SameSite=None; Path=/
+Set-Cookie: __Secure-meridian.session_token=...; HttpOnly; Secure; SameSite=None; Partitioned; Path=/
 ```
 
 ---
@@ -293,7 +293,7 @@ Issues a short-lived exchange token for the Identity service. This token can be 
 ```http
 POST /api/v1/betterauth/exchange
 Content-Type: application/json
-Cookie: better-auth.session_token=...
+Cookie: __Secure-meridian.session_token=...
 ```
 
 **Request Body (optional):**

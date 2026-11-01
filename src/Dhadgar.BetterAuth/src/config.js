@@ -15,6 +15,10 @@ export function assertTrustedOrigins(origins, env) {
     if (o === "*") throw new Error("BETTER_AUTH_TRUSTED_ORIGINS cannot contain '*' outside development");
     let url;
     try { url = new URL(o); } catch { throw new Error(`BETTER_AUTH_TRUSTED_ORIGINS entry is not a URL: ${o}`); }
+    // HF-02 N1: WHATWG URL accepts "*" inside a host, and Better Auth treats it as a glob, so reject it.
+    if (url.hostname.includes("*") || url.username || url.password) {
+      throw new Error(`BETTER_AUTH_TRUSTED_ORIGINS entry cannot contain a wildcard host: ${o}`);
+    }
     if ((url.protocol !== "https:" && url.protocol !== "http:") || url.origin !== o) {
       throw new Error(`BETTER_AUTH_TRUSTED_ORIGINS entry must be an exact origin (scheme://host[:port], no path or trailing slash): ${o}`);
     }
