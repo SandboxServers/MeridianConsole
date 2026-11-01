@@ -24,7 +24,7 @@ public sealed class HistoryClientTests : IDisposable
 
     private readonly SecretVault _vault = new();
     private readonly Redactor _redactor;
-    private readonly FakeSink _sink = new();
+    private readonly FakeObservationSink _sink = new();
     private readonly FakeHandler _handler = new();
     private readonly HttpClient _http;
     private readonly Uri _endpoint = new("http://127.0.0.1:" + LabPorts.Barrier.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/api/v1/agents/enroll");
@@ -52,10 +52,14 @@ public sealed class HistoryClientTests : IDisposable
         Result<HistoryClientOutcome> outcome = await client.RunAsync(HistoryRetry.None, CancellationToken.None);
 
         Assert.True(outcome.IsSuccess);
-        EnrollNodeRequest body = Assert.Single(_handler.Bodies.Select(Deserialize));
+        string raw = Assert.Single(_handler.Bodies);
+        Assert.Contains("\"publicKey\"", raw, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"public_key\"", raw, StringComparison.Ordinal);
+        EnrollNodeRequest body = Deserialize(raw);
         Assert.Equal(TokenValue, body.Token);
         Assert.Equal("linux", body.Platform);
         Assert.Equal("lab-9f2c4a-c1-1", body.Hardware.Hostname);
+        Assert.True(body.Hardware.CpuCores > 0);
         Assert.False(string.IsNullOrEmpty(body.PublicKey));
     }
 
@@ -147,8 +151,9 @@ public sealed class HistoryClientTests : IDisposable
     private HistoryClient NewClient() =>
         new(RunId, 1, "key-a", "linux", _tokenRef, _endpoint, _http, _sink, _vault, _redactor, TimeProvider.System);
 
+    // A literal Web instance, not LabWireJson.Options: a regression in the helper must not hide in the test.
     private static EnrollNodeRequest Deserialize(string body) =>
-        JsonSerializer.Deserialize<EnrollNodeRequest>(body, LabJson.Options)!;
+        JsonSerializer.Deserialize<EnrollNodeRequest>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
 
     private sealed class FakeHandler : HttpMessageHandler
     {
@@ -164,26 +169,5 @@ public sealed class HistoryClientTests : IDisposable
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),
             };
         }
-    }
-
-    private sealed class FakeSink : ILabObservationSink
-    {
-        private long _seq;
-
-        public List<LabObservation> Lines { get; } = [];
-
-        public Result BeginRun(string runId, string runFolder) => throw new NotSupportedException();
-
-        public Task<Result<long>> EndRunAsync(string runId, CancellationToken ct) => throw new NotSupportedException();
-
-        public OpId NextOp(string runId, string actor) => new(runId, actor, ++_seq);
-
-        public Result<long> Append(LabObservation draft)
-        {
-            Lines.Add(draft with { Seq = Lines.Count + 1 });
-            return Result<long>.Success(Lines.Count);
-        }
-
-        public IReadOnlyList<LabObservation> Read(string runId, long afterSeq, int max) => throw new NotSupportedException();
     }
 }
