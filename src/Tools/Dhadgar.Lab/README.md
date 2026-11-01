@@ -241,7 +241,7 @@ A source that does not exist yet is skipped, not an error: I2 and I3 skip a data
 | I3 | Database checks from `docs/guides/uat-specs/invariants` |
 | I4 | Secrets (vault values, the daemon token) in any raw log line |
 | I5 | Orphans: labelled containers, queues, proxies, backups |
-| I6 | Unexplained restarts (kill and pause faults excuse theirs) |
+| I6 | Unexplained restarts and process exits; kill and pause faults, and the lab's own successful svc_*, stack_* and member_reset calls, excuse only their own targets at the time they ran (D-ML114) |
 
 I1 to I6 register in `Mcp/Areas/InvariantsArea.cs`; the wiring adapters live in `Invariants/InvariantWiring.cs`.
 

@@ -80,6 +80,40 @@ public sealed class I6RestartInvariantTests
         Assert.True((await check.CheckAsync(Window, CancellationToken.None)).IsFailure);
     }
 
+    [Fact]
+    public async Task I6_KillFaultOnTheRegistryId_ExcusesTheContainerName()
+    {
+        // The fault target is the registry id (c:nodes); the observation is the container name (meridian-lab-nodes).
+        var containers = new List<RestartObservation> { new("meridian-lab-nodes", "meridian-lab-nodes", 0, T0.AddHours(-1)) };
+        var excuses = new List<RestartExcuse> { new("fault_kill", "c:nodes", T0.AddSeconds(10)) };
+        var check = Build(containers, excuses, []);
+        await check.CheckAsync(Window, CancellationToken.None);
+
+        containers[0] = new RestartObservation("meridian-lab-nodes", "meridian-lab-nodes", 1, T0.AddSeconds(20));
+        Assert.Empty((await check.CheckAsync(Window with { To = T0.AddMinutes(2) }, CancellationToken.None)).Value!);
+    }
+
+    [Fact]
+    public async Task I6_HealedFaultExcuse_CoversUntilTheHeal()
+    {
+        // A kill that healed three minutes in excuses the restart at its heal, through the wiring the daemon uses.
+        var history = new FixedFaults(new FaultHistoryEntry("f1", "kill", "c:nodes", T0, T0.AddMinutes(3)));
+        var containers = new List<RestartObservation> { new("meridian-lab-nodes", "meridian-lab-nodes", 0, T0.AddHours(-1)) };
+        var check = new I6RestartInvariant(
+            _ => Task.FromResult(Result<IReadOnlyList<RestartObservation>>.Success(containers.ToArray())),
+            InvariantWiring.Excuses(history, new LabRestartExcuses()),
+            () => []);
+        await check.CheckAsync(Window, CancellationToken.None);
+
+        containers[0] = new RestartObservation("meridian-lab-nodes", "meridian-lab-nodes", 1, T0.AddMinutes(3).AddSeconds(10));
+        Assert.Empty((await check.CheckAsync(Window with { To = T0.AddMinutes(4) }, CancellationToken.None)).Value!);
+    }
+
+    private sealed class FixedFaults(params FaultHistoryEntry[] entries) : IFaultHistory
+    {
+        public IReadOnlyList<FaultHistoryEntry> Snapshot() => entries;
+    }
+
     private static I6RestartInvariant Build(
         List<RestartObservation> containers,
         List<RestartExcuse> excuses,

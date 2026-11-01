@@ -280,13 +280,18 @@ public static class InvariantWiring
         };
 
     /// <summary>
-    /// Restart excuses: a kill or pause fault on a target excuses that target's restart (from the fault history), and each
-    /// lab call to svc_start, svc_restart, stack_up or member_reset excuses the restart it caused (from the dispatcher's log).
+    /// Restart excuses: a kill or pause fault on a target excuses that target's restart from the fault's start to its heal (from
+    /// the fault history), and each successful lab call to svc_*, stack_* or member_reset excuses the restarts it caused, from
+    /// its start to its end (from the dispatcher's log). D-ML114.
     /// </summary>
     public static Func<IReadOnlyList<RestartExcuse>> Excuses(IFaultHistory history, LabRestartExcuses actions) =>
         () => history.Snapshot()
             .Where(f => f.Kind is "kill" or "pause" or "fault_kill" or "fault_pause")
-            .Select(f => new RestartExcuse(f.Kind.StartsWith("fault_", StringComparison.Ordinal) ? f.Kind : "fault_" + f.Kind, f.TargetId, f.StartedAt ?? f.HealedAt ?? DateTimeOffset.MinValue))
+            .Select(f => new RestartExcuse(
+                f.Kind.StartsWith("fault_", StringComparison.Ordinal) ? f.Kind : "fault_" + f.Kind,
+                f.TargetId,
+                f.StartedAt ?? f.HealedAt ?? DateTimeOffset.MinValue,
+                f.HealedAt ?? DateTimeOffset.MaxValue))
             .Concat(actions.Snapshot())
             .ToArray();
 }
