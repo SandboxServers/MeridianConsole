@@ -69,11 +69,18 @@ public static class MutantBuilder
     public static IReadOnlyList<string> ArchiveArgs(string repoRoot, string tarPath) =>
         ["-C", repoRoot, "archive", "--format=tar", $"--output={tarPath}", "HEAD"];
 
-    /// <summary>Check arguments: <c>apply --check &lt;patch&gt;</c>, run in the extracted tree.</summary>
-    public static IReadOnlyList<string> ApplyCheckArgs(string patchPath) => ["apply", "--check", patchPath];
+    /// <summary>
+    /// Check arguments: <c>-c core.longpaths=true apply --check &lt;patch&gt;</c>, run in the extracted tree. Git's long-path
+    /// support lets a patch apply under a build folder whose paths pass MAX_PATH (wave 5 run 7, cause C).
+    /// </summary>
+    public static IReadOnlyList<string> ApplyCheckArgs(string patchPath) =>
+        ["-c", "core.longpaths=true", "apply", "--check", patchPath];
 
-    /// <summary>Apply arguments: <c>apply &lt;patch&gt;</c>, run in the extracted tree.</summary>
-    public static IReadOnlyList<string> ApplyArgs(string patchPath) => ["apply", patchPath];
+    /// <summary>
+    /// Apply arguments: <c>-c core.longpaths=true apply &lt;patch&gt;</c>, run in the extracted tree. See
+    /// <see cref="ApplyCheckArgs"/> for why the long-path flag is passed.
+    /// </summary>
+    public static IReadOnlyList<string> ApplyArgs(string patchPath) => ["-c", "core.longpaths=true", "apply", patchPath];
 
     /// <summary>
     /// Builds one product mutant from HEAD of <paramref name="paths"/>'s repo. A patch that does not apply gives the

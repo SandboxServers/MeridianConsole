@@ -179,7 +179,7 @@ public static class SelfCheckRunner
             return scope;
         }
 
-        (int applyExit, _) = await RunProcessAsync("git", ["-C", copy, "apply", patch], null, ct).ConfigureAwait(false);
+        (int applyExit, _) = await RunProcessAsync("git", ["-c", "core.longpaths=true", "-C", copy, "apply", patch], null, ct).ConfigureAwait(false);
         if (applyExit != 0)
         {
             return new SelfCheckRow(mutant.Id, test, SelfCheckJudge.Invalid, "the patch does not apply; refresh it as tools/lab/mutants/README.md says");
@@ -194,7 +194,7 @@ public static class SelfCheckRunner
         finally
         {
             // The revert runs even when the build or the run throws, so the next mutant starts from a clean copy.
-            (int revertExit, _) = await RunProcessAsync("git", ["-C", copy, "apply", "-R", patch], null, CancellationToken.None).ConfigureAwait(false);
+            (int revertExit, _) = await RunProcessAsync("git", ["-c", "core.longpaths=true", "-C", copy, "apply", "-R", patch], null, CancellationToken.None).ConfigureAwait(false);
             reverted = revertExit == 0;
         }
 
