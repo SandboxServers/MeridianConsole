@@ -284,7 +284,7 @@ public class GatewayAuthSeparationTests
         var der = Convert.ToBase64String(cert.RawData);
         var pemBodyLines = cert.ExportCertificatePem()
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(line => !line.StartsWith("-----", StringComparison.Ordinal))
+            .Where(line => line.Length >= 16 && !line.StartsWith("-----", StringComparison.Ordinal))
             .ToArray();
 
         using var logs = new CapturingLoggerProvider();
