@@ -51,9 +51,13 @@ builder.Services.AddDbContext<NodesDbContext>(options =>
 // Register SignalR for the agent hub (shared framework; no package needed)
 builder.Services.AddSignalR(o =>
 {
-    o.MaximumReceiveMessageSize = 64 * 1024;
+    o.MaximumReceiveMessageSize = AgentHubProtocol.MaxReceiveMessageBytes;
     o.EnableDetailedErrors = false;
 });
+
+// Connection registry for the agent hub. Singleton: it holds no scoped service. Single-instance for the MVP;
+// scale-out needs a Redis backplane (ADR-0008).
+builder.Services.AddSingleton<IAgentConnectionRegistry, AgentConnectionRegistry>();
 
 // Register services
 builder.Services.AddScoped<INodeService, NodeService>();

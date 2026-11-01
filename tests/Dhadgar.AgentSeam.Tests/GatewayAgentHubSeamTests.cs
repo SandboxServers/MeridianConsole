@@ -1,15 +1,21 @@
+using System.Collections.Concurrent;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Agent.Core.Communication;
 using Dhadgar.Agent.Core.Configuration;
 using Dhadgar.Agent.Core.Health;
 using Dhadgar.Agent.Core.Identity;
 using Dhadgar.Agent.Core.Telemetry;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
+using Dhadgar.Nodes.Hubs;
+using Dhadgar.Nodes.Services;
 using Dhadgar.Nodes.Tests.Integration.AgentSeam;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -155,6 +161,166 @@ public sealed class GatewayAgentHubSeamTests : IDisposable
 
         var nodeBAfter = await ReadLastHeartbeatAsync(harness, agentB.NodeId);
         Assert.Equal(nodeBBefore, nodeBAfter);
+    }
+
+    [Fact]
+    public async Task Telemetry_ThroughGateway_IsAccepted()
+    {
+        using var harness = new GatewayNodesHarness(_caDirectory);
+        var (enrolled, store) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        // The agent client does not expose its hub connection, so the test invokes Telemetry on a hub connection
+        // that uses the same certificate, protocol header and Gateway handler as ControlPlaneClient.
+        using var recorder = new ResponseRecordingHandler();
+        await using var connection = CreateHubConnectionThroughGateway(harness.GatewayServer, cert, recorder);
+        await connection.StartAsync();
+
+        var ack = await connection.InvokeAsync<AgentHubAck>(
+            nameof(IAgentHub.Telemetry),
+            new AgentTelemetry(harness.NodesBase.TimeProvider.GetUtcNow(), new Dictionary<string, double> { ["cpu"] = 1 }));
+
+        Assert.True(ack.Accepted, ack.ErrorCode);
+        Assert.True(await WaitForConnectedAsync(harness, enrolled.NodeId), "Nodes' registry does not report the node as connected.");
+    }
+
+    [Fact]
+    public async Task Connect_ForDecommissionedNode_IsClosedByNodes()
+    {
+        using var harness = new GatewayNodesHarness(_caDirectory);
+        var (enrolled, store) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        using (var scope = harness.Nodes.Services.CreateScope())
+        {
+            var nodes = scope.ServiceProvider.GetRequiredService<INodeService>();
+            var decommissioned = await nodes.DecommissionNodeAsync(enrolled.OrganizationId, enrolled.NodeId);
+            Assert.True(decommissioned.Success, decommissioned.Error);
+        }
+
+        await ConnectExpectingNodesRefusalAsync(harness, enrolled.NodeId, cert);
+    }
+
+    [Fact]
+    public async Task Connect_ForDecommissionedNodeWithActiveCertificate_IsClosedByNodes()
+    {
+        using var harness = new GatewayNodesHarness(_caDirectory);
+        var (enrolled, store) = await harness.EnrollThroughGatewayAsync(Guid.NewGuid());
+        using var cert = store.GetClientCertificate()!;
+
+        // INodeService also revokes the node's certificates, and the certificate check refuses first. Setting only the
+        // status leaves the certificate usable, so a refusal here can only come from the connect-time node check.
+        using (var scope = harness.Nodes.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NodesDbContext>();
+            var node = await db.Nodes.SingleAsync(n => n.Id == enrolled.NodeId);
+            node.Status = Dhadgar.Nodes.Data.Entities.NodeStatus.Decommissioned;
+            await db.SaveChangesAsync();
+        }
+
+        await ConnectExpectingNodesRefusalAsync(harness, enrolled.NodeId, cert);
+    }
+
+    /// <summary>
+    /// Connects through the Gateway with the client certificate and asserts that Nodes refused the connection.
+    /// </summary>
+    private static async Task ConnectExpectingNodesRefusalAsync(GatewayNodesHarness harness, Guid nodeId, X509Certificate2 cert)
+    {
+        using var recorder = new ResponseRecordingHandler();
+        await using var connection = CreateHubConnectionThroughGateway(harness.GatewayServer, cert, recorder);
+        var closed = WatchForClose(connection);
+
+        var startFailure = await Record.ExceptionAsync(() => connection.StartAsync());
+        if (startFailure is null)
+        {
+            // The connection opened and Nodes aborts it in OnConnectedAsync, so it must close.
+            await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        else
+        {
+            var refused = Assert.IsType<HttpRequestException>(startFailure);
+            Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+
+            // Proof that Nodes answered: the Gateway hosts no hub, and its own JwtBearer challenge is the only 401
+            // that carries a Bearer WWW-Authenticate. A refusal from Nodes has none.
+            Assert.Contains(recorder.Responses, r => r.Status == HttpStatusCode.Unauthorized && !r.GatewayChallenge);
+        }
+
+        Assert.False(harness.Nodes.Services.GetRequiredService<IAgentConnectionRegistry>().IsConnected(nodeId));
+    }
+
+    /// <summary>
+    /// Builds a raw hub connection to the Gateway with the agent's client certificate and protocol header.
+    /// </summary>
+    private static HubConnection CreateHubConnectionThroughGateway(
+        TestServer gatewayServer,
+        X509Certificate2 cert,
+        ResponseRecordingHandler recorder) =>
+        new HubConnectionBuilder()
+            .WithUrl(new Uri("https://localhost" + AgentHubProtocol.Path), options =>
+            {
+                options.Transports = HttpTransportType.LongPolling;
+                options.ClientCertificates = [cert];
+                options.HttpMessageHandlerFactory = inner =>
+                {
+                    recorder.InnerHandler = CertificateInjectingHandlerFactory(gatewayServer)(inner);
+                    return recorder;
+                };
+                options.Headers[AgentHubProtocol.VersionHeader] = AgentHubProtocol.CurrentVersion;
+            })
+            .Build();
+
+    /// <summary>
+    /// Records the failed responses that come back on the hub connection, and whether each one is the Gateway's challenge.
+    /// </summary>
+    private sealed class ResponseRecordingHandler : DelegatingHandler
+    {
+        public ConcurrentQueue<RecordedResponse> Responses { get; } = new();
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = await base.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var gatewayChallenge = response.Headers.WwwAuthenticate.Any(h => h.Scheme == "Bearer");
+                Responses.Enqueue(new RecordedResponse(response.StatusCode, gatewayChallenge));
+            }
+
+            return response;
+        }
+    }
+
+    private sealed record RecordedResponse(HttpStatusCode Status, bool GatewayChallenge);
+
+    private static TaskCompletionSource WatchForClose(HubConnection connection)
+    {
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+        return closed;
+    }
+
+    /// <summary>
+    /// Polls Nodes' connection registry until the node is connected, or the deadline passes.
+    /// </summary>
+    private static async Task<bool> WaitForConnectedAsync(GatewayNodesHarness harness, Guid nodeId)
+    {
+        var registry = harness.Nodes.Services.GetRequiredService<IAgentConnectionRegistry>();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (registry.IsConnected(nodeId))
+            {
+                return true;
+            }
+
+            await Task.Delay(100);
+        }
+
+        return registry.IsConnected(nodeId);
     }
 
     /// <summary>

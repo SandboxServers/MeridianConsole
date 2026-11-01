@@ -2,6 +2,7 @@ using Dhadgar.Contracts.Agents;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Data;
+using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -23,14 +24,16 @@ public sealed class AgentHub(
     NodesDbContext dbContext,
     IOptions<MtlsOptions> mtlsOptions,
     TimeProvider timeProvider,
-    ILogger<AgentHub> logger) : Hub<IAgentHubClient>, IAgentHub
+    ILogger<AgentHub> logger,
+    IAgentConnectionRegistry registry) : Hub<IAgentHubClient>, IAgentHub
 {
     private const string CertificateThumbprintClaim = "certificate_thumbprint";
     private const string CertificateNotAfterClaim = "certificate_not_after";
 
     /// <summary>
-    /// Refuses connections with an unsupported protocol version, without a node identity, or with a
-    /// certificate that is revoked or expired, and places accepted connections in the node's group.
+    /// Refuses connections with an unsupported protocol version, without a node identity, with a
+    /// certificate that is revoked or expired, or for a node that is unknown or decommissioned. Accepted
+    /// connections join the node's group and are recorded in <see cref="IAgentConnectionRegistry"/>.
     /// </summary>
     public override async Task OnConnectedAsync()
     {
@@ -56,8 +59,39 @@ public sealed class AgentHub(
             return;
         }
 
+        var node = await dbContext.Nodes
+            .AsNoTracking()
+            .Where(n => n.Id == nodeId)
+            .Select(n => new { n.OrganizationId, n.Status })
+            .FirstOrDefaultAsync(Context.ConnectionAborted);
+
+        if (node is null || node.Status == NodeStatus.Decommissioned)
+        {
+            logger.LogWarning("Agent connection refused: node {NodeId} is unknown or decommissioned", nodeId);
+            Context.Abort();
+            return;
+        }
+
+        Context.Items["OrganizationId"] = node.OrganizationId;
+
         await Groups.AddToGroupAsync(Context.ConnectionId, AgentHubProtocol.NodeGroup(nodeId));
         await base.OnConnectedAsync();
+
+        // Last: a connection is reported as connected only once it is accepted and grouped.
+        registry.Add(nodeId, Context.ConnectionId);
+    }
+
+    /// <summary>
+    /// Removes the connection from <see cref="IAgentConnectionRegistry"/> when it closes.
+    /// </summary>
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (TryGetNodeId(out var nodeId))
+        {
+            registry.Remove(nodeId, Context.ConnectionId);
+        }
+
+        await base.OnDisconnectedAsync(exception);
     }
 
     /// <summary>
@@ -101,9 +135,32 @@ public sealed class AgentHub(
         });
     }
 
-    /// <summary>Stub until VS-08R: answers <see cref="AgentHubErrorCodes.NotSupported"/>.</summary>
-    public Task<AgentHubAck> Telemetry(AgentTelemetry telemetry) =>
-        Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NotSupported));
+    /// <summary>
+    /// Validates the telemetry against the C-2 limits and acknowledges it. Nothing is written to the database;
+    /// only the node id and metric count are logged.
+    /// </summary>
+    /// <remarks>
+    /// Only the connect-time check ran for this connection. A node decommissioned, or a certificate revoked, after
+    /// connect is still counted by <see cref="IAgentConnectionRegistry.IsConnected"/> and still gets
+    /// <c>Accepted</c> here until its next <see cref="Heartbeat"/>. Any method that persists data must re-check the
+    /// certificate and node status before it writes (VS-33).
+    /// </remarks>
+    public Task<AgentHubAck> Telemetry(AgentTelemetry telemetry)
+    {
+        if (!AgentTelemetryValidator.IsValid(telemetry))
+        {
+            return Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.InvalidTelemetry));
+        }
+
+        if (!TryGetNodeId(out var nodeId))
+        {
+            // Unreachable through the authorized hub, which always sets node_id. No node matches a missing identity.
+            return Task.FromResult(new AgentHubAck(false, AgentHubErrorCodes.NodeNotFound));
+        }
+
+        logger.LogDebug("Telemetry from node {NodeId}: {MetricCount} metrics", nodeId, telemetry.Metrics.Count);
+        return Task.FromResult(new AgentHubAck(true));
+    }
 
     /// <summary>Stub until VS-33: answers <see cref="AgentHubErrorCodes.NotSupported"/>.</summary>
     public Task<AgentHubAck> CommandResult(AgentCommandResult result) =>
