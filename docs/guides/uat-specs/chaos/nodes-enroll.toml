@@ -6,7 +6,7 @@ schema = 1
 
 [plan]
 id = "nodes-enroll"
-workload = { spec = "docs/guides/uat-specs/lab-selftest.toml", rows = ["enroll-gateway"] }   # looped, paced by GatewayPacer
+workload = { spec = "docs/guides/uat-specs/enroll-probe.toml", rows = ["enroll-gateway"] }   # looped, paced by GatewayPacer
 max_concurrent = 2
 quiet_s = [5, 30]                 # gap between fault injections, seeded uniform
 

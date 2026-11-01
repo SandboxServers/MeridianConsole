@@ -179,6 +179,15 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             return Result<object>.Failure("[Lab.NotFound] the section is not in the spec");
         }
 
+        if (rowFilter is { Count: > 0 })
+        {
+            Result rowCheck = RowFilterCheck.Check(loaded.Spec, rowFilter);
+            if (rowCheck.IsFailure)
+            {
+                return Result<object>.Failure(rowCheck.Error);
+            }
+        }
+
         string? label = string.IsNullOrEmpty(args.Label) ? repro?.Label : args.Label;
         var request = new UatRunRequest(
             loaded.Spec,

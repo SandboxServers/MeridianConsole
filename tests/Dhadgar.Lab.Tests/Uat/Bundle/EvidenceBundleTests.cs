@@ -159,6 +159,51 @@ public sealed class ReproTests : IDisposable
           required = true
         """;
 
+    private const string ChainSpecText = """
+        schema = 1
+
+        [section]
+        id = "plan-check"
+        title = "Plan check"
+
+        [[row]]
+        id = "first"
+        title = "First row"
+        expected = "present"
+
+          [[row.step]]
+          id = "read"
+          tool = "registry_read"
+          args = {}
+
+          [[row.expect]]
+          id = "key-row"
+          text = "key read"
+          source = "step"
+          step = "read"
+          op = "truthy"
+          required = true
+
+        [[row]]
+        id = "second"
+        title = "Second row"
+        expected = "present"
+        depends_on = ["first"]
+
+          [[row.step]]
+          id = "read"
+          tool = "registry_read"
+          args = {}
+
+          [[row.expect]]
+          id = "key-row"
+          text = "key read"
+          source = "step"
+          step = "read"
+          op = "truthy"
+          required = true
+        """;
+
     private readonly string _root;
     private readonly LabPaths _paths;
     private readonly PathValidator _validator = new(NullLogger<PathValidator>.Instance);
@@ -269,6 +314,32 @@ public sealed class ReproTests : IDisposable
 
         Assert.True(result.IsFailure);
         Assert.Contains("[Lab.InvalidArgument] give spec or replay, not both", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Run_RowsFilterDropsDependency_IsRefused()
+    {
+        File.WriteAllText(Path.Combine(_root, "docs", "guides", "uat-specs", "chain.toml"), ChainSpecText);
+        var tool = new UatRunTool(_paths, _validator, _services);
+        JsonElement args = JsonSerializer.SerializeToElement(new { spec = "chain.toml", rows = new[] { "second" } });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-r82a", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.InvalidArgument] rows filter keeps second without its dependency first", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Run_RowsFilterNamesUnknownRow_IsNotFound()
+    {
+        File.WriteAllText(Path.Combine(_root, "docs", "guides", "uat-specs", "chain.toml"), ChainSpecText);
+        var tool = new UatRunTool(_paths, _validator, _services);
+        JsonElement args = JsonSerializer.SerializeToElement(new { spec = "chain.toml", rows = new[] { "zz" } });
+
+        Result<JsonElement> result = await tool.InvokeAsync(args, new LabCallContext("call-r82b", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("[Lab.NotFound] row zz is not in the spec", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
