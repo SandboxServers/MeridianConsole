@@ -195,6 +195,34 @@ public sealed class ModelHunterTests : IDisposable
     }
 
     [Fact]
+    public async Task Replay_PgDownInsideCut_IsNotSentTwice()
+    {
+        // D-ML122: a PgDown while the cut is active sends nothing, so FaultBook sees one disable.
+        var lab = new FakeLab { DisableClashes = true };
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgUp), new HuntOp(HuntOpKind.Mint)], CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.False(replay.Value!.Diverged);
+        Assert.Equal(1, lab.Calls.Count(call => call.Tool == "fault_proxy_disable"));
+        Assert.Equal(1, lab.Calls.Count(call => call.Tool == "fault_heal"));
+    }
+
+    [Fact]
+    public async Task Replay_PgDownAfterHeal_IsSentAgain()
+    {
+        var lab = new FakeLab { DisableClashes = true };
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgUp), new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgUp)], CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.Equal(2, lab.Calls.Count(call => call.Tool == "fault_proxy_disable"));
+        Assert.Equal(2, lab.Calls.Count(call => call.Tool == "fault_heal"));
+    }
+
+    [Fact]
     public async Task Replay_RestartOutsideCut_IsSent()
     {
         var lab = new FakeLab();
@@ -266,6 +294,12 @@ public sealed class ModelHunterTests : IDisposable
         /// <summary>When true, <c>svc_restart</c> answers an error result, so a call that is sent makes the case fail.</summary>
         public bool RestartFails { get; init; }
 
+        /// <summary>
+        /// When true, <c>fault_proxy_disable</c> answers an error result while an earlier disable has not been followed by
+        /// <c>fault_heal</c> or <c>fault_reset</c>, as <c>FaultBook</c> does (F109).
+        /// </summary>
+        public bool DisableClashes { get; init; }
+
         /// <summary>How many of the next enroll probes answer 429 before the product answers normally.</summary>
         public int Throttles { get; set; }
 
@@ -312,6 +346,11 @@ public sealed class ModelHunterTests : IDisposable
                     _used.Add(false);
                     return Ok(new { token_ref = "ref-" + (_used.Count - 1).ToString(CultureInfo.InvariantCulture) });
                 case "fault_proxy_disable":
+                    if (DisableClashes && _pgDown)
+                    {
+                        return new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = tool }));
+                    }
+
                     bool first = !_pgDown;
                     _pgDown = true;
                     if (first)
