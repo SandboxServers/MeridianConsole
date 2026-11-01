@@ -22,6 +22,35 @@ public sealed class SelfCheckRecoveryI5Tests
     }
 
     [Fact]
+    public void SkipPairAlone_IsANote()
+    {
+        using JsonDocument payload = JsonDocument.Parse(
+            """
+            {"violations":[],"errors":[],"skipped":[
+              {"invariant_id":"I5","source":"queues","reason":"stack not up (no lab credentials)"},
+              {"invariant_id":"I5","source":"proxies","reason":"stack not up (no lab credentials)"}]}
+            """);
+
+        IReadOnlyList<string> notes = SelfCheckRecovery.I5Notes(payload.RootElement);
+
+        Assert.Equal(2, notes.Count);
+        Assert.Contains(notes, note => note.Contains("I5 queues not checked after the restart", StringComparison.Ordinal));
+        Assert.Contains(notes, note => note.Contains("I5 proxies not checked after the restart", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SkipOfContainers_IsNotANote()
+    {
+        using JsonDocument payload = JsonDocument.Parse(
+            """
+            {"violations":[],"errors":[],"skipped":[
+              {"invariant_id":"I5","source":"containers","reason":"stack not up (no lab credentials)"}]}
+            """);
+
+        Assert.Empty(SelfCheckRecovery.I5Notes(payload.RootElement));
+    }
+
+    [Fact]
     public void SkipOfContainers_IsAProblem()
     {
         using JsonDocument payload = JsonDocument.Parse(

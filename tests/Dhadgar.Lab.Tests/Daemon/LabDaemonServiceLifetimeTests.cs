@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Daemon;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Processes;
@@ -70,6 +71,7 @@ public sealed class LabDaemonServiceLifetimeTests
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<LabToolDispatcher>());
             Assert.Same(services.GetRequiredService<LeaseBook>(), scope.ServiceProvider.GetRequiredService<LeaseBook>());
             Assert.Same(services.GetRequiredService<ResultsService>(), scope.ServiceProvider.GetRequiredService<ResultsService>());
+            Assert.Same(services.GetRequiredService<LabRestartExcuses>(), scope.ServiceProvider.GetRequiredService<LabToolDispatcher>().Excuses);
             Assert.NotNull(services.GetRequiredService<UatAttestTool>());
         }
         finally

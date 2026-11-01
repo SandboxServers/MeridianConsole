@@ -72,6 +72,9 @@ public sealed class LabToolDispatcher
         _excuses = excuses;
     }
 
+    /// <summary>The excuse log this dispatcher records into (wiring test).</summary>
+    internal LabRestartExcuses? Excuses => _excuses;
+
     /// <summary>
     /// Runs one tool call through the gate. Arguments are never written to the audit log.
     /// </summary>
@@ -148,15 +151,18 @@ public sealed class LabToolDispatcher
             return Refusal(DefaultErrorCode, "the audit log is unavailable", holder: null);
         }
 
-        // An accepted restart call excuses the restart it causes (I6). A refused call never reaches this line.
-        _excuses?.RecordCall(toolName, toolArguments, started);
-
         // 5 to 6: invoke, then redact. 7: the audit end runs on every path that began, including a throw.
         string outcomeCode = InternalErrorCode;
         try
         {
             LabToolResult outcome = await RunToolAsync(tool, toolArguments, context, leaseId, watch, ct).ConfigureAwait(false);
             outcomeCode = outcome.IsError ? ErrorCodeOf(outcome.Payload) : "ok";
+            if (!outcome.IsError)
+            {
+                // D-ML114: only a call that succeeded excuses the restarts it caused, from its start to its end.
+                _excuses?.RecordCall(toolName, toolArguments, started, _time.GetUtcNow());
+            }
+
             return outcome;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

@@ -10,14 +10,16 @@ public sealed record RestartObservation(string Name, string Service, long Restar
 
 /// <summary>
 /// One audited action that may explain a restart (C11 I6 rule): <c>fault_kill</c>, <c>fault_pause</c>, <c>svc_start</c>,
-/// <c>svc_restart</c>, <c>stack_up</c> or <c>member_reset</c>, with its target (<c>c:&lt;name&gt;</c>, a service or a member).
+/// <c>svc_restart</c>, <c>svc_stop</c>, <c>stack_up</c>, <c>stack_down</c> or <c>member_reset</c>, with its target (<c>c:&lt;name&gt;</c>,
+/// a service or a member). <paramref name="Until"/> is the end of the call or the heal of a fault; null means <paramref name="At"/>.
 /// </summary>
-public sealed record RestartExcuse(string Action, string Target, DateTimeOffset At);
+public sealed record RestartExcuse(string Action, string Target, DateTimeOffset At, DateTimeOffset? Until = null);
 
 /// <summary>
 /// I6 (C11): a registered container restarted, or the supervisor saw an unexpected process exit, with no excuse inside the
-/// 30 s margins. A baseline snapshot of <c>RestartCount</c> and <c>StartedAt</c> is taken by the first check; later checks
-/// report every change since the previous check. A dependency fault never excuses a restart.
+/// 30 s margins. An excuse covers an event only between its start and its end (D-ML114), and a restart count rise is excused
+/// only by a fault. A baseline snapshot of <c>RestartCount</c> and <c>StartedAt</c> is taken by the first check; later checks
+/// report every change since the previous check.
 /// </summary>
 public sealed class I6RestartInvariant : IInvariant
 {
@@ -58,9 +60,7 @@ public sealed class I6RestartInvariant : IInvariant
         }
 
         var violations = new List<InvariantViolation>();
-        IReadOnlyList<RestartExcuse> excuses = _excuses()
-            .Where(e => e.At >= window.From - Margin && e.At <= window.To + Margin)
-            .ToArray();
+        IReadOnlyList<RestartExcuse> excuses = _excuses();
 
         if (_hasBaseline)
         {
@@ -71,9 +71,11 @@ public sealed class I6RestartInvariant : IInvariant
                     continue;
                 }
 
-                bool restarted = now.RestartCount > before.RestartCount
+                bool countRose = now.RestartCount > before.RestartCount;
+                bool restarted = countRose
                     || (now.StartedAt is DateTimeOffset started && before.StartedAt is DateTimeOffset previous && started > previous);
-                if (restarted && !Excused(excuses, now.Name, now.Service))
+                DateTimeOffset at = now.StartedAt ?? window.To;
+                if (restarted && !Excused(excuses, now.Name, at, countRose))
                 {
                     violations.Add(new InvariantViolation(
                         Id,
@@ -93,7 +95,7 @@ public sealed class I6RestartInvariant : IInvariant
                 continue;
             }
 
-            if (!Excused(excuses, exit.Name, exit.Name))
+            if (!Excused(excuses, exit.Name, exit.At, countRose: false))
             {
                 violations.Add(new InvariantViolation(
                     Id,
@@ -116,18 +118,25 @@ public sealed class I6RestartInvariant : IInvariant
     }
 
     /// <summary>
-    /// True when an audited action targets this container (by name or service) under the C11 I6 rule.
+    /// True when an audited action excuses this event under the C11 I6 rule and D-ML114: the event time falls inside the
+    /// action's window (with the margins), and the target names this container. A count rise is excused only by a fault.
     /// </summary>
-    internal static bool Excused(IReadOnlyList<RestartExcuse> excuses, string name, string service)
+    internal static bool Excused(IReadOnlyList<RestartExcuse> excuses, string name, DateTimeOffset at, bool countRose)
     {
+        string subject = Canonical(name);
         foreach (RestartExcuse excuse in excuses)
         {
+            if (!Covers(excuse, at))
+            {
+                continue;
+            }
+
+            bool sameTarget = Canonical(excuse.Target) == subject || excuse.Target == name;
             bool matches = excuse.Action switch
             {
-                "fault_kill" or "fault_pause" => excuse.Target == "c:" + name || excuse.Target == name,
-                "svc_start" or "svc_restart" => excuse.Target == service,
-                "stack_up" => excuse.Target == service || excuse.Target == LabRestartExcuses.AllTargets,
-                "member_reset" => excuse.Target == name,
+                "fault_kill" or "fault_pause" => sameTarget,
+                "svc_start" or "svc_restart" or "svc_stop" or "member_reset" => !countRose && sameTarget,
+                "stack_up" or "stack_down" => !countRose && (sameTarget || excuse.Target == LabRestartExcuses.AllTargets),
                 _ => false,
             };
             if (matches)
@@ -137,5 +146,20 @@ public sealed class I6RestartInvariant : IInvariant
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// True when the event time is within the margin of the excuse's window, from its start to its end (or its start alone).
+    /// </summary>
+    internal static bool Covers(RestartExcuse excuse, DateTimeOffset at) =>
+        at + Margin >= excuse.At && at - Margin <= (excuse.Until ?? excuse.At);
+
+    /// <summary>
+    /// The container or process name without a leading <c>c:</c> and without the lab container prefix.
+    /// </summary>
+    internal static string Canonical(string target)
+    {
+        string name = target.StartsWith("c:", StringComparison.Ordinal) ? target[2..] : target;
+        return name.StartsWith(LabDefaults.ContainerPrefix, StringComparison.Ordinal) ? name[LabDefaults.ContainerPrefix.Length..] : name;
     }
 }

@@ -59,7 +59,7 @@ public static class SelfCheckProgram
     /// <summary>Runs the crash-recovery check (A1-A4). Exit 0 only when the restarted daemon shows no toxic, lease or I5 orphan.</summary>
     private static int RunRecovery(string repoRoot, IPathValidator validator)
     {
-        Result<IReadOnlyList<string>> result = SelfCheckRecovery
+        Result<RecoveryVerdict> result = SelfCheckRecovery
             .RunAsync(repoRoot, validator, TimeProvider.System, keep: false, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
@@ -69,15 +69,30 @@ public static class SelfCheckProgram
             return 2;
         }
 
-        if (result.Value!.Count == 0)
+        return ReportRecovery(result.Value!, Console.Out);
+    }
+
+    /// <summary>
+    /// Prints the verdict: each note, then either the pass line and exit 0, or each problem and exit 1. A note never fails the leg.
+    /// </summary>
+    /// <param name="verdict">The recovery verdict.</param>
+    /// <param name="output">Where the lines go.</param>
+    internal static int ReportRecovery(RecoveryVerdict verdict, TextWriter output)
+    {
+        foreach (string note in verdict.Notes)
         {
-            Console.WriteLine("selfcheck recovery: passed");
+            output.WriteLine("selfcheck recovery: note: " + note);
+        }
+
+        if (verdict.Problems.Count == 0)
+        {
+            output.WriteLine("selfcheck recovery: passed");
             return 0;
         }
 
-        foreach (string problem in result.Value)
+        foreach (string problem in verdict.Problems)
         {
-            Console.WriteLine("selfcheck recovery: " + problem);
+            output.WriteLine("selfcheck recovery: " + problem);
         }
 
         return 1;

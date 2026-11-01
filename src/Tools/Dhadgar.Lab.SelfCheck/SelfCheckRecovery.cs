@@ -17,6 +17,14 @@ using ModelContextProtocol.Protocol;
 namespace Dhadgar.Lab.SelfCheck;
 
 /// <summary>
+/// The result of the recovery check: <paramref name="Problems"/> fail the leg; <paramref name="Notes"/> are printed and never
+/// fail it (security N3).
+/// </summary>
+/// <param name="Problems">The problem texts. Any entry fails the leg.</param>
+/// <param name="Notes">The note texts, such as the accepted I5 skips. They are printed only.</param>
+public sealed record RecoveryVerdict(IReadOnlyList<string> Problems, IReadOnlyList<string> Notes);
+
+/// <summary>
 /// The crash-recovery check of <c>selfcheck --recovery</c> (L55, amendments A1-A4). It starts a child daemon from a
 /// temporary copy of HEAD, acquires a lease, brings the stack up with wipe, adds a latency toxic on
 /// <c>nodes-postgres</c>, kills the child's process tree, starts a second child on the same home and checks that
@@ -129,6 +137,30 @@ public static class SelfCheckRecovery
     }
 
     /// <summary>
+    /// The accepted I5 skips (D-ML106) as printed notes (security N3). A note never fails the leg. Skips of other
+    /// sources are not listed here, because <see cref="I5Problems"/> already reports them as problems.
+    /// </summary>
+    /// <param name="payload">The <c>invariants_check</c> payload.</param>
+    internal static IReadOnlyList<string> I5Notes(JsonElement payload)
+    {
+        var notes = new List<string>();
+        if (payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("skipped", out JsonElement skipped)
+            && skipped.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement entry in skipped.EnumerateArray())
+            {
+                if (IsI5(entry) && IsAcceptedSkip(entry))
+                {
+                    notes.Add(Cut("I5 " + Field(entry, "source") + " not checked after the restart: " + Field(entry, "reason")));
+                }
+            }
+        }
+
+        return notes;
+    }
+
+    /// <summary>
     /// D-ML106: the restarted daemon has no credential refs (KG-W5-5), so I2 and the I5 queue and proxy checks skip with the
     /// stack-not-up reason. Only that pair is accepted; any other skip is a problem.
     /// </summary>
@@ -192,31 +224,31 @@ public static class SelfCheckRecovery
     /// <param name="time">The clock for the readiness bound.</param>
     /// <param name="keep">Keep the temporary copy and home instead of deleting them.</param>
     /// <param name="ct">Cancels the run.</param>
-    public static async Task<Result<IReadOnlyList<string>>> RunAsync(string repoRoot, IPathValidator validator, TimeProvider time, bool keep, CancellationToken ct)
+    public static async Task<Result<RecoveryVerdict>> RunAsync(string repoRoot, IPathValidator validator, TimeProvider time, bool keep, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(time);
 
         if (!OperatingSystem.IsWindows())
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.Unsupported] --recovery runs on Windows in this build");
+            return Result<RecoveryVerdict>.Failure("[Lab.Unsupported] --recovery runs on Windows in this build");
         }
 
         if (ElevationCheck.IsElevated())
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.Elevated] selfcheck --recovery needs a non-elevated session");
+            return Result<RecoveryVerdict>.Failure("[Lab.Elevated] selfcheck --recovery needs a non-elevated session");
         }
 
         if (IsDaemonRunning())
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.Busy] stop the running lab daemon first");
+            return Result<RecoveryVerdict>.Failure("[Lab.Busy] stop the running lab daemon first");
         }
 
         string tempRoot = Path.GetTempPath();
         Result<string> workRoot = validator.ValidatePath(Path.Combine(tempRoot, SelfCheckRunner.TempFolderName, "recovery-" + Guid.NewGuid().ToString("N")), [tempRoot]);
         if (workRoot.IsFailure)
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.InvalidArgument] the temporary folder is not valid");
+            return Result<RecoveryVerdict>.Failure("[Lab.InvalidArgument] the temporary folder is not valid");
         }
 
         string copy = Path.Combine(workRoot.Value!, "copy");
@@ -229,11 +261,11 @@ public static class SelfCheckRecovery
         }
         catch (InvalidOperationException)
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.ProcessFailed] the recovery copy could not be prepared");
+            return Result<RecoveryVerdict>.Failure("[Lab.ProcessFailed] the recovery copy could not be prepared");
         }
         catch (IOException)
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.ProcessFailed] the recovery copy could not be prepared");
+            return Result<RecoveryVerdict>.Failure("[Lab.ProcessFailed] the recovery copy could not be prepared");
         }
         finally
         {
@@ -244,19 +276,19 @@ public static class SelfCheckRecovery
         }
     }
 
-    private static async Task<Result<IReadOnlyList<string>>> RunInCopyAsync(string copy, string home, TimeProvider time, CancellationToken ct)
+    private static async Task<Result<RecoveryVerdict>> RunInCopyAsync(string copy, string home, TimeProvider time, CancellationToken ct)
     {
         string csproj = Path.Combine(copy, "src", "Tools", "Dhadgar.Lab", "Dhadgar.Lab.csproj");
         (int buildExit, _) = await SelfCheckRunner.RunProcessAsync("dotnet", ["build", csproj, "-c", BuildConfiguration], null, ct).ConfigureAwait(false);
         if (buildExit != 0)
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.ProcessFailed] the lab daemon did not build");
+            return Result<RecoveryVerdict>.Failure("[Lab.ProcessFailed] the lab daemon did not build");
         }
 
         string dll = Path.Combine(copy, "src", "Tools", "Dhadgar.Lab", "bin", BuildConfiguration, "net10.0", "meridian-lab.dll");
         if (!File.Exists(dll))
         {
-            return Result<IReadOnlyList<string>>.Failure("[Lab.NotFound] the lab daemon binary was not found");
+            return Result<RecoveryVerdict>.Failure("[Lab.NotFound] the lab daemon binary was not found");
         }
 
         Daemon? first = null;
@@ -266,7 +298,7 @@ public static class SelfCheckRecovery
             Result<Daemon> started = await StartDaemonAsync(dll, home, copy, time, "the lab daemon", ct).ConfigureAwait(false);
             if (started.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure(started.Error);
+                return Result<RecoveryVerdict>.Failure(started.Error);
             }
 
             first = started.Value!;
@@ -274,20 +306,20 @@ public static class SelfCheckRecovery
             Result<string> lease = await AcquireLeaseAsync(first.Token, ct).ConfigureAwait(false);
             if (lease.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure(lease.Error);
+                return Result<RecoveryVerdict>.Failure(lease.Error);
             }
 
             Result<JsonDocument> up = await CallToolAsync(first.Token, "stack_up", new Dictionary<string, object?> { ["wipe"] = true, ["lease_id"] = lease.Value }, ct).ConfigureAwait(false);
             if (up.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure(up.Error);
+                return Result<RecoveryVerdict>.Failure(up.Error);
             }
 
             up.Value!.Dispose();
             Result<JsonDocument> toxic = await CallToolAsync(first.Token, "fault_toxic_add", ToxicArguments(lease.Value!), ct).ConfigureAwait(false);
             if (toxic.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure(toxic.Error);
+                return Result<RecoveryVerdict>.Failure(toxic.Error);
             }
 
             toxic.Value!.Dispose();
@@ -300,7 +332,7 @@ public static class SelfCheckRecovery
             Result<Daemon> restarted = await StartDaemonAsync(dll, home, copy, time, "the restarted lab daemon", ct).ConfigureAwait(false);
             if (restarted.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure(restarted.Error);
+                return Result<RecoveryVerdict>.Failure(restarted.Error);
             }
 
             second = restarted.Value!;
@@ -333,7 +365,7 @@ public static class SelfCheckRecovery
         ["lease_id"] = leaseId,
     };
 
-    private static async Task<Result<IReadOnlyList<string>>> JudgeRestartAsync(string token, CancellationToken ct)
+    private static async Task<Result<RecoveryVerdict>> JudgeRestartAsync(string token, CancellationToken ct)
     {
         Result<JsonDocument> faults = await CallToolAsync(token, "faults_active", new Dictionary<string, object?>(), ct).ConfigureAwait(false);
         Result<JsonDocument> lease = await CallToolAsync(token, "lab_lease_status", new Dictionary<string, object?>(), ct).ConfigureAwait(false);
@@ -344,7 +376,7 @@ public static class SelfCheckRecovery
         {
             if (faults.IsFailure || lease.IsFailure || invariants.IsFailure)
             {
-                return Result<IReadOnlyList<string>>.Failure("[Lab.Tool] a recovery probe failed");
+                return Result<RecoveryVerdict>.Failure("[Lab.Tool] a recovery probe failed");
             }
 
             bool faultsEmpty = faults.Value!.RootElement.TryGetProperty("faults", out JsonElement list)
@@ -352,7 +384,7 @@ public static class SelfCheckRecovery
             bool leaseHeld = lease.Value!.RootElement.TryGetProperty("current", out JsonElement current)
                 && current.ValueKind != JsonValueKind.Null;
             IReadOnlyList<string> i5 = I5Problems(invariants.Value!.RootElement);
-            return Result<IReadOnlyList<string>>.Success(Judge(faultsEmpty, leaseHeld, i5));
+            return Result<RecoveryVerdict>.Success(new RecoveryVerdict(Judge(faultsEmpty, leaseHeld, i5), I5Notes(invariants.Value!.RootElement)));
         }
     }
 
@@ -449,11 +481,13 @@ public static class SelfCheckRecovery
 
     private static async Task<Result<JsonDocument>> GetStatusAsync(string token, CancellationToken ct)
     {
-        Uri uri = LabCliUri(LabDefaults.StatusPath);
-        if (!LabHosts.IsDaemonEndpoint(uri))
+        Result<Uri> target = DaemonUri(LabDefaults.StatusPath);
+        if (target.IsFailure)
         {
-            return Result<JsonDocument>.Failure("[Lab.Refused] the target is not a lab endpoint");
+            return Result<JsonDocument>.Failure(target.Error);
         }
+
+        Uri uri = target.Value!;
 
         try
         {
@@ -482,11 +516,13 @@ public static class SelfCheckRecovery
     /// <summary>Calls one MCP tool on the child's <c>/mcp</c> endpoint and returns its JSON result. The caller disposes it.</summary>
     private static async Task<Result<JsonDocument>> CallToolAsync(string token, string tool, Dictionary<string, object?> arguments, CancellationToken ct)
     {
-        Uri uri = LabCliUri(LabDefaults.McpPath);
-        if (!LabHosts.IsDaemonEndpoint(uri))
+        Result<Uri> target = DaemonUri(LabDefaults.McpPath);
+        if (target.IsFailure)
         {
-            return Result<JsonDocument>.Failure("[Lab.Refused] the target is not a lab endpoint");
+            return Result<JsonDocument>.Failure(target.Error);
         }
+
+        Uri uri = target.Value!;
 
         try
         {
@@ -520,6 +556,18 @@ public static class SelfCheckRecovery
 
     private static Uri LabCliUri(string path) =>
         new("http://127.0.0.1:" + LabDefaults.DaemonPort.ToString(CultureInfo.InvariantCulture) + path, UriKind.Absolute);
+
+    /// <summary>
+    /// The child daemon's URI for <paramref name="path"/>, accepted only when <see cref="LabHosts.IsDaemonEndpoint"/> allows it.
+    /// The daemon port is not a service port, so the service-port guard would refuse it.
+    /// </summary>
+    internal static Result<Uri> DaemonUri(string path)
+    {
+        Uri uri = LabCliUri(path);
+        return LabHosts.IsDaemonEndpoint(uri)
+            ? Result<Uri>.Success(uri)
+            : Result<Uri>.Failure("[Lab.Refused] the target is not a lab endpoint");
+    }
 
     /// <summary>
     /// One child daemon. <c>daemon run</c> has no port option, so the child binds <see cref="LabDefaults.DaemonPort"/>;
