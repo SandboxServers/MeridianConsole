@@ -299,6 +299,8 @@ src/Dhadgar.Nodes/
 | POST | `/claim` | Claim reservation with server ID |
 | DELETE | `/` | Release reservation |
 
+These endpoints use the `ReservationCaller` policy: the caller must be a user principal with an `org_id` claim (agent principals, which carry a `node_id` claim, get 403; no parseable `org_id` gets 403). The reservation's node must belong to the caller's organization. An unknown token and another organization's reservation both return 404 `reservation_not_found`, so the token endpoints do not reveal whether a token exists.
+
 ---
 
 ## Database Schema

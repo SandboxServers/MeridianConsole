@@ -674,4 +674,42 @@ public sealed class CapacityReservationServiceTests
         Assert.Equal(1, failCount); // Last one should fail
         Assert.Equal("insufficient_memory", results.First(r => !r.Success).Error);
     }
+
+    [Fact]
+    public async Task GetOwningOrganizationIdAsync_KnownToken_ReturnsNodeOrganization()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var (service, _, timeProvider) = CreateService(context);
+        var orgId = Guid.NewGuid();
+        var node = await SeedNodeWithCapacityAsync(context, timeProvider, orgId: orgId);
+        var reserve = await service.ReserveAsync(
+            node.Id,
+            memoryMb: 512,
+            diskMb: 1024,
+            cpuMillicores: 0,
+            requestedBy: "test",
+            ttlMinutes: 15);
+        Assert.True(reserve.Success);
+
+        // Act
+        var owner = await service.GetOwningOrganizationIdAsync(reserve.Value!.ReservationToken);
+
+        // Assert
+        Assert.Equal(orgId, owner);
+    }
+
+    [Fact]
+    public async Task GetOwningOrganizationIdAsync_UnknownToken_ReturnsNull()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var (service, _, _) = CreateService(context);
+
+        // Act
+        var owner = await service.GetOwningOrganizationIdAsync(Guid.NewGuid());
+
+        // Assert
+        Assert.Null(owner);
+    }
 }
