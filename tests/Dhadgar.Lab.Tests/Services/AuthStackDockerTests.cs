@@ -1,4 +1,8 @@
+using System.Buffers.Text;
+using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Build;
@@ -19,19 +23,32 @@ namespace Dhadgar.Lab.Tests.Services;
 [Collection(LabDockerGate.Name)]
 public sealed class AuthStackDockerTests
 {
-    private const string LinuxContext = "desktop-linux";
+    private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";
 
-    [Fact]
+    [SkippableFact(Timeout = 1_500_000)]
     [Trait("RequiresDocker", "true")]
     [Trait("RequiresNetwork", "true")]
-    public async Task BuildUpStart_IdentityBetterAuthPanel_ServeHealthAndLogin()
+    public async Task AuthStack_SignUpThroughGateway()
     {
+        string linuxContext = Environment.GetEnvironmentVariable("Lab__Docker__LinuxContext") is { Length: > 0 } configured
+            ? configured
+            : ContainerLogFollower.DefaultLinuxContext;
+        (int versionExit, _) = RunDocker(linuxContext, ["version", "--format", "{{.Server.Version}}"]);
+        Skip.IfNot(versionExit == 0, "docker is not reachable on context " + linuxContext);
+
+        (int psExit, string labelled) = RunDocker(linuxContext, ["ps", "-aq", "--filter", "label=" + LabDefaults.ContainerLabel + "=1", "--filter", "name=^meridian-lab-", "--format", "{{.ID}}"]);
+        Assert.True(psExit == 0, "docker ps failed");
+        if (labelled.Trim().Length > 0 && Environment.GetEnvironmentVariable(WipeEnvVar) != "1")
+        {
+            Assert.Fail("labelled lab containers exist; set MERIDIAN_LAB_S6_WIPE=1 to let the test's stack_up wipe remove them");
+        }
+
         string repoRoot = FindRepoRoot();
         string home = Path.Combine(Path.GetTempPath(), "meridian-lab-services-" + Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(home);
         var paths = LabPaths.FromRoot(home, repoRoot);
         var validator = new PathValidator(NullLogger<PathValidator>.Instance);
-        var docker = new DockerCli(new DockerOptions(LinuxContext, null));
+        var docker = new DockerCli(new DockerOptions(linuxContext, null));
         using var vault = new SecretVault();
         using var toxi = new ToxiproxyClient();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
@@ -96,6 +113,17 @@ public sealed class AuthStackDockerTests
                 using HttpResponseMessage response = await http.GetAsync($"http://127.0.0.1:{port}{path}", ct);
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             }
+
+            string email = $"lab-{Guid.NewGuid():N}@lab.invalid";
+            string password = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(24));
+            using var signUp = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{LabPorts.Gateway}/api/v1/betterauth/sign-up/email")
+            {
+                Content = JsonContent.Create(new { email, password, name = "lab" }),
+            };
+            signUp.Headers.Add("Origin", BetterAuthLabAdapter.TrustedOrigin);
+            using HttpResponseMessage signedUp = await http.SendAsync(signUp, ct);
+            // The body carries a session token: never print it.
+            Assert.True(signedUp.StatusCode == HttpStatusCode.OK, $"sign-up through the Gateway answered {(int)signedUp.StatusCode}");
         }
         finally
         {
@@ -109,7 +137,38 @@ public sealed class AuthStackDockerTests
                 _ = await stack.DownAsync(wipe: true, CancellationToken.None);
             }
 
-            Directory.Delete(home, recursive: true);
+            try
+            {
+                Directory.Delete(home, recursive: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Best effort: the temp home is disposable.
+            }
+        }
+    }
+
+    private static (int ExitCode, string Output) RunDocker(string context, string[] args)
+    {
+        var psi = new ProcessStartInfo("docker") { RedirectStandardOutput = true, RedirectStandardError = true };
+        psi.ArgumentList.Add("--context");
+        psi.ArgumentList.Add(context);
+        foreach (string arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        try
+        {
+            using Process process = Process.Start(psi)!;
+            string output = process.StandardOutput.ReadToEnd();
+            _ = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return (process.ExitCode, output);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return (-1, string.Empty);
         }
     }
 

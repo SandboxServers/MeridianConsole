@@ -60,8 +60,25 @@ public sealed class AuthStackAdapterTests
         Assert.Equal("betterauth", env.Value["POSTGRES_DATABASE"]);
         Assert.Equal("ba-secret-value", env.Value["BETTER_AUTH_SECRET"]);
         Assert.Equal(IdentityLabAdapter.ExchangeIssuer, env.Value["EXCHANGE_TOKEN_ISSUER"]);
-        Assert.False(env.Value.ContainsKey("SECRETS_SERVICE_URL"));
+        Assert.Equal("http://127.0.0.1:8099", env.Value["SECRETS_SERVICE_URL"]);
+        Assert.Equal("8099", env.Value["LAB_SECRETS_STUB_PORT"]);
+        Assert.Equal("--import=file:///lab/secrets-stub.mjs", env.Value["NODE_OPTIONS"]);
+        Assert.Equal("1", env.Value["USE_ENV_DB_PASSWORD"]);
+        Assert.False(env.Value.ContainsKey("IDENTITY_SERVICE_URL"));
+        Assert.DoesNotContain(env.Value.Keys, k => k.StartsWith("SERVICE_CLIENT_", StringComparison.Ordinal));
         Assert.DoesNotContain(env.Value.Values, v => v.Contains('\n', StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Context_ToString_PrintsNoSecret()
+    {
+        string text = Context().ToString();
+
+        Assert.Contains("a9c623a1", text, StringComparison.Ordinal);
+        foreach (string secret in new[] { "CCCC", "ba-secret-value", "lab-password-value", "bapw", "Password=" })
+        {
+            Assert.DoesNotContain(secret, text, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

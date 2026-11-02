@@ -1,12 +1,18 @@
 using System.Net;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Faults;
+using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Services;
 using Dhadgar.Lab.Stack;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -220,9 +226,117 @@ public sealed class LabStackTests : IDisposable
         Assert.Empty(Directory.GetFiles(state, "env-*"));
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The LabStack returned to the caller owns the ToxiproxyClient and its fake handler; the test disposes the stack.")]
-    private LabStack CreateStack(out LabTargetRegistry registry)
+    [Fact]
+    public async Task UpAsync_WritesExchangePublicKey_MatchingTheVaultPrivateKey()
     {
+        using LabStack stack = CreateStack(out _, out LabCredentialRefs refs);
+
+        Result<StackStatusDto> up = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(up.IsSuccess, up.IsFailure ? up.Error : string.Empty);
+        string file = Path.Combine(LabPaths.FromRoot(_root, repoRoot: FindRepoRoot()).State, "identity", "exchange-public.pem");
+        string publicPem = await File.ReadAllTextAsync(file, CancellationToken.None);
+        Assert.Contains("BEGIN PUBLIC KEY", publicPem, StringComparison.Ordinal);
+        Assert.DoesNotContain("PRIVATE KEY", publicPem, StringComparison.Ordinal);
+        Result<string> privatePem = new LabConnectionStrings(_vault, refs).ExchangePrivateKeyPem();
+        Assert.True(privatePem.IsSuccess, privatePem.IsFailure ? privatePem.Error : string.Empty);
+        using var priv = ECDsa.Create();
+        priv.ImportFromPem(privatePem.Value!);
+        using var pub = ECDsa.Create();
+        pub.ImportFromPem(publicPem);
+        Assert.Equal(priv.ExportSubjectPublicKeyInfo(), pub.ExportSubjectPublicKeyInfo());
+    }
+
+    [Fact]
+    public async Task StartBetterAuth_FakeDocker_SecretsOnlyInTheEnvFile_AndFileDeleted()
+    {
+        using LabStack stack = CreateStack(out LabTargetRegistry registry, out LabCredentialRefs refs);
+        Result<StackStatusDto> up = await stack.UpAsync(wipe: false, CancellationToken.None);
+        Assert.True(up.IsSuccess, up.IsFailure ? up.Error : string.Empty);
+
+        // Set only after UpAsync: its own container inspects must keep the defaults.
+        string? envPath = null;
+        string envText = string.Empty;
+        IReadOnlyList<string>? runArgs = null;
+        _docker.Answer = args =>
+        {
+            if (args.Contains("run") && args.Any(a => a.Contains("meridian-lab-betterauth", StringComparison.Ordinal)))
+            {
+                runArgs = args.ToArray();
+                int at = args.ToList().IndexOf("--env-file");
+                if (at >= 0)
+                {
+                    envPath = args[at + 1];
+                    envText = File.ReadAllText(envPath);
+                }
+
+                return new DockerOutput(125, string.Empty, "refused by the test");
+            }
+
+            return args.Contains("container") && args.Contains("inspect") && args.Any(a => a.Contains(".Config.Labels", StringComparison.Ordinal))
+                ? new DockerOutput(1, string.Empty, "No such container")
+                : null;
+        };
+
+        LabPaths paths = LabPaths.FromRoot(_root, repoRoot: FindRepoRoot());
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var redactor = new Redactor(_vault);
+        var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
+        using var supervisor = new LabProcessSupervisor(
+            new LogPathGuard(paths, validator),
+            redactor,
+            leases,
+            _time,
+            new NullRawLineObserver(),
+            new NoFaults());
+        var logs = new ContainerLogFollower(supervisor, new ConfigurationBuilder().Build(), _time, paths);
+        var services = new LabServices(
+            [new BetterAuthLabAdapter()],
+            _docker,
+            registry,
+            stack,
+            new LabConnectionStrings(_vault, refs),
+            refs,
+            _vault,
+            logs,
+            new ConfigOverlay(paths, validator),
+            validator,
+            paths,
+            _time);
+
+        Result<LabServiceStartDto> result = await services.StartAsync("betterauth", "a9c623a1", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("could not start", result.Error, StringComparison.Ordinal);
+        Assert.NotNull(envPath);
+        Assert.False(File.Exists(envPath), "the env file must be deleted after docker run");
+        Assert.Contains("EXCHANGE_TOKEN_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----", envText, StringComparison.Ordinal);
+        Assert.Contains("SECRETS_SERVICE_URL=http://127.0.0.1:8099", envText, StringComparison.Ordinal);
+        Assert.NotNull(runArgs);
+        Assert.Contains("--env-file", runArgs);
+        string joined = string.Join(' ', runArgs);
+        string joinedNoNewlines = joined.Replace("\n", string.Empty, StringComparison.Ordinal);
+        foreach ((string reference, int length) in _vault.Snapshot())
+        {
+            if (length < 8)
+            {
+                continue;
+            }
+
+            Result<string> value = _vault.Use(reference, v => v.ToString());
+            Assert.True(value.IsSuccess);
+            Assert.DoesNotContain(value.Value!, joined, StringComparison.Ordinal);
+            Assert.DoesNotContain(value.Value!, joinedNoNewlines, StringComparison.Ordinal);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The LabStack returned to the caller owns the ToxiproxyClient and its fake handler; the test disposes the stack.")]
+    private LabStack CreateStack(out LabTargetRegistry registry) => CreateStack(out registry, out _);
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The LabStack returned to the caller owns the ToxiproxyClient and its fake handler; the test disposes the stack.")]
+    private LabStack CreateStack(out LabTargetRegistry registry, out LabCredentialRefs refs)
+    {
+        refs = new LabCredentialRefs();
         var paths = LabPaths.FromRoot(_root, repoRoot: FindRepoRoot());
         registry = new LabTargetRegistry(paths, _docker, _time);
         var toxi = new ToxiproxyClient(new FakeToxiproxyHandler());
@@ -231,7 +345,7 @@ public sealed class LabStackTests : IDisposable
             registry,
             toxi,
             _vault,
-            new LabCredentialRefs(),
+            refs,
             paths,
             new PathValidator(NullLogger<PathValidator>.Instance),
             _time);

@@ -38,10 +38,21 @@ NEXT STEP: step 2 (LabServiceContext optional ExchangePublicKeyPem/ExchangePriva
 LAST CHECK: build Dhadgar.Lab Release TreatWarningsAsErrors -> Build succeeded, 0 warnings, 0 errors.
 
 ## Session 3 (continuation 3 of 3, last)
-DONE: part 3 (a75d6893, env wiring), part 4 (8a63e685): LabEnvValue.cs (EscapedNewlinePem for Identity, SingleLinePem for BetterAuth since jose importPKCS8 needs no literal \n), IdentityLabAdapter (15010), BetterAuthLabAdapter (15130; DATABASE from POSTGRES_* parsed from ServiceDb string; BETTER_AUTH_TRUSTED_ORIGINS=14321, NODE_ENV unset), PanelLabAdapter (14321). Identity /healthz and BetterAuth /healthz verified.
+DONE: part 3 (a75d6893, env wiring), part 4 (8a63e685): LabEnvValue.cs (EscapedNewlinePem for Identity, SingleLinePem for BetterAuth since jose importPKCS8 needs no literal \n), IdentityLabAdapter (15010), BetterAuthLabAdapter (15130; DATABASE from POSTGRES_* parsed from ServiceDb string; BETTER_AUTH_TRUSTED_ORIGINS=14321, NODE_ENV unset), PanelLabAdapter (14321). Identity /healthz and BetterAuth /healthz read in source only (not run). BetterAuth has no env mode; it needs the lab Secrets stub (l34-ruling-1, D-ML144).
 NEXT STEP: (4) register 3 adapters in LabDaemon.cs ~line 303 AddSingleton; LabBuilder.Projects add identity (dotnet src/Dhadgar.Identity/Dhadgar.Identity.csproj) + Node projects betterauth/panel via node-app.Dockerfile (needs BuildProject extension: staging of app + SharedAuth). Then (5) GatewayAdapter, (6), (7) tests, (8) checks.
 
 
 ## Session 4 (fallback implementer)
 DONE: part 5 LabBuilder/LabDaemon (6e0d22f2); part 6 GatewayAdapter (e2f1d4d1); part 7 tests + README (293caeb8). I2OutboxInvariant: Identity has no Outbox in src/Dhadgar.Identity, so I2 stays Nodes-only (packet: "if its model has them"). stack_reset_data lists tables dynamically; identity and betterauth are lab DBs already.
 Tests authored, not run (Docker): AuthStackDockerTests, PanelLoginSeamTests (S-L9).
+
+## Fix pass 1 (l34-ruling-1)
+Applied E1-E15. Production (commit 6fd8c45c): E1-E7, E13 (node-app.Dockerfile, lab-secrets-stub.mjs, LabBuilder staging + deny-list, BetterAuthLabAdapter stub env, LabServiceContext.PrintMembers, SecretForms PEM forms, README). Tests: E8-E12 (RedactorTests, LabStackTests, NodeStagingTests, AuthStackAdapterTests, BetterAuthSecretsStubTests, AuthStackDockerTests, Seams/PanelLoginSeamTests moved from Services/). E14 this note. E15 report.
+
+Checks:
+- Build Lab and Lab.Tests Release, TreatWarningsAsErrors: pass, 0 warnings.
+- Targeted run (stub, staging, adapters, redactor, stack): 59/59 pass, 0 skipped (node stub test ran).
+- Full filtered run: see report. Only allowed failure GatewayRouteTableTests.EveryGatewayRoute_IsInTheTable_WithTheSameCluster.
+- No packages.lock.json or csproj changes.
+- Check 5 (AuthStackDockerTests, Docker): NOT RUN, Docker forbidden. Orchestrator must run it before review pass 2.
+- Deviation: the node script in Stub_FeedsTheRealLoadSecrets exits explicitly after flushing stdout, because the stub listener keeps node alive.
