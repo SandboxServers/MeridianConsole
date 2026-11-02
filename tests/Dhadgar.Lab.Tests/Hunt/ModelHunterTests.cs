@@ -80,6 +80,50 @@ public sealed class ModelHunterTests : IDisposable
     }
 
     [Fact]
+    public async Task Replay_EnrollAgainInsideCut_Pg500_IsNotDiverged()
+    {
+        // F125: run 11's divergence. EnrollAgain is the same request as Enroll, so its cut 500 and the I1 it logs are excused.
+        var lab = new FakeLab { Pg500 = true };
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.Mint), new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.EnrollAgain, 0), new HuntOp(HuntOpKind.PgUp)], CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.False(replay.Value!.Diverged, replay.Value.Detail);
+        Assert.Equal(1, replay.Value.Known);
+    }
+
+    [Fact]
+    public async Task Replay_EnrollInsideCut_Pg500_IsNotDiverged()
+    {
+        // The control: Enroll inside a cut was already excused, and it now exercises the queued I1 path.
+        var lab = new FakeLab { Pg500 = true };
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.Mint), new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.Enroll, 0), new HuntOp(HuntOpKind.PgUp)], CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.False(replay.Value!.Diverged, replay.Value.Detail);
+        Assert.Equal(1, replay.Value.Known);
+    }
+
+    [Fact]
+    public async Task Replay_EnrollAgainOutsideCut_I1_Diverges()
+    {
+        // The excuse must not widen past the cut. FlakyI1OnCheck = 3 is the check after EnrollAgain for a new hunter
+        // (start checkpoint 1, after Mint 2, after EnrollAgain 3). The status is 201, so only the I1 can diverge.
+        var lab = new FakeLab { FlakyI1OnCheck = 3 };
+        ModelHunter hunter = NewHunter(lab);
+
+        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.Mint), new HuntOp(HuntOpKind.EnrollAgain, 0)], CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error);
+        Assert.True(replay.Value!.Diverged);
+        Assert.Equal(1, replay.Value.Index);
+        Assert.Contains("outside a PgDown window", replay.Value.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Hunter_I1OutsidePgDown_Fails()
     {
         var lab = new FakeLab { I1Violations = true };
@@ -481,6 +525,10 @@ public sealed class ModelHunterTests : IDisposable
 
         public bool ReusedTokenReturns201 { get; init; }
 
+        /// <summary>
+        /// Inside a cut the product answers 500 and logs an unhandled exception, so the next <c>invariants_check</c> returns one I1 (KI-F67).
+        /// A 503 cut answer (this flag false) queues nothing.
+        /// </summary>
         public bool Pg500 { get; init; }
 
         public bool I1Violations { get; init; }
@@ -684,7 +732,13 @@ public sealed class ModelHunterTests : IDisposable
         {
             if (_pgDown)
             {
-                return Pg500 ? 500 : 503;
+                if (Pg500)
+                {
+                    _queuedI1++;
+                    return 500;
+                }
+
+                return 503;
             }
 
             if (_staleIdle > 0)

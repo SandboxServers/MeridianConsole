@@ -485,7 +485,7 @@ public sealed class ModelHunter
         }
     }
 
-    /// <summary>After each op: the DB agrees with the model, and no I3 violation and no I1 outside a cut window on enroll (A2).</summary>
+    /// <summary>After each op: the DB agrees with the model, and no I3 violation and no I1 outside a cut window on Enroll or EnrollAgain (A2).</summary>
     private async Task<string?> CheckStateAsync(EnrollmentModel model, HuntOp op, CancellationToken ct)
     {
         Result<JsonElement> nodes = await CallAsync("db_query", new JsonObject
@@ -536,7 +536,9 @@ public sealed class ModelHunter
                     return "invariant " + invariantId + " violated";
                 }
 
-                bool allowed = model.PgDown && op.Kind == HuntOpKind.Enroll;
+                // KI-F67: a request sent inside a cut may answer 500 and log an unhandled exception; Enroll and EnrollAgain are the same
+                // request (EnrollmentModel.Expect), so both are excused (F125). Nothing else is.
+                bool allowed = model.PgDown && (op.Kind is HuntOpKind.Enroll or HuntOpKind.EnrollAgain);
                 if (invariantId.StartsWith("I1", StringComparison.Ordinal) && !allowed)
                 {
                     return "invariant " + invariantId + " violated outside a PgDown window";
