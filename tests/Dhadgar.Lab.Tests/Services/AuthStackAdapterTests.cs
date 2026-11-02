@@ -1,4 +1,5 @@
 using Dhadgar.Lab.Services;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Dhadgar.Lab.Tests.Services;
@@ -46,6 +47,59 @@ public sealed class AuthStackAdapterTests
 
         Assert.True(env.IsFailure);
         Assert.StartsWith("[Lab.InvalidArgument]", env.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Identity_UsesDevelopmentCertificates_AndBlankVaultUri()
+    {
+        var env = new IdentityLabAdapter().Environment(Context());
+
+        Assert.True(env.IsSuccess, env.Error);
+        Assert.Equal("true", env.Value![IdentityLabAdapter.UseDevelopmentCertificatesKey]);
+        Assert.True(env.Value.TryGetValue(IdentityLabAdapter.KeyVaultUriKey, out string? vault), "the Key Vault URI key must be present (empty) to override appsettings");
+        Assert.Equal(string.Empty, vault);
+        Assert.DoesNotContain(IdentityLabAdapter.UseDevelopmentCertificatesKey.Replace("__", ":", StringComparison.Ordinal), new IdentityLabAdapter().OverlayKeys);
+        Assert.DoesNotContain(IdentityLabAdapter.KeyVaultUriKey.Replace("__", ":", StringComparison.Ordinal), new IdentityLabAdapter().OverlayKeys);
+    }
+
+    [Fact]
+    public void Identity_OverItsAppsettings_SelectsDevelopmentCertificates_AndNoVault()
+    {
+        string appsettings = Path.Combine(LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory), "src", "Dhadgar.Identity", "appsettings.json");
+        var env = new IdentityLabAdapter().Environment(Context());
+        Assert.True(env.IsSuccess, env.Error);
+
+        IConfiguration config = new ConfigurationBuilder()
+            .AddJsonFile(appsettings, optional: false, reloadOnChange: false)
+            .AddInMemoryCollection(env.Value!.Select(pair => new KeyValuePair<string, string?>(pair.Key.Replace("__", ":", StringComparison.Ordinal), pair.Value)))
+            .Build();
+
+        // Mirrors Program.cs: GetValue<bool>("Auth:UseDevelopmentCertificates") picks the certificate branch.
+        Assert.True(config.GetValue<bool>("Auth:UseDevelopmentCertificates"), "Identity would take the Key Vault certificate branch (F131)");
+        Assert.True(string.IsNullOrWhiteSpace(config["Auth:KeyVault:VaultUri"]), "appsettings' Key Vault URI is still in force");
+    }
+
+    [Fact]
+    public void Identity_KeyVaultConsumers_AreTheKnownFour()
+    {
+        string root = Path.Combine(LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory), "src", "Dhadgar.Identity");
+        string sep = Path.DirectorySeparatorChar.ToString();
+        var consumers = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains(sep + "bin" + sep, StringComparison.Ordinal) && !path.Contains(sep + "obj" + sep, StringComparison.Ordinal))
+            .Where(path => File.ReadAllText(path).Contains("new DefaultAzureCredential(", StringComparison.Ordinal))
+            .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(new[] { "Program.cs", "Services/ExchangeTokenValidator.cs", "Services/SigningKeyProvider.cs", "Services/WebhookSecretProvider.cs" }, consumers);
+
+        string program = File.ReadAllText(Path.Combine(root, "Program.cs"));
+        Assert.Contains("GetValue<bool>(\"Auth:UseDevelopmentCertificates\")", program, StringComparison.Ordinal);
+        Assert.Contains("|| useDevelopmentCertificates)", program, StringComparison.Ordinal);
+        foreach (string service in consumers.Where(name => name.StartsWith("Services/", StringComparison.Ordinal)))
+        {
+            Assert.Contains("VaultUri", File.ReadAllText(Path.Combine(root, service)), StringComparison.Ordinal);
+        }
     }
 
     [Fact]

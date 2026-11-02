@@ -118,7 +118,16 @@ public sealed class AuthStackDockerTests
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             }
 
-            string email = $"lab-{Guid.NewGuid():N}@lab.invalid";
+            // D-ML152: Identity must not touch Azure Key Vault or the Azure credential chain in the lab.
+            Result<IReadOnlyList<LogLine>> identityLines = supervisor.ReadLines("identity");
+            Assert.True(identityLines.IsSuccess, identityLines.IsFailure ? identityLines.Error : string.Empty);
+            Assert.DoesNotContain(identityLines.Value!, line =>
+                line.Message.Contains("DefaultAzureCredential", StringComparison.Ordinal)
+                || line.Message.Contains("Azure.Identity", StringComparison.Ordinal)
+                || line.Message.Contains("vault.azure.net", StringComparison.Ordinal)
+                || line.Category.StartsWith("Azure.", StringComparison.Ordinal));
+
+            string email =$"lab-{Guid.NewGuid():N}@lab.invalid";
             string password = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(24));
             using var signUp = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{LabPorts.Gateway}/api/v1/betterauth/sign-up/email")
             {

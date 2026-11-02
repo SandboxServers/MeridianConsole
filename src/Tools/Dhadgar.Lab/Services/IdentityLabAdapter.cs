@@ -6,6 +6,8 @@ namespace Dhadgar.Lab.Services;
 /// <summary>
 /// Identity behind the lab proxies (C1 port 15010). Postgres, Redis and RabbitMQ are reached only through Toxiproxy.
 /// It verifies BetterAuth's exchange tokens with the stack's public key, so the key pair is generated per stack.
+/// It runs Identity's development-certificate path with a blank Key Vault URI, as the compose dev stack does (D-ML152):
+/// certificates and the signing key are ephemeral (KG-W7-5), and webhooks are unsigned.
 /// </summary>
 public sealed class IdentityLabAdapter : ILabServiceAdapter
 {
@@ -20,6 +22,17 @@ public sealed class IdentityLabAdapter : ILabServiceAdapter
 
     /// <summary>Audience of the exchange tokens; equals the path Identity serves <c>/exchange</c> on.</summary>
     public const string ExchangeAudience = "https://meridianconsole.com/api/v1/identity/exchange";
+
+    /// <summary>
+    /// <c>Auth:UseDevelopmentCertificates</c>: Identity's own switch for ephemeral OpenIddict certificates instead of Key Vault (D-ML152).
+    /// Set only by this adapter; never an overlay key and never a product default.
+    /// </summary>
+    public const string UseDevelopmentCertificatesKey = "Auth__UseDevelopmentCertificates";
+
+    /// <summary>
+    /// <c>Auth:KeyVault:VaultUri</c>, set empty so it overrides appsettings: no Key Vault calls for certificates, exchange keys or webhook secrets (D-ML152).
+    /// </summary>
+    public const string KeyVaultUriKey = "Auth__KeyVault__VaultUri";
 
     /// <summary>Identity to Postgres proxy port (C10 <c>identity-postgres</c>).</summary>
     public const int PostgresProxyPort = 20030;
@@ -84,6 +97,8 @@ public sealed class IdentityLabAdapter : ILabServiceAdapter
             ["Auth__Exchange__Issuer"] = ExchangeIssuer,
             ["Auth__Exchange__Audience"] = ExchangeAudience,
             ["Auth__Exchange__PublicKeyPem"] = LabEnvValue.EscapedNewlinePem(ctx.ExchangePublicKeyPem),
+            [UseDevelopmentCertificatesKey] = "true",
+            [KeyVaultUriKey] = string.Empty,
             ["RabbitMq__Host"] = GatewayAdapter.ToxiproxyHost,
             ["RabbitMq__Port"] = RabbitMqProxyPort.ToString(CultureInfo.InvariantCulture),
             ["RabbitMq__Username"] = ctx.RabbitMqUsername,

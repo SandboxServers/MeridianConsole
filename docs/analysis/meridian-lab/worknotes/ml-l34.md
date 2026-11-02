@@ -56,3 +56,14 @@ Checks:
 - No packages.lock.json or csproj changes.
 - Check 5 (AuthStackDockerTests, Docker): NOT RUN, Docker forbidden. Orchestrator must run it before review pass 2.
 - Deviation: the node script in Stub_FeedsTheRealLoadSecrets exits explicitly after flushing stdout, because the stub listener keeps node alive.
+
+## Fix pass 2 (l34-ruling-2)
+
+- R1: the old L34 decision number renamed to `D-ML146` in the eight files named by l34-ruling-2 section 5.2 (11 hits). Commit `24e7672e`. A git grep for the old number now lists the four ruling worknotes only: docker-run-12-ruling 4, l19n-ruling-1 12, l34-ruling-1 16, l36-ruling-1 11.
+- E1 `src/Tools/Dhadgar.Lab/Services/IdentityLabAdapter.cs`: constants `UseDevelopmentCertificatesKey` and `KeyVaultUriKey`; `Environment` sets `Auth__UseDevelopmentCertificates=true` and `Auth__KeyVault__VaultUri` empty; class summary updated (D-ML152). `OverlayKeys` unchanged.
+- E2 `tests/Dhadgar.Lab.Tests/Services/AuthStackAdapterTests.cs`: T1 `Identity_UsesDevelopmentCertificates_AndBlankVaultUri`, T2 `Identity_OverItsAppsettings_SelectsDevelopmentCertificates_AndNoVault`, T3 `Identity_KeyVaultConsumers_AreTheKnownFour`. Red checked by reverting E1 entries and mutating the T3 list (T1, T2, T3 failed); both restored before commit.
+- E3 `tests/Dhadgar.Lab.Tests/Services/AuthStackDockerTests.cs`: Azure log-line assertion on identity after the health loop. Docker only, not run here.
+- E4 `src/Tools/Dhadgar.Lab/README.md` line 69 replaced per ruling.
+- Checks: Lab build Release, 0 errors; Lab.Tests build Release, 0 errors, 0 warnings; `AuthStackAdapterTests` 11 passed, 0 failed; non-Docker filter `RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true` 1550 passed, 0 failed, 5 skipped; no Docker run.
+- No `packages.lock.json` or csproj changes.
+- Run 14 pending (orchestrator).
