@@ -342,6 +342,29 @@ public sealed class LabServices
             connections["gateway-redis"] = redis.Value!;
         }
 
+        if (adapter.Name is "notifications" or "discord")
+        {
+            Result<string> db = _connections.ServiceDb(adapter.Name);
+            if (db.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(db.Error);
+            }
+
+            connections[adapter.Name] = db.Value!;
+        }
+
+        string? adminKey = null;
+        if (adapter.Name is "notifications" or "discord")
+        {
+            Result<string> key = AdminApiKey(adapter.Name == "notifications" ? LabCredentialRefs.NotificationsAdmin : LabCredentialRefs.DiscordAdmin);
+            if (key.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(key.Error);
+            }
+
+            adminKey = key.Value!;
+        }
+
         Result<string> password = RabbitMqPassword();
         if (password.IsFailure)
         {
@@ -359,7 +382,8 @@ public sealed class LabServices
             connections,
             Path.Combine(_paths.State, "nodes-ca"),
             "lab",
-            password.Value!);
+            password.Value!,
+            adminKey);
         Result<IReadOnlyDictionary<string, string>> composed = adapter.Environment(ctx);
         if (composed.IsFailure)
         {
@@ -376,6 +400,17 @@ public sealed class LabServices
         env["Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics"] = "Information";
 
         return Result<IReadOnlyDictionary<string, string>>.Success(env);
+    }
+
+    private Result<string> AdminApiKey(string credential)
+    {
+        string? reference = _credentials.Get(credential);
+        if (reference is null)
+        {
+            return Result<string>.Failure("[Lab.NotFound] the stack has no admin keys; run stack_up first");
+        }
+
+        return _vault.Use(reference, value => value.ToString());
     }
 
     private Result<string> RabbitMqPassword()

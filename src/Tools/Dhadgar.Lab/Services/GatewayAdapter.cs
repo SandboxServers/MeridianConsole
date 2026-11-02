@@ -17,6 +17,12 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     /// <summary>Gateway to Redis proxy port (C10 <c>gateway-redis</c>).</summary>
     public const int GatewayRedisProxyPort = 20010;
 
+    /// <summary>Gateway to Notifications proxy port (C10 <c>gateway-notifications</c>, L36).</summary>
+    public const int GatewayNotificationsProxyPort = 20014;
+
+    /// <summary>Gateway to Discord proxy port (C10 <c>gateway-discord</c>, L36).</summary>
+    public const int GatewayDiscordProxyPort = 20015;
+
     /// <inheritdoc />
     public string Name => "gateway";
 
@@ -30,7 +36,7 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     public int HostPort => 15000;
 
     /// <inheritdoc />
-    public IReadOnlyList<string> Proxies { get; } = ["gateway-redis", "gateway-nodes"];
+    public IReadOnlyList<string> Proxies { get; } = ["gateway-redis", "gateway-nodes", "gateway-notifications", "gateway-discord"];
 
     /// <inheritdoc />
     public string HealthPath => "/healthz";
@@ -61,6 +67,8 @@ public sealed class GatewayAdapter : ILabServiceAdapter
             ["Logging__Console__FormatterName"] = "json",
             ["Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics"] = "Information",
             ["ReverseProxy__Clusters__nodes__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayNodesProxyPort}/",
+            ["ReverseProxy__Clusters__notifications__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayNotificationsProxyPort}/",
+            ["ReverseProxy__Clusters__discord__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayDiscordProxyPort}/",
             ["Redis__ConnectionString"] = redis,
             ["Cloudflare__EnableDynamicFetch"] = "false",
             ["Readyz__RequiredClusters__0"] = "nodes",

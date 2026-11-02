@@ -37,7 +37,10 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     private const string SuperUser = "postgres";
     internal static readonly string[] LabDatabaseServices = ["nodes", "identity", "notifications", "discord", "betterauth"];
     private static readonly string[] CredentialNames =
-        [LabCredentialRefs.Postgres, LabCredentialRefs.LabOwner, LabCredentialRefs.LabReader, LabCredentialRefs.RabbitMq, LabCredentialRefs.Redis];
+        [
+            LabCredentialRefs.Postgres, LabCredentialRefs.LabOwner, LabCredentialRefs.LabReader, LabCredentialRefs.RabbitMq, LabCredentialRefs.Redis,
+            LabCredentialRefs.NotificationsAdmin, LabCredentialRefs.DiscordAdmin,
+        ];
     private static readonly TimeSpan ReadinessWindow = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessPoll = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan StaleEnvFileAge = TimeSpan.FromMinutes(10);

@@ -11,12 +11,14 @@ namespace Dhadgar.Lab.Services;
 /// <param name="CaStateDirectory">Host folder for Nodes CA state (<c>LabPaths.State\nodes-ca</c>).</param>
 /// <param name="RabbitMqUsername">RabbitMQ user for lab services.</param>
 /// <param name="RabbitMqPassword">RabbitMQ password for lab services; never logged.</param>
+/// <param name="AdminApiKey">Admin API key for services that authenticate admin routes (L36); from the vault, never logged. Null when the service has none.</param>
 public sealed record LabServiceContext(
     string BuildId,
     IReadOnlyDictionary<string, string> ConnectionStrings,
     string CaStateDirectory,
     string RabbitMqUsername,
-    string RabbitMqPassword);
+    string RabbitMqPassword,
+    string? AdminApiKey = null);
 
 /// <summary>
 /// One lab-managed service: its container identity, port and the environment it needs behind the proxies (L09).

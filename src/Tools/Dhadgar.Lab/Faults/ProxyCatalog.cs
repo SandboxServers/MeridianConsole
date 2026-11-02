@@ -36,6 +36,7 @@ public static class ProxyCatalog
         new("notifications-webhook", 20052, "meridian-lab-sink:8080", "L36"),
         new("discord-postgres", 20060, "meridian-lab-postgres:5432", "L36"),
         new("discord-webhook", 20061, "meridian-lab-sink:8080", "L36"),
+        new("discord-rabbitmq", 20062, "meridian-lab-rabbitmq:5672", "L36"),
         new("agent-ingress", 25000, "meridian-lab-gateway:8080", "L08"),
         new("agent-ingress-tls", 25443, "meridian-lab-gateway:8443", "L41"),
     ];
