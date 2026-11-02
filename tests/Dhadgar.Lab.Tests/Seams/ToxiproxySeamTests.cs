@@ -22,6 +22,7 @@ namespace Dhadgar.Lab.Tests.Seams;
 
 /// <summary>
 /// S-L7 on the real stack: the lab's <see cref="ToxiproxyClient"/> drives a real Toxiproxy in front of a real Nodes and Gateway.
+/// S-L15 (F114, D-ML128) cuts <c>nodes-postgres</c> while Nodes' pool is idle, heals it, and asserts that the first enroll after the heal answers 401, not 500.
 /// A 1000 ms latency toxic on <c>gateway-nodes</c> slows the Gateway probe; disabling <c>nodes-postgres</c> makes the Nodes DB path
 /// (unknown-token enroll on the direct port) answer 5xx and healing restores 401; disabling <c>nodes-rabbitmq</c> makes Nodes
 /// <c>/readyz</c> report <c>masstransit</c> Degraded or Unhealthy naming the proxy, and healing restores a fully healthy report (D-ML72); reset removes the latency toxic. Observation is on direct
@@ -49,45 +50,13 @@ public sealed class ToxiproxySeamTests
     [Trait("RequiresDocker", "true")]
     public async Task ProxyFaults_ReachGatewayNodesDbAndRabbitPaths_ThenResetClearsToxics()
     {
-        string repoRoot = FindRepoRoot();
-        string home = Path.Combine(Path.GetTempPath(), "meridian-lab-toxi-seam-" + Guid.NewGuid().ToString("N"));
-        _ = Directory.CreateDirectory(home);
-        var paths = LabPaths.FromRoot(home, repoRoot);
-        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
-        var docker = new DockerCli(new DockerOptions(LinuxContext, null));
-        using var vault = new SecretVault();
-        using var toxi = new ToxiproxyClient();
-        var refs = new LabCredentialRefs();
-        var targets = new LabTargetRegistry(paths, docker, TimeProvider.System);
-        using var stack = new LabStack(docker, targets, toxi, vault, refs, paths, validator, TimeProvider.System);
-        var connections = new LabConnectionStrings(vault, refs);
-        var redactor = new Redactor(vault);
-        var leases = new LeaseBook(TimeProvider.System, new NullLabEvents(), new LeaseOptions());
-        using var supervisor = new LabProcessSupervisor(
-            new LogPathGuard(paths, validator),
-            redactor,
-            leases,
-            TimeProvider.System,
-            new NullRawLineObserver(),
-            new NoFaults());
-        var logs = new ContainerLogFollower(supervisor, new ConfigurationBuilder().Build(), TimeProvider.System, paths);
-        var overlay = new ConfigOverlay(paths, validator);
-        var services = new LabServices(
-            [new GatewayAdapter(), new NodesAdapter()],
-            docker,
-            targets,
-            stack,
-            connections,
-            refs,
-            vault,
-            logs,
-            overlay,
-            validator,
-            paths,
-            TimeProvider.System);
-
-        using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
-        using var http = new HttpClient(handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(10) };
+        using SeamRig rig = CreateRig("toxi-seam");
+        string repoRoot = rig.RepoRoot;
+        string home = rig.Home;
+        LabStack stack = rig.Stack;
+        LabServices services = rig.Services;
+        ToxiproxyClient toxi = rig.Toxi;
+        HttpClient http = rig.Http;
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(20));
         CancellationToken ct = cts.Token;
 
@@ -99,9 +68,9 @@ public sealed class ToxiproxySeamTests
             Result<LabBuildDto> build = await LabBuilder.BuildAsync(
                 repoRoot,
                 LabBuilder.Projects.Where(project => project.Name is "nodes" or "gateway").ToList(),
-                docker,
-                paths,
-                validator,
+                rig.Docker,
+                rig.Paths,
+                rig.Validator,
                 TimeProvider.System,
                 ct);
             Assert.True(build.IsSuccess, build.IsFailure ? build.Error : string.Empty);
@@ -228,6 +197,99 @@ public sealed class ToxiproxySeamTests
                 _ = await services.StopAsync(name, CancellationToken.None);
             }
 
+            _ = await stack.DownAsync(wipe: true, CancellationToken.None);
+
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Seam", "S-L15")]
+    [Trait("RequiresDocker", "true")]
+    public async Task PostgresCutWhileIdle_FirstEnrollAfterHeal_Answers401()
+    {
+        using SeamRig rig = CreateRig("pg-cut-seam");
+        string home = rig.Home;
+        LabStack stack = rig.Stack;
+        LabServices services = rig.Services;
+        ToxiproxyClient toxi = rig.Toxi;
+        HttpClient http = rig.Http;
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(20));
+        CancellationToken ct = cts.Token;
+
+        try
+        {
+            Result<StackStatusDto> up = await stack.UpAsync(wipe: true, ct);
+            Assert.True(up.IsSuccess, up.IsFailure ? up.Error : string.Empty);
+
+            // Nodes only: the pool is the seam, so no Gateway is needed.
+            Result<LabBuildDto> build = await LabBuilder.BuildAsync(
+                rig.RepoRoot,
+                LabBuilder.Projects.Where(project => project.Name is "nodes").ToList(),
+                rig.Docker,
+                rig.Paths,
+                rig.Validator,
+                TimeProvider.System,
+                ct);
+            Assert.True(build.IsSuccess, build.IsFailure ? build.Error : string.Empty);
+
+            Result<LabServiceStartDto> nodes = await services.StartAsync("nodes", build.Value.BuildId, ct);
+            Assert.True(nodes.IsSuccess, nodes.IsFailure ? nodes.Error : string.Empty);
+
+            // Baseline: an unknown-token enroll reaches the DB lookup and answers 401.
+            int? lastBaseline = null;
+            bool baselineReady = await WaitUntilAsync(
+                async () =>
+                {
+                    lastBaseline = (await ProbeAsync(http, NodesEnrollUri(), HttpMethod.Post, UnknownTokenEnrollBody(), ct)).Status;
+                    return lastBaseline == 401;
+                },
+                BaselineSeconds,
+                5,
+                ct);
+            Assert.True(baselineReady, $"Nodes did not answer 401 to an unknown-token enroll within {BaselineSeconds} s; last answer {lastBaseline}.");
+
+            // Warm the pool: four parallel probes take four pooled Postgres connections, then the pool sits idle.
+            ProbeResult[] warm = await Task.WhenAll(
+                Enumerable.Range(0, 4).Select(_ => ProbeAsync(http, NodesEnrollUri(), HttpMethod.Post, UnknownTokenEnrollBody(), ct)));
+            foreach (ProbeResult probe in warm)
+            {
+                Assert.Equal(401, probe.Status);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+
+            // Cut Postgres while Nodes is idle. No Nodes request is sent during the cut.
+            Result disablePg = await toxi.SetEnabledAsync("nodes-postgres", false, ct);
+            Assert.True(disablePg.IsSuccess, disablePg.IsFailure ? disablePg.Error : string.Empty);
+            Assert.False(
+                await CanConnectAsync(ProxyPort("nodes-postgres"), ct),
+                "The nodes-postgres listener still accepts new connections after it was disabled.");
+            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+
+            // Heal. The wait probes the proxy listener only, never Nodes.
+            Result healPg = await toxi.SetEnabledAsync("nodes-postgres", true, ct);
+            Assert.True(healPg.IsSuccess, healPg.IsFailure ? healPg.Error : string.Empty);
+            bool proxyUp = await WaitUntilAsync(() => CanConnectAsync(ProxyPort("nodes-postgres"), ct), 10, 1, ct);
+            Assert.True(proxyUp, "The nodes-postgres listener did not accept connections 10 s after it was enabled.");
+
+            // The first request after the heal is the one that must not 500 (F114, NR-1).
+            ProbeResult first = await ProbeAsync(http, NodesEnrollUri(), HttpMethod.Post, UnknownTokenEnrollBody(), ct);
+            _output.WriteLine($"S-L15 timing first-enroll-after-heal status={first.Status} elapsed={first.ElapsedMs} ms");
+            Assert.True(
+                first.Status == 401,
+                $"First enroll after an idle Postgres cut answered {first.Status}, not 401 (F114 product half, D-ML128).");
+
+            for (int i = 2; i <= 6; i++)
+            {
+                ProbeResult probe = await ProbeAsync(http, NodesEnrollUri(), HttpMethod.Post, UnknownTokenEnrollBody(), ct);
+                _output.WriteLine($"S-L15 timing probe-{i}={probe.ElapsedMs} ms status={probe.Status}");
+                Assert.True(probe.Status == 401, $"Enroll probe {i} after the heal answered {probe.Status}, not 401.");
+            }
+        }
+        finally
+        {
+            _ = await services.StopAsync("nodes", CancellationToken.None);
             _ = await stack.DownAsync(wipe: true, CancellationToken.None);
 
             Directory.Delete(home, recursive: true);
@@ -417,6 +479,120 @@ public sealed class ToxiproxySeamTests
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The lab object graph shared by the S-L7 and S-L15 seams: a real stack, Toxiproxy, the Nodes and Gateway services and a direct-port HTTP client.
+    /// Disposing it releases the process-local objects; the caller stops the services, takes the stack down and deletes <see cref="Home"/>.
+    /// </summary>
+    private sealed class SeamRig : IDisposable
+    {
+        private readonly SecretVault _vault;
+        private readonly ToxiproxyClient _toxi;
+        private readonly LabProcessSupervisor _supervisor;
+        private readonly SocketsHttpHandler _handler;
+        private readonly HttpClient _http;
+
+        public SeamRig(
+            string repoRoot,
+            string home,
+            DockerCli docker,
+            LabPaths paths,
+            PathValidator validator,
+            SecretVault vault,
+            ToxiproxyClient toxi,
+            LabStack stack,
+            LabServices services,
+            LabProcessSupervisor supervisor,
+            SocketsHttpHandler handler,
+            HttpClient http)
+        {
+            RepoRoot = repoRoot;
+            Home = home;
+            Docker = docker;
+            Paths = paths;
+            Validator = validator;
+            _vault = vault;
+            _toxi = toxi;
+            Stack = stack;
+            Services = services;
+            _supervisor = supervisor;
+            _handler = handler;
+            _http = http;
+        }
+
+        public string RepoRoot { get; }
+
+        public string Home { get; }
+
+        public DockerCli Docker { get; }
+
+        public LabPaths Paths { get; }
+
+        public PathValidator Validator { get; }
+
+        public LabStack Stack { get; }
+
+        public LabServices Services { get; }
+
+        public ToxiproxyClient Toxi => _toxi;
+
+        public HttpClient Http => _http;
+
+        public void Dispose()
+        {
+            _http.Dispose();
+            _handler.Dispose();
+            _supervisor.Dispose();
+            Stack.Dispose();
+            _toxi.Dispose();
+            _vault.Dispose();
+        }
+    }
+
+    /// <summary>Builds the S-L7 and S-L15 object graph under a fresh <c>meridian-lab-{prefix}-*</c> home directory.</summary>
+    private static SeamRig CreateRig(string prefix)
+    {
+        string repoRoot = FindRepoRoot();
+        string home = Path.Combine(Path.GetTempPath(), "meridian-lab-" + prefix + "-" + Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(home);
+        var paths = LabPaths.FromRoot(home, repoRoot);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var docker = new DockerCli(new DockerOptions(LinuxContext, null));
+        var vault = new SecretVault();
+        var toxi = new ToxiproxyClient();
+        var refs = new LabCredentialRefs();
+        var targets = new LabTargetRegistry(paths, docker, TimeProvider.System);
+        var stack = new LabStack(docker, targets, toxi, vault, refs, paths, validator, TimeProvider.System);
+        var connections = new LabConnectionStrings(vault, refs);
+        var redactor = new Redactor(vault);
+        var leases = new LeaseBook(TimeProvider.System, new NullLabEvents(), new LeaseOptions());
+        var supervisor = new LabProcessSupervisor(
+            new LogPathGuard(paths, validator),
+            redactor,
+            leases,
+            TimeProvider.System,
+            new NullRawLineObserver(),
+            new NoFaults());
+        var logs = new ContainerLogFollower(supervisor, new ConfigurationBuilder().Build(), TimeProvider.System, paths);
+        var overlay = new ConfigOverlay(paths, validator);
+        var services = new LabServices(
+            [new GatewayAdapter(), new NodesAdapter()],
+            docker,
+            targets,
+            stack,
+            connections,
+            refs,
+            vault,
+            logs,
+            overlay,
+            validator,
+            paths,
+            TimeProvider.System);
+
+        var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
+        var http = new HttpClient(handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(10) };
+        return new SeamRig(repoRoot, home, docker, paths, validator, vault, toxi, stack, services, supervisor, handler, http);
     }
 
     private static string FindRepoRoot()
