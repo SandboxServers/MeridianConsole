@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Results;
+using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -148,7 +149,19 @@ public sealed class FlakeCheckTool : LabTool<FlakeCheckArgs>
             return Result<object>.Failure(plan.Error);
         }
 
-        FlakeCheckPlan chosen = plan.Value!;
+        Result<UatSpec> spec = await LoadSpecAsync(plan.Value!.SpecFile, ct).ConfigureAwait(false);
+        if (spec.IsFailure)
+        {
+            return Result<object>.Failure(spec.Error);
+        }
+
+        Result<FlakeCheckPlan> closed = FlakeCheckJob.WithSpec(plan.Value!, spec.Value!);
+        if (closed.IsFailure)
+        {
+            return Result<object>.Failure(closed.Error);
+        }
+
+        FlakeCheckPlan chosen = closed.Value!;
         Result<JobHandle> started = _jobs.Start(FlakeCheckJob.Kind, chosen.Seed, (jobContext, token) =>
             FlakeCheckJob.RunAsync(chosen, jobContext,
                 (name, arguments, callContext, callToken) =>
@@ -157,5 +170,49 @@ public sealed class FlakeCheckTool : LabTool<FlakeCheckArgs>
         return started.IsFailure
             ? Result<object>.Failure(started.Error)
             : Result<object>.Success(new FlakeCheckStarted(started.Value!.JobId));
+    }
+
+    /// <summary>
+    /// Reads and loads the source run's spec the way <c>uat_run</c> does: the spec folder, the spec file, the 1 MiB cap and
+    /// <see cref="SpecLoader.LoadText"/>.
+    /// </summary>
+    private async Task<Result<UatSpec>> LoadSpecAsync(string specName, CancellationToken ct)
+    {
+        Result<string> dir = UatSpecPaths.ResolveDir(null, _paths, _validator);
+        if (dir.IsFailure)
+        {
+            return Result<UatSpec>.Failure(dir.Error);
+        }
+
+        Result<string> path = UatSpecPaths.ResolveSpec(dir.Value!, specName, _validator);
+        if (path.IsFailure)
+        {
+            return Result<UatSpec>.Failure(path.Error);
+        }
+
+        if (!File.Exists(path.Value!))
+        {
+            return Result<UatSpec>.Failure("[Lab.NotFound] no such spec");
+        }
+
+        if (new FileInfo(path.Value!).Length > UatSpecPaths.MaxSpecBytes)
+        {
+            return Result<UatSpec>.Failure("[Lab.InvalidArgument] the spec is larger than 1 MiB");
+        }
+
+        string text;
+        try
+        {
+            text = await File.ReadAllTextAsync(path.Value!, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Result<UatSpec>.Failure("[Lab.Unavailable] the spec could not be read");
+        }
+
+        SpecLoadOutcome loaded = SpecLoader.LoadText(specName, text);
+        return loaded.Spec is null
+            ? Result<UatSpec>.Failure("[Lab.InvalidArgument] the source run's spec does not load")
+            : Result<UatSpec>.Success(loaded.Spec);
     }
 }

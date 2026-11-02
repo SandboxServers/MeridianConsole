@@ -69,6 +69,30 @@ public sealed class RowFilterCheckTests
         Assert.Equal("[Lab.NotFound] row zz is not in the spec", result.Error);
     }
 
+    [Fact]
+    public void Close_AddsTransitiveDependencies_InFileOrder()
+    {
+        UatSpec spec = LoadChain();
+
+        IReadOnlyList<string> closed = RowFilterCheck.Close(spec, ["c"]);
+
+        Assert.Equal(new[] { "a", "b", "c" }, closed);
+        Result check = RowFilterCheck.Check(spec, closed);
+        Assert.True(check.IsSuccess, check.Error);
+    }
+
+    [Fact]
+    public void Close_UnknownRow_PassesThroughToNotFound()
+    {
+        UatSpec spec = LoadChain();
+
+        IReadOnlyList<string> closed = RowFilterCheck.Close(spec, ["zz"]);
+
+        Assert.Equal(new[] { "zz" }, closed);
+        Result check = RowFilterCheck.Check(spec, closed);
+        Assert.Equal("[Lab.NotFound] row zz is not in the spec", check.Error);
+    }
+
     private static UatSpec LoadChain()
     {
         SpecLoadOutcome loaded = SpecLoader.LoadText("chain.toml", Chain);

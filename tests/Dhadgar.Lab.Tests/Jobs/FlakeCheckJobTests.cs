@@ -7,6 +7,8 @@ using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Tests.Results;
 using Dhadgar.Lab.Tools;
+using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -195,6 +197,85 @@ public sealed class FlakeCheckJobTests : IDisposable
         Assert.Equal("stable", record.Result!["state"]!.GetValue<string>());
         Assert.Empty(record.Result["flakes"]!.AsArray());
         Assert.Equal("fail", ReadJobOverall(jobId));
+    }
+
+    [Fact]
+    public async Task WithSpec_FailedRowWithDependency_PassesUatRunFilterCheck()
+    {
+        // The source run failed row b, which depends on a. A flake check that reruns only b is refused by uat_run's check,
+        // so the plan must carry the closed filter a, b while Keys stays b.
+        WriteSource("src-dep", new RowSpec("chain", "a", "PASS"), new RowSpec("chain", "b", "FAIL"));
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-dep", null,
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+        Assert.True(plan.IsSuccess, plan.Error);
+        UatSpec spec = LoadSpec(ChainSpec);
+
+        Result<FlakeCheckPlan> closed = FlakeCheckJob.WithSpec(plan.Value!, spec);
+
+        Assert.True(closed.IsSuccess, closed.Error);
+        Assert.True(RowFilterCheck.Check(spec, closed.Value!.Rows).IsSuccess);
+        Assert.Equal(new[] { "a", "b" }, closed.Value.Rows);
+        Assert.Equal(new[] { "chain/b" }, closed.Value.Keys);
+    }
+
+    [Fact]
+    public async Task WithSpec_UnknownRow_IsNotFound()
+    {
+        WriteSource("src-unknown", new RowSpec("chain", "b", "FAIL"));
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-unknown", null,
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+        Assert.True(plan.IsSuccess, plan.Error);
+        UatSpec spec = LoadSpec(SingleRowSpec);
+
+        Result<FlakeCheckPlan> closed = FlakeCheckJob.WithSpec(plan.Value!, spec);
+
+        Assert.True(closed.IsFailure);
+        Assert.StartsWith("[Lab.NotFound]", closed.Error, StringComparison.Ordinal);
+    }
+
+    private const string ChainSpec = """
+        schema = 1
+
+        [section]
+        id = "chain"
+        title = "Chain"
+        sequential = true
+        requires = []
+        allow_invariants = []
+
+        [[row]]
+        id = "a"
+        title = "A"
+        expected = "a holds"
+
+        [[row]]
+        id = "b"
+        title = "B"
+        expected = "b holds"
+        depends_on = ["a"]
+        """;
+
+    private const string SingleRowSpec = """
+        schema = 1
+
+        [section]
+        id = "chain"
+        title = "Chain"
+        sequential = true
+        requires = []
+        allow_invariants = []
+
+        [[row]]
+        id = "a"
+        title = "A"
+        expected = "a holds"
+        """;
+
+    private static UatSpec LoadSpec(string text)
+    {
+        SpecLoadOutcome loaded = SpecLoader.LoadText("chain.toml", text);
+        Assert.NotNull(loaded.Spec);
+        return loaded.Spec!;
     }
 
     /// <summary>Writes a source bundle with one spec file (<c>nodes.toml</c>) in its run.json, the shape a real run has.</summary>
