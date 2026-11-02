@@ -342,6 +342,49 @@ public sealed class LabServices
             connections["gateway-redis"] = redis.Value!;
         }
 
+        string? exchangePublic = null;
+        string? exchangePrivate = null;
+        string? betterAuthSecret = null;
+        if (adapter.Name == "identity")
+        {
+            Result<string> postgres = _connections.ServiceDb("identity");
+            if (postgres.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(postgres.Error);
+            }
+
+            Result<string> redis = _connections.Redis("identity");
+            if (redis.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(redis.Error);
+            }
+
+            Result<string> publicPem = ReadExchangePublicKey();
+            if (publicPem.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(publicPem.Error);
+            }
+
+            connections["identity"] = postgres.Value!;
+            connections["identity-redis"] = redis.Value!;
+            exchangePublic = publicPem.Value;
+        }
+
+        if (adapter.Name == "betterauth")
+        {
+            Result<string> postgres = _connections.ServiceDb("betterauth");
+            Result<string> privateKey = _connections.ExchangePrivateKeyPem();
+            Result<string> secret = _connections.BetterAuthSecretValue();
+            if (postgres.IsFailure || privateKey.IsFailure || secret.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure((postgres.IsFailure ? postgres : privateKey.IsFailure ? privateKey : secret).Error);
+            }
+
+            connections["betterauth"] = postgres.Value!;
+            exchangePrivate = privateKey.Value;
+            betterAuthSecret = secret.Value;
+        }
+
         Result<string> password = RabbitMqPassword();
         if (password.IsFailure)
         {
@@ -359,7 +402,10 @@ public sealed class LabServices
             connections,
             Path.Combine(_paths.State, "nodes-ca"),
             "lab",
-            password.Value!);
+            password.Value!,
+            exchangePublic,
+            exchangePrivate,
+            betterAuthSecret);
         Result<IReadOnlyDictionary<string, string>> composed = adapter.Environment(ctx);
         if (composed.IsFailure)
         {
@@ -440,6 +486,31 @@ public sealed class LabServices
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Reads the exchange public key that <c>stack_up</c> wrote under <c>state\identity</c>. The path goes through the validator.
+    /// </summary>
+    private Result<string> ReadExchangePublicKey()
+    {
+        Result<string> file = _validator.ValidatePath(Path.Combine(_paths.State, "identity", "exchange-public.pem"), [_paths.State]);
+        if (file.IsFailure)
+        {
+            return file;
+        }
+
+        try
+        {
+            return Result<string>.Success(File.ReadAllText(file.Value!));
+        }
+        catch (IOException)
+        {
+            return Result<string>.Failure("[Lab.NotFound] the exchange public key is missing; run stack_up first");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Result<string>.Failure("[Lab.NotFound] the exchange public key is missing; run stack_up first");
         }
     }
 

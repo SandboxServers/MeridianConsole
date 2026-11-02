@@ -156,6 +156,16 @@ public sealed class LabConnectionStrings
             $"meridian-lab-toxiproxy:{proxy.Value},password={password},abortConnect=false");
     }
 
+    /// <summary>
+    /// The Identity exchange private key (PKCS8 PEM) for BetterAuth's container env. Only the env file carries it.
+    /// </summary>
+    public Result<string> ExchangePrivateKeyPem() => WithPassword(LabCredentialRefs.IdentityExchange, pem => pem);
+
+    /// <summary>
+    /// The BetterAuth secret for BetterAuth's container env. Only the env file carries it.
+    /// </summary>
+    public Result<string> BetterAuthSecretValue() => WithPassword(LabCredentialRefs.BetterAuthSecret, secret => secret);
+
     private static string DatabaseName(string service) => $"meridian_lab_{service}";
 
     private static Result<int> ProxyFor(string service, string dependency)
