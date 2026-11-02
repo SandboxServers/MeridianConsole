@@ -314,3 +314,36 @@ Teardown: `stack_down` wipe on the segment 6 daemon (state down, network absent,
 
 Last check result line: Dhadgar.Lab.Tests Release build succeeded, 0 errors. Part A: A11 Passed 1 Failed 0; A3 Passed 1 Failed 0. Part B: fuzz 28 of 50 HTTP 500 (KG-W5-1, known).
 Next step: none for this run (raw results recorded). Soak and coverage were not in this brief and were not run; A7 was not rerun.
+
+## Continuation 10 (wave5-docker-run-10, reds-only confirmation run, D-ML126, campaign tip 4aeb6b71)
+
+Setup: campaign tip 4aeb6b71, worktree `.claude/worktrees/meridian-lab`, non-elevated. Full report: `.claude/reports/meridian-lab/wave5-docker-run-10.md`. Same procedure as run 9 (fresh daemon per segment, port 8789, reds only).
+
+Build: Dhadgar.Lab.Tests Release build succeeded, 0 Warning(s), 0 Error(s); Dhadgar.Lab Release build succeeded, 0 Warning(s), 0 Error(s).
+
+Part A: A11 (Seam=S-L7) Passed 1, Failed 0; A3 (MutationDockerTests) Passed 1, Failed 0.
+
+Part B (one daemon per segment):
+
+| Seg | Gate | Job | Result |
+| --- | --- | --- | --- |
+| 1 | Hunt enrollment seed 4242, 300 s | 98ae360f4421 | succeeded, `diverged` at op 4 (`expected 201, got 500`) |
+| 1 | Replay of that repro (L27b) | d563dfccff55 | succeeded, `not_reproduced`; replay accepted (no F116 refusal) |
+| 2 | M5 alone | 8e9109ffc493 | detected, `inv:I4\|nodes\|vault-value:tok-1`, detector run 844014 |
+| 2 | R9-1 `results_flake_check` run 844014, row enroll-probe/enroll-gateway | synchronous | refused `Lab.InvalidArgument` "the run has no spec or seed to rerun"; dependency path not reached |
+| 3a | M4 alone | 1882122725d9 | detected, `inv:I1\|nodes\|unhandled` |
+| 3b | M1 alone | a264a75d2b10 | detected, `hist:enrollment\|E1\|enroll-race` and two more |
+| 4 | Twin enroll-latency-invariance | synchronous | pass, held true, diffs [] |
+| 5 | Chaos nodes-enroll 600 s | 1ee6e93a7ab9 | succeeded, violations 0, workload_errors 0, 147 loops, 294 enroll audit lines |
+| 6 | Fuzz enroll 50 cases | 6a41fb1faf0d | succeeded, sent 50, known 8, 28 failures, all `status 500` (KG-W5-1) |
+
+Daemon pids: 43876, 40812, 56636, 56852, 61636, 65428, 67648. All stopped; port 8789 free after each.
+
+Notes:
+- The R9-1 check was not exercised as intended: the only failed row available was a mutation detector run, which has no spec or seed to rerun. No other run was substituted. Open for the owner to decide whether a plain uat run with a failed dependent row should be the R9-1 probe.
+- The hunt result changed from run 9 (`not_reproduced`) to `diverged`. Its repro replays to `not_reproduced` on a fresh daemon. Recorded raw, not diagnosed.
+
+Teardown: `stack_down` wipe (state down, network absent, containers []); lease released; daemon 67648 stopped; `docker ps -a` and `docker network ls` filtered for `meridian-lab` show nothing; port 8789 free.
+
+Last check result line: Dhadgar.Lab.Tests Release build succeeded, 0 Warning(s), 0 Error(s). A11 Passed 1 Failed 0; A3 Passed 1 Failed 0. Fuzz 28 of 50 HTTP 500 (KG-W5-1, known).
+Next step: none for this run (raw results recorded). Soak and coverage not run (not in this brief).
