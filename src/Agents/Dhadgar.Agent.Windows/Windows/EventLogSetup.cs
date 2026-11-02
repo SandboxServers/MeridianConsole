@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security;
+using Dhadgar.Contracts.Agents;
 
 namespace Dhadgar.Agent.Windows.Windows;
 
@@ -16,7 +17,7 @@ public static class EventLogSetup
     /// <summary>
     /// The event source name registered in Windows Event Log.
     /// </summary>
-    public const string SourceName = "Meridian Console Agent";
+    public const string SourceName = AgentWindowsFootprint.EventLogSourceName;
 
     /// <summary>
     /// The Windows Event Log to write to.
