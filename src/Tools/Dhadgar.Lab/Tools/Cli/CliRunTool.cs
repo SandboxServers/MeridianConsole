@@ -497,16 +497,33 @@ public sealed class CliRunTool : LabTool<CliRunArgs>
     private readonly FaultTargetGuard _guard;
     private readonly IDockerCli _docker;
     private readonly Redactor _redactor;
+    private readonly LabCredentialRefs _credentials;
+    private readonly SecretVault _vault;
+    private readonly LabPaths _paths;
+    private readonly IPathValidator _validator;
 
     /// <summary>
-    /// Creates the tool over the pool, the target guard, the Docker client and the redactor.
+    /// Creates the tool over the pool, the target guard, the Docker client, the redactor, the admin key references and
+    /// vault (admin verbs), the lab paths and the path validator (the staged member config).
     /// </summary>
-    public CliRunTool(PoolManager pool, FaultTargetGuard guard, IDockerCli docker, Redactor redactor)
+    public CliRunTool(
+        PoolManager pool,
+        FaultTargetGuard guard,
+        IDockerCli docker,
+        Redactor redactor,
+        LabCredentialRefs credentials,
+        SecretVault vault,
+        LabPaths paths,
+        IPathValidator validator)
     {
         _pool = pool ?? throw new ArgumentNullException(nameof(pool));
         _guard = guard ?? throw new ArgumentNullException(nameof(guard));
         _docker = docker ?? throw new ArgumentNullException(nameof(docker));
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
+        _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
+        _vault = vault ?? throw new ArgumentNullException(nameof(vault));
+        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     }
 
     /// <inheritdoc />
@@ -514,7 +531,8 @@ public sealed class CliRunTool : LabTool<CliRunArgs>
 
     /// <inheritdoc />
     public override string Description =>
-        "Run the lab CLI inside a Linux container member with its own HOME. Only allowlisted verbs and safe subcommands; the host and Windows members are refused.";
+        "Run the lab CLI inside a Linux container member with its own HOME. Only allowlisted verbs and safe subcommands; the host and Windows members are refused. "
+        + "Admin verbs (notifications, discord) write the vault's admin key into the member config for the call and remove it afterwards; that rewrite also clears any stored login.";
 
     /// <summary>
     /// Decides whether a member may run the CLI. Pure, so the host refusal is testable without Docker.
@@ -570,14 +588,81 @@ public sealed class CliRunTool : LabTool<CliRunArgs>
             return Result<object>.Failure(shape.Error);
         }
 
-        Result<ResolvedTarget> resolved = await _guard.ResolveAsync(found!.TargetId, "cli", ct).ConfigureAwait(false);
+        Result<ResolvedTarget> resolved = await _guard.ResolveMemberForExecAsync(found!.TargetId, ct).ConfigureAwait(false);
         if (resolved.IsFailure)
         {
             return Result<object>.Failure(resolved.Error);
         }
 
-        // Each argument is its own list item; nothing is joined into a command string.
-        var dockerArgs = new List<string> { "exec", "-e", "HOME=/home/lab", found.ContainerName!, MemberCliPath };
+        string container = resolved.Value!.ContainerId ?? string.Empty;
+        if (container.Length == 0)
+        {
+            return Result<object>.Failure("[Lab.BlastRadius] the member's container could not be resolved");
+        }
+
+        // An admin verb needs its vault key in the member config for this call only (ruling N2). The key is read here and
+        // is never logged or put on a command line; the config is rewritten without it in finally.
+        string? credential = CliMemberInstall.AdminCredentialFor(args.Args[0]);
+        string? key = null;
+        if (credential is not null)
+        {
+            string? reference = _credentials.Get(credential);
+            if (reference is null)
+            {
+                return Result<object>.Failure("[Lab.NotFound] the stack has no admin keys; run stack_up first");
+            }
+
+            Result<string> vaulted = _vault.Use(reference, value => value.ToString());
+            if (vaulted.IsFailure)
+            {
+                return Result<object>.Failure(vaulted.Error);
+            }
+
+            key = vaulted.Value;
+        }
+
+        string staging = CliMemberInstall.StagingDirectory(_paths);
+        Result<object> outcome;
+        bool scrubFailed = false;
+        try
+        {
+            outcome = await SeedAndRunAsync(container, args, key, staging, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (credential is not null)
+            {
+                // CancellationToken.None: the scrub must run even when the call was cancelled.
+                Result scrubbed = await CliMemberInstall.InstallConfigAsync(_docker, container, staging, null, _validator, CancellationToken.None)
+                    .ConfigureAwait(false);
+                scrubFailed = scrubbed.IsFailure;
+            }
+        }
+
+        if (scrubFailed)
+        {
+            return Result<object>.Failure("[Lab.Docker] could not remove the admin key from the member's CLI config");
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// Writes the admin key into the member config when one is given, then runs the CLI in the member. Each argument is its
+    /// own list item; nothing is joined into a command string.
+    /// </summary>
+    private async Task<Result<object>> SeedAndRunAsync(string container, CliRunArgs args, string? key, string staging, CancellationToken ct)
+    {
+        if (key is not null)
+        {
+            Result seeded = await CliMemberInstall.InstallConfigAsync(_docker, container, staging, key, _validator, ct).ConfigureAwait(false);
+            if (seeded.IsFailure)
+            {
+                return Result<object>.Failure(seeded.Error);
+            }
+        }
+
+        var dockerArgs = new List<string> { "exec", "-e", "HOME=/home/lab", container, MemberCliPath };
         dockerArgs.AddRange(args.Args);
 
         var clock = Stopwatch.StartNew();
