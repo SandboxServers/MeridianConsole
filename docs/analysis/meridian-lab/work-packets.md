@@ -3686,7 +3686,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 2. `Ui/Flows/*.cs`: the four C14 flows; `login_email` signs up and in through `http_request via=gateway` (vault password), parses `Set-Cookie` for BetterAuth's session cookie name, adds it with `Domain = "localhost"`, `Path = "/"`, `Secure = true`, `HttpOnly = true`, `SameSite = None`, then opens `/callback`. `refresh` records `refresh_path` (`panel` or `direct`).
 3. `Tools/Ui/UiTools.cs`; clause source: `ui_flow_run` is a step tool, and `step` clauses read `UiFlowResult`.
 4. `docs/guides/uat-specs/panel.toml` (section `panel`, `requires = ["docker", "network"]`): rows `login`, `refresh-rotates`, `refresh-replay-refused` (DV-3), `logout-clears`, `dashboard-guard`.
-5. S-L9 (as written in L34, `Seams/PanelLoginSeamTests.cs`) goes green unchanged. Tests: `UiStorageTests` (hash prefix only), `RouteGuardTests` (an external URL is aborted), `FlowDockerTests` (`RequiresDocker`, `RequiresNetwork`). Masking is L35m (D-ML154, D-ML160).
+5. S-L9 (as written in L34, `Seams/PanelLoginSeamTests.cs`) goes green unchanged. Tests: `UiStorageTests` (hash prefix only), `RouteGuardTests` (an external URL is aborted), `FlowDockerTests` (`RequiresDocker`, `RequiresNetwork`). Masking is L35m (D-ML154, D-ML160). L35m is amended by [docker-run-15 ruling](worknotes/docker-run-15-ruling.md): fix L35mf (F143, D-ML168, D-ML169), merged `0bab7454`; its spec lives in that note, section 5.
 6. Identity's signing key across restarts (KG-W7-5): supply a per-stack `Auth__SigningKeyPem` from the vault (generated at `stack_up` like the exchange pair), or record the restart rows as expected re-login. State which.
 
 **Tests and why they fail when reverted:** S-L9 is the cross-component DV-3 test; `UiResult_NeverCarriesToken`.
@@ -3740,6 +3740,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 ### L37. CLI in a Linux member
 
 Amended by [l37 ruling 1](worknotes/l37-ruling-1.md) (D-ML162 to D-ML164) and its addendum 1 (D-ML167): dev client seeded and pinned, member config routes through the Gateway's `/api/v1` paths, per-subcommand allowlist, admin key per call, `cli_run` in `BlastRadiusTests.GuardedExecTools`. Merged `6e3b1082`; the live `cli.toml` run is owed (user's yes).
+
+Amended by [docker-run-15 ruling](worknotes/docker-run-15-ruling.md): fixes L37f1 to L37f3 (F144 to F147, D-ML170 to D-ML174), merged `ce7e37c9`; the live gate is `CliSpecE2ETests`. The packet specs live in that note, section 5.
 
 - **Branch / worktree / commit:** `ml/l37-cli` / `ml-l37` / `feat(lab): run the cli inside a linux pool member`
 - **Depends on:** L30, L34. **Security review:** yes (CLI credentials).
