@@ -23,3 +23,5 @@ subject `fix(lab): isolate hunt cases and make every repro replayable [ml-l27b]`
 
 ## Next step
 None for the code. Remaining: confirm the full Lab run result recorded in the report, then close the packet.
+
+> Superseded in part by L27c (`0c1900b3`): `_cutSinceRestart` is now `_needsRestart`, which starts true for a new hunter; see [ml-l27c](ml-l27c.md).

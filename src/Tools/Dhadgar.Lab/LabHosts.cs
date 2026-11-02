@@ -48,8 +48,8 @@ public static class LabHosts
     }
 
     /// <summary>
-    /// True only for http, a loopback host, and <see cref="LabDefaults.DaemonPort"/>. The daemon's own <c>/status</c>
-    /// and the CLI's loopback calls use this; <see cref="IsLabEndpoint"/> is unchanged.
+    /// True only for http, a loopback host, and <see cref="LabDefaults.DaemonPort"/>. The CLI's loopback calls (<c>status</c>, <c>uat run</c>)
+    /// and the self-check recovery's calls to its child daemon use this; <see cref="IsLabEndpoint"/> is unchanged.
     /// </summary>
     public static bool IsDaemonEndpoint(Uri uri)
     {
