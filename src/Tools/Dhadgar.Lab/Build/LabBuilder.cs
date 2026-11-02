@@ -106,6 +106,13 @@ public static class LabBuilder
     /// <summary>Image tag for a project at a build: <c>meridian-lab/&lt;project&gt;:&lt;build_id&gt;</c>.</summary>
     public static string ImageTag(string project, string buildId) => $"meridian-lab/{project}:{buildId}";
 
+    /// <summary>
+    /// The Dockerfile under <c>tools/lab/images</c> for a project: the probe image (sink, L36) uses <c>probe.Dockerfile</c>,
+    /// every other service uses <c>dotnet-service.Dockerfile</c>.
+    /// </summary>
+    internal static string DockerfileFor(string projectName) =>
+        string.Equals(projectName, "probe", StringComparison.Ordinal) ? "probe.Dockerfile" : "dotnet-service.Dockerfile";
+
     /// <summary>Lock-file drift marker returned when restore would change a lock file.</summary>
     public const string LockDriftError = "[Lab.ProcessFailed] lock file drift";
 
@@ -169,8 +176,7 @@ public static class LabBuilder
         {
             Result<string> csproj = validator.ValidatePath(Path.Combine(checkoutPath, project.Csproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
             Result<string> publishDir = validator.ValidatePath(Path.Combine(outputRoot.Value!, project.Name), [paths.Builds]);
-            string dockerfileName = project.Name == "probe" ? "probe.Dockerfile" : "dotnet-service.Dockerfile";
-            Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", dockerfileName), [checkoutPath]);
+            Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", DockerfileFor(project.Name)), [checkoutPath]);
             if (csproj.IsFailure || publishDir.IsFailure || dockerfile.IsFailure)
             {
                 return Result<LabBuildDto>.Failure("[Lab.InvalidArgument] build path is not valid");

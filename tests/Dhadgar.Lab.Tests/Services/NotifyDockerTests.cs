@@ -19,7 +19,8 @@ namespace Dhadgar.Lab.Tests.Services;
 /// Builds Notifications and Discord from the working tree, starts the lab stack and both services, and checks the
 /// asserted states: Notifications answers <c>/healthz</c>, and Discord answers <c>/healthz</c> 503 while its bot is absent
 /// (D-ML41, F26). Runs only where the Linux Docker engine is available. Touches only <c>meridian-lab-*</c> resources.
-/// The webhook-to-sink step is not exercised: the lab has no sink start path yet (recorded gap).
+/// The sink (L36) starts first and answers <c>GET /_sink/requests</c> with <c>[]</c>. The Discord webhook call through the
+/// sink is not exercised here (recorded gap).
 /// </summary>
 [Collection(LabDockerGate.Name)]
 public sealed class NotifyDockerTests
@@ -56,7 +57,7 @@ public sealed class NotifyDockerTests
         var logs = new ContainerLogFollower(supervisor, new ConfigurationBuilder().Build(), TimeProvider.System, paths);
         var overlay = new ConfigOverlay(paths, validator);
         var services = new LabServices(
-            [new GatewayAdapter(), new NotificationsLabAdapter(), new DiscordLabAdapter()],
+            [new GatewayAdapter(), new NotificationsLabAdapter(), new DiscordLabAdapter(), new SinkLabAdapter()],
             docker,
             targets,
             stack,
@@ -81,13 +82,22 @@ public sealed class NotifyDockerTests
 
             Result<LabBuildDto> build = await LabBuilder.BuildAsync(
                 repoRoot,
-                LabBuilder.Projects.Where(project => project.Name is "notifications" or "discord").ToList(),
+                LabBuilder.Projects.Where(project => project.Name is "notifications" or "discord" or "probe").ToList(),
                 docker,
                 paths,
                 validator,
                 TimeProvider.System,
                 ct);
             Assert.True(build.IsSuccess, build.IsFailure ? build.Error : string.Empty);
+
+            // The sink starts first so the webhook proxies have a target; it answers an empty request log.
+            Result<LabServiceStartDto> sink = await services.StartAsync("sink", build.Value.BuildId, ct);
+            Assert.True(sink.IsSuccess, sink.IsFailure ? sink.Error : string.Empty);
+            using (HttpResponseMessage requests = await http.GetAsync($"http://127.0.0.1:{LabPorts.Sink}/_sink/requests", ct))
+            {
+                Assert.Equal(HttpStatusCode.OK, requests.StatusCode);
+                Assert.Equal("[]", (await requests.Content.ReadAsStringAsync(ct)).Trim());
+            }
 
             Result<LabServiceStartDto> notifications = await services.StartAsync("notifications", build.Value.BuildId, ct);
             Assert.True(notifications.IsSuccess, notifications.IsFailure ? notifications.Error : string.Empty);
@@ -111,7 +121,7 @@ public sealed class NotifyDockerTests
         }
         finally
         {
-            foreach (string name in new[] { "discord", "notifications" })
+            foreach (string name in new[] { "discord", "notifications", "sink" })
             {
                 _ = await services.StopAsync(name, CancellationToken.None);
             }
