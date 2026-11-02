@@ -6,6 +6,7 @@ using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Npgsql;
 using Npgsql.Schema;
+using NpgsqlTypes;
 
 namespace Dhadgar.Lab.Data;
 
@@ -275,7 +276,7 @@ public sealed class LabDb
         await using var catalog = new NpgsqlCommand(
             "SELECT c.oid, a.attnum, c.relname, a.attname FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid WHERE c.oid = ANY(@oids)",
             conn);
-        _ = catalog.Parameters.Add(new NpgsqlParameter<uint[]>("oids", oids));
+        _ = catalog.Parameters.Add(OidArrayParameter("oids", oids));
 
         await using NpgsqlDataReader catalogReader = await catalog.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await catalogReader.ReadAsync(ct).ConfigureAwait(false))
@@ -286,6 +287,12 @@ public sealed class LabDb
 
         return origins;
     }
+
+    /// <summary>
+    /// The catalog lookup's OID list. Npgsql has no default PostgreSQL type for <c>uint</c> (oid, xid or cid), so the array is typed as <c>oid[]</c> (F143).
+    /// </summary>
+    internal static NpgsqlParameter<uint[]> OidArrayParameter(string name, uint[] oids) =>
+        new(name, oids) { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Oid };
 
     /// <summary>
     /// Converts the buffered cells to JSON, replacing each masked, non-null cell with <see cref="ColumnMask.Masked"/>.
