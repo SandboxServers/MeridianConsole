@@ -83,7 +83,8 @@ public sealed class CliAllowlistTests
     [Fact]
     public void Allowlist_SafeSubcommands_AreAccepted()
     {
-        Assert.True(CliAllowlist.Check(["auth", "login", "--identity-url", "http://meridian-lab-gateway:8080"]).IsSuccess);
+        Assert.True(CliAllowlist.Check(["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"]).IsSuccess);
+        Assert.True(CliAllowlist.Check(["nodes", "list", "--org", "o1"]).IsSuccess);
         Assert.True(CliAllowlist.Check(["auth", "status"]).IsSuccess);
         Assert.True(CliAllowlist.Check(["nodes", "list"]).IsSuccess);
         Assert.True(CliAllowlist.Check(["notifications", "logs"]).IsSuccess);
@@ -96,5 +97,75 @@ public sealed class CliAllowlistTests
         Assert.True(CliAllowlist.Check(["--version"]).IsSuccess);
         Assert.True(CliAllowlist.Check(["--help"]).IsSuccess);
         Assert.True(CliAllowlist.Check(["--help", "nodes"]).IsFailure);
+    }
+
+    [Theory]
+    [InlineData("--identity-url", "http://x")]
+    [InlineData("--identity-url=http://x", null)]
+    [InlineData("--identity-url:http://x", null)]
+    public void Login_IdentityUrl_IsRefused(string token, string? value)
+    {
+        var args = new List<string> { "auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret", token };
+        if (value is not null)
+        {
+            args.Add(value);
+        }
+
+        Assert.True(CliAllowlist.Check(args).IsFailure);
+    }
+
+    public static TheoryData<string[]> NotThePinnedLogin => new()
+    {
+        new[] { "auth", "login", "--client-id", "dev-client", "--client-secret", "real" },
+        new[] { "auth", "login", "--client-id", "dev-client", "--client-secret=dev-secret" },
+        new[] { "auth", "login", "--client-id", "dev-client" },
+        new[] { "auth", "login", "--client-secret", "dev-secret" },
+        new[] { "auth", "login", "--client-id", "dev-client", "--client-id", "dev-client", "--client-secret", "dev-secret", "--client-secret", "dev-secret" },
+    };
+
+    [Theory]
+    [MemberData(nameof(NotThePinnedLogin))]
+    public void Login_OnlyThePinnedDevClient_IsAccepted(string[] args)
+    {
+        Assert.True(CliAllowlist.Check(args).IsFailure);
+    }
+
+    [Fact]
+    public void AtArguments_AreRefused()
+    {
+        Assert.True(CliAllowlist.Check(["nodes", "list", "@/etc/passwd"]).IsFailure);
+        Assert.True(CliAllowlist.Check(["notifications", "test", "--title", "@x"]).IsFailure);
+    }
+
+    [Fact]
+    public void UnknownOptions_AreRefused()
+    {
+        Assert.True(CliAllowlist.Check(["nodes", "list", "--reveal"]).IsFailure);
+        Assert.True(CliAllowlist.Check(["discord", "channels", "--url", "x"]).IsFailure);
+        Assert.True(CliAllowlist.Check(["nodes", "list", "--"]).IsFailure);
+        Assert.True(CliAllowlist.Check(["nodes", "list", "-o", "x"]).IsFailure);
+    }
+
+    [Fact]
+    public void Maintenance_NeedsStartOrStop()
+    {
+        Assert.True(CliAllowlist.Check(["nodes", "maintenance", "n1"]).IsFailure);
+        Assert.True(CliAllowlist.Check(["nodes", "maintenance", "start", "n1"]).IsSuccess);
+    }
+
+    [Fact]
+    public void Positionals_AreBounded()
+    {
+        Assert.True(CliAllowlist.Check(["nodes", "get", "a", "b"]).IsFailure);
+        Assert.True(CliAllowlist.Check(["nodes", "get", "a"]).IsSuccess);
+        Assert.True(CliAllowlist.Check(["nodes", "list", "x"]).IsFailure);
+    }
+
+    [Fact]
+    public void Refusals_NeverEchoTheValue()
+    {
+        var refused = CliAllowlist.Check(["auth", "login", "--client-id", "dev-client", "--client-secret", "hunter2xyz"]);
+        Assert.True(refused.IsFailure);
+        Assert.DoesNotContain("hunter2xyz", refused.Error);
     }
 }

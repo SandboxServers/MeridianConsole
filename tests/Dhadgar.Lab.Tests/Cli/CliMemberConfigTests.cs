@@ -1,8 +1,10 @@
 using System.Text.Json;
+using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Tools.Cli;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Dhadgar.Lab.Tests.Cli;
@@ -15,6 +17,7 @@ public sealed class CliMemberConfigTests
 {
     private const string FakeAdminKey = "fake-admin-key-for-tests";
     private const string Container = "lab-member-linux-1";
+    private static readonly PathValidator Validator = new(NullLogger<PathValidator>.Instance);
 
     [Fact]
     public void Launcher_ExecsTheDllUnderDotnet()
@@ -94,7 +97,7 @@ public sealed class CliMemberConfigTests
         {
             var docker = new FakeDocker();
 
-            Result result = await CliMemberInstall.InstallConfigAsync(docker, Container, staging, FakeAdminKey, CancellationToken.None);
+            Result result = await CliMemberInstall.InstallConfigAsync(docker, Container, staging, FakeAdminKey, Validator, CancellationToken.None);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(4, docker.Calls.Count);
@@ -117,7 +120,7 @@ public sealed class CliMemberConfigTests
         {
             var docker = new FakeDocker { ExitCode = 1 };
 
-            Result result = await CliMemberInstall.InstallConfigAsync(docker, Container, staging, FakeAdminKey, CancellationToken.None);
+            Result result = await CliMemberInstall.InstallConfigAsync(docker, Container, staging, FakeAdminKey, Validator, CancellationToken.None);
 
             Assert.True(result.IsFailure);
             Assert.Contains("[Lab.Docker]", result.Error, StringComparison.Ordinal);
@@ -139,7 +142,7 @@ public sealed class CliMemberConfigTests
         {
             var docker = new FakeDocker();
 
-            Result result = await CliMemberInstall.InstallConfigAsync(docker, Container, Path.Combine(blocker, "sub"), null, CancellationToken.None);
+            Result result = await CliMemberInstall.InstallConfigAsync(docker, Container, Path.Combine(blocker, "sub"), null, Validator, CancellationToken.None);
 
             Assert.True(result.IsFailure);
             Assert.Contains("[Lab.Io]", result.Error, StringComparison.Ordinal);
