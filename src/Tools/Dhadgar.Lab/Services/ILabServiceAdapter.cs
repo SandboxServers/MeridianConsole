@@ -11,12 +11,26 @@ namespace Dhadgar.Lab.Services;
 /// <param name="CaStateDirectory">Host folder for Nodes CA state (<c>LabPaths.State\nodes-ca</c>).</param>
 /// <param name="RabbitMqUsername">RabbitMQ user for lab services.</param>
 /// <param name="RabbitMqPassword">RabbitMQ password for lab services; never logged.</param>
+/// <param name="ExchangePublicKeyPem">Identity's exchange public key PEM (Identity only); null when no stack key exists.</param>
+/// <param name="ExchangePrivateKeyPem">BetterAuth's exchange private key PEM (BetterAuth only); never logged.</param>
+/// <param name="BetterAuthSecret">BetterAuth's <c>BETTER_AUTH_SECRET</c> (BetterAuth only); never logged.</param>
 public sealed record LabServiceContext(
     string BuildId,
     IReadOnlyDictionary<string, string> ConnectionStrings,
     string CaStateDirectory,
     string RabbitMqUsername,
-    string RabbitMqPassword);
+    string RabbitMqPassword,
+    string? ExchangePublicKeyPem = null,
+    string? ExchangePrivateKeyPem = null,
+    string? BetterAuthSecret = null)
+{
+    // ToString prints only the build id: the context carries the exchange private key, the BetterAuth secret and the RabbitMQ password.
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("BuildId = ").Append(BuildId);
+        return true;
+    }
+}
 
 /// <summary>
 /// One lab-managed service: its container identity, port and the environment it needs behind the proxies (L09).

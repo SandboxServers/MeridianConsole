@@ -25,6 +25,12 @@ public sealed class LabCredentialRefs
     /// <summary>The Redis password.</summary>
     public const string Redis = "redis";
 
+    /// <summary>The Identity exchange signing key (ES256 PKCS8 PEM), generated per stack; BetterAuth holds the private half.</summary>
+    public const string IdentityExchange = "identity-exchange";
+
+    /// <summary>The BetterAuth secret (<c>BETTER_AUTH_SECRET</c>).</summary>
+    public const string BetterAuthSecret = "betterauth-secret";
+
     private readonly Lock _gate = new();
     private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
 
@@ -149,6 +155,16 @@ public sealed class LabConnectionStrings
         return WithPassword(LabCredentialRefs.Redis, password =>
             $"meridian-lab-toxiproxy:{proxy.Value},password={password},abortConnect=false");
     }
+
+    /// <summary>
+    /// The Identity exchange private key (PKCS8 PEM) for BetterAuth's container env. Only the env file carries it.
+    /// </summary>
+    public Result<string> ExchangePrivateKeyPem() => WithPassword(LabCredentialRefs.IdentityExchange, pem => pem);
+
+    /// <summary>
+    /// The BetterAuth secret for BetterAuth's container env. Only the env file carries it.
+    /// </summary>
+    public Result<string> BetterAuthSecretValue() => WithPassword(LabCredentialRefs.BetterAuthSecret, secret => secret);
 
     private static string DatabaseName(string service) => $"meridian_lab_{service}";
 

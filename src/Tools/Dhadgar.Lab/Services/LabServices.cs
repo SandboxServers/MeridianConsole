@@ -346,6 +346,49 @@ public sealed class LabServices
             connections["gateway-redis"] = redis.Value!;
         }
 
+        string? exchangePublic = null;
+        string? exchangePrivate = null;
+        string? betterAuthSecret = null;
+        if (adapter.Name == "identity")
+        {
+            Result<string> postgres = _connections.ServiceDb("identity");
+            if (postgres.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(postgres.Error);
+            }
+
+            Result<string> redis = _connections.Redis("identity");
+            if (redis.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(redis.Error);
+            }
+
+            Result<string> publicPem = ReadExchangePublicKey();
+            if (publicPem.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(publicPem.Error);
+            }
+
+            connections["identity"] = postgres.Value!;
+            connections["identity-redis"] = redis.Value!;
+            exchangePublic = publicPem.Value;
+        }
+
+        if (adapter.Name == "betterauth")
+        {
+            Result<string> postgres = _connections.ServiceDb("betterauth");
+            Result<string> privateKey = _connections.ExchangePrivateKeyPem();
+            Result<string> secret = _connections.BetterAuthSecretValue();
+            if (postgres.IsFailure || privateKey.IsFailure || secret.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure((postgres.IsFailure ? postgres : privateKey.IsFailure ? privateKey : secret).Error);
+            }
+
+            connections["betterauth"] = postgres.Value!;
+            exchangePrivate = privateKey.Value;
+            betterAuthSecret = secret.Value;
+        }
+
         Result<string> password = RabbitMqPassword();
         if (password.IsFailure)
         {
@@ -363,7 +406,10 @@ public sealed class LabServices
             connections,
             Path.Combine(_paths.State, "nodes-ca"),
             "lab",
-            password.Value!);
+            password.Value!,
+            exchangePublic,
+            exchangePrivate,
+            betterAuthSecret);
         Result<IReadOnlyDictionary<string, string>> composed = adapter.Environment(ctx);
         if (composed.IsFailure)
         {
@@ -447,9 +493,36 @@ public sealed class LabServices
     }
 
     /// <summary>
+    /// Reads the exchange public key that <c>stack_up</c> wrote under <c>state\identity</c>. The path goes through the validator.
+    /// </summary>
+    private Result<string> ReadExchangePublicKey()
+    {
+        Result<string> file = _validator.ValidatePath(Path.Combine(_paths.State, "identity", "exchange-public.pem"), [_paths.State]);
+        if (file.IsFailure)
+        {
+            return file;
+        }
+
+        try
+        {
+            return Result<string>.Success(File.ReadAllText(file.Value!));
+        }
+        catch (IOException)
+        {
+            return Result<string>.Failure("[Lab.NotFound] the exchange public key is missing; run stack_up first");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Result<string>.Failure("[Lab.NotFound] the exchange public key is missing; run stack_up first");
+        }
+    }
+
+    /// <summary>
     /// Writes <c>KEY=value</c> lines to a fresh file under <see cref="LabPaths.State"/>. The caller deletes it.
     /// Overlay values are checked for control characters on read and write (<see cref="ConfigOverlay"/>), so a line is one variable.
-    /// Each pair goes through the same zeroing writer as <see cref="LabStack"/>, so no secret stays in a managed string buffer.
+    /// Each pair goes through <c>LabStack.WriteEntry</c>. The secret strings that <c>ComposeEnvironment</c> and the adapters build
+    /// (the private key PEM, its single-line form, the BetterAuth secret) are immutable managed strings and are not zeroed.
+    /// This is accepted: they live only in same-user daemon memory until the call returns.
     /// </summary>
     private Result<string> WriteEnvFile(IReadOnlyDictionary<string, string> env)
     {

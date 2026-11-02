@@ -1,5 +1,7 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Services;
 using Dhadgar.Lab.Uat.Bundle;
 
 namespace Dhadgar.Lab.Tests.Secrets;
@@ -55,6 +57,25 @@ public sealed class RedactorTests
         var redacted = redactor.Redact(document.RootElement);
 
         Assert.Equal("{\"a\":{\"b\":[\"x ***tok-1\"]},\"n\":5,\"t\":true,\"z\":null}", redacted.GetRawText());
+    }
+
+    [Fact]
+    public void Redact_SingleLinePemAndBody_MaskedAsTheVaultRef()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        string pem = key.ExportPkcs8PrivateKeyPem();
+        using var vault = new SecretVault();
+        string reference = vault.Add(SecretKind.PrivateKey, pem.AsSpan());
+        var redactor = new Redactor(vault);
+
+        Assert.Equal($"x ***{reference} y", redactor.Redact($"x {LabEnvValue.SingleLinePem(pem)} y"));
+
+        string[] lines = pem.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string body = string.Concat(lines.Where(l => !l.StartsWith("-----", StringComparison.Ordinal)));
+        Assert.Equal($"***{reference}", redactor.Redact(body));
+        string firstBodyLine = lines.First(l => !l.StartsWith("-----", StringComparison.Ordinal));
+        Assert.True(firstBodyLine.Length >= 16);
+        Assert.Equal($"***{reference}", redactor.Redact(firstBodyLine));
     }
 
     [Fact]
