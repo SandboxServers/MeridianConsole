@@ -21,6 +21,9 @@ namespace Dhadgar.Lab.Tests.Jobs;
 /// </summary>
 public sealed class FlakeCheckJobTests : IDisposable
 {
+    /// <summary>A seed above <c>long.MaxValue</c>: about half of all random seeds are this large (C17, F119).</summary>
+    private const ulong HighSeed = 12499590173714643239UL;
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "meridian-lab-flake-check", Guid.NewGuid().ToString("N"));
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 2, 10, 0, 0, TimeSpan.Zero));
     private readonly PathValidator _validator = new(NullLogger<PathValidator>.Instance);
@@ -104,6 +107,65 @@ public sealed class FlakeCheckJobTests : IDisposable
 
         Assert.True(plan.IsFailure);
         Assert.StartsWith("[Lab.InvalidArgument]", plan.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PlanAsync_SeedAboveLongMax_PlansWithSameSeed()
+    {
+        string folder = WriteSource("src-high", new RowSpec("nodes", "enroll", "FAIL"));
+        SetSeed(folder, HighSeed);
+
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-high", null,
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+
+        Assert.True(plan.IsSuccess, plan.Error);
+        Assert.Equal(HighSeed, plan.Value!.Seed);
+    }
+
+    [Fact]
+    public async Task RunAsync_SeedAboveLongMax_ResultSeedIsUnsigned()
+    {
+        string folder = WriteSource("src-high-run", new RowSpec("nodes", "enroll", "FAIL"));
+        SetSeed(folder, HighSeed);
+        var calls = new List<JsonElement>();
+
+        string jobId = await StartJobAsync("src-high-run", (name, args, callContext, ct) =>
+        {
+            calls.Add(args.Clone());
+            string rerunId = "rerun-high-" + calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            BundleFixtures.Write(_paths.UatRuns, rerunId, "b1", 7, new RowSpec("nodes", "enroll", "PASS"));
+            return Task.FromResult(new LabToolResult(false, JsonSerializer.SerializeToElement(new { run_id = rerunId, overall = "pass" })));
+        });
+
+        JobRecord record = _runner.Get(jobId).Value!;
+        Assert.Equal(HighSeed, record.Result!["seed"]!.GetValue<ulong>());
+        Assert.Equal(HighSeed, calls[0].GetProperty("seed").GetUInt64());
+    }
+
+    [Fact]
+    public async Task PlanAsync_RowsAsKey_SelectsThatRow()
+    {
+        WriteSource("src-key", new RowSpec("nodes", "enroll", "PASS"), new RowSpec("nodes", "heal", "FAIL"));
+
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-key", new[] { "nodes/heal" },
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+
+        Assert.True(plan.IsSuccess, plan.Error);
+        Assert.Equal(new[] { "heal" }, plan.Value!.Rows);
+        Assert.Equal(new[] { "nodes/heal" }, plan.Value.Keys);
+    }
+
+    [Fact]
+    public async Task PlanAsync_BareRowIdInTwoSections_IsAmbiguous()
+    {
+        WriteSource("src-ambiguous", new RowSpec("a", "x", "FAIL"), new RowSpec("b", "x", "FAIL"));
+
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-ambiguous", new[] { "x" },
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+
+        Assert.True(plan.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", plan.Error, StringComparison.Ordinal);
+        Assert.Contains("ambiguous", plan.Error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -276,6 +338,15 @@ public sealed class FlakeCheckJobTests : IDisposable
         SpecLoadOutcome loaded = SpecLoader.LoadText("chain.toml", text);
         Assert.NotNull(loaded.Spec);
         return loaded.Spec!;
+    }
+
+    /// <summary>Rewrites a bundle's run.json seed as an unsigned number (the fixture writes a long).</summary>
+    private static void SetSeed(string folder, ulong seed)
+    {
+        string file = Path.Combine(folder, "run.json");
+        var run = (JsonNode.Parse(File.ReadAllText(file)) as JsonObject)!;
+        run["seed"] = seed;
+        File.WriteAllText(file, run.ToJsonString());
     }
 
     /// <summary>Writes a source bundle with one spec file (<c>nodes.toml</c>) in its run.json, the shape a real run has.</summary>
