@@ -119,7 +119,7 @@ public sealed class NotifyAdapterTests
     {
         List<ILabServiceAdapter> adapters = ShippedAdapters();
 
-        Assert.True(adapters.Count >= 8,$"only {adapters.Count} adapters found");
+        Assert.True(adapters.Count >= 8, $"only {adapters.Count} adapters found");
         Assert.Contains(adapters, a => a.Name == "sink");
         foreach (ILabServiceAdapter adapter in adapters)
         {
