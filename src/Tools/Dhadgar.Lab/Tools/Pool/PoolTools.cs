@@ -1,6 +1,9 @@
 using System.Text.Json;
+using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Pool;
+using Dhadgar.Lab.Tools.Cli;
 using Dhadgar.Lab.Tools.Faults;
 using Dhadgar.Shared.Results;
 
@@ -66,13 +69,20 @@ public sealed class PoolListTool : LabTool<NoArguments>
 public sealed class PoolAcquireTool : LabTool<PoolAcquireArgs>
 {
     private readonly PoolManager _pool;
+    private readonly IDockerCli _docker;
+    private readonly LabPaths _paths;
+    private readonly IPathValidator _validator;
 
     /// <summary>
-    /// Creates the tool over the pool manager.
+    /// Creates the tool over the pool manager, with the Docker client and paths that install the lab CLI (L37) into
+    /// each Linux member it acquires.
     /// </summary>
-    public PoolAcquireTool(PoolManager pool)
+    public PoolAcquireTool(PoolManager pool, IDockerCli docker, LabPaths paths, IPathValidator validator)
     {
         _pool = pool ?? throw new ArgumentNullException(nameof(pool));
+        _docker = docker ?? throw new ArgumentNullException(nameof(docker));
+        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     }
 
     /// <inheritdoc />
@@ -93,9 +103,48 @@ public sealed class PoolAcquireTool : LabTool<PoolAcquireArgs>
         Result<IReadOnlyList<PoolMember>> acquired = await _pool
             .AcquireAsync(args.Constraints, args.Purpose, context.LeaseId, ct)
             .ConfigureAwait(false);
-        return acquired.IsFailure
-            ? Result<object>.Failure(acquired.Error)
-            : Result<object>.Success(new PoolAcquireResult(acquired.Value));
+        if (acquired.IsFailure)
+        {
+            return Result<object>.Failure(acquired.Error);
+        }
+
+        // L37: when the latest build has a CLI, each Linux member gets it at /opt/lab/cli/ before the lease uses it.
+        string? cliDirectory = CliMemberInstall.LatestCliDirectory(_paths, _validator);
+        if (cliDirectory is not null)
+        {
+            foreach (PoolMember member in acquired.Value!.Where(m => m.Dimensions.Os == "linux" && !string.IsNullOrWhiteSpace(m.ContainerName)))
+            {
+                Result installed = await CliMemberInstall.InstallAsync(_docker, member.ContainerName!, cliDirectory, ct).ConfigureAwait(false);
+                if (installed.IsFailure)
+                {
+                    await ReleaseAcquiredAsync(acquired.Value).ConfigureAwait(false);
+                    return Result<object>.Failure(installed.Error);
+                }
+
+                // The admin key is written per call by cli_run, because the vault has none until stack_up.
+                Result configured = await CliMemberInstall.InstallConfigAsync(_docker, member.ContainerName!, CliMemberInstall.StagingDirectory(_paths), null, _validator, ct).ConfigureAwait(false);
+                if (configured.IsFailure)
+                {
+                    await ReleaseAcquiredAsync(acquired.Value).ConfigureAwait(false);
+                    return Result<object>.Failure(configured.Error);
+                }
+            }
+        }
+
+        return Result<object>.Success(new PoolAcquireResult(acquired.Value));
+    }
+
+    /// <summary>
+    /// Releases every member a failed acquire took, so none stays leased. The caller returns the original install error.
+    /// A release failure is ignored here; <c>pool_reset</c> cleans up the rest. <c>ReleaseAsync</c> refuses the host.
+    /// </summary>
+    private async Task ReleaseAcquiredAsync(IReadOnlyList<PoolMember> members)
+    {
+        foreach (PoolMember member in members)
+        {
+            // CancellationToken.None: a failed acquire must never leave members leased.
+            _ = await _pool.ReleaseAsync(member.MemberId, CancellationToken.None).ConfigureAwait(false);
+        }
     }
 }
 

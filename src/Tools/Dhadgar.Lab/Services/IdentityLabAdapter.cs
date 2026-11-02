@@ -34,6 +34,24 @@ public sealed class IdentityLabAdapter : ILabServiceAdapter
     /// </summary>
     public const string KeyVaultUriKey = "Auth__KeyVault__VaultUri";
 
+    /// <summary>
+    /// The repo's public development client (compose, CLI prompt defaults), seeded only in the lab Identity; never a vault secret (D-ML162).
+    /// </summary>
+    public const string DevClientId = "dev-client";
+
+    /// <summary>
+    /// The repo's public development client secret (compose, CLI prompt defaults), seeded only in the lab Identity; never a vault secret (D-ML162).
+    /// </summary>
+    public const string DevClientSecret = "dev-secret";
+
+    /// <summary>
+    /// The lab Identity's OIDC discovery document. Gateway and Nodes fetch it direct, not through the public issuer (D-ML163 c, F138).
+    /// </summary>
+    public const string MetadataAddress = "http://meridian-lab-identity:8080/.well-known/openid-configuration";
+
+    /// <summary>The lab Identity's internal base URL, the one the token validator rewrites the issuer prefix to (D-ML163 c).</summary>
+    public const string InternalBaseUrl = "http://meridian-lab-identity:8080";
+
     /// <summary>Identity to Postgres proxy port (C10 <c>identity-postgres</c>).</summary>
     public const int PostgresProxyPort = 20030;
 
@@ -99,6 +117,8 @@ public sealed class IdentityLabAdapter : ILabServiceAdapter
             ["Auth__Exchange__PublicKeyPem"] = LabEnvValue.EscapedNewlinePem(ctx.ExchangePublicKeyPem),
             [UseDevelopmentCertificatesKey] = "true",
             [KeyVaultUriKey] = string.Empty,
+            ["OpenIddict__DevClient__ClientId"] = DevClientId,
+            ["OpenIddict__DevClient__ClientSecret"] = DevClientSecret,
             ["RabbitMq__Host"] = GatewayAdapter.ToxiproxyHost,
             ["RabbitMq__Port"] = RabbitMqProxyPort.ToString(CultureInfo.InvariantCulture),
             ["RabbitMq__Username"] = ctx.RabbitMqUsername,

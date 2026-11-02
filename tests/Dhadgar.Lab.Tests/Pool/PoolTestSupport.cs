@@ -121,11 +121,20 @@ internal sealed class FakeDockerCli : IDockerCli
 
     public List<string[]> Calls { get; } = [];
 
+    /// <summary>Picks the exit code for a call; null means every call exits 0.</summary>
+    public Func<string[], int>? ExitCodeFor { get; set; }
+
+    /// <summary>Invoked after each call is recorded, so a test can read or change state the call touched.</summary>
+    public Action<string[]>? OnCall { get; set; }
+
     public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct)
     {
-        Calls.Add(args.ToArray());
+        string[] call = args.ToArray();
+        Calls.Add(call);
+        OnCall?.Invoke(call);
         string stdout = args.Count > 0 && args[0] == "ps" ? Listing : string.Empty;
-        return Task.FromResult(Result<DockerOutput>.Success(new DockerOutput(0, stdout, string.Empty)));
+        int exitCode = ExitCodeFor?.Invoke(call) ?? 0;
+        return Task.FromResult(Result<DockerOutput>.Success(new DockerOutput(exitCode, stdout, string.Empty)));
     }
 }
 

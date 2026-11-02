@@ -81,6 +81,12 @@ public sealed class GatewayAdapter : ILabServiceAdapter
             ["Cloudflare__EnableDynamicFetch"] = "false",
             ["Readyz__RequiredClusters__0"] = "nodes",
             ["Readyz__RequiredClusters__1"] = "identity",
+            // The CLI reaches the Gateway as meridian-lab-gateway, so the host is allowed; localhost stays for the lab probes.
+            ["AllowedHosts"] = "localhost;meridian-lab-gateway",
+            // Discovery and JWKS go direct to the lab Identity, as in compose; without these the Gateway fetches the public
+            // issuer (F138). A gateway-identity proxy fault cuts the route, not token validation.
+            ["Auth__MetadataAddress"] = IdentityLabAdapter.MetadataAddress,
+            ["Auth__InternalBaseUrl"] = IdentityLabAdapter.InternalBaseUrl,
         };
         return Result<IReadOnlyDictionary<string, string>>.Success(env);
     }

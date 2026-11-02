@@ -114,6 +114,25 @@ public static class LabBuilder
     public static IReadOnlyList<string> PublishArgs(string csprojPath, string outputDirectory) =>
         ["publish", csprojPath, "-c", "Release", "--no-restore", "-o", outputDirectory];
 
+    /// <summary>The lab CLI project (L37), relative to the checkout root.</summary>
+    public const string CliCsproj = "src/Dhadgar.Cli/Dhadgar.Cli.csproj";
+
+    /// <summary>
+    /// Name of the Linux launcher written beside the CLI publish. The CLI's apphost is built for the build host (a Windows
+    /// <c>.exe</c> here), so the member runs <c>dhadgar</c>, a shell launcher for the portable <c>dhadgar.dll</c>.
+    /// </summary>
+    public const string CliLauncherName = "dhadgar";
+
+    /// <summary>The launcher's text: it runs the portable CLI dll under the member's <c>dotnet</c> runtime.</summary>
+    public const string CliLauncherText = "#!/bin/sh\nexec dotnet /opt/lab/cli/dhadgar.dll \"$@\"\n";
+
+    /// <summary>
+    /// CLI publish arguments: a portable publish with no runtime identifier. <c>SkipGlobalToolInstall=true</c> stops the
+    /// project's AfterBuild target from installing a global tool on the workstation during the publish.
+    /// </summary>
+    public static IReadOnlyList<string> CliPublishArgs(string csprojPath, string outputDirectory) =>
+        ["publish", csprojPath, "-c", "Release", "--no-restore", "-p:SkipGlobalToolInstall=true", "-o", outputDirectory];
+
     /// <summary>
     /// Docker build arguments for one project image, with the <c>meridian-lab</c> label. A mutant build passes its
     /// <c>meridian-lab-mutant=&lt;id&gt;</c> label as <paramref name="extraLabel"/> (L54, A2).
@@ -293,10 +312,57 @@ public static class LabBuilder
             }
         }
 
+        Result cli = await PublishCliAsync(outputRoot.Value!, checkoutPath, paths, validator, ct).ConfigureAwait(false);
+        if (cli.IsFailure)
+        {
+            return Result<LabBuildDto>.Failure(cli.Error);
+        }
+
         var projectNames = projects.Select(project => project.Name).ToList();
         var dto = new LabBuildDto(buildId, commit, dirty, checkoutPath, projectNames, images, at);
         Result written = WriteOutputs(paths, validator, outputRoot.Value!, dto);
         return written.IsFailure ? Result<LabBuildDto>.Failure(written.Error) : Result<LabBuildDto>.Success(dto);
+    }
+
+    /// <summary>
+    /// Publishes the lab CLI (L37) portable into <c>&lt;outputRoot&gt;\cli</c> with the Linux launcher beside it. Restore
+    /// runs first with <c>--locked-mode</c>, like every other project. Only paths under <see cref="LabPaths.Builds"/> are written.
+    /// </summary>
+    internal static async Task<Result> PublishCliAsync(string outputRoot, string checkoutPath, LabPaths paths, IPathValidator validator, CancellationToken ct)
+    {
+        Result<string> csproj = validator.ValidatePath(Path.Combine(checkoutPath, CliCsproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
+        Result<string> cliDir = validator.ValidatePath(Path.Combine(outputRoot, "cli"), [paths.Builds]);
+        if (csproj.IsFailure || cliDir.IsFailure)
+        {
+            return Result.Failure("[Lab.InvalidArgument] build path is not valid");
+        }
+
+        Result<string> restore = await RunAsync("dotnet", RestoreArgs(csproj.Value!), checkoutPath, ct).ConfigureAwait(false);
+        if (restore.IsFailure)
+        {
+            return Result.Failure(restore.Error);
+        }
+
+        Result<string> publish = await RunAsync("dotnet", CliPublishArgs(csproj.Value!, cliDir.Value!), checkoutPath, ct).ConfigureAwait(false);
+        if (publish.IsFailure)
+        {
+            return Result.Failure(publish.Error);
+        }
+
+        try
+        {
+            File.WriteAllText(Path.Combine(cliDir.Value!, CliLauncherName), CliLauncherText);
+        }
+        catch (IOException)
+        {
+            return Result.Failure("[Lab.Io] could not write the CLI launcher");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Result.Failure("[Lab.Io] could not write the CLI launcher");
+        }
+
+        return Result.Success();
     }
 
     /// <summary>

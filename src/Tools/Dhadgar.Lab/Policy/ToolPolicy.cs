@@ -127,8 +127,7 @@ public static class ToolPolicy
         // L35
         "ui_flow_list",
         "ui_flow_run",
-        // L37
-        "cli_run",
+        // L37 (registered)
         // L42
         "fleet_run",
         // L43

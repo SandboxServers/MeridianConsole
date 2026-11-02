@@ -41,6 +41,18 @@ public sealed class AuthStackAdapterTests
     }
 
     [Fact]
+    public void Identity_SeedsTheLabDevClient_FromConstants()
+    {
+        var adapter = new IdentityLabAdapter();
+        var env = adapter.Environment(Context());
+
+        Assert.True(env.IsSuccess, env.Error);
+        Assert.Equal(IdentityLabAdapter.DevClientId, env.Value!["OpenIddict__DevClient__ClientId"]);
+        Assert.Equal(IdentityLabAdapter.DevClientSecret, env.Value["OpenIddict__DevClient__ClientSecret"]);
+        Assert.DoesNotContain(adapter.OverlayKeys, k => k.Contains("OpenIddict", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Identity_WithoutPublicKey_IsInvalidArgument()
     {
         var env = new IdentityLabAdapter().Environment(Context(withKeys: false));

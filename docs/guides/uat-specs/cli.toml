@@ -1,0 +1,429 @@
+schema = 1
+
+# The lab CLI in a Linux container member (L37, F30). Every row runs `cli_run`, which runs /opt/lab/cli/dhadgar with
+# HOME=/home/lab inside the member (never on the host). The member's config.json holds gateway_url, identity_url,
+# nodes_url, notifications_url and, per admin call, admin_api_key (Tools/Cli/CliRunTool.cs). The CLI's `auth login` takes
+# its client secret only from --client-secret, so auth-login and gateway-down pass the CLI's documented development
+# placeholders (dev-client, dev-secret). Those are not lab secrets. IdentityLabAdapter seeds dev-client/dev-secret
+# (D-ML162); cli_run writes the admin key per call (ruling N2); verbs that drop their exit code are asserted on text
+# (D-ML164, KG-W7-7).
+# Output from cli_run is redacted before it returns (R-LOG).
+# Rows: version (no stack), auth-login (client_credentials through the Gateway), nodes-list (after one enroll through the
+# Gateway), notifications-admin (direct, with the admin key), gateway-down (Identity route cut: auth login prints a 5xx failure
+# after a proven control login, auth status reports no session, no stack trace).
+
+[section]
+id = "cli"
+title = "Lab CLI in a Linux container member"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+requires_pool = { os = "linux", kind = "container" }
+
+[[row]]
+id = "version"
+title = "The CLI in the member prints its version"
+expected = "cli_run --version exits 0 with non-empty stdout"
+
+  [[row.step]]
+  id = "version"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["--version"] }
+
+  [[row.expect]]
+  id = "version-exit"
+  text = "the CLI exits 0"
+  source = "step"
+  step = "version"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = true
+
+  [[row.expect]]
+  id = "version-stdout"
+  text = "the CLI prints a version"
+  source = "step"
+  step = "version"
+  pointer = "/result/stdout"
+  op = "ne"
+  value = ""
+  required = true
+
+[[row]]
+id = "auth-login"
+title = "auth login (client_credentials) through the Gateway returns a token"
+expected = "auth login prints Authenticated successfully and auth status reports a session; the secret is never echoed (exit code is not required, KG-W7-7)"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-identity"
+  tool = "svc_start"
+  args = { service = "identity" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "logout"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
+  id = "login"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
+
+  [[row.step]]
+  id = "status"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "status"] }
+
+  [[row.expect]]
+  id = "login-ok"
+  text = "auth login reports success"
+  source = "step"
+  step = "login"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated successfully"
+  required = true
+
+  [[row.expect]]
+  id = "login-no-secret-echo"
+  text = "stdout does not echo the client secret"
+  source = "step"
+  step = "login"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "dev-secret"
+  required = true
+
+  [[row.expect]]
+  id = "status-authenticated"
+  text = "auth status reports an authenticated session"
+  source = "step"
+  step = "status"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated"
+  required = true
+
+  [[row.expect]]
+  id = "login-exit"
+  text = "auth login exits 0 (KG-W7-7)"
+  source = "step"
+  step = "login"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = false
+
+[[row]]
+id = "nodes-list"
+title = "nodes list shows the node that enrolled through the Gateway"
+expected = "after one enroll through the Gateway (201) and a login, nodes list is routed, authenticated and accepted by the Gateway (no 400, 404 or 401); the node appearing is not required (KG-W7-8)"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-identity"
+  tool = "svc_start"
+  args = { service = "identity" }
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "cli-list-${run_id}" }
+  capture = { token_ref = "/token_ref", org_id = "/organization_id" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  capture = { node_id = "/node_id" }
+
+  [[row.step]]
+  id = "logout"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
+  id = "login"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
+
+  [[row.step]]
+  id = "list"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["nodes", "list", "--org", "${org_id}"] }
+
+  [[row.expect]]
+  id = "enroll-201"
+  text = "the gateway enroll returns 201"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "login-ok"
+  text = "auth login reports success"
+  source = "step"
+  step = "login"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated successfully"
+  required = true
+
+  [[row.expect]]
+  id = "list-stdout"
+  text = "nodes list prints output"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "ne"
+  value = ""
+  required = true
+
+  [[row.expect]]
+  id = "list-not-host-refused"
+  text = "the Gateway does not refuse the list request as a bad request"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "400 BadRequest"
+  required = true
+
+  [[row.expect]]
+  id = "list-routed"
+  text = "the Gateway routes the list request"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "404 NotFound"
+  required = true
+
+  [[row.expect]]
+  id = "list-token-accepted"
+  text = "the Gateway accepts the CLI token"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "401 Unauthorized"
+  required = true
+
+  [[row.expect]]
+  id = "list-authenticated"
+  text = "the CLI sends an authenticated session"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "not_authenticated"
+  required = true
+
+  [[row.expect]]
+  id = "list-no-stack-trace"
+  text = "stderr has no stack trace"
+  source = "step"
+  step = "list"
+  pointer = "/result/stderr"
+  op = "not_contains"
+  value = "   at "
+  required = true
+
+  [[row.expect]]
+  id = "list-shows-node"
+  text = "the enrolled node appears in the list (KG-W7-8, D-ML165)"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "${node_id}"
+  required = false
+
+  [[row.expect]]
+  id = "list-exit"
+  text = "nodes list exits 0 (KG-W7-7)"
+  source = "step"
+  step = "list"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = false
+
+[[row]]
+id = "notifications-admin"
+title = "notifications logs answers direct with the admin key"
+expected = "cli_run notifications logs exits 0 against the Notifications service"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-notifications"
+  tool = "svc_start"
+  args = { service = "notifications" }
+
+  [[row.step]]
+  id = "logs"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["notifications", "logs"] }
+
+  [[row.expect]]
+  id = "logs-exit"
+  text = "notifications logs exits 0"
+  source = "step"
+  step = "logs"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = true
+
+  [[row.expect]]
+  id = "logs-has-key"
+  text = "notifications logs does not print the admin key"
+  source = "step"
+  step = "logs"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "Admin API key"
+  required = true
+
+[[row]]
+id = "gateway-down"
+title = "auth login fails readably when the Gateway's Identity route is cut"
+expected = "with gateway-identity disabled after a control login, auth login prints Authentication failed with a 5xx and no success text; auth status reports Not authenticated; no stack trace (exit code is not required, KG-W7-7)"
+
+  [[row.fault]]
+  id = "identity-route"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "gateway-identity" } }
+  start = "after_step:logout2"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-identity"
+  tool = "svc_start"
+  args = { service = "identity" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "logout"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
+  id = "login-control"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
+
+  [[row.step]]
+  id = "logout2"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
+  id = "login-down"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
+
+  [[row.step]]
+  id = "status-after"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "status"] }
+
+  [[row.expect]]
+  id = "control-ok"
+  text = "auth login succeeds before the Identity route is cut"
+  source = "step"
+  step = "login-control"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated successfully"
+  required = true
+
+  [[row.expect]]
+  id = "down-5xx"
+  text = "auth login reports a 5xx failure while the Identity route is cut"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/stdout"
+  op = "matches"
+  value = 'Authentication failed:.{0,40}\b5[0-9]{2}\b'
+  required = true
+
+  [[row.expect]]
+  id = "down-no-success"
+  text = "auth login does not report success while the Identity route is cut"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "Authenticated successfully"
+  required = true
+
+  [[row.expect]]
+  id = "status-after-not-authenticated"
+  text = "auth status reports no session after the failed login"
+  source = "step"
+  step = "status-after"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Not authenticated"
+  required = true
+
+  [[row.expect]]
+  id = "no-stack-trace"
+  text = "stderr has no stack trace"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/stderr"
+  op = "not_contains"
+  value = "   at "
+  required = true
+
+  [[row.expect]]
+  id = "login-fails"
+  text = "auth login exits non-zero while the Identity route is cut (KG-W7-7)"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/exit_code"
+  op = "ne"
+  value = 0
+  required = false
