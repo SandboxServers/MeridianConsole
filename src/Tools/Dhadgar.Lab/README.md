@@ -73,10 +73,12 @@ Identity runs with `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate), `Auth:Us
 
 `db_query` masks credential cells by where they came from, not by what the statement calls them. The decision uses the base table column the value was read from (resolved through the catalog after the reader closes, `Data/ColumnMask.cs`). A masked, non-null cell returns `[masked]`; a masked null stays null; column names are kept.
 
-- Masked base columns: `betterauth` `session.token`, `account.accessToken`, `account.refreshToken`, `account.idToken`, `account.password`, `verification.value`; `identity` `refresh_tokens.TokenHash`, `OpenIddictTokens.Payload`, `OpenIddictTokens.ReferenceId`, `OpenIddictApplications.ClientSecret`. A base column in this list is masked whatever its type.
-- Expression rule: in `betterauth` and `identity`, a computed expression (no base column, such as `token || ''`) is masked when its type is `text`, `character varying`, `character`, `bytea`, `json` or `jsonb`. Other expressions, and every column in `nodes`, `notifications` and `discord`, pass through.
+- Masked base columns (any type): `betterauth` `session.token`, `account.accessToken`, `account.refreshToken`, `account.idToken`, `account.password`, `verification.value`; `identity` `refresh_tokens.TokenHash`, `OpenIddictTokens.Payload`, `OpenIddictTokens.ReferenceId`, `OpenIddictApplications.ClientSecret`; `nodes` `enrollment_tokens.TokenHash`, `capacity_reservations.ReservationToken`.
+- Name rule, every database: a base column whose real name (from the catalog, not the alias) contains `token`, `secret`, `password`, `hash` or `payload` is masked unless its type is numeric, boolean, date/time or `uuid`. This fails closed if a schema renames a listed column.
+- Expression rule, `betterauth` and `identity`: a value with no base column (an expression, a cast, a UNION column, a whole-row read, or a column the catalog cannot resolve) is masked unless its type is numeric, boolean, date/time or `uuid`. In `nodes`, `notifications` and `discord`, expressions pass through.
+- Limits (D-ML160): masking stops accidental disclosure, not a hostile query author. A statement can still read a secret a bit at a time through numbers or booleans (`ascii(substr(token,1,1))`, `token LIKE 'a%'`). A view reports its own OID, so a view over a listed column is caught only by the name rule; neither database defines one, and `lab_reader` cannot create one.
 
-Masking is KG-W7-1 (L35).
+Masking is KG-W7-1 (L35m). The live check of the listed names against the migrated schemas is KG-W7-6 (`AuthStackDockerTests`).
 
 I2 checks the Nodes and Notifications outboxes; Identity has none.
 

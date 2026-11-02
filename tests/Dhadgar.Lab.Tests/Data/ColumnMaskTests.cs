@@ -42,6 +42,7 @@ public sealed class ColumnMaskTests
     {
         Assert.False(ColumnMask.ShouldMask("nodes", null, "text"));
         Assert.False(ColumnMask.ShouldMask("nodes", null, "jsonb"));
+        Assert.False(ColumnMask.ShouldMask("nodes", null, "name"));
     }
 
     [Fact]
@@ -50,6 +51,63 @@ public sealed class ColumnMaskTests
         Assert.False(ColumnMask.ShouldMask("betterauth", ("session", "userId"), "text"));
         Assert.False(ColumnMask.ShouldMask("identity", ("refresh_tokens", "Id"), "integer"));
         Assert.False(ColumnMask.ShouldMask("identity", null, "integer"));
-        Assert.False(ColumnMask.ShouldMask("nodes", ("session", "token"), "text"));
+        Assert.False(ColumnMask.ShouldMask("nodes", ("nodes", "Name"), "text"));
+    }
+
+    [Theory]
+    [InlineData("betterauth", "name")]
+    [InlineData("betterauth", "xml")]
+    [InlineData("betterauth", "tsvector")]
+    [InlineData("betterauth", "\"char\"")]
+    [InlineData("betterauth", "text[]")]
+    [InlineData("betterauth", "record")]
+    [InlineData("betterauth", "session")]
+    [InlineData("identity", "name")]
+    [InlineData("identity", "xml")]
+    [InlineData("identity", "tsvector")]
+    [InlineData("identity", "\"char\"")]
+    [InlineData("identity", "text[]")]
+    [InlineData("identity", "record")]
+    [InlineData("identity", "session")]
+    public void Expression_NonPassThroughType_Masked(string db, string type)
+    {
+        Assert.True(ColumnMask.ShouldMask(db, null, type));
+    }
+
+    [Theory]
+    [InlineData("betterauth", "integer")]
+    [InlineData("betterauth", "bigint")]
+    [InlineData("betterauth", "boolean")]
+    [InlineData("betterauth", "numeric")]
+    [InlineData("betterauth", "timestamp with time zone")]
+    [InlineData("betterauth", "uuid")]
+    [InlineData("identity", "integer")]
+    [InlineData("identity", "bigint")]
+    [InlineData("identity", "boolean")]
+    [InlineData("identity", "numeric")]
+    [InlineData("identity", "timestamp with time zone")]
+    [InlineData("identity", "uuid")]
+    public void Expression_PassThroughType_NotMasked(string db, string type)
+    {
+        Assert.False(ColumnMask.ShouldMask(db, null, type));
+    }
+
+    [Fact]
+    public void SensitiveName_BaseColumn_Masked()
+    {
+        Assert.True(ColumnMask.ShouldMask("nodes", ("session", "token"), "text"));
+        Assert.True(ColumnMask.ShouldMask("betterauth", ("account", "access_token"), "text"));
+        Assert.True(ColumnMask.ShouldMask("discord", ("guilds", "BotToken"), "character varying"));
+        Assert.True(ColumnMask.ShouldMask("identity", ("users", "PasswordHash"), "text"));
+        Assert.False(ColumnMask.ShouldMask("betterauth", ("account", "accessTokenExpiresAt"), "timestamp with time zone"));
+        Assert.False(ColumnMask.ShouldMask("nodes", ("enrollment_tokens", "UsedAt"), "timestamp with time zone"));
+        Assert.False(ColumnMask.ShouldMask("nodes", ("enrollment_tokens", "Id"), "uuid"));
+    }
+
+    [Fact]
+    public void Nodes_CredentialColumns_Masked()
+    {
+        Assert.True(ColumnMask.ShouldMask("nodes", ("capacity_reservations", "ReservationToken"), "uuid"));
+        Assert.True(ColumnMask.ShouldMask("nodes", ("enrollment_tokens", "TokenHash"), "character varying"));
     }
 }

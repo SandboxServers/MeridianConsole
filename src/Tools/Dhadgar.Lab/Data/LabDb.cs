@@ -211,10 +211,10 @@ public sealed class LabDb
     }
 
     /// <summary>One result column as Postgres reports it: its name, its base table column (zero for an expression) and its type.</summary>
-    private sealed record ColumnInfo(string Name, uint TableOid, short Attnum, string DataTypeName);
+    internal sealed record ColumnInfo(string Name, uint TableOid, short Attnum, string DataTypeName);
 
     /// <summary>The buffered cells of a reader, before the catalog lookup and the JSON conversion.</summary>
-    private sealed record RawRows(IReadOnlyList<ColumnInfo> Columns, List<object?[]> Rows, bool Truncated);
+    internal sealed record RawRows(IReadOnlyList<ColumnInfo> Columns, List<object?[]> Rows, bool Truncated);
 
     private static async Task<RawRows> ReadRowsAsync(NpgsqlDataReader reader, int maxRows, CancellationToken ct)
     {
@@ -291,7 +291,7 @@ public sealed class LabDb
     /// Converts the buffered cells to JSON, replacing each masked, non-null cell with <see cref="ColumnMask.Masked"/>.
     /// Column names are kept.
     /// </summary>
-    private static DbQueryResult BuildResult(
+    internal static DbQueryResult BuildResult(
         string database,
         RawRows raw,
         IReadOnlyDictionary<(uint TableOid, short Attnum), (string Table, string Column)> origins)

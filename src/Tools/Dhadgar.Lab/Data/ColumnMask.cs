@@ -19,21 +19,28 @@ internal static class ColumnMask
         ("betterauth", "account", "idToken"), ("betterauth", "account", "password"), ("betterauth", "verification", "value"),
         ("identity", "refresh_tokens", "TokenHash"), ("identity", "OpenIddictTokens", "Payload"),
         ("identity", "OpenIddictTokens", "ReferenceId"), ("identity", "OpenIddictApplications", "ClientSecret"),
+        ("nodes", "enrollment_tokens", "TokenHash"), ("nodes", "capacity_reservations", "ReservationToken"),
     }.ToFrozenSet();
 
     // Databases whose computed expressions are masked by type, because an expression can carry a secret under any alias.
     internal static readonly FrozenSet<string> ExpressionMaskedDbs = new[] { "betterauth", "identity" }.ToFrozenSet();
 
-    private static readonly FrozenSet<string> ExpressionMaskedTypes = new[]
+    // Types an unattributed value may keep: numbers, booleans, dates and times, uuid (D-ML160). Npgsql DataTypeName spelling.
+    internal static readonly FrozenSet<string> PassThroughTypes = new[]
     {
-        "text", "character varying", "character", "bytea", "json", "jsonb",
+        "smallint", "integer", "bigint", "real", "double precision", "numeric", "boolean", "date",
+        "time without time zone", "time with time zone", "timestamp without time zone", "timestamp with time zone",
+        "interval", "uuid",
     }.ToFrozenSet(StringComparer.Ordinal);
+
+    // A base column whose real name carries one of these is credential-like in every database (fail closed on schema drift).
+    private static readonly string[] SensitiveNameFragments = ["token", "secret", "password", "hash", "payload"];
 
     /// <summary>
     /// Whether a cell is masked. <paramref name="origin"/> is the (table, column) of the base column the value was read
-    /// from, or <c>null</c> for an expression. A base column in <see cref="Sensitive"/> is masked whatever its type; an
-    /// expression in an <see cref="ExpressionMaskedDbs"/> database is masked when its type is textual or binary; anything
-    /// else passes through.
+    /// from, or <c>null</c> for an expression. A base column in <see cref="Sensitive"/> is masked whatever its type; a base
+    /// column whose real name carries a credential fragment is masked unless its type is in <see cref="PassThroughTypes"/>;
+    /// an expression in an <see cref="ExpressionMaskedDbs"/> database is masked unless its type is in <see cref="PassThroughTypes"/>.
     /// </summary>
     public static bool ShouldMask(string database, (string Table, string Column)? origin, string dataTypeName)
     {
@@ -42,9 +49,27 @@ internal static class ColumnMask
 
         if (origin is { } column)
         {
-            return Sensitive.Contains((database, column.Table, column.Column));
+            if (Sensitive.Contains((database, column.Table, column.Column)))
+            {
+                return true;
+            }
+
+            return IsSensitiveName(column.Column) && !PassThroughTypes.Contains(dataTypeName);
         }
 
-        return ExpressionMaskedDbs.Contains(database) && ExpressionMaskedTypes.Contains(dataTypeName);
+        return ExpressionMaskedDbs.Contains(database) && !PassThroughTypes.Contains(dataTypeName);
+    }
+
+    internal static bool IsSensitiveName(string column)
+    {
+        foreach (string fragment in SensitiveNameFragments)
+        {
+            if (column.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

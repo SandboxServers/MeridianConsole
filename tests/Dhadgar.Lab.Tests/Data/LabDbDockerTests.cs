@@ -81,6 +81,12 @@ public sealed class LabDbDockerTests
             "SELECT token AS t FROM session",
             "SELECT s.token FROM session s JOIN session t ON t.id = s.id",
             "SELECT token || '' AS x FROM session",
+            "SELECT token::name AS n FROM session",
+            "SELECT xmlelement(name t, token) AS x FROM session",
+            "SELECT ARRAY[token] AS a FROM session",
+            "SELECT q.token FROM (SELECT token FROM session) q",
+            "WITH c AS (SELECT token FROM session) SELECT token FROM c",
+            "SELECT \"userId\" FROM session WHERE false UNION ALL SELECT token FROM session",
         };
         foreach (string sql in betterAuthQueries)
         {
@@ -92,6 +98,19 @@ public sealed class LabDbDockerTests
         Result<DbQueryResult> identity = await lab.Db.QueryAsync("identity", "SELECT \"TokenHash\" FROM refresh_tokens", new Dictionary<string, JsonElement>(), 10, CancellationToken.None);
 
         AssertMaskedWithoutSecret(identity, secret, "identity refresh_tokens");
+
+        Result<DbQueryResult> identityCast = await lab.Db.QueryAsync("identity", "SELECT \"TokenHash\"::name AS n FROM refresh_tokens", new Dictionary<string, JsonElement>(), 10, CancellationToken.None);
+
+        AssertMaskedWithoutSecret(identityCast, secret, "identity refresh_tokens cast");
+
+        // Pass-through controls: a non-sensitive column and an aggregate must still come back.
+        Result<DbQueryResult> userId = await lab.Db.QueryAsync("betterauth", "SELECT \"userId\" FROM session", new Dictionary<string, JsonElement>(), 10, CancellationToken.None);
+        Assert.True(userId.IsSuccess, userId.IsFailure ? userId.Error : string.Empty);
+        Assert.Equal("lab-user-1", userId.Value.Rows[0]["userId"].GetString());
+
+        Result<DbQueryResult> count = await lab.Db.QueryAsync("betterauth", "SELECT count(*) AS n FROM session", new Dictionary<string, JsonElement>(), 10, CancellationToken.None);
+        Assert.True(count.IsSuccess, count.IsFailure ? count.Error : string.Empty);
+        Assert.Equal(1, count.Value.Rows[0]["n"].GetInt64());
     }
 
     private static void AssertMaskedWithoutSecret(Result<DbQueryResult> result, string secret, string label)
@@ -180,8 +199,8 @@ public sealed class LabDbDockerTests
         /// </summary>
         public static async Task CreateFixturesAsync(LabConnectionStrings connections, string secret)
         {
-            await RunAsOwnerAsync(connections, "betterauth", "CREATE TABLE session (id integer PRIMARY KEY, token text NOT NULL)");
-            await RunAsOwnerAsync(connections, "betterauth", "INSERT INTO session (id, token) VALUES (1, @secret)", secret);
+            await RunAsOwnerAsync(connections, "betterauth", "CREATE TABLE session (id integer PRIMARY KEY, \"userId\" text NOT NULL, token text NOT NULL)");
+            await RunAsOwnerAsync(connections, "betterauth", "INSERT INTO session (id, \"userId\", token) VALUES (1, 'lab-user-1', @secret)", secret);
             await RunAsOwnerAsync(connections, "betterauth", "GRANT SELECT ON session TO " + LabCredentialRefs.LabReader);
 
             await RunAsOwnerAsync(connections, "identity", "CREATE TABLE refresh_tokens (\"Id\" integer PRIMARY KEY, \"TokenHash\" character varying(128) NOT NULL)");
