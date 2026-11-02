@@ -196,6 +196,28 @@ public static class LabBuilder
             }
 
             images.Add(tag);
+
+            // The probe also ships as the Linux pool member image (L30); the member image carries no service.
+            if (project.Name == "probe")
+            {
+                Result<string> memberDockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "linux-member.Dockerfile"), [checkoutPath]);
+                if (memberDockerfile.IsFailure)
+                {
+                    return Result<LabBuildDto>.Failure("[Lab.InvalidArgument] build path is not valid");
+                }
+
+                string memberTag = ImageTag("linux-member", buildId);
+                Result<DockerOutput> member = await docker.RunAsync(
+                    DockerEngine.Linux,
+                    DockerBuildArgs(memberTag, project.DllName, publishDir.Value!, memberDockerfile.Value!),
+                    ct).ConfigureAwait(false);
+                if (member.IsFailure || member.Value!.ExitCode != 0)
+                {
+                    return Result<LabBuildDto>.Failure("[Lab.Docker] docker build failed");
+                }
+
+                images.Add(memberTag);
+            }
         }
 
         var projectNames = projects.Select(project => project.Name).ToList();
