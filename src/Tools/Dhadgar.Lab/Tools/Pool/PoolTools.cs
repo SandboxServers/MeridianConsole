@@ -1,4 +1,7 @@
+using System.Text.Json;
+using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Pool;
+using Dhadgar.Lab.Tools.Faults;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Tools.Pool;
@@ -130,17 +133,22 @@ public sealed class PoolReleaseTool : LabTool<PoolReleaseArgs>
 /// <summary>
 /// <c>member_reset</c> (Leased): recreates one member from its image with the same id. The host is refused.
 /// </summary>
-public sealed class MemberResetTool : LabTool<MemberResetArgs>
+public sealed class MemberResetTool : LabTool<MemberResetArgs>, IFaultTool
 {
     private readonly PoolManager _pool;
+    private readonly FaultTargetGuard _guard;
 
     /// <summary>
-    /// Creates the tool over the pool manager.
+    /// Creates the tool over the pool manager and the fault target guard.
     /// </summary>
-    public MemberResetTool(PoolManager pool)
+    public MemberResetTool(PoolManager pool, FaultTargetGuard guard)
     {
         _pool = pool ?? throw new ArgumentNullException(nameof(pool));
+        _guard = guard ?? throw new ArgumentNullException(nameof(guard));
     }
+
+    /// <inheritdoc />
+    public JsonElement SampleArgs(string targetId) => FaultToolSupport.ToArgs(new MemberResetArgs(targetId));
 
     /// <inheritdoc />
     public override string Name => "member_reset";
@@ -151,7 +159,19 @@ public sealed class MemberResetTool : LabTool<MemberResetArgs>
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(MemberResetArgs args, LabCallContext context, CancellationToken ct)
     {
-        Result<PoolMember> reset = await _pool.ResetAsync(MemberIds.FromArgument(args.Member), ct).ConfigureAwait(false);
+        string memberId = MemberIds.FromArgument(args.Member);
+        if (memberId.Contains(':', StringComparison.Ordinal))
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] member must be a pool member id or m:<id>");
+        }
+
+        Result<ResolvedTarget> resolved = await _guard.ResolveAsync("m:" + memberId, "reset", ct).ConfigureAwait(false);
+        if (resolved.IsFailure)
+        {
+            return Result<object>.Failure(resolved.Error);
+        }
+
+        Result<PoolMember> reset = await _pool.ResetAsync(memberId, ct).ConfigureAwait(false);
         return reset.IsFailure
             ? Result<object>.Failure(reset.Error)
             : Result<object>.Success(reset.Value);

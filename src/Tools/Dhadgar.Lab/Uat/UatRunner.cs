@@ -5,6 +5,7 @@ using Dhadgar.Lab.Daemon;
 using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
+using Dhadgar.Lab.Pool;
 using Dhadgar.Lab.Random;
 using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Tools;
@@ -80,19 +81,21 @@ public sealed class UatRunner
     private readonly InvariantMonitor? _invariants;
     private readonly InvariantLedger? _ledger;
     private readonly DaemonIdentity? _daemon;
+    private readonly PoolManager? _pool;
 
     /// <summary>
     /// Creates the runner. With <paramref name="observations"/> and <paramref name="paths"/> every run and step is recorded in the run's <c>events.jsonl</c> (C18).
     /// <paramref name="settle"/> is the wait after a row with faults before its clauses run; null uses <see cref="RowExecutor.DefaultSettle"/>.
     /// </summary>
-    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null, InvariantMonitor? invariants = null, InvariantLedger? ledger = null, DaemonIdentity? daemon = null, TimeSpan? settle = null)
+    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null, InvariantMonitor? invariants = null, InvariantLedger? ledger = null, DaemonIdentity? daemon = null, TimeSpan? settle = null, PoolManager? pool = null)
     {
+        _pool = pool;
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(evaluator);
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
         _time = time ?? throw new ArgumentNullException(nameof(time));
-        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations, CheckpointAsync, settle ?? RowExecutor.DefaultSettle);
+        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations, CheckpointAsync, settle ?? RowExecutor.DefaultSettle, pool is null ? null : pool.ResetAsync);
         _observations = observations;
         _uatRuns = paths?.UatRuns;
         _invariants = invariants;
@@ -170,6 +173,7 @@ public sealed class UatRunner
         }
 
         bool observing = false;
+        IReadOnlyList<string> acquiredMembers = [];
         try
         {
             var run = new RowExecutor.RunContext(runId, seed, leaseId, ownLease, _time.GetUtcNow());
@@ -182,6 +186,23 @@ public sealed class UatRunner
             }
 
             string? missing = await MissingCapabilityAsync(request.Spec.Section, ct).ConfigureAwait(false);
+
+            // requires_pool (L30): one acquire per section; a failure SKIPs the section's rows with "pool: <error>".
+            if (missing is null && request.Spec.Section.RequiresPool is { } poolSpec && _pool is not null && leaseId is not null)
+            {
+                Result<IReadOnlyList<PoolMember>> acquired = await _pool
+                    .AcquireAsync(ConstraintsOf(poolSpec), "uat " + request.Spec.Section.Id, leaseId, ct)
+                    .ConfigureAwait(false);
+                if (acquired.IsSuccess)
+                {
+                    run.Members = acquired.Value.Select(m => m.MemberId).ToArray();
+                    acquiredMembers = run.Members;
+                }
+                else
+                {
+                    run.PoolError = acquired.Error;
+                }
+            }
 
             // Checkpoint at run start: the window runs from the daemon's start, so earlier leaks and orphans are reported.
             var startWindow = new InvariantWindow(_daemon?.StartedAt ?? run.RunStart, _time.GetUtcNow(), null, null);
@@ -266,6 +287,12 @@ public sealed class UatRunner
                 _ = await _observations!.EndRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
             }
 
+            // The section's members are released at section end, also when a row blocked or the run was cancelled. The host is refused and stays.
+            foreach (string member in acquiredMembers.Where(m => m != "host"))
+            {
+                _ = await _pool!.ReleaseAsync(member, CancellationToken.None).ConfigureAwait(false);
+            }
+
             if (ownLease && leaseId is not null)
             {
                 _ = _leases.Release(leaseId);
@@ -340,6 +367,18 @@ public sealed class UatRunner
             (RowGrade grade, string reason) = RowGrader.Grade(true, null, null, Array.Empty<(bool, ClauseState)>(), own.Select(v => (v.Violation.InvariantId, v.Allowed)).ToArray(), ownErrors);
             yield return new UatRowResult("invariants/" + id, grade, reason, Array.Empty<UatClauseResult>(), Violations: own, CheckErrors: ownErrors);
         }
+    }
+
+    /// <summary>
+    /// Reads the section's <c>requires_pool</c> table into C13 constraints. Keys were checked by the spec validator; a value of the wrong type is left unset.
+    /// </summary>
+    private static PoolConstraints ConstraintsOf(IReadOnlyDictionary<string, JsonElement> table)
+    {
+        string? Text(string key) => table.TryGetValue(key, out JsonElement v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        int? Number(string key) => table.TryGetValue(key, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
+        bool? Flag(string key) => table.TryGetValue(key, out JsonElement v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
+
+        return new PoolConstraints(Text("os"), Number("min_os_build"), Text("sku"), Text("isolation"), Text("kind"), Text("arch"), Flag("reboot"), Number("count") ?? 1);
     }
 
     private async Task<string?> MissingCapabilityAsync(UatSection section, CancellationToken ct)

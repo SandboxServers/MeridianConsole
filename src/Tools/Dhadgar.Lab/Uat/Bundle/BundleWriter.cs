@@ -606,7 +606,9 @@ public sealed class BundleWriter : IUatRunSink
             os = RuntimeInformation.OSDescription,
             build = new { id = _stamp.Id, commit = _stamp.Commit, dirty = _stamp.Dirty, checkout = _stamp.Checkout },
             lease_owner = result.LeaseOwner,
-            members = Array.Empty<string>(),
+            members = secretFailed
+                ? []
+                : _results.Select(row => row.Member).Where(m => m is not null).Select(m => m!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
             specs = new[] { new { file = spec.File, sha256 = spec.Sha256 } },
             tools,
             summary,

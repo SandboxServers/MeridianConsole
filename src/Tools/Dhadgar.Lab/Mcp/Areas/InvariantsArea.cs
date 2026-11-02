@@ -81,7 +81,10 @@ public static partial class LabMcpServer
                 InvariantWiring.StackCreated(sp.GetRequiredService<LabCredentialRefs>()),
                 // L54 (A2): mutant containers are found by their label and may exist only while a mutation job runs.
                 mutantContainers: ct => I5OrphanInvariant.ListMutantContainersAsync(docker, DockerEngine.Linux, ct),
-                mutationRunning: () => jobs.List().Any(job => job.Kind == MutationRunJob.Kind && job.State == "running"));
+                mutationRunning: () => jobs.List().Any(job => job.Kind == MutationRunJob.Kind && job.State == "running"),
+                // L30: member containers are found by their label and must be listed by the pool.
+                memberContainers: ct => I5OrphanInvariant.ListMemberContainersAsync(docker, DockerEngine.Linux, ct),
+                poolMembers: sp.GetRequiredService<Dhadgar.Lab.Pool.PoolManager>().MemberContainerNames);
         });
         services.AddSingleton<IInvariant>(sp =>
         {

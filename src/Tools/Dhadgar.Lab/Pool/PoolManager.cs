@@ -488,6 +488,17 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         return prefix + "-99";
     }
 
+    /// <summary>
+    /// The container names of the members the pool holds now. The I5 orphan check compares labelled containers against it.
+    /// </summary>
+    public IReadOnlyList<string> MemberContainerNames()
+    {
+        lock (_state)
+        {
+            return _members.Where(m => m.ContainerName is not null).Select(m => m.ContainerName!).ToArray();
+        }
+    }
+
     private PoolMember? FindMember(string memberId)
     {
         lock (_state)
