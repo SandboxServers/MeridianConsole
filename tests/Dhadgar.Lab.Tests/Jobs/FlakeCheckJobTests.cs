@@ -4,6 +4,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Tests.Results;
 using Dhadgar.Lab.Tools;
@@ -69,6 +70,40 @@ public sealed class FlakeCheckJobTests : IDisposable
         Assert.Equal(new[] { "nodes/heal" }, plan.Value.Keys);
         Assert.Equal(new[] { "nodes" }, plan.Value.Sections);
         Assert.Equal(2, plan.Value.Reruns);
+    }
+
+    [Fact]
+    public async Task PlanAsync_MutantSource_Refused()
+    {
+        string folder = WriteSource("src-mutant", new RowSpec("nodes", "heal", "FAIL"));
+        string file = Path.Combine(folder, "run.json");
+        var run = (JsonNode.Parse(File.ReadAllText(file)) as JsonObject)!;
+        var build = (JsonObject)run["build"]!;
+        build["id"] = "mutant-m1-0123abcd";
+        build["mutant"] = "m1";
+        File.WriteAllText(file, run.ToJsonString());
+
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-mutant", null,
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+
+        Assert.True(plan.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", plan.Error, StringComparison.Ordinal);
+        Assert.Contains("mutant detector run", plan.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PlanAsync_WhileMarkSet_Refused()
+    {
+        WriteSource("src-plain-marked", new RowSpec("nodes", "heal", "FAIL"));
+        var running = new RunningMutantBuild();
+        running.Set(new MutantMark("mutant-m1-0123abcd", "m1", "0123abcd4567ef89"));
+
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-plain-marked", null,
+            FlakeCheckJob.DefaultReruns, CancellationToken.None, running.Current);
+
+        Assert.True(plan.IsFailure);
+        Assert.StartsWith("[Lab.Conflict]", plan.Error, StringComparison.Ordinal);
+        Assert.Contains("mutant build is serving", plan.Error, StringComparison.Ordinal);
     }
 
     [Fact]
