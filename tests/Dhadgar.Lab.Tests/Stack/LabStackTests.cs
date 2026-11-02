@@ -72,6 +72,30 @@ public sealed class LabStackTests : IDisposable
     }
 
     [Fact]
+    public async Task UpAsync_FakeDocker_CreatesAndRegistersEveryStackProxy()
+    {
+        // D-ML150: stack_up creates every C10 proxy except L41's agent-ingress-tls, so p:<name> exists for faults from the start.
+        using LabStack stack = CreateStack(out LabTargetRegistry registry);
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        HashSet<string> proxyTargets = registry.All
+            .Where(target => target.Kind == LabTargetKind.Proxy)
+            .Select(target => target.TargetId)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (ProxyDefinition proxy in ProxyCatalog.StackProxies)
+        {
+            Assert.Contains($"p:{proxy.Name}", proxyTargets);
+        }
+
+        Assert.Contains("p:identity-postgres", proxyTargets);
+        Assert.Contains("p:notifications-rabbitmq", proxyTargets);
+        Assert.Contains("p:gateway-identity", proxyTargets);
+        Assert.DoesNotContain("p:agent-ingress-tls", proxyTargets);
+    }
+
+    [Fact]
     public async Task UpAsync_FakeDocker_NoCallCarriesAPasswordValue()
     {
         using LabStack stack = CreateStack(out _);

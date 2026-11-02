@@ -1,4 +1,6 @@
 using Dhadgar.Lab.Faults;
+using Dhadgar.Lab.Services;
+using Dhadgar.Lab.Stack;
 
 namespace Dhadgar.Lab.Tests.Stack;
 
@@ -33,6 +35,37 @@ public sealed class ProxyCatalogTests
 
         Assert.Equal(ProxyCatalog.All.Count(p => p.Packet == "L08"), l08);
         Assert.True(l08 > 0);
+    }
+
+    [Fact]
+    public void StackProxies_ExcludesOnlyL41()
+    {
+        int l41 = ProxyCatalog.All.Count(p => p.Packet == "L41");
+
+        Assert.True(l41 > 0);
+        Assert.Equal(ProxyCatalog.All.Count - l41, ProxyCatalog.StackProxies.Count());
+        Assert.DoesNotContain(ProxyCatalog.StackProxies, p => p.Packet == "L41");
+    }
+
+    [Fact]
+    public void StackProxies_CoverEveryAdapterProxy()
+    {
+        // Guard for F129: a proxy an adapter names must be created by stack_up, or its p:<name> target does not exist.
+        HashSet<string> stackNames = ProxyCatalog.StackProxies.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        List<ILabServiceAdapter> adapters = typeof(LabStack).Assembly.GetTypes()
+            .Where(t => !t.IsAbstract && !t.IsInterface && typeof(ILabServiceAdapter).IsAssignableFrom(t))
+            .Where(t => t.GetConstructor(Type.EmptyTypes) is not null)
+            .Select(t => (ILabServiceAdapter)Activator.CreateInstance(t)!)
+            .ToList();
+
+        Assert.NotEmpty(adapters);
+        foreach (ILabServiceAdapter adapter in adapters)
+        {
+            foreach (string name in adapter.Proxies)
+            {
+                Assert.True(stackNames.Contains(name), $"Adapter {adapter.Name} names proxy {name}, which stack_up does not create.");
+            }
+        }
     }
 
     [Fact]
