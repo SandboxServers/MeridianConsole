@@ -462,7 +462,17 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
             _leaseOf[memberId] = leaseId;
         }
 
-        Result saved = await SaveAsync(ct).ConfigureAwait(false);
+        Result saved;
+        try
+        {
+            saved = await SaveAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            ForgetPending(memberId);
+            throw;
+        }
+
         if (saved.IsFailure)
         {
             ForgetPending(memberId);
@@ -564,7 +574,7 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         if (resolved.IsFailure)
         {
             // A reset whose run failed has already removed the container; a Failed member with no container left is forgotten (N3).
-            bool gone = member.State == MemberState.Failed
+            bool gone = member.State is MemberState.Failed or MemberState.Provisioning
                 && string.Equals(resolved.Error, "[Lab.BlastRadius] container could not be inspected", StringComparison.Ordinal);
             if (!gone)
             {

@@ -162,8 +162,11 @@ internal sealed class FakePoolProvider : IPoolProvider
     /// <summary>When set, <see cref="ProvisionAsync"/> fails after recording the attempt, as a run that could not start does.</summary>
     public bool FailProvision { get; set; }
 
-    /// <summary>When set, <see cref="ProvisionAsync"/> throws <see cref="OperationCanceledException"/>, as a cancelled run does.</summary>
-    public bool CancelProvision { get; set; }
+    /// <summary>The provision attempt from which <see cref="ProvisionAsync"/> throws <see cref="OperationCanceledException"/>, as a cancelled run does; 0 means never.</summary>
+    public int CancelFrom { get; set; }
+
+    /// <summary>When set, <see cref="IsAvailableAsync"/> cancels this source before it reports available, as a cancel during acquire does.</summary>
+    public CancellationTokenSource? CancelOnAvailable { get; set; }
 
     /// <summary>The provision attempt from which <see cref="ProvisionAsync"/> throws, simulating a crash mid-acquire; 0 means never.</summary>
     public int CrashFrom { get; set; }
@@ -174,8 +177,11 @@ internal sealed class FakePoolProvider : IPoolProvider
 
     public List<string> Destroyed { get; } = [];
 
-    public Task<Result<bool>> IsAvailableAsync(CancellationToken ct) =>
-        Task.FromResult(Available ? Result<bool>.Success(true) : Result<bool>.Failure("[Lab.Unavailable] fake provider is down"));
+    public Task<Result<bool>> IsAvailableAsync(CancellationToken ct)
+    {
+        CancelOnAvailable?.Cancel();
+        return Task.FromResult(Available ? Result<bool>.Success(true) : Result<bool>.Failure("[Lab.Unavailable] fake provider is down"));
+    }
 
     public Task<Result<PoolMember>> ProvisionAsync(PoolConstraints constraints, string memberId, CancellationToken ct)
     {
@@ -185,7 +191,7 @@ internal sealed class FakePoolProvider : IPoolProvider
             throw new InvalidOperationException("simulated crash");
         }
 
-        if (CancelProvision)
+        if (CancelFrom > 0 && Provisioned.Count >= CancelFrom)
         {
             throw new OperationCanceledException(ct);
         }

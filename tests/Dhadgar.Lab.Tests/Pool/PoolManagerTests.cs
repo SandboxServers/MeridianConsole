@@ -285,12 +285,29 @@ public sealed class PoolManagerTests
     [Fact]
     public async Task Acquire_CancelledMidProvision_LeavesNoMembers()
     {
-        var linux = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { CancelProvision = true };
+        var linux = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { CancelFrom = 2 };
         using var pool = new PoolHarness([linux]);
 
         _ = await Assert.ThrowsAsync<OperationCanceledException>(() =>
             pool.Manager.AcquireAsync(AnyLinux with { Count = 2 }, "test", "lease-1", CancellationToken.None));
 
+        Assert.Equal(["lin-01"], linux.Destroyed);
+        PoolListing listing = await pool.Manager.ListAsync(CancellationToken.None);
+        Assert.Empty(listing.Members);
+    }
+
+    [Fact]
+    public async Task Acquire_CancelledWhileSavingPending_ForgetsThePendingMember()
+    {
+        using var cancel = new CancellationTokenSource();
+        var linux = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { CancelOnAvailable = cancel };
+        using var pool = new PoolHarness([linux]);
+
+        // File writes cancelled by the token surface as TaskCanceledException, a subclass of OperationCanceledException.
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            pool.Manager.AcquireAsync(AnyLinux, "test", "lease-1", cancel.Token));
+
+        Assert.Empty(linux.Provisioned);
         PoolListing listing = await pool.Manager.ListAsync(CancellationToken.None);
         Assert.Empty(listing.Members);
     }
@@ -309,6 +326,25 @@ public sealed class PoolManagerTests
         await restarted.Manager.StartAsync(CancellationToken.None);
 
         Assert.Equal(["lin-01", "lin-02"], second.Destroyed.Order());
+    }
+
+    [Fact]
+    public async Task Start_ForgetsAProvisioningEntryWhoseContainerWasNeverCreated()
+    {
+        var first = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { CrashFrom = 1 };
+        using var pool = new PoolHarness([first]);
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            pool.Manager.AcquireAsync(AnyLinux, "test", "lease-1", CancellationToken.None));
+        string file = Path.Combine(pool.Paths.State, "pool.json");
+        Assert.Single(JsonSerializer.Deserialize<List<PoolMember>>(File.ReadAllText(file), JsonOptions)!);
+
+        // The restarted daemon finds no container for the pending entry, so it is forgotten rather than kept as leftover.
+        var second = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer);
+        var inspector = new FlakyInspector { Gone = true };
+        using var restarted = new PoolHarness([second], root: pool.Root, inspector: inspector);
+        await restarted.Manager.StartAsync(CancellationToken.None);
+
+        Assert.Empty(JsonSerializer.Deserialize<List<PoolMember>>(File.ReadAllText(file), JsonOptions)!);
     }
 
     [Fact]
