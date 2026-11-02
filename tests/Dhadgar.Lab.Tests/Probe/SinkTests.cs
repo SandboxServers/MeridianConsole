@@ -1,9 +1,11 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Dhadgar.Lab.Probe;
 using Microsoft.AspNetCore.Builder;
@@ -87,6 +89,7 @@ public sealed class SinkTests
             + @"{""payload"":""{\""token\"":\""abc123\""}""}"
             + "authorization: Basic dXNlcjpwdw==;"
             + "bearer lowerCaseTok.en"
+            + "\nauthorization: Bearer hdrTok.en.value;"
             + "\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF";
 
         string redacted = SinkRecorder.Redact(body);
@@ -96,7 +99,43 @@ public sealed class SinkTests
         Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("dXNlcjpwdw==", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("lowerCaseTok.en", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("hdrTok.en.value", redacted, StringComparison.Ordinal);
         Assert.DoesNotContain("MIIEvQ", redacted, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("authorization: Bearer abc123SECRET")]
+    [InlineData("Authorization=Bearer abc123SECRET&x=1")]
+    [InlineData("bearer abc123SECRET")]
+    public void Redact_BearerAfterAuthorizationKey_IsRedacted(string input)
+    {
+        string redacted = SinkRecorder.Redact(input);
+
+        Assert.DoesNotContain("abc123SECRET", redacted, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("{\"password\":\"correct horse batt")]
+    [InlineData("{\"a\":1,\"token\":\"abc123SEC")]
+    [InlineData("{\"a\":1,\"token\":\"abc123SEC\\")]
+    public void Redact_UnclosedQuotedValue_IsRedacted(string input)
+    {
+        string redacted = SinkRecorder.Redact(input);
+
+        Assert.DoesNotContain("correct horse", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123SEC", redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Record_SecretStraddlingTheBodyCut_IsNotStored()
+    {
+        var recorder = new SinkRecorder(TimeProvider.System);
+        string body = new string('x', SinkRecorder.MaxBodyChars - 20) + "\"token\":\"abc123SECRETSECRET";
+
+        SinkRequest stored = recorder.Record("/webhook", [], body);
+
+        Assert.DoesNotContain("abc123", stored.Body, StringComparison.Ordinal);
+        Assert.EndsWith("\"token\":\"[redacted]", stored.Body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -105,9 +144,12 @@ public sealed class SinkTests
         var recorder = new SinkRecorder(TimeProvider.System);
 
         SinkRequest stored = recorder.Record("/api/webhooks/123/abcDEF.ghi", [], "{}");
+        SinkRequest versioned = recorder.Record("/api/v10/webhooks/123/abcDEF.ghi", [], "{}");
 
         Assert.DoesNotContain("abcDEF.ghi", stored.Path, StringComparison.Ordinal);
         Assert.StartsWith("/api/webhooks/123/", stored.Path, StringComparison.Ordinal);
+        Assert.DoesNotContain("abcDEF.ghi", versioned.Path, StringComparison.Ordinal);
+        Assert.StartsWith("/api/v10/webhooks/123/", versioned.Path, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -208,5 +250,67 @@ public sealed class SinkTests
         IReadOnlyList<SinkRequest> stored = recorder.Since(0);
         Assert.Single(stored);
         Assert.True(stored[0].Body.Length <= SinkRecorder.MaxBodyChars);
+    }
+
+    [Fact]
+    public async Task ReadBoundedAsync_ReadsOnlyUpToTheLimit_NotTheWholeBody()
+    {
+        var body = new CountingStream(new string('y', 1024 * 1024));
+
+        string text = await SinkHost.ReadBoundedAsync(body, CancellationToken.None);
+
+        Assert.Equal(SinkRecorder.MaxBodyChars, text.Length);
+        Assert.True(
+            body.TotalBytesRead <= SinkRecorder.MaxBodyChars * 4 + 4096,
+            $"read {body.TotalBytesRead} bytes; the bound is {SinkRecorder.MaxBodyChars * 4 + 4096}");
+    }
+
+    /// <summary>A read-only stream over ASCII text that counts the bytes handed out.</summary>
+    private sealed class CountingStream : Stream
+    {
+        private readonly byte[] _data;
+        private int _position;
+
+        public CountingStream(string text)
+        {
+            _data = Encoding.UTF8.GetBytes(text);
+        }
+
+        public long TotalBytesRead { get; private set; }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+        public override int Read(Span<byte> buffer)
+        {
+            int n = Math.Min(buffer.Length, _data.Length - _position);
+            _data.AsSpan(_position, n).CopyTo(buffer);
+            _position += n;
+            TotalBytesRead += n;
+            return n;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

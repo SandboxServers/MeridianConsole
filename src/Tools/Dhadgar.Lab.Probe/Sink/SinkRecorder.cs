@@ -53,7 +53,7 @@ public sealed class SinkRecorder
     /// password or a JSON string nested in a JSON string is redacted whole.
     /// </summary>
     private static readonly Regex SecretPair = new(
-        @"(?i)(?<pre>(?:access_token|refresh_token|id_token|password|passwd|client_secret|secret|api[_-]?key|token|authorization|private_key)\\?""?\s*[:=]\s*)(?:(?<q>\\?"")(?:[^""\\]|\\.)*(?<qe>\\?"")|[^""&,\s}]+)",
+        @"(?i)(?<pre>(?:access_token|refresh_token|id_token|password|passwd|client_secret|secret|api[_-]?key|token|authorization|private_key)\\?""?\s*[:=]\s*)(?:(?<q>\\?"")(?:[^""\\]|\\.)*(?<qe>\\?""|\\?\z)|[^""&,\s}]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex BearerValue = new(
@@ -68,9 +68,9 @@ public sealed class SinkRecorder
         @"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
-    /// <summary>The token segment of a Discord-style webhook path (<c>/api/webhooks/{id}/{token}</c>).</summary>
+    /// <summary>The token segment of a Discord-style webhook path (<c>/api/webhooks/{id}/{token}</c>, versioned or not).</summary>
     private static readonly Regex WebhookTokenPath = new(
-        @"(?i)(/api/webhooks/\d+/)[^/?#]+",
+        @"(?i)(/webhooks/\d+/)[^/?#]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly object _gate = new();
@@ -149,8 +149,8 @@ public sealed class SinkRecorder
         ArgumentNullException.ThrowIfNull(text);
         string withPem = PemBlock.Replace(text, "[redacted]");
         string withBasic = BasicValue.Replace(withPem, match => match.Groups[1].Value + "[redacted]");
-        string withPairs = SecretPair.Replace(withBasic, RedactPair);
-        return BearerValue.Replace(withPairs, match => match.Groups[1].Value + "[redacted]");
+        string withBearer = BearerValue.Replace(withBasic, match => match.Groups[1].Value + "[redacted]");
+        return SecretPair.Replace(withBearer, RedactPair);
     }
 
     private static string RedactPair(Match match)

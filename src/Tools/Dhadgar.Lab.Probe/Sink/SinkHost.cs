@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Dhadgar.Lab.Tests")]
+
 namespace Dhadgar.Lab.Probe;
 
 /// <summary>
@@ -50,24 +52,32 @@ public static class SinkHost
             string path = ctx.Request.Path.Value ?? "/";
             var headers = ctx.Request.Headers.Select(h => new KeyValuePair<string, string>(
                 h.Key, string.Join(",", h.Value.ToArray())));
-            // Read at most MaxBodyChars characters: a larger body is never buffered, and the recorder stores the cut.
-            using var reader = new StreamReader(ctx.Request.Body);
-            char[] buffer = new char[SinkRecorder.MaxBodyChars];
-            try
-            {
-                int read = await reader.ReadBlockAsync(buffer.AsMemory(), ctx.RequestAborted).ConfigureAwait(false);
-                string body = new string(buffer, 0, read);
-                recorder.Record(path, headers, body);
-            }
-            finally
-            {
-                Array.Clear(buffer);
-            }
-
+            string body = await ReadBoundedAsync(ctx.Request.Body, ctx.RequestAborted).ConfigureAwait(false);
+            recorder.Record(path, headers, body);
             return Results.Ok();
         });
 
         return app;
+    }
+
+    /// <summary>
+    /// Reads at most <see cref="SinkRecorder.MaxBodyChars"/> characters of <paramref name="body"/>. The rest is never read,
+    /// so a larger body is never buffered, and the recorder stores the cut.
+    /// </summary>
+    internal static async Task<string> ReadBoundedAsync(Stream body, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        using var reader = new StreamReader(body);
+        char[] buffer = new char[SinkRecorder.MaxBodyChars];
+        try
+        {
+            int read = await reader.ReadBlockAsync(buffer.AsMemory(), ct).ConfigureAwait(false);
+            return new string(buffer, 0, read);
+        }
+        finally
+        {
+            Array.Clear(buffer);
+        }
     }
 
     /// <summary>
