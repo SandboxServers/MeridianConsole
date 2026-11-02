@@ -127,7 +127,7 @@ public sealed class AuthStackDockerTests
                 || line.Message.Contains("vault.azure.net", StringComparison.Ordinal)
                 || line.Category.StartsWith("Azure.", StringComparison.Ordinal));
 
-            string email =$"lab-{Guid.NewGuid():N}@lab.invalid";
+            string email = $"lab-{Guid.NewGuid():N}@lab.invalid";
             string password = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(24));
             using var signUp = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{LabPorts.Gateway}/api/v1/betterauth/sign-up/email")
             {
