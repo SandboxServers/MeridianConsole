@@ -31,6 +31,8 @@ PLAN (decided):
 11. Tests: adapter env tests (tests/Dhadgar.Lab.Tests/Services/AuthStackAdapterTests.cs), PanelLoginSeamTests (S-L9, RequiresDocker, RequiresNetwork), AuthStackDockerTests (RequiresDocker, RequiresNetwork).
 12. README section (src/Tools/Dhadgar.Lab/README.md "Services": Identity, BetterAuth, Panel).
 
-NEXT STEP: step 1 (LabCredentialRefs + LabStack EnsureCredentials), then build Dhadgar.Lab.
+DONE (session 2, part 2): step 1. LabCredentialRefs.IdentityExchange/BetterAuthSecret added; LabStack.EnsureCredentials returns Result, generates P-256 PKCS8 key into vault (NewExchangeKey) and writes state\identity\exchange-public.pem (WriteExchangePublicKey). Caller in StackUp checks Result.
 
-LAST CHECK: none yet.
+NEXT STEP: step 2 (LabServiceContext optional ExchangePublicKeyPem/ExchangePrivateKeyPem/BetterAuthSecret; ComposeEnvironment fills them), then steps 4-6 adapters.
+
+LAST CHECK: build Dhadgar.Lab Release TreatWarningsAsErrors -> Build succeeded, 0 warnings, 0 errors.

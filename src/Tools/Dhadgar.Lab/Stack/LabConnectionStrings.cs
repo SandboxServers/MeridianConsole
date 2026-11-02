@@ -25,6 +25,12 @@ public sealed class LabCredentialRefs
     /// <summary>The Redis password.</summary>
     public const string Redis = "redis";
 
+    /// <summary>The Identity exchange signing key (ES256 PKCS8 PEM), generated per stack; BetterAuth holds the private half.</summary>
+    public const string IdentityExchange = "identity-exchange";
+
+    /// <summary>The BetterAuth secret (<c>BETTER_AUTH_SECRET</c>).</summary>
+    public const string BetterAuthSecret = "betterauth-secret";
+
     private readonly Lock _gate = new();
     private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
 

@@ -37,7 +37,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     private const string SuperUser = "postgres";
     internal static readonly string[] LabDatabaseServices = ["nodes", "identity", "notifications", "discord", "betterauth"];
     private static readonly string[] CredentialNames =
-        [LabCredentialRefs.Postgres, LabCredentialRefs.LabOwner, LabCredentialRefs.LabReader, LabCredentialRefs.RabbitMq, LabCredentialRefs.Redis];
+        [LabCredentialRefs.Postgres, LabCredentialRefs.LabOwner, LabCredentialRefs.LabReader, LabCredentialRefs.RabbitMq, LabCredentialRefs.Redis, LabCredentialRefs.IdentityExchange, LabCredentialRefs.BetterAuthSecret];
     private static readonly TimeSpan ReadinessWindow = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessPoll = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan StaleEnvFileAge = TimeSpan.FromMinutes(10);
@@ -259,7 +259,11 @@ public sealed class LabStack : ILabStatusSource, IDisposable
             return network;
         }
 
-        EnsureCredentials();
+        Result credentials = EnsureCredentials();
+        if (credentials.IsFailure)
+        {
+            return credentials;
+        }
 
         var started = await StartContainerAsync(
             "postgres", PostgresImage, ["127.0.0.1:15432:5432"],
@@ -357,14 +361,80 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     /// <summary>
     /// Creates a password for every credential that has none. Each is 24 random bytes, base64url, held in the vault.
     /// </summary>
-    private void EnsureCredentials()
+    private Result EnsureCredentials()
     {
         foreach (var name in CredentialNames)
         {
             if (_refs.Get(name) is null)
             {
-                _refs.Set(name, NewSecret());
+                _refs.Set(name, name == LabCredentialRefs.IdentityExchange ? NewExchangeKey() : NewSecret());
             }
+        }
+
+        return WriteExchangePublicKey();
+    }
+
+    /// <summary>
+    /// Generates the Identity exchange key pair's private half (P-256, PKCS8 PEM) into the vault. The buffers are zeroed.
+    /// </summary>
+    private string NewExchangeKey()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        byte[] pkcs8 = key.ExportPkcs8PrivateKey();
+        char[] pem = PemEncoding.Write("PRIVATE KEY", pkcs8);
+        try
+        {
+            return _vault.Add(SecretKind.PrivateKey, pem);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(pkcs8);
+            CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(pem.AsSpan()));
+        }
+    }
+
+    /// <summary>
+    /// Writes the public half of the exchange key to <c>state\identity\exchange-public.pem</c>, the file Identity reads.
+    /// The public PEM is derived from the vault copy each stack_up, so the file always matches the key BetterAuth signs with.
+    /// </summary>
+    private Result WriteExchangePublicKey()
+    {
+        string? secretRef = _refs.Get(LabCredentialRefs.IdentityExchange);
+        if (secretRef is null)
+        {
+            return Result.Failure("[Lab.NotFound] the exchange key was not provisioned");
+        }
+
+        Result<string> publicPem = _vault.Use(secretRef, span =>
+        {
+            using var key = ECDsa.Create();
+            key.ImportFromPem(span);
+            return key.ExportSubjectPublicKeyInfoPem();
+        });
+        if (publicPem.IsFailure)
+        {
+            return Result.Failure(publicPem.Error);
+        }
+
+        Result<string> file = _validator.ValidatePath(Path.Combine(_paths.State, "identity", "exchange-public.pem"), [_paths.State]);
+        if (file.IsFailure)
+        {
+            return Result.Failure("[Lab.InvalidArgument] the exchange key path is outside lab state");
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file.Value!)!);
+            File.WriteAllText(file.Value!, publicPem.Value!);
+            return Result.Success();
+        }
+        catch (IOException)
+        {
+            return Result.Failure("[Lab.IO] the exchange public key could not be written");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Result.Failure("[Lab.IO] the exchange public key could not be written");
         }
     }
 
