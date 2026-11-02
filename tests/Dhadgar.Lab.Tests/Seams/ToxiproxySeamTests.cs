@@ -117,8 +117,8 @@ public sealed class ToxiproxySeamTests
             Result disablePg = await toxi.SetEnabledAsync("nodes-postgres", false, ct);
             Assert.True(disablePg.IsSuccess, disablePg.IsFailure ? disablePg.Error : string.Empty);
             Assert.False(
-                await CanConnectAsync(ProxyPort("nodes-postgres"), ct),
-                "The nodes-postgres listener still accepts new connections after it was disabled.");
+                await ProxyListenerProbe.AcceptsAsync(rig.Docker, "nodes-postgres", ct),
+                "The nodes-postgres listener still accepts connections after it was disabled.");
             int? lastPg = null;
             bool pgFailed = await WaitUntilAsync(
                 async () =>
@@ -264,14 +264,14 @@ public sealed class ToxiproxySeamTests
             Result disablePg = await toxi.SetEnabledAsync("nodes-postgres", false, ct);
             Assert.True(disablePg.IsSuccess, disablePg.IsFailure ? disablePg.Error : string.Empty);
             Assert.False(
-                await CanConnectAsync(ProxyPort("nodes-postgres"), ct),
-                "The nodes-postgres listener still accepts new connections after it was disabled.");
+                await ProxyListenerProbe.AcceptsAsync(rig.Docker, "nodes-postgres", ct),
+                "The nodes-postgres listener still accepts connections after it was disabled.");
             await Task.Delay(TimeSpan.FromSeconds(3), ct);
 
             // Heal. The wait probes the proxy listener only, never Nodes.
             Result healPg = await toxi.SetEnabledAsync("nodes-postgres", true, ct);
             Assert.True(healPg.IsSuccess, healPg.IsFailure ? healPg.Error : string.Empty);
-            bool proxyUp = await WaitUntilAsync(() => CanConnectAsync(ProxyPort("nodes-postgres"), ct), 10, 1, ct);
+            bool proxyUp = await WaitUntilAsync(() => ProxyListenerProbe.AcceptsAsync(rig.Docker, "nodes-postgres", ct), 10, 1, ct);
             Assert.True(proxyUp, "The nodes-postgres listener did not accept connections 10 s after it was enabled.");
 
             // The first request after the heal is the one that must not 500 (F114, NR-1).
@@ -393,26 +393,6 @@ public sealed class ToxiproxySeamTests
         }
 
         return false;
-    }
-
-    private static async Task<bool> CanConnectAsync(int port, CancellationToken ct)
-    {
-        using var client = new System.Net.Sockets.TcpClient();
-        try
-        {
-            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            attempt.CancelAfter(TimeSpan.FromSeconds(3));
-            await client.ConnectAsync("127.0.0.1", port, attempt.Token);
-            return client.Connected;
-        }
-        catch (System.Net.Sockets.SocketException)
-        {
-            return false;
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return false;
-        }
     }
 
     /// <summary>
