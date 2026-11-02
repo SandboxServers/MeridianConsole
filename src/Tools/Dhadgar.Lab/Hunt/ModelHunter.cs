@@ -66,6 +66,9 @@ public sealed class ModelHunter
     private readonly TimeSpan _settle;
     private readonly ILogger<ModelHunter> _logger;
 
+    /// <summary>True after a case that cut Postgres, until the next case restarts the nodes service (step 2, D-ML119 unchanged).</summary>
+    private bool _cutSinceRestart;
+
     /// <summary>
     /// Creates the hunter.
     /// </summary>
@@ -120,7 +123,11 @@ public sealed class ModelHunter
 
         if (findings.Shrunk is null)
         {
-            var passed = new JsonObject { ["state"] = "passed", ["iterations"] = iterations, ["throttled"] = findings.Throttled, ["known"] = findings.Known };
+            var passed = new JsonObject
+            {
+                ["state"] = "passed", ["iterations"] = iterations, ["throttled"] = findings.Throttled, ["known"] = findings.Known,
+                ["carried"] = findings.Carried,
+            };
             return Result<JobOutcome>.Success(new JobOutcome("pass", passed));
         }
 
@@ -131,22 +138,49 @@ public sealed class ModelHunter
             return Result<JobOutcome>.Failure(replay.Infrastructure);
         }
 
-        string detail = replay.Detail ?? "the shrunk case did not diverge on replay";
-        var ops = new JsonArray(findings.Shrunk.Select(op => (JsonNode)JsonValue.Create(op.ToString())!).ToArray());
+        // The shrink did not reproduce, but the original failure may: replay the original once (R9, run 9).
+        List<HuntOp> reported = findings.Shrunk;
+        CaseResult verdict = replay;
+        bool shrinkUnstable = false;
+        if (!replay.Diverged && findings.Original is not null && !findings.Original.SequenceEqual(findings.Shrunk))
+        {
+            CaseResult original = await RunCaseAsync(findings.Original, ct).ConfigureAwait(false);
+            if (original.Infrastructure is not null)
+            {
+                return Result<JobOutcome>.Failure(original.Infrastructure);
+            }
+
+            if (original.Diverged)
+            {
+                reported = findings.Original;
+                verdict = original;
+                shrinkUnstable = true;
+            }
+        }
+
+        string detail = verdict.Detail ?? "the shrunk case did not diverge on replay";
         var failed = new JsonObject
         {
-            ["state"] = replay.Diverged ? "diverged" : "not_reproduced",
+            ["state"] = verdict.Diverged ? "diverged" : "not_reproduced",
             ["model"] = ModelName,
             ["run_seed"] = (long)runSeed,
             ["cscheck_seed"] = cscheckSeed,
-            ["ops"] = ops,
-            ["first_diverging_op"] = replay.Index,
+            ["ops"] = OpArray(reported),
+            ["first_diverging_op"] = verdict.Index,
             ["detail"] = detail,
             ["known"] = findings.Known,
+            ["carried"] = findings.Carried,
+            ["original_ops"] = OpArray(findings.Original ?? findings.Shrunk),
+            ["original_detail"] = findings.OriginalDetail,
         };
+        if (shrinkUnstable)
+        {
+            failed["shrink_unstable"] = true;
+        }
+
         if (jobFolder is not null)
         {
-            Result written = await WriteReproAsync(jobFolder, runSeed, cscheckSeed, buildId, findings.Shrunk, replay.Index, detail, ct)
+            Result written = await WriteReproAsync(jobFolder, runSeed, cscheckSeed, buildId, reported, verdict.Index, detail, ct)
                 .ConfigureAwait(false);
             if (written.IsFailure)
             {
@@ -170,7 +204,11 @@ public sealed class ModelHunter
     }
 
     /// <summary>The findings of one CsCheck sample.</summary>
-    private sealed record SampleFindings(List<HuntOp>? Shrunk, int Throttled, int Known, string? Infrastructure);
+    /// <param name="Original">The ops of the first diverging case, before the shrink, or null.</param>
+    /// <param name="OriginalDetail">What the first diverging case reported, or null.</param>
+    /// <param name="Carried">The violations the case-start checkpoints carried, summed over the sample.</param>
+    private sealed record SampleFindings(List<HuntOp>? Shrunk, int Throttled, int Known, string? Infrastructure, List<HuntOp>? Original,
+        string? OriginalDetail, int Carried);
 
     /// <summary>
     /// The CsCheck sample. CsCheck calls the assertion synchronously, so each case blocks on its async tool calls; the caller
@@ -179,8 +217,11 @@ public sealed class ModelHunter
     private SampleFindings Sample(string cscheckSeed, int iterations, int budgetSeconds, CancellationToken ct)
     {
         List<HuntOp>? captured = null;
+        List<HuntOp>? original = null;
+        string? originalDetail = null;
         int throttled = 0;
         int known = 0;
+        int carried = 0;
         string? infrastructure = null;
         try
         {
@@ -201,8 +242,12 @@ public sealed class ModelHunter
 
                     throttled += result.Throttled ? 1 : 0;
                     known += result.Known;
+                    carried += result.Carried;
                     if (result.Diverged)
                     {
+                        // CsCheck shrinks by calling this again; only the first failure is the original.
+                        original ??= [.. ops];
+                        originalDetail ??= result.Detail;
                         throw new InvalidOperationException(result.Detail ?? "diverged");
                     }
                 },
@@ -221,10 +266,10 @@ public sealed class ModelHunter
         }
         catch (CsCheckException)
         {
-            return new SampleFindings(captured, throttled, known, infrastructure);
+            return new SampleFindings(captured, throttled, known, infrastructure, original, originalDetail, carried);
         }
 
-        return new SampleFindings(null, throttled, known, infrastructure);
+        return new SampleFindings(null, throttled, known, infrastructure, original, originalDetail, carried);
     }
 
     /// <summary>The result of one case.</summary>
@@ -234,7 +279,8 @@ public sealed class ModelHunter
     /// <param name="Throttled">True when a Gateway enroll was throttled twice; the case ends and is not a failure.</param>
     /// <param name="Known">The count of 5xx answers to an enroll while Postgres was cut (KI-F67, known).</param>
     /// <param name="Infrastructure">An infrastructure error (a tool that failed to run), or null.</param>
-    public sealed record CaseResult(bool Diverged, int Index, string? Detail, bool Throttled, int Known, string? Infrastructure)
+    /// <param name="Carried">The violations the case-start checkpoint returned. They are counted, never a divergence (step 1).</param>
+    public sealed record CaseResult(bool Diverged, int Index, string? Detail, bool Throttled, int Known, string? Infrastructure, int Carried = 0)
     {
         /// <summary>A case that matched the model.</summary>
         public static CaseResult Passed(int known) => new(false, -1, null, false, known, null);
@@ -248,6 +294,20 @@ public sealed class ModelHunter
         string? faultId = null;
         bool ranPgDown = false;
         int known = 0;
+        int carried = 0;
+
+        // Step 2: a case that follows a cut restarts the nodes service first, so its pool is never the stale one of the last case.
+        if (_cutSinceRestart)
+        {
+            Result<JsonElement> restarted = await CallAsync("svc_restart", new JsonObject { ["service"] = Service }, ct).ConfigureAwait(false);
+            if (restarted.IsFailure)
+            {
+                return Infrastructure(restarted.Error);
+            }
+
+            _cutSinceRestart = false;
+        }
+
         try
         {
             Result<JsonElement> reset = await CallAsync("stack_reset_data", new JsonObject { ["databases"] = new JsonArray(Database) }, ct).ConfigureAwait(false);
@@ -261,6 +321,15 @@ public sealed class ModelHunter
             {
                 return Infrastructure(reset.Error);
             }
+
+            // Step 1: the case-start checkpoint. Violations here are carried from an earlier case, so they are counted, not a divergence.
+            Result<JsonElement> start = await CallAsync("invariants_check", new JsonObject(), ct).ConfigureAwait(false);
+            if (start.IsFailure)
+            {
+                return Infrastructure("[Lab.Unavailable] invariants_check failed at case start");
+            }
+
+            carried = CountViolations(start.Value);
 
             for (int i = 0; i < ops.Count; i++)
             {
@@ -325,7 +394,7 @@ public sealed class ModelHunter
                         int status = Number(enrolled.Value, "status");
                         if (status == 429)
                         {
-                            return new CaseResult(false, -1, null, true, known, null);
+                            return new CaseResult(false, -1, null, true, known, null, carried);
                         }
 
                         if (expected == HuntExpectation.NotSuccess && status >= 500)
@@ -389,17 +458,18 @@ public sealed class ModelHunter
                 mismatch ??= await CheckStateAsync(model, op, ct).ConfigureAwait(false);
                 if (mismatch is not null)
                 {
-                    return new CaseResult(true, i, "op " + i.ToString(CultureInfo.InvariantCulture) + " " + op + ": " + mismatch, false, known, null);
+                    return new CaseResult(true, i, "op " + i.ToString(CultureInfo.InvariantCulture) + " " + op + ": " + mismatch, false, known, null, carried);
                 }
             }
 
-            return CaseResult.Passed(known);
+            return new CaseResult(false, -1, null, false, known, null, carried);
         }
         finally
         {
             if (ranPgDown)
             {
                 await HealAsync().ConfigureAwait(false);
+                _cutSinceRestart = true;
             }
         }
     }
@@ -530,6 +600,15 @@ public sealed class ModelHunter
     }
 
     private static CaseResult Infrastructure(string error) => new(false, -1, null, false, 0, error);
+
+    /// <summary>The number of entries in an <c>invariants_check</c> payload's <c>violations</c> array, or 0.</summary>
+    private static int CountViolations(JsonElement payload) =>
+        payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("violations", out JsonElement violations) && violations.ValueKind == JsonValueKind.Array
+            ? violations.GetArrayLength()
+            : 0;
+
+    /// <summary>The ops as a JSON array of their written names, as the repro and the payload carry them.</summary>
+    private static JsonArray OpArray(IEnumerable<HuntOp> ops) => new(ops.Select(op => (JsonNode)JsonValue.Create(op.ToString())!).ToArray());
 
     private static string? Compare(HuntExpectation expected, int status) => expected switch
     {
