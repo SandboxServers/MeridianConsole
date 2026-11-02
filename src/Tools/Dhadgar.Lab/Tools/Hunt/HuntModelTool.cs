@@ -116,6 +116,33 @@ public sealed class HuntModelTool : LabTool<HuntModelArgs>
             : Result<object>.Success(new HuntModelStarted(started.Value!.JobId, seed)));
     }
 
+    /// <summary>The largest repro file, in bytes, that a replay reads.</summary>
+    internal const long MaxReproBytes = 64 * 1024;
+
+    /// <summary>Reads a repro file whose size is capped at <see cref="MaxReproBytes"/>; IO failures are returned, not thrown.</summary>
+    internal static async Task<Result<string>> ReadReproAsync(string path, CancellationToken ct)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists)
+            {
+                return Result<string>.Failure("[Lab.NotFound] repro not found");
+            }
+
+            if (info.Length > MaxReproBytes)
+            {
+                return Result<string>.Failure("[Lab.InvalidArgument] repro is larger than 64 KiB");
+            }
+
+            return Result<string>.Success(await File.ReadAllTextAsync(path, ct).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Result<string>.Failure("[Lab.InvalidArgument] repro could not be read");
+        }
+    }
+
     /// <summary>Reads the recorded ops from a repro under the jobs folder and starts the replay job.</summary>
     private async Task<Result<object>> ReplayAsync(string replay, Func<string, JsonElement, LabCallContext, CancellationToken, Task<LabToolResult>> invoke, string buildId, CancellationToken ct)
     {
@@ -125,13 +152,13 @@ public sealed class HuntModelTool : LabTool<HuntModelArgs>
             return Result<object>.Failure(reproPath.Error);
         }
 
-        if (!File.Exists(reproPath.Value!))
+        Result<string> text = await ReadReproAsync(reproPath.Value!, ct).ConfigureAwait(false);
+        if (text.IsFailure)
         {
-            return Result<object>.Failure("[Lab.NotFound] repro not found");
+            return Result<object>.Failure(text.Error);
         }
 
-        string text = await File.ReadAllTextAsync(reproPath.Value!, ct).ConfigureAwait(false);
-        Result<ReproRecord> record = ReproParser.Parse(text);
+        Result<ReproRecord> record = ReproParser.Parse(text.Value!);
         if (record.IsFailure)
         {
             return Result<object>.Failure(record.Error);

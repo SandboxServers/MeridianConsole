@@ -10,7 +10,7 @@ using Xunit;
 namespace Dhadgar.Lab.Tests.Uat;
 
 /// <summary>
-/// A6: every shipped UAT spec (<c>lab-selftest.toml</c> and <c>catalog/*.toml</c>) loads and passes the plan-time validator
+/// A6: every shipped UAT spec (every top-level <c>*.toml</c>, today <c>lab-selftest.toml</c> and <c>enroll-probe.toml</c>, and <c>catalog/*.toml</c>) loads and passes the plan-time validator
 /// against the daemon's real tool registry. <c>known-issues.toml</c>, <c>invariants/</c>, <c>chaos/</c>, <c>twins/</c> and the
 /// catalog scenario files <c>enroll-history.toml</c> and <c>soak.toml</c> are not specs and are skipped. A failure is a finding to report, never an expected value to edit.
 /// </summary>
@@ -41,7 +41,10 @@ public sealed class ShippedSpecsRegistryValidateTests
             LabToolRegistry registry = daemon.Services.GetRequiredService<LabToolRegistry>();
 
             string specs = Path.Combine(LabIsolationTests.FindRepoRoot(AppContext.BaseDirectory), "docs", "guides", "uat-specs");
-            var files = new List<string> { Path.Combine(specs, "lab-selftest.toml") };
+            var files = Directory.EnumerateFiles(specs, "*.toml", SearchOption.TopDirectoryOnly)
+                .Where(f => Path.GetFileName(f) is not "known-issues.toml")
+                .Order(StringComparer.Ordinal)
+                .ToList();
             string catalog = Path.Combine(specs, "catalog");
             if (Directory.Exists(catalog))
             {
@@ -67,6 +70,9 @@ public sealed class ShippedSpecsRegistryValidateTests
             }
 
             Assert.True(files.Count > 1, "no catalog specs found under " + catalog);
+            var names = files.Select(f => Path.GetFileName(f)).ToList();
+            Assert.Contains("lab-selftest.toml", names);
+            Assert.Contains("enroll-probe.toml", names);
             Assert.True(failures.Count == 0, string.Join("; ", failures));
         }
         finally

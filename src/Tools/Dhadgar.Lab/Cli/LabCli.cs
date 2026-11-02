@@ -48,7 +48,7 @@ public static class LabCli
 
         var status = new Command("status", "Prints the daemon status from GET /status on 127.0.0.1. The token comes from MERIDIAN_LAB_TOKEN.");
         var statusJson = new Option<bool>("--json") { Description = "Prints the raw JSON body." };
-        var statusPort = new Option<int>("--port") { Description = "Daemon port on 127.0.0.1.", DefaultValueFactory = _ => LabDefaults.DaemonPort };
+        var statusPort = new Option<int>("--port") { Description = "Daemon port on 127.0.0.1; only 8789 (LabDefaults.DaemonPort) is accepted.", DefaultValueFactory = _ => LabDefaults.DaemonPort };
         status.Options.Add(statusJson);
         status.Options.Add(statusPort);
         status.SetAction((parse, ct) => StatusAsync(parse.GetValue(statusPort), parse.GetValue(statusJson), Console.Out, Console.Error, ct));
@@ -64,7 +64,7 @@ public static class LabCli
         var seed = new Option<ulong?>("--seed") { Description = "Run seed; a fresh one is drawn when omitted." };
         var replay = new Option<string?>("--replay") { Description = "Bundle-relative <run_id>\\repro\\repro.toml. Excludes --specs, --section, --rows and --seed." };
         var runJson = new Option<bool>("--json") { Description = "Prints the raw JSON result." };
-        var runPort = new Option<int>("--port") { Description = "Daemon port on 127.0.0.1.", DefaultValueFactory = _ => LabDefaults.DaemonPort };
+        var runPort = new Option<int>("--port") { Description = "Daemon port on 127.0.0.1; only 8789 (LabDefaults.DaemonPort) is accepted.", DefaultValueFactory = _ => LabDefaults.DaemonPort };
         foreach (var option in new Option[] { specs, section, rows, planOnly, label, seed, replay, runJson, runPort })
         {
             uatRun.Options.Add(option);

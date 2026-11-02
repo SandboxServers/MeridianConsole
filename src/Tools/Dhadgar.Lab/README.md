@@ -270,7 +270,7 @@ Every read takes no `member` in L12; a `member` argument returns `[Lab.Unavailab
 
 ## CLI
 
-Both commands talk only to `http://127.0.0.1:<port>` (`--port`, default from `LabDefaults`). The token comes from `MERIDIAN_LAB_TOKEN`, never an argument. Requests follow no redirects and use no proxy.
+Both commands talk only to `http://127.0.0.1:8789` (`LabDefaults.DaemonPort`). `--port` defaults to 8789; any other port is refused as `[Lab.Refused] the target is not a lab endpoint` (`LabHosts.IsDaemonEndpoint`, D-ML139), so the CLI cannot reach a daemon started with another `Lab:Port`. MCP clients that call `/mcp` directly are not affected. The token comes from `MERIDIAN_LAB_TOKEN`, never an argument. Requests follow no redirects and use no proxy.
 
 - `meridian-lab status [--json] [--port <n>]` calls `GET /status` and prints the daemon state.
 - `meridian-lab uat run --specs <file>... [--section <id>] [--rows a,b] [--plan-only] [--label <text>] [--seed <n>] [--replay <repro.toml>] [--json] [--port <n>]` calls the `uat_run` MCP tool on `/mcp`. It prints the seed, the summary table and the bundle path. `--replay` needs no `--specs`; it excludes `--section`, `--rows` and `--seed`.
@@ -282,6 +282,8 @@ Exit codes for `uat run` follow `overall` (C8): 0 `pass`, 1 `fail`, 2 config or 
 `stack_up` with `wipe` also removes labelled `meridian-lab-*` containers that the daemon does not know about. Without `wipe`, `stack_up` refuses while such containers exist. Log clauses read the supervisor's own log ring for the process.
 
 The shipped spec `docs/guides/uat-specs/lab-selftest.toml` (section `lab-selftest`, requires Docker) exercises the stack, Nodes and Gateway enrolment and the Toxiproxy ingress path. Its Gateway checks never call the CA route through the Gateway (D-ML63). Enrol polling uses `poll_ms = 5000` (F54). The S-L6 test needs `MERIDIAN_LAB_S6_WIPE=1` when labelled lab containers exist, because its `stack_up` wipe removes them; it is skipped when Docker is not reachable.
+
+The shipped spec `docs/guides/uat-specs/enroll-probe.toml` (section `enroll-probe`, one row `enroll-gateway` with no `depends_on`) starts nothing: it mints a token and enrolls once through the Gateway against a stack its caller already started. It is the M5 mutant's detector and the chaos `nodes-enroll` workload (D-ML123).
 
 ## Self-check
 

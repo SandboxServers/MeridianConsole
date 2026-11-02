@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Tools;
@@ -44,6 +45,9 @@ public static class FlakeCheckJob
 
     private const string RowsFolder = "rows";
     private const string RunFile = "run.json";
+    private const int MaxRowArgLength = 200;
+    private static readonly Regex RowArgPattern =
+        new(@"^[a-z0-9-]+(/[a-z0-9-]+)?\z", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// Reads the source run's <c>run.json</c> and rows and selects the rows to rerun: the named <paramref name="rowIds"/>,
@@ -62,6 +66,11 @@ public static class FlakeCheckJob
         if (reruns < 1 || reruns > MaxReruns)
         {
             return Result<FlakeCheckPlan>.Failure("[Lab.InvalidArgument] reruns must be 1 to 5");
+        }
+
+        if (rowIds is not null && rowIds.Any(id => id is null || id.Length > MaxRowArgLength || !RowArgPattern.IsMatch(id)))
+        {
+            return Result<FlakeCheckPlan>.Failure("[Lab.InvalidArgument] a rows entry is not a row id or section/row key");
         }
 
         Result<string> folder = BundleFolders.Find(uatRuns, runId, validator);

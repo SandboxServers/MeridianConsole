@@ -156,6 +156,34 @@ public sealed class FlakeCheckJobTests : IDisposable
     }
 
     [Fact]
+    public async Task PlanAsync_RowArgTooLong_IsInvalidWithoutEcho()
+    {
+        WriteSource("src-long-row", new RowSpec("nodes", "heal", "FAIL"));
+        string longRow = new string('a', 201);
+
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-long-row", new[] { longRow },
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+
+        Assert.True(plan.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", plan.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(longRow, plan.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PlanAsync_RowArgWithNewline_IsInvalidWithoutEcho()
+    {
+        WriteSource("src-newline-row", new RowSpec("nodes", "heal", "FAIL"));
+        const string badRow = "heal\nx";
+
+        Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, "src-newline-row", new[] { badRow },
+            FlakeCheckJob.DefaultReruns, CancellationToken.None);
+
+        Assert.True(plan.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", plan.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(badRow, plan.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PlanAsync_BareRowIdInTwoSections_IsAmbiguous()
     {
         WriteSource("src-ambiguous", new RowSpec("a", "x", "FAIL"), new RowSpec("b", "x", "FAIL"));
