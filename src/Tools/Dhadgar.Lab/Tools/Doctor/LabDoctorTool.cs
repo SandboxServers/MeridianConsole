@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Principal;
 using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Windows;
 using Dhadgar.Shared.Results;
@@ -219,6 +220,8 @@ public sealed class LabDoctorTool : LabTool<LabDoctorArgs>
         {
             start.ArgumentList.Add(argument);
         }
+
+        LabProcessStart.StripToken(start);
 
         try
         {

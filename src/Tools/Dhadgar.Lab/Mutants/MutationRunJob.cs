@@ -70,6 +70,7 @@ public sealed class MutationRunJob
     private readonly IPathValidator _validator;
     private readonly TimeProvider _time;
     private readonly Redactor _redactor;
+    private readonly RunningMutantBuild _running;
 
     /// <summary>
     /// Creates the job. Production passes <c>MutantBuilder.BuildAsync</c>, the dispatcher's <c>InvokeAsync</c> and the latest plain build;
@@ -83,6 +84,7 @@ public sealed class MutationRunJob
     /// <param name="validator">Validates the result files' paths.</param>
     /// <param name="time">The clock for the restore budget.</param>
     /// <param name="redactor">Redacts every string the job writes to its result files.</param>
+    /// <param name="running">Records the mutant build while it serves the services (D-ML155).</param>
     public MutationRunJob(
         IReadOnlyList<MutantSpec> mutants,
         Func<MutantSpec, CancellationToken, Task<Result<MutantBuildDto>>> build,
@@ -91,8 +93,10 @@ public sealed class MutationRunJob
         GatewayPacer pacer,
         IPathValidator validator,
         TimeProvider time,
-        Redactor redactor)
+        Redactor redactor,
+        RunningMutantBuild running)
     {
+        _running = running ?? throw new ArgumentNullException(nameof(running));
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
         _mutants = mutants ?? throw new ArgumentNullException(nameof(mutants));
         _build = build ?? throw new ArgumentNullException(nameof(build));
@@ -142,6 +146,10 @@ public sealed class MutationRunJob
         finally
         {
             restore = await RestorePlainAsync(plain, leaseId, started).ConfigureAwait(false);
+            if (restore.IsSuccess)
+            {
+                _running.Clear();
+            }
         }
 
         if (restore.IsFailure && overall == "complete")
@@ -185,6 +193,7 @@ public sealed class MutationRunJob
             return new MutantVerdictDto(spec.Id, MutantBuilder.StaleVerdict, [], [], built.Value.Reason);
         }
 
+        _running.Set(new MutantMark(built.Value.BuildId, spec.Id, built.Value.Commit));
         foreach (string service in spec.Services)
         {
             // Recorded before the call so a start that fails half way is still restored.

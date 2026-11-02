@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
@@ -143,7 +144,7 @@ public sealed class FlakeCheckTool : LabTool<FlakeCheckArgs>
         }
 
         Result<FlakeCheckPlan> plan = await FlakeCheckJob.PlanAsync(_paths.UatRuns, _validator, args.RunId, args.Rows,
-            args.Reruns ?? FlakeCheckJob.DefaultReruns, ct).ConfigureAwait(false);
+            args.Reruns ?? FlakeCheckJob.DefaultReruns, ct, _services.GetService<RunningMutantBuild>()?.Current).ConfigureAwait(false);
         if (plan.IsFailure)
         {
             return Result<object>.Failure(plan.Error);

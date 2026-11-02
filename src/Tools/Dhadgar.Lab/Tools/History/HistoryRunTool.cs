@@ -7,6 +7,7 @@ using Dhadgar.Lab.Build;
 using Dhadgar.Lab.History;
 using Dhadgar.Lab.Http;
 using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Policy;
 using Dhadgar.Lab.Secrets;
@@ -401,7 +402,7 @@ public sealed class HistoryRunTool : LabTool<HistoryRunArgs>
     private async Task<Result<AttemptOutcome>> RunAttemptAsync(
         HistoryScenario scenario, int clients, ulong seed, bool minimise, string leaseId, TimeProvider time, CancellationToken ct)
     {
-        BuildStamp stamp = LastBuildReader.Read(_paths, _validator);
+        BuildStamp stamp = LastBuildReader.Read(_paths, _validator, _services.GetService<RunningMutantBuild>());
         string runId = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
         DateTimeOffset started = time.GetUtcNow();
         string folder = Path.Combine(_paths.UatRuns, BundleFolders.Name(started, stamp.Id, runId));

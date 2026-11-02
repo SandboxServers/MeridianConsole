@@ -9,7 +9,8 @@ namespace Dhadgar.Lab.Uat.Bundle;
 /// <param name="Commit">The full commit hash, or empty when not collected.</param>
 /// <param name="Dirty">True when the checkout had uncommitted changes.</param>
 /// <param name="Checkout">The checkout relative to the repo root with <c>/</c> separators (<c>.</c> for the root), or empty.</param>
-public sealed record BuildStamp(string Id, string Commit, bool Dirty, string Checkout)
+/// <param name="Mutant">The mutant id when a mutant build served the services for this run (D-ML155); null otherwise.</param>
+public sealed record BuildStamp(string Id, string Commit, bool Dirty, string Checkout, string? Mutant = null)
 {
     /// <summary>The stamp of a run with no build.</summary>
     public static readonly BuildStamp None = new("nobuild", string.Empty, false, string.Empty);
@@ -32,19 +33,16 @@ public sealed record BuildStamp(string Id, string Commit, bool Dirty, string Che
                 return "nobuild";
             }
 
-            if (Commit.Length == 0)
-            {
-                return Build8Of(Id);
-            }
-
-            string commit = Commit.Length <= 12 ? Commit : Commit[..12];
-            return $"{Build8Of(Id)} (commit {commit}, {(Dirty ? "dirty" : "clean")})";
+            string line = Commit.Length == 0
+                ? Build8Of(Id)
+                : $"{Build8Of(Id)} (commit {(Commit.Length <= 12 ? Commit : Commit[..12])}, {(Dirty ? "dirty" : "clean")})";
+            return Mutant is null ? line : $"{line} mutant {Mutant}";
         }
     }
 
     /// <summary>
-    /// Reads <c>run["build"]</c> with fields <c>id</c>, <c>commit</c>, <c>dirty</c> and <c>checkout</c>. A missing or wrong-typed field
-    /// falls back to that field of <see cref="None"/>. Never throws.
+    /// Reads <c>run["build"]</c> with fields <c>id</c>, <c>commit</c>, <c>dirty</c>, <c>checkout</c> and the optional <c>mutant</c>. A
+    /// missing or wrong-typed field falls back to that field of <see cref="None"/>; a missing <c>mutant</c> is null. Never throws.
     /// </summary>
     /// <param name="run">The parsed <c>run.json</c>.</param>
     public static BuildStamp FromRunJson(JsonObject run)
@@ -55,7 +53,8 @@ public sealed record BuildStamp(string Id, string Commit, bool Dirty, string Che
             Text(build, "id") ?? None.Id,
             Text(build, "commit") ?? None.Commit,
             Flag(build, "dirty") ?? None.Dirty,
-            Text(build, "checkout") ?? None.Checkout);
+            Text(build, "checkout") ?? None.Checkout,
+            Text(build, "mutant"));
     }
 
     private static string? Text(JsonObject? obj, string name) =>

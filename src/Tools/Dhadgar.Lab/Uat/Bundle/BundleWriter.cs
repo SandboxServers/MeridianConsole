@@ -594,6 +594,13 @@ public sealed class BundleWriter : IUatRunSink
             .ToArray();
 
         // Last, so that redactions counts every other file written in this pass.
+        // The mutant key is written only for a bundle made while a mutant build served the services (D-ML155).
+        var build = new JsonObject { ["id"] = _stamp.Id, ["commit"] = _stamp.Commit, ["dirty"] = _stamp.Dirty, ["checkout"] = _stamp.Checkout };
+        if (_stamp.Mutant is { } mutant)
+        {
+            build["mutant"] = mutant;
+        }
+
         var run = new
         {
             schema = 1,
@@ -604,7 +611,7 @@ public sealed class BundleWriter : IUatRunSink
             ended_at = _time.GetUtcNow(),
             daemon_version = typeof(BundleWriter).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             os = RuntimeInformation.OSDescription,
-            build = new { id = _stamp.Id, commit = _stamp.Commit, dirty = _stamp.Dirty, checkout = _stamp.Checkout },
+            build,
             lease_owner = result.LeaseOwner,
             members = secretFailed
                 ? []

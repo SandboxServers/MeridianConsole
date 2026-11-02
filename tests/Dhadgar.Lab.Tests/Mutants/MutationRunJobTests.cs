@@ -388,7 +388,8 @@ public sealed class MutationRunJobTests : IDisposable
             new GatewayPacer(_time),
             new PathValidator(NullLogger<PathValidator>.Instance),
             _time,
-            new Redactor(_vault));
+            new Redactor(_vault),
+            new RunningMutantBuild());
 
         Result<JobOutcome> result = await job.RunAsync("job-test", Lease, _folder, ct);
 

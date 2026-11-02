@@ -338,12 +338,15 @@ public static class MutantBuilder
                 return Result.Failure("[Lab.InvalidArgument] change.patch has a header the scope check cannot read");
             }
 
-            foreach (string path in HeaderPaths(line))
+            // A --- or +++ header must carry its a/ or b/ prefix, or the scope check cannot tell which path it names (H4).
+            if (!TryReadHeaderPath(line, out string? headerPath))
             {
-                if (!allowed.Contains(path))
-                {
-                    return Result.Failure("[Lab.InvalidArgument] change.patch touches a file that files does not list");
-                }
+                return Result.Failure("[Lab.InvalidArgument] change.patch has a header the scope check cannot read");
+            }
+
+            if (headerPath is not null && !allowed.Contains(headerPath))
+            {
+                return Result.Failure("[Lab.InvalidArgument] change.patch touches a file that files does not list");
             }
         }
 
@@ -381,35 +384,52 @@ public static class MutantBuilder
         return true;
     }
 
-    /// <summary>The repo-relative paths one <c>---</c> or <c>+++</c> header line names, with <c>a/</c> and <c>b/</c> stripped.</summary>
-    private static IEnumerable<string> HeaderPaths(string line)
+    /// <summary>
+    /// Reads the repo-relative path a <c>---</c> or <c>+++</c> header names, with its <c>a/</c> or <c>b/</c> prefix stripped. A line
+    /// that is not a header returns true with <paramref name="path"/> null, and so does <c>/dev/null</c>. A <c>---</c> line must start
+    /// <c>--- a/</c> and a <c>+++</c> line must start <c>+++ b/</c>; any other header returns false, and the caller refuses the patch
+    /// (H4). A removed hunk line that begins <c>-- </c> reads as a <c>---</c> header and is refused, which fails closed.
+    /// </summary>
+    /// <param name="line">One patch line.</param>
+    /// <param name="path">The header's path, or null when the line names no path.</param>
+    private static bool TryReadHeaderPath(string line, out string? path)
     {
-        string? header = null;
+        path = null;
         if (line.StartsWith("--- ", StringComparison.Ordinal))
         {
-            header = line[4..];
+            string header = line[4..];
             if (header == "/dev/null")
             {
-                yield break;
+                return true;
             }
 
-            header = header.StartsWith("a/", StringComparison.Ordinal) ? header[2..] : header;
+            if (!header.StartsWith("a/", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            path = Normalise(header[2..]);
+            return true;
         }
-        else if (line.StartsWith("+++ ", StringComparison.Ordinal))
+
+        if (line.StartsWith("+++ ", StringComparison.Ordinal))
         {
-            header = line[4..];
+            string header = line[4..];
             if (header == "/dev/null")
             {
-                yield break;
+                return true;
             }
 
-            header = header.StartsWith("b/", StringComparison.Ordinal) ? header[2..] : header;
+            if (!header.StartsWith("b/", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            path = Normalise(header[2..]);
+            return true;
         }
 
-        if (header is not null)
-        {
-            yield return Normalise(header);
-        }
+        return true;
     }
 
     private static string Normalise(string path) => path.Split('\t')[0].Trim().Replace('\\', '/');

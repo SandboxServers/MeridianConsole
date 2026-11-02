@@ -6,6 +6,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Http;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
@@ -154,7 +155,7 @@ public sealed class TwinRunTool : LabTool<TwinRunArgs>
             system: RuntimeInformation.OSDescription,
             build: string.Empty,
             label: label);
-        sink.UseBuild(LastBuildReader.Read(_paths, _validator));
+        sink.UseBuild(LastBuildReader.Read(_paths, _validator, _services.GetService<RunningMutantBuild>()));
         IRunLogSource? logs = _services.GetService<IRunLogSource>();
         if (logs is not null)
         {

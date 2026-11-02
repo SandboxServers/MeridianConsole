@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Configuration;
 
@@ -76,6 +77,8 @@ public sealed class DockerCli : IDockerCli
         {
             startInfo.ArgumentList.Add(arg);
         }
+
+        LabProcessStart.StripToken(startInfo);
 
         using var process = new Process { StartInfo = startInfo };
         try
