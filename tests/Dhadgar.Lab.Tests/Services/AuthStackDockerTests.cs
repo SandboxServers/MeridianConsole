@@ -16,6 +16,7 @@ using Dhadgar.Lab.Stack;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit.Abstractions;
 
 namespace Dhadgar.Lab.Tests.Services;
 
@@ -24,6 +25,9 @@ namespace Dhadgar.Lab.Tests.Services;
 public sealed class AuthStackDockerTests
 {
     private const string WipeEnvVar = "MERIDIAN_LAB_S6_WIPE";
+    private readonly ITestOutputHelper _output;
+
+    public AuthStackDockerTests(ITestOutputHelper output) => _output = output;
 
     [SkippableFact(Timeout = 1_500_000)]
     [Trait("RequiresDocker", "true")]
@@ -127,6 +131,10 @@ public sealed class AuthStackDockerTests
         }
         finally
         {
+            // Let the log followers flush before the tails are read; the tails are written before any container stops.
+            await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None);
+            ServiceLogTail.Write(_output, supervisor, ["nodes", "identity", "betterauth", "panel", "gateway"], 80);
+
             foreach (string name in new[] { "gateway", "panel", "betterauth", "identity", "nodes" })
             {
                 _ = await services.StopAsync(name, CancellationToken.None);
