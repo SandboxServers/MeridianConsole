@@ -5,8 +5,10 @@ using Dhadgar.Shared.Results;
 namespace Dhadgar.Lab.Services;
 
 /// <summary>
-/// BetterAuth behind the lab Gateway (C1 port 15130). It runs in env mode (no Secrets service, F22), so its database
-/// and secrets come from the env file. The exchange private key reaches it only through that env file.
+/// BetterAuth behind the lab Gateway (C1 port 15130). BetterAuth always loads its secret and exchange key from the Secrets
+/// service at boot (<c>secrets-client.js</c> <c>loadSecrets</c>). The lab does not run Secrets, so the image preloads the
+/// loopback stub <c>tools/lab/images/lab-secrets-stub.mjs</c> (D-ML144), which serves the values this env file carries.
+/// The exchange private key reaches the container only through the env file.
 /// </summary>
 public sealed class BetterAuthLabAdapter : ILabServiceAdapter
 {
@@ -24,6 +26,12 @@ public sealed class BetterAuthLabAdapter : ILabServiceAdapter
 
     /// <summary>The <c>kid</c> written into exchange token headers.</summary>
     public const string ExchangeKeyId = "betterauth-exchange-v1";
+
+    /// <summary>Loopback port of the lab Secrets stub inside the BetterAuth container (D-ML144); never published.</summary>
+    public const int SecretsStubPort = 8099;
+
+    /// <summary>Where the node-app image holds the stub (<c>COPY lab /lab</c>).</summary>
+    public const string SecretsStubPath = "/lab/secrets-stub.mjs";
 
     /// <inheritdoc />
     public string Name => "betterauth";
@@ -86,6 +94,10 @@ public sealed class BetterAuthLabAdapter : ILabServiceAdapter
             ["EXCHANGE_TOKEN_ISSUER"] = IdentityLabAdapter.ExchangeIssuer,
             ["EXCHANGE_TOKEN_AUDIENCE"] = ExchangeAudience,
             ["EXCHANGE_TOKEN_KID"] = ExchangeKeyId,
+            ["SECRETS_SERVICE_URL"] = $"http://127.0.0.1:{SecretsStubPort}",
+            ["LAB_SECRETS_STUB_PORT"] = SecretsStubPort.ToString(CultureInfo.InvariantCulture),
+            ["NODE_OPTIONS"] = $"--import=file://{SecretsStubPath}",
+            ["USE_ENV_DB_PASSWORD"] = "1",
         };
         return Result<IReadOnlyDictionary<string, string>>.Success(env);
     }

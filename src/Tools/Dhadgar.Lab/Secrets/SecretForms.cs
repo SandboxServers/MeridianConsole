@@ -15,7 +15,8 @@ internal delegate bool SecretFormVisitor(ReadOnlySpan<char> form);
 
 /// <summary>
 /// The raw form of a vault value and the JSON-escaped forms a JSON writer can produce for it, so a secret that is escaped
-/// on its way into a bundle or log file is still found. Temporary buffers that hold escaped text are cleared.
+/// on its way into a bundle or log file is still found, and, for PEM private keys, the single-line, body and body-line forms.
+/// Temporary buffers that hold escaped text are cleared.
 /// </summary>
 internal static class SecretForms
 {
@@ -72,11 +73,72 @@ internal static class SecretForms
                 }
             }
 
-            return true;
+            return ForEachPemForm(secret, use);
         }
         finally
         {
             buffer.Clear();
+        }
+    }
+
+    private const int MinPemLine = 16;
+
+    /// <summary>
+    /// For a PEM private key, the forms a service can receive or print without the multi-line block: the key on one line
+    /// (what <c>LabEnvValue.SingleLinePem</c> sends to BetterAuth), the base64 body alone, and each body line of at least
+    /// 16 characters. The PEM regex in <see cref="Redactor"/> only matches when the header is present. The buffer is zeroed.
+    /// </summary>
+    private static bool ForEachPemForm(ReadOnlySpan<char> secret, SecretFormVisitor use)
+    {
+        if (!secret.StartsWith("-----BEGIN ", StringComparison.Ordinal) || secret.IndexOf("PRIVATE KEY-----", StringComparison.Ordinal) < 0)
+        {
+            return true;
+        }
+
+        char[] single = ArrayPool<char>.Shared.Rent(secret.Length);
+        try
+        {
+            int length = 0;
+            foreach (char c in secret)
+            {
+                if (c is not ('\r' or '\n'))
+                {
+                    single[length++] = c;
+                }
+            }
+
+            ReadOnlySpan<char> line = single.AsSpan(0, length);
+            if (!line.SequenceEqual(secret) && !use(line))
+            {
+                return false;
+            }
+
+            int headerEnd = line.IndexOf("KEY-----", StringComparison.Ordinal);
+            int footer = line.IndexOf("-----END ", StringComparison.Ordinal);
+            if (headerEnd >= 0 && footer > headerEnd + 8)
+            {
+                ReadOnlySpan<char> body = line[(headerEnd + 8)..footer];
+                if (body.Length >= MinPemLine && !use(body))
+                {
+                    return false;
+                }
+            }
+
+            foreach (Range range in secret.Split('\n'))
+            {
+                ReadOnlySpan<char> part = secret[range].TrimEnd('\r');
+                if (part.Length >= MinPemLine && !part.StartsWith("-----", StringComparison.Ordinal) && !use(part))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(single.AsSpan()));
+            ArrayPool<char>.Shared.Return(single);
         }
     }
 

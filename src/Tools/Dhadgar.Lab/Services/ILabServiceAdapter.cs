@@ -22,7 +22,15 @@ public sealed record LabServiceContext(
     string RabbitMqPassword,
     string? ExchangePublicKeyPem = null,
     string? ExchangePrivateKeyPem = null,
-    string? BetterAuthSecret = null);
+    string? BetterAuthSecret = null)
+{
+    // ToString prints only the build id: the context carries the exchange private key, the BetterAuth secret and the RabbitMQ password.
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("BuildId = ").Append(BuildId);
+        return true;
+    }
+}
 
 /// <summary>
 /// One lab-managed service: its container identity, port and the environment it needs behind the proxies (L09).

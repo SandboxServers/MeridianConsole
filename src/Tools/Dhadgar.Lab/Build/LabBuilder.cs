@@ -39,8 +39,23 @@ public static class LabBuilder
         new("panel", "src/Dhadgar.Panel/package.json", string.Empty, "src/Dhadgar.Panel", "dist/server/entry.mjs"),
     ];
 
-    /// <summary>Folder names never copied into a Node build context (installed or generated output).</summary>
-    private static readonly string[] NodeExcludedNames = ["node_modules", "dist", ".git", ".astro", "coverage"];
+    /// <summary>Folder names never staged into a Node build context (installed, generated or .NET shim output).</summary>
+    private static readonly string[] NodeExcludedDirectories = ["node_modules", "dist", ".git", ".astro", "coverage", "bin", "obj"];
+
+    /// <summary>File names never staged: package-manager credentials and local secret files (security N4).</summary>
+    private static readonly string[] NodeExcludedFileNames = [".npmrc", ".yarnrc", ".yarnrc.yml", ".dev.vars", ".secrets", "secrets.json"];
+
+    /// <summary>Key and certificate extensions never staged.</summary>
+    private static readonly string[] NodeExcludedExtensions = [".pem", ".key", ".pfx", ".p12"];
+
+    /// <summary>The lab-only Secrets stub (D-ML144), relative to the checkout, and where it lands in the stage.</summary>
+    private const string SecretsStubSource = "tools/lab/images/lab-secrets-stub.mjs";
+
+    /// <summary>True when a file name may be staged: not an env file, not a credential file, not a key or certificate.</summary>
+    internal static bool IsStagedFile(string name) =>
+        !name.StartsWith(".env", StringComparison.OrdinalIgnoreCase)
+        && !NodeExcludedFileNames.Contains(name, StringComparer.OrdinalIgnoreCase)
+        && !NodeExcludedExtensions.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Resolves a project name. Unknown names fail with <c>[Lab.InvalidArgument]</c>.</summary>
     public static Result<BuildProject> ResolveProject(string name)
@@ -196,7 +211,7 @@ public static class LabBuilder
                 continue;
             }
 
-            Result<string> csproj =validator.ValidatePath(Path.Combine(checkoutPath, project.Csproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
+            Result<string> csproj = validator.ValidatePath(Path.Combine(checkoutPath, project.Csproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
             Result<string> publishDir = validator.ValidatePath(Path.Combine(outputRoot.Value!, project.Name), [paths.Builds]);
             Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "dotnet-service.Dockerfile"), [checkoutPath]);
             if (csproj.IsFailure || publishDir.IsFailure || dockerfile.IsFailure)
@@ -236,32 +251,25 @@ public static class LabBuilder
     }
 
     /// <summary>
-    /// Stages a Node app and its <c>SharedAuth</c> dependency under <c>&lt;Builds&gt;\&lt;build_id&gt;\&lt;project&gt;</c>, then
-    /// <c>docker build</c>s it from <c>node-app.Dockerfile</c>. Only source is copied; <c>npm ci</c> runs inside the image.
-    /// Env files are never staged.
+    /// Stages a Node app under <c>&lt;outputRoot&gt;\&lt;project&gt;</c>: <c>app/</c> (the app), <c>SharedAuth/</c> and
+    /// <c>lab/secrets-stub.mjs</c> (D-ML144). Env files, credential files, keys, installed or generated folders and reparse
+    /// points are never copied. Returns the stage folder.
     /// </summary>
-    private static async Task<Result<string>> BuildNodeAppAsync(
-        BuildProject project,
-        string checkoutPath,
-        string outputRoot,
-        string buildId,
-        IDockerCli docker,
-        LabPaths paths,
-        IPathValidator validator,
-        CancellationToken ct)
+    internal static Result<string> StageNodeApp(BuildProject project, string checkoutPath, string outputRoot, LabPaths paths, IPathValidator validator)
     {
         Result<string> appSource = validator.ValidatePath(Path.Combine(checkoutPath, project.NodeDirectory!.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
         Result<string> sharedSource = validator.ValidatePath(Path.Combine(checkoutPath, "src", "Dhadgar.SharedAuth"), [checkoutPath]);
         Result<string> stage = validator.ValidatePath(Path.Combine(outputRoot, project.Name), [paths.Builds]);
-        Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "node-app.Dockerfile"), [checkoutPath]);
-        if (appSource.IsFailure || sharedSource.IsFailure || stage.IsFailure || dockerfile.IsFailure)
+        Result<string> stubSource = validator.ValidatePath(Path.Combine(checkoutPath, SecretsStubSource.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
+        if (appSource.IsFailure || sharedSource.IsFailure || stage.IsFailure || stubSource.IsFailure)
         {
             return Result<string>.Failure("[Lab.InvalidArgument] build path is not valid");
         }
 
         Result<string> appDest = validator.ValidatePath(Path.Combine(stage.Value!, "app"), [paths.Builds]);
         Result<string> sharedDest = validator.ValidatePath(Path.Combine(stage.Value!, "SharedAuth"), [paths.Builds]);
-        if (appDest.IsFailure || sharedDest.IsFailure)
+        Result<string> stubDest = validator.ValidatePath(Path.Combine(stage.Value!, "lab", "secrets-stub.mjs"), [paths.Builds]);
+        if (appDest.IsFailure || sharedDest.IsFailure || stubDest.IsFailure)
         {
             return Result<string>.Failure("[Lab.InvalidArgument] build path is not valid");
         }
@@ -278,6 +286,45 @@ public static class LabBuilder
             return Result<string>.Failure(copiedShared.Error);
         }
 
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(stubDest.Value!)!);
+            File.Copy(stubSource.Value!, stubDest.Value!, overwrite: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return Result<string>.Failure("[Lab.Io] build source could not be staged");
+        }
+
+        return Result<string>.Success(stage.Value!);
+    }
+
+    /// <summary>
+    /// Stages a Node app (<see cref="StageNodeApp"/>), then <c>docker build</c>s it from <c>node-app.Dockerfile</c>.
+    /// Only source is copied; <c>npm ci</c> runs inside the image.
+    /// </summary>
+    private static async Task<Result<string>> BuildNodeAppAsync(
+        BuildProject project,
+        string checkoutPath,
+        string outputRoot,
+        string buildId,
+        IDockerCli docker,
+        LabPaths paths,
+        IPathValidator validator,
+        CancellationToken ct)
+    {
+        Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "node-app.Dockerfile"), [checkoutPath]);
+        if (dockerfile.IsFailure)
+        {
+            return Result<string>.Failure("[Lab.InvalidArgument] build path is not valid");
+        }
+
+        Result<string> stage = StageNodeApp(project, checkoutPath, outputRoot, paths, validator);
+        if (stage.IsFailure)
+        {
+            return stage;
+        }
+
         string tag = ImageTag(project.Name, buildId);
         Result<DockerOutput> image = await docker.RunAsync(
             DockerEngine.Linux,
@@ -292,10 +339,11 @@ public static class LabBuilder
     }
 
     /// <summary>
-    /// Copies a source tree without installed or generated folders (<see cref="NodeExcludedNames"/>) and without env files.
-    /// Fails with <c>[Lab.Io]</c> when a file cannot be copied.
+    /// Copies a source tree without installed or generated folders (<see cref="NodeExcludedDirectories"/>), without env,
+    /// credential, key and certificate files (<see cref="IsStagedFile"/>, <see cref="NodeExcludedFileNames"/>,
+    /// <see cref="NodeExcludedExtensions"/>) and without reparse points. Fails with <c>[Lab.Io]</c> when a file cannot be copied.
     /// </summary>
-    private static Result CopyTree(string source, string destination)
+    internal static Result CopyTree(string source, string destination)
     {
         try
         {
@@ -303,7 +351,7 @@ public static class LabBuilder
             foreach (string file in Directory.GetFiles(source))
             {
                 string name = Path.GetFileName(file);
-                if (!name.StartsWith(".env", StringComparison.OrdinalIgnoreCase))
+                if (IsStagedFile(name) && (File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0)
                 {
                     File.Copy(file, Path.Combine(destination, name), overwrite: true);
                 }
@@ -312,7 +360,8 @@ public static class LabBuilder
             foreach (string directory in Directory.GetDirectories(source))
             {
                 string name = Path.GetFileName(directory);
-                if (NodeExcludedNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                if (NodeExcludedDirectories.Contains(name, StringComparer.OrdinalIgnoreCase)
+                    || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
                 {
                     continue;
                 }

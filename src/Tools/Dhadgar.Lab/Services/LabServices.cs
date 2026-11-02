@@ -517,7 +517,9 @@ public sealed class LabServices
     /// <summary>
     /// Writes <c>KEY=value</c> lines to a fresh file under <see cref="LabPaths.State"/>. The caller deletes it.
     /// Overlay values are checked for control characters on read and write (<see cref="ConfigOverlay"/>), so a line is one variable.
-    /// Each pair goes through the same zeroing writer as <see cref="LabStack"/>, so no secret stays in a managed string buffer.
+    /// Each pair goes through <c>LabStack.WriteEntry</c>. The secret strings that <c>ComposeEnvironment</c> and the adapters build
+    /// (the private key PEM, its single-line form, the BetterAuth secret) are immutable managed strings and are not zeroed.
+    /// This is accepted: they live only in same-user daemon memory until the call returns.
     /// </summary>
     private Result<string> WriteEnvFile(IReadOnlyDictionary<string, string> env)
     {

@@ -62,7 +62,16 @@ The lab starts these services from the working tree, each behind Toxiproxy for i
 | BetterAuth | 15130 | Postgres (`betterauth-postgres`) | `/healthz` |
 | Panel | 14321 | none | `/login` |
 
-`stack_up` generates a per-stack ES256 exchange key pair. BetterAuth signs exchange tokens with the private key; Identity verifies them with the public key. The private key and the BetterAuth secret live only in the vault and reach the container through an env file. BetterAuth and the Panel are Node apps built with `tools/lab/images/node-app.Dockerfile`. Identity has no outbox tables, so the I2 outbox invariant covers Nodes only.
+`stack_up` generates a per-stack ES256 exchange key pair. BetterAuth signs exchange tokens with the private key; Identity verifies them with the public key (`state\identity\exchange-public.pem`). The private key and the BetterAuth secret live only in the vault and reach the container through an env file. BetterAuth and the Panel are Node apps built with `tools/lab/images/node-app.Dockerfile`. Staging skips env files, `.npmrc`/`.yarnrc*`, `.dev.vars`, `secrets.json`, key and certificate files, `node_modules`/`dist`/`bin`/`obj` and reparse points. `lab_build` without `projects` builds these images too, which needs the npm registry.
+
+BetterAuth always loads its secret and exchange key from the Secrets service at boot. The lab does not run Secrets: the image preloads `tools/lab/images/lab-secrets-stub.mjs` (`NODE_OPTIONS`), which answers `/connect/token` and `/api/v1/secrets/{betterauth,oauth,infrastructure}` on `127.0.0.1:8099` inside the container. It serves only values the env file carries. No product code changes (D-ML144).
+
+Identity runs with `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate, ephemeral signing key). Without Key Vault, `/webhooks/better-auth` (through the Gateway `/api/v1/identity/webhooks/better-auth`) accepts unsigned bodies, so any local process can soft-delete or rewrite a lab user. The OpenAPI and Scalar pages are served on `127.0.0.1:15010`. The lab is not a fidelity target for webhook signing.
+
+`db_query service=betterauth` or `service=identity` returns session, account-token, verification and refresh-token columns unmasked (lab users, per-stack secrets). Masking is KG-W7-1 (L35).
+
+Identity has no outbox tables, so the I2 outbox invariant covers Nodes only.
+
 ## Daemon edge
 
 `meridian-lab daemon run` starts the loopback daemon. The token comes from `MERIDIAN_LAB_TOKEN` (at least 32 bytes, base64url); `meridian-lab token new` prints a fresh one. The daemon listens on `127.0.0.1` and `[::1]` only; there is no supported way to bind elsewhere, so `Lab:BindAddress` set to anything but loopback is a refusal. Kestrel endpoint settings in `labsettings.json` or the environment are ignored, and a start that reports any non-loopback address is refused. `MERIDIAN_LAB_HOME` must be a user-private directory; on Unix the lab root is created 0700 and `daemon.pid` 0600.
