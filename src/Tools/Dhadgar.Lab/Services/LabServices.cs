@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Processes;
@@ -31,6 +32,9 @@ public sealed class LabServices
     /// probing <c>127.0.0.1</c> with its own Host header is refused with 400 by host filtering.
     /// </summary>
     public const string ProbeHostHeader = "localhost";
+
+    /// <summary>The shape of a container state: a lowercase status word, a space and an integer exit code.</summary>
+    private static readonly Regex ContainerStateShape = new("^[a-z]+ -?\\d+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>Seconds docker waits before killing a stopping container.</summary>
     public const string StopGrace = "10";
@@ -502,9 +506,9 @@ public sealed class LabServices
 
             if (time.GetElapsedTime(started) >= deadline)
             {
-                string checks = failingChecks.Length == 0 ? string.Empty : $"; failing checks: {failingChecks}";
+                string containerState = await ContainerStateAsync(adapter.Container, CancellationToken.None).ConfigureAwait(false);
                 return Result.Failure(
-                    $"[Lab.Timeout] {adapter.Name} did not answer {(int)adapter.ReadyStatusCode} within {ReadinessTimeoutSeconds} s; last status {lastStatus}{checks}");
+                    ReadinessTimeoutMessage(adapter.Name, lastStatus, failingChecks, containerState, (int)adapter.ReadyStatusCode));
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
@@ -559,7 +563,7 @@ public sealed class LabServices
     /// Names of the checks that are not <c>Healthy</c> in an ASP.NET health JSON body. Names only: descriptions,
     /// exceptions and data never leave this method (R-LOG). Returns empty for any other body.
     /// </summary>
-    private static string FailingHealthChecks(string body)
+    internal static string FailingHealthChecks(string body)
     {
         if (!body.TrimStart().StartsWith('{'))
         {
@@ -569,14 +573,14 @@ public sealed class LabServices
         try
         {
             using JsonDocument document = JsonDocument.Parse(body);
-            if (!document.RootElement.TryGetProperty("entries", out JsonElement entries)
-                || entries.ValueKind != JsonValueKind.Object)
+            if (!document.RootElement.TryGetProperty("checks", out JsonElement checks)
+                || checks.ValueKind != JsonValueKind.Object)
             {
                 return string.Empty;
             }
 
             var names = new List<string>();
-            foreach (JsonProperty entry in entries.EnumerateObject())
+            foreach (JsonProperty entry in checks.EnumerateObject())
             {
                 bool healthy = entry.Value.ValueKind == JsonValueKind.Object
                     && entry.Value.TryGetProperty("status", out JsonElement status)
@@ -594,6 +598,45 @@ public sealed class LabServices
         {
             return string.Empty;
         }
+    }
+
+    /// <summary>
+    /// Reads the container's <c>status exitcode</c> from <c>docker container inspect</c> for a readiness timeout. A Docker failure
+    /// or an unexpected answer reads as <c>unknown</c> (see <see cref="ParseContainerState"/>).
+    /// </summary>
+    private async Task<string> ContainerStateAsync(string containerName, CancellationToken ct)
+    {
+        Result<DockerOutput> call = await _docker.RunAsync(
+            DockerEngine.Linux,
+            ["container", "inspect", "--format", "{{.State.Status}} {{.State.ExitCode}}", containerName],
+            ct).ConfigureAwait(false);
+        return ParseContainerState(call);
+    }
+
+    /// <summary>
+    /// The container state text for a readiness timeout: the trimmed stdout when it is <c>status exitcode</c> (lowercase status,
+    /// integer exit code), otherwise <c>unknown</c>. Docker error text never reaches the message.
+    /// </summary>
+    internal static string ParseContainerState(Result<DockerOutput> call)
+    {
+        if (call.IsFailure || call.Value!.ExitCode != 0)
+        {
+            return "unknown";
+        }
+
+        string state = call.Value!.StdOut.Trim();
+        return ContainerStateShape.IsMatch(state) ? state : "unknown";
+    }
+
+    /// <summary>
+    /// The readiness timeout message. It names the service, the last probe status, the failing ServiceDefaults checks (names
+    /// only) and the container state, so a timeout explains itself (D-ML151).
+    /// </summary>
+    internal static string ReadinessTimeoutMessage(string name, string lastStatus, string failingChecks, string containerState, int readyStatus = 200)
+    {
+        string checks = failingChecks.Length == 0 ? string.Empty : $"; failing checks: {failingChecks}";
+        return $"[Lab.Timeout] {name} did not answer {readyStatus} within {ReadinessTimeoutSeconds} s; "
+            + $"last status {lastStatus}{checks}; container {containerState}";
     }
 
     private static Result Require(Result<DockerOutput> call, string message) =>

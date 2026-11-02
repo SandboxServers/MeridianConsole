@@ -319,7 +319,7 @@ public sealed class LabStack : ILabStatusSource, IDisposable
             return databases;
         }
 
-        foreach (var proxy in ProxyCatalog.ForPacket("L08"))
+        foreach (var proxy in ProxyCatalog.StackProxies)
         {
             var created = await _toxiproxy.CreateProxyAsync(
                 new ProxySpec(proxy.Name, $"0.0.0.0:{proxy.ListenPort}", proxy.Upstream, Enabled: true), ct).ConfigureAwait(false);
