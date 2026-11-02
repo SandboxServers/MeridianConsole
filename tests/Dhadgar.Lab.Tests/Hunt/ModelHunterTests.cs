@@ -171,6 +171,16 @@ public sealed class ModelHunterTests : IDisposable
     }
 
     [Fact]
+    public async Task Hunter_WarmUpMintWithoutTokenRef_IsInfrastructure()
+    {
+        var lab = new FakeLab { WarmUpMintWithoutTokenRef = true };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsFailure, "a warm-up mint with no token_ref is an infrastructure error, not a product verdict");
+        Assert.Contains("nodes_token_mint returned no token_ref", outcome.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Hunter_HealThrows_CaseStillEnds()
     {
         var lab = new FakeLab { HealThrows = true };
@@ -178,6 +188,7 @@ public sealed class ModelHunterTests : IDisposable
 
         Assert.True(outcome.IsSuccess, outcome.Error);
         Assert.Equal("pass", outcome.Value!.Overall);
+        Assert.True(lab.HealThrown, "the fake must have thrown from a heal for this test to mean anything");
         Assert.Contains(lab.Calls, call => call.Tool == "fault_proxy_disable");
     }
 
@@ -476,7 +487,12 @@ public sealed class ModelHunterTests : IDisposable
 
         public bool HealThrows { get; init; }
 
+        public bool HealThrown => _healThrown;
+
         public bool MintWithoutTokenRef { get; init; }
+
+        /// <summary>When true, only the <c>hunt-warmup</c> mint answers without a <c>token_ref</c>.</summary>
+        public bool WarmUpMintWithoutTokenRef { get; init; }
 
         /// <summary>When true, <c>svc_restart</c> answers an error result while the cut is active, so a call that is sent inside a cut makes the case fail (F104).</summary>
         public bool RestartFailsWhileCut { get; init; }
@@ -554,13 +570,18 @@ public sealed class ModelHunterTests : IDisposable
                     Heal();
                     return Ok(new { healed = Array.Empty<string>() });
                 case "nodes_token_mint":
-                    if (MintWithoutTokenRef)
+                    // The warm-up mints before the case's data reset, which discards its token, so it is not held to the case's cap.
+                    bool warmup = args.TryGetProperty("label", out JsonElement label) && label.GetString() == "hunt-warmup";
+                    if (MintWithoutTokenRef && !warmup)
                     {
                         return Ok(new { });
                     }
 
-                    // The warm-up mints before the case's data reset, which discards its token, so it is not held to the case's cap.
-                    bool warmup = args.TryGetProperty("label", out JsonElement label) && label.GetString() == "hunt-warmup";
+                    if (WarmUpMintWithoutTokenRef && warmup)
+                    {
+                        return Ok(new { });
+                    }
+
                     if (!warmup && _used.Count >= 8)
                     {
                         return Ok(new { });

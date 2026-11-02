@@ -11,6 +11,12 @@ Done and committed (continuation 2). Nothing is left in the packet.
 - The fake's per-reset token cap exempts `hunt-warmup` mints (the warm-up token is discarded by the next reset).
 - HealThrows throws once (not on every heal), so the case-start path cannot throw out of `RunCaseAsync`. Judged legitimate; see the report.
 
+## Rule and evidence (F120, D-ML136)
+
+- Rule: a case starts with fault_reset, then svc_restart plus a 201 warm-up enroll via nodes when the hunter is new, the previous case cut, or the case cuts; then stack_reset_data and the case-start checkpoint.
+- Why `FakeLab` models idle pooled connections: a cut only fails an enroll that takes a pooled connection the cut killed, so a fake with a stale flag could not tell a restarted, warmed pool from an empty one; `_idle`/`_staleIdle` make the warm-up matter.
+- Evidence: Run 10: the in-hunt replay started on a restarted warm pool and reproduced; the separate `replay=` job had a new hunter, no restart and an empty pool and gave 201. See wave5-run10-ruling.md section 3 and 7.2.
+
 ## Hang
 
 Not a deadlock. Each `RunAsync` spends about 30 s of real time in the CsCheck budget. The earlier 90 s blame timeout was too short.
