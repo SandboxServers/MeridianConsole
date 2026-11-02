@@ -22,7 +22,7 @@ public sealed class LinuxPoolDockerTests
 {
     private const string LinuxContext = "desktop-linux";
     private const string LabNetwork = "meridian-lab-net";
-    private const string ProbeDll = "/opt/lab/probe/Dhadgar.Lab.Probe.dll";
+    private const string ProbeDll = "/opt/lab/probe/meridian-lab-probe.dll";
 
     [SkippableFact]
     public async Task Acquire_Reset_Release_RoundTripsARealMember()
