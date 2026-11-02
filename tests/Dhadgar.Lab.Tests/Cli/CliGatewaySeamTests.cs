@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Services;
 using Dhadgar.Lab.Tools.Cli;
@@ -25,8 +26,12 @@ public sealed class CliGatewaySeamTests
     [Fact]
     public void MemberConfig_LoginAndNodesList_RouteThroughTheGateway()
     {
-        Assert.Equal("identity", GatewayRouteTable.ClusterFor(new Uri(CliMemberInstall.MemberIdentityUrl).AbsolutePath + "/connect/token"));
-        Assert.Equal("nodes", GatewayRouteTable.ClusterFor(new Uri(CliMemberInstall.MemberNodesUrl).AbsolutePath + "/organizations/o1/nodes"));
+        // The URLs come from the rendered config, so dropping or mistyping identity_url or nodes_url fails here.
+        using JsonDocument config = JsonDocument.Parse(CliMemberInstall.RenderMemberConfig(null));
+        string identityUrl = config.RootElement.GetProperty("identity_url").GetString()!;
+        string nodesUrl = config.RootElement.GetProperty("nodes_url").GetString()!;
+        Assert.Equal("identity", GatewayRouteTable.ClusterFor(new Uri(identityUrl).AbsolutePath + "/connect/token"));
+        Assert.Equal("nodes", GatewayRouteTable.ClusterFor(new Uri(nodesUrl).AbsolutePath + "/organizations/o1/nodes"));
 
         // The CLI's own defaults match no Gateway route (fact 5). When D-ML166 fixes the CLI this goes red: drop the lab override then.
         Assert.Null(GatewayRouteTable.ClusterFor("/identity/connect/token"));
