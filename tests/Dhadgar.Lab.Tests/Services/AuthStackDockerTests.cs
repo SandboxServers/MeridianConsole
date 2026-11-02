@@ -3,9 +3,11 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Audit;
 using Dhadgar.Lab.Build;
+using Dhadgar.Lab.Data;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Leasing;
@@ -137,6 +139,32 @@ public sealed class AuthStackDockerTests
             using HttpResponseMessage signedUp = await http.SendAsync(signUp, ct);
             // The body carries a session token: never print it.
             Assert.True(signedUp.StatusCode == HttpStatusCode.OK, $"sign-up through the Gateway answered {(int)signedUp.StatusCode}");
+
+            // Live-schema check of the masking list (KG-W7-6): every entry must name a real column. The names are schema names, not secrets.
+            var labDb = new LabDb(connections);
+            const string catalogSql = "SELECT count(*) AS n FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relname = @t AND a.attname = @c AND NOT a.attisdropped";
+            foreach ((string db, string table, string column) in ColumnMask.Sensitive)
+            {
+                var catalogParams = new Dictionary<string, JsonElement>
+                {
+                    ["t"] = JsonSerializer.SerializeToElement(table),
+                    ["c"] = JsonSerializer.SerializeToElement(column),
+                };
+                Result<DbQueryResult> found = await labDb.QueryAsync(db, catalogSql, catalogParams, 1, ct);
+                Assert.True(found.IsSuccess, $"{db}.{table}.{column} catalog lookup failed: {(found.IsFailure ? found.Error : string.Empty)}");
+                Assert.True(found.Value.Rows[0]["n"].GetInt64() == 1, $"{db}.{table}.{column} is not in the live schema");
+            }
+
+            Result<DbQueryResult> sessions = await labDb.QueryAsync("betterauth", "SELECT token FROM session", new Dictionary<string, JsonElement>(), 10, ct);
+            Assert.True(sessions.IsSuccess, sessions.IsFailure ? sessions.Error : string.Empty);
+            Assert.True(sessions.Value.RowCount >= 1, "sign-up created no session row");
+            foreach (Dictionary<string, JsonElement> row in sessions.Value.Rows)
+            {
+                foreach (JsonElement cell in row.Values)
+                {
+                    Assert.Equal(ColumnMask.Masked, cell.GetString());
+                }
+            }
         }
         finally
         {

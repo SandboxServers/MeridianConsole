@@ -5,6 +5,7 @@ using Dhadgar.Lab.Stack;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Npgsql;
+using Npgsql.Schema;
 
 namespace Dhadgar.Lab.Data;
 
@@ -116,8 +117,18 @@ public sealed class LabDb
                 await using var cmd = new NpgsqlCommand(sql, conn);
 #pragma warning restore CA2100
                 cmd.Parameters.AddRange(bound.Value.ToArray());
-                await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-                return Result<DbQueryResult>.Success(await ReadRowsAsync(reader, maxRows, ct).ConfigureAwait(false));
+
+                RawRows raw;
+                await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                {
+                    raw = await ReadRowsAsync(reader, maxRows, ct).ConfigureAwait(false);
+                }
+
+                // The reader is disposed (Npgsql allows one open reader per connection), so the catalog read runs now, still in the READ ONLY transaction.
+                IReadOnlyDictionary<(uint TableOid, short Attnum), (string Table, string Column)> origins =
+                    await ResolveOriginsAsync(conn, raw.Columns, ct).ConfigureAwait(false);
+
+                return Result<DbQueryResult>.Success(BuildResult(database, raw, origins));
             }
             finally
             {
@@ -199,15 +210,25 @@ public sealed class LabDb
         return Result<List<NpgsqlParameter>>.Success(bound);
     }
 
-    private static async Task<DbQueryResult> ReadRowsAsync(NpgsqlDataReader reader, int maxRows, CancellationToken ct)
+    /// <summary>One result column as Postgres reports it: its name, its base table column (zero for an expression) and its type.</summary>
+    internal sealed record ColumnInfo(string Name, uint TableOid, short Attnum, string DataTypeName);
+
+    /// <summary>The buffered cells of a reader, before the catalog lookup and the JSON conversion.</summary>
+    internal sealed record RawRows(IReadOnlyList<ColumnInfo> Columns, List<object?[]> Rows, bool Truncated);
+
+    private static async Task<RawRows> ReadRowsAsync(NpgsqlDataReader reader, int maxRows, CancellationToken ct)
     {
-        var columns = new List<string>(reader.FieldCount);
-        for (int i = 0; i < reader.FieldCount; i++)
+        var columns = new List<ColumnInfo>(reader.FieldCount);
+        foreach (NpgsqlDbColumn schema in reader.GetColumnSchema())
         {
-            columns.Add(reader.GetName(i));
+            columns.Add(new ColumnInfo(
+                schema.ColumnName,
+                schema.TableOID,
+                schema.ColumnAttributeNumber ?? 0,
+                schema.DataTypeName));
         }
 
-        var rows = new List<Dictionary<string, JsonElement>>();
+        var rows = new List<object?[]>();
         bool truncated = false;
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
@@ -218,26 +239,106 @@ public sealed class LabDb
                 break;
             }
 
+            var values = new object?[columns.Count];
+            for (int i = 0; i < columns.Count; i++)
+            {
+                values[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            }
+
+            rows.Add(values);
+        }
+
+        return new RawRows(columns, rows, truncated);
+    }
+
+    /// <summary>
+    /// Resolves the base table column of each result column with one bound catalog query. A column with no table OID or
+    /// attribute number is an expression and gets no entry.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<(uint TableOid, short Attnum), (string Table, string Column)>> ResolveOriginsAsync(
+        NpgsqlConnection conn,
+        IReadOnlyList<ColumnInfo> columns,
+        CancellationToken ct)
+    {
+        uint[] oids = columns
+            .Where(c => c.TableOid != 0 && c.Attnum != 0)
+            .Select(c => c.TableOid)
+            .Distinct()
+            .ToArray();
+
+        var origins = new Dictionary<(uint TableOid, short Attnum), (string Table, string Column)>();
+        if (oids.Length == 0)
+        {
+            return origins;
+        }
+
+        await using var catalog = new NpgsqlCommand(
+            "SELECT c.oid, a.attnum, c.relname, a.attname FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid WHERE c.oid = ANY(@oids)",
+            conn);
+        _ = catalog.Parameters.Add(new NpgsqlParameter<uint[]>("oids", oids));
+
+        await using NpgsqlDataReader catalogReader = await catalog.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await catalogReader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            origins[(catalogReader.GetFieldValue<uint>(0), catalogReader.GetFieldValue<short>(1))] =
+                (catalogReader.GetFieldValue<string>(2), catalogReader.GetFieldValue<string>(3));
+        }
+
+        return origins;
+    }
+
+    /// <summary>
+    /// Converts the buffered cells to JSON, replacing each masked, non-null cell with <see cref="ColumnMask.Masked"/>.
+    /// Column names are kept.
+    /// </summary>
+    internal static DbQueryResult BuildResult(
+        string database,
+        RawRows raw,
+        IReadOnlyDictionary<(uint TableOid, short Attnum), (string Table, string Column)> origins)
+    {
+        var columns = new List<string>(raw.Columns.Count);
+        foreach (ColumnInfo column in raw.Columns)
+        {
+            columns.Add(column.Name);
+        }
+
+        var masks = new bool[raw.Columns.Count];
+        for (int i = 0; i < raw.Columns.Count; i++)
+        {
+            ColumnInfo column = raw.Columns[i];
+            (string Table, string Column)? origin = null;
+            if (column.TableOid != 0 && column.Attnum != 0 && origins.TryGetValue((column.TableOid, column.Attnum), out (string Table, string Column) found))
+            {
+                origin = found;
+            }
+
+            masks[i] = ColumnMask.ShouldMask(database, origin, column.DataTypeName);
+        }
+
+        var rows = new List<Dictionary<string, JsonElement>>(raw.Rows.Count);
+        foreach (object?[] values in raw.Rows)
+        {
             var row = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             for (int i = 0; i < columns.Count; i++)
             {
-                row[columns[i]] = ToJson(reader, i);
+                row[columns[i]] = masks[i] && values[i] is not null
+                    ? JsonSerializer.SerializeToElement(ColumnMask.Masked, LabJson.Options)
+                    : ToJson(values[i]);
             }
 
             rows.Add(row);
         }
 
-        return new DbQueryResult(columns, rows, rows.Count, truncated);
+        return new DbQueryResult(columns, rows, rows.Count, raw.Truncated);
     }
 
-    private static JsonElement ToJson(NpgsqlDataReader reader, int ordinal)
+    private static JsonElement ToJson(object? value)
     {
-        if (reader.IsDBNull(ordinal))
+        if (value is null)
         {
             return JsonSerializer.SerializeToElement<string?>(null, LabJson.Options);
         }
 
-        object value = reader.GetValue(ordinal);
         object json = value switch
         {
             string or bool or short or int or long or decimal => value,
