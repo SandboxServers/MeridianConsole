@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Pool;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Tools.Pool;
@@ -40,6 +41,31 @@ public sealed class PoolAcquireCliInstallTests
         Assert.Contains(member, provider.Destroyed);
         PoolListing listing = await harness.Manager.ListAsync(CancellationToken.None);
         Assert.DoesNotContain(listing.Members, m => string.Equals(m.MemberId, member, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MemberReset_ReinstallsTheCli()
+    {
+        var provider = new FakePoolProvider("linux", FakePoolProvider.LinuxContainer);
+        using var harness = new PoolHarness([provider]);
+        WriteLatestBuildWithCli(harness.Paths);
+        var constraints = new PoolConstraints("linux", null, null, null, null, null, null);
+        Result<IReadOnlyList<PoolMember>> acquired = await harness.Manager.AcquireAsync(constraints, "test", "lease-1", CancellationToken.None);
+        Assert.True(acquired.IsSuccess);
+        string memberId = Assert.Single(acquired.Value!).MemberId;
+        harness.Docker.Calls.Clear();
+        var guard = new FaultTargetGuard(harness.Registry, new LabMemberInspector(), new PassingTripwire());
+        var tool = new MemberResetTool(harness.Manager, guard, harness.Docker, harness.Paths, Validator);
+
+        Result<JsonElement> result = await tool.InvokeAsync(
+            JsonSerializer.SerializeToElement(new MemberResetArgs(memberId), LabJson.Options),
+            new LabCallContext("c2", "lease-1", "test"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(memberId, Assert.Single(provider.Reset));
+        Assert.Contains(harness.Docker.Calls, call => call[0] == "cp" && call[^1].EndsWith(":/opt/lab/cli/", StringComparison.Ordinal));
+        Assert.Contains(harness.Docker.Calls, call => call[0] == "cp" && call[^1].EndsWith(":/home/lab/.dhadgar/config.json", StringComparison.Ordinal));
     }
 
     /// <summary>Writes a latest-build stamp whose id folder has a <c>cli</c> folder (as <c>LastBuildReaderTests</c> does).</summary>

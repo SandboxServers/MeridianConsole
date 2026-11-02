@@ -29,6 +29,21 @@ public sealed class CliMemberConfigTests
     }
 
     [Fact]
+    public async Task PublishCli_WithoutTheCliProject_FailsWithALabError()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "lab-n3-" + Guid.NewGuid().ToString("N"));
+        LabPaths paths = LabPaths.FromRoot(root);
+        string checkout = Path.Combine(root, "repo");
+        string outputRoot = Path.Combine(paths.Builds, "0123abcd");
+
+        Result result = await LabBuilder.PublishCliAsync(outputRoot, checkout, paths, Validator, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.", result.Error, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(outputRoot, "cli", LabBuilder.CliLauncherName)));
+    }
+
+    [Fact]
     public void InstallArgs_AreOneItemPerArgument()
     {
         Assert.Equal(["exec", "-u", "root", Container, "mkdir", "-p", "/opt/lab/cli"], CliMemberInstall.MkdirArgs(Container));

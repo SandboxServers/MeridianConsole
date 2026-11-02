@@ -109,25 +109,13 @@ public sealed class PoolAcquireTool : LabTool<PoolAcquireArgs>
         }
 
         // L37: when the latest build has a CLI, each Linux member gets it at /opt/lab/cli/ before the lease uses it.
-        string? cliDirectory = CliMemberInstall.LatestCliDirectory(_paths, _validator);
-        if (cliDirectory is not null)
+        foreach (PoolMember member in acquired.Value!)
         {
-            foreach (PoolMember member in acquired.Value!.Where(m => m.Dimensions.Os == "linux" && !string.IsNullOrWhiteSpace(m.ContainerName)))
+            Result installed = await CliMemberInstall.InstallIntoMemberAsync(_docker, _paths, _validator, member, ct).ConfigureAwait(false);
+            if (installed.IsFailure)
             {
-                Result installed = await CliMemberInstall.InstallAsync(_docker, member.ContainerName!, cliDirectory, ct).ConfigureAwait(false);
-                if (installed.IsFailure)
-                {
-                    await ReleaseAcquiredAsync(acquired.Value).ConfigureAwait(false);
-                    return Result<object>.Failure(installed.Error);
-                }
-
-                // The admin key is written per call by cli_run, because the vault has none until stack_up.
-                Result configured = await CliMemberInstall.InstallConfigAsync(_docker, member.ContainerName!, CliMemberInstall.StagingDirectory(_paths), null, _validator, ct).ConfigureAwait(false);
-                if (configured.IsFailure)
-                {
-                    await ReleaseAcquiredAsync(acquired.Value).ConfigureAwait(false);
-                    return Result<object>.Failure(configured.Error);
-                }
+                await ReleaseAcquiredAsync(acquired.Value).ConfigureAwait(false);
+                return Result<object>.Failure(installed.Error);
             }
         }
 
@@ -136,7 +124,7 @@ public sealed class PoolAcquireTool : LabTool<PoolAcquireArgs>
 
     /// <summary>
     /// Releases every member a failed acquire took, so none stays leased. The caller returns the original install error.
-    /// A release failure is ignored here; <c>pool_reset</c> cleans up the rest. <c>ReleaseAsync</c> refuses the host.
+    /// A release failure is ignored here; the lease-end hook releases whatever is still leased. <c>ReleaseAsync</c> refuses the host.
     /// </summary>
     private async Task ReleaseAcquiredAsync(IReadOnlyList<PoolMember> members)
     {
@@ -204,14 +192,21 @@ public sealed class MemberResetTool : LabTool<MemberResetArgs>, IFaultTool
 {
     private readonly PoolManager _pool;
     private readonly FaultTargetGuard _guard;
+    private readonly IDockerCli _docker;
+    private readonly LabPaths _paths;
+    private readonly IPathValidator _validator;
 
     /// <summary>
-    /// Creates the tool over the pool manager and the fault target guard.
+    /// Creates the tool over the pool manager, the fault target guard, and the Docker client, paths and validator that
+    /// reinstall the lab CLI (L37) into a reset Linux member, because a reset recreates the container from the bare image.
     /// </summary>
-    public MemberResetTool(PoolManager pool, FaultTargetGuard guard)
+    public MemberResetTool(PoolManager pool, FaultTargetGuard guard, IDockerCli docker, LabPaths paths, IPathValidator validator)
     {
         _pool = pool ?? throw new ArgumentNullException(nameof(pool));
         _guard = guard ?? throw new ArgumentNullException(nameof(guard));
+        _docker = docker ?? throw new ArgumentNullException(nameof(docker));
+        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     }
 
     /// <inheritdoc />
@@ -239,8 +234,15 @@ public sealed class MemberResetTool : LabTool<MemberResetArgs>, IFaultTool
         }
 
         Result<PoolMember> reset = await _pool.ResetAsync(memberId, ct).ConfigureAwait(false);
-        return reset.IsFailure
-            ? Result<object>.Failure(reset.Error)
+        if (reset.IsFailure)
+        {
+            return Result<object>.Failure(reset.Error);
+        }
+
+        // The reset recreated the container from the bare image, so the CLI and its config are installed again.
+        Result installed = await CliMemberInstall.InstallIntoMemberAsync(_docker, _paths, _validator, reset.Value!, ct).ConfigureAwait(false);
+        return installed.IsFailure
+            ? Result<object>.Failure(installed.Error)
             : Result<object>.Success(reset.Value);
     }
 }

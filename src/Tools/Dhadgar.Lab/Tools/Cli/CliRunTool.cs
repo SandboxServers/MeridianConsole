@@ -273,6 +273,38 @@ public static class CliMemberInstall
         return RunStepsAsync(docker, [MkdirArgs(container), CopyArgs(container, hostCliDirectory), ChmodArgs(container)], ct);
     }
 
+    /// <summary>
+    /// Installs the CLI and its config into one pool member when it is a Linux container with a latest build that has a CLI.
+    /// Used by <c>pool_acquire</c> and <c>member_reset</c>, because a reset recreates the container from the bare image.
+    /// Returns success without doing anything for other members or when there is no CLI to install.
+    /// </summary>
+    public static async Task<Result> InstallIntoMemberAsync(IDockerCli docker, LabPaths paths, IPathValidator validator, PoolMember member, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(docker);
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(validator);
+        ArgumentNullException.ThrowIfNull(member);
+        if (member.Dimensions.Os != "linux" || string.IsNullOrWhiteSpace(member.ContainerName))
+        {
+            return Result.Success();
+        }
+
+        string? cliDirectory = LatestCliDirectory(paths, validator);
+        if (cliDirectory is null)
+        {
+            return Result.Success();
+        }
+
+        Result installed = await InstallAsync(docker, member.ContainerName!, cliDirectory, ct).ConfigureAwait(false);
+        if (installed.IsFailure)
+        {
+            return installed;
+        }
+
+        // The admin key is written per call by cli_run, because the vault has none until stack_up.
+        return await InstallConfigAsync(docker, member.ContainerName!, StagingDirectory(paths), null, validator, ct).ConfigureAwait(false);
+    }
+
     /// <summary>The directory in a Linux member that holds the CLI's config (<c>HOME=/home/lab</c>).</summary>
     public const string MemberConfigDirectory = "/home/lab/.dhadgar";
 
