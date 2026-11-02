@@ -119,6 +119,13 @@ public sealed class PoolAcquireTool : LabTool<PoolAcquireArgs>
                 {
                     return Result<object>.Failure(installed.Error);
                 }
+
+                // No admin key is seeded yet, so the config holds only gateway_url (notifications-admin needs a key later).
+                Result configured = await CliMemberInstall.InstallConfigAsync(_docker, member.ContainerName!, _paths.State, null, ct).ConfigureAwait(false);
+                if (configured.IsFailure)
+                {
+                    return Result<object>.Failure(configured.Error);
+                }
             }
         }
 

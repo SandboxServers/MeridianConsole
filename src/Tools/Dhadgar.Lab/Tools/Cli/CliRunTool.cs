@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
@@ -143,10 +144,81 @@ public static class CliMemberInstall
     /// <summary>
     /// Installs the CLI into one Linux member: mkdir, copy, chmod. Any non-zero exit fails with <c>[Lab.Docker]</c>.
     /// </summary>
-    public static async Task<Result> InstallAsync(IDockerCli docker, string container, string hostCliDirectory, CancellationToken ct)
+    public static Task<Result> InstallAsync(IDockerCli docker, string container, string hostCliDirectory, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(docker);
-        IReadOnlyList<IReadOnlyList<string>> steps = [MkdirArgs(container), CopyArgs(container, hostCliDirectory), ChmodArgs(container)];
+        return RunStepsAsync(docker, [MkdirArgs(container), CopyArgs(container, hostCliDirectory), ChmodArgs(container)], ct);
+    }
+
+    /// <summary>The directory in a Linux member that holds the CLI's config (<c>HOME=/home/lab</c>).</summary>
+    public const string MemberConfigDirectory = "/home/lab/.dhadgar";
+
+    /// <summary>The CLI config file in a Linux member.</summary>
+    public const string MemberConfigPath = "/home/lab/.dhadgar/config.json";
+
+    /// <summary>The Gateway the member's CLI calls: the lab network name, not a host port.</summary>
+    public const string MemberGatewayUrl = "http://meridian-lab-gateway:8080";
+
+    /// <summary>
+    /// The member's <c>config.json</c> text: <c>gateway_url</c>, and <c>admin_api_key</c> when one is given (the CLI's
+    /// <c>CliConfig</c> reads both). Client credentials are not written: <c>auth login</c> takes its secret only from
+    /// <c>--client-secret</c> or a prompt, never from this file.
+    /// </summary>
+    public static string RenderMemberConfig(string? adminApiKey)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal) { ["gateway_url"] = MemberGatewayUrl };
+        if (!string.IsNullOrEmpty(adminApiKey))
+        {
+            values["admin_api_key"] = adminApiKey;
+        }
+
+        return JsonSerializer.Serialize(values, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// The <c>docker</c> steps that write the member's config from a staged file: mkdir, copy, owner as the member
+    /// home, mode 600. Each is an <c>ArgumentList</c> item list.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<string>> ConfigSteps(string container, string stagedFile) =>
+    [
+        ["exec", "-u", "root", container, "mkdir", "-p", MemberConfigDirectory],
+        ["cp", stagedFile, container + ":" + MemberConfigPath],
+        ["exec", "-u", "root", container, "chown", "--reference=/home/lab", MemberConfigDirectory, MemberConfigPath],
+        ["exec", "-u", "root", container, "chmod", "600", MemberConfigPath],
+    ];
+
+    /// <summary>
+    /// Writes <c>/home/lab/.dhadgar/config.json</c> into one Linux member. The JSON is staged in a new file under
+    /// <paramref name="stagingDirectory"/>, copied with <c>docker cp</c>, and deleted in <c>finally</c>. The key never
+    /// goes on a command line or into a log. IO failures return <c>[Lab.Io]</c>; Docker non-zero exits return <c>[Lab.Docker]</c>.
+    /// </summary>
+    public static async Task<Result> InstallConfigAsync(IDockerCli docker, string container, string stagingDirectory, string? adminApiKey, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(docker);
+        ArgumentNullException.ThrowIfNull(stagingDirectory);
+        string staged = Path.Combine(stagingDirectory, "cli-config-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            Directory.CreateDirectory(stagingDirectory);
+            await File.WriteAllTextAsync(staged, RenderMemberConfig(adminApiKey), ct).ConfigureAwait(false);
+            return await RunStepsAsync(docker, ConfigSteps(container, staged), ct).ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+            return Result.Failure("[Lab.Io] could not stage the member's CLI config");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Result.Failure("[Lab.Io] could not stage the member's CLI config");
+        }
+        finally
+        {
+            DeleteStaged(staged);
+        }
+    }
+
+    private static async Task<Result> RunStepsAsync(IDockerCli docker, IReadOnlyList<IReadOnlyList<string>> steps, CancellationToken ct)
+    {
         foreach (IReadOnlyList<string> step in steps)
         {
             Result<DockerOutput> output = await docker.RunAsync(DockerEngine.Linux, step, ct).ConfigureAwait(false);
@@ -162,6 +234,22 @@ public static class CliMemberInstall
         }
 
         return Result.Success();
+    }
+
+    private static void DeleteStaged(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // The staged file is gone or locked; nothing else to do.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Same: the file could not be removed; the caller already has the result.
+        }
     }
 }
 
