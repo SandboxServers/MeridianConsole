@@ -13,7 +13,13 @@ namespace Dhadgar.Lab.Build;
 /// <param name="Name">Lab project name used by tools.</param>
 /// <param name="Csproj">Path relative to the checkout root, with forward slashes.</param>
 /// <param name="DllName">Assembly file name the image runs.</param>
-public sealed record BuildProject(string Name, string Csproj, string DllName);
+/// <param name="NodeDirectory">For a Node app: its folder relative to the checkout root (<c>null</c> for .NET projects).</param>
+/// <param name="NodeEntry">For a Node app: the entry the image runs, relative to the app folder.</param>
+public sealed record BuildProject(string Name, string Csproj, string DllName, string? NodeDirectory = null, string? NodeEntry = null)
+{
+    /// <summary>True for a Node app built from <c>tools/lab/images/node-app.Dockerfile</c> instead of a .NET publish.</summary>
+    public bool IsNode => NodeDirectory is not null;
+}
 
 /// <summary>
 /// Argument construction and checkout validation for <c>lab_build</c> (L09). Every process runs through
@@ -28,7 +34,13 @@ public static class LabBuilder
         new("gateway", "src/Dhadgar.Gateway/Dhadgar.Gateway.csproj", "Dhadgar.Gateway.dll"),
         new("nodes", "src/Dhadgar.Nodes/Dhadgar.Nodes.csproj", "Dhadgar.Nodes.dll"),
         new("probe", "src/Tools/Dhadgar.Lab.Probe/Dhadgar.Lab.Probe.csproj", "Dhadgar.Lab.Probe.dll"),
+        new("identity", "src/Dhadgar.Identity/Dhadgar.Identity.csproj", "Dhadgar.Identity.dll"),
+        new("betterauth", "src/Dhadgar.BetterAuth/package.json", string.Empty, "src/Dhadgar.BetterAuth", "src/server.js"),
+        new("panel", "src/Dhadgar.Panel/package.json", string.Empty, "src/Dhadgar.Panel", "dist/server/entry.mjs"),
     ];
+
+    /// <summary>Folder names never copied into a Node build context (installed or generated output).</summary>
+    private static readonly string[] NodeExcludedNames = ["node_modules", "dist", ".git", ".astro", "coverage"];
 
     /// <summary>Resolves a project name. Unknown names fail with <c>[Lab.InvalidArgument]</c>.</summary>
     public static Result<BuildProject> ResolveProject(string name)
@@ -101,6 +113,13 @@ public static class LabBuilder
         return args;
     }
 
+    /// <summary>
+    /// Docker build arguments for a Node app image from <c>node-app.Dockerfile</c>: <c>APP_DIR</c> is the staged app folder
+    /// and <c>APP_ENTRY</c> the entry it runs (L34).
+    /// </summary>
+    public static IReadOnlyList<string> NodeDockerBuildArgs(string imageTag, string entry, string contextDirectory, string dockerfile) =>
+        ["build", "--build-arg", "APP_DIR=app", "--build-arg", $"APP_ENTRY={entry}", "--label", "meridian-lab=1", "-f", dockerfile, "-t", imageTag, contextDirectory];
+
     /// <summary>Image tag for a project at a build: <c>meridian-lab/&lt;project&gt;:&lt;build_id&gt;</c>.</summary>
     public static string ImageTag(string project, string buildId) => $"meridian-lab/{project}:{buildId}";
 
@@ -165,7 +184,19 @@ public static class LabBuilder
         var images = new List<string>();
         foreach (BuildProject project in projects)
         {
-            Result<string> csproj = validator.ValidatePath(Path.Combine(checkoutPath, project.Csproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
+            if (project.IsNode)
+            {
+                Result<string> nodeImage = await BuildNodeAppAsync(project, checkoutPath, outputRoot.Value!, buildId, docker, paths, validator, ct).ConfigureAwait(false);
+                if (nodeImage.IsFailure)
+                {
+                    return Result<LabBuildDto>.Failure(nodeImage.Error);
+                }
+
+                images.Add(nodeImage.Value!);
+                continue;
+            }
+
+            Result<string> csproj =validator.ValidatePath(Path.Combine(checkoutPath, project.Csproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
             Result<string> publishDir = validator.ValidatePath(Path.Combine(outputRoot.Value!, project.Name), [paths.Builds]);
             Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "dotnet-service.Dockerfile"), [checkoutPath]);
             if (csproj.IsFailure || publishDir.IsFailure || dockerfile.IsFailure)
@@ -202,6 +233,103 @@ public static class LabBuilder
         var dto = new LabBuildDto(buildId, commit, dirty, checkoutPath, projectNames, images, at);
         Result written = WriteOutputs(paths, validator, outputRoot.Value!, dto);
         return written.IsFailure ? Result<LabBuildDto>.Failure(written.Error) : Result<LabBuildDto>.Success(dto);
+    }
+
+    /// <summary>
+    /// Stages a Node app and its <c>SharedAuth</c> dependency under <c>&lt;Builds&gt;\&lt;build_id&gt;\&lt;project&gt;</c>, then
+    /// <c>docker build</c>s it from <c>node-app.Dockerfile</c>. Only source is copied; <c>npm ci</c> runs inside the image.
+    /// Env files are never staged.
+    /// </summary>
+    private static async Task<Result<string>> BuildNodeAppAsync(
+        BuildProject project,
+        string checkoutPath,
+        string outputRoot,
+        string buildId,
+        IDockerCli docker,
+        LabPaths paths,
+        IPathValidator validator,
+        CancellationToken ct)
+    {
+        Result<string> appSource = validator.ValidatePath(Path.Combine(checkoutPath, project.NodeDirectory!.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
+        Result<string> sharedSource = validator.ValidatePath(Path.Combine(checkoutPath, "src", "Dhadgar.SharedAuth"), [checkoutPath]);
+        Result<string> stage = validator.ValidatePath(Path.Combine(outputRoot, project.Name), [paths.Builds]);
+        Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "node-app.Dockerfile"), [checkoutPath]);
+        if (appSource.IsFailure || sharedSource.IsFailure || stage.IsFailure || dockerfile.IsFailure)
+        {
+            return Result<string>.Failure("[Lab.InvalidArgument] build path is not valid");
+        }
+
+        Result<string> appDest = validator.ValidatePath(Path.Combine(stage.Value!, "app"), [paths.Builds]);
+        Result<string> sharedDest = validator.ValidatePath(Path.Combine(stage.Value!, "SharedAuth"), [paths.Builds]);
+        if (appDest.IsFailure || sharedDest.IsFailure)
+        {
+            return Result<string>.Failure("[Lab.InvalidArgument] build path is not valid");
+        }
+
+        Result copiedApp = CopyTree(appSource.Value!, appDest.Value!);
+        if (copiedApp.IsFailure)
+        {
+            return Result<string>.Failure(copiedApp.Error);
+        }
+
+        Result copiedShared = CopyTree(sharedSource.Value!, sharedDest.Value!);
+        if (copiedShared.IsFailure)
+        {
+            return Result<string>.Failure(copiedShared.Error);
+        }
+
+        string tag = ImageTag(project.Name, buildId);
+        Result<DockerOutput> image = await docker.RunAsync(
+            DockerEngine.Linux,
+            NodeDockerBuildArgs(tag, project.NodeEntry!, stage.Value!, dockerfile.Value!),
+            ct).ConfigureAwait(false);
+        if (image.IsFailure || image.Value!.ExitCode != 0)
+        {
+            return Result<string>.Failure("[Lab.Docker] docker build failed");
+        }
+
+        return Result<string>.Success(tag);
+    }
+
+    /// <summary>
+    /// Copies a source tree without installed or generated folders (<see cref="NodeExcludedNames"/>) and without env files.
+    /// Fails with <c>[Lab.Io]</c> when a file cannot be copied.
+    /// </summary>
+    private static Result CopyTree(string source, string destination)
+    {
+        try
+        {
+            Directory.CreateDirectory(destination);
+            foreach (string file in Directory.GetFiles(source))
+            {
+                string name = Path.GetFileName(file);
+                if (!name.StartsWith(".env", StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Copy(file, Path.Combine(destination, name), overwrite: true);
+                }
+            }
+
+            foreach (string directory in Directory.GetDirectories(source))
+            {
+                string name = Path.GetFileName(directory);
+                if (NodeExcludedNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                Result nested = CopyTree(directory, Path.Combine(destination, name));
+                if (nested.IsFailure)
+                {
+                    return nested;
+                }
+            }
+
+            return Result.Success();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return Result.Failure("[Lab.Io] build source could not be staged");
+        }
     }
 
     private static Result WriteOutputs(LabPaths paths, IPathValidator validator, string outputRoot, LabBuildDto dto)

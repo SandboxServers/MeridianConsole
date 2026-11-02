@@ -301,6 +301,9 @@ public sealed class LabDaemon : IAsyncDisposable
         builder.Services.AddSingleton<LabStack>();
         builder.Services.AddSingleton<ILabServiceAdapter, GatewayAdapter>();
         builder.Services.AddSingleton<ILabServiceAdapter, NodesAdapter>();
+        builder.Services.AddSingleton<ILabServiceAdapter, IdentityLabAdapter>();
+        builder.Services.AddSingleton<ILabServiceAdapter, BetterAuthLabAdapter>();
+        builder.Services.AddSingleton<ILabServiceAdapter, PanelLabAdapter>();
         builder.Services.AddSingleton<ConfigOverlay>();
         builder.Services.AddSingleton<LabServices>();
         builder.Services.AddSingleton<ILabStatusSource>(sp => sp.GetRequiredService<LabStack>());
