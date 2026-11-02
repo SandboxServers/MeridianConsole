@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
@@ -7,6 +8,7 @@ using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Pool;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Services;
+using Dhadgar.Lab.Stack;
 using Dhadgar.Lab.Tools.Pool;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
@@ -283,9 +285,19 @@ public static class CliMemberInstall
     /// <summary>The Notifications service the CLI calls direct for admin commands (the lab network name, as in ProxyCatalog).</summary>
     public const string MemberNotificationsUrl = "http://meridian-lab-notifications:8080";
 
+    /// <summary>The Identity URL the CLI posts to: the Gateway's <c>/api/v1/identity</c> route (D-ML163 a).</summary>
+    public const string MemberIdentityUrl = "http://meridian-lab-gateway:8080/api/v1/identity";
+
+    /// <summary>The Nodes base URL the CLI calls: the Gateway's <c>/api/v1</c> route (D-ML163 a).</summary>
+    public const string MemberNodesUrl = "http://meridian-lab-gateway:8080/api/v1";
+
+    /// <summary>The Discord service the CLI calls direct for admin commands (the lab network name).</summary>
+    public const string MemberDiscordUrl = "http://meridian-lab-discord:8080";
+
     /// <summary>
-    /// The member's <c>config.json</c> text: <c>gateway_url</c>, <c>notifications_url</c>, and <c>admin_api_key</c> when
-    /// one is given (the CLI's <c>CliConfig</c> reads them all). Client credentials are not written: <c>auth login</c>
+    /// The member's <c>config.json</c> text: the five service URLs (<c>gateway_url</c>, <c>identity_url</c>, <c>nodes_url</c>,
+    /// <c>notifications_url</c>, <c>discord_url</c>) and <c>admin_api_key</c> when one is given (the CLI's <c>CliConfig</c>
+    /// reads them all). Client credentials are still never written (D-ML162 puts them on argv only): <c>auth login</c>
     /// takes its secret only from <c>--client-secret</c> or a prompt, never from this file.
     /// </summary>
     public static string RenderMemberConfig(string? adminApiKey)
@@ -293,7 +305,10 @@ public static class CliMemberInstall
         var values = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["gateway_url"] = MemberGatewayUrl,
+            ["identity_url"] = MemberIdentityUrl,
+            ["nodes_url"] = MemberNodesUrl,
             ["notifications_url"] = MemberNotificationsUrl,
+            ["discord_url"] = MemberDiscordUrl,
         };
         if (!string.IsNullOrEmpty(adminApiKey))
         {
@@ -315,20 +330,107 @@ public static class CliMemberInstall
         ["exec", "-u", "root", container, "chmod", "600", MemberConfigPath],
     ];
 
+    /// <summary>The vault's admin key a verb needs in the member config, or null when the verb needs none (D-ML162, ruling N2).</summary>
+    /// <param name="verb">The CLI verb (the first argument).</param>
+    public static string? AdminCredentialFor(string verb) => verb switch
+    {
+        "notifications" => LabCredentialRefs.NotificationsAdmin,
+        "discord" => LabCredentialRefs.DiscordAdmin,
+        _ => null,
+    };
+
+    /// <summary>The dedicated folder under the lab state root where a member config is staged before <c>docker cp</c>.</summary>
+    /// <param name="paths">The lab's paths.</param>
+    public static string StagingDirectory(LabPaths paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        return Path.Combine(paths.State, "cli-config");
+    }
+
+    /// <summary>
+    /// Deletes stale staged configs: <c>cli-config-*.json</c> files in <paramref name="directory"/> whose last write is older
+    /// than <paramref name="now"/> minus <paramref name="maxAge"/>. This covers a process killed between write and delete.
+    /// Returns the count removed; returns 0 when the directory does not exist. Per-file IO failures are skipped.
+    /// </summary>
+    internal static int SweepStale(string directory, DateTimeOffset now, TimeSpan maxAge)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return 0;
+        }
+
+        DateTime cutoff = now.Subtract(maxAge).UtcDateTime;
+        int removed = 0;
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(directory, "cli-config-*.json"))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(file) < cutoff)
+                    {
+                        File.Delete(file);
+                        removed++;
+                    }
+                }
+                catch (IOException)
+                {
+                    // The file is locked or already gone; a later sweep retries it.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Same: the file could not be removed by this process.
+                }
+            }
+        }
+        catch (IOException)
+        {
+            return removed;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return removed;
+        }
+
+        return removed;
+    }
+
     /// <summary>
     /// Writes <c>/home/lab/.dhadgar/config.json</c> into one Linux member. The JSON is staged in a new file under
-    /// <paramref name="stagingDirectory"/>, copied with <c>docker cp</c>, and deleted in <c>finally</c>. The key never
-    /// goes on a command line or into a log. IO failures return <c>[Lab.Io]</c>; Docker non-zero exits return <c>[Lab.Docker]</c>.
+    /// <paramref name="stagingDirectory"/>, copied with <c>docker cp</c>, and deleted in <c>finally</c>. The staging folder
+    /// is validated under its parent, and stale staged files are swept first. The key never goes on a command line or into
+    /// a log. IO failures return <c>[Lab.Io]</c>; Docker non-zero exits return <c>[Lab.Docker]</c>.
     /// </summary>
-    public static async Task<Result> InstallConfigAsync(IDockerCli docker, string container, string stagingDirectory, string? adminApiKey, CancellationToken ct)
+    public static async Task<Result> InstallConfigAsync(IDockerCli docker, string container, string stagingDirectory, string? adminApiKey, IPathValidator validator, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(docker);
         ArgumentNullException.ThrowIfNull(stagingDirectory);
-        string staged = Path.Combine(stagingDirectory, "cli-config-" + Guid.NewGuid().ToString("N") + ".json");
+        ArgumentNullException.ThrowIfNull(validator);
+        string? parent = Path.GetDirectoryName(Path.GetFullPath(stagingDirectory));
+        if (parent is null)
+        {
+            return Result.Failure("[Lab.Io] the member's CLI config staging folder is not under the lab state root");
+        }
+
+        Result<string> checkedDirectory = validator.ValidatePath(stagingDirectory, [parent]);
+        if (checkedDirectory.IsFailure)
+        {
+            return Result.Failure(checkedDirectory.Error);
+        }
+
+        string staged = Path.Combine(checkedDirectory.Value!, "cli-config-" + Guid.NewGuid().ToString("N") + ".json");
         try
         {
-            Directory.CreateDirectory(stagingDirectory);
-            await File.WriteAllTextAsync(staged, RenderMemberConfig(adminApiKey), ct).ConfigureAwait(false);
+            Directory.CreateDirectory(checkedDirectory.Value!);
+            SweepStale(checkedDirectory.Value!, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+            string json = RenderMemberConfig(adminApiKey);
+            // The writer is disposed (and the file closed) before docker cp opens the file.
+            await using (var stream = new FileStream(staged, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            await using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+            {
+                await writer.WriteAsync(json.AsMemory(), ct).ConfigureAwait(false);
+            }
+
             return await RunStepsAsync(docker, ConfigSteps(container, staged), ct).ConfigureAwait(false);
         }
         catch (IOException)
