@@ -17,6 +17,12 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     /// <summary>Gateway to Redis proxy port (C10 <c>gateway-redis</c>).</summary>
     public const int GatewayRedisProxyPort = 20010;
 
+    /// <summary>Gateway to Identity proxy port (C10 <c>gateway-identity</c>).</summary>
+    public const int GatewayIdentityProxyPort = 20011;
+
+    /// <summary>Gateway to BetterAuth proxy port (C10 <c>gateway-betterauth</c>).</summary>
+    public const int GatewayBetterAuthProxyPort = 20013;
+
     /// <inheritdoc />
     public string Name => "gateway";
 
@@ -30,7 +36,7 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     public int HostPort => 15000;
 
     /// <inheritdoc />
-    public IReadOnlyList<string> Proxies { get; } = ["gateway-redis", "gateway-nodes"];
+    public IReadOnlyList<string> Proxies { get; } = ["gateway-redis", "gateway-nodes", "gateway-identity", "gateway-betterauth"];
 
     /// <inheritdoc />
     public string HealthPath => "/healthz";
@@ -61,9 +67,12 @@ public sealed class GatewayAdapter : ILabServiceAdapter
             ["Logging__Console__FormatterName"] = "json",
             ["Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics"] = "Information",
             ["ReverseProxy__Clusters__nodes__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayNodesProxyPort}/",
+            ["ReverseProxy__Clusters__identity__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayIdentityProxyPort}/",
+            ["ReverseProxy__Clusters__betterauth__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayBetterAuthProxyPort}/",
             ["Redis__ConnectionString"] = redis,
             ["Cloudflare__EnableDynamicFetch"] = "false",
             ["Readyz__RequiredClusters__0"] = "nodes",
+            ["Readyz__RequiredClusters__1"] = "identity",
         };
         return Result<IReadOnlyDictionary<string, string>>.Success(env);
     }
