@@ -127,6 +127,7 @@ public sealed class NotifyDockerTests
         finally
         {
             // Redacted log tails before teardown: the home folder is deleted below, so this is the only record of a failed start.
+            await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None); // let the follower flush the last lines
             ServiceLogTail.Write(_output, supervisor, ["sink", "notifications", "discord"], 80);
 
             foreach (string name in new[] { "discord", "notifications", "sink" })

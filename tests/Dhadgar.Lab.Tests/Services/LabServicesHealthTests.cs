@@ -49,6 +49,15 @@ public sealed class LabServicesHealthTests
     }
 
     [Fact]
+    public void ReadinessTimeoutMessage_NonDefaultReadyStatus_NamesThatStatus()
+    {
+        string message = LabServices.ReadinessTimeoutMessage("discord", "HTTP 200", string.Empty, "running 0", 503);
+
+        Assert.Contains("did not answer 503 within", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("did not answer 200", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ParseContainerState_StatusAndExitCode_IsKept()
     {
         Assert.Equal("exited 139", LabServices.ParseContainerState(Inspect(0, "exited 139\n")));
