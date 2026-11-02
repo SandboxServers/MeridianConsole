@@ -66,8 +66,11 @@ public sealed class ModelHunter
     private readonly TimeSpan _settle;
     private readonly ILogger<ModelHunter> _logger;
 
-    /// <summary>True after a case that cut Postgres, until the next case restarts the nodes service (step 2, D-ML119 unchanged).</summary>
-    private bool _cutSinceRestart;
+    /// <summary>
+    /// True until this hunter has restarted Nodes, and again after a case that cut Postgres. A new hunter, and so every replay,
+    /// starts by restarting Nodes, because a pool left by an earlier job is unknown (F120).
+    /// </summary>
+    private bool _needsRestart = true;
 
     /// <summary>
     /// Creates the hunter.
@@ -163,7 +166,7 @@ public sealed class ModelHunter
         {
             ["state"] = verdict.Diverged ? "diverged" : "not_reproduced",
             ["model"] = ModelName,
-            ["run_seed"] = (long)runSeed,
+            ["run_seed"] = runSeed,
             ["cscheck_seed"] = cscheckSeed,
             ["ops"] = OpArray(reported),
             ["first_diverging_op"] = verdict.Index,
@@ -296,27 +299,35 @@ public sealed class ModelHunter
         int known = 0;
         int carried = 0;
 
-        // Step 2: a case that follows a cut restarts the nodes service first, so its pool is never the stale one of the last case.
-        if (_cutSinceRestart)
-        {
-            Result<JsonElement> restarted = await CallAsync("svc_restart", new JsonObject { ["service"] = Service }, ct).ConfigureAwait(false);
-            if (restarted.IsFailure)
-            {
-                return Infrastructure(restarted.Error);
-            }
-
-            _cutSinceRestart = false;
-        }
-
+        bool cuts = ops.Any(op => op.Kind == HuntOpKind.PgDown);
         try
         {
-            Result<JsonElement> reset = await CallAsync("stack_reset_data", new JsonObject { ["databases"] = new JsonArray(Database) }, ct).ConfigureAwait(false);
+            // No restart into a cut another job left open (D-ML119): heal first.
+            Result<JsonElement> reset = await CallAsync("fault_reset", new JsonObject(), ct).ConfigureAwait(false);
             if (reset.IsFailure)
             {
                 return Infrastructure(reset.Error);
             }
 
-            reset = await CallAsync("fault_reset", new JsonObject(), ct).ConfigureAwait(false);
+            // F120: a case that cuts Postgres, and the first case of a hunter, start on a restarted and warmed pool.
+            if (_needsRestart || cuts)
+            {
+                Result<JsonElement> restarted = await CallAsync("svc_restart", new JsonObject { ["service"] = Service }, ct).ConfigureAwait(false);
+                if (restarted.IsFailure)
+                {
+                    return Infrastructure(restarted.Error);
+                }
+
+                _needsRestart = false;
+
+                Result warmed = await WarmPoolAsync(ct).ConfigureAwait(false);
+                if (warmed.IsFailure)
+                {
+                    return Infrastructure(warmed.Error);
+                }
+            }
+
+            reset = await CallAsync("stack_reset_data", new JsonObject { ["databases"] = new JsonArray(Database) }, ct).ConfigureAwait(false);
             if (reset.IsFailure)
             {
                 return Infrastructure(reset.Error);
@@ -469,7 +480,7 @@ public sealed class ModelHunter
             if (ranPgDown)
             {
                 await HealAsync().ConfigureAwait(false);
-                _cutSinceRestart = true;
+                _needsRestart = true;
             }
         }
     }
@@ -574,6 +585,43 @@ public sealed class ModelHunter
         }
 
         return await CallAsync("nodes_enroll_probe", probe, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The F120 warm-up: one token and one direct Nodes enroll answering 201, so the pool holds a live connection before the case
+    /// starts. It goes straight to Nodes (no Gateway pacing, so a 429 here is an error). Its token and node are removed by the
+    /// case's <c>stack_reset_data</c>. Only the fact of a failure is reported; the token ref is never logged.
+    /// </summary>
+    private async Task<Result> WarmPoolAsync(CancellationToken ct)
+    {
+        Result<JsonElement> mint = await CallAsync("nodes_token_mint",
+            new JsonObject { ["label"] = "hunt-warmup", ["validity_minutes"] = HuntOp.ValidityMinutes }, ct).ConfigureAwait(false);
+        if (mint.IsFailure)
+        {
+            return Result.Failure(mint.Error);
+        }
+
+        if (Text(mint.Value, "token_ref") is not { } tokenRef)
+        {
+            return Result.Failure("[Lab.Unavailable] nodes_token_mint returned no token_ref");
+        }
+
+        Result<JsonElement> probe = await CallAsync("nodes_enroll_probe", new JsonObject
+        {
+            ["token_ref"] = tokenRef,
+            ["platform"] = Platform,
+            ["via"] = "nodes",
+            ["hostname"] = "hunt-warmup",
+        }, ct).ConfigureAwait(false);
+        if (probe.IsFailure)
+        {
+            return Result.Failure(probe.Error);
+        }
+
+        int status = Number(probe.Value, "status");
+        return status == 201
+            ? Result.Success()
+            : Result.Failure("[Lab.Unavailable] nodes warm-up enroll answered " + status.ToString(CultureInfo.InvariantCulture));
     }
 
     private static TimeSpan RetryWait(JsonElement payload) =>
