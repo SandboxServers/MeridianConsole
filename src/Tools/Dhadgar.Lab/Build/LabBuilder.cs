@@ -29,7 +29,7 @@ public static class LabBuilder
         new("nodes", "src/Dhadgar.Nodes/Dhadgar.Nodes.csproj", "Dhadgar.Nodes.dll"),
         new("notifications", "src/Dhadgar.Notifications/Dhadgar.Notifications.csproj", "Dhadgar.Notifications.dll"),
         new("discord", "src/Dhadgar.Discord/Dhadgar.Discord.csproj", "Dhadgar.Discord.dll"),
-        new("probe", "src/Tools/Dhadgar.Lab.Probe/Dhadgar.Lab.Probe.csproj", "Dhadgar.Lab.Probe.dll"),
+        new("probe", "src/Tools/Dhadgar.Lab.Probe/Dhadgar.Lab.Probe.csproj", "meridian-lab-probe.dll"),
     ];
 
     /// <summary>Resolves a project name. Unknown names fail with <c>[Lab.InvalidArgument]</c>.</summary>

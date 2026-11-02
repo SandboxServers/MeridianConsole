@@ -37,6 +37,18 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
         new OutboxTarget("nodes", "nodes", "OutboxMessage", "EnqueueTime", "OutboxState", "Created", "Delivered"),
     ];
 
+    /// <summary>
+    /// The Notifications outbox (L36): the EF outbox MassTransit creates in <c>notifications</c>. Until its migrations
+    /// create the tables, the check reports <c>InvariantCheckError</c> "outbox tables missing" (KI-NOTIF-OUTBOX).
+    /// </summary>
+    public static IReadOnlyList<OutboxTarget> NotificationsTargets { get; } =
+    [
+        new OutboxTarget("notifications", "notifications", "OutboxMessage", "EnqueueTime", "OutboxState", "Created", "Delivered"),
+    ];
+
+    /// <summary>Every outbox the lab checks: Nodes and Notifications (Discord has no EF outbox).</summary>
+    public static IReadOnlyList<OutboxTarget> AllTargets { get; } = [.. NodesTargets, .. NotificationsTargets];
+
     private readonly IReadOnlyList<OutboxTarget> _targets;
     private readonly InvariantSqlQuery _query;
     private readonly Redactor _redactor;

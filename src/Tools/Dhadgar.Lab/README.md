@@ -50,6 +50,12 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 | Sink | 18090 | L36 |
 | Daemon | 8789 | lab daemon (loopback only) |
 
+## Services
+
+- **Notifications** (`meridian-lab-notifications`, 15090): built from `src/Dhadgar.Notifications`. Postgres, RabbitMQ and its webhook go through the `notifications-postgres` (20050), `notifications-rabbitmq` (20051) and `notifications-webhook` (20052) proxies. Its admin key comes from the vault. Its EF outbox is checked by I2 and reports `KI-NOTIF-OUTBOX` while the tables are missing. Email is not switched to SMTP (D-ML40 not ruled), so email rows assert the designed failure.
+- **Discord** (`meridian-lab-discord`, 15120): built from `src/Dhadgar.Discord`. Postgres and RabbitMQ go through `discord-postgres` (20060) and `discord-rabbitmq` (20062). The webhook goes through `discord-webhook` (20061). The bot stays absent (D-ML41), so `/readyz` 503 is the asserted state (F26). `SecretsService__Url` is unset, so the `:5080` fallback is visible (KI-DISCORD-SECRETS-PORT).
+- **Sink** (`meridian-lab-sink`, 18090): the probe image in `tools/lab/images/probe.Dockerfile` running `Dhadgar.Lab.Probe sink`. It records requests in memory (last 500), drops `Authorization`, redacts credentials, and serves `GET /_sink/requests?since=` and `DELETE /_sink/requests`.
+
 ## Daemon edge
 
 `meridian-lab daemon run` starts the loopback daemon. The token comes from `MERIDIAN_LAB_TOKEN` (at least 32 bytes, base64url); `meridian-lab token new` prints a fresh one. The daemon listens on `127.0.0.1` and `[::1]` only; there is no supported way to bind elsewhere, so `Lab:BindAddress` set to anything but loopback is a refusal. Kestrel endpoint settings in `labsettings.json` or the environment are ignored, and a start that reports any non-loopback address is refused. `MERIDIAN_LAB_HOME` must be a user-private directory; on Unix the lab root is created 0700 and `daemon.pid` 0600.
