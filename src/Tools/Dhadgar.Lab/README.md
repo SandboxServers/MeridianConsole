@@ -252,8 +252,8 @@ A Leased call's lease is watched for the whole call. If the lease expires, is re
 
 ## Soak and chaos
 
-- **Soak grade (D-ML112).** `soak_run` ends `pass`, `weak` or `fail`. `fail` is a sampler error, a failed I7 or no successful workload loop. `weak` is fewer than 3 successful loops (reason `fewer than 3 workload loops`), or too few resource samples for I7 or I7 skipped (reason `too few resource samples for I7`). The result carries a `reason`, null on pass.
-- **Soak rows (D-ML156).** `soak_run` reads the spec and checks its `rows` before the job starts. A row not in the spec returns `[Lab.NotFound]`, and a row whose dependency is not looped returns `[Lab.InvalidArgument]`. A spec over 1 MiB, or one that does not load, is refused the same way; no job starts.
+- **Soak grade (D-ML112).** `soak_run` ends `pass`, `weak` or `fail`. `fail` is a sampler error, a failed I7 or no successful workload loop. `weak` is fewer than 3 successful loops (reason `fewer than 3 workload loops`), or too few resource samples for I7 or I7 skipped (reason `too few resource samples for I7`). The result carries a `reason` for `weak` and for a fail with no successful loop; it is null on `pass` and on a fail from a sampler error or a failed I7.
+- **Soak rows (D-ML156).** `soak_run` reads the spec and checks its `rows` before the job starts. A row not in the spec returns `[Lab.NotFound]`, and a row whose dependency is not looped returns `[Lab.InvalidArgument]`. A missing spec returns `[Lab.NotFound]`; a spec over 1 MiB or one that does not load returns `[Lab.InvalidArgument]`; an unreadable spec returns `[Lab.Unavailable]`. No job starts in any of these cases.
 - **Chaos grade (D-ML141).** `chaos_run` passes only when at least one workload loop succeeded, with no violation, no check error and a written timeline. A run with no successful loop (none, or every loop errored) fails with reason `no workload loop succeeded`.
 
 ## Pool

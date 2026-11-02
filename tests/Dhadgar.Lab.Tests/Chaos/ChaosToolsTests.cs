@@ -104,6 +104,34 @@ public sealed class ChaosToolsTests : IDisposable
         Assert.Empty(Directory.GetDirectories(_paths.Jobs));
     }
 
+    [Fact]
+    public async Task SoakRun_SpecMissing_RefusedBeforeStart()
+    {
+        SoakRunTool tool = await SoakToolWithTwoRowSpecAsync();
+        JsonElement arguments = JsonSerializer.SerializeToElement(new { spec = "absent.toml", duration_s = 300 });
+
+        Result<JsonElement> result = await tool.InvokeAsync(arguments, new LabCallContext("call-5", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.NotFound]", result.Error, StringComparison.Ordinal);
+        Assert.Empty(Directory.GetDirectories(_paths.Jobs));
+    }
+
+    [Fact]
+    public async Task SoakRun_SpecTooLarge_RefusedBeforeStart()
+    {
+        SoakRunTool tool = await SoakToolWithTwoRowSpecAsync();
+        string big = Path.Combine(_root, "repo", "docs", "guides", "uat-specs", "big.toml");
+        await File.WriteAllTextAsync(big, new string('#', (int)UatSpecPaths.MaxSpecBytes + 1));
+        JsonElement arguments = JsonSerializer.SerializeToElement(new { spec = "big.toml", duration_s = 300 });
+
+        Result<JsonElement> result = await tool.InvokeAsync(arguments, new LabCallContext("call-6", null, "test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("[Lab.InvalidArgument] the spec is too large", result.Error);
+        Assert.Empty(Directory.GetDirectories(_paths.Jobs));
+    }
+
     /// <summary>A soak tool over a temp repo root that holds a two-row spec; row 2 depends on row 1.</summary>
     private async Task<SoakRunTool> SoakToolWithTwoRowSpecAsync()
     {
