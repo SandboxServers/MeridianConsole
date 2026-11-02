@@ -101,4 +101,28 @@ public sealed class ServiceAdapterTests
             Assert.DoesNotContain("ConnectionStrings__Postgres", adapter.OverlayKeys);
         }
     }
+
+    [Fact]
+    public void Gateway_AllowsTheLabNetworkHost_AndKeepsLocalhost()
+    {
+        var env = new GatewayAdapter().Environment(Context());
+
+        Assert.True(env.IsSuccess, env.Error);
+        string[] hosts = env.Value!["AllowedHosts"].Split(';');
+        Assert.Contains("localhost", hosts);
+        Assert.Contains("meridian-lab-gateway", hosts);
+    }
+
+    [Fact]
+    public void Gateway_And_Nodes_FetchDiscoveryFromTheLabIdentity()
+    {
+        foreach (var env in new[] { new GatewayAdapter().Environment(Context()), new NodesAdapter().Environment(Context()) })
+        {
+            Assert.True(env.IsSuccess, env.Error);
+            Assert.Equal(IdentityLabAdapter.MetadataAddress, env.Value!["Auth__MetadataAddress"]);
+            Assert.Equal(IdentityLabAdapter.InternalBaseUrl, env.Value["Auth__InternalBaseUrl"]);
+            Assert.DoesNotContain("meridianconsole.com", env.Value["Auth__MetadataAddress"], StringComparison.Ordinal);
+            Assert.DoesNotContain("meridianconsole.com", env.Value["Auth__InternalBaseUrl"], StringComparison.Ordinal);
+        }
+    }
 }
