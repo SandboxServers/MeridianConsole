@@ -232,6 +232,7 @@ public sealed class ToxiproxySeamTests
                 TimeProvider.System,
                 ct);
             Assert.True(build.IsSuccess, build.IsFailure ? build.Error : string.Empty);
+            _output.WriteLine($"S-L15 build {build.Value.BuildId}");
 
             Result<LabServiceStartDto> nodes = await services.StartAsync("nodes", build.Value.BuildId, ct);
             Assert.True(nodes.IsSuccess, nodes.IsFailure ? nodes.Error : string.Empty);
@@ -289,6 +290,8 @@ public sealed class ToxiproxySeamTests
         }
         finally
         {
+            await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None); // let the follower flush the last lines
+            WriteNodesLogTail(rig.Supervisor, 60);
             _ = await services.StopAsync("nodes", CancellationToken.None);
             _ = await stack.DownAsync(wipe: true, CancellationToken.None);
 
@@ -409,6 +412,25 @@ public sealed class ToxiproxySeamTests
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the last <paramref name="count"/> captured Nodes log lines (already redacted) to the test output. S-L15's record
+    /// needs them: the red shows the dead-connection 500, and the green shows EF's retry (D-ML144).
+    /// </summary>
+    private void WriteNodesLogTail(LabProcessSupervisor supervisor, int count)
+    {
+        Result<IReadOnlyList<LogLine>> lines = supervisor.ReadLines("nodes");
+        if (lines.IsFailure)
+        {
+            _output.WriteLine($"S-L15 nodes-log unavailable: {lines.Error}");
+            return;
+        }
+
+        foreach (LogLine line in lines.Value!.TakeLast(count))
+        {
+            _output.WriteLine($"S-L15 nodes-log {line.Timestamp:O} {line.Level} {line.Category} {line.Message}");
         }
     }
 
@@ -538,6 +560,8 @@ public sealed class ToxiproxySeamTests
         public ToxiproxyClient Toxi => _toxi;
 
         public HttpClient Http => _http;
+
+        public LabProcessSupervisor Supervisor => _supervisor;
 
         public void Dispose()
         {
