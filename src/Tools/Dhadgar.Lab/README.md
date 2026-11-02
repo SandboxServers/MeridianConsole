@@ -71,7 +71,12 @@ BetterAuth always loads its secret and exchange key from the Secrets service at 
 
 Identity runs with `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate), `Auth:UseDevelopmentCertificates=true` and an empty `Auth:KeyVault:VaultUri`, as the compose dev stack does (D-ML152). Its OpenIddict certificates and JWT signing key are ephemeral, so tokens issued before an Identity restart stop validating after it (KG-W7-5). Nothing calls Azure Key Vault. Because the vault URI is empty, `/webhooks/better-auth` (through the Gateway `/api/v1/identity/webhooks/better-auth`) accepts unsigned bodies, so any local process can soft-delete or rewrite a lab user. The OpenAPI and Scalar pages are served on `127.0.0.1:15010`. The lab is not a fidelity target for webhook signing or certificate rotation.
 
-`db_query service=betterauth` or `service=identity` returns session, account-token, verification and refresh-token columns unmasked (lab users, per-stack secrets). Masking is KG-W7-1 (L35).
+`db_query` masks credential cells by where they came from, not by what the statement calls them. The decision uses the base table column the value was read from (resolved through the catalog after the reader closes, `Data/ColumnMask.cs`). A masked, non-null cell returns `[masked]`; a masked null stays null; column names are kept.
+
+- Masked base columns: `betterauth` `session.token`, `account.accessToken`, `account.refreshToken`, `account.idToken`, `account.password`, `verification.value`; `identity` `refresh_tokens.TokenHash`, `OpenIddictTokens.Payload`, `OpenIddictTokens.ReferenceId`, `OpenIddictApplications.ClientSecret`. A base column in this list is masked whatever its type.
+- Expression rule: in `betterauth` and `identity`, a computed expression (no base column, such as `token || ''`) is masked when its type is `text`, `character varying`, `character`, `bytea`, `json` or `jsonb`. Other expressions, and every column in `nodes`, `notifications` and `discord`, pass through.
+
+Masking is KG-W7-1 (L35).
 
 I2 checks the Nodes and Notifications outboxes; Identity has none.
 

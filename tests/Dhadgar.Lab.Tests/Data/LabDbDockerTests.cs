@@ -9,6 +9,7 @@ using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Stack;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 
 namespace Dhadgar.Lab.Tests.Data;
 
@@ -64,6 +65,51 @@ public sealed class LabDbDockerTests
         Assert.Equal(1, result.Value.RowCount);
     }
 
+    [Fact]
+    [Trait("RequiresDocker", "true")]
+    [Trait("RequiresNetwork", "true")]
+    public async Task DbQuery_TokenColumns_Masked()
+    {
+        const string secret = "lab-l35m-canary-token-7f3a9c";
+        await using var lab = await DockerLab.StartAsync();
+        await DockerLab.CreateFixturesAsync(lab.Connections, secret);
+
+        // The base column, an alias, a join and an expression: each carries the secret, none may return it.
+        string[] betterAuthQueries =
+        {
+            "SELECT token FROM session",
+            "SELECT token AS t FROM session",
+            "SELECT s.token FROM session s JOIN session t ON t.id = s.id",
+            "SELECT token || '' AS x FROM session",
+        };
+        foreach (string sql in betterAuthQueries)
+        {
+            Result<DbQueryResult> result = await lab.Db.QueryAsync("betterauth", sql, new Dictionary<string, JsonElement>(), 10, CancellationToken.None);
+
+            AssertMaskedWithoutSecret(result, secret, sql);
+        }
+
+        Result<DbQueryResult> identity = await lab.Db.QueryAsync("identity", "SELECT \"TokenHash\" FROM refresh_tokens", new Dictionary<string, JsonElement>(), 10, CancellationToken.None);
+
+        AssertMaskedWithoutSecret(identity, secret, "identity refresh_tokens");
+    }
+
+    private static void AssertMaskedWithoutSecret(Result<DbQueryResult> result, string secret, string label)
+    {
+        Assert.True(result.IsSuccess, label + ": " + (result.IsFailure ? result.Error : string.Empty));
+        Assert.Equal(1, result.Value.RowCount);
+
+        foreach (Dictionary<string, JsonElement> row in result.Value.Rows)
+        {
+            foreach (KeyValuePair<string, JsonElement> cell in row)
+            {
+                Assert.DoesNotContain(secret, cell.Value.ToString(), StringComparison.Ordinal);
+            }
+        }
+
+        Assert.Equal(ColumnMask.Masked, result.Value.Rows[0].Values.First().GetString());
+    }
+
     /// <summary>
     /// A stack brought up for one test; <see cref="DisposeAsync"/> tears it down with wipe.
     /// </summary>
@@ -74,16 +120,20 @@ public sealed class LabDbDockerTests
         private readonly ToxiproxyClient _toxi;
         private readonly LabStack _stack;
 
-        private DockerLab(string home, SecretVault vault, ToxiproxyClient toxi, LabStack stack, LabDb db)
+        private DockerLab(string home, SecretVault vault, ToxiproxyClient toxi, LabStack stack, LabConnectionStrings connections, LabDb db)
         {
             _home = home;
             _vault = vault;
             _toxi = toxi;
             _stack = stack;
+            Connections = connections;
             Db = db;
         }
 
         public LabDb Db { get; }
+
+        /// <summary>The connection-string builder, so a test can write fixture tables as the service owner.</summary>
+        public LabConnectionStrings Connections { get; }
 
         public static async Task<DockerLab> StartAsync()
         {
@@ -105,7 +155,8 @@ public sealed class LabDbDockerTests
                 throw new InvalidOperationException("The lab stack did not come up: " + up.Error);
             }
 
-            return new DockerLab(home, vault, toxi, stack, new LabDb(new LabConnectionStrings(vault, refs)));
+            var connections = new LabConnectionStrings(vault, refs);
+            return new DockerLab(home, vault, toxi, stack, connections, new LabDb(connections));
         }
 
         /// <summary>
@@ -121,6 +172,40 @@ public sealed class LabDbDockerTests
             using var content = new StringContent("{\"enabled\":false}", Encoding.UTF8, "application/json");
             using HttpResponseMessage response = await http.PostAsync("proxies/" + proxy, content, CancellationToken.None);
             Assert.True(response.IsSuccessStatusCode, "Toxiproxy refused to disable " + proxy);
+        }
+
+        /// <summary>
+        /// Writes the fixture tables as each database's owner, with one row holding <paramref name="secret"/>, and grants the reader SELECT.
+        /// The stack wipe at teardown discards them.
+        /// </summary>
+        public static async Task CreateFixturesAsync(LabConnectionStrings connections, string secret)
+        {
+            await RunAsOwnerAsync(connections, "betterauth", "CREATE TABLE session (id integer PRIMARY KEY, token text NOT NULL)");
+            await RunAsOwnerAsync(connections, "betterauth", "INSERT INTO session (id, token) VALUES (1, @secret)", secret);
+            await RunAsOwnerAsync(connections, "betterauth", "GRANT SELECT ON session TO " + LabCredentialRefs.LabReader);
+
+            await RunAsOwnerAsync(connections, "identity", "CREATE TABLE refresh_tokens (\"Id\" integer PRIMARY KEY, \"TokenHash\" character varying(128) NOT NULL)");
+            await RunAsOwnerAsync(connections, "identity", "INSERT INTO refresh_tokens (\"Id\", \"TokenHash\") VALUES (1, @secret)", secret);
+            await RunAsOwnerAsync(connections, "identity", "GRANT SELECT ON refresh_tokens TO " + LabCredentialRefs.LabReader);
+        }
+
+        private static async Task RunAsOwnerAsync(LabConnectionStrings connections, string database, string sql, string? secret = null)
+        {
+            Result<string> connection = connections.OwnerDirect(database);
+            Assert.True(connection.IsSuccess, "The owner connection to " + database + " was refused: " + (connection.IsFailure ? connection.Error : string.Empty));
+
+            await using var conn = new NpgsqlConnection(connection.Value);
+            await conn.OpenAsync(CancellationToken.None);
+
+#pragma warning disable CA2100 // Fixture SQL is a constant written in this file; the secret is a bound parameter.
+            await using var cmd = new NpgsqlCommand(sql, conn);
+#pragma warning restore CA2100
+            if (secret is not null)
+            {
+                _ = cmd.Parameters.AddWithValue("secret", secret);
+            }
+
+            _ = await cmd.ExecuteNonQueryAsync(CancellationToken.None);
         }
 
         public async ValueTask DisposeAsync()
