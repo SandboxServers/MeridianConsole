@@ -75,7 +75,7 @@ public sealed class HuntModelTool : LabTool<HuntModelArgs>
     public override string Name => "hunt_model_run";
 
     /// <inheritdoc />
-    public override string Description => "Starts a seeded model-based enrollment hunt (model enrollment, iterations 1 to 500, default 25; budget_s 1 to 3600, default 600) as a job. Returns job_id and seed; follow it with job_status. With replay (a path under the jobs folder to a repro.toml) the job replays the recorded ops once and reports whether the failure reproduces.";
+    public override string Description => "Starts a seeded model-based enrollment hunt (model enrollment, iterations 1 to 500, default 25; budget_s 1 to 3600, default 600) as a job. Returns job_id and seed; follow it with job_status. With replay (a path under the jobs folder to a repro.toml) the job replays the recorded ops once and reports whether the failure reproduces. The hunt runs at most iterations cases or budget_s, whichever ends first; the same seed draws the same cases.";
 
     /// <inheritdoc />
     protected override Task<Result<object>> ExecuteAsync(HuntModelArgs args, LabCallContext context, CancellationToken ct)
