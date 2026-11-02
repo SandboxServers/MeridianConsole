@@ -273,6 +273,7 @@ A Leased call's lease is watched for the whole call. If the lease expires, is re
 - **Host.** `m:host` is read-only. `member_reset m:host` and its destroy return `[Lab.BlastRadius] host is read-only`.
 - **Cleanup.** Lease end destroys every container member (one lease holds the pool at a time). At start, the pool destroys each member listed in `LabPaths.State\pool.json` and clears the file. The file is written atomically. I5 reports a `meridian-lab-member` container that the pool does not list as an orphan.
 - **Image.** `lab_build` builds `meridian-lab/linux-member:<build id>` from `tools/lab/images/linux-member.Dockerfile` when it builds the `probe` project. The member runs `sleep infinity`; the probe is in `/opt/lab/probe`.
+- The Linux provider creates the labelled `meridian-lab-net` network when it is missing; `stack_up wipe` leaves the containers of members the pool holds (D-ML171, D-ML172).
 - **Not in L30.** Windows members (L31) and VMs (D-ML31). Those providers return `[Lab.Unavailable]`.
 
 ## Evidence bundle

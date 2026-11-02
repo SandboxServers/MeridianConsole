@@ -158,6 +158,37 @@ public sealed class LabStackTests : IDisposable
     }
 
     [Fact]
+    public async Task UpAsync_Wipe_KeepsHeldPoolMembers_RemovesUnheldOnes()
+    {
+        // D-ML171: a registered pool member is the pool's to remove; wipe removes only the unheld labelled containers.
+        using LabStack stack = CreateStack(out LabTargetRegistry registry);
+        _ = registry.Register("m:lin-01", LabTargetKind.Member, "lin-01", "meridian-lab-m-lin-01");
+        _docker.PsOutput = "meridian-lab-postgres\nmeridian-lab-m-lin-01\nmeridian-lab-m-lin-02";
+
+        _ = await stack.UpAsync(wipe: true, CancellationToken.None);
+
+        Assert.Contains(_docker.Calls, c => string.Join(' ', c) == "rm -f -v meridian-lab-postgres");
+        Assert.Contains(_docker.Calls, c => string.Join(' ', c) == "rm -f -v meridian-lab-m-lin-02");
+        Assert.DoesNotContain(_docker.Calls, c => c.Contains("rm") && c.Contains("meridian-lab-m-lin-01"));
+    }
+
+    [Fact]
+    public async Task UpAsync_WithoutWipe_HeldPoolMemberIsNotAnOrphan()
+    {
+        // D-ML171: a held pool member is not an unknown labelled container, so the orphan refusal does not fire for it.
+        using LabStack stack = CreateStack(out LabTargetRegistry registry);
+        _ = registry.Register("m:lin-01", LabTargetKind.Member, "lin-01", "meridian-lab-m-lin-01");
+        _docker.PsOutput = "meridian-lab-m-lin-01";
+
+        Result<StackStatusDto> result = await stack.UpAsync(wipe: false, CancellationToken.None);
+
+        Assert.DoesNotContain(
+            "labelled lab containers exist that this daemon does not know",
+            result.IsFailure ? result.Error : string.Empty,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UpAsync_WithoutWipeOnEmptyRegistry_RefusesWhileLabelledContainersExist()
     {
         // R-N1: without wipe the daemon does not start a stack on top of containers it does not know.
