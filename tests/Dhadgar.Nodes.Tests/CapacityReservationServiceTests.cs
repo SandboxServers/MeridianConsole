@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
@@ -5,6 +6,7 @@ using Dhadgar.Nodes.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -676,6 +678,59 @@ public sealed class CapacityReservationServiceTests
     }
 
     [Fact]
+    public async Task ReserveAsync_TransientFailureOnInsert_RetriesOnceAndCommitsOneReservation()
+    {
+        // Arrange - the first INSERT into capacity_reservations fails transiently; the strategy must retry the whole unit
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var interceptor = new FailFirstInsertInterceptor();
+        var options = new DbContextOptionsBuilder<NodesDbContext>()
+            .UseSqlite(connection, o => o.ExecutionStrategy(d => new TestRetryingStrategy(d)))
+            .AddInterceptors(interceptor)
+            .Options;
+
+        var timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        Guid nodeId;
+        using (var setupContext = new NodesDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync();
+            var node = await SeedNodeWithCapacityAsync(setupContext, timeProvider);
+            nodeId = node.Id;
+        }
+
+        using var context = new NodesDbContext(options);
+        var publisher = new TestNodesEventPublisher();
+        var service = new CapacityReservationService(
+            context,
+            publisher,
+            timeProvider,
+            NullLogger<CapacityReservationService>.Instance);
+
+        // Act
+        var result = await service.ReserveAsync(
+            nodeId,
+            memoryMb: 512,
+            diskMb: 1024,
+            cpuMillicores: 0,
+            requestedBy: "test",
+            ttlMinutes: 15);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.Equal(1, interceptor.Throws);
+
+        using var verifyContext = new NodesDbContext(options);
+        var rows = await verifyContext.CapacityReservations.ToListAsync();
+        Assert.Single(rows);
+
+        // Both attempts publish, and every publish carries the one committed token
+        var published = publisher.GetMessages<CapacityReserved>();
+        Assert.NotEmpty(published);
+        Assert.All(published, message => Assert.Equal(rows[0].ReservationToken, message.ReservationToken));
+    }
+
+    [Fact]
     public async Task GetOwningOrganizationIdAsync_KnownToken_ReturnsNodeOrganization()
     {
         // Arrange
@@ -711,5 +766,72 @@ public sealed class CapacityReservationServiceTests
 
         // Assert
         Assert.Null(owner);
+    }
+
+    /// <summary>Fails the first capacity reservation INSERT with a transient error, then lets every later command through.</summary>
+    private sealed class FailFirstInsertInterceptor : DbCommandInterceptor
+    {
+        private int _throws;
+
+        /// <summary>How many times the interceptor has thrown (0 or 1).</summary>
+        public int Throws => Volatile.Read(ref _throws);
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowOnFirstReservationInsert(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowOnFirstReservationInsert(command);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void ThrowOnFirstReservationInsert(DbCommand command)
+        {
+            if (command.CommandText.StartsWith("INSERT INTO \"capacity_reservations\"", StringComparison.Ordinal)
+                && Interlocked.CompareExchange(ref _throws, 1, 0) == 0)
+            {
+                throw new TransientTestException();
+            }
+        }
+    }
+
+    /// <summary>Retries only <see cref="TransientTestException"/>, with no delay, so the test stays fast.</summary>
+    private sealed class TestRetryingStrategy : ExecutionStrategy
+    {
+        public TestRetryingStrategy(ExecutionStrategyDependencies dependencies)
+            : base(dependencies, maxRetryCount: 3, maxRetryDelay: TimeSpan.Zero)
+        {
+        }
+
+        protected override bool ShouldRetryOn(Exception? exception) => exception is TransientTestException;
+    }
+
+    private sealed class TransientTestException : Exception
+    {
+        public TransientTestException()
+            : base("Injected transient failure for the retry test.")
+        {
+        }
+
+        public TransientTestException(string message)
+            : base(message)
+        {
+        }
+
+        public TransientTestException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 }

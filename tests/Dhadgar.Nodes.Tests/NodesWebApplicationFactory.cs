@@ -45,6 +45,12 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
     /// </summary>
     public Dictionary<string, string?> Settings { get; } = new();
 
+    /// <summary>
+    /// When true, the host keeps the production <c>NodesDbContext</c> registration (Npgsql, with its retrying
+    /// execution strategy) instead of the InMemory replacement. Set it with a connection string in <see cref="Settings"/>.
+    /// </summary>
+    public bool UseProductionDbContext { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -64,18 +70,21 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Remove existing DbContext registration
-            services.RemoveAll<DbContextOptions<NodesDbContext>>();
+            if (!UseProductionDbContext)
+            {
+                // Remove existing DbContext registration
+                services.RemoveAll<DbContextOptions<NodesDbContext>>();
 
-            var efProvider = new ServiceCollection()
-                .AddEntityFrameworkInMemoryDatabase()
-                .BuildServiceProvider();
+                var efProvider = new ServiceCollection()
+                    .AddEntityFrameworkInMemoryDatabase()
+                    .BuildServiceProvider();
 
-            services.AddDbContext<NodesDbContext>(options =>
-                options.UseInMemoryDatabase(_databaseName)
-                    .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-                    .UseInternalServiceProvider(efProvider)
-                    .AddInterceptors(Faults));
+                services.AddDbContext<NodesDbContext>(options =>
+                    options.UseInMemoryDatabase(_databaseName)
+                        .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                        .UseInternalServiceProvider(efProvider)
+                        .AddInterceptors(Faults));
+            }
 
             // Remove all MassTransit services and replace with test publisher
             // This removes bus, health checks, and other MassTransit infrastructure
@@ -152,8 +161,11 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IAuditContextAccessor>();
             services.AddScoped<IAuditContextAccessor, TestNodesAuditContextAccessor>();
 
-            // Add a startup filter to initialize the database
-            services.AddSingleton<IStartupFilter>(new DbInitStartupFilter());
+            // Add a startup filter to initialize the database (InMemory only; production Postgres is not created here)
+            if (!UseProductionDbContext)
+            {
+                services.AddSingleton<IStartupFilter>(new DbInitStartupFilter());
+            }
 
             // Add problem details and endpoint exploration for better error reporting
             // This ensures minimal API binding infrastructure is properly configured

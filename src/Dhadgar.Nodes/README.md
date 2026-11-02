@@ -421,6 +421,12 @@ Recent migrations:
 - `20261027130000_AddMassTransitOutboxEntities` creates the MassTransit outbox and inbox tables (`InboxState`, `OutboxState`, `OutboxMessage`). `NodesDbContext` registered them earlier, but no migration created them (P16-ruling-1).
 - `20261027130100_AddAgentCertificateGraceUntil` adds the nullable `GraceUntil` column to `agent_certificates` (renewal grace window, D-S212).
 
+### Database resilience
+
+- **Retry policy:** `NodesRetryingExecutionStrategy` retries transient database failures 3 times, with a delay of at most 1 s. On a client-side connection failure (for example, after a Postgres restart left pooled connections dead), it also clears the Npgsql pool, so the retry opens a fresh connection.
+- **User-initiated transactions:** the retrying strategy rejects a user transaction that runs outside it. Any new user-initiated transaction must run inside `context.Database.CreateExecutionStrategy().ExecuteAsync(...)`, as `CapacityReservationService.ReserveAsync` does.
+- **Publishing is not transactional:** Nodes has no `UseBusOutbox()`, so `Publish` goes straight to the broker and is not part of the database transaction (F117). A retried operation must therefore use fixed ids so a republished event is identical. The outbox decision is pending (D-ML133).
+
 ---
 
 ## Events and Messaging

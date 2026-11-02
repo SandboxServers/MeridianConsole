@@ -46,7 +46,7 @@ builder.Services.AddOptions<NodesOptions>()
 builder.Services.AddSingleton<IValidateOptions<NodesOptions>, NodesOptions>();
 
 builder.Services.AddDbContext<NodesDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+    NodesDatabase.Configure(options, builder.Configuration.GetConnectionString("Postgres")));
 
 // Note: PostgreSQL health check is already registered by AddDhadgarServiceDefaults
 // with HealthCheckDependencies.Postgres - no need to add it again here.
