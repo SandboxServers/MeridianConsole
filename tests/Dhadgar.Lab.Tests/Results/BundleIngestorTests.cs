@@ -84,6 +84,23 @@ public sealed class BundleIngestorTests : IDisposable
         Assert.Equal(0, db.CountFlakes());
     }
 
+    [Fact]
+    public async Task QueryView_SeedAboveLongMax_ReadsBackUnsigned()
+    {
+        string folder = BundleFixtures.Write(_uatRuns, "run-qv", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
+        SetSeed(folder, HighSeed);
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+        Assert.True((await NewIngestor(db).IngestAsync(folder, [_uatRuns], CancellationToken.None)).IsSuccess);
+
+        Result<IReadOnlyList<JsonObject>> runs = db.QueryView("runs", null, null);
+        Result<IReadOnlyList<JsonObject>> rows = db.QueryView("rows", null, null);
+
+        Assert.True(runs.IsSuccess, runs.Error);
+        Assert.True(rows.IsSuccess, rows.Error);
+        Assert.Equal(HighSeed, runs.Value!.Single()["seed"]!.GetValue<ulong>());
+        Assert.Equal(HighSeed, rows.Value!.First()["seed"]!.GetValue<ulong>());
+    }
+
     /// <summary>Rewrites a bundle's run.json seed as an unsigned number (the fixture writes a long).</summary>
     private static void SetSeed(string folder, ulong seed)
     {

@@ -53,13 +53,13 @@ internal sealed class TriageToolsFixture : IDisposable
     public DraftWriter Writer { get; }
 
     /// <summary>Plants a signature, one row and a run whose signature text is <paramref name="text"/>.</summary>
-    public async Task PlantSignatureAsync(string signatureId, string text)
+    public async Task PlantSignatureAsync(string signatureId, string text, long seed = 3)
     {
         Result<bool> done = await Results.ReadAsync(db =>
         {
-            Assert.True(db.UpsertRun(new RunRecord("run-plant", "uat", null, 3, "build-9", null, null, null, null, "fail", null, null,
+            Assert.True(db.UpsertRun(new RunRecord("run-plant", "uat", null, seed, "build-9", null, null, null, null, "fail", null, null,
                 "C:\\bundle")).IsSuccess);
-            Assert.True(db.InsertRow(new RowRecord("run-plant", "catalog-nodes", "row-p", "fail", null, 3, null, signatureId,
+            Assert.True(db.InsertRow(new RowRecord("run-plant", "catalog-nodes", "row-p", "fail", null, seed, null, signatureId,
                 "[\"" + signatureId + "\"]", null, null, null)).IsSuccess);
             Assert.True(db.UpsertSignature(new SignatureRecord(signatureId, "row", text, "2026-10-28T00:00:00Z", "new", null)).IsSuccess);
             Assert.True(db.RecountSignatureHits(signatureId).IsSuccess);

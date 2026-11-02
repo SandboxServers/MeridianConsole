@@ -31,6 +31,17 @@ public sealed class DraftWriterTests : IDisposable
     }
 
     [Fact]
+    public async Task WriteAsync_StoredHighSeed_DraftPrintsUnsignedSeed()
+    {
+        await _fixture.PlantSignatureAsync("sig-h2", "row fails: enroll", unchecked((long)12499590173714643239UL));
+
+        Result<string> result = await _fixture.Writer.WriteAsync("sig-h2", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Contains("- Seed: 12499590173714643239\n", File.ReadAllText(result.Value), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_Golden_HasEverySectionAndEndsWithTheDraftOnlyLine()
     {
         var bucket = new ResultsDb.BucketRecord("sig-g1", "row", "2026-10-27T00:00:00Z", "2026-10-28T00:00:00Z", 4, "new", null, null,
