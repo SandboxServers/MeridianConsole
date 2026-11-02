@@ -36,3 +36,12 @@ DONE (session 2, part 2): step 1. LabCredentialRefs.IdentityExchange/BetterAuthS
 NEXT STEP: step 2 (LabServiceContext optional ExchangePublicKeyPem/ExchangePrivateKeyPem/BetterAuthSecret; ComposeEnvironment fills them), then steps 4-6 adapters.
 
 LAST CHECK: build Dhadgar.Lab Release TreatWarningsAsErrors -> Build succeeded, 0 warnings, 0 errors.
+
+## Session 3 (continuation 3 of 3, last)
+DONE: part 3 (a75d6893, env wiring), part 4 (8a63e685): LabEnvValue.cs (EscapedNewlinePem for Identity, SingleLinePem for BetterAuth since jose importPKCS8 needs no literal \n), IdentityLabAdapter (15010), BetterAuthLabAdapter (15130; DATABASE from POSTGRES_* parsed from ServiceDb string; BETTER_AUTH_TRUSTED_ORIGINS=14321, NODE_ENV unset), PanelLabAdapter (14321). Identity /healthz and BetterAuth /healthz verified.
+NEXT STEP: (4) register 3 adapters in LabDaemon.cs ~line 303 AddSingleton; LabBuilder.Projects add identity (dotnet src/Dhadgar.Identity/Dhadgar.Identity.csproj) + Node projects betterauth/panel via node-app.Dockerfile (needs BuildProject extension: staging of app + SharedAuth). Then (5) GatewayAdapter, (6), (7) tests, (8) checks.
+
+
+## Session 4 (fallback implementer)
+DONE: part 5 LabBuilder/LabDaemon (6e0d22f2); part 6 GatewayAdapter (e2f1d4d1); part 7 tests + README (293caeb8). I2OutboxInvariant: Identity has no Outbox in src/Dhadgar.Identity, so I2 stays Nodes-only (packet: "if its model has them"). stack_reset_data lists tables dynamically; identity and betterauth are lab DBs already.
+Tests authored, not run (Docker): AuthStackDockerTests, PanelLoginSeamTests (S-L9).
