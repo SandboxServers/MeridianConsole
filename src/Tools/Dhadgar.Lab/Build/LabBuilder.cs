@@ -169,7 +169,8 @@ public static class LabBuilder
         {
             Result<string> csproj = validator.ValidatePath(Path.Combine(checkoutPath, project.Csproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
             Result<string> publishDir = validator.ValidatePath(Path.Combine(outputRoot.Value!, project.Name), [paths.Builds]);
-            Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "dotnet-service.Dockerfile"), [checkoutPath]);
+            string dockerfileName = project.Name == "probe" ? "probe.Dockerfile" : "dotnet-service.Dockerfile";
+            Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", dockerfileName), [checkoutPath]);
             if (csproj.IsFailure || publishDir.IsFailure || dockerfile.IsFailure)
             {
                 return Result<LabBuildDto>.Failure("[Lab.InvalidArgument] build path is not valid");

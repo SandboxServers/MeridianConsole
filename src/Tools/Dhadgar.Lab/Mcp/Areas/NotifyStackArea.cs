@@ -12,5 +12,6 @@ public static partial class LabMcpServer
     {
         services.AddSingleton<ILabServiceAdapter, NotificationsLabAdapter>();
         services.AddSingleton<ILabServiceAdapter, DiscordLabAdapter>();
+        services.AddSingleton<ILabServiceAdapter, SinkLabAdapter>();
     }
 }

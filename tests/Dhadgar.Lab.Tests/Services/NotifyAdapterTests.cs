@@ -180,6 +180,30 @@ public sealed class NotifyAdapterTests
     }
 
     [Fact]
+    public void Sink_RunsProbeImageAsMeridianLabSink_OnLoopbackPort()
+    {
+        var sink = new SinkLabAdapter();
+
+        Assert.Equal("meridian-lab-sink", sink.Container);
+        Assert.Equal("probe", sink.Project);
+        Assert.Equal(LabPorts.Sink, sink.HostPort);
+        Assert.Equal("/_sink/requests", sink.HealthPath);
+    }
+
+    [Fact]
+    public void RunOptions_PublishOnLoopback_AndSinkHasMemoryCap()
+    {
+        IReadOnlyList<string> sinkArgs = LabServices.RunOptions(new SinkLabAdapter());
+        IReadOnlyList<string> discordArgs = LabServices.RunOptions(new DiscordLabAdapter());
+
+        Assert.Contains($"127.0.0.1:{LabPorts.Sink}:8080", sinkArgs);
+        Assert.Contains("--memory", sinkArgs);
+        Assert.Contains("128m", sinkArgs);
+        Assert.Contains($"127.0.0.1:{LabPorts.Discord}:8080", discordArgs);
+        Assert.DoesNotContain("--memory", discordArgs);
+    }
+
+    [Fact]
     public void Gateway_ClustersForNotificationsAndDiscord_PointAtLabProxies()
     {
         var env = new GatewayAdapter().Environment(Context());

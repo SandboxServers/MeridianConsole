@@ -161,15 +161,8 @@ public sealed class LabServices
         string containerId;
         try
         {
-            var args = new List<string>
-            {
-                "run", "-d", "--name", containerName,
-                "--label", $"{LabDefaults.ContainerLabel}=1",
-                "--restart", "no",
-                "--network", LabDefaults.NetworkName,
-                "--tmpfs", "/tmp:rw,size=64m",
-                "-p", $"127.0.0.1:{target.HostPort}:{ContainerPort}",
-            };
+            var args = new List<string> { "run", "-d", "--name", containerName };
+            args.AddRange(RunOptions(target));
             if (target is NodesAdapter)
             {
                 args.Add("-v");
@@ -428,6 +421,29 @@ public sealed class LabServices
         }
 
         return _vault.Use(reference, value => value.ToString());
+    }
+
+    /// <summary>
+    /// The <c>docker run</c> flags a lab service needs besides its name, env file and image. Every service is published on
+    /// loopback only; the sink (L36) also gets a 128 MiB memory cap.
+    /// </summary>
+    internal static IReadOnlyList<string> RunOptions(ILabServiceAdapter target)
+    {
+        var options = new List<string>
+        {
+            "--label", $"{LabDefaults.ContainerLabel}=1",
+            "--restart", "no",
+            "--network", LabDefaults.NetworkName,
+            "--tmpfs", "/tmp:rw,size=64m",
+            "-p", $"127.0.0.1:{target.HostPort}:{ContainerPort}",
+        };
+        if (target is SinkLabAdapter)
+        {
+            options.Add("--memory");
+            options.Add("128m");
+        }
+
+        return options;
     }
 
     /// <summary>
