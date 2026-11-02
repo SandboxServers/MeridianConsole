@@ -12,6 +12,7 @@ using Dhadgar.Lab.Stack;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit.Abstractions;
 
 namespace Dhadgar.Lab.Tests.Services;
 
@@ -26,6 +27,10 @@ namespace Dhadgar.Lab.Tests.Services;
 public sealed class NotifyDockerTests
 {
     private const string LinuxContext = "desktop-linux";
+
+    private readonly ITestOutputHelper _output;
+
+    public NotifyDockerTests(ITestOutputHelper output) => _output = output;
 
     [Fact]
     [Trait("RequiresDocker", "true")]
@@ -121,6 +126,9 @@ public sealed class NotifyDockerTests
         }
         finally
         {
+            // Redacted log tails before teardown: the home folder is deleted below, so this is the only record of a failed start.
+            ServiceLogTail.Write(_output, supervisor, ["sink", "notifications", "discord"], 80);
+
             foreach (string name in new[] { "discord", "notifications", "sink" })
             {
                 _ = await services.StopAsync(name, CancellationToken.None);

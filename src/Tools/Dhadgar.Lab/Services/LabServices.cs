@@ -222,7 +222,7 @@ public sealed class LabServices
             return Result<LabServiceStartDto>.Failure(followed.Error);
         }
 
-        Result ready = await WaitReadyAsync(target, _time, ct).ConfigureAwait(false);
+        Result ready = await WaitReadyAsync(target, _time, ct, _docker).ConfigureAwait(false);
         return ready.IsFailure
             ? Result<LabServiceStartDto>.Failure(ready.Error)
             : Result<LabServiceStartDto>.Success(new LabServiceStartDto(targetId, "up", image));
@@ -466,7 +466,11 @@ public sealed class LabServices
     /// <c>StartAsync</c> checks the URL with <c>IsReadinessEndpoint</c> before any docker call.
     /// Internal so the tests can drive the wait with a fake listener and clock.
     /// </summary>
-    internal static async Task<Result> WaitReadyAsync(ILabServiceAdapter adapter, TimeProvider time, CancellationToken ct)
+    internal static async Task<Result> WaitReadyAsync(
+        ILabServiceAdapter adapter,
+        TimeProvider time,
+        CancellationToken ct,
+        IDockerCli? docker = null)
     {
         var uri = new Uri($"http://127.0.0.1:{adapter.HostPort}{adapter.HealthPath}", UriKind.Absolute);
         using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
@@ -506,7 +510,9 @@ public sealed class LabServices
 
             if (time.GetElapsedTime(started) >= deadline)
             {
-                string containerState = await ContainerStateAsync(adapter.Container, CancellationToken.None).ConfigureAwait(false);
+                string containerState = docker is null
+                    ? "unknown"
+                    : await ContainerStateAsync(docker, adapter.Container, CancellationToken.None).ConfigureAwait(false);
                 return Result.Failure(
                     ReadinessTimeoutMessage(adapter.Name, lastStatus, failingChecks, containerState, (int)adapter.ReadyStatusCode));
             }
@@ -604,9 +610,9 @@ public sealed class LabServices
     /// Reads the container's <c>status exitcode</c> from <c>docker container inspect</c> for a readiness timeout. A Docker failure
     /// or an unexpected answer reads as <c>unknown</c> (see <see cref="ParseContainerState"/>).
     /// </summary>
-    private async Task<string> ContainerStateAsync(string containerName, CancellationToken ct)
+    private static async Task<string> ContainerStateAsync(IDockerCli docker, string containerName, CancellationToken ct)
     {
-        Result<DockerOutput> call = await _docker.RunAsync(
+        Result<DockerOutput> call = await docker.RunAsync(
             DockerEngine.Linux,
             ["container", "inspect", "--format", "{{.State.Status}} {{.State.ExitCode}}", containerName],
             ct).ConfigureAwait(false);
