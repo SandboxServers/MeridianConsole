@@ -66,6 +66,9 @@ public sealed class NodesAdapter : ILabServiceAdapter
             ["RabbitMq__Username"] = ctx.RabbitMqUsername,
             ["RabbitMq__Password"] = ctx.RabbitMqPassword,
             ["Nodes__CaStoragePath"] = ContainerCaPath,
+            // Discovery and JWKS go direct to the lab Identity, as in compose (D-ML163 c, F138).
+            ["Auth__MetadataAddress"] = IdentityLabAdapter.MetadataAddress,
+            ["Auth__InternalBaseUrl"] = IdentityLabAdapter.InternalBaseUrl,
         };
         return Result<IReadOnlyDictionary<string, string>>.Success(env);
     }

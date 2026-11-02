@@ -6,6 +6,7 @@ using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Pool;
 using Dhadgar.Lab.Secrets;
+using Dhadgar.Lab.Services;
 using Dhadgar.Lab.Tools.Pool;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
@@ -27,6 +28,9 @@ public sealed record CliRunResult(int ExitCode, string Stdout, string Stderr, lo
 /// The C10 CLI allowlist (L37). Only these verbs reach the CLI, and only the listed subcommands behind them.
 /// No subcommand that prints a secret is listed: <c>nodes create-token</c> and <c>nodes list-tokens</c> print or
 /// reveal enrollment tokens, and the <c>config</c> verb has no safe subcommand in this CLI (it has no subcommands).
+/// Options are allowlisted per subcommand (<c>--x=v</c>, <c>--x:v</c>, <c>-abc</c> and <c>--</c> are refused), <c>@</c>
+/// response-file arguments are refused anywhere, and <c>auth login</c> is pinned to the lab's development client (D-ML162).
+/// Refusal messages never echo an argument's text.
 /// </summary>
 public static class CliAllowlist
 {
@@ -45,6 +49,26 @@ public static class CliAllowlist
             ["discord"] = Set("status", "channels"),
             ["config"] = Set(),
         };
+
+    /// <summary>
+    /// The options each subcommand accepts (option names from <c>src/Dhadgar.Cli/Program.cs</c>). <c>--identity-url</c> is
+    /// deliberately absent: the member config points the CLI at the Gateway (D-ML163).
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, Shape> Shapes = new Dictionary<string, Shape>(StringComparer.Ordinal)
+    {
+        ["auth login"] = new(Set("--client-id", "--client-secret"), Set(), 0),
+        ["auth status"] = new(Set(), Set(), 0),
+        ["auth logout"] = new(Set(), Set(), 0),
+        ["nodes list"] = new(Set("--org", "--status", "--skip", "--take"), Set(), 0),
+        ["nodes get"] = new(Set("--org"), Set(), 1),
+        ["nodes update"] = new(Set("--display-name", "--org"), Set(), 1),
+        ["nodes decommission"] = new(Set("--org"), Set("--force"), 1),
+        ["nodes maintenance"] = new(Set("--org"), Set(), 1, Set("start", "stop")),
+        ["notifications logs"] = new(Set("--limit", "--status", "--org"), Set(), 0),
+        ["notifications test"] = new(Set("--title", "--message", "--severity", "--org"), Set(), 0),
+        ["discord status"] = new(Set(), Set(), 0),
+        ["discord channels"] = new(Set("--guild"), Set(), 0),
+    };
 
     /// <summary>Flags allowed as the only argument.</summary>
     public static IReadOnlySet<string> Flags { get; } = Set("--help", "--version");
@@ -94,12 +118,109 @@ public static class CliAllowlist
             return Result.Success();
         }
 
-        return subcommands.Contains(args[1])
-            ? Result.Success()
-            : Result.Failure("[Lab.InvalidArgument] subcommand is not in the CLI allowlist");
+        if (!subcommands.Contains(args[1]))
+        {
+            return Result.Failure("[Lab.InvalidArgument] subcommand is not in the CLI allowlist");
+        }
+
+        return CheckShape(verb + " " + args[1], args);
+    }
+
+    /// <summary>
+    /// Walks the tokens after the subcommand against its shape. The first failing rule wins; no message echoes a token.
+    /// </summary>
+    private static Result CheckShape(string key, IReadOnlyList<string> args)
+    {
+        if (!Shapes.TryGetValue(key, out Shape? shape))
+        {
+            return Result.Failure("[Lab.InvalidArgument] subcommand is not in the CLI allowlist");
+        }
+
+        int index = 2;
+        if (shape.Actions is not null)
+        {
+            if (args.Count < 3 || !shape.Actions.Contains(args[2]))
+            {
+                return Result.Failure("[Lab.InvalidArgument] subcommand needs start or stop");
+            }
+
+            index = 3;
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        string? clientId = null;
+        string? clientSecret = null;
+        int positionals = 0;
+        for (int i = index; i < args.Count; i++)
+        {
+            string token = args[i];
+            if (token.StartsWith('@'))
+            {
+                return Result.Failure("[Lab.InvalidArgument] '@' arguments (response files) are refused");
+            }
+
+            if (token.StartsWith('-'))
+            {
+                if (shape.ValueOptions.Contains(token))
+                {
+                    if (!seen.Add(token))
+                    {
+                        return Result.Failure("[Lab.InvalidArgument] option given twice");
+                    }
+
+                    if (i + 1 >= args.Count || args[i + 1].StartsWith('-') || args[i + 1].StartsWith('@'))
+                    {
+                        return Result.Failure("[Lab.InvalidArgument] option needs a plain value");
+                    }
+
+                    string value = args[i + 1];
+                    if (token == "--client-id")
+                    {
+                        clientId = value;
+                    }
+                    else if (token == "--client-secret")
+                    {
+                        clientSecret = value;
+                    }
+
+                    i++;
+                    continue;
+                }
+
+                if (!shape.FlagOptions.Contains(token))
+                {
+                    return Result.Failure("[Lab.InvalidArgument] option is not allowed for this subcommand");
+                }
+
+                if (!seen.Add(token))
+                {
+                    return Result.Failure("[Lab.InvalidArgument] option given twice");
+                }
+
+                continue;
+            }
+
+            positionals++;
+            if (positionals > shape.MaxPositionals)
+            {
+                return Result.Failure("[Lab.InvalidArgument] too many positional arguments");
+            }
+        }
+
+        if (key == "auth login"
+            && !(string.Equals(clientId, IdentityLabAdapter.DevClientId, StringComparison.Ordinal)
+                 && string.Equals(clientSecret, IdentityLabAdapter.DevClientSecret, StringComparison.Ordinal)))
+        {
+            return Result.Failure("[Lab.InvalidArgument] auth login takes only the lab's development client");
+        }
+
+        return Result.Success();
     }
 
     private static IReadOnlySet<string> Set(params string[] items) => items.ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>The options and positional count one subcommand accepts.</summary>
+    private sealed record Shape(IReadOnlySet<string> ValueOptions, IReadOnlySet<string> FlagOptions, int MaxPositionals, IReadOnlySet<string>? Actions = null);
 }
 
 /// <summary>
