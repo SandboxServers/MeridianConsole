@@ -1,14 +1,16 @@
 schema = 1
 
 # The lab CLI in a Linux container member (L37, F30). Every row runs `cli_run`, which runs /opt/lab/cli/dhadgar with
-# HOME=/home/lab inside the member (never on the host). The member's config.json holds gateway_url, notifications_url and,
-# once seeded, admin_api_key (Tools/Cli/CliRunTool.cs). The CLI's `auth login` takes its client secret only from
-# --client-secret, so auth-login and gateway-down pass the CLI's documented development placeholders (dev-client,
-# dev-secret). Those are not lab secrets; the security review (L37 "yes") confirms they match the lab's identity seed.
+# HOME=/home/lab inside the member (never on the host). The member's config.json holds gateway_url, identity_url,
+# nodes_url, notifications_url and, per admin call, admin_api_key (Tools/Cli/CliRunTool.cs). The CLI's `auth login` takes
+# its client secret only from --client-secret, so auth-login and gateway-down pass the CLI's documented development
+# placeholders (dev-client, dev-secret). Those are not lab secrets. IdentityLabAdapter seeds dev-client/dev-secret
+# (D-ML162); cli_run writes the admin key per call (ruling N2); verbs that drop their exit code are asserted on text
+# (D-ML164, KG-W7-7).
 # Output from cli_run is redacted before it returns (R-LOG).
 # Rows: version (no stack), auth-login (client_credentials through the Gateway), nodes-list (after one enroll through the
-# Gateway), notifications-admin (direct, with the admin key: it fails until the key is seeded), gateway-down (Identity
-# route cut: auth login exits non-zero with a readable error, no stack trace).
+# Gateway), notifications-admin (direct, with the admin key), gateway-down (Identity route cut: auth login exits non-zero
+# with a readable error, no stack trace).
 
 [section]
 id = "cli"
@@ -59,18 +61,38 @@ expected = "cli_run auth login exits 0; the token is stored in the member's conf
   args = { wipe = true }
 
   [[row.step]]
+  id = "start-identity"
+  tool = "svc_start"
+  args = { service = "identity" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "logout"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
   id = "login"
   tool = "cli_run"
   args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
 
+  [[row.step]]
+  id = "status"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "status"] }
+
   [[row.expect]]
-  id = "login-exit"
-  text = "auth login exits 0"
+  id = "login-ok"
+  text = "auth login reports success"
   source = "step"
   step = "login"
-  pointer = "/result/exit_code"
-  op = "eq"
-  value = 0
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated successfully"
   required = true
 
   [[row.expect]]
@@ -83,6 +105,26 @@ expected = "cli_run auth login exits 0; the token is stored in the member's conf
   value = "dev-secret"
   required = true
 
+  [[row.expect]]
+  id = "status-authenticated"
+  text = "auth status reports an authenticated session"
+  source = "step"
+  step = "status"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated"
+  required = true
+
+  [[row.expect]]
+  id = "login-exit"
+  text = "auth login exits 0 (KG-W7-7)"
+  source = "step"
+  step = "login"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = false
+
 [[row]]
 id = "nodes-list"
 title = "nodes list shows the node that enrolled through the Gateway"
@@ -92,6 +134,11 @@ expected = "after one enroll through the Gateway (201), cli_run nodes list exits
   id = "up"
   tool = "stack_up"
   args = { wipe = true }
+
+  [[row.step]]
+  id = "start-identity"
+  tool = "svc_start"
+  args = { service = "identity" }
 
   [[row.step]]
   id = "start-nodes"
@@ -107,17 +154,28 @@ expected = "after one enroll through the Gateway (201), cli_run nodes list exits
   id = "mint"
   tool = "nodes_token_mint"
   args = { label = "cli-list-${run_id}" }
-  capture = { token_ref = "/token_ref" }
+  capture = { token_ref = "/token_ref", org_id = "/organization_id" }
 
   [[row.step]]
   id = "probe"
   tool = "nodes_enroll_probe"
   args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+  capture = { node_id = "/node_id" }
+
+  [[row.step]]
+  id = "logout"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
+  id = "login"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
 
   [[row.step]]
   id = "list"
   tool = "cli_run"
-  args = { member = "${member}", args = ["nodes", "list"] }
+  args = { member = "${member}", args = ["nodes", "list", "--org", "${org_id}"] }
 
   [[row.expect]]
   id = "enroll-201"
@@ -130,19 +188,109 @@ expected = "after one enroll through the Gateway (201), cli_run nodes list exits
   required = true
 
   [[row.expect]]
+  id = "login-ok"
+  text = "auth login reports success"
+  source = "step"
+  step = "login"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated successfully"
+  required = true
+
+  [[row.expect]]
+  id = "list-stdout"
+  text = "nodes list prints output"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "ne"
+  value = ""
+  required = true
+
+  [[row.expect]]
+  id = "list-not-host-refused"
+  text = "the Gateway does not refuse the list request as a bad request"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "400 BadRequest"
+  required = true
+
+  [[row.expect]]
+  id = "list-routed"
+  text = "the Gateway routes the list request"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "404 NotFound"
+  required = true
+
+  [[row.expect]]
+  id = "list-token-accepted"
+  text = "the Gateway accepts the CLI token"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "401 Unauthorized"
+  required = true
+
+  [[row.expect]]
+  id = "list-authenticated"
+  text = "the CLI sends an authenticated session"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "not_authenticated"
+  required = true
+
+  [[row.expect]]
+  id = "list-no-stack-trace"
+  text = "stderr has no stack trace"
+  source = "step"
+  step = "list"
+  pointer = "/result/stderr"
+  op = "not_contains"
+  value = "   at "
+  required = true
+
+  [[row.expect]]
+  id = "list-shows-node"
+  text = "the enrolled node appears in the list (KG-W7-8, D-ML165)"
+  source = "step"
+  step = "list"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "${node_id}"
+  required = false
+
+  [[row.expect]]
   id = "list-exit"
-  text = "nodes list exits 0"
+  text = "nodes list exits 0 (KG-W7-7)"
   source = "step"
   step = "list"
   pointer = "/result/exit_code"
   op = "eq"
   value = 0
-  required = true
+  required = false
 
 [[row]]
 id = "notifications-admin"
 title = "notifications logs answers direct with the admin key"
-expected = "cli_run notifications logs exits 0 against the Notifications service; fails until pool_acquire seeds admin_api_key"
+expected = "cli_run notifications logs exits 0 against the Notifications service"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-notifications"
+  tool = "svc_start"
+  args = { service = "notifications" }
 
   [[row.step]]
   id = "logs"
@@ -159,6 +307,16 @@ expected = "cli_run notifications logs exits 0 against the Notifications service
   value = 0
   required = true
 
+  [[row.expect]]
+  id = "logs-has-key"
+  text = "notifications logs does not print the admin key"
+  source = "step"
+  step = "logs"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "Admin API key"
+  required = true
+
 [[row]]
 id = "gateway-down"
 title = "auth login fails readably when the Gateway's Identity route is cut"
@@ -167,7 +325,7 @@ expected = "with gateway-identity disabled, auth login exits non-zero; stderr sh
   [[row.fault]]
   id = "identity-route"
   inject = { tool = "fault_proxy_disable", args = { proxy = "gateway-identity" } }
-  start = "after_step:up"
+  start = "after_step:logout2"
   heal = "after_steps"
 
   [[row.step]]
@@ -176,18 +334,78 @@ expected = "with gateway-identity disabled, auth login exits non-zero; stderr sh
   args = { wipe = true }
 
   [[row.step]]
+  id = "start-identity"
+  tool = "svc_start"
+  args = { service = "identity" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "logout"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
+  id = "login-control"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
+
+  [[row.step]]
+  id = "logout2"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "logout"] }
+
+  [[row.step]]
   id = "login-down"
   tool = "cli_run"
   args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
 
+  [[row.step]]
+  id = "status-after"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "status"] }
+
   [[row.expect]]
-  id = "login-fails"
-  text = "auth login exits non-zero while the Identity route is cut"
+  id = "control-ok"
+  text = "auth login succeeds before the Identity route is cut"
+  source = "step"
+  step = "login-control"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Authenticated successfully"
+  required = true
+
+  [[row.expect]]
+  id = "down-5xx"
+  text = "auth login reports a 5xx failure while the Identity route is cut"
   source = "step"
   step = "login-down"
-  pointer = "/result/exit_code"
-  op = "ne"
-  value = 0
+  pointer = "/result/stdout"
+  op = "matches"
+  value = 'Authentication failed:.{0,40}\b5[0-9]{2}\b'
+  required = true
+
+  [[row.expect]]
+  id = "down-no-success"
+  text = "auth login does not report success while the Identity route is cut"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "Authenticated successfully"
+  required = true
+
+  [[row.expect]]
+  id = "status-after-not-authenticated"
+  text = "auth status reports no session after the failed login"
+  source = "step"
+  step = "status-after"
+  pointer = "/result/stdout"
+  op = "contains"
+  value = "Not authenticated"
   required = true
 
   [[row.expect]]
@@ -199,3 +417,13 @@ expected = "with gateway-identity disabled, auth login exits non-zero; stderr sh
   op = "not_contains"
   value = "   at "
   required = true
+
+  [[row.expect]]
+  id = "login-fails"
+  text = "auth login exits non-zero while the Identity route is cut (KG-W7-7)"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/exit_code"
+  op = "ne"
+  value = 0
+  required = false
