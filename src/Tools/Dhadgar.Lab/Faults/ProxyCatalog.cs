@@ -10,7 +10,7 @@ namespace Dhadgar.Lab.Faults;
 public sealed record ProxyDefinition(string Name, int ListenPort, string Upstream, string Packet);
 
 /// <summary>
-/// The C10 proxy table as static data. <c>LabStack</c> creates the rows owned by L08.
+/// The C10 proxy table as static data. <c>LabStack</c> creates <c>StackProxies</c>.
 /// </summary>
 public static class ProxyCatalog
 {
@@ -39,6 +39,13 @@ public static class ProxyCatalog
         new("agent-ingress", 25000, "meridian-lab-gateway:8080", "L08"),
         new("agent-ingress-tls", 25443, "meridian-lab-gateway:8443", "L41"),
     ];
+
+    /// <summary>
+    /// The proxies <c>stack_up</c> creates: every row except L41's agent-ingress-tls, which L41 makes live with the Gateway's
+    /// 8443 listener (D-ML150). <see cref="ProxyDefinition.Packet"/> names who first needs a row, not who creates it.
+    /// </summary>
+    public static IEnumerable<ProxyDefinition> StackProxies =>
+        All.Where(proxy => !string.Equals(proxy.Packet, "L41", StringComparison.Ordinal));
 
     /// <summary>
     /// The proxies owned by one packet.
