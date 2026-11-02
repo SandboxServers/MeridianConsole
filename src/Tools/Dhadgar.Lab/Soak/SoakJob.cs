@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
@@ -32,6 +33,9 @@ public static class SoakJob
 
     /// <summary>The pause after a failed workload run, before the next one.</summary>
     public static readonly TimeSpan WorkloadRetryDelay = TimeSpan.FromSeconds(5);
+
+    /// <summary>The fewest successful workload loops a soak can pass with (D-ML112).</summary>
+    internal const int MinLoops = 3;
 
     /// <summary>
     /// The job work. Runs the workload and the samples until the run length has passed or the job is cancelled. A sample
@@ -126,7 +130,7 @@ public static class SoakJob
             store.End();
         }
 
-        string overall = sampleErrors == 0 && loops > 0 && !i7Failed ? "pass" : "fail";
+        (string overall, string? reason) = Grade(loops, samples, sampleErrors, i7, i7Failed);
         JsonNode? result = JsonSerializer.SerializeToNode(new
         {
             loops,
@@ -136,8 +140,30 @@ public static class SoakJob
             i7,
             duration_s = run.DurationS,
             seed = run.Seed,
+            reason,
         });
         return Result<JobOutcome>.Success(new JobOutcome(overall, result));
+    }
+
+    /// <summary>D-ML112: fail on a sampler error, a failed I7 or no loop; weak on too few loops or samples; else pass.</summary>
+    internal static (string Overall, string? Reason) Grade(int loops, int samples, int sampleErrors, string i7, bool i7Failed)
+    {
+        if (sampleErrors > 0 || i7Failed || loops == 0)
+        {
+            return ("fail", loops == 0 ? "no workload loop succeeded" : null);
+        }
+
+        if (loops < MinLoops)
+        {
+            return ("weak", "fewer than 3 workload loops");
+        }
+
+        if (samples < I7ResourceTrendInvariant.MinSamples || i7 == "skipped")
+        {
+            return ("weak", "too few resource samples for I7");
+        }
+
+        return ("pass", null);
     }
 
     /// <summary>The <c>uat_run</c> arguments for one loop: the spec, the rows when given, the seed and the job's lease.</summary>

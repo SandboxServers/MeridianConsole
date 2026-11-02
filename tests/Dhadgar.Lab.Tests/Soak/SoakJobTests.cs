@@ -188,8 +188,78 @@ public sealed class SoakJobTests : IDisposable
         Assert.True(started.IsSuccess, started.Error);
         await started.Value!.Completed;
 
-        Assert.Equal("pass", outcome.Value.Overall);
+        // A skipped I7 is reported, not failed; it is weak, not pass (D-ML112).
+        Assert.Equal("weak", outcome.Value.Overall);
         Assert.Equal("skipped", outcome.Value.Result!["i7"]!.GetValue<string>());
+        Assert.NotNull(outcome.Value.Result["reason"]);
+    }
+
+    [Fact]
+    public async Task RunAsync_OneLoop_EndsWeakWithReason()
+    {
+        var docker = new FakeDocker(exitCode: 0);
+        var sampler = Sampler(docker);
+        Result<JobOutcome> outcome = default;
+
+        // Ten seconds of fake time: the first loop advances the clock to the end, so exactly one loop runs.
+        var run = new SoakRun("lab-selftest.toml", null, 10, 9);
+        Result<JobHandle> started = _runner.Start(SoakJob.Kind, run.Seed, async (context, token) =>
+        {
+            Result<JobOutcome> result = await SoakJob.RunAsync(run, context, Invoke, new GatewayPacer(_time), sampler, _store, _time, token);
+            outcome = result;
+            return result;
+        });
+        Assert.True(started.IsSuccess, started.Error);
+        await started.Value!.Completed;
+
+        Assert.Equal("weak", outcome.Value!.Overall);
+        Assert.Equal(1, outcome.Value.Result!["loops"]!.GetValue<int>());
+        Assert.NotNull(outcome.Value.Result["reason"]);
+    }
+
+    [Fact]
+    public void Grade_TwoLoops_IsWeak()
+    {
+        (string overall, string? reason) = SoakJob.Grade(2, 5, 0, "checked", false);
+
+        Assert.Equal("weak", overall);
+        Assert.NotNull(reason);
+    }
+
+    [Fact]
+    public void Grade_ThreeLoopsTwoSamples_IsWeak()
+    {
+        (string overall, string? reason) = SoakJob.Grade(3, 2, 0, "checked", false);
+
+        Assert.Equal("weak", overall);
+        Assert.NotNull(reason);
+    }
+
+    [Fact]
+    public void Grade_I7Skipped_IsWeak()
+    {
+        (string overall, string? reason) = SoakJob.Grade(3, 5, 0, "skipped", false);
+
+        Assert.Equal("weak", overall);
+        Assert.NotNull(reason);
+    }
+
+    [Fact]
+    public void Grade_ZeroLoops_IsFail()
+    {
+        (string overall, string? reason) = SoakJob.Grade(0, 5, 0, "checked", false);
+
+        Assert.Equal("fail", overall);
+        Assert.Equal("no workload loop succeeded", reason);
+    }
+
+    [Fact]
+    public void Grade_Enough_IsPass()
+    {
+        (string overall, string? reason) = SoakJob.Grade(3, 3, 0, "checked", false);
+
+        Assert.Equal("pass", overall);
+        Assert.Null(reason);
     }
 
     private ResourceSampler Sampler(FakeDocker docker)

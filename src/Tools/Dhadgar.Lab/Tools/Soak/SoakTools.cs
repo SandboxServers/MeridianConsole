@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Soak;
+using Dhadgar.Lab.Uat;
+using Dhadgar.Lab.Uat.Spec;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -68,17 +70,17 @@ public sealed class SoakRunTool : LabTool<SoakRunArgs>
     public override string Description => "Starts a soak: loops a uat spec (docs/guides/uat-specs/<spec>; optional rows) through uat_run for duration_s (300 to 86400) seconds, sampling the lab containers' memory and process counts every 30 seconds for invariant I7. Returns job_id and seed; follow it with job_status.";
 
     /// <inheritdoc />
-    protected override Task<Result<object>> ExecuteAsync(SoakRunArgs args, LabCallContext context, CancellationToken ct)
+    protected override async Task<Result<object>> ExecuteAsync(SoakRunArgs args, LabCallContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(args);
         if (string.IsNullOrWhiteSpace(_paths.RepoRoot))
         {
-            return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] the repo root is not configured"));
+            return Result<object>.Failure("[Lab.InvalidArgument] the repo root is not configured");
         }
 
         if (string.IsNullOrWhiteSpace(args.Spec))
         {
-            return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] spec must name a uat spec below docs/guides/uat-specs/"));
+            return Result<object>.Failure("[Lab.InvalidArgument] spec must name a uat spec below docs/guides/uat-specs/");
         }
 
         string relative = args.Spec.StartsWith(SpecsPrefix, StringComparison.Ordinal) ? args.Spec[SpecsPrefix.Length..] : args.Spec;
@@ -86,22 +88,58 @@ public sealed class SoakRunTool : LabTool<SoakRunArgs>
         Result<string> spec = _validator.ValidatePath(Path.Combine(specsRoot, relative), [specsRoot]);
         if (spec.IsFailure)
         {
-            return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] spec is outside docs/guides/uat-specs/"));
+            return Result<object>.Failure("[Lab.InvalidArgument] spec is outside docs/guides/uat-specs/");
         }
 
         if (args.Rows is not null && (args.Rows.Count > MaxRows || args.Rows.Any(string.IsNullOrWhiteSpace)))
         {
-            return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] rows must be up to 50 non-empty row names"));
+            return Result<object>.Failure("[Lab.InvalidArgument] rows must be up to 50 non-empty row names");
         }
 
         if (args.DurationS is not { } durationS || durationS < MinDurationS || durationS > MaxDurationS)
         {
-            return Task.FromResult(Result<object>.Failure("[Lab.InvalidArgument] duration_s must be 300 to 86400"));
+            return Result<object>.Failure("[Lab.InvalidArgument] duration_s must be 300 to 86400");
+        }
+
+        // Refuse a bad spec before the job starts, so the caller sees the error on this call and no job is left behind.
+        if (!File.Exists(spec.Value!))
+        {
+            return Result<object>.Failure("[Lab.NotFound] no such spec");
+        }
+
+        if (new FileInfo(spec.Value!).Length > UatSpecPaths.MaxSpecBytes)
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] the spec is too large");
+        }
+
+        string text;
+        try
+        {
+            text = await File.ReadAllTextAsync(spec.Value!, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Result<object>.Failure("[Lab.Unavailable] the spec could not be read");
+        }
+
+        SpecLoadOutcome loaded = SpecLoader.LoadText(relative, text);
+        if (loaded.Spec is null)
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] the spec does not load: " + loaded.Problems.Count + " problem(s)");
+        }
+
+        if (args.Rows is { Count: > 0 })
+        {
+            Result rowCheck = RowFilterCheck.Check(loaded.Spec, args.Rows);
+            if (rowCheck.IsFailure)
+            {
+                return Result<object>.Failure(rowCheck.Error);
+            }
         }
 
         if (_store.IsSoaking)
         {
-            return Task.FromResult(Result<object>.Failure("[Lab.Conflict] a soak is already running"));
+            return Result<object>.Failure("[Lab.Conflict] a soak is already running");
         }
 
         ulong runSeed = args.Seed ?? BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
@@ -111,8 +149,8 @@ public sealed class SoakRunTool : LabTool<SoakRunArgs>
                 (name, arguments, callContext, callToken) =>
                     _services.GetRequiredService<LabToolDispatcher>().InvokeAsync(name, arguments, callContext, callToken),
                 _pacer, _sampler, _store, _time, token));
-        return Task.FromResult(started.IsFailure
+        return started.IsFailure
             ? Result<object>.Failure(started.Error)
-            : Result<object>.Success(new SoakStarted(started.Value!.JobId, runSeed)));
+            : Result<object>.Success(new SoakStarted(started.Value!.JobId, runSeed));
     }
 }

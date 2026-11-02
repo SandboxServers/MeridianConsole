@@ -157,6 +157,56 @@ public sealed class ChaosJobTests : IDisposable
         Assert.Contains("event = \"heal\"", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Outcome_ZeroWorkloadLoops_Fails()
+    {
+        // No uat_run call is made: a zero-length run has no loop, so the outcome has no successful loop.
+        ChaosRun run = Run(durationS: 0, quietS: 10);
+
+        JobHandle handle = StartJob(run, Invoke);
+        await handle.Completed;
+
+        JobRecord record = _runner.Get(handle.JobId).Value!;
+        Assert.Equal(0, record.Result!["workload_loops"]!.GetValue<int>());
+        Assert.Equal("no workload loop succeeded", record.Result["reason"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Outcome_AllLoopsErrored_Fails()
+    {
+        ChaosRun run = Run(durationS: 60, quietS: 10);
+
+        // Every uat_run call errors. Each failed loop waits the retry delay on the fake clock, so a pump keeps the clock
+        // moving until the job ends; the clock is advanced only after the job has registered its delay.
+        async Task<LabToolResult> UatAlwaysErrors(string name, JsonElement args, LabCallContext callContext, CancellationToken ct)
+        {
+            if (name == "uat_run")
+            {
+                await Task.Yield();
+                return new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = "uat failed" }));
+            }
+
+            return await Invoke(name, args, callContext, ct).ConfigureAwait(false);
+        }
+
+        JobHandle handle = StartJob(run, UatAlwaysErrors);
+        Task pump = Task.Run(async () =>
+        {
+            while (!handle.Completed.IsCompleted)
+            {
+                _time.Advance(TimeSpan.FromSeconds(1));
+                await Task.Delay(1).ConfigureAwait(false);
+            }
+        });
+        await handle.Completed;
+        await pump;
+
+        JobRecord record = _runner.Get(handle.JobId).Value!;
+        Assert.Equal(0, record.Result!["workload_loops"]!.GetValue<int>());
+        Assert.True(record.Result["workload_errors"]!.GetValue<int>() > 0, "the errored loops must be counted");
+        Assert.Equal("no workload loop succeeded", record.Result["reason"]!.GetValue<string>());
+    }
+
     private sealed class NoEvents : ILabEvents
     {
         public void Emit(LabEvent labEvent)
