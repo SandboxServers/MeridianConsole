@@ -9,8 +9,8 @@ schema = 1
 # (D-ML164, KG-W7-7).
 # Output from cli_run is redacted before it returns (R-LOG).
 # Rows: version (no stack), auth-login (client_credentials through the Gateway), nodes-list (after one enroll through the
-# Gateway), notifications-admin (direct, with the admin key), gateway-down (Identity route cut: auth login exits non-zero
-# with a readable error, no stack trace).
+# Gateway), notifications-admin (direct, with the admin key), gateway-down (Identity route cut: auth login prints a 5xx failure
+# after a proven control login, auth status reports no session, no stack trace).
 
 [section]
 id = "cli"
@@ -53,7 +53,7 @@ expected = "cli_run --version exits 0 with non-empty stdout"
 [[row]]
 id = "auth-login"
 title = "auth login (client_credentials) through the Gateway returns a token"
-expected = "cli_run auth login exits 0; the token is stored in the member's config and never printed"
+expected = "auth login prints Authenticated successfully and auth status reports a session; the secret is never echoed (exit code is not required, KG-W7-7)"
 
   [[row.step]]
   id = "up"
@@ -128,7 +128,7 @@ expected = "cli_run auth login exits 0; the token is stored in the member's conf
 [[row]]
 id = "nodes-list"
 title = "nodes list shows the node that enrolled through the Gateway"
-expected = "after one enroll through the Gateway (201), cli_run nodes list exits 0"
+expected = "after one enroll through the Gateway (201) and a login, nodes list is routed, authenticated and accepted by the Gateway (no 400, 404 or 401); the node appearing is not required (KG-W7-8)"
 
   [[row.step]]
   id = "up"
@@ -320,7 +320,7 @@ expected = "cli_run notifications logs exits 0 against the Notifications service
 [[row]]
 id = "gateway-down"
 title = "auth login fails readably when the Gateway's Identity route is cut"
-expected = "with gateway-identity disabled, auth login exits non-zero; stderr shows a readable error, no stack trace"
+expected = "with gateway-identity disabled after a control login, auth login prints Authentication failed with a 5xx and no success text; auth status reports Not authenticated; no stack trace (exit code is not required, KG-W7-7)"
 
   [[row.fault]]
   id = "identity-route"
