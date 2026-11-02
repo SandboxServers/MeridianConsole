@@ -1,35 +1,38 @@
 # RESUME: meridian-lab
 
-Ledger: [README.md](README.md) (newest: F125, D-ML143, KG-W5-21). Packets and contract: [work-packets.md](work-packets.md). Latest ruling: [wave5-close-ruling](worknotes/wave5-close-ruling.md), with L27d and L27e in section 6 and the next steps in section 7. Nodes product packet: [nodes-ef-retry-packet](worknotes/nodes-ef-retry-packet.md) (NR-1, L19n).
+Ledger: [README.md](README.md) (newest: F132, D-ML152, KG-W7-5; next free F133, D-ML153, KG-W5-24, KG-W7-6; F127 reserved). Packets and contract: [work-packets.md](work-packets.md). Latest rulings: [l34 ruling 2](worknotes/l34-ruling-2.md), [docker-run-12](worknotes/docker-run-12-ruling.md), [l36 ruling 1](worknotes/l36-ruling-1.md), [l19n ruling 1](worknotes/l19n-ruling-1.md). Run record: [wave5-docker-run](worknotes/wave5-docker-run.md) (runs 13, 14).
 
-## State (2026-11-02)
+## State (2026-11-02, wave boundary)
 
-- `campaign/meridian-lab` tip is **99bb31e3** (the run 11 record), on top of `7351c6f7` (R11-1 merged). The worktree is `.claude/worktrees/meridian-lab`.
-- **Waves 5 and 5E are closed (D-ML142).** Run 11 passed every section 6 clause.
-  - KG-W5-16, -15 and -7 (for 5E) are closed. KG-W5-18 is closed for new ingests.
-  - Two hunter lab defects are parked: F124 (the seed fixes only the first case; a flaky test) as KG-W5-21, and F125 (the cut-window `EnrollAgain` I1 is not excused) inside KG-W5-13.
-- NR-1 (worktree `nr1-nodes-ef-retry`, off `origin/main`) is coded at `159a72da` + `f50b01b0`, with review and security `ship`. It waits on S-L15 green.
+- `campaign/meridian-lab` tip is **fdebb5e1** (worktree `.claude/worktrees/meridian-lab`). Waves 5 and 5E closed (D-ML142); `main` with NR-1 (#256) merged at `8191eb8f`.
+- Merged since: L21g `a0935402` (KG-W5-22 closed), L08b `a49c1786`, L30 `cdc8c73b`, L19n with L19o and the fix pass `ab7a0116` (review 3 `ship`), L34 with L34b and L34c `a4a69e6a` (reviews and security `ship`), L36 with L36b `fdebb5e1` (review 2 `ship`).
+- Run 13: S-L15 red on scratch accepted (500, Npgsql failure), green genuine (6 × 401, EF retry); S-L7 passed in-network; Notify passed; AuthStack red (F131, fixed by L34c). Run 14: AuthStack passed at `f599f371`. KG-W5-17, KG-W5-23, KG-W7-4 closed; D-ML144 record done.
+- Tip review 1 (`.claude/reports/meridian-lab/wave5-tip-review-1.md`) is **in review**.
+- F132 (Identity honours the dev-certificate switch in Production) is an Identity backlog item, not a campaign packet.
 
-## Next steps (orchestrator)
+## Next actions (orchestrator)
 
-1. Have ops delete `tests/Dhadgar.Lab.Tests/TestResults/` in the campaign worktree (explicit path). It is untracked and is the likely cause of the `-dirty` build ids. No lock file is dirty.
-2. **L19n** (worktree `ml-l19n`), on a fresh daemon: S-L15 red on the tip, then green in scratch with NR-1's diff. If the first probe answers 401 before NR-1, the packet's hard stop applies. Then ops opens NR-1's PR to `main`, and the owner merges it (D-41).
-3. Merge `origin/main` into the campaign branch: merge, never rebase (D-38). Then rerun `RequiresDocker!=true`, S-L15 (KG-W5-17), A6 and A11 on a fresh daemon.
-4. In parallel with steps 2 and 3:
-   - **L27d**, then **L27e** (close ruling 6.1 and 6.2). Each gets a coder, a reviewer and a security-advisor. Both must land before the campaign review.
-   - **L30 ‖ L34 ‖ L36** are Ready. They merge one at a time, rebasing on the tip each time.
-5. Ask the architect for the W8 deltas note (needed before L39 and L40) and for specs of L29b, L54b, L55b, L05b, L25g, L28b and L52b.
-6. Run the close-out doc sweep (`wf-r7.md`, `wf-r8.md`, the old `Category!=Docker` lines). Then L31-L33 once L00 unparks, waves 7 to 10, the campaign review (D-ML74: every Docker test, the live hunt, S-L15), L47, and one PR with `security-review` (D-ML131).
+1. Read tip review 1. On `fix`, a packet-coder applies its notes on the tip; on `decision`, ask the architect for a ruling.
+2. Follow-ups: **L27d**, then **L27e** (before the campaign review); ask the architect to spec **L29b** and **L54b** (before the wave 10 gates).
+3. Ask the architect for `worknotes/W8-sprint2-deltas.md` before L40.
+4. Waves 6-10: wave 6 (L31-L33) waits on L00 and D-ML37/D-ML38; wave 7 continues with L35, L37, L38, L56; then 8, 9, 10.
+5. Campaign review (D-ML74: every Docker test, the live hunt, S-L15).
+6. L47 close-out.
+7. ops pushes once and opens one PR with `security-review`, merged on the user's yes (D-ML131).
 
-## Owner decisions
+## Open owner items
 
-- Open, none blocking: D-ML138 (carried out on option A; ratify), D-ML133 (Nodes outbox), D-ML120 (Nodes start without DB), D-ML107 (fuzz 500s), D-ML37/D-ML38 (only if Windows containers turn on).
-- Non-blocking: D-ML31, D-ML40-42, D-ML49, D-ML53, D-ML54, D-ML56, D-ML58, D-ML59, D-ML71, D-ML73, OD-W5-1.
+- D-ML133 (Nodes outbox), D-ML107 (fuzz 500s), D-ML120 (Nodes start without its DB). Also open, non-blocking: D-ML138 (ratify by action), D-ML37/D-ML38.
+
+## Cleanup (ops; `git worktree remove` only, **never prune**)
+
+- `nr1-nodes-ef-retry` and the `ml-l19n-red` scratch (branch `ml/l19n-red-scratch`).
+- Merged fix-wave worktrees R7-R11: `ml-wf-r7-*` (4), `ml-wf-r8-*` (3), `ml-wf-r9-flake-deps`, `ml-wf-r10-seed-flake`, `ml-wf-r11-boundary-fixes`.
+- Merged packet worktrees: `ml-l21g`, `ml-l08b`, `ml-l30`, `ml-l34`, `ml-l36`, `ml-l19n`.
+- About 87 local `ml/*` branches: delete merged ones with `git branch -d` after their worktrees are gone.
 
 ## Watch-outs
 
-- The non-Docker filter is `RequiresDocker!=true`. Run briefs list "lab network absent" and "no TestResults folder" as step 0 preconditions.
-- A hunt `diverged` result is not evidence until L27d and L27e land. Quote the job payload, not only the audit.
-- Bundle rows are at `rows/<section>/<row>.json`. Do not flake-check a detector run (KG-W5-19).
-- The CLI reaches port 8789 only (D-ML139). Never print the lab token or a lease id.
-- No `publish -r`, no `restore -r` and no `git worktree prune`. Teardown is label-only. The `ml-*` worktrees stay until the campaign PR merges.
+- Non-Docker filter is `RequiresDocker!=true`. Proxy listeners are probed in-network only (D-ML149).
+- A hunt `diverged` is not evidence until L27d and L27e land. Do not flake-check a detector run (KG-W5-19).
+- No `publish -r`, no `restore -r`, no `git worktree prune`. Teardown is label-only. Never print the lab token or a lease id.

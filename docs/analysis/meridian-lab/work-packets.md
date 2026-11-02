@@ -321,7 +321,7 @@ Every Leased tool takes a required `lease_id` string; it is not repeated below. 
 | `stack_reset_data` | Leased | `databases?` (default all lab DBs) | `{truncated:[{database, tables}]}` | L11 |
 | `svc_start`, `svc_stop`, `svc_restart` | Leased | `service` (C10 services), `build_id?` (default latest) | `{target_id, state, image}` | L09 |
 | `svc_config_set` | Leased | `service`, `key`, `value` (string or null to clear) | `{service, overlay:{...}}` | L09 |
-| `http_request` | Leased | `via` (`gateway`, `agent_ingress`, `sink` (L36), or a C10 service), `method`, `path`, `headers?`, `body?` (JSON; `${secret:<ref>}` placeholders), `bearer_ref?` (L56: a `brr-N` vault ref sent as `Authorization: Bearer`, redacted in evidence) | `{status, headers, body, duration_ms, outcome}` (redacted, body max 64 KiB; `outcome` `ok`/`fail`/`unknown` per C18, from L48; a transport error after sending returns `outcome: unknown` with the error code) | L10, L48, L56 |
+| `http_request` | Leased | `via` (`gateway`, `agent_ingress`, `sink` (L36) through `LabHosts.IsSinkEndpoint` only (D-ML147), or a C10 service), `method`, `path`, `headers?`, `body?` (JSON; `${secret:<ref>}` placeholders), `bearer_ref?` (L56: a `brr-N` vault ref sent as `Authorization: Bearer`, redacted in evidence) | `{status, headers, body, duration_ms, outcome}` (redacted, body max 64 KiB; `outcome` `ok`/`fail`/`unknown` per C18, from L48; a transport error after sending returns `outcome: unknown` with the error code) | L10, L48, L56 |
 | `nodes_token_mint` | Leased | `label?`, `validity_minutes?` (60, 1 to 1440), `organization_id?` (L56: `LabIds.OrganizationId` (default), `LabIds.TenantBOrganizationId`, or an organization id present in the lab Identity database; anything else `[Lab.InvalidArgument]`) | `{token_ref, token_id, expires_at, organization_id}` | L11, L56 |
 | `nodes_enroll_probe` | Leased | `token_ref`, `platform` (`windows`, `linux`), `via` (`gateway`, `agent_ingress`, `nodes`), `hostname?` (L51; `^[a-z0-9-]{1,48}$`, default `meridian-lab-probe`), `key_ref?` (L51; reuse a vaulted key for a retry, default a new key) | `{status, node_id?, certificate_thumbprint?, key_ref, error?}` | L11, L51 |
 | `nodes_cert_time_shift` | Leased | `node_id`, `shift_minutes` (-525600..0), `fields?` (`issued_at`, `not_before`, `not_after`, `grace_until`) | `{rows_updated}` | L11, L40 |
@@ -647,6 +647,8 @@ Toxiproxy proxies (`ProxyCatalog`; listen addresses are inside the Toxiproxy con
 | `agent-ingress` | 25000 (published `127.0.0.1:25000`) | `meridian-lab-gateway:8080` | L08 |
 | `agent-ingress-tls` | 25443 (published `127.0.0.1:25443`) | `meridian-lab-gateway:8443` | L41 |
 
+The listen ports are reachable only on `meridian-lab-net`; tests probe them in-network (D-ML149). The packet column names the packet that first needs a row; `stack_up` creates every row except L41's (D-ML150).
+
 Agent ingress is also published on the host's container-NAT address only if the L00 worknote shows Windows members cannot reach `127.0.0.1` on the host; never on `0.0.0.0`.
 
 Lab-only HTTP barrier proxy (L49, D-ML47): an in-daemon Kestrel listener on `127.0.0.1:25080` (`LabPorts.Barrier`), upstream `http://127.0.0.1:25000` (the `agent-ingress` Toxiproxy listener, so the real path Gateway → `gateway-nodes` → Nodes stays in place). Plain HTTP only. `LabPorts.ServicePorts` gains 25080 so `LabHosts.IsLabEndpoint` accepts it. Only history clients (C19) send through it; nothing in a product container is configured to use it.
@@ -728,7 +730,7 @@ public sealed class InvariantMonitor
 
 A check error inside a row window turns that row's PASS or NEEDS_HUMAN into UNVERIFIED with reason `invariant <id> unchecked: <error>`; outside any row it becomes a synthetic `invariants/<id>` row graded UNVERIFIED.
 
-A source that does not exist yet is **not applicable** (D-ML80): the invariant returns an `InvariantSkip`, which is never a check error and never changes a grade. I2 and I3 skip a database when `InvariantDbGate` says `StackNotUp` (no `lab_reader` credential) or `SchemaNotReady` (`__EFMigrationsHistory` missing); a gate failure is a check error, and so is any query failure on an applicable database, 42P01 included. I5 skips `queues` and `proxies` until `stack_up` has created the credentials, and always checks containers and backups. The monitor stamps each skip with the window's row; the runner labels checkpoint skips `(run-start)` and `(run-end)`. `invariants.json` and `invariants_check` list them under `skipped`.
+A source that does not exist yet is **not applicable** (D-ML80): the invariant returns an `InvariantSkip`, which is never a check error and never changes a grade. I2 and I3 skip a database when `InvariantDbGate` says `StackNotUp` (no `lab_reader` credential) or `SchemaNotReady` (`__EFMigrationsHistory` missing); a gate failure is a check error, and so is any query failure on an applicable database, 42P01 included — except I2, which reports a missing outbox table on an applicable database as violation `outbox-tables-missing` (D-ML148). I5 skips `queues` and `proxies` until `stack_up` has created the credentials, and always checks containers and backups. The monitor stamps each skip with the window's row; the runner labels checkpoint skips `(run-start)` and `(run-end)`. `invariants.json` and `invariants_check` list them under `skipped`.
 
 | Id | Invariant | How it is checked | Packet |
 | --- | --- | --- | --- |
@@ -886,7 +888,7 @@ public sealed record UiStorage(bool AccessTokenPresent, bool RefreshTokenPresent
 | Flow | Steps |
 | --- | --- |
 | `login_email` | Seeded user `lab-<seed hex>@lab.invalid` with a vault password: BetterAuth `sign-up/email` (first use) and `sign-in/email` through the Gateway by API; read the session cookie from `Set-Cookie`; add it to the browser context for `localhost`; open `http://localhost:14321/callback`; wait for `/dashboard`; read `sessionStorage` keys `meridian_access_token`, `meridian_refresh_token`, `meridian_expires_at` (presence and a hash prefix only) |
-| `refresh` | `login_email`, then trigger the Panel's own refresh path (the packet finds it in `src/Dhadgar.Panel/src/lib/auth/`); if the Panel has no page-triggered refresh, call `{gateway}/api/v1/identity/refresh` from the page with `fetch` and the stored refresh token, and record `refresh_path = "direct"`; then replay the old refresh token, expect refusal |
+| `refresh` | `login_email`, then trigger the Panel's own refresh path (the packet finds it in `src/Dhadgar.Panel/src/lib/auth/`); if the Panel has no page-triggered refresh, call `{gateway}/api/v1/identity/refresh` from the page with `fetch` and the stored refresh token, and record `refresh_path = "direct"`; then replay the old refresh token, expect refusal. Steps include `refresh` (ok when the refresh answered 200 and the stored refresh token's prefix changed) and `replay_refused` (ok when the old token, replayed to `{gateway}/api/v1/identity/refresh`, was refused with 400 or 401). Tool payload fields are LabJson snake_case (`steps[].url`, `storage.access_token_present`, `storage.refresh_token_sha256_prefix`). |
 | `logout` | `login_email`, open `/logout`; the three keys are gone; `/dashboard` redirects to `/login` |
 | `dashboard_guard` | fresh context; open `/dashboard`; expect `/login` |
 
@@ -1548,7 +1550,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 2. `Docker/LabTargetRegistry.cs`: `ILabTargetRegistry` with `Result<LabTarget> Register(string targetId, LabTargetKind kind, string name, string? containerId)`, `LabTarget? Find(string targetId)`, `IReadOnlyList<LabTarget> All`, `Remove(string targetId)`, `Task<int> ReconcileAsync(CancellationToken)` (drops entries whose container is gone). Persisted to `LabPaths.State\targets.json` (write temp, then `File.Move` overwrite). `LabTarget(string TargetId, LabTargetKind Kind, string Name, string? ContainerId, DateTimeOffset CreatedAt)`.
 3. `Stack/LabStack.cs`: `UpAsync(bool wipe)`: network `meridian-lab-net` (create if missing, labelled); containers `meridian-lab-postgres`, `meridian-lab-rabbitmq`, `meridian-lab-redis`, `meridian-lab-toxiproxy` per C10, each `--label meridian-lab=1 --restart no --network meridian-lab-net`; registers `c:<name>`. Images: read `src/Dhadgar.AppHost/Program.cs` for the Postgres and Redis image and tag (if unpinned use `postgres:17` and `redis:7`, as constants). Readiness (60 s): `pg_isready`, `rabbitmq-diagnostics -q ping`, `redis-cli ping`, Toxiproxy `GET /version`. Then databases `meridian_lab_nodes`, `meridian_lab_identity`, `meridian_lab_notifications`, `meridian_lab_discord`, `meridian_lab_betterauth`, roles `lab_owner` (owns every lab DB) and `lab_reader` (`CONNECT`, `USAGE ON SCHEMA public`, `ALTER DEFAULT PRIVILEGES FOR ROLE lab_owner IN SCHEMA public GRANT SELECT ON TABLES TO lab_reader`) via `docker exec meridian-lab-postgres psql -v ON_ERROR_STOP=1 -U postgres -c <sql>` (ArgumentList); registers `d:<service>`. RabbitMQ: user `lab` (vault password), vhost `/`. `wipe` removes the registered containers (anonymous volumes with them) before starting. `DownAsync(bool wipe)`. Implements `ILabStatusSource` for stack state.
 4. `tools/lab/images/rabbitmq.Dockerfile`: `FROM rabbitmq:4-management` (match the AppHost major), `ADD` the `rabbitmq_delayed_message_exchange` `.ez` for that RabbitMQ minor from its GitHub release with `--checksum=sha256:<hash>` (look up the hash on the release page and write it in), `RUN rabbitmq-plugins enable --offline rabbitmq_delayed_message_exchange`. Built by the stack as `meridian-lab/rabbitmq:<sha8 of the Dockerfile>` with the label; Docker tests tagged `RequiresNetwork` too.
-5. `Faults/ToxiproxyClient.cs` (minimal here; L19 adds toxics): `HttpClient` at `http://127.0.0.1:18474` (refuse any other base address: loopback and `LabPorts.ToxiproxyApi` only); `CreateProxyAsync(ProxySpec)`, `ListProxiesAsync()`, `ResetAsync()`. `ProxySpec(string Name, string Listen, string Upstream, bool Enabled)`. `Faults/ProxyCatalog.cs`: the C10 proxy table as static data with the owning packet; `LabStack` creates the L08 rows after Toxiproxy is ready and registers `p:<name>`.
+5. `Faults/ToxiproxyClient.cs` (minimal here; L19 adds toxics): `HttpClient` at `http://127.0.0.1:18474` (refuse any other base address: loopback and `LabPorts.ToxiproxyApi` only); `CreateProxyAsync(ProxySpec)`, `ListProxiesAsync()`, `ResetAsync()`. `ProxySpec(string Name, string Listen, string Upstream, bool Enabled)`. `Faults/ProxyCatalog.cs`: the C10 proxy table as static data with the owning packet; `LabStack` creates `ProxyCatalog.StackProxies` (every row except L41's; D-ML150) after Toxiproxy is ready and registers `p:<name>`.
 6. `Stack/LabConnectionStrings.cs`: `Result<string> ServiceDb(string service)` (host `meridian-lab-toxiproxy`, the service's proxy port, `meridian_lab_<service>`, `lab_owner`), `Result<string> Reader(string service)`, `OwnerDirect(string service)` (the daemon's own writes: L11 mint and reset) and `Admin()` (superuser, L20 DB faults), all host `127.0.0.1:15432` (observation path, R-OBSERVE), `RabbitMq(string service)`, `Redis(string service)`; built inside `SecretVault.Use`; passed only to container env files and Npgsql.
 7. `Tools/Stack/StackTools.cs`: `stack_up`, `stack_down`, `stack_status`.
 8. Tests: `LabStackTests` with a fake `IDockerCli` recording argument lists: every call starts `--context`, labels present, ports bound to `127.0.0.1`, no password in any argument, `--restart no`; `stack_down` never touches an unregistered name; `LabTargetRegistryTests` (persist, reload, reconcile drops a vanished container); `ProxyCatalogTests` (no duplicate names or listen ports; every proxy's owning packet is in C10); `LabStackDockerTests` (`RequiresDocker`, `RequiresNetwork`): up, `stack_status` is `up`, Toxiproxy lists the five L08 proxies, `lab_reader` cannot `CREATE TABLE`, the delayed-message plugin is enabled (`rabbitmq-plugins list -e`), down with wipe leaves no labelled container.
@@ -2769,7 +2771,7 @@ Files with more than one owner, in merge order:
 - L16g is new (OD-1, ruled as its default in D-ML89).
 
 **Carry-overs from wave 4 that bind wave 5.** Every packet in this wave inlines the ones it touches:
-- **C11 skip rule (D-ML80).** A monitor, snapshotter or checker that reads a lab DB uses `InvariantWiring.DbGate(LabDb, LabCredentialRefs)` (`Invariants/InvariantWiring.cs:175`). `StackNotUp` and `SchemaNotReady` become `InvariantSkip`, which is never an error and never a grade. 42P01 on a migrated DB is still an error. Each such reader has three outcomes (ok, not applicable, error) and an anti-always-skip test: a migrated fake gate with changing data must produce a result. This binds I7 (L29), `TransitionSnapshotter` (L52) and the L55 recovery assertions.
+- **C11 skip rule (D-ML80).** A monitor, snapshotter or checker that reads a lab DB uses `InvariantWiring.DbGate(LabDb, LabCredentialRefs)` (`Invariants/InvariantWiring.cs:175`). `StackNotUp` and `SchemaNotReady` become `InvariantSkip`, which is never an error and never a grade. 42P01 on a migrated DB is still an error (I2's outbox tables excepted, D-ML148). Each such reader has three outcomes (ok, not applicable, error) and an anti-always-skip test: a migrated fake gate with changing data must produce a result. This binds I7 (L29), `TransitionSnapshotter` (L52) and the L55 recovery assertions.
 - **Nodes `/readyz` has no Postgres check (F67).** Never wait on, or assert, a readiness change for a Postgres cut. An enroll during a cut is a 500 that I1 never excuses; it is known as KI-F67 (D-ML87). Readiness is HTTP 200 while Degraded (F68, D-ML72), so assert on the `/readyz` body. The only `ready` check is `masstransit` (`src/Dhadgar.Nodes/Program.cs:104-109`).
 - **Lab Host header (D-ML84, D-ML85).** A request to the Gateway ports 15000 or 25000 goes through `LabHttp`, which sets `Host: LabServices.ProbeHostHeader` (`Http/LabHttp.cs:133`), or through the barrier (`Barrier/BarrierProxy.cs:429`). There is never a raw `HttpClient` to the Gateway. Every URI is checked by `LabHosts.IsLabEndpoint` first.
 - **Heal in `finally` with its own token.** A job that injects faults (hunter PgDown, chaos, twin variants, mutation runs and the plain-build restore) heals in `finally` under its own `using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30), _time)`. It catches `OperationCanceledException when (budget.IsCancellationRequested)` and leaves the rest to `FaultBook`'s 60 s HealFailed retry. The pattern is `HealAbandonedAsync` (`Uat/RowExecutor.cs:362`). The job's cancelled token is never reused for cleanup.
@@ -3642,8 +3644,8 @@ Then one `uat run --specs <W>\docs\guides\uat-specs\agent-container-enroll.toml 
 **Files**
 
 1. `tools/lab/images/node-app.Dockerfile`: `ARG APP_DIR`; `FROM node:<major from package.json engines>-bookworm-slim`; copy `src/Dhadgar.SharedAuth` (when the app depends on it) and the app; `npm ci`; Panel: `npm run build` with `PUBLIC_GATEWAY_URL=http://localhost:15000`; `CMD` per app (`node dist/server/entry.mjs` for the Panel, the BetterAuth start script).
-2. `Services/IdentityLabAdapter.cs`: env `ConnectionStrings__*` through `identity-postgres` (20030), `Redis` through `identity-redis` (20031), `RabbitMq__Host=meridian-lab-toxiproxy`, `RabbitMq__Port=20032` (L09f), vhost `/` (`AddDhadgarMessaging` has no vhost key) and credentials; `Auth__Exchange__PublicKeyPem` from the generated key; issuer and audience equal to BetterAuth's; `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate, F23).
-3. `Services/BetterAuthLabAdapter.cs`: env mode (no Secrets service, F22), database through 20040, trusted origins `http://localhost:14321`, the exchange private key, the Gateway URL; health path from the app.
+2. `Services/IdentityLabAdapter.cs`: env `ConnectionStrings__*` through `identity-postgres` (20030), `Redis` through `identity-redis` (20031), `RabbitMq__Host=meridian-lab-toxiproxy`, `RabbitMq__Port=20032` (L09f), vhost `/` (`AddDhadgarMessaging` has no vhost key) and credentials; `Auth__Exchange__PublicKeyPem` from the generated key; issuer and audience equal to BetterAuth's; `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate, F23); `Auth__UseDevelopmentCertificates=true` and an empty `Auth__KeyVault__VaultUri`, not overlay keys (D-ML152, F131).
+3. `Services/BetterAuthLabAdapter.cs`: Secrets through the loopback stub (D-ML146), database through 20040, trusted origins `http://localhost:14321`, the exchange private key, the Gateway URL; health path from the app.
 4. `Services/PanelLabAdapter.cs`: no dependencies; health `GET /login` 200.
 5. Gateway: clusters `identity` and `betterauth` through proxies 20011 and 20013; `Readyz:RequiredClusters` = `[nodes, identity]`.
 6. `ProxyCatalog` and `LabTargetRegistry`: the new proxies and databases; `stack_reset_data` gains `identity` and `betterauth` (table lists from their models or migrations); `db_query` databases.
@@ -3683,7 +3685,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 2. `Ui/Flows/*.cs`: the four C14 flows; `login_email` signs up and in through `http_request via=gateway` (vault password), parses `Set-Cookie` for BetterAuth's session cookie name, adds it with `Domain = "localhost"`, `Path = "/"`, `Secure = true`, `HttpOnly = true`, `SameSite = None`, then opens `/callback`. `refresh` records `refresh_path` (`panel` or `direct`).
 3. `Tools/Ui/UiTools.cs`; clause source: `ui_flow_run` is a step tool, and `step` clauses read `UiFlowResult`.
 4. `docs/guides/uat-specs/panel.toml` (section `panel`, `requires = ["docker", "network"]`): rows `login`, `refresh-rotates`, `refresh-replay-refused` (DV-3), `logout-clears`, `dashboard-guard`.
-5. S-L9 green. Tests: `UiStorageTests` (hash prefix only), `RouteGuardTests` (an external URL is aborted), `FlowDockerTests` (`RequiresDocker`, `RequiresNetwork`).
+5. S-L9 (as written in L34, `Seams/PanelLoginSeamTests.cs`) goes green unchanged. Tests: `UiStorageTests` (hash prefix only), `RouteGuardTests` (an external URL is aborted), `FlowDockerTests` (`RequiresDocker`, `RequiresNetwork`). `LabDb` masks the values (keeps column names) of `session.token`, `account.accessToken`, `account.refreshToken`, `account.idToken`, `account.password`, `verification.value` and Identity's refresh-token hash column; test `DbQuery_TokenColumns_Masked` (KG-W7-1).
+6. Identity's signing key across restarts (KG-W7-5): supply a per-stack `Auth__SigningKeyPem` from the vault (generated at `stack_up` like the exchange pair), or record the restart rows as expected re-login. State which.
 
 **Tests and why they fail when reverted:** S-L9 is the cross-component DV-3 test; `UiResult_NeverCarriesToken`.
 
@@ -3700,24 +3703,25 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ### L36. Notifications, Discord, webhook sink
 
-- **Branch / worktree / commit:** `ml/l36-notify-discord` / `ml-l36` / `feat(lab): notifications, discord and a webhook sink`
+- **Branch / worktree / commit:** `ml/l36` (actual; planned `ml/l36-notify-discord`) / `ml-l36` / `feat(lab): notifications, discord and a webhook sink`
 - **Depends on:** L22, L12. **Security review:** yes (admin API keys, webhooks).
 - **Rules:**
   - R-REG: area NotifyStack (its `ILabServiceAdapter` registrations too).
   - R-HOST: the services' webhook and email targets point only at `meridian-lab-sink` through proxies 20052 and 20061; if a service validates webhook hosts against `discord.com` (read the code), the rows that need delivery become catalog rows asserting the refusal and a known issue, not a product change.
   - R-ZERO / R-LOG: `X-Admin-Api-Key` values come from the vault and are redacted; the sink stores bodies redacted and drops `Authorization` headers.
-  - D-ML40 not ruled → no SMTP switch: email rows assert the designed failure with `known_issue = "KI-NOTIF-OUTBOX"` or the Graph provider's refusal; D-ML41 recommended out → the Discord bot stays absent, and Discord's `/readyz` 503 is the asserted state (F26).
+  - D-ML40 not ruled → no SMTP switch: email rows assert the designed failure with `known_issue = "KI-NOTIF-OUTBOX"` or the Graph provider's refusal; D-ML41 recommended out → the Discord bot stays absent, and Discord's `/healthz` 503 is the asserted state (F26).
   - R-RESULT, R-DOCKER, R-NULL, R-XUNIT.
 
-**Contract excerpt:** C10 rows `notifications`, `discord`, `sink` and their proxies; C4 `http_request via=sink`; F25-F27.
+**Contract excerpt:** C10 rows `notifications`, `discord`, `sink` and their proxies; C4 `http_request via=sink` (sink predicate D-ML147); F25-F27.
 
 **Files**
 
 1. Probe mode `sink` (ASP.NET minimal app in the probe): `POST /{**path}` records `{at, path, headers (minus Authorization), body (redacted, max 64 KiB)}` in memory (last 500); `GET /_sink/requests?since=` returns them; `DELETE /_sink/requests` clears. Image `meridian-lab/probe:<build_id>` runs it as `meridian-lab-sink`.
 2. `Services/NotificationsLabAdapter.cs`, `Services/DiscordLabAdapter.cs`: env through their proxies; `RabbitMq__Host=meridian-lab-toxiproxy` explicit (F27) with `RabbitMq__Port=20051` for Notifications and `RabbitMq__Port=20062` for Discord (L09f key; vhost `/`); Discord `Discord__WebhookUrl=http://meridian-lab-toxiproxy:20061/webhook`, `SecretsService__Url` unset or a lab value so the `:5080` fallback is visible (KI-DISCORD-SECRETS-PORT); admin API keys generated into the vault.
 3. Gateway clusters `notifications` and `discord` through 20014 and 20015.
-4. `stack_reset_data`, `db_query`, `ProxyCatalog`, `LabTargetRegistry`, `I2OutboxInvariant` (Notifications' outbox, if the tables exist; else the I2 check reports `InvariantCheckError` "outbox tables missing", which is KI-NOTIF-OUTBOX).
-5. Tests: `SinkTests` (Authorization dropped; redaction), adapter env tests, `NotifyDockerTests` (`RequiresDocker`): both services start; a Discord webhook test call reaches the sink, or the refusal is recorded.
+4. `stack_reset_data`, `db_query`, `ProxyCatalog`, `LabTargetRegistry`, `I2OutboxInvariant` (Notifications' outbox; with no outbox tables on its migrated DB, I2 reports violation `outbox-tables-missing`, matched to KI-NOTIF-OUTBOX, D-ML148).
+5. Tests: `SinkTests` (Authorization dropped; redaction), adapter env tests, `NotifyDockerTests` (`RequiresDocker`): both services start; the sink starts and answers `GET /_sink/requests` with `[]`; webhook delivery is KG-W7-2 (L38).
+6. `LabHosts.IsSinkEndpoint`, `LabServices.IsReadinessEndpoint`, `LabHttp` `via=sink` (D-ML147).
 
 **Tests and why they fail when reverted:** `Sink_DropsAuthorization`; the Docker test proves the wiring.
 
@@ -3769,6 +3773,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 - **Depends on:** L35, L36, L37. **Security review:** yes (driver tool list).
 - **Rules:** as L23 (catalog rule, `ExpectationAssumed`, findings stay findings); D-ML18 forbidden set.
 
+**Contract excerpt:** C12 known issues; C11 I2 violation `outbox-tables-missing` (D-ML148); C4 `http_request via=sink` reaches only `LabHosts.IsSinkEndpoint` (D-ML147), so any row that reads the sink uses that `via`.
+
 **Files**
 
 1. `catalog/identity.toml`: `identity-redis-down-exchange` (exchange fails with the designed status, no 500; recovery), `identity-pg-down-refresh`, `identity-exchange-replay` (the same exchange token twice → refused), `identity-exchange-expired` (wait past 60 s → refused), `identity-rabbit-down` (refresh still works if the bus is not on the path).
@@ -3779,6 +3785,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 6. `lab-coverage.json`: Identity, BetterAuth, Panel, SharedAuth, Notifications, Discord, CLI become `real`.
 7. `FuzzTargets`: `identity_exchange`, `identity_refresh`, `notifications_admin`.
 8. `.claude/agents/uat-driver.md` gains `ui_flow_list`, `ui_flow_run`, `cli_run`, `pool_list`, `pool_acquire`, `pool_release`, `member_reset`, the agent tools from L32 and the member fault tools; `DriverToolListTests` stays green.
+9. Notifications catalog rows claim `KI-NOTIF-OUTBOX` through `inv:I2|notifications|outbox-tables-missing`; KG-W7-2 and KG-W7-3 are closed or re-parked here.
 
 **Tests and why they fail when reverted:** `LabCoverageTests` (no `real-pending` owned by waves 4 to 7), `ShippedSpecsValidateTests`, `DriverToolListTests`. Local evidence: one run of each catalog, grades in the report.
 

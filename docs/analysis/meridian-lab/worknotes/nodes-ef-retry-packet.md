@@ -19,13 +19,13 @@ Out of scope: D-ML120 (Nodes exits when the database is unreachable at startup).
 | Packet | Branch / worktree | Base | Ships as | Security |
 | --- | --- | --- | --- | --- |
 | NR-1 | `fix/nodes-ef-retry` / `nodes-ef-retry` | `origin/main` (**not** `campaign/meridian-lab`) | its own PR to `main`, separate from the lab PR | security-advisor pass (section 3) |
-| L19n | `ml/l19n-pool-seam` / `ml-l19n` | `campaign/meridian-lab` | local merge into the campaign; ships in the one campaign PR (D-ML131) | no (test only) |
+| L19n | `ml/l19n` / `ml-l19n` | `campaign/meridian-lab` | local merge into the campaign; ships in the one campaign PR (D-ML131) | no (test only) |
 
 Order:
 
 1. **NR-1 code and review can start now.** It needs no Docker, and it does not touch the lab or the boundary.
 2. **L19n runs after the boundary confirmation run (D-ML130)**, on a fresh daemon, so it shares no daemon with boundary runs (D-ML125's hard stop: L19n is a new seam test, not a fix wave). It writes S-L15 and records it **red** on the campaign tip.
-3. **NR-1 seam check (section 4.6).** Before NR-1 is reported ready to merge, S-L15 runs **green** in a scratch worktree: the campaign tip with NR-1's `src/Dhadgar.Nodes` diff applied.
+3. **NR-1 seam check (section 4.6).** Before NR-1 is reported ready to merge, S-L15 runs **green** in a scratch worktree: the campaign tip with NR-1's `src/Dhadgar.Nodes` diff applied. Not done: NR-1 merged (#256) first; L19n's tip green replaces it (D-ML144).
 4. **The owner merges NR-1** (D-41: only the owner merges, one yes per PR). If another Nodes `Program.cs` PR lands on `main` first, ops merges `main` into `fix/nodes-ef-retry` (merge, never rebase, D-38).
 5. The next `origin/main` merge into `campaign/meridian-lab` brings NR-1 in. The campaign review (D-ML74) reruns S-L15, and it must be green. Until then, S-L15 red is the conditional gap KG-W5-17.
 
@@ -197,14 +197,14 @@ dotnet test tests\Dhadgar.AgentSeam.Tests\Dhadgar.AgentSeam.Tests.csproj -c Rele
    2. Baseline: `WaitUntilAsync` until an unknown-token enroll on `NodesEnrollUri()` answers 401 (60 s window, 5 s poll).
    3. Warm the pool: 4 probes in parallel (`Task.WhenAll`), each 401. Then wait 1 s with no request.
    4. `toxi.SetEnabledAsync("nodes-postgres", false)`. Assert that `CanConnectAsync(ProxyPort("nodes-postgres"))` is false. Wait 3 s, and send **no** Nodes request during the cut.
-   5. `toxi.SetEnabledAsync("nodes-postgres", true)`. `WaitUntilAsync(CanConnectAsync(...))` (10 s window, 1 s poll). This probes the proxy listener, never Nodes.
+   5. Superseded by D-ML149: the listener is probed in-network with `ProxyListenerProbe` (L19o). `toxi.SetEnabledAsync("nodes-postgres", true)`. `WaitUntilAsync(CanConnectAsync(...))` (10 s window, 1 s poll). This probes the proxy listener, never Nodes.
    6. Send **one** probe and assert `Status == 401`, with the message `$"First enroll after an idle Postgres cut answered {status}, not 401 (F114 product half, D-ML128)."`
    7. Send 5 more sequential probes, each 401. Write the timings with `_output.WriteLine("S-L15 timing …")`.
 3. Update the class `<summary>` to name S-L15.
 
 ### Expected results
 
-- **Red** on the campaign tip at dispatch: step 2.6 gets 500, as in run 9. Record the status, and the Nodes log lines around it from the container log follower (EF "transient failure", then "Unhandled exception (fallback handler)"), in `worknotes/l19n.md`. **Hard stop:** if the first probe answers 401 before NR-1, the seam does not reproduce F114. Report `blocked spec` with the timings. Do not tune the waits to force a red.
+- Superseded by D-ML144 ([l19n ruling 1](l19n-ruling-1.md) section 4): the red is taken on a scratch branch with `src/Dhadgar.Nodes` at `37560f0d`, and the hard stop applies to that run only. **Red** on the campaign tip at dispatch: step 2.6 gets 500, as in run 9. Record the status, and the Nodes log lines around it from the container log follower (EF "transient failure", then "Unhandled exception (fallback handler)"), in `worknotes/l19n.md`. **Hard stop:** if the first probe answers 401 before NR-1, the seam does not reproduce F114. Report `blocked spec` with the timings. Do not tune the waits to force a red.
 - **Green** in NR-1's scratch check (section 4.6), and on the campaign after `main` (with NR-1) is merged in.
 - S-L7 still passes after the step 1 extraction. Run both Facts.
 
@@ -212,7 +212,7 @@ dotnet test tests\Dhadgar.AgentSeam.Tests\Dhadgar.AgentSeam.Tests.csproj -c Rele
 
 ```powershell
 dotnet build tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release -p:TreatWarningsAsErrors=true
-dotnet test tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --no-build --filter "Category!=Docker"
+dotnet test tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --no-build --filter "RequiresDocker!=true"
 dotnet test tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~ToxiproxySeamTests"
 ```
 

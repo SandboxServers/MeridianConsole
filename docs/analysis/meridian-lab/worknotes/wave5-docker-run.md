@@ -385,6 +385,17 @@ Next step: none. The boundary-close ruling is the architect's (ruling section 7)
 
 ## Docker run 12
 
-Raw record: [wave5-docker-run-12](../../../../.claude/reports/meridian-lab/wave5-docker-run-12.md). L19n red (scratch 261a9ed5): Failed 1 at the heal wait (The nodes-postgres listener did not accept connections 10 s after it was enabled.), green not run. L34 AuthStackDockerTests: Failed 1 (identity did not answer 200 within 90 s; last status connection refused or reset). L36 NotifyDockerTests: Failed 1 (
-otifications did not answer 200 within 90 s; last status HTTP 503). Teardown clean after each run.
+Raw record: [wave5-docker-run-12](../../../../.claude/reports/meridian-lab/wave5-docker-run-12.md). L19n red (scratch 261a9ed5): Failed 1 at the heal wait (The nodes-postgres listener did not accept connections 10 s after it was enabled.), green not run. L34 AuthStackDockerTests: Failed 1 (identity did not answer 200 within 90 s; last status connection refused or reset). L36 NotifyDockerTests: Failed 1 (notifications did not answer 200 within 90 s; last status HTTP 503). Teardown clean after each run.
+
+Ruled: [docker-run-12 ruling](docker-run-12-ruling.md).
+
+## Docker run 13
+
+Raw record: [wave5-docker-run-13](../../../../.claude/reports/meridian-lab/wave5-docker-run-13.md). Heads: ml-l19n `efca9d09` (L19o), ml-l34 `328942c5`, ml-l36 `66f6e3e1`; scratch rebuilt by cherry-pick to `5852cf97`. S-L15 red (scratch): Failed 1, 500 after the cut with an Npgsql `NpgsqlReadBuffer.Ensure` failure, accepted. S-L15 green (`efca9d09`): Passed, 6 × 401 after the cut and an EF "transient exception ... will be retried" line, genuine. S-L7: Passed (56 s) with the in-network probe. Notify: Passed (56 s). AuthStack: Failed, Identity exited 139 at `LoadKeyVaultCertificate` with no Azure credential. Teardown clean after each run.
+
+Run 13 ruled: [l34 ruling 2](l34-ruling-2.md); S-L15, S-L7 and Notify done; AuthStack red, F131.
+
+## Docker run 14
+
+Raw record: [wave5-docker-run-14](../../../../.claude/reports/meridian-lab/wave5-docker-run-14.md). AuthStackDockerTests passed at ml/l34 `f599f371` (after L34c): `AuthStack_SignUpThroughGateway` Passed in 2 m 3 s; Identity listened and answered `/healthz` 200. Teardown clean. KG-W7-4 closed.
 

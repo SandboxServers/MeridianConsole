@@ -1,10 +1,12 @@
 # L34 ruling 1 (review pass 1 `decision`, security pass 1 `fix`)
 
+> Renumbered: this note first called its decision D-ML144. It is **D-ML146** ([l36 ruling 1](l36-ruling-1.md) section 1); D-ML144 belongs to L19n.
+
 Range `8191eb8f..7429671e`, branch `ml/l34`, worktree `.claude/worktrees/ml-l34` (`<W>` below). Inputs: `.claude/reports/meridian-lab/ml-l34-review-1.md`, `ml-l34-security-1.md`, the L34 spec in `work-packets.md`, worknote `ml-l34.md`.
 
 ## 1. Outcome
 
-L34 is **fixable in one pass by one implementer; no owner question**. The open decision (review D1, security N1) is that BetterAuth has no env mode. `server.js:22` always runs `await loadSecrets()`. `secrets-client.js:272-275` throws without `SECRETS_SERVICE_URL`, and lines 280-307 always replace `BETTER_AUTH_SECRET` and `EXCHANGE_TOKEN_PRIVATE_KEY` with the Secrets service's answer. The lab does not run Dhadgar.Secrets (ledger README line 16), and the packet forbids product changes. Ruling D-ML144: the lab supplies a **loopback Secrets stub preloaded into the BetterAuth process**. BetterAuth's real `loadSecrets` then runs unchanged against a fake for a dependency the lab does not cover. F22 was wrong and is corrected (section 7).
+L34 is **fixable in one pass by one implementer; no owner question**. The open decision (review D1, security N1) is that BetterAuth has no env mode. `server.js:22` always runs `await loadSecrets()`. `secrets-client.js:272-275` throws without `SECRETS_SERVICE_URL`, and lines 280-307 always replace `BETTER_AUTH_SECRET` and `EXCHANGE_TOKEN_PRIVATE_KEY` with the Secrets service's answer. The lab does not run Dhadgar.Secrets (ledger README line 16), and the packet forbids product changes. Ruling D-ML146: the lab supplies a **loopback Secrets stub preloaded into the BetterAuth process**. BetterAuth's real `loadSecrets` then runs unchanged against a fake for a dependency the lab does not cover. F22 was wrong and is corrected (section 7).
 
 Every other fix note is applied as prescribed or with the changes stated, except security N6, parked as KG-W7-1 (owner L35). The edits are in section 4.
 
@@ -19,11 +21,11 @@ Every other fix note is applied as prescribed or with the changes stated, except
 | Review N5 (shell-form CMD) | Apply | E1 |
 | Review N6 (`csproj =validator`) | Apply | E3 |
 | Review N7 (README blank line) | Apply | E13 |
-| Review D1 (BetterAuth cannot boot) | Ruled: D-ML144 stub | E1, E2, E3, E4, E7, E12 |
+| Review D1 (BetterAuth cannot boot) | Ruled: D-ML146 stub | E1, E2, E3, E4, E7, E12 |
 | Review D2 / security label | `security-review` label on the PR; a security pass 2 is required (stub carries the private key; `SecretForms` changes) | none |
 | Review "checked": default `lab_build` now builds the Node images | Accept the behaviour (`svc_start betterauth/panel` needs those images); document it | E13 |
 | Review "checked": `MutationRunTool` can resolve `panel`/`betterauth` | Accept as is (returns a Result failure) | none |
-| Security N1 | Ruled: D-ML144 (in-process loopback variant of the advisor's option 1) | as D1 |
+| Security N1 | Ruled: D-ML146 (in-process loopback variant of the advisor's option 1) | as D1 |
 | Security N2 (`LabServiceContext.ToString`) | Apply | E5, E7 |
 | Security N3 (unsigned Identity webhooks in Development) | Option (b): README statement. Option (a) is rejected because a lab-only `DenyAll` would make the lab Gateway differ from the product Gateway on a real route | E13 |
 | Security N4 (staging deny-list) | Apply the extended deny-list, skip reparse points, and exclude `bin`/`obj` too. An allow-list is rejected because it is brittle against the Panel's layout (`Pages/`, `Shared/`, `public/`) | E3, E9 |
@@ -32,7 +34,7 @@ Every other fix note is applied as prescribed or with the changes stated, except
 | Security N7 (wipe guard, unguarded delete) | Apply to both Docker tests | E10, E11 |
 | Security "not fixed" (earlier rounds) | Unchanged; already owned by L54b (H3, H4) | none |
 
-## 3. D-ML144: BetterAuth's Secrets dependency in the lab
+## 3. D-ML146: BetterAuth's Secrets dependency in the lab
 
 - `tools/lab/images/lab-secrets-stub.mjs` is a lab file, never shipped. It is staged into every Node image at `/lab/secrets-stub.mjs`. The BetterAuth adapter alone loads it, with `NODE_OPTIONS=--import=file:///lab/secrets-stub.mjs`.
 - It listens on `127.0.0.1:8099` **inside the container's network namespace**. No port is published, it is not on the lab network and it has no Toxiproxy edge. It serves `POST /connect/token` and `GET /api/v1/secrets/{betterauth,oauth,infrastructure}`, using only values the env file already gave this container (`BETTER_AUTH_SECRET`, `EXCHANGE_TOKEN_PRIVATE_KEY`). The private key therefore reaches no new process, file or network path.
@@ -51,7 +53,7 @@ Every other fix note is applied as prescribed or with the changes stated, except
 ```dockerfile
 # syntax=docker/dockerfile:1
 # L34: one image for the Node lab apps (BetterAuth, Panel). The build context is the folder LabBuilder.StageNodeApp fills:
-# app/ (the app's source), SharedAuth/ (the file: dependency the Panel names) and lab/ (lab-only files, D-ML144).
+# app/ (the app's source), SharedAuth/ (the file: dependency the Panel names) and lab/ (lab-only files, D-ML146).
 # Node major matches the Panel's engines (>=22.23.4) and the BetterAuth Dockerfile (node:22).
 FROM node:22-bookworm-slim
 
@@ -62,7 +64,7 @@ ARG PUBLIC_GATEWAY_URL=http://localhost:15000
 WORKDIR /src
 # The Panel's package.json and package-lock.json name file:../Dhadgar.SharedAuth, resolved from /src/app.
 COPY SharedAuth /src/Dhadgar.SharedAuth
-# Lab-only Secrets stub; loaded only where the adapter sets NODE_OPTIONS (BetterAuth, D-ML144).
+# Lab-only Secrets stub; loaded only where the adapter sets NODE_OPTIONS (BetterAuth, D-ML146).
 COPY lab /lab
 COPY ${APP_DIR} /src/app
 WORKDIR /src/app
@@ -88,7 +90,7 @@ CMD ["sh", "-c", "exec node \"$APP_ENTRY\""]
 ### E2. New `tools/lab/images/lab-secrets-stub.mjs`
 
 ```javascript
-// Lab only (meridian-lab L34, D-ML144). Never shipped with BetterAuth.
+// Lab only (meridian-lab L34, D-ML146). Never shipped with BetterAuth.
 // Preloaded into the lab BetterAuth container with NODE_OPTIONS=--import=file:///lab/secrets-stub.mjs.
 // It stands in for Dhadgar.Secrets and its /connect/token, which the lab does not run, so BetterAuth's real
 // loadSecrets() (src/Dhadgar.BetterAuth/src/secrets-client.js) runs unchanged. It serves only values the lab
@@ -160,7 +162,7 @@ private static readonly string[] NodeExcludedFileNames = [".npmrc", ".yarnrc", "
 /// <summary>Key and certificate extensions never staged.</summary>
 private static readonly string[] NodeExcludedExtensions = [".pem", ".key", ".pfx", ".p12"];
 
-/// <summary>The lab-only Secrets stub (D-ML144), relative to the checkout, and where it lands in the stage.</summary>
+/// <summary>The lab-only Secrets stub (D-ML146), relative to the checkout, and where it lands in the stage.</summary>
 private const string SecretsStubSource = "tools/lab/images/lab-secrets-stub.mjs";
 
 /// <summary>True when a file name may be staged: not an env file, not a credential file, not a key or certificate.</summary>
@@ -175,7 +177,7 @@ internal static bool IsStagedFile(string name) =>
 ```csharp
 /// <summary>
 /// Stages a Node app under <c>&lt;outputRoot&gt;\&lt;project&gt;</c>: <c>app/</c> (the app), <c>SharedAuth/</c> and
-/// <c>lab/secrets-stub.mjs</c> (D-ML144). Env files, credential files, keys, installed or generated folders and reparse
+/// <c>lab/secrets-stub.mjs</c> (D-ML146). Env files, credential files, keys, installed or generated folders and reparse
 /// points are never copied. Returns the stage folder.
 /// </summary>
 internal static Result<string> StageNodeApp(BuildProject project, string checkoutPath, string outputRoot, LabPaths paths, IPathValidator validator)
@@ -224,7 +226,7 @@ foreach (string directory in Directory.GetDirectories(source))
 1. Add constants:
 
 ```csharp
-/// <summary>Loopback port of the lab Secrets stub inside the BetterAuth container (D-ML144); never published.</summary>
+/// <summary>Loopback port of the lab Secrets stub inside the BetterAuth container (D-ML146); never published.</summary>
 public const int SecretsStubPort = 8099;
 
 /// <summary>Where the node-app image holds the stub (<c>COPY lab /lab</c>).</summary>
@@ -241,7 +243,7 @@ public const string SecretsStubPath = "/lab/secrets-stub.mjs";
 ```
 
    Do not set `IDENTITY_SERVICE_URL`, `SERVICE_CLIENT_ID` or `SERVICE_CLIENT_SECRET`.
-3. Replace the class summary with: "BetterAuth behind the lab Gateway (C1 port 15130). BetterAuth always loads its secret and exchange key from the Secrets service at boot (`secrets-client.js` `loadSecrets`). The lab does not run Secrets, so the image preloads the loopback stub `tools/lab/images/lab-secrets-stub.mjs` (D-ML144), which serves the values this env file carries. The exchange private key reaches the container only through the env file."
+3. Replace the class summary with: "BetterAuth behind the lab Gateway (C1 port 15130). BetterAuth always loads its secret and exchange key from the Secrets service at boot (`secrets-client.js` `loadSecrets`). The lab does not run Secrets, so the image preloads the loopback stub `tools/lab/images/lab-secrets-stub.mjs` (D-ML146), which serves the values this env file carries. The exchange private key reaches the container only through the env file."
 
 ### E5. `src/Tools/Dhadgar.Lab/Services/ILabServiceAdapter.cs` (security N2)
 
@@ -463,14 +465,14 @@ Assert.DoesNotContain(env.Value.Keys, k => k.StartsWith("SERVICE_CLIENT_", Strin
 1. Insert a blank line before `## Daemon edge` (review N7).
 2. Replace the paragraph under the Services table with these paragraphs:
    - `stack_up` generates a per-stack ES256 exchange key pair. BetterAuth signs exchange tokens with the private key; Identity verifies them with the public key (`state\identity\exchange-public.pem`). The private key and the BetterAuth secret live only in the vault and reach the container through an env file. BetterAuth and the Panel are Node apps built with `tools/lab/images/node-app.Dockerfile`. Staging skips env files, `.npmrc`/`.yarnrc*`, `.dev.vars`, `secrets.json`, key and certificate files, `node_modules`/`dist`/`bin`/`obj` and reparse points. `lab_build` without `projects` builds these images too, which needs the npm registry.
-   - BetterAuth always loads its secret and exchange key from the Secrets service at boot. The lab does not run Secrets: the image preloads `tools/lab/images/lab-secrets-stub.mjs` (`NODE_OPTIONS`), which answers `/connect/token` and `/api/v1/secrets/{betterauth,oauth,infrastructure}` on `127.0.0.1:8099` inside the container. It serves only values the env file carries. No product code changes (D-ML144).
+   - BetterAuth always loads its secret and exchange key from the Secrets service at boot. The lab does not run Secrets: the image preloads `tools/lab/images/lab-secrets-stub.mjs` (`NODE_OPTIONS`), which answers `/connect/token` and `/api/v1/secrets/{betterauth,oauth,infrastructure}` on `127.0.0.1:8099` inside the container. It serves only values the env file carries. No product code changes (D-ML146).
    - Identity runs with `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate, ephemeral signing key). Without Key Vault, `/webhooks/better-auth` (through the Gateway `/api/v1/identity/webhooks/better-auth`) accepts unsigned bodies, so any local process can soft-delete or rewrite a lab user. The OpenAPI and Scalar pages are served on `127.0.0.1:15010`. The lab is not a fidelity target for webhook signing.
    - `db_query service=betterauth` or `service=identity` returns session, account-token, verification and refresh-token columns unmasked (lab users, per-stack secrets). Masking is KG-W7-1 (L35).
    - Identity has no outbox tables, so the I2 outbox invariant covers Nodes only.
 
 ### E14. Worknote `docs/analysis/meridian-lab/worknotes/ml-l34.md`
 
-In the session 3 line, replace "Identity /healthz and BetterAuth /healthz verified." with "Identity /healthz and BetterAuth /healthz read in source only (not run). BetterAuth has no env mode; it needs the lab Secrets stub (l34-ruling-1, D-ML144)." Append a `## Fix pass 1 (l34-ruling-1)` section listing E1-E15 as done, with the check results.
+In the session 3 line, replace "Identity /healthz and BetterAuth /healthz verified." with "Identity /healthz and BetterAuth /healthz read in source only (not run). BetterAuth has no env mode; it needs the lab Secrets stub (l34-ruling-1, D-ML146)." Append a `## Fix pass 1 (l34-ruling-1)` section listing E1-E15 as done, with the check results.
 
 ### E15. Commit
 
@@ -506,13 +508,13 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --no
    - Change `SecretForms` back to `return true;`: the new Redactor test (below) fails.
    - Delete `PrintMembers`: `Context_ToString_PrintsNoSecret` fails.
 4. Runs: checks 3 and 4 as in section 5 (4 red, naming `ui_flow_run`). Check 5 green on a Docker machine. It is the proof that BetterAuth boots and that `POST /api/v1/betterauth/sign-up/email` through the Gateway answers 200.
-5. A security pass 2 on the same range confirms D-ML144's properties (loopback-only, fail-closed preload, no new key path) and the E7 forms.
+5. A security pass 2 on the same range confirms D-ML146's properties (loopback-only, fail-closed preload, no new key path) and the E7 forms.
 
 ## 7. Ledger changes (orchestrator applies in the campaign worktree)
 
 1. README findings, F22: replace "It loads secrets from the Secrets service at boot unless env mode is set" with "It always loads `BETTER_AUTH_SECRET` and `EXCHANGE_TOKEN_PRIVATE_KEY` from the Secrets service at boot (`server.js:22`, `secrets-client.js:269-307`; there is no env mode). `IDENTITY_SERVICE_URL ?? SECRETS_SERVICE_URL` serves `/connect/token`, and `USE_ENV_DB_PASSWORD` affects only the DB password." Also replace the cookie sentence with: "Cookies are host-only since HF-02 (no `Domain`, prefix `meridian`, `__Secure-meridian.session_token`; `src/Dhadgar.BetterAuth/CLAUDE.md`)."
-2. Decisions: add **D-ML144**: "The lab BetterAuth gets its secrets from a loopback stub preloaded into its process (`tools/lab/images/lab-secrets-stub.mjs`, `NODE_OPTIONS=--import`, `127.0.0.1:8099` in the container, fail-closed). No product change; the real `loadSecrets` runs. Rejected: a product env mode (packet rule, D-ML40), a stub container (key on the lab network), running Secrets (Key Vault). | Accepted (architect) | F22; [l34-ruling-1](worknotes/l34-ruling-1.md)."
+2. Decisions: add **D-ML146**: "The lab BetterAuth gets its secrets from a loopback stub preloaded into its process (`tools/lab/images/lab-secrets-stub.mjs`, `NODE_OPTIONS=--import`, `127.0.0.1:8099` in the container, fail-closed). No product change; the real `loadSecrets` runs. Rejected: a product env mode (packet rule, D-ML40), a stub container (key on the lab network), running Secrets (Key Vault). | Accepted (architect) | F22; [l34-ruling-1](worknotes/l34-ruling-1.md)."
 3. Known gaps: add **KG-W7-1**: "`db_query service=betterauth|identity` returns session/account tokens, verification values and refresh-token rows unmasked; persisted results can carry them (security L34 N6). | L35 | L35". L35 Files item 5 gains: "`LabDb` masks the values (keeps column names) of `session.token`, `account.accessToken`, `account.refreshToken`, `account.idToken`, `account.password`, `verification.value` and Identity's refresh-token hash column; test `DbQuery_TokenColumns_Masked`."
 4. C14: in the `refresh` row, append: "Steps include `refresh` (ok when the refresh answered 200 and the stored refresh token's prefix changed) and `replay_refused` (ok when the old token, replayed to `{gateway}/api/v1/identity/refresh`, was refused with 400 or 401). Tool payload fields are LabJson snake_case (`steps[].url`, `storage.access_token_present`, `storage.refresh_token_sha256_prefix`)." L35's S-L9 line: "S-L9 (as written in L34, `Seams/PanelLoginSeamTests.cs`) goes green unchanged."
-5. Packet table, L34 row: status "Fix pass 1 ([l34-ruling-1](worknotes/l34-ruling-1.md); D-ML144)". The L34 spec, Files item 3: replace "env mode (no Secrets service, F22)" with "Secrets through the loopback stub (D-ML144)".
+5. Packet table, L34 row: status "Fix pass 1 ([l34-ruling-1](worknotes/l34-ruling-1.md); D-ML146)". The L34 spec, Files item 3: replace "env mode (no Secrets service, F22)" with "Secrets through the loopback stub (D-ML146)".
 6. PR: `security-review` label; security pass 2 required.
