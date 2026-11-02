@@ -159,6 +159,51 @@ public sealed class MutationRunJobTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_DetectorCall_SeesMarkSet_ThenCleared()
+    {
+        var running = new RunningMutantBuild();
+        MutantMark? seen = null;
+        var fake = new FakeInvoker
+        {
+            OnCall = tool =>
+            {
+                if (tool == "history_run")
+                {
+                    seen = running.Current;
+                }
+            },
+        };
+
+        JobOutcome outcome = await RunAsync([Spec("M1")], fake, MutantBuildWithStamp(), running: running);
+
+        Assert.Equal("complete", outcome.Overall);
+        Assert.NotNull(seen);
+        Assert.Equal("M1", seen!.MutantId);
+        Assert.Equal("mutant-M1-bbbbbbbb", seen.BuildId);
+        Assert.Equal(new string('b', 40), seen.Commit);
+        Assert.Null(running.Current);
+    }
+
+    [Fact]
+    public async Task RunAsync_RestoreFails_MarkKept()
+    {
+        var running = new RunningMutantBuild();
+        var fake = new FakeInvoker
+        {
+            HistoryPayload = """{"run_id":"r11","violations":[{"rule":"E1"}]}""",
+            FailStartBuild = PlainBuild,
+        };
+
+        JobOutcome outcome = await RunAsync([Spec("M11")], fake, MutantBuildWithStamp(), running: running);
+
+        Assert.Equal("restore_failed", outcome.Overall);
+        MutantMark? mark = running.Current;
+        Assert.NotNull(mark);
+        Assert.Equal("M11", mark!.MutantId);
+        Assert.Equal("mutant-M11-bbbbbbbb", mark.BuildId);
+    }
+
+    [Fact]
     public async Task Failed_restore_start_is_reported()
     {
         var fake = new FakeInvoker { HistoryPayload = """{"run_id":"r10","violations":[{"rule":"E1"}]}""", FailStartBuild = PlainBuild };
@@ -376,7 +421,8 @@ public sealed class MutationRunJobTests : IDisposable
         FakeInvoker fake,
         Func<MutantSpec, CancellationToken, Task<Result<MutantBuildDto>>>? build = null,
         string? plain = PlainBuild,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        RunningMutantBuild? running = null)
     {
         Directory.CreateDirectory(_folder);
         Func<MutantSpec, CancellationToken, Task<Result<MutantBuildDto>>> builder = build ?? BuildOk;
@@ -389,7 +435,7 @@ public sealed class MutationRunJobTests : IDisposable
             new PathValidator(NullLogger<PathValidator>.Instance),
             _time,
             new Redactor(_vault),
-            new RunningMutantBuild());
+            running ?? new RunningMutantBuild());
 
         Result<JobOutcome> result = await job.RunAsync("job-test", Lease, _folder, ct);
 
@@ -400,6 +446,11 @@ public sealed class MutationRunJobTests : IDisposable
     private Task<Result<MutantBuildDto>> BuildOk(MutantSpec spec, CancellationToken ct) =>
         Task.FromResult(Result<MutantBuildDto>.Success(
             new MutantBuildDto(spec.Id, MutantBuilder.BuiltVerdict, null, "build-" + spec.Id, new string('b', 40), [], [], _time.GetUtcNow())));
+
+    /// <summary>A mutant build whose id is the stamp form <c>mutant-&lt;id&gt;-&lt;commit8&gt;</c> (D-ML155).</summary>
+    private static Func<MutantSpec, CancellationToken, Task<Result<MutantBuildDto>>> MutantBuildWithStamp() =>
+        (spec, _) => Task.FromResult(Result<MutantBuildDto>.Success(
+            new MutantBuildDto(spec.Id, MutantBuilder.BuiltVerdict, null, "mutant-" + spec.Id + "-bbbbbbbb", new string('b', 40), [], [], DateTimeOffset.UnixEpoch)));
 
     private static MutantSpec Spec(string id) =>
         new(id, MutantKind.Product, new string('a', 40), "Test mutant " + id, ["src/Nodes/Enrollment.cs"], ["nodes"], HistoryDetector(Pattern), id);

@@ -275,6 +275,38 @@ public sealed class RowEvidenceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunJson_MutantStamp_WritesMutant()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, redactor, new SecretScanner(_vault), _time, "mutant", "linux", string.Empty, null);
+        writer.UseBuild(new BuildStamp("mutant-m1-0123abcd", "0123abcd4567ef89", true, string.Empty, "m1"));
+
+        await RunSpecAsync(writer);
+
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json")));
+        JsonElement build = run.RootElement.GetProperty("build");
+        Assert.Equal("mutant-m1-0123abcd", build.GetProperty("id").GetString());
+        Assert.Equal("m1", build.GetProperty("mutant").GetString());
+        Assert.True(build.GetProperty("dirty").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RunJson_PlainStamp_HasNoMutantKey()
+    {
+        var redactor = new Redactor(_vault);
+        var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+        var writer = new BundleWriter(Path.Combine(_root, "uat-runs"), validator, redactor, new SecretScanner(_vault), _time, "plain", "linux", string.Empty, null);
+        writer.UseBuild(new BuildStamp("0123abcd", "0123abcd4567ef89", false, "."));
+
+        await RunSpecAsync(writer);
+
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(writer.Folder!, "run.json")));
+        JsonElement build = run.RootElement.GetProperty("build");
+        Assert.False(build.TryGetProperty("mutant", out _));
+    }
+
+    [Fact]
     public async Task Runner_EventsAndBundle_ShareOneFolder()
     {
         var redactor = new Redactor(_vault);

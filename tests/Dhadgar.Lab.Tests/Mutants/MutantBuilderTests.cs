@@ -187,6 +187,44 @@ public sealed class MutantBuilderTests : IDisposable
         Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PatchTouchesOnly_MinusHeaderWithoutPrefix_Refused()
+    {
+        const string listed = "src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs";
+        string[] patch = [$"--- {listed}", $"+++ b/{listed}", "@@ -0,0 +1 @@", "+x"];
+
+        Result result = MutantBuilder.PatchTouchesOnly(patch, _spec.Files);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+        Assert.Contains("cannot read", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PatchTouchesOnly_PlusHeaderWithoutPrefix_Refused()
+    {
+        const string listed = "src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs";
+        string[] patch = [$"--- a/{listed}", $"+++ {listed}", "@@ -0,0 +1 @@", "+x"];
+
+        Result result = MutantBuilder.PatchTouchesOnly(patch, _spec.Files);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+        Assert.Contains("cannot read", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PatchTouchesOnly_DiffGitWithoutPrefixes_Refused()
+    {
+        const string listed = "src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs";
+        string[] patch = [$"diff --git {listed} {listed}", "new file mode 100644", "@@ -0,0 +1 @@", "+x"];
+
+        Result result = MutantBuilder.PatchTouchesOnly(patch, _spec.Files);
+
+        Assert.True(result.IsFailure);
+        Assert.StartsWith("[Lab.InvalidArgument]", result.Error, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("rename from src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
     [InlineData("rename to src/Dhadgar.Nodes/Data/Configurations/EnrollmentTokenConfiguration.cs")]
