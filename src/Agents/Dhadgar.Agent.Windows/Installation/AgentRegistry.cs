@@ -1,3 +1,5 @@
+using Dhadgar.Contracts.Agents;
+
 namespace Dhadgar.Agent.Windows.Installation;
 
 /// <summary>
@@ -7,10 +9,10 @@ namespace Dhadgar.Agent.Windows.Installation;
 internal static class AgentRegistry
 {
     /// <summary>Registry path under HKLM where agent configuration is stored.</summary>
-    internal const string KeyPath = @"SOFTWARE\Meridian Console\Agent";
+    internal const string KeyPath = AgentWindowsFootprint.RegistryKeyPath;
 
     /// <summary>Registry value name for the enrollment token (REG_SZ).</summary>
-    internal const string EnrollmentTokenValueName = "EnrollmentToken";
+    internal const string EnrollmentTokenValueName = AgentWindowsFootprint.EnrollmentTokenValueName;
 
     /// <summary>Registry value name for the control plane endpoint (REG_SZ), written by the installer (D-S230).</summary>
     internal const string ControlPlaneEndpointValueName = "ControlPlaneEndpoint";
