@@ -24,7 +24,7 @@ public sealed record OutboxTarget(
 
 /// <summary>
 /// I2: the outbox drains (C11). A message row older than 60 s, or a state row not delivered after 60 s, is a violation.
-/// The Nodes target is the only one here; L34 and L36 add the others.
+/// The Nodes and Notifications targets are here; L34 adds the others.
 /// </summary>
 public sealed class I2OutboxInvariant : ISkippableInvariant
 {
@@ -39,7 +39,7 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
 
     /// <summary>
     /// The Notifications outbox (L36): the EF outbox MassTransit creates in <c>notifications</c>. Until its migrations
-    /// create the tables, the check reports <c>InvariantCheckError</c> "outbox tables missing" (KI-NOTIF-OUTBOX).
+    /// create the tables, the check fails with the Postgres <c>42P01</c> text (KI-NOTIF-OUTBOX).
     /// </summary>
     public static IReadOnlyList<OutboxTarget> NotificationsTargets { get; } =
     [
@@ -91,6 +91,7 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
         var violations = new List<InvariantViolation>();
         var skipped = new List<InvariantSkip>();
         var gated = new Dictionary<string, DbApplicability>(StringComparer.Ordinal);
+        string? failure = null;
 
         foreach (OutboxTarget target in _targets)
         {
@@ -134,7 +135,9 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
                 Result<DbQueryResult> query = await _query(target.Database, probe.Sql, ct).ConfigureAwait(false);
                 if (query.IsFailure)
                 {
-                    return Result<InvariantOutcome>.Failure($"{target.Service} {probe.CheckId}: {query.Error}");
+                    // Keep checking the other targets; the failure is returned after the violations found so far.
+                    failure ??= $"{target.Service} {probe.CheckId}: {query.Error}";
+                    break;
                 }
 
                 if (query.Value.RowCount == 0)
@@ -157,6 +160,11 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
                     window.To,
                     evidence));
             }
+        }
+
+        if (failure is not null && violations.Count == 0)
+        {
+            return Result<InvariantOutcome>.Failure(failure);
         }
 
         return Result<InvariantOutcome>.Success(new InvariantOutcome(violations, skipped));
