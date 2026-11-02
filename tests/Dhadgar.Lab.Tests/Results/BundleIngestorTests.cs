@@ -85,6 +85,21 @@ public sealed class BundleIngestorTests : IDisposable
     }
 
     [Fact]
+    public async Task DetectFlakes_MutantBuildRun_NotComparedWithPlainRun()
+    {
+        string plain = BundleFixtures.Write(_uatRuns, "run-plain", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
+        string mutant = BundleFixtures.Write(_uatRuns, "run-mutant", "mutant-m1-abc12345", 42,
+            new RowSpec("nodes", "enroll", "FAIL", ClauseState: "NotHeld"));
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+        BundleIngestor ingestor = NewIngestor(db);
+
+        Assert.True((await ingestor.IngestAsync(plain, [_uatRuns], CancellationToken.None)).IsSuccess);
+        Assert.True((await ingestor.IngestAsync(mutant, [_uatRuns], CancellationToken.None)).IsSuccess);
+
+        Assert.Equal(0, db.CountFlakes());
+    }
+
+    [Fact]
     public async Task QueryView_SeedAboveLongMax_ReadsBackUnsigned()
     {
         string folder = BundleFixtures.Write(_uatRuns, "run-qv", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
